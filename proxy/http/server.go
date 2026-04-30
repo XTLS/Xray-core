@@ -60,6 +60,28 @@ func isTimeout(err error) bool {
 	return ok && nerr.Timeout()
 }
 
+// http407Response is the standard RFC 7235 reply that explicitly identifies
+// the listener as an HTTP proxy. http400Response is a generic web-server
+// reply used to camouflage the port from proxy fingerprinting.
+var (
+	http407Response = []byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\n\r\n")
+	http400Response = []byte("HTTP/1.1 400 Bad Request\r\nServer: nginx\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+)
+
+// writeHTTPAuthFailure writes the auth-failure response according to the
+// configured behavior. REJECT preserves RFC 7235 ("407"). DROP writes
+// nothing. HTTP400 writes a generic 400 to camouflage the port.
+func writeHTTPAuthFailure(w io.Writer, behavior AuthFailureBehavior) error {
+	switch behavior {
+	case AuthFailureBehavior_DROP:
+		return nil
+	case AuthFailureBehavior_HTTP400:
+		return common.Error2(w.Write(http400Response))
+	default:
+		return common.Error2(w.Write(http407Response))
+	}
+}
+
 func parseBasicAuth(auth string) (username, password string, ok bool) {
 	const prefix = "Basic "
 	if !strings.HasPrefix(auth, prefix) {
@@ -125,7 +147,10 @@ Start:
 	if len(s.config.Accounts) > 0 {
 		user, pass, ok := parseBasicAuth(request.Header.Get("Proxy-Authorization"))
 		if !ok || !s.config.HasAccount(user, pass) {
-			return common.Error2(conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\n\r\n")))
+			if err := writeHTTPAuthFailure(conn, s.config.AuthFailureBehavior); err != nil {
+				return err
+			}
+			return errors.New("http proxy auth failed").AtInfo()
 		}
 		if inbound != nil {
 			inbound.User.Email = user

@@ -72,6 +72,61 @@ func (AuthType) EnumDescriptor() ([]byte, []int) {
 	return file_proxy_socks_config_proto_rawDescGZIP(), []int{0}
 }
 
+// AuthFailureBehavior controls what the server returns when SOCKS5
+// authentication fails or when the client offers no acceptable method.
+// REJECT preserves the RFC 1928/1929 responses (0x05 0xFF, 0x01 0xFF) and is
+// the default. DROP closes the connection silently. HTTP400 writes a generic
+// "HTTP/1.1 400 Bad Request" reply so port scanners cannot fingerprint the
+// service as a SOCKS proxy.
+type AuthFailureBehavior int32
+
+const (
+	AuthFailureBehavior_REJECT  AuthFailureBehavior = 0
+	AuthFailureBehavior_DROP    AuthFailureBehavior = 1
+	AuthFailureBehavior_HTTP400 AuthFailureBehavior = 2
+)
+
+// Enum value maps for AuthFailureBehavior.
+var (
+	AuthFailureBehavior_name = map[int32]string{
+		0: "REJECT",
+		1: "DROP",
+		2: "HTTP400",
+	}
+	AuthFailureBehavior_value = map[string]int32{
+		"REJECT":  0,
+		"DROP":    1,
+		"HTTP400": 2,
+	}
+)
+
+func (x AuthFailureBehavior) Enum() *AuthFailureBehavior {
+	p := new(AuthFailureBehavior)
+	*p = x
+	return p
+}
+
+func (x AuthFailureBehavior) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuthFailureBehavior) Descriptor() protoreflect.EnumDescriptor {
+	return file_proxy_socks_config_proto_enumTypes[1].Descriptor()
+}
+
+func (AuthFailureBehavior) Type() protoreflect.EnumType {
+	return &file_proxy_socks_config_proto_enumTypes[1]
+}
+
+func (x AuthFailureBehavior) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuthFailureBehavior.Descriptor instead.
+func (AuthFailureBehavior) EnumDescriptor() ([]byte, []int) {
+	return file_proxy_socks_config_proto_rawDescGZIP(), []int{1}
+}
+
 // Account represents a Socks account.
 type Account struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -127,14 +182,15 @@ func (x *Account) GetPassword() string {
 
 // ServerConfig is the protobuf config for Socks server.
 type ServerConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AuthType      AuthType               `protobuf:"varint,1,opt,name=auth_type,json=authType,proto3,enum=xray.proxy.socks.AuthType" json:"auth_type,omitempty"`
-	Accounts      map[string]string      `protobuf:"bytes,2,rep,name=accounts,proto3" json:"accounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Address       *net.IPOrDomain        `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
-	UdpEnabled    bool                   `protobuf:"varint,4,opt,name=udp_enabled,json=udpEnabled,proto3" json:"udp_enabled,omitempty"`
-	UserLevel     uint32                 `protobuf:"varint,6,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	AuthType            AuthType               `protobuf:"varint,1,opt,name=auth_type,json=authType,proto3,enum=xray.proxy.socks.AuthType" json:"auth_type,omitempty"`
+	Accounts            map[string]string      `protobuf:"bytes,2,rep,name=accounts,proto3" json:"accounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Address             *net.IPOrDomain        `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`
+	UdpEnabled          bool                   `protobuf:"varint,4,opt,name=udp_enabled,json=udpEnabled,proto3" json:"udp_enabled,omitempty"`
+	UserLevel           uint32                 `protobuf:"varint,6,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
+	AuthFailureBehavior AuthFailureBehavior    `protobuf:"varint,7,opt,name=auth_failure_behavior,json=authFailureBehavior,proto3,enum=xray.proxy.socks.AuthFailureBehavior" json:"auth_failure_behavior,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ServerConfig) Reset() {
@@ -202,6 +258,13 @@ func (x *ServerConfig) GetUserLevel() uint32 {
 	return 0
 }
 
+func (x *ServerConfig) GetAuthFailureBehavior() AuthFailureBehavior {
+	if x != nil {
+		return x.AuthFailureBehavior
+	}
+	return AuthFailureBehavior_REJECT
+}
+
 // ClientConfig is the protobuf config for Socks client.
 type ClientConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -255,7 +318,7 @@ const file_proxy_socks_config_proto_rawDesc = "" +
 	"\x18proxy/socks/config.proto\x12\x10xray.proxy.socks\x1a\x18common/net/address.proto\x1a!common/protocol/server_spec.proto\"A\n" +
 	"\aAccount\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xc5\x02\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xa0\x03\n" +
 	"\fServerConfig\x127\n" +
 	"\tauth_type\x18\x01 \x01(\x0e2\x1a.xray.proxy.socks.AuthTypeR\bauthType\x12H\n" +
 	"\baccounts\x18\x02 \x03(\v2,.xray.proxy.socks.ServerConfig.AccountsEntryR\baccounts\x125\n" +
@@ -263,7 +326,8 @@ const file_proxy_socks_config_proto_rawDesc = "" +
 	"\vudp_enabled\x18\x04 \x01(\bR\n" +
 	"udpEnabled\x12\x1d\n" +
 	"\n" +
-	"user_level\x18\x06 \x01(\rR\tuserLevel\x1a;\n" +
+	"user_level\x18\x06 \x01(\rR\tuserLevel\x12Y\n" +
+	"\x15auth_failure_behavior\x18\a \x01(\x0e2%.xray.proxy.socks.AuthFailureBehaviorR\x13authFailureBehavior\x1a;\n" +
 	"\rAccountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"L\n" +
@@ -271,7 +335,12 @@ const file_proxy_socks_config_proto_rawDesc = "" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server*%\n" +
 	"\bAuthType\x12\v\n" +
 	"\aNO_AUTH\x10\x00\x12\f\n" +
-	"\bPASSWORD\x10\x01BR\n" +
+	"\bPASSWORD\x10\x01*8\n" +
+	"\x13AuthFailureBehavior\x12\n" +
+	"\n" +
+	"\x06REJECT\x10\x00\x12\b\n" +
+	"\x04DROP\x10\x01\x12\v\n" +
+	"\aHTTP400\x10\x02BR\n" +
 	"\x14com.xray.proxy.socksP\x01Z%github.com/xtls/xray-core/proxy/socks\xaa\x02\x10Xray.Proxy.Socksb\x06proto3"
 
 var (
@@ -286,27 +355,29 @@ func file_proxy_socks_config_proto_rawDescGZIP() []byte {
 	return file_proxy_socks_config_proto_rawDescData
 }
 
-var file_proxy_socks_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proxy_socks_config_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_proxy_socks_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proxy_socks_config_proto_goTypes = []any{
 	(AuthType)(0),                   // 0: xray.proxy.socks.AuthType
-	(*Account)(nil),                 // 1: xray.proxy.socks.Account
-	(*ServerConfig)(nil),            // 2: xray.proxy.socks.ServerConfig
-	(*ClientConfig)(nil),            // 3: xray.proxy.socks.ClientConfig
-	nil,                             // 4: xray.proxy.socks.ServerConfig.AccountsEntry
-	(*net.IPOrDomain)(nil),          // 5: xray.common.net.IPOrDomain
-	(*protocol.ServerEndpoint)(nil), // 6: xray.common.protocol.ServerEndpoint
+	(AuthFailureBehavior)(0),        // 1: xray.proxy.socks.AuthFailureBehavior
+	(*Account)(nil),                 // 2: xray.proxy.socks.Account
+	(*ServerConfig)(nil),            // 3: xray.proxy.socks.ServerConfig
+	(*ClientConfig)(nil),            // 4: xray.proxy.socks.ClientConfig
+	nil,                             // 5: xray.proxy.socks.ServerConfig.AccountsEntry
+	(*net.IPOrDomain)(nil),          // 6: xray.common.net.IPOrDomain
+	(*protocol.ServerEndpoint)(nil), // 7: xray.common.protocol.ServerEndpoint
 }
 var file_proxy_socks_config_proto_depIdxs = []int32{
 	0, // 0: xray.proxy.socks.ServerConfig.auth_type:type_name -> xray.proxy.socks.AuthType
-	4, // 1: xray.proxy.socks.ServerConfig.accounts:type_name -> xray.proxy.socks.ServerConfig.AccountsEntry
-	5, // 2: xray.proxy.socks.ServerConfig.address:type_name -> xray.common.net.IPOrDomain
-	6, // 3: xray.proxy.socks.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	5, // 1: xray.proxy.socks.ServerConfig.accounts:type_name -> xray.proxy.socks.ServerConfig.AccountsEntry
+	6, // 2: xray.proxy.socks.ServerConfig.address:type_name -> xray.common.net.IPOrDomain
+	1, // 3: xray.proxy.socks.ServerConfig.auth_failure_behavior:type_name -> xray.proxy.socks.AuthFailureBehavior
+	7, // 4: xray.proxy.socks.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_proxy_socks_config_proto_init() }
@@ -319,7 +390,7 @@ func file_proxy_socks_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_socks_config_proto_rawDesc), len(file_proxy_socks_config_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,

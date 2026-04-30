@@ -23,15 +23,27 @@ func (v *HTTPAccount) Build() *http.Account {
 }
 
 type HTTPServerConfig struct {
-	Accounts    []*HTTPAccount `json:"accounts"`
-	Transparent bool           `json:"allowTransparent"`
-	UserLevel   uint32         `json:"userLevel"`
+	Accounts            []*HTTPAccount `json:"accounts"`
+	Transparent         bool           `json:"allowTransparent"`
+	UserLevel           uint32         `json:"userLevel"`
+	AuthFailureResponse string         `json:"authFailureResponse"`
 }
 
 func (c *HTTPServerConfig) Build() (proto.Message, error) {
 	config := &http.ServerConfig{
 		AllowTransparent: c.Transparent,
 		UserLevel:        c.UserLevel,
+	}
+
+	switch c.AuthFailureResponse {
+	case "", "reject":
+		config.AuthFailureBehavior = http.AuthFailureBehavior_REJECT
+	case "drop":
+		config.AuthFailureBehavior = http.AuthFailureBehavior_DROP
+	case "http400":
+		config.AuthFailureBehavior = http.AuthFailureBehavior_HTTP400
+	default:
+		return nil, errors.New(`unknown http "authFailureResponse": `, c.AuthFailureResponse, ` (expected "reject", "drop", or "http400")`)
 	}
 
 	if len(c.Accounts) > 0 {
