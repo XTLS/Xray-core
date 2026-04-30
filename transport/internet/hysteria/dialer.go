@@ -66,7 +66,7 @@ func (c *client) close() {
 
 func (c *client) dial() error {
 	status := c.status()
-	if c.status() == StatusActive {
+	if status == StatusActive {
 		return nil
 	}
 	if status == StatusInactive {
