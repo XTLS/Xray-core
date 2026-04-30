@@ -324,6 +324,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	datagram := DatagramFromContext(ctx)
+	dest.Network = net.Network_UDP
 	config := streamSettings.ProtocolSettings.(*Config)
 	gotlsConfig := tlsConfig.GetTLSConfig()
 	socketConfig := streamSettings.SocketSettings
