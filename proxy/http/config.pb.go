@@ -22,6 +22,60 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// AuthFailureBehavior controls what the server returns when HTTP proxy
+// authentication is missing or invalid. REJECT preserves the RFC 7235 "407
+// Proxy Authentication Required" response (the default). DROP closes the
+// connection silently. HTTP400 writes a generic "HTTP/1.1 400 Bad Request"
+// reply so port scanners cannot fingerprint the service as a proxy.
+type AuthFailureBehavior int32
+
+const (
+	AuthFailureBehavior_REJECT  AuthFailureBehavior = 0
+	AuthFailureBehavior_DROP    AuthFailureBehavior = 1
+	AuthFailureBehavior_HTTP400 AuthFailureBehavior = 2
+)
+
+// Enum value maps for AuthFailureBehavior.
+var (
+	AuthFailureBehavior_name = map[int32]string{
+		0: "REJECT",
+		1: "DROP",
+		2: "HTTP400",
+	}
+	AuthFailureBehavior_value = map[string]int32{
+		"REJECT":  0,
+		"DROP":    1,
+		"HTTP400": 2,
+	}
+)
+
+func (x AuthFailureBehavior) Enum() *AuthFailureBehavior {
+	p := new(AuthFailureBehavior)
+	*p = x
+	return p
+}
+
+func (x AuthFailureBehavior) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuthFailureBehavior) Descriptor() protoreflect.EnumDescriptor {
+	return file_proxy_http_config_proto_enumTypes[0].Descriptor()
+}
+
+func (AuthFailureBehavior) Type() protoreflect.EnumType {
+	return &file_proxy_http_config_proto_enumTypes[0]
+}
+
+func (x AuthFailureBehavior) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuthFailureBehavior.Descriptor instead.
+func (AuthFailureBehavior) EnumDescriptor() ([]byte, []int) {
+	return file_proxy_http_config_proto_rawDescGZIP(), []int{0}
+}
+
 type Account struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -76,12 +130,13 @@ func (x *Account) GetPassword() string {
 
 // Config for HTTP proxy server.
 type ServerConfig struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Accounts         map[string]string      `protobuf:"bytes,2,rep,name=accounts,proto3" json:"accounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	AllowTransparent bool                   `protobuf:"varint,3,opt,name=allow_transparent,json=allowTransparent,proto3" json:"allow_transparent,omitempty"`
-	UserLevel        uint32                 `protobuf:"varint,4,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Accounts            map[string]string      `protobuf:"bytes,2,rep,name=accounts,proto3" json:"accounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	AllowTransparent    bool                   `protobuf:"varint,3,opt,name=allow_transparent,json=allowTransparent,proto3" json:"allow_transparent,omitempty"`
+	UserLevel           uint32                 `protobuf:"varint,4,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
+	AuthFailureBehavior AuthFailureBehavior    `protobuf:"varint,5,opt,name=auth_failure_behavior,json=authFailureBehavior,proto3,enum=xray.proxy.http.AuthFailureBehavior" json:"auth_failure_behavior,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ServerConfig) Reset() {
@@ -133,6 +188,13 @@ func (x *ServerConfig) GetUserLevel() uint32 {
 		return x.UserLevel
 	}
 	return 0
+}
+
+func (x *ServerConfig) GetAuthFailureBehavior() AuthFailureBehavior {
+	if x != nil {
+		return x.AuthFailureBehavior
+	}
+	return AuthFailureBehavior_REJECT
 }
 
 type Header struct {
@@ -248,12 +310,13 @@ const file_proxy_http_config_proto_rawDesc = "" +
 	"\x17proxy/http/config.proto\x12\x0fxray.proxy.http\x1a!common/protocol/server_spec.proto\"A\n" +
 	"\aAccount\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xe0\x01\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xba\x02\n" +
 	"\fServerConfig\x12G\n" +
 	"\baccounts\x18\x02 \x03(\v2+.xray.proxy.http.ServerConfig.AccountsEntryR\baccounts\x12+\n" +
 	"\x11allow_transparent\x18\x03 \x01(\bR\x10allowTransparent\x12\x1d\n" +
 	"\n" +
-	"user_level\x18\x04 \x01(\rR\tuserLevel\x1a;\n" +
+	"user_level\x18\x04 \x01(\rR\tuserLevel\x12X\n" +
+	"\x15auth_failure_behavior\x18\x05 \x01(\x0e2$.xray.proxy.http.AuthFailureBehaviorR\x13authFailureBehavior\x1a;\n" +
 	"\rAccountsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"0\n" +
@@ -262,7 +325,12 @@ const file_proxy_http_config_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value\"}\n" +
 	"\fClientConfig\x12<\n" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\x12/\n" +
-	"\x06header\x18\x02 \x03(\v2\x17.xray.proxy.http.HeaderR\x06headerBO\n" +
+	"\x06header\x18\x02 \x03(\v2\x17.xray.proxy.http.HeaderR\x06header*8\n" +
+	"\x13AuthFailureBehavior\x12\n" +
+	"\n" +
+	"\x06REJECT\x10\x00\x12\b\n" +
+	"\x04DROP\x10\x01\x12\v\n" +
+	"\aHTTP400\x10\x02BO\n" +
 	"\x13com.xray.proxy.httpP\x01Z$github.com/xtls/xray-core/proxy/http\xaa\x02\x0fXray.Proxy.Httpb\x06proto3"
 
 var (
@@ -277,24 +345,27 @@ func file_proxy_http_config_proto_rawDescGZIP() []byte {
 	return file_proxy_http_config_proto_rawDescData
 }
 
+var file_proxy_http_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_proxy_http_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_proxy_http_config_proto_goTypes = []any{
-	(*Account)(nil),                 // 0: xray.proxy.http.Account
-	(*ServerConfig)(nil),            // 1: xray.proxy.http.ServerConfig
-	(*Header)(nil),                  // 2: xray.proxy.http.Header
-	(*ClientConfig)(nil),            // 3: xray.proxy.http.ClientConfig
-	nil,                             // 4: xray.proxy.http.ServerConfig.AccountsEntry
-	(*protocol.ServerEndpoint)(nil), // 5: xray.common.protocol.ServerEndpoint
+	(AuthFailureBehavior)(0),        // 0: xray.proxy.http.AuthFailureBehavior
+	(*Account)(nil),                 // 1: xray.proxy.http.Account
+	(*ServerConfig)(nil),            // 2: xray.proxy.http.ServerConfig
+	(*Header)(nil),                  // 3: xray.proxy.http.Header
+	(*ClientConfig)(nil),            // 4: xray.proxy.http.ClientConfig
+	nil,                             // 5: xray.proxy.http.ServerConfig.AccountsEntry
+	(*protocol.ServerEndpoint)(nil), // 6: xray.common.protocol.ServerEndpoint
 }
 var file_proxy_http_config_proto_depIdxs = []int32{
-	4, // 0: xray.proxy.http.ServerConfig.accounts:type_name -> xray.proxy.http.ServerConfig.AccountsEntry
-	5, // 1: xray.proxy.http.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
-	2, // 2: xray.proxy.http.ClientConfig.header:type_name -> xray.proxy.http.Header
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 0: xray.proxy.http.ServerConfig.accounts:type_name -> xray.proxy.http.ServerConfig.AccountsEntry
+	0, // 1: xray.proxy.http.ServerConfig.auth_failure_behavior:type_name -> xray.proxy.http.AuthFailureBehavior
+	6, // 2: xray.proxy.http.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
+	3, // 3: xray.proxy.http.ClientConfig.header:type_name -> xray.proxy.http.Header
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proxy_http_config_proto_init() }
@@ -307,13 +378,14 @@ func file_proxy_http_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_http_config_proto_rawDesc), len(file_proxy_http_config_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_proxy_http_config_proto_goTypes,
 		DependencyIndexes: file_proxy_http_config_proto_depIdxs,
+		EnumInfos:         file_proxy_http_config_proto_enumTypes,
 		MessageInfos:      file_proxy_http_config_proto_msgTypes,
 	}.Build()
 	File_proxy_http_config_proto = out.File

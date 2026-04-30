@@ -13,11 +13,23 @@ message Account {
   string password = 2;
 }
 
+// AuthFailureBehavior controls what the server returns when HTTP proxy
+// authentication is missing or invalid. REJECT preserves the RFC 7235 "407
+// Proxy Authentication Required" response (the default). DROP closes the
+// connection silently. HTTP400 writes a generic "HTTP/1.1 400 Bad Request"
+// reply so port scanners cannot fingerprint the service as a proxy.
+enum AuthFailureBehavior {
+  REJECT = 0;
+  DROP = 1;
+  HTTP400 = 2;
+}
+
 // Config for HTTP proxy server.
 message ServerConfig {
   map<string, string> accounts = 2;
   bool allow_transparent = 3;
   uint32 user_level = 4;
+  AuthFailureBehavior auth_failure_behavior = 5;
 }
 
 message Header {

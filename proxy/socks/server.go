@@ -33,6 +33,20 @@ type Server struct {
 	httpServer    *http.Server
 }
 
+// mapAuthFailureBehaviorToHTTP translates the SOCKS-side auth-failure
+// behavior into the HTTP-side enum so the embedded HTTP fallback does not
+// expose the proxy fingerprint when the SOCKS inbound is configured to hide.
+func mapAuthFailureBehaviorToHTTP(b AuthFailureBehavior) http.AuthFailureBehavior {
+	switch b {
+	case AuthFailureBehavior_DROP:
+		return http.AuthFailureBehavior_DROP
+	case AuthFailureBehavior_HTTP400:
+		return http.AuthFailureBehavior_HTTP400
+	default:
+		return http.AuthFailureBehavior_REJECT
+	}
+}
+
 // NewServer creates a new Server object.
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	v := core.MustFromContext(ctx)
@@ -42,7 +56,8 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		cone:          ctx.Value("cone").(bool),
 	}
 	httpConfig := &http.ServerConfig{
-		UserLevel: config.UserLevel,
+		UserLevel:           config.UserLevel,
+		AuthFailureBehavior: mapAuthFailureBehaviorToHTTP(config.AuthFailureBehavior),
 	}
 	if config.AuthType == AuthType_PASSWORD {
 		httpConfig.Accounts = config.Accounts

@@ -48,7 +48,7 @@ type ServerSession struct {
 
 func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
 	if s.config.AuthType == AuthType_PASSWORD {
-		writeSocks4Response(writer, socks4RequestRejected, net.AnyIP, net.Port(0))
+		writeSocks4AuthFailure(writer, s.config.AuthFailureBehavior)
 		return nil, errors.New("socks 4 is not allowed when auth is required.")
 	}
 
@@ -109,8 +109,29 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 	}
 
 	if !hasAuthMethod(expectedAuth, buffer.BytesRange(0, int32(nMethod))) {
-		writeSocks5AuthenticationResponse(writer, socks5Version, authNoMatchingMethod)
+		writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, socks5Version, authNoMatchingMethod)
 		return "", errors.New("no matching auth method")
+	}
+
+	if expectedAuth == authPassword && s.config.AuthFailureBehavior != AuthFailureBehavior_REJECT {
+		username, password, err := ReadUsernamePassword(reader)
+		if err != nil {
+			writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, 0x01, 0xFF)
+			return "", errors.New("failed to read username and password for authentication").Base(err)
+		}
+
+		if !s.config.HasAccount(username, password) {
+			writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, 0x01, 0xFF)
+			return "", errors.New("invalid username or password")
+		}
+
+		if err := writeSocks5AuthenticationResponse(writer, socks5Version, expectedAuth); err != nil {
+			return "", errors.New("failed to write auth response").Base(err)
+		}
+		if err := writeSocks5AuthenticationResponse(writer, 0x01, 0x00); err != nil {
+			return "", errors.New("failed to write auth response").Base(err)
+		}
+		return username, nil
 	}
 
 	if err := writeSocks5AuthenticationResponse(writer, socks5Version, expectedAuth); err != nil {
@@ -124,7 +145,7 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 		}
 
 		if !s.config.HasAccount(username, password) {
-			writeSocks5AuthenticationResponse(writer, 0x01, 0xFF)
+			writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, 0x01, 0xFF)
 			return "", errors.New("invalid username or password")
 		}
 
@@ -295,6 +316,37 @@ func hasAuthMethod(expectedAuth byte, authCandidates []byte) bool {
 
 func writeSocks5AuthenticationResponse(writer io.Writer, version byte, auth byte) error {
 	return buf.WriteAllBytes(writer, []byte{version, auth}, nil)
+}
+
+// http400Response is a generic "Bad Request" reply that does not advertise any
+// proxy-specific headers. It is used to mask SOCKS/HTTP inbound ports as
+// ordinary web servers when authentication fails.
+var http400Response = []byte("HTTP/1.1 400 Bad Request\r\nServer: nginx\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+
+// writeSocks5AuthFailure writes the auth-failure response according to the
+// configured behavior. REJECT preserves the standard RFC 1928/1929 reply.
+// DROP writes nothing (the caller will close the connection). HTTP400 writes
+// a generic HTTP 400 to camouflage the port from proxy fingerprinting.
+func writeSocks5AuthFailure(writer io.Writer, behavior AuthFailureBehavior, version byte, auth byte) error {
+	switch behavior {
+	case AuthFailureBehavior_DROP:
+		return nil
+	case AuthFailureBehavior_HTTP400:
+		return buf.WriteAllBytes(writer, http400Response, nil)
+	default:
+		return writeSocks5AuthenticationResponse(writer, version, auth)
+	}
+}
+
+func writeSocks4AuthFailure(writer io.Writer, behavior AuthFailureBehavior) error {
+	switch behavior {
+	case AuthFailureBehavior_DROP:
+		return nil
+	case AuthFailureBehavior_HTTP400:
+		return buf.WriteAllBytes(writer, http400Response, nil)
+	default:
+		return writeSocks4Response(writer, socks4RequestRejected, net.AnyIP, net.Port(0))
+	}
 }
 
 func writeSocks5Response(writer io.Writer, errCode byte, address net.Address, port net.Port) error {

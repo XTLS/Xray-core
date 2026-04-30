@@ -28,11 +28,12 @@ const (
 )
 
 type SocksServerConfig struct {
-	AuthMethod string          `json:"auth"`
-	Accounts   []*SocksAccount `json:"accounts"`
-	UDP        bool            `json:"udp"`
-	Host       *Address        `json:"ip"`
-	UserLevel  uint32          `json:"userLevel"`
+	AuthMethod          string          `json:"auth"`
+	Accounts            []*SocksAccount `json:"accounts"`
+	UDP                 bool            `json:"udp"`
+	Host                *Address        `json:"ip"`
+	UserLevel           uint32          `json:"userLevel"`
+	AuthFailureResponse string          `json:"authFailureResponse"`
 }
 
 func (v *SocksServerConfig) Build() (proto.Message, error) {
@@ -45,6 +46,17 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 	default:
 		// errors.New("unknown socks auth method: ", v.AuthMethod, ". Default to noauth.").AtWarning().WriteToLog()
 		config.AuthType = socks.AuthType_NO_AUTH
+	}
+
+	switch v.AuthFailureResponse {
+	case "", "reject":
+		config.AuthFailureBehavior = socks.AuthFailureBehavior_REJECT
+	case "drop":
+		config.AuthFailureBehavior = socks.AuthFailureBehavior_DROP
+	case "http400":
+		config.AuthFailureBehavior = socks.AuthFailureBehavior_HTTP400
+	default:
+		return nil, errors.New(`unknown socks "authFailureResponse": `, v.AuthFailureResponse, ` (expected "reject", "drop", or "http400")`)
 	}
 
 	if len(v.Accounts) > 0 {
