@@ -110,7 +110,6 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 
 	if !hasAuthMethod(expectedAuth, buffer.BytesRange(0, int32(nMethod))) {
 		writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, socks5Version, authNoMatchingMethod)
-		writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, socks5Version, authNoMatchingMethod)
 		return "", errors.New("no matching auth method")
 	}
 
@@ -146,7 +145,6 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 		}
 
 		if !s.config.HasAccount(username, password) {
-			writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, 0x01, 0xFF)
 			writeSocks5AuthFailure(writer, s.config.AuthFailureBehavior, 0x01, 0xFF)
 			return "", errors.New("invalid username or password")
 		}
