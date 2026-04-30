@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
@@ -240,8 +241,10 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 						pktConn = c.PacketConn
 					case *net.UDPConn:
 						pktConn = c
-					default:
+					case *cnc.Connection:
 						pktConn = &internet.FakePacketConn{Conn: c}
+					default:
+						panic(reflect.TypeOf(c))
 					}
 				}
 
