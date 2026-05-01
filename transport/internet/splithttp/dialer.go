@@ -199,7 +199,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), streamSettings.SocketSettings)
 					if err != nil {
 						errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
-						conn.Close()
 						return nil, errors.New("failed to dial to dest").Base(err)
 					}
 

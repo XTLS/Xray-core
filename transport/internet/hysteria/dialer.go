@@ -275,7 +275,6 @@ func (c *client) udpHopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	conn, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
 	if err != nil {
 		errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
-		conn.Close()
 		return nil, errors.New("failed to dial to dest").Base(err)
 	}
 
