@@ -35,8 +35,10 @@ func (i *interConn) Read(b []byte) (int, error) {
 func (i *interConn) Write(b []byte) (int, error) {
 	if i.client {
 		i.client = false
-		_, err := i.stream.Write(append(quicvarint.Append(nil, FrameTypeTCPRequest), b...))
-		return len(b), err
+		if _, err := i.stream.Write(append(quicvarint.Append(nil, FrameTypeTCPRequest), b...)); err != nil {
+			return 0, err
+		}
+		return len(b), nil
 	}
 
 	return i.stream.Write(b)
@@ -118,7 +120,10 @@ func (i *InterConn) Write(p []byte) (int, error) {
 	}
 	i.Update()
 	binary.BigEndian.PutUint32(p, i.id)
-	return len(p), i.write(p)
+	if err := i.write(p); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 func (i *InterConn) Close() error {
