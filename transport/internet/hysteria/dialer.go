@@ -123,7 +123,6 @@ func (c *client) dial() error {
 	if len(quicParams.UdpHop.Ports) > 0 {
 		pktConn, err = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, c.udpHopDialer)
 		if err != nil {
-			pktConn.Close()
 			return err
 		}
 	} else {
@@ -275,9 +274,9 @@ func (c *client) clean() {
 func (c *client) udpHopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
 	conn, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
 	if err != nil {
-		errors.LogInfo(context.Background(), "skip hop: failed to dial to dest")
+		errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
 		conn.Close()
-		return nil, errors.New("failed to dial to dest")
+		return nil, errors.New("failed to dial to dest").Base(err)
 	}
 
 	var pktConn net.PacketConn

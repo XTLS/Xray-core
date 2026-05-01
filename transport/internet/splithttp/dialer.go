@@ -198,9 +198,9 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				udpHopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
 					conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), streamSettings.SocketSettings)
 					if err != nil {
-						errors.LogInfo(context.Background(), "skip hop: failed to dial to dest")
+						errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
 						conn.Close()
-						return nil, errors.New("failed to dial to dest")
+						return nil, errors.New("failed to dial to dest").Base(err)
 					}
 
 					var pktConn net.PacketConn
@@ -229,7 +229,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				if len(quicParams.UdpHop.Ports) > 0 {
 					pktConn, err = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer)
 					if err != nil {
-						pktConn.Close()
 						return nil, err
 					}
 				} else {
