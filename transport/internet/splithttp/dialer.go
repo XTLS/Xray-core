@@ -256,7 +256,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					pktConn = newConn
 				}
 
-				quicConn, err := quic.DialEarly(ctx, pktConn, udpAddr, tlsCfg, cfg)
+				conn, err := quic.DialEarly(ctx, pktConn, udpAddr, tlsCfg, cfg)
 				if err != nil {
 					return nil, err
 				}
@@ -264,14 +264,14 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				switch quicParams.Congestion {
 				case "reno":
 				case "", "bbr":
-					congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
+					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				case "force-brutal":
-					congestion.UseBrutal(quicConn, quicParams.BrutalUp)
+					congestion.UseBrutal(conn, quicParams.BrutalUp)
 				default:
 					panic(quicParams.Congestion)
 				}
 
-				return quicConn, nil
+				return conn, nil
 			},
 		}
 	} else if httpVersion == "2" {
