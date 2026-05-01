@@ -16,4 +16,6 @@ message User {
   // Protocol specific account information. Must be the account proto in one of
   // the proxies.
   xray.common.serial.TypedMessage account = 3;
+  uint64 uplink_speed_limit = 4;
+  uint64 downlink_speed_limit = 5;
 }

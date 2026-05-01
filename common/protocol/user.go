@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"sync"
+
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 )
@@ -28,11 +30,16 @@ func (u *User) ToMemoryUser() (*MemoryUser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &MemoryUser{
-		Account: account,
-		Email:   u.Email,
-		Level:   u.Level,
-	}, nil
+	mu := &MemoryUser{
+		Account:            account,
+		Email:              u.Email,
+		Level:              u.Level,
+		UplinkSpeedLimit:   u.GetUplinkSpeedLimit(),
+		DownlinkSpeedLimit: u.GetDownlinkSpeedLimit(),
+	}
+	mu.uplinkLimiter = globalLimiterRegistry.Get(mu.Email, "uplink", mu.UplinkSpeedLimit)
+	mu.downlinkLimiter = globalLimiterRegistry.Get(mu.Email, "downlink", mu.DownlinkSpeedLimit)
+	return mu, nil
 }
 
 func ToProtoUser(mu *MemoryUser) *User {
@@ -40,9 +47,11 @@ func ToProtoUser(mu *MemoryUser) *User {
 		return nil
 	}
 	return &User{
-		Account: serial.ToTypedMessage(mu.Account.ToProto()),
-		Email:   mu.Email,
-		Level:   mu.Level,
+		Account:            serial.ToTypedMessage(mu.Account.ToProto()),
+		Email:              mu.Email,
+		Level:              mu.Level,
+		UplinkSpeedLimit:   mu.UplinkSpeedLimit,
+		DownlinkSpeedLimit: mu.DownlinkSpeedLimit,
 	}
 }
 
@@ -52,4 +61,34 @@ type MemoryUser struct {
 	Account Account
 	Email   string
 	Level   uint32
+	UplinkSpeedLimit   uint64
+	DownlinkSpeedLimit uint64
+
+	limiterMu       sync.Mutex
+	uplinkLimiter   *RateLimiter
+	downlinkLimiter *RateLimiter
+}
+
+func (u *MemoryUser) GetUplinkLimiter() *RateLimiter {
+	if u == nil {
+		return nil
+	}
+	u.limiterMu.Lock()
+	defer u.limiterMu.Unlock()
+	if u.uplinkLimiter == nil {
+		u.uplinkLimiter = globalLimiterRegistry.Get(u.Email, "uplink", u.UplinkSpeedLimit)
+	}
+	return u.uplinkLimiter
+}
+
+func (u *MemoryUser) GetDownlinkLimiter() *RateLimiter {
+	if u == nil {
+		return nil
+	}
+	u.limiterMu.Lock()
+	defer u.limiterMu.Unlock()
+	if u.downlinkLimiter == nil {
+		u.downlinkLimiter = globalLimiterRegistry.Get(u.Email, "downlink", u.DownlinkSpeedLimit)
+	}
+	return u.downlinkLimiter
 }
