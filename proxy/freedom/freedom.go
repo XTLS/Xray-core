@@ -179,7 +179,7 @@ func (h *Handler) shouldResolveDomainBeforeFinalRules(dialDest net.Destination, 
 	if dialDest.Network != net.Network_TCP || !dialDest.Address.Family().IsDomain() {
 		return false
 	}
-	if len(h.finalRules) == 1 {
+	if len(h.finalRules) > 1 {
 		rule := h.finalRules[0]
 		if rule.action == RuleAction_Allow && rule.network[dialDest.Network] && len(rule.port) == 0 && rule.ip == nil {
 			return false
