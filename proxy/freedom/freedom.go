@@ -178,7 +178,7 @@ func getDefaultFinalRule(inbound *session.Inbound) *FinalRule {
 }
 
 func (h *Handler) shouldResolveDomainBeforeFinalRules(dialDest net.Destination, defaultRule *FinalRule) bool {
-	if dialDest.Network != net.Network_TCP || !dialDest.Address.Family().IsDomain() {
+	if !dialDest.Address.Family().IsDomain() {
 		return false
 	}
 	if len(h.finalRules) > 0 {
@@ -314,7 +314,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
-		} else if h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) { // asis + tcp + domain
+		} else if h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) { // asis + domain + hasrules
 			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
