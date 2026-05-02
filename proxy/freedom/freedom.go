@@ -266,6 +266,21 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	input := link.Reader
 	output := link.Writer
+	blackhole := func(blockedDest net.Destination) error {
+		delay := time.Duration(30+dice.Roll(61)) * time.Second
+		errors.LogInfo(ctx, "blocked target: ", blockedDest, ", blackholing connection for ", delay)
+		timer := time.AfterFunc(delay, func() {
+			common.Interrupt(input)
+			common.Interrupt(output)
+			errors.LogInfo(ctx, "closed blackholed connection to blocked target: ", blockedDest)
+		})
+		defer timer.Stop()
+		defer common.Close(output)
+		if err := buf.Copy(input, buf.Discard); err != nil {
+			return nil
+		}
+		return nil
+	}
 
 	var conn stat.Connection
 	var blockedDest *net.Destination
@@ -290,7 +305,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
-		} else if h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) {
+		} else if h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) { // asis + tcp + domain
 			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
@@ -301,7 +316,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 			}
 		}
-		if dialDest.Network == net.Network_TCP && h.applyFinalRules(dialDest.Network, dialDest.Address, dialDest.Port, defaultRule) == RuleAction_Block {
+		if h.applyFinalRules(dialDest.Network, dialDest.Address, dialDest.Port, defaultRule) == RuleAction_Block {
 			blockedDest = &dialDest
 			return nil
 		}
@@ -318,12 +333,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return errors.New("failed to open connection to ", destination).Base(err)
 	}
 	if blockedDest != nil {
-		return errors.New("blocked target: ", *blockedDest).AtInfo()
+		return blackhole(*blockedDest)
 	}
-	// if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
-	// 	conn.Close()
-	// 	return errors.New("blocked target: ", remoteDest).AtInfo()
-	// }
+	// SRV/TXT
+	if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
+		conn.Close()
+		return blackhole(remoteDest)
+	}
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 		version := byte(h.config.ProxyProtocol)
 		srcAddr := inbound.Source.RawNetAddr()
