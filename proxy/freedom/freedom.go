@@ -349,10 +349,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return blackhole(*blockedDest)
 	}
 	// SRV/TXT
-	if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
-		conn.Close()
-		return blackhole(remoteDest)
-	}
+	// if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
+	// 	conn.Close()
+	// 	return blackhole(remoteDest)
+	// }
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 		version := byte(h.config.ProxyProtocol)
 		srcAddr := inbound.Source.RawNetAddr()
