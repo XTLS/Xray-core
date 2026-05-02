@@ -95,7 +95,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				}
 			}
 		}
-		if dest.Port == 0 {
+		if dest.Port == 0 && port != "" {
 			dest.Port = net.Port(common.Must2(strconv.Atoi(port)))
 		}
 		if d.portMap != nil && d.portMap[port] != "" {
