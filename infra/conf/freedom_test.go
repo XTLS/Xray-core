@@ -21,7 +21,8 @@ func TestFreedomConfig(t *testing.T) {
 			Input: `{
 				"domainStrategy": "AsIs",
 				"redirect": "127.0.0.1:3366",
-				"userLevel": 1
+				"userLevel": 1,
+				"blockDelay": "30-60"
 			}`,
 			Parser: loadJSON(creator),
 			Output: &freedom.Config{
@@ -37,6 +38,10 @@ func TestFreedomConfig(t *testing.T) {
 					},
 				},
 				UserLevel: 1,
+				BlockDelay: &freedom.Range{
+					Min: 30,
+					Max: 60,
+				},
 			},
 		},
 		{

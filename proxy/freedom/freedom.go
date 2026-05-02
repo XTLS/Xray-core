@@ -223,6 +223,19 @@ func (h *Handler) policy() policy.Session {
 	return p
 }
 
+func (h *Handler) blockDelay() time.Duration {
+	minDelay := uint64(30)
+	maxDelay := uint64(90)
+	if h.config.BlockDelay != nil {
+		minDelay = h.config.BlockDelay.Min
+		maxDelay = h.config.BlockDelay.Max
+	}
+	if maxDelay <= minDelay {
+		return time.Duration(minDelay) * time.Second
+	}
+	return time.Duration(minDelay+uint64(dice.Roll(int(maxDelay-minDelay+1)))) * time.Second
+}
+
 func isValidAddress(addr *net.IPOrDomain) bool {
 	if addr == nil {
 		return false
@@ -267,7 +280,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	input := link.Reader
 	output := link.Writer
 	blackhole := func(blockedDest net.Destination) error {
-		delay := time.Duration(30+dice.Roll(61)) * time.Second
+		delay := h.blockDelay()
 		errors.LogInfo(ctx, "blocked target: ", blockedDest, ", blackholing connection for ", delay)
 		timer := time.AfterFunc(delay, func() {
 			common.Interrupt(input)

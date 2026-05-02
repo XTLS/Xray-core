@@ -36,6 +36,11 @@ message Noise {
   string apply_to = 6;
 }
 
+message Range {
+  uint64 min = 1;
+  uint64 max = 2;
+}
+
 enum RuleAction {
   Allow = 0;
   Block = 1;
@@ -56,4 +61,5 @@ message Config {
   uint32 proxy_protocol = 6;
   repeated Noise noises = 7;
   repeated FinalRuleConfig final_rules = 8;
+  Range block_delay = 9;
 }

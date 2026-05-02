@@ -27,6 +27,7 @@ type FreedomConfig struct {
 	ProxyProtocol  uint32                    `json:"proxyProtocol"`
 	IPsBlocked     *StringList               `json:"ipsBlocked"`
 	FinalRules     []*FreedomFinalRuleConfig `json:"finalRules"`
+	BlockDelay     *Int32Range               `json:"blockDelay"`
 }
 
 type Fragment struct {
@@ -187,6 +188,13 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 			return nil, err
 		}
 		config.FinalRules = append(config.FinalRules, rule)
+	}
+
+	if c.BlockDelay != nil {
+		config.BlockDelay = &freedom.Range{
+			Min: uint64(c.BlockDelay.From),
+			Max: uint64(c.BlockDelay.To),
+		}
 	}
 
 	return config, nil
