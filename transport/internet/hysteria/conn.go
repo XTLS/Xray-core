@@ -24,49 +24,49 @@ type interConn struct {
 	user   *protocol.MemoryUser
 }
 
-func (i *interConn) User() *protocol.MemoryUser {
-	return i.user
+func (c *interConn) User() *protocol.MemoryUser {
+	return c.user
 }
 
-func (i *interConn) Read(b []byte) (int, error) {
-	return i.stream.Read(b)
+func (c *interConn) Read(b []byte) (int, error) {
+	return c.stream.Read(b)
 }
 
-func (i *interConn) Write(b []byte) (int, error) {
-	if i.client {
-		i.client = false
-		if _, err := i.stream.Write(append(quicvarint.Append(nil, FrameTypeTCPRequest), b...)); err != nil {
+func (c *interConn) Write(b []byte) (int, error) {
+	if c.client {
+		c.client = false
+		if _, err := c.stream.Write(append(quicvarint.Append(nil, FrameTypeTCPRequest), b...)); err != nil {
 			return 0, err
 		}
 		return len(b), nil
 	}
 
-	return i.stream.Write(b)
+	return c.stream.Write(b)
 }
 
-func (i *interConn) Close() error {
-	i.stream.CancelRead(0)
-	return i.stream.Close()
+func (c *interConn) Close() error {
+	c.stream.CancelRead(0)
+	return c.stream.Close()
 }
 
-func (i *interConn) LocalAddr() net.Addr {
-	return i.local
+func (c *interConn) LocalAddr() net.Addr {
+	return c.local
 }
 
-func (i *interConn) RemoteAddr() net.Addr {
-	return i.remote
+func (c *interConn) RemoteAddr() net.Addr {
+	return c.remote
 }
 
-func (i *interConn) SetDeadline(t time.Time) error {
-	return i.stream.SetDeadline(t)
+func (c *interConn) SetDeadline(t time.Time) error {
+	return c.stream.SetDeadline(t)
 }
 
-func (i *interConn) SetReadDeadline(t time.Time) error {
-	return i.stream.SetReadDeadline(t)
+func (c *interConn) SetReadDeadline(t time.Time) error {
+	return c.stream.SetReadDeadline(t)
 }
 
-func (i *interConn) SetWriteDeadline(t time.Time) error {
-	return i.stream.SetWriteDeadline(t)
+func (c *interConn) SetWriteDeadline(t time.Time) error {
+	return c.stream.SetWriteDeadline(t)
 }
 
 type InterConn struct {
@@ -88,66 +88,65 @@ func (i *InterConn) User() *protocol.MemoryUser {
 	return i.user
 }
 
-func (i *InterConn) Time() time.Time {
-	i.mutex.Lock()
-	v := i.time
-	i.mutex.Unlock()
+func (c *InterConn) Time() time.Time {
+	c.mutex.Lock()
+	v := c.time
+	c.mutex.Unlock()
 	return v
 }
 
-func (i *InterConn) Update() {
-	i.mutex.Lock()
-	i.time = time.Now()
-	i.mutex.Unlock()
+func (c *InterConn) Update() {
+	c.mutex.Lock()
+	c.time = time.Now()
+	c.mutex.Unlock()
 }
 
-func (i *InterConn) Read(p []byte) (int, error) {
-	b, ok := <-i.ch
+func (c *InterConn) Read(p []byte) (int, error) {
+	b, ok := <-c.ch
 	if !ok {
 		return 0, io.EOF
 	}
-	n := copy(p, b)
-	if n != len(b) {
+	if len(p) < len(b) {
 		return 0, io.ErrShortBuffer
 	}
-	i.Update()
-	return n, nil
+	c.Update()
+	return copy(p, b), nil
 }
 
-func (i *InterConn) Write(p []byte) (int, error) {
-	if i.closed {
+func (c *InterConn) Write(p []byte) (int, error) {
+	if c.closed {
 		return 0, io.ErrClosedPipe
 	}
-	i.Update()
-	binary.BigEndian.PutUint32(p, i.id)
-	if err := i.write(p); err != nil {
+	binary.BigEndian.PutUint32(p, c.id)
+	if err := c.write(p); err != nil {
 		return 0, err
 	}
+	c.Update()
 	return len(p), nil
 }
 
-func (i *InterConn) Close() error {
-	i.close()
+func (c *InterConn) Close() error {
+	c.close()
 	return nil
 }
 
-func (i *InterConn) LocalAddr() net.Addr {
-	return i.local
+func (c *InterConn) LocalAddr() net.Addr {
+	return c.local
 }
 
-func (i *InterConn) RemoteAddr() net.Addr {
-	return i.remote
+func (c *InterConn) RemoteAddr() net.Addr {
+	return c.remote
 }
 
-func (i *InterConn) SetDeadline(t time.Time) error {
+func (c *InterConn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (i *InterConn) SetReadDeadline(t time.Time) error {
+func (c *InterConn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-func (i *InterConn) SetWriteDeadline(t time.Time) error {
+func (c *InterConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
