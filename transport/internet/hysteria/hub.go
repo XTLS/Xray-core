@@ -40,7 +40,7 @@ type httpHandler struct {
 	user *protocol.MemoryUser
 }
 
-func (h *httpHandler) AuthHttp(w http.ResponseWriter, r *http.Request) bool {
+func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method == http.MethodPost && r.Host == URLHost && r.URL.Path == URLPath {
 		h.Lock()
 		defer h.Unlock()
@@ -110,7 +110,7 @@ func (h *httpHandler) AuthHttp(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if h.AuthHttp(w, r) {
+	if h.AuthHTTP(w, r) {
 		return
 	}
 	h.masqHandler.ServeHTTP(w, r)

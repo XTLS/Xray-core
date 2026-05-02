@@ -151,11 +151,12 @@ func (c *InterConn) SetWriteDeadline(t time.Time) error {
 }
 
 type udpSessionManager struct {
+	sync.RWMutex
+
 	conn   *quic.Conn
 	m      map[uint32]*InterConn
 	next   uint32
 	closed bool
-	mutex  sync.RWMutex
 
 	addConn        internet.ConnHandler
 	udpIdleTimeout time.Duration
@@ -179,7 +180,7 @@ func (m *udpSessionManager) clean() {
 			return
 		}
 
-		m.mutex.RLock()
+		m.RLock()
 		now := time.Now()
 		timeoutConn := make([]*InterConn, 0, len(m.m))
 		for _, udpConn := range m.m {
@@ -187,12 +188,12 @@ func (m *udpSessionManager) clean() {
 				timeoutConn = append(timeoutConn, udpConn)
 			}
 		}
-		m.mutex.RUnlock()
+		m.RUnlock()
 
 		for _, udpConn := range timeoutConn {
-			m.mutex.Lock()
+			m.Lock()
 			m.close(udpConn)
-			m.mutex.Unlock()
+			m.Unlock()
 		}
 	}
 }
@@ -212,8 +213,8 @@ func (m *udpSessionManager) run() {
 		m.feed(id, d)
 	}
 
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.Lock()
+	defer m.Unlock()
 
 	m.closed = true
 
@@ -223,8 +224,8 @@ func (m *udpSessionManager) run() {
 }
 
 func (m *udpSessionManager) udp() (*InterConn, error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.Lock()
+	defer m.Unlock()
 
 	if m.closed {
 		return nil, errors.New("closed")
@@ -239,9 +240,9 @@ func (m *udpSessionManager) udp() (*InterConn, error) {
 	}
 	udpConn.write = m.conn.SendDatagram
 	udpConn.close = func() {
-		m.mutex.Lock()
+		m.Lock()
 		m.close(udpConn)
-		m.mutex.Unlock()
+		m.Unlock()
 	}
 	m.m[m.next] = udpConn
 	m.next++
@@ -250,24 +251,24 @@ func (m *udpSessionManager) udp() (*InterConn, error) {
 }
 
 func (m *udpSessionManager) feed(id uint32, d []byte) {
-	m.mutex.RLock()
+	m.RLock()
 	udpConn, ok := m.m[id]
 	if ok {
 		select {
 		case udpConn.ch <- d:
 		default:
 		}
-		m.mutex.RUnlock()
+		m.RUnlock()
 		return
 	}
-	m.mutex.RUnlock()
+	m.RUnlock()
 
 	if m.addConn == nil {
 		return
 	}
 
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.Lock()
+	defer m.Unlock()
 
 	udpConn, ok = m.m[id]
 	if !ok {
@@ -281,9 +282,9 @@ func (m *udpSessionManager) feed(id uint32, d []byte) {
 		}
 		udpConn.write = m.conn.SendDatagram
 		udpConn.close = func() {
-			m.mutex.Lock()
+			m.Lock()
 			m.close(udpConn)
-			m.mutex.Unlock()
+			m.Unlock()
 		}
 		udpConn.user = m.user
 		m.m[id] = udpConn
