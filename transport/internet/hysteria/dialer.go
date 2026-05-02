@@ -29,7 +29,6 @@ import (
 type client struct {
 	sync.Mutex
 
-	ctx            context.Context
 	dest           net.Destination
 	config         *Config
 	tlsConfig      *go_tls.Config
@@ -65,7 +64,7 @@ func (c *client) close() {
 	c.udpSM = nil
 }
 
-func (c *client) dial() error {
+func (c *client) dial(ctx context.Context) error {
 	status := c.status()
 	if status == StatusActive {
 		return nil
@@ -114,6 +113,29 @@ func (c *client) dial() error {
 	// 	quicConfig.KeepAlivePeriod = 10 * time.Second
 	// }
 
+	udpHopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
+		conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
+		if err != nil {
+			errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
+			return nil, errors.New("failed to dial to dest").Base(err)
+		}
+
+		var pktConn net.PacketConn
+
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn = c.PacketConn
+		case *net.UDPConn:
+			pktConn = c
+		default:
+			errors.LogInfo(context.Background(), "skip hop: invalid conn ", reflect.TypeOf(c))
+			conn.Close()
+			return nil, errors.New("invalid conn ", reflect.TypeOf(c))
+		}
+
+		return pktConn, nil
+	}
+
 	var pktConn net.PacketConn
 	var udpAddr *net.UDPAddr
 	var err error
@@ -122,12 +144,12 @@ func (c *client) dial() error {
 		return err
 	}
 	if len(quicParams.UdpHop.Ports) > 0 {
-		pktConn, err = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, c.udpHopDialer)
+		pktConn, err = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer)
 		if err != nil {
 			return err
 		}
 	} else {
-		conn, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
+		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
 		if err != nil {
 			return err
 		}
@@ -229,11 +251,11 @@ func (c *client) dial() error {
 	return nil
 }
 
-func (c *client) tcp() (stat.Connection, error) {
+func (c *client) tcp(ctx context.Context) (stat.Connection, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	err := c.dial()
+	err := c.dial(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -252,11 +274,11 @@ func (c *client) tcp() (stat.Connection, error) {
 	}, nil
 }
 
-func (c *client) udp() (stat.Connection, error) {
+func (c *client) udp(ctx context.Context) (stat.Connection, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	err := c.dial()
+	err := c.dial(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -270,29 +292,6 @@ func (c *client) clean() {
 		c.close()
 	}
 	c.Unlock()
-}
-
-func (c *client) udpHopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
-	conn, err := internet.DialSystem(c.ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
-	if err != nil {
-		errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
-		return nil, errors.New("failed to dial to dest").Base(err)
-	}
-
-	var pktConn net.PacketConn
-
-	switch c := conn.(type) {
-	case *internet.PacketConnWrapper:
-		pktConn = c.PacketConn
-	case *net.UDPConn:
-		pktConn = c
-	default:
-		errors.LogInfo(context.Background(), "skip hop: invalid conn ", reflect.TypeOf(c))
-		conn.Close()
-		return nil, errors.New("invalid conn ", reflect.TypeOf(c))
-	}
-
-	return pktConn, nil
 }
 
 type dialerConf struct {
@@ -344,7 +343,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		c = manager.m[dialerConf{dest, streamSettings}]
 		if c == nil {
 			c = &client{
-				ctx:            ctx,
 				dest:           dest,
 				config:         streamSettings.ProtocolSettings.(*Config),
 				tlsConfig:      tlsConfig.GetTLSConfig(),
@@ -357,12 +355,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		manager.Unlock()
 	}
 
-	c.ctx = ctx
-
 	if datagram {
-		return c.udp()
+		return c.udp(ctx)
 	}
-	return c.tcp()
+	return c.tcp(ctx)
 }
 
 func init() {
