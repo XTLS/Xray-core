@@ -289,21 +289,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	input := link.Reader
 	output := link.Writer
-	blackhole := func(blockedDest net.Destination, rule *FinalRule) error {
-		delay := h.blockDelay(rule)
-		errors.LogInfo(ctx, "blocked target: ", blockedDest, ", blackholing connection for ", delay)
-		timer := time.AfterFunc(delay, func() {
-			common.Interrupt(input)
-			common.Interrupt(output)
-			errors.LogInfo(ctx, "closed blackholed connection to blocked target: ", blockedDest)
-		})
-		defer timer.Stop()
-		defer common.Close(output)
-		if err := buf.Copy(input, buf.Discard); err != nil {
-			return nil
-		}
-		return nil
-	}
 
 	var conn stat.Connection
 	var blockedDest *net.Destination
@@ -358,7 +343,19 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return errors.New("failed to open connection to ", destination).Base(err)
 	}
 	if blockedDest != nil {
-		return blackhole(*blockedDest, blockedRule)
+		delay := h.blockDelay(blockedRule)
+		errors.LogInfo(ctx, "blocked target: ", *blockedDest, ", blackholing connection for ", delay)
+		timer := time.AfterFunc(delay, func() {
+			common.Interrupt(input)
+			common.Interrupt(output)
+			errors.LogInfo(ctx, "closed blackholed connection to blocked target: ", *blockedDest)
+		})
+		defer timer.Stop()
+		defer common.Close(output)
+		if err := buf.Copy(input, buf.Discard); err != nil {
+			return nil
+		}
+		return nil
 	}
 	// TODO: SRV/TXT
 	// if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
