@@ -29,6 +29,7 @@ import (
 type client struct {
 	sync.Mutex
 
+	ctx            context.Context
 	dest           net.Destination
 	config         *Config
 	tlsConfig      *go_tls.Config
@@ -126,7 +127,7 @@ func (c *client) dial() error {
 			return err
 		}
 	} else {
-		conn, err := internet.DialSystem(context.Background(), c.dest, c.socketConfig)
+		conn, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
 		if err != nil {
 			return err
 		}
@@ -272,7 +273,7 @@ func (c *client) clean() {
 }
 
 func (c *client) udpHopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
-	conn, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
+	conn, err := internet.DialSystem(c.ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
 	if err != nil {
 		errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
 		return nil, errors.New("failed to dial to dest").Base(err)
@@ -343,6 +344,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		c = manager.m[dialerConf{dest, streamSettings}]
 		if c == nil {
 			c = &client{
+				ctx:            ctx,
 				dest:           dest,
 				config:         streamSettings.ProtocolSettings.(*Config),
 				tlsConfig:      tlsConfig.GetTLSConfig(),

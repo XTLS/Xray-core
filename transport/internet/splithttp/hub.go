@@ -441,7 +441,7 @@ type Listener struct {
 	server     http.Server
 	h3server   *http3.Server
 	listener   net.Listener
-	h3listener Qface
+	h3listener http3.QUICListener
 	config     *Config
 	addConn    internet.ConnHandler
 	isH3       bool
@@ -519,8 +519,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
 		l.h3listener = &QListener{
-			Qface:      l.h3listener,
-			quicParams: quicParams,
+			QUICListener: l.h3listener,
+			quicParams:   quicParams,
 		}
 		errors.LogInfo(ctx, "listening QUIC for XHTTP/3 on ", address, ":", port)
 
@@ -615,21 +615,13 @@ func init() {
 	common.Must(internet.RegisterTransportListener(protocolName, ListenXH))
 }
 
-type Qface interface {
-	Accept(ctx context.Context) (*quic.Conn, error)
-	Addr() net.Addr
-	Close() error
-}
-
-var _ Qface = (*quic.EarlyListener)(nil)
-
 type QListener struct {
-	Qface
+	http3.QUICListener
 	quicParams *internet.QuicParams
 }
 
 func (l *QListener) Accept(ctx context.Context) (*quic.Conn, error) {
-	conn, err := l.Qface.Accept(ctx)
+	conn, err := l.QUICListener.Accept(ctx)
 	if err != nil {
 		return nil, err
 	}
