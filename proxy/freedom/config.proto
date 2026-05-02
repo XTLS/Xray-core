@@ -51,6 +51,7 @@ message FinalRuleConfig {
   repeated xray.common.net.Network networks = 2;
   xray.common.net.PortList port_list = 3;
   repeated xray.common.geodata.IPRule ip = 4;
+  Range block_delay = 5;
 }
 
 message Config {
@@ -61,5 +62,4 @@ message Config {
   uint32 proxy_protocol = 6;
   repeated Noise noises = 7;
   repeated FinalRuleConfig final_rules = 8;
-  Range block_delay = 9;
 }
