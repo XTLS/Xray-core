@@ -7,6 +7,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
@@ -48,7 +49,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		ctx, cancel := context.WithCancel(ctx)
 		timer := signal.CancelAfterInactivity(ctx, func() {
 			cancel()
-		}, 60*time.Second)
+		}, time.Duration(30+dice.Roll(91))*time.Second)
 		go buf.Copy(link.Reader, buf.Discard, buf.UpdateActivity(timer))
 		<-ctx.Done()
 	}
