@@ -497,8 +497,8 @@ func (b Bandwidth) Bps() (uint64, error) {
 }
 
 type UdpHop struct {
-	PortList json.RawMessage `json:"ports"`
-	Interval *Int32Range     `json:"interval"`
+	PortList *PortList   `json:"ports"`
+	Interval *Int32Range `json:"interval"`
 }
 
 type Masquerade struct {
@@ -2142,9 +2142,8 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
 			}
 
-			var hop *PortList
-			if err := json.Unmarshal(c.FinalMask.QuicParams.UdpHop.PortList, &hop); err != nil {
-				hop = &PortList{}
+			if c.FinalMask.QuicParams.UdpHop.PortList == nil {
+				c.FinalMask.QuicParams.UdpHop.PortList = &PortList{}
 			}
 
 			var inertvalMin, inertvalMax int64
@@ -2190,7 +2189,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				BrutalUp:   up,
 				BrutalDown: down,
 				UdpHop: &internet.UdpHop{
-					Ports:       hop.Build().Ports(),
+					Ports:       c.FinalMask.QuicParams.UdpHop.PortList.Build().Ports(),
 					IntervalMin: inertvalMin,
 					IntervalMax: inertvalMax,
 				},
