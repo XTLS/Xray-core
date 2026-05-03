@@ -58,7 +58,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 
 	if streamSettings.UdpmaskManager != nil {
 		var pktConn net.PacketConn
-		var udpAddr = conn.RemoteAddr().(*net.UDPAddr)
+		var udpAddr *net.UDPAddr
 		switch c := conn.(type) {
 		case *internet.PacketConnWrapper:
 			pktConn = c.PacketConn
@@ -69,6 +69,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 		default:
 			panic(reflect.TypeOf(c))
 		}
+		udpAddr = common.Must2(net.ResolveUDPAddr("udp", conn.RemoteAddr().String()))
 		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
 		if err != nil {
 			pktConn.Close()

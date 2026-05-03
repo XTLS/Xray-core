@@ -5,6 +5,7 @@ import (
 	gotls "crypto/tls"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -199,7 +200,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), streamSettings.SocketSettings)
 					if err != nil {
 						errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
-						return nil, errors.New("failed to dial to dest").Base(err)
+						return nil, errors.New("")
 					}
 
 					var pktConn net.PacketConn
@@ -210,9 +211,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					case *net.UDPConn:
 						pktConn = c
 					default:
-						errors.LogInfo(context.Background(), "skip hop: invalid conn ", reflect.TypeOf(c))
-						conn.Close()
-						return nil, errors.New("invalid conn ", reflect.TypeOf(c))
+						panic(reflect.TypeOf(c))
 					}
 
 					return pktConn, nil
@@ -220,20 +219,27 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				var pktConn net.PacketConn
 				var udpAddr *net.UDPAddr
-				var err error
-				udpAddr, err = net.ResolveUDPAddr("udp", dest.NetAddr())
-				if err != nil {
-					return nil, err
-				}
 				if len(quicParams.UdpHop.Ports) > 0 {
-					pktConn, err = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer)
+					index := rand.Intn(len(quicParams.UdpHop.Ports))
+					dest.Port = net.Port(quicParams.UdpHop.Ports[index])
+					conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 					if err != nil {
-						return nil, err
+						return nil, errors.New("failed to dial to dest").Base(err)
 					}
+					switch c := conn.(type) {
+					case *internet.PacketConnWrapper:
+						pktConn = c.PacketConn
+					case *net.UDPConn:
+						pktConn = c
+					default:
+						panic(reflect.TypeOf(c))
+					}
+					udpAddr = common.Must2(net.ResolveUDPAddr("udp", conn.RemoteAddr().String()))
+					pktConn = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer, pktConn, index)
 				} else {
 					conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 					if err != nil {
-						return nil, err
+						return nil, errors.New("failed to dial to dest").Base(err)
 					}
 					switch c := conn.(type) {
 					case *internet.PacketConnWrapper:
@@ -245,6 +251,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					default:
 						panic(reflect.TypeOf(c))
 					}
+					udpAddr = common.Must2(net.ResolveUDPAddr("udp", conn.RemoteAddr().String()))
 				}
 
 				if streamSettings.UdpmaskManager != nil {

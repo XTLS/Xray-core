@@ -47,7 +47,7 @@ type udpPacket struct {
 	Err  error
 }
 
-func NewUDPHopPacketConn(addrs []net.Addr, hopIntervalMin time.Duration, hopIntervalMax time.Duration, listenUDPFunc func(addr *net.UDPAddr) (net.PacketConn, error)) (net.PacketConn, error) {
+func NewUDPHopPacketConn(addrs []net.Addr, hopIntervalMin time.Duration, hopIntervalMax time.Duration, listenUDPFunc func(addr *net.UDPAddr) (net.PacketConn, error), currentConn net.PacketConn, addrIndex int) net.PacketConn {
 	if len(addrs) == 0 {
 		panic("len(addrs) == 0")
 	}
@@ -75,8 +75,8 @@ func NewUDPHopPacketConn(addrs []net.Addr, hopIntervalMin time.Duration, hopInte
 		HopIntervalMax: hopIntervalMax,
 		ListenUDPFunc:  listenUDPFunc,
 		prevConn:       nil,
-		currentConn:    nil,
-		addrIndex:      rand.Intn(len(addrs)),
+		currentConn:    currentConn,
+		addrIndex:      addrIndex,
 		recvQueue:      make(chan *udpPacket, packetQueueSize),
 		closeChan:      make(chan struct{}),
 		bufPool: sync.Pool{
@@ -85,14 +85,9 @@ func NewUDPHopPacketConn(addrs []net.Addr, hopIntervalMin time.Duration, hopInte
 			},
 		},
 	}
-	var err error
-	hConn.currentConn, err = listenUDPFunc(hConn.Addrs[hConn.addrIndex].(*net.UDPAddr))
-	if err != nil {
-		return nil, err
-	}
 	go hConn.recvLoop(hConn.currentConn)
 	go hConn.hopLoop()
-	return hConn, nil
+	return hConn
 }
 
 func (u *UdpHopPacketConn) recvLoop(conn net.PacketConn) {
