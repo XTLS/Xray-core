@@ -237,11 +237,10 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 	})
 	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
-	destination := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
-	if !destination.IsValid() {
-		return errors.New("invalid destination")
+	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
+	if err != nil {
+		return err
 	}
-
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
 		return err
@@ -262,7 +261,10 @@ func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.Packe
 	})
 	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
-	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
+	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
+	if err != nil {
+		return err
+	}
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
 		return err

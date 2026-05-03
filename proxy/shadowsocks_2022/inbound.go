@@ -115,7 +115,11 @@ func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.M
 	})
 	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
-	link, err := dispatcher.Dispatch(ctx, singbridge.ToDestination(metadata.Destination, net.Network_TCP))
+	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
+	if err != nil {
+		return err
+	}
+	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
 		return err
 	}
@@ -136,7 +140,10 @@ func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, me
 	})
 	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
 	dispatcher := session.DispatcherFromContext(ctx)
-	destination := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
+	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
+	if err != nil {
+		return err
+	}
 	link, err := dispatcher.Dispatch(ctx, destination)
 	if err != nil {
 		return err
