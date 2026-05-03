@@ -31,9 +31,6 @@ func init() {
 				case *internet.PacketConnWrapper:
 					pktConn = c.PacketConn
 					udpAddr = c.RemoteAddr().(*net.UDPAddr)
-				case *net.UDPConn:
-					pktConn = c
-					udpAddr = c.RemoteAddr().(*net.UDPAddr)
 				case *cnc.Connection:
 					pktConn = &internet.FakePacketConn{Conn: c}
 					udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}

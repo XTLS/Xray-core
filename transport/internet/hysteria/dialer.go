@@ -126,8 +126,6 @@ func (c *client) dial(ctx context.Context) error {
 		switch c := conn.(type) {
 		case *internet.PacketConnWrapper:
 			pktConn = c.PacketConn
-		case *net.UDPConn:
-			pktConn = c
 		default:
 			panic(reflect.TypeOf(c))
 		}
@@ -148,9 +146,6 @@ func (c *client) dial(ctx context.Context) error {
 		case *internet.PacketConnWrapper:
 			pktConn = c.PacketConn
 			udpAddr = conn.RemoteAddr().(*net.UDPAddr)
-		case *net.UDPConn:
-			pktConn = c
-			udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 		default:
 			panic(reflect.TypeOf(c))
 		}
@@ -163,9 +158,6 @@ func (c *client) dial(ctx context.Context) error {
 		switch c := conn.(type) {
 		case *internet.PacketConnWrapper:
 			pktConn = c.PacketConn
-			udpAddr = c.RemoteAddr().(*net.UDPAddr)
-		case *net.UDPConn:
-			pktConn = c
 			udpAddr = c.RemoteAddr().(*net.UDPAddr)
 		case *cnc.Connection:
 			pktConn = &internet.FakePacketConn{Conn: c}

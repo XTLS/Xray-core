@@ -208,8 +208,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					switch c := conn.(type) {
 					case *internet.PacketConnWrapper:
 						pktConn = c.PacketConn
-					case *net.UDPConn:
-						pktConn = c
 					default:
 						panic(reflect.TypeOf(c))
 					}
@@ -230,9 +228,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					case *internet.PacketConnWrapper:
 						pktConn = c.PacketConn
 						udpAddr = conn.RemoteAddr().(*net.UDPAddr)
-					case *net.UDPConn:
-						pktConn = c
-						udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 					default:
 						panic(reflect.TypeOf(c))
 					}
@@ -245,9 +240,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					switch c := conn.(type) {
 					case *internet.PacketConnWrapper:
 						pktConn = c.PacketConn
-						udpAddr = c.RemoteAddr().(*net.UDPAddr)
-					case *net.UDPConn:
-						pktConn = c
 						udpAddr = c.RemoteAddr().(*net.UDPAddr)
 					case *cnc.Connection:
 						pktConn = &internet.FakePacketConn{Conn: c}
