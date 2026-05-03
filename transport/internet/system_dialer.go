@@ -219,7 +219,7 @@ type FakePacketConn struct {
 
 func (c *FakePacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	n, err = c.Read(p)
-	return n, &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}, err
+	return n, &net.UDPAddr{IP: c.Conn.RemoteAddr().(*net.TCPAddr).IP, Port: c.Conn.RemoteAddr().(*net.TCPAddr).Port}, err
 }
 
 func (c *FakePacketConn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
@@ -227,5 +227,5 @@ func (c *FakePacketConn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
 }
 
 func (c *FakePacketConn) LocalAddr() net.Addr {
-	return &net.UDPAddr{IP: c.LocalAddr().(*net.TCPAddr).IP, Port: c.LocalAddr().(*net.TCPAddr).Port}
+	return &net.UDPAddr{IP: c.Conn.LocalAddr().(*net.TCPAddr).IP, Port: c.Conn.LocalAddr().(*net.TCPAddr).Port}
 }

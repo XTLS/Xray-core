@@ -229,12 +229,13 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					switch c := conn.(type) {
 					case *internet.PacketConnWrapper:
 						pktConn = c.PacketConn
+						udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 					case *net.UDPConn:
 						pktConn = c
+						udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 					default:
 						panic(reflect.TypeOf(c))
 					}
-					udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 					pktConn = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer, pktConn, index)
 				} else {
 					conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
