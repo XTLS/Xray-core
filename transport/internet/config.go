@@ -12,7 +12,7 @@ var (
 	globalTransportConfigCreatorCache = make(map[string]ConfigCreator)
 )
 
-var strategy = [][]byte{
+var strategy = [11][3]byte{
 	//              name        strategy,   prefer, fallback
 	{0, 0, 0}, //   AsIs        none,       /,      /
 	{1, 0, 0}, //   UseIP       use,        both,   none
@@ -26,8 +26,6 @@ var strategy = [][]byte{
 	{2, 4, 6}, //   ForceIPv4v6 force,      4,      6
 	{2, 6, 4}, //   ForceIPv6v4 force,      6,      4
 }
-
-const unknownProtocol = "unknown"
 
 func RegisterProtocolConfigCreator(name string, creator ConfigCreator) error {
 	if _, found := globalTransportConfigCreatorCache[name]; found {
