@@ -234,7 +234,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					default:
 						panic(reflect.TypeOf(c))
 					}
-					udpAddr = common.Must2(net.ResolveUDPAddr("udp", conn.RemoteAddr().String()))
+					udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 					pktConn = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer, pktConn, index)
 				} else {
 					conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
