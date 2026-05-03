@@ -30,14 +30,16 @@ func init() {
 				switch c := conn.(type) {
 				case *internet.PacketConnWrapper:
 					pktConn = c.PacketConn
+					udpAddr = c.RemoteAddr().(*net.UDPAddr)
 				case *net.UDPConn:
 					pktConn = c
+					udpAddr = c.RemoteAddr().(*net.UDPAddr)
 				case *cnc.Connection:
 					pktConn = &internet.FakePacketConn{Conn: c}
+					udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
 				default:
 					panic(reflect.TypeOf(c))
 				}
-				udpAddr = common.Must2(net.ResolveUDPAddr("udp", conn.RemoteAddr().String()))
 				newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
 				if err != nil {
 					pktConn.Close()
