@@ -1,0 +1,71 @@
+ssh root@195.248.242.55
+nano vless_reality.sh
+#!/bin/bash
+
+# نصب اسکریپت و ابزارهای لازم
+apt update && apt install -y socat curl jq
+
+# نصب Xray
+bash <(curl -Ls https://raw.githubusercontent.com/XTLS/Xray-install/main/install-release.sh)
+
+# ساخت Reality Key Pair
+REALITY_KEYS=$(xray x25519)
+PRIV_KEY=$(echo "$REALITY_KEYS" | grep Private | awk '{print $3}')
+PUB_KEY=$(echo "$REALITY_KEYS" | grep Public | awk '{print $3}')
+
+# ساخت UUID
+UUID=$(cat /proc/sys/kernel/random/uuid)
+
+# آی‌پی سرور
+SERVER_IP=$(curl -s ifconfig.me)
+
+# انتخاب dest و sni معتبر
+SNI="www.cloudflare.com"
+DEST="www.cloudflare.com:443"
+
+# ساخت shortId برای Reality
+SHORTID=$(head -c 8 /dev/urandom | xxd -ps)
+
+# ساخت فایل کانفیگ Xray
+cat > /usr/local/etc/xray/config.json <<EOF
+{
+  "inbounds": [{
+    "port": 443,
+    "protocol": "vless",
+    "settings": {
+      "clients": [{
+        "id": "$UUID",
+        "flow": "xtls-rprx-vision"
+      }],
+      "decryption": "none"
+    },
+    "streamSettings": {
+      "network": "tcp",
+      "security": "reality",
+      "realitySettings": {
+        "show": false,
+        "dest": "$DEST",
+        "xver": 0,
+        "serverNames": ["$SNI"],
+        "privateKey": "$PRIV_KEY",
+        "shortIds": ["$SHORTID"]
+      }
+    }
+  }],
+  "outbounds": [{
+    "protocol": "freedom",
+    "settings": {}
+  }]
+}
+EOF
+
+# راه‌اندازی مجدد Xray
+systemctl restart xray
+
+# تولید لینک نهایی VLESS Reality
+echo -e "\n\n✅  اتصال شما آماده است:\n"
+echo "---------------------------------------------"
+echo "vless://$UUID@$SERVER_IP:443?type=tcp&security=reality&sni=$SNI&fp=chrome&pbk=$PUB_KEY&sid=$SHORTID&flow=xtls-rprx-vision#MyReality"
+echo "---------------------------------------------"
+echo -e "\n\n 🔑 Reality Public Key شما:\n$PUB_KEY"
+echo -e "\nتمام شد! اگر به راهنما نیاز داری، همینجا بپرس 😉"
