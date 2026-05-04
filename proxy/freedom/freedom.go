@@ -319,7 +319,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
 			} else if len(addrs) > 0 {
-				if addr := net.IPAddress(addrs[dice.Roll(len(addrs))].IP); addr != nil {
+				if addr := net.IPAddress(addrs[0].IP); addr != nil {
 					dialDest.Address = addr
 					errors.LogInfo(ctx, "dialing to ", dialDest)
 				}
