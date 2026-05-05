@@ -21,6 +21,8 @@ type LogConfig struct {
 	LogLevel    string `json:"loglevel"`
 	DNSLog      bool   `json:"dnsLog"`
 	MaskAddress string `json:"maskAddress"`
+    ErrorStderr bool   `json:"errorStderr"`
+    MinSeverity int32  `json:"minSeverity"`
 }
 
 func (v *LogConfig) Build() *log.Config {
@@ -61,5 +63,9 @@ func (v *LogConfig) Build() *log.Config {
 		config.ErrorLogLevel = clog.Severity_Warning
 	}
 	config.MaskAddress = v.MaskAddress
+    
+    config.ErrorStderr = v.ErrorStderr
+    config.MinSeverity = clog.Severity(v.MinSeverity)
+
 	return config
 }

@@ -65,6 +65,7 @@ func (g *Instance) initAccessLogger() error {
 func (g *Instance) initErrorLogger() error {
 	handler, err := createHandler(g.config.ErrorLogType, HandlerCreatorOptions{
 		Path: g.config.ErrorLogPath,
+		ErrorStderr: g.config.ErrorStderr,
 	})
 	if err != nil {
 		return err
@@ -134,7 +135,11 @@ func (g *Instance) Handle(msg log.Message) {
 		}
 	case *log.GeneralMessage:
 		if g.errorLogger != nil && msg.Severity <= g.config.ErrorLogLevel {
-			g.errorLogger.Handle(Msg)
+            if g.config.MinSeverity == 0 || msg.Severity <= g.config.MinSeverity {
+                g.errorLogger.Handle(Msg)
+            } else if g.accessLogger != nil {
+                g.accessLogger.Handle(Msg)
+            }
 		}
 	default:
 		// Swallow

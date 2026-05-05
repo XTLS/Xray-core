@@ -24,4 +24,7 @@ message Config {
   string access_log_path = 5;
   bool enable_dns_log = 6;
   string mask_address= 7;
+
+  bool error_stderr = 8;
+  xray.common.log.Severity min_severity = 9;
 }
