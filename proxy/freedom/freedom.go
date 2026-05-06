@@ -239,11 +239,11 @@ func (h *Handler) blockDelay(rule *FinalRule) time.Duration {
 		min = rule.blockDelay.Min
 		max = rule.blockDelay.Max
 	}
-	abs := max - min
+	span := max - min
 	if max < min {
-		abs = min - max
+		span = min - max
 	}
-	return time.Duration(min+uint64(dice.Roll(int(abs+1)))) * time.Second
+	return time.Duration(min+uint64(dice.Roll(int(span+1)))) * time.Second
 }
 
 func isValidAddress(addr *net.IPOrDomain) bool {
@@ -293,6 +293,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 	var blockedDest *net.Destination
 	var blockedRule *FinalRule
+	firstResolve := true
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
 		dialDest := destination
 		if h.config.DomainStrategy.HasStrategy() && dialDest.Address.Family().IsDomain() {
@@ -303,7 +304,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			ips, err := internet.LookupForIP(dialDest.Address.Domain(), strategy, outGateway)
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
-				if h.config.DomainStrategy.ForceIP() {
+				if h.config.DomainStrategy.ForceIP() || h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) {
 					return err
 				}
 			} else {
@@ -315,11 +316,31 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
 		} else if h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) { // asis + domain + hasrules
-			addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
-			if err != nil {
-				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
-			} else if len(addrs) > 0 {
-				if addr := net.IPAddress(addrs[0].IP); addr != nil {
+			domain := dialDest.Address.Domain()
+			var ips []net.IP
+			var err error
+			if firstResolve {
+				firstResolve = false
+				supportIPv4, supportIPv6 := utils.CheckRoutes()
+				if !supportIPv4 && !supportIPv6 {
+					return errors.New("failed to detect route support")
+				}
+				if supportIPv4 {
+					ips, err = net.DefaultResolver.LookupIP(ctx, "ip4", domain)
+				}
+				if len(ips) == 0 && supportIPv6 {
+					ips, err = net.DefaultResolver.LookupIP(ctx, "ip6", domain)
+				}
+				if err != nil && len(ips) == 0 {
+					return err
+				}
+			} else {
+				ips, err = net.DefaultResolver.LookupIP(ctx, "ip", domain)
+			}
+			if err != nil && len(ips) == 0 {
+				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", domain) // SRV/TXT, lookup failed
+			} else if len(ips) > 0 {
+				if addr := net.IPAddress(ips[dice.Roll(len(ips))]); addr != nil {
 					dialDest.Address = addr
 					errors.LogInfo(ctx, "dialing to ", dialDest)
 				}
@@ -357,7 +378,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		return nil
 	}
-	// TODO: SRV/TXT
+	// TODO: SRV/TXT & bypass dialerProxy & lookup failed
 	// if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
 	// 	conn.Close()
 	// 	return blackhole(remoteDest)
