@@ -318,32 +318,27 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		} else if h.shouldResolveDomainBeforeFinalRules(dialDest, defaultRule) { // asis + domain + hasrules
 			domain := dialDest.Address.Domain()
 			var ips []net.IP
-			var err error
 			if firstResolve {
 				firstResolve = false
 				supportIPv4, supportIPv6 := utils.CheckRoutes()
-				if !supportIPv4 && !supportIPv6 {
-					return errors.New("failed to detect route support")
-				}
 				if supportIPv4 {
-					ips, err = net.DefaultResolver.LookupIP(ctx, "ip4", domain)
+					ips, _ = net.DefaultResolver.LookupIP(ctx, "ip4", domain)
 				}
 				if len(ips) == 0 && supportIPv6 {
-					ips, err = net.DefaultResolver.LookupIP(ctx, "ip6", domain)
+					ips, _ = net.DefaultResolver.LookupIP(ctx, "ip6", domain)
 				}
-				if err != nil && len(ips) == 0 {
-					return err
+				if len(ips) == 0 {
+					return errors.New("failed to get IP address for domain ", domain)
 				}
 			} else {
-				ips, err = net.DefaultResolver.LookupIP(ctx, "ip", domain)
+				ips, _ = net.DefaultResolver.LookupIP(ctx, "ip", domain)
 			}
-			if err != nil && len(ips) == 0 {
-				errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", domain) // SRV/TXT, lookup failed
-			} else if len(ips) > 0 {
-				if addr := net.IPAddress(ips[dice.Roll(len(ips))]); addr != nil {
-					dialDest.Address = addr
-					errors.LogInfo(ctx, "dialing to ", dialDest)
-				}
+			if len(ips) == 0 { // SRV/TXT, lookup failed
+				return errors.New("failed to get IP address for domain ", domain)
+			}
+			if addr := net.IPAddress(ips[dice.Roll(len(ips))]); addr != nil {
+				dialDest.Address = addr
+				errors.LogInfo(ctx, "dialing to ", dialDest)
 			}
 		}
 		if rule := h.matchFinalRule(dialDest.Network, dialDest.Address, dialDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
@@ -378,11 +373,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		return nil
 	}
-	// TODO: SRV/TXT & bypass dialerProxy & lookup failed
-	// if remoteDest := net.DestinationFromAddr(conn.RemoteAddr()); h.applyFinalRules(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule) == RuleAction_Block {
-	// 	conn.Close()
-	// 	return blackhole(remoteDest)
-	// }
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
 		version := byte(h.config.ProxyProtocol)
 		srcAddr := inbound.Source.RawNetAddr()
