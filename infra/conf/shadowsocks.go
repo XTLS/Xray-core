@@ -53,6 +53,10 @@ type ShadowsocksServerConfig struct {
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
 
+	if v.Clients != nil {
+		v.Users = v.Clients
+	}
+
 	if C.Contains(shadowaead_2022.List, v.Cipher) {
 		return buildShadowsocks2022(v)
 	}
@@ -60,9 +64,6 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	config := new(shadowsocks.ServerConfig)
 	config.Network = v.NetworkList.Build()
 
-	if v.Clients != nil {
-		v.Users = v.Clients
-	}
 	if v.Users != nil {
 		if len(v.Users) > 0 {
 			config.Users = make([]*protocol.User, len(v.Users))
