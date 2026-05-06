@@ -59,7 +59,8 @@ func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 }
 
 type VMessInboundConfig struct {
-	Users    []json.RawMessage   `json:"clients"`
+	Clients  []json.RawMessage   `json:"clients"`
+	Users    []json.RawMessage   `json:"users"`
 	Defaults *VMessDefaultConfig `json:"default"`
 }
 
@@ -73,6 +74,9 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 		config.Default = c.Defaults.Build()
 	}
 
+	if c.Clients != nil {
+		c.Users = c.Clients
+	}
 	config.User = make([]*protocol.User, len(c.Users))
 	processUser := func(idx int) error {
 		rawData := c.Users[idx]

@@ -45,7 +45,8 @@ type ShadowsocksServerConfig struct {
 	Password    string                   `json:"password"`
 	Level       byte                     `json:"level"`
 	Email       string                   `json:"email"`
-	Users       []*ShadowsocksUserConfig `json:"clients"`
+	Clients     []*ShadowsocksUserConfig `json:"clients"`
+	Users       []*ShadowsocksUserConfig `json:"users"`
 	NetworkList *NetworkList             `json:"network"`
 }
 
@@ -59,6 +60,9 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	config := new(shadowsocks.ServerConfig)
 	config.Network = v.NetworkList.Build()
 
+	if v.Clients != nil {
+		v.Users = v.Clients
+	}
 	if v.Users != nil {
 		if len(v.Users) > 0 {
 			config.Users = make([]*protocol.User, len(v.Users))

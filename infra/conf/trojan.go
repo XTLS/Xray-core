@@ -113,6 +113,7 @@ type TrojanUserConfig struct {
 // TrojanServerConfig is Inbound configuration
 type TrojanServerConfig struct {
 	Clients   []*TrojanUserConfig      `json:"clients"`
+	Users     []*TrojanUserConfig      `json:"users"`
 	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
 }
 
@@ -120,12 +121,16 @@ type TrojanServerConfig struct {
 func (c *TrojanServerConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
 
+	if c.Clients != nil {
+		c.Users = c.Clients
+	}
+
 	config := &trojan.ServerConfig{
-		Users: make([]*protocol.User, len(c.Clients)),
+		Users: make([]*protocol.User, len(c.Users)),
 	}
 
 	processClient := func(idx int) error {
-		rawUser := c.Clients[idx]
+		rawUser := c.Users[idx]
 		if rawUser.Flow != "" {
 			return errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
 		}
@@ -139,7 +144,7 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		}
 		return nil
 	}
-	if err := task.ParallelForN(len(c.Clients), processClient); err != nil {
+	if err := task.ParallelForN(len(c.Users), processClient); err != nil {
 		return nil, err
 	}
 
