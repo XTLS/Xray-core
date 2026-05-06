@@ -46,7 +46,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	if c.Clients != nil {
 		c.Users = c.Clients
 	}
-	config.Clients = make([]*protocol.User, len(c.Users))
+	config.Users = make([]*protocol.User, len(c.Users))
 	switch c.Flow {
 	case vless.XRV, "":
 	default:
@@ -95,7 +95,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		}
 
 		user.Account = serial.ToTypedMessage(account)
-		config.Clients[idx] = user
+		config.Users[idx] = user
 		return nil
 	}
 

@@ -267,7 +267,7 @@ func runVLESSRealityCase(t *testing.T, bin string, mode trafficMode, payloadSize
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&vin.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -501,7 +501,7 @@ func runVLesseEncCase(t *testing.T, bin string, mode trafficMode, payloadSize in
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&vin.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -605,7 +605,7 @@ func runVLESSXHTTPCase(t *testing.T, bin string, mode trafficMode, payloadSize i
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&vin.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),

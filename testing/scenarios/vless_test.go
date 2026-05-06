@@ -54,7 +54,7 @@ func TestVless(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -159,7 +159,7 @@ func TestVlessTls(t *testing.T) {
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -281,7 +281,7 @@ func TestVlessXtlsVision(t *testing.T) {
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id:   userID.String(),
@@ -413,7 +413,7 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&inbound.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id:   userID.String(),
@@ -553,7 +553,7 @@ func TestVlessRealityFingerprints(t *testing.T) {
 						},
 					}),
 					ProxySettings: serial.ToTypedMessage(&inbound.Config{
-						Clients: []*protocol.User{
+						Users: []*protocol.User{
 							{
 								Account: serial.ToTypedMessage(&vless.Account{
 									Id: userID.String(),
