@@ -58,6 +58,9 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 }
 
 type DNSOutboundConfig struct {
+	ToNetwork  Network                  `json:"toNetwork"`
+	ToAddress  *Address                 `json:"toAddress"`
+	ToPort     uint16                   `json:"toPort"`
 	Network    Network                  `json:"network"`
 	Address    *Address                 `json:"address"`
 	Port       uint16                   `json:"port"`
@@ -68,15 +71,27 @@ type DNSOutboundConfig struct {
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
+	if len(c.Network) > 0 {
+		errors.PrintDeprecatedFeatureWarning(`"network"`, `"toNetwork"`)
+		c.ToNetwork = c.Network
+	}
+	if c.Address != nil {
+		errors.PrintDeprecatedFeatureWarning(`"address"`, `"toAddress"`)
+		c.ToAddress = c.Address
+	}
+	if c.Port != 0 {
+		errors.PrintDeprecatedFeatureWarning(`"port"`, `"toPort"`)
+		c.ToPort = c.Port
+	}
 	config := &dns.Config{
-		Server: &net.Endpoint{
-			Network: c.Network.Build(),
-			Port:    uint32(c.Port),
+		ToServer: &net.Endpoint{
+			Network: c.ToNetwork.Build(),
+			Port:    uint32(c.ToPort),
 		},
 		UserLevel: c.UserLevel,
 	}
-	if c.Address != nil {
-		config.Server.Address = c.Address.Build()
+	if c.ToAddress != nil {
+		config.ToServer.Address = c.ToAddress.Build()
 	}
 
 	// todo: remove legacy
