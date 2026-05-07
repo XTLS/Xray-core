@@ -34,7 +34,11 @@ RUN echo '{}' >/tmp/usr/local/etc/xray/05_inbounds.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/06_outbounds.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/07_transport.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/08_stats.json
-RUN echo '{}' >/tmp/usr/local/etc/xray/09_reverse.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/09_fakedns.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/10_metrics.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/11_observatory.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/12_geodata.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/99_version.json
 
 # Create log files
 RUN mkdir -p /tmp/var/log/xray && touch \
