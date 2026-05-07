@@ -59,8 +59,8 @@ func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
 }
 
 type VMessInboundConfig struct {
-	Clients  []json.RawMessage   `json:"clients"`
 	Users    []json.RawMessage   `json:"users"`
+	Clients  []json.RawMessage   `json:"clients"`
 	Defaults *VMessDefaultConfig `json:"default"`
 }
 

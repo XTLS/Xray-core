@@ -31,8 +31,8 @@ type VLessInboundFallback struct {
 }
 
 type VLessInboundConfig struct {
-	Clients    []json.RawMessage       `json:"clients"`
 	Users      []json.RawMessage       `json:"users"`
+	Clients    []json.RawMessage       `json:"clients"`
 	Decryption string                  `json:"decryption"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
 	Flow       string                  `json:"flow"`

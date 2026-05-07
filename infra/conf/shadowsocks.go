@@ -45,8 +45,8 @@ type ShadowsocksServerConfig struct {
 	Password    string                   `json:"password"`
 	Level       byte                     `json:"level"`
 	Email       string                   `json:"email"`
-	Clients     []*ShadowsocksUserConfig `json:"clients"`
 	Users       []*ShadowsocksUserConfig `json:"users"`
+	Clients     []*ShadowsocksUserConfig `json:"clients"`
 	NetworkList *NetworkList             `json:"network"`
 }
 

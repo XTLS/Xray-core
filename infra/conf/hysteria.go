@@ -39,8 +39,8 @@ type HysteriaUserConfig struct {
 
 type HysteriaServerConfig struct {
 	Version int32                 `json:"version"`
-	Clients []*HysteriaUserConfig `json:"clients"`
 	Users   []*HysteriaUserConfig `json:"users"`
+	Clients []*HysteriaUserConfig `json:"clients"`
 }
 
 func (c *HysteriaServerConfig) Build() (proto.Message, error) {
