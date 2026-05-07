@@ -21,15 +21,12 @@ type DokodemoConfig struct {
 
 func (v *DokodemoConfig) Build() (proto.Message, error) {
 	if v.Network != nil {
-		errors.PrintDeprecatedFeatureWarning(`"network"`, `"allowedNetwork"`)
 		v.AllowedNetwork = v.Network
 	}
 	if v.Address != nil {
-		errors.PrintDeprecatedFeatureWarning(`"address"`, `"rewriteAddress"`)
 		v.RewriteAddress = v.Address
 	}
 	if v.Port != 0 {
-		errors.PrintDeprecatedFeatureWarning(`"port"`, `"rewritePort"`)
 		v.RewritePort = v.Port
 	}
 	config := new(dokodemo.Config)

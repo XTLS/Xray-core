@@ -72,15 +72,12 @@ type DNSOutboundConfig struct {
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 	if len(c.Network) > 0 {
-		errors.PrintDeprecatedFeatureWarning(`"network"`, `"rewriteNetwork"`)
 		c.RewriteNetwork = c.Network
 	}
 	if c.Address != nil {
-		errors.PrintDeprecatedFeatureWarning(`"address"`, `"rewriteAddress"`)
 		c.RewriteAddress = c.Address
 	}
 	if c.Port != 0 {
-		errors.PrintDeprecatedFeatureWarning(`"port"`, `"rewritePort"`)
 		c.RewritePort = c.Port
 	}
 	config := &dns.Config{
