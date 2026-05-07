@@ -17,6 +17,7 @@ import (
 func CopyPacketConn(ctx context.Context, inboundConn net.Conn, link *transport.Link, destination net.Destination, serverConn net.PacketConn) error {
 	cancel := func() {
 		common.Interrupt(link.Reader)
+		common.Interrupt(serverConn)
 	}
 	conn := &PacketConnWrapper{
 		Reader: link.Reader,

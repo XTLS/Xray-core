@@ -24,7 +24,8 @@ func CopyConn(ctx context.Context, inboundConn net.Conn, link *transport.Link, s
 		conn.R = &buf.BufferedReader{Reader: link.Reader}
 	}
 	cancel := func() {
-		common.Interrupt(conn.R)
+		common.Interrupt(link.Reader)
+		common.Interrupt(serverConn)
 	}
 	conn.T = signal.CancelAfterInactivity(ctx, cancel, 300*time.Second)
 	return ReturnError(bufio.CopyConn(ctx, conn, serverConn))
