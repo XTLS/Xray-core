@@ -8,18 +8,22 @@ import (
 )
 
 type DokodemoConfig struct {
+	AllowedNetwork *NetworkList      `json:"allowedNetwork"`
+	Network        *NetworkList      `json:"network"`
 	Address        *Address          `json:"address"`
 	RewriteAddress *Address          `json:"rewriteAddress"`
 	Port           uint16            `json:"port"`
 	RewritePort    uint16            `json:"rewritePort"`
 	PortMap        map[string]string `json:"portMap"`
-	Network        *NetworkList      `json:"network"`
-	AllowedNetwork *NetworkList      `json:"allowedNetwork"`
 	FollowRedirect bool              `json:"followRedirect"`
 	UserLevel      uint32            `json:"userLevel"`
 }
 
 func (v *DokodemoConfig) Build() (proto.Message, error) {
+	if v.Network != nil {
+		errors.PrintDeprecatedFeatureWarning(`"network"`, `"allowedNetwork"`)
+		v.AllowedNetwork = v.Network
+	}
 	if v.Address != nil {
 		errors.PrintDeprecatedFeatureWarning(`"address"`, `"rewriteAddress"`)
 		v.RewriteAddress = v.Address
@@ -28,11 +32,8 @@ func (v *DokodemoConfig) Build() (proto.Message, error) {
 		errors.PrintDeprecatedFeatureWarning(`"port"`, `"rewritePort"`)
 		v.RewritePort = v.Port
 	}
-	if v.Network != nil {
-		errors.PrintDeprecatedFeatureWarning(`"network"`, `"allowedNetwork"`)
-		v.AllowedNetwork = v.Network
-	}
 	config := new(dokodemo.Config)
+	config.AllowedNetworks = v.AllowedNetwork.Build()
 	if v.RewriteAddress != nil {
 		config.RewriteAddress = v.RewriteAddress.Build()
 	}
@@ -43,7 +44,6 @@ func (v *DokodemoConfig) Build() (proto.Message, error) {
 			return nil, errors.New("invalid portMap: ", v).Base(err)
 		}
 	}
-	config.AllowedNetworks = v.AllowedNetwork.Build()
 	config.FollowRedirect = v.FollowRedirect
 	config.UserLevel = v.UserLevel
 	return config, nil
