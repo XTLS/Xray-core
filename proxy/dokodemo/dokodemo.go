@@ -32,12 +32,12 @@ func init() {
 }
 
 type DokodemoDoor struct {
-	policyManager policy.Manager
-	config        *Config
-	toAddress     net.Address
-	toPort        net.Port
-	portMap       map[string]string
-	sockopt       *session.Sockopt
+	policyManager  policy.Manager
+	config         *Config
+	rewriteAddress net.Address
+	rewritePort    net.Port
+	portMap        map[string]string
+	sockopt        *session.Sockopt
 }
 
 // Init initializes the DokodemoDoor instance with necessary parameters.
@@ -46,8 +46,8 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 		return errors.New("no network specified")
 	}
 	d.config = config
-	d.toAddress = config.GetPredefinedAddress()
-	d.toPort = net.Port(config.ToPort)
+	d.rewriteAddress = config.GetPredefinedAddress()
+	d.rewritePort = net.Port(config.RewritePort)
 	d.portMap = config.PortMap
 	d.policyManager = pm
 	d.sockopt = sockopt
@@ -78,8 +78,8 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	}
 	dest := net.Destination{
 		Network: network,
-		Address: d.toAddress,
-		Port:    d.toPort,
+		Address: d.rewriteAddress,
+		Port:    d.rewritePort,
 	}
 
 	if !d.config.FollowRedirect {

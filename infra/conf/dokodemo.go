@@ -9,9 +9,9 @@ import (
 
 type DokodemoConfig struct {
 	Address        *Address          `json:"address"`
-	ToAddress      *Address          `json:"toAddress"`
+	RewriteAddress *Address          `json:"rewriteAddress"`
 	Port           uint16            `json:"port"`
-	ToPort         uint16            `json:"toPort"`
+	RewritePort    uint16            `json:"rewritePort"`
 	PortMap        map[string]string `json:"portMap"`
 	Network        *NetworkList      `json:"network"`
 	AllowedNetwork *NetworkList      `json:"allowedNetwork"`
@@ -21,22 +21,22 @@ type DokodemoConfig struct {
 
 func (v *DokodemoConfig) Build() (proto.Message, error) {
 	if v.Address != nil {
-		errors.PrintDeprecatedFeatureWarning(`"address"`, `"toAddress"`)
-		v.ToAddress = v.Address
+		errors.PrintDeprecatedFeatureWarning(`"address"`, `"rewriteAddress"`)
+		v.RewriteAddress = v.Address
 	}
 	if v.Port != 0 {
-		errors.PrintDeprecatedFeatureWarning(`"port"`, `"toPort"`)
-		v.ToPort = v.Port
+		errors.PrintDeprecatedFeatureWarning(`"port"`, `"rewritePort"`)
+		v.RewritePort = v.Port
 	}
 	if v.Network != nil {
 		errors.PrintDeprecatedFeatureWarning(`"network"`, `"allowedNetwork"`)
 		v.AllowedNetwork = v.Network
 	}
 	config := new(dokodemo.Config)
-	if v.ToAddress != nil {
-		config.ToAddress = v.ToAddress.Build()
+	if v.RewriteAddress != nil {
+		config.RewriteAddress = v.RewriteAddress.Build()
 	}
-	config.ToPort = uint32(v.ToPort)
+	config.RewritePort = uint32(v.RewritePort)
 	config.PortMap = v.PortMap
 	for _, v := range config.PortMap {
 		if _, _, err := net.SplitHostPort(v); err != nil {

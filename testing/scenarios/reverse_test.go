@@ -77,8 +77,8 @@ func TestReverseProxy(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(dest.Address),
-					ToPort:          uint32(dest.Port),
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -142,8 +142,8 @@ func TestReverseProxy(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(dest.Address),
-					ToPort:          uint32(dest.Port),
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -252,8 +252,8 @@ func TestReverseProxyLongRunning(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(dest.Address),
-					ToPort:          uint32(dest.Port),
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -331,8 +331,8 @@ func TestReverseProxyLongRunning(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(dest.Address),
-					ToPort:          uint32(dest.Port),
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 			},

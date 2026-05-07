@@ -24,12 +24,12 @@ func TestDokodemoConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dokodemo.Config{
-				ToAddress: &net.IPOrDomain{
+				RewriteAddress: &net.IPOrDomain{
 					Address: &net.IPOrDomain_Ip{
 						Ip: []byte{8, 8, 8, 8},
 					},
 				},
-				ToPort:          53,
+				RewritePort:     53,
 				AllowedNetworks: []net.Network{net.Network_TCP},
 				FollowRedirect:  true,
 				UserLevel:       1,

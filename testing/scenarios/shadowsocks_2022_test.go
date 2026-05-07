@@ -103,8 +103,8 @@ func testShadowsocks2022Tcp(t *testing.T, method string, password string) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(dest.Address),
-					ToPort:          uint32(dest.Port),
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 			},
@@ -188,8 +188,8 @@ func testShadowsocks2022Udp(t *testing.T, method string, password string) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(udpDest.Address),
-					ToPort:          uint32(udpDest.Port),
+					RewriteAddress:  net.NewIPOrDomain(udpDest.Address),
+					RewritePort:     uint32(udpDest.Port),
 					AllowedNetworks: []net.Network{net.Network_UDP},
 				}),
 			},

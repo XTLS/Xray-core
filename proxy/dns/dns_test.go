@@ -114,8 +114,8 @@ func TestUDPDNSTunnel(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(net.LocalHostIP),
-					ToPort:          uint32(port),
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
 					AllowedNetworks: []net.Network{net.Network_UDP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -233,8 +233,8 @@ func TestTCPDNSTunnel(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(net.LocalHostIP),
-					ToPort:          uint32(port),
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -319,8 +319,8 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(net.LocalHostIP),
-					ToPort:          uint32(port),
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
@@ -409,8 +409,8 @@ func TestDNSRules(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       net.NewIPOrDomain(net.LocalHostIP),
-					ToPort:          uint32(port),
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
 					AllowedNetworks: []net.Network{net.Network_UDP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{

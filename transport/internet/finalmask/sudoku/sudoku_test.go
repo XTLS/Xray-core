@@ -292,8 +292,8 @@ func runVLESSRealityCase(t *testing.T, bin string, mode trafficMode, payloadSize
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       xnet.NewIPOrDomain(backend.Address()),
-					ToPort:          uint32(backend.Port()),
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
 					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
@@ -412,8 +412,8 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       xnet.NewIPOrDomain(backend.Address()),
-					ToPort:          uint32(backend.Port()),
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
 					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
@@ -530,8 +530,8 @@ func runVLesseEncCase(t *testing.T, bin string, mode trafficMode, payloadSize in
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       xnet.NewIPOrDomain(backend.Address()),
-					ToPort:          uint32(backend.Port()),
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
 					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
@@ -630,8 +630,8 @@ func runVLESSXHTTPCase(t *testing.T, bin string, mode trafficMode, payloadSize i
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					ToAddress:       xnet.NewIPOrDomain(backend.Address()),
-					ToPort:          uint32(backend.Port()),
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
 					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
