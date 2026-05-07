@@ -209,10 +209,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
 	if h.encryption != nil {
-		var err error
-		if conn, err = h.encryption.Handshake(conn); err != nil {
+		newConn, err := h.encryption.Handshake(conn)
+		if err != nil {
+			conn.Close()
 			return errors.New("ML-KEM-768 handshake failed").Base(err).AtInfo()
 		}
+		conn = newConn
 	}
 
 	command := protocol.RequestCommandTCP
