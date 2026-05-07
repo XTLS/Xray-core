@@ -9,11 +9,11 @@ import (
 
 type DokodemoConfig struct {
 	AllowedNetwork *NetworkList      `json:"allowedNetwork"`
+	RewriteAddress *Address          `json:"rewriteAddress"`
+	RewritePort    uint16            `json:"rewritePort"`
 	Network        *NetworkList      `json:"network"`
 	Address        *Address          `json:"address"`
-	RewriteAddress *Address          `json:"rewriteAddress"`
 	Port           uint16            `json:"port"`
-	RewritePort    uint16            `json:"rewritePort"`
 	PortMap        map[string]string `json:"portMap"`
 	FollowRedirect bool              `json:"followRedirect"`
 	UserLevel      uint32            `json:"userLevel"`
