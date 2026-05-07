@@ -45,7 +45,7 @@ func (w *PipeConnWrapper) Close() error {
 
 func (w *PipeConnWrapper) Read(b []byte) (n int, err error) {
 	w.T.Update()
-	n, err = w.Read(b)
+	n, err = w.R.Read(b)
 	if err != nil {
 		// uplinkonly
 		w.T.SetTimeout(3 * time.Second)

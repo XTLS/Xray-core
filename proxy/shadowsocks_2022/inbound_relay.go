@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
 	C "github.com/sagernet/sing/common"
@@ -20,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
@@ -177,6 +179,9 @@ func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketCon
 		Reader: link.Reader,
 		Writer: link.Writer,
 		Dest:   destination,
+		T: signal.CancelAfterInactivity(ctx, func() {
+			common.Interrupt(link.Reader)
+		}, 300*time.Second),
 	}
 	return bufio.CopyPacketConn(ctx, conn, outConn)
 }
