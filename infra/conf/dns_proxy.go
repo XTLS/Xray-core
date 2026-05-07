@@ -58,40 +58,40 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 }
 
 type DNSOutboundConfig struct {
-	ToNetwork  Network                  `json:"toNetwork"`
-	ToAddress  *Address                 `json:"toAddress"`
-	ToPort     uint16                   `json:"toPort"`
-	Network    Network                  `json:"network"`
-	Address    *Address                 `json:"address"`
-	Port       uint16                   `json:"port"`
-	UserLevel  uint32                   `json:"userLevel"`
-	Rules      []*DNSOutboundRuleConfig `json:"rules"`
-	NonIPQuery *string                  `json:"nonIPQuery"` // todo: remove legacy
-	BlockTypes *[]int32                 `json:"blockTypes"` // todo: remove legacy
+	RewriteNetwork Network                  `json:"rewriteNetwork"`
+	RewriteAddress *Address                 `json:"rewriteAddress"`
+	RewritePort    uint16                   `json:"rewritePort"`
+	Network        Network                  `json:"network"`
+	Address        *Address                 `json:"address"`
+	Port           uint16                   `json:"port"`
+	UserLevel      uint32                   `json:"userLevel"`
+	Rules          []*DNSOutboundRuleConfig `json:"rules"`
+	NonIPQuery     *string                  `json:"nonIPQuery"` // todo: remove legacy
+	BlockTypes     *[]int32                 `json:"blockTypes"` // todo: remove legacy
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 	if len(c.Network) > 0 {
-		errors.PrintDeprecatedFeatureWarning(`"network"`, `"toNetwork"`)
-		c.ToNetwork = c.Network
+		errors.PrintDeprecatedFeatureWarning(`"network"`, `"rewriteNetwork"`)
+		c.RewriteNetwork = c.Network
 	}
 	if c.Address != nil {
-		errors.PrintDeprecatedFeatureWarning(`"address"`, `"toAddress"`)
-		c.ToAddress = c.Address
+		errors.PrintDeprecatedFeatureWarning(`"address"`, `"rewriteAddress"`)
+		c.RewriteAddress = c.Address
 	}
 	if c.Port != 0 {
-		errors.PrintDeprecatedFeatureWarning(`"port"`, `"toPort"`)
-		c.ToPort = c.Port
+		errors.PrintDeprecatedFeatureWarning(`"port"`, `"rewritePort"`)
+		c.RewritePort = c.Port
 	}
 	config := &dns.Config{
-		ToServer: &net.Endpoint{
-			Network: c.ToNetwork.Build(),
-			Port:    uint32(c.ToPort),
+		RewriteServer: &net.Endpoint{
+			Network: c.RewriteNetwork.Build(),
+			Port:    uint32(c.RewritePort),
 		},
 		UserLevel: c.UserLevel,
 	}
-	if c.ToAddress != nil {
-		config.ToServer.Address = c.ToAddress.Build()
+	if c.RewriteAddress != nil {
+		config.RewriteServer.Address = c.RewriteAddress.Build()
 	}
 
 	// todo: remove legacy

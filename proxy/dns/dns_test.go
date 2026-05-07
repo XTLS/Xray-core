@@ -332,7 +332,7 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-					ToServer: &net.Endpoint{
+					RewriteServer: &net.Endpoint{
 						Network: net.Network_TCP,
 					},
 				}),
