@@ -122,7 +122,6 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
 
 	if c.Clients != nil {
-		errors.PrintDeprecatedFeatureWarning(`"clients"`, `"users"`)
 		c.Users = c.Clients
 	}
 

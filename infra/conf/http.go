@@ -36,7 +36,6 @@ func (c *HTTPServerConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Accounts != nil {
-		errors.PrintDeprecatedFeatureWarning(`"accounts"`, `"users"`)
 		c.Users = c.Accounts
 	}
 	// TODO: PB

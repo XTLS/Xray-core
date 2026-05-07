@@ -49,7 +49,6 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 	}
 
 	if v.Accounts != nil {
-		errors.PrintDeprecatedFeatureWarning(`"accounts"`, `"users"`)
 		v.Users = v.Accounts
 	}
 	// TODO: PB

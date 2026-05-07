@@ -44,7 +44,6 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config := new(inbound.Config)
 
 	if c.Clients != nil {
-		errors.PrintDeprecatedFeatureWarning(`"clients"`, `"users"`)
 		c.Users = c.Clients
 	}
 	config.Users = make([]*protocol.User, len(c.Users))

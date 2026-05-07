@@ -47,7 +47,6 @@ func (c *HysteriaServerConfig) Build() (proto.Message, error) {
 	config := new(hysteria.ServerConfig)
 
 	if c.Clients != nil {
-		errors.PrintDeprecatedFeatureWarning(`"clients"`, `"users"`)
 		c.Users = c.Clients
 	}
 	if len(c.Users) > 0 {

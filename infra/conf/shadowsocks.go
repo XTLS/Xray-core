@@ -54,7 +54,6 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
 
 	if v.Clients != nil {
-		errors.PrintDeprecatedFeatureWarning(`"clients"`, `"users"`)
 		v.Users = v.Clients
 	}
 

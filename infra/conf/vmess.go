@@ -75,7 +75,6 @@ func (c *VMessInboundConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Clients != nil {
-		errors.PrintDeprecatedFeatureWarning(`"clients"`, `"users"`)
 		c.Users = c.Clients
 	}
 	config.User = make([]*protocol.User, len(c.Users))
