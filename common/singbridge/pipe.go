@@ -45,7 +45,12 @@ func (w *PipeConnWrapper) Close() error {
 
 func (w *PipeConnWrapper) Read(b []byte) (n int, err error) {
 	w.T.Update()
-	return w.R.Read(b)
+	n, err = w.Read(b)
+	if err != nil {
+		// uplinkonly
+		w.T.SetTimeout(3 * time.Second)
+	}
+	return
 }
 
 func (w *PipeConnWrapper) Write(p []byte) (n int, err error) {
@@ -68,6 +73,8 @@ func (w *PipeConnWrapper) Write(p []byte) (n int, err error) {
 	if err != nil {
 		n = 0
 		buf.ReleaseMulti(mb)
+		// downlinkonly
+		w.T.SetTimeout(3 * time.Second)
 	}
 	return
 }

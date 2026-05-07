@@ -60,6 +60,8 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 	}
 	mb, err := w.ReadMultiBuffer()
 	if err != nil {
+		// uplinkonly
+		w.T.SetTimeout(3 * time.Second)
 		return M.Socksaddr{}, err
 	}
 	nb, bb := buf.SplitFirst(mb)
@@ -83,6 +85,8 @@ func (w *PacketConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksadd
 	w.T.Update()
 	endpoint, err := ToDestination(destination, net.Network_UDP)
 	if err != nil {
+		// uplinkonly
+		w.T.SetTimeout(3 * time.Second)
 		return err
 	}
 	vBuf := buf.New()
