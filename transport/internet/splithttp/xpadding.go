@@ -177,6 +177,14 @@ func ApplyPaddingToQuery(u *url.URL, key, value string) {
 }
 
 func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
+
+	if c.DisableXPadding {
+		return RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
 	if c.XPaddingBytes == nil || c.XPaddingBytes.To == 0 {
 		return RangeConfig{
 			From: 100,
@@ -193,6 +201,9 @@ func (c *Config) ApplyXPaddingToHeader(h http.Header, config XPaddingConfig) {
 	}
 
 	paddingValue := GeneratePadding(config.Method, config.Length)
+	if paddingValue == "" && c.DisableXPadding {
+		return
+	}
 
 	switch p := config.Placement; p.Placement {
 	case PlacementHeader:
@@ -215,6 +226,10 @@ func (c *Config) ApplyXPaddingToRequest(req *http.Request, config XPaddingConfig
 		req.Header = make(http.Header)
 	}
 
+	if config.Length <= 0 && c.DisableXPadding {
+		return
+	}
+
 	placement := config.Placement.Placement
 
 	if placement == PlacementHeader || placement == PlacementQueryInHeader {
@@ -223,6 +238,9 @@ func (c *Config) ApplyXPaddingToRequest(req *http.Request, config XPaddingConfig
 	}
 
 	paddingValue := GeneratePadding(config.Method, config.Length)
+	if paddingValue == "" && c.DisableXPadding {
+		return
+	}
 
 	switch placement {
 	case PlacementCookie:
@@ -234,6 +252,9 @@ func (c *Config) ApplyXPaddingToRequest(req *http.Request, config XPaddingConfig
 
 func (c *Config) ApplyXPaddingToResponse(writer http.ResponseWriter, config XPaddingConfig) {
 	placement := config.Placement.Placement
+	if config.Length <= 0 && c.DisableXPadding {
+		return
+	}
 
 	if placement == PlacementHeader || placement == PlacementQueryInHeader {
 		c.ApplyXPaddingToHeader(writer.Header(), config)
@@ -241,6 +262,9 @@ func (c *Config) ApplyXPaddingToResponse(writer http.ResponseWriter, config XPad
 	}
 
 	paddingValue := GeneratePadding(config.Method, config.Length)
+	if paddingValue == "" && c.DisableXPadding {
+		return
+	}
 
 	switch placement {
 	case PlacementCookie:

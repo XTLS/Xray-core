@@ -239,9 +239,20 @@ type SplitHTTPConfig struct {
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
+	DisableXPadding      *bool             `json:"disableXPadding"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
+}
+
+func (c *SplitHTTPConfig) getDisableXPadding() bool {
+	if c == nil {
+		return false
+	}
+	if c.DisableXPadding != nil {
+		return *c.DisableXPadding
+	}
+	return false
 }
 
 type XmuxConfig struct {
@@ -270,8 +281,13 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		extra.Host = c.Host
 		extra.Path = c.Path
 		extra.Mode = c.Mode
+		if c.DisableXPadding != nil {
+			extra.DisableXPadding = c.DisableXPadding
+		}
 		c = &extra
 	}
+
+	disableXPadding := c.getDisableXPadding()
 
 	switch c.Mode {
 	case "":
@@ -288,7 +304,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
-	if c.XPaddingBytes != (Int32Range{}) && (c.XPaddingBytes.From <= 0 || c.XPaddingBytes.To <= 0) {
+	if !disableXPadding && c.XPaddingBytes != (Int32Range{}) && (c.XPaddingBytes.From <= 0 || c.XPaddingBytes.To <= 0) {
 		return nil, errors.New("xPaddingBytes cannot be disabled")
 	}
 
@@ -396,6 +412,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Xmux.HMaxReusableSecs.To = 3000
 	}
 
+	if disableXPadding {
+		c.XPaddingBytes = Int32Range{From: 0, To: 0}
+	}
+
 	config := &splithttp.Config{
 		Host:                 c.Host,
 		Path:                 c.Path,
@@ -430,6 +450,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 			HMaxReusableSecs: newRangeConfig(c.Xmux.HMaxReusableSecs),
 			HKeepAlivePeriod: c.Xmux.HKeepAlivePeriod,
 		},
+		DisableXPadding:      disableXPadding,
 	}
 
 	if c.DownloadSettings != nil {

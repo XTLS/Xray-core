@@ -314,7 +314,9 @@ func (c *Config) FillStreamRequest(request *http.Request, sessionId string, seqS
 		}
 	}
 
-	c.ApplyXPaddingToRequest(request, config)
+	if !c.DisableXPadding {
+		c.ApplyXPaddingToRequest(request, config)
+	}
 	c.ApplyMetaToRequest(request, sessionId, "")
 
 	if request.Body != nil && !c.NoGRPCHeader { // stream-up/one
@@ -364,7 +366,9 @@ func (c *Config) FillPacketRequest(request *http.Request, sessionId string, seqS
 		}
 	}
 
-	c.ApplyXPaddingToRequest(request, config)
+	if !c.DisableXPadding {
+		c.ApplyXPaddingToRequest(request, config)
+	}
 	c.ApplyMetaToRequest(request, sessionId, seqStr)
 
 	return nil
