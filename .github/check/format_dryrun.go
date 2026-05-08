@@ -90,9 +90,10 @@ func Run(binary string, args []string) ([]byte, error) {
 	return output, nil
 }
 
-func RunMany(binary string, args, files []string) {
-	fmt.Println("Processing...")
+func RunMany(binary string, args, files []string) bool {
+	fmt.Println("Processing with", binary, args, "...")
 
+	formatRequired := false
 	maxTasks := make(chan struct{}, runtime.NumCPU())
 	for _, file := range files {
 		maxTasks <- struct{}{}
@@ -102,10 +103,12 @@ func RunMany(binary string, args, files []string) {
 				fmt.Println(err)
 			} else if len(output) > 0 {
 				fmt.Println(string(output))
+				formatRequired = true
 			}
 			<-maxTasks
 		}(file)
 	}
+	return formatRequired
 }
 
 func main() {
@@ -179,15 +182,37 @@ func main() {
 		os.Exit(1)
 	}
 
-	gofmtArgs := []string{
-		"-l", "-e", "-w",
+	gofmtListArgs := []string{
+		"-l", "-e",
 	}
 
-	goimportsArgs := []string{
-		"write",
+	gofmtShowArgs := []string{
+		"-d", "-e",
 	}
 
-	RunMany(gofmt, gofmtArgs, rawFilesSlice)
-	RunMany(goimports, goimportsArgs, rawFilesSlice)
-	fmt.Println("Do NOT forget to commit file changes.")
+	goimportsListArgs := []string{
+		"list",
+	}
+
+	goimportsShowArgs := []string{
+		"diff",
+	}
+
+	fmt.Println("Checking files thar are not properly formatted...")
+	formatRequired := RunMany(gofmt, gofmtListArgs, rawFilesSlice)
+	formatImportRequired := RunMany(goimports, goimportsListArgs, rawFilesSlice)
+	if formatRequired {
+		fmt.Println("Format problem(s) found.")
+		RunMany(gofmt, gofmtShowArgs, rawFilesSlice)
+	}
+	if formatImportRequired {
+		fmt.Println("Format problem(s) in import found.")
+		RunMany(goimports, goimportsShowArgs, rawFilesSlice)
+	}
+	if formatRequired || formatImportRequired {
+		fmt.Println("Please run 'go install -v github.com/daixiang0/gci@latest', 'go install -v mvdan.cc/gofumpt@latest', then run 'go run ./infra/vformat/main.go' to format the Go source files.")
+		os.Exit(1)
+	} else {
+		fmt.Println("All Go source file format check has been passed.")
+	}
 }

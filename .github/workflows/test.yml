@@ -65,17 +65,9 @@ jobs:
           cache: false
       - name: Check Format
         run: |
-          DIFFFILE=$(gofmt -l ./)
-          if [ -n "${DIFFFILE}" ]; then
-            echo "Format problem(s) found. Run 'go fmt -x ./...' or 'gofmt -w ./' to format the go files."
-            echo "Here are the list of file(s):"
-            echo "${DIFFFILE}"
-            echo "Here are the format problem(s) currently found:"
-            gofmt -d ./
-            exit 1
-          else
-            echo "Source file format check passed."
-          fi
+          go install -v github.com/daixiang0/gci@latest
+          go install -v mvdan.cc/gofumpt@latest
+          go run ./.github/check/format_dryrun.go -pwd ./
 
   test:
     needs: check-assets
