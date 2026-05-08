@@ -253,7 +253,9 @@ func main() {
 
 		/* if formatRequired || formatImportRequired { */
 		if formatRequired {
-			fmt.Println("Please run 'go install -v github.com/daixiang0/gci@latest', 'go install -v mvdan.cc/gofumpt@latest', then run 'go run ./infra/vformat/main.go' to format the Go source files.")
+			/* fmt.Println("Please run 'go install -v github.com/daixiang0/gci@latest', 'go install -v mvdan.cc/gofumpt@latest', then run 'go run ./infra/vformat/main.go' to format the Go source files.")
+			os.Exit(1) */
+			fmt.Println("Please run 'go install -v mvdan.cc/gofumpt@latest', then run 'go run ./infra/vformat/main.go' to format the Go source files.")
 			os.Exit(1)
 		} else {
 			fmt.Println("All Go source file format check has been passed.")
