@@ -67,7 +67,7 @@ jobs:
         run: |
           go install -v github.com/daixiang0/gci@latest
           go install -v mvdan.cc/gofumpt@latest
-          go run ./.github/check/format_dryrun.go -pwd ./
+          go run ./infra/vformat/main.go -mode dryrun -pwd ./
 
   test:
     needs: check-assets

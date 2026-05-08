@@ -12,7 +12,16 @@ import (
 	"strings"
 )
 
-var directory = flag.String("pwd", "", "Working directory of Xray vformat.")
+var (
+	directory = flag.String("pwd", "", "Working directory of Xray vformat.")
+	action    = flag.String("mode", "format", "Execution mode. Default is 'format'.\n'format' formatting source files and save changes to files.\n'check' list all paths of improper formatted file.\n'dryrun' formatting source files and shows all diffs, but will not make any changes to files.")
+)
+
+var (
+	isCheck  bool
+	isDryrun bool
+	isFormat bool
+)
 
 // envFile returns the name of the Go environment configuration file.
 // Copy from https://github.com/golang/go/blob/c4f2a9788a7be04daf931ac54382fbe2cb754938/src/cmd/go/internal/cfg/cfg.go#L150-L166
@@ -90,9 +99,10 @@ func Run(binary string, args []string) ([]byte, error) {
 	return output, nil
 }
 
-func RunMany(binary string, args, files []string) {
-	fmt.Println("Processing...")
+func RunMany(binary string, args, files []string) bool {
+	fmt.Println("Processing with", binary, args, "...")
 
+	formatRequired := false
 	maxTasks := make(chan struct{}, runtime.NumCPU())
 	for _, file := range files {
 		maxTasks <- struct{}{}
@@ -102,10 +112,12 @@ func RunMany(binary string, args, files []string) {
 				fmt.Println(err)
 			} else if len(output) > 0 {
 				fmt.Println(string(output))
+				formatRequired = true
 			}
 			<-maxTasks
 		}(file)
 	}
+	return formatRequired
 }
 
 func main() {
@@ -122,6 +134,19 @@ func main() {
 			os.Exit(1)
 		}
 		*directory = filepath.Join(pwd, *directory)
+	}
+
+	switch *action {
+	case "format":
+		isFormat = true
+	case "check":
+		isCheck = true
+	case "dryrun":
+		isCheck = true
+		isDryrun = true
+	default:
+		fmt.Println("Unrecognized 'mode'. Will format all source files and save changes.")
+		isFormat = true
 	}
 
 	pwd := *directory
@@ -179,15 +204,58 @@ func main() {
 		os.Exit(1)
 	}
 
-	gofmtArgs := []string{
-		"-l", "-e", "-w",
+	if isFormat {
+		gofmtArgs := []string{
+			"-l", "-e", "-w",
+		}
+		goimportsArgs := []string{
+			"write",
+		}
+
+		fmt.Println("Formatting Go source files...")
+		RunMany(gofmt, gofmtArgs, rawFilesSlice)
+		RunMany(goimports, goimportsArgs, rawFilesSlice)
+		fmt.Println("Do NOT forget to commit file changes.")
 	}
 
-	goimportsArgs := []string{
-		"write",
-	}
+	if isCheck {
+		gofmtListArgs := []string{
+			"-l", "-e",
+		}
+		goimportsListArgs := []string{
+			"list",
+		}
 
-	RunMany(gofmt, gofmtArgs, rawFilesSlice)
-	RunMany(goimports, goimportsArgs, rawFilesSlice)
-	fmt.Println("Do NOT forget to commit file changes.")
+		fmt.Println("Checking files thar are not properly formatted...")
+		formatRequired := RunMany(gofmt, gofmtListArgs, rawFilesSlice)
+		formatImportRequired := RunMany(goimports, goimportsListArgs, rawFilesSlice)
+		if formatRequired {
+			fmt.Println("Format problem(s) found.")
+		}
+		if formatImportRequired {
+			fmt.Println("Format problem(s) in import found.")
+		}
+
+		if isDryrun {
+			if formatRequired {
+				gofmtShowArgs := []string{
+					"-d", "-e",
+				}
+				RunMany(gofmt, gofmtShowArgs, rawFilesSlice)
+			}
+			if formatImportRequired {
+				goimportsShowArgs := []string{
+					"diff",
+				}
+				RunMany(goimports, goimportsShowArgs, rawFilesSlice)
+			}
+		}
+
+		if formatRequired || formatImportRequired {
+			fmt.Println("Please run 'go install -v github.com/daixiang0/gci@latest', 'go install -v mvdan.cc/gofumpt@latest', then run 'go run ./infra/vformat/main.go' to format the Go source files.")
+			os.Exit(1)
+		} else {
+			fmt.Println("All Go source file format check has been passed.")
+		}
+	}
 }
