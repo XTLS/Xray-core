@@ -50,6 +50,32 @@ jobs:
             fi
           done
 
+  check-format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Check Format
+        run: |
+          DIFFFILE=$(gofmt -l ./)
+          if [ -n "${DIFFFILE}" ]; then
+            echo "Format problem found. Run 'go fmt -x ./...' or 'gofmt -w ./' to format the go files."
+            echo "Here are the list of files:"
+            echo "${DIFFFILE}"
+            echo "Here are the formatting problem currently found:"
+            gofmt -d ./
+            exit 1
+          else
+            echo "Source file format check passed."
+          fi
+
   test:
     needs: check-assets
     permissions:
