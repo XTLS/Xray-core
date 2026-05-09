@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package xray.transport.internet.finalmask.rawpacket;
+option csharp_namespace = "Xray.Transport.Internet.Finalmask.Rawpacket";
+option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/rawpacket";
+option java_package = "com.xray.transport.internet.finalmask.rawpacket";
+option java_multiple_files = true;
+
+message Config {
+  // Base64-encoded fake payload bytes to inject before the real traffic.
+  string payload = 1;
+
+  // Corruption method to make the fake packet dropped by the server.
+  // Available: wrong-sequence, wrong-checksum, wrong-ack, wrong-md5, wrong-timestamp.
+  string method = 2;
+
+  // TTL of the fake packet. A low value (e.g. 3-5) ensures the packet
+  // is seen by middleboxes but does not reach the destination server.
+  uint32 ttl = 3;
+
+  // How many Write() calls trigger injection. 0 or 1 = single-shot (default).
+  int32 count = 4;
+}
