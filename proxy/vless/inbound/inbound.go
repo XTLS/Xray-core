@@ -85,6 +85,7 @@ type Handler struct {
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
+	connTracker *proxy.ConnTracker
 }
 
 // New creates a new VLess inbound handler.
@@ -99,6 +100,7 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		observer:               v.GetFeature(extension.ObservatoryType()),
 		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
+		connTracker:            proxy.NewConnTracker(),
 	}
 
 	if config.Decryption != "" && config.Decryption != "none" {
@@ -244,7 +246,11 @@ func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
 	h.RemoveReverse(h.validator.GetByEmail(e))
-	return h.validator.Del(e)
+	err := h.validator.Del(e)
+	if err == nil {
+		h.connTracker.KillAll(e)
+	}
+	return err
 }
 
 // GetUser implements proxy.UserManager.GetUser().
@@ -536,6 +542,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.Name = "vless"
 	inbound.User = request.User
 	inbound.VlessRoute = net.PortFromBytes(userSentID[6:8])
+
+	if request.User.Email != "" {
+		var cleanup func()
+		ctx, _, cleanup = h.connTracker.Track(ctx, request.User.Email, connection)
+		defer cleanup()
+	}
 
 	account := request.User.Account.(*vless.MemoryAccount)
 

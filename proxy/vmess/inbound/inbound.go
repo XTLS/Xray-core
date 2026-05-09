@@ -21,6 +21,7 @@ import (
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -107,6 +108,7 @@ type Handler struct {
 	clients               *vmess.TimedUserValidator
 	usersByEmail          *userByEmail
 	sessionHistory        *encoding.SessionHistory
+	connTracker           *proxy.ConnTracker
 }
 
 // New creates a new VMess inbound handler.
@@ -118,6 +120,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		clients:               vmess.NewTimedUserValidator(),
 		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
 		sessionHistory:        encoding.NewSessionHistory(),
+		connTracker:           proxy.NewConnTracker(),
 	}
 
 	for _, user := range config.User {
@@ -181,6 +184,7 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 		return errors.New("User ", email, " not found.")
 	}
 	h.clients.Remove(email)
+	h.connTracker.KillAll(email)
 	return nil
 }
 
@@ -271,6 +275,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.Name = "vmess"
 	inbound.CanSpliceCopy = 3
 	inbound.User = request.User
+
+	if request.User.Email != "" {
+		var cleanup func()
+		ctx, _, cleanup = h.connTracker.Track(ctx, request.User.Email, connection)
+		defer cleanup()
+	}
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 
