@@ -497,8 +497,8 @@ func (b Bandwidth) Bps() (uint64, error) {
 }
 
 type UdpHop struct {
-	PortList json.RawMessage `json:"ports"`
-	Interval *Int32Range     `json:"interval"`
+	PortList PortList   `json:"ports"`
+	Interval Int32Range `json:"interval"`
 }
 
 type Masquerade struct {
@@ -2142,18 +2142,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
 			}
 
-			var hop *PortList
-			if err := json.Unmarshal(c.FinalMask.QuicParams.UdpHop.PortList, &hop); err != nil {
-				hop = &PortList{}
-			}
-
-			var inertvalMin, inertvalMax int64
-			if c.FinalMask.QuicParams.UdpHop.Interval != nil {
-				inertvalMin = int64(c.FinalMask.QuicParams.UdpHop.Interval.From)
-				inertvalMax = int64(c.FinalMask.QuicParams.UdpHop.Interval.To)
-			}
-
-			if (inertvalMin != 0 && inertvalMin < 5) || (inertvalMax != 0 && inertvalMax < 5) {
+			if (c.FinalMask.QuicParams.UdpHop.Interval.From != 0 && c.FinalMask.QuicParams.UdpHop.Interval.From < 5) || (c.FinalMask.QuicParams.UdpHop.Interval.To != 0 && c.FinalMask.QuicParams.UdpHop.Interval.To < 5) {
 				return nil, errors.New("Interval must be at least 5")
 			}
 
@@ -2190,9 +2179,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				BrutalUp:   up,
 				BrutalDown: down,
 				UdpHop: &internet.UdpHop{
-					Ports:       hop.Build().Ports(),
-					IntervalMin: inertvalMin,
-					IntervalMax: inertvalMax,
+					Ports:       c.FinalMask.QuicParams.UdpHop.PortList.Build().Ports(),
+					IntervalMin: int64(c.FinalMask.QuicParams.UdpHop.Interval.From),
+					IntervalMax: int64(c.FinalMask.QuicParams.UdpHop.Interval.To),
 				},
 				InitStreamReceiveWindow: c.FinalMask.QuicParams.InitStreamReceiveWindow,
 				MaxStreamReceiveWindow:  c.FinalMask.QuicParams.MaxStreamReceiveWindow,

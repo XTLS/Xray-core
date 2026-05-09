@@ -23,16 +23,16 @@ const (
 )
 
 type Config struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Address *net.IPOrDomain        `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	Port    uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	PortMap map[string]string      `protobuf:"bytes,3,rep,name=port_map,json=portMap,proto3" json:"port_map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RewriteAddress *net.IPOrDomain        `protobuf:"bytes,1,opt,name=rewrite_address,json=rewriteAddress,proto3" json:"rewrite_address,omitempty"`
+	RewritePort    uint32                 `protobuf:"varint,2,opt,name=rewrite_port,json=rewritePort,proto3" json:"rewrite_port,omitempty"`
+	PortMap        map[string]string      `protobuf:"bytes,3,rep,name=port_map,json=portMap,proto3" json:"port_map,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// List of networks that the Dokodemo accepts.
-	Networks       []net.Network `protobuf:"varint,7,rep,packed,name=networks,proto3,enum=xray.common.net.Network" json:"networks,omitempty"`
-	FollowRedirect bool          `protobuf:"varint,5,opt,name=follow_redirect,json=followRedirect,proto3" json:"follow_redirect,omitempty"`
-	UserLevel      uint32        `protobuf:"varint,6,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	AllowedNetworks []net.Network `protobuf:"varint,7,rep,packed,name=allowed_networks,json=allowedNetworks,proto3,enum=xray.common.net.Network" json:"allowed_networks,omitempty"`
+	FollowRedirect  bool          `protobuf:"varint,5,opt,name=follow_redirect,json=followRedirect,proto3" json:"follow_redirect,omitempty"`
+	UserLevel       uint32        `protobuf:"varint,6,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -65,16 +65,16 @@ func (*Config) Descriptor() ([]byte, []int) {
 	return file_proxy_dokodemo_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Config) GetAddress() *net.IPOrDomain {
+func (x *Config) GetRewriteAddress() *net.IPOrDomain {
 	if x != nil {
-		return x.Address
+		return x.RewriteAddress
 	}
 	return nil
 }
 
-func (x *Config) GetPort() uint32 {
+func (x *Config) GetRewritePort() uint32 {
 	if x != nil {
-		return x.Port
+		return x.RewritePort
 	}
 	return 0
 }
@@ -86,9 +86,9 @@ func (x *Config) GetPortMap() map[string]string {
 	return nil
 }
 
-func (x *Config) GetNetworks() []net.Network {
+func (x *Config) GetAllowedNetworks() []net.Network {
 	if x != nil {
-		return x.Networks
+		return x.AllowedNetworks
 	}
 	return nil
 }
@@ -111,12 +111,12 @@ var File_proxy_dokodemo_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dokodemo_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproxy/dokodemo/config.proto\x12\x13xray.proxy.dokodemo\x1a\x18common/net/address.proto\x1a\x18common/net/network.proto\"\xd2\x02\n" +
-	"\x06Config\x125\n" +
-	"\aaddress\x18\x01 \x01(\v2\x1b.xray.common.net.IPOrDomainR\aaddress\x12\x12\n" +
-	"\x04port\x18\x02 \x01(\rR\x04port\x12C\n" +
-	"\bport_map\x18\x03 \x03(\v2(.xray.proxy.dokodemo.Config.PortMapEntryR\aportMap\x124\n" +
-	"\bnetworks\x18\a \x03(\x0e2\x18.xray.common.net.NetworkR\bnetworks\x12'\n" +
+	"\x1bproxy/dokodemo/config.proto\x12\x13xray.proxy.dokodemo\x1a\x18common/net/address.proto\x1a\x18common/net/network.proto\"\xff\x02\n" +
+	"\x06Config\x12D\n" +
+	"\x0frewrite_address\x18\x01 \x01(\v2\x1b.xray.common.net.IPOrDomainR\x0erewriteAddress\x12!\n" +
+	"\frewrite_port\x18\x02 \x01(\rR\vrewritePort\x12C\n" +
+	"\bport_map\x18\x03 \x03(\v2(.xray.proxy.dokodemo.Config.PortMapEntryR\aportMap\x12C\n" +
+	"\x10allowed_networks\x18\a \x03(\x0e2\x18.xray.common.net.NetworkR\x0fallowedNetworks\x12'\n" +
 	"\x0ffollow_redirect\x18\x05 \x01(\bR\x0efollowRedirect\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x06 \x01(\rR\tuserLevel\x1a:\n" +
@@ -145,9 +145,9 @@ var file_proxy_dokodemo_config_proto_goTypes = []any{
 	(net.Network)(0),       // 3: xray.common.net.Network
 }
 var file_proxy_dokodemo_config_proto_depIdxs = []int32{
-	2, // 0: xray.proxy.dokodemo.Config.address:type_name -> xray.common.net.IPOrDomain
+	2, // 0: xray.proxy.dokodemo.Config.rewrite_address:type_name -> xray.common.net.IPOrDomain
 	1, // 1: xray.proxy.dokodemo.Config.port_map:type_name -> xray.proxy.dokodemo.Config.PortMapEntry
-	3, // 2: xray.proxy.dokodemo.Config.networks:type_name -> xray.common.net.Network
+	3, // 2: xray.proxy.dokodemo.Config.allowed_networks:type_name -> xray.common.net.Network
 	3, // [3:3] is the sub-list for method output_type
 	3, // [3:3] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name

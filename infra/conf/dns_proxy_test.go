@@ -24,7 +24,7 @@ func TestDnsProxyConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{
+				RewriteServer: &net.Endpoint{
 					Network: net.Network_TCP,
 					Address: net.NewIPOrDomain(net.IPAddress([]byte{8, 8, 8, 8})),
 					Port:    53,
@@ -44,7 +44,7 @@ func TestDnsProxyConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{},
+				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Direct,
@@ -84,7 +84,7 @@ func TestDnsProxyConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{},
+				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Reject,
@@ -111,7 +111,7 @@ func TestDnsProxyConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{},
+				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Drop,
@@ -136,7 +136,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{},
+				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Hijack,
@@ -154,7 +154,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{},
+				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Reject,
@@ -177,7 +177,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{},
+				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Drop,
@@ -200,7 +200,7 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &dns.Config{
-				Server: &net.Endpoint{},
+				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Drop,

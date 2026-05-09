@@ -82,7 +82,7 @@ func testShadowsocks2022Tcp(t *testing.T, method string, password string) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -103,9 +103,9 @@ func testShadowsocks2022Tcp(t *testing.T, method string, password string) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  net.NewIPOrDomain(dest.Address),
-					Port:     uint32(dest.Port),
-					Networks: []net.Network{net.Network_TCP},
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
+					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 			},
 		},
@@ -167,7 +167,7 @@ func testShadowsocks2022Udp(t *testing.T, method string, password string) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					IpsBlocked: &freedom.IPRules{},
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -188,9 +188,9 @@ func testShadowsocks2022Udp(t *testing.T, method string, password string) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  net.NewIPOrDomain(udpDest.Address),
-					Port:     uint32(udpDest.Port),
-					Networks: []net.Network{net.Network_UDP},
+					RewriteAddress:  net.NewIPOrDomain(udpDest.Address),
+					RewritePort:     uint32(udpDest.Port),
+					AllowedNetworks: []net.Network{net.Network_UDP},
 				}),
 			},
 		},

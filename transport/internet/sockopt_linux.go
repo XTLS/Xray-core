@@ -2,7 +2,6 @@ package internet
 
 import (
 	"context"
-	"net"
 	"runtime"
 	"strconv"
 	"strings"
@@ -11,32 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/sys/unix"
 )
-
-func bindAddr(fd uintptr, ip []byte, port uint32) error {
-	setReuseAddr(fd)
-	setReusePort(fd)
-
-	var sockaddr syscall.Sockaddr
-
-	switch len(ip) {
-	case net.IPv4len:
-		a4 := &syscall.SockaddrInet4{
-			Port: int(port),
-		}
-		copy(a4.Addr[:], ip)
-		sockaddr = a4
-	case net.IPv6len:
-		a6 := &syscall.SockaddrInet6{
-			Port: int(port),
-		}
-		copy(a6.Addr[:], ip)
-		sockaddr = a6
-	default:
-		return errors.New("unexpected length of ip")
-	}
-
-	return syscall.Bind(int(fd), sockaddr)
-}
 
 // applyOutboundSocketOptions applies socket options for outbound connection.
 // note that unlike other part of Xray, this function needs network with speified network stack(tcp4/tcp6/udp4/udp6)

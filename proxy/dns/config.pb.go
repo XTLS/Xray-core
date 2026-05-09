@@ -139,7 +139,7 @@ type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserLevel     uint32                 `protobuf:"varint,1,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
 	Rule          []*DNSRuleConfig       `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
-	Server        *net.Endpoint          `protobuf:"bytes,3,opt,name=server,proto3" json:"server,omitempty"`
+	RewriteServer *net.Endpoint          `protobuf:"bytes,3,opt,name=rewrite_server,json=rewriteServer,proto3" json:"rewrite_server,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -188,9 +188,9 @@ func (x *Config) GetRule() []*DNSRuleConfig {
 	return nil
 }
 
-func (x *Config) GetServer() *net.Endpoint {
+func (x *Config) GetRewriteServer() *net.Endpoint {
 	if x != nil {
-		return x.Server
+		return x.RewriteServer
 	}
 	return nil
 }
@@ -203,12 +203,12 @@ const file_proxy_dns_config_proto_rawDesc = "" +
 	"\rDNSRuleConfig\x122\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x14\n" +
 	"\x05qtype\x18\x02 \x03(\x05R\x05qtype\x127\n" +
-	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\"\x8d\x01\n" +
+	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\"\x9c\x01\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x01 \x01(\rR\tuserLevel\x121\n" +
-	"\x04rule\x18\x02 \x03(\v2\x1d.xray.proxy.dns.DNSRuleConfigR\x04rule\x121\n" +
-	"\x06server\x18\x03 \x01(\v2\x19.xray.common.net.EndpointR\x06server*:\n" +
+	"\x04rule\x18\x02 \x03(\v2\x1d.xray.proxy.dns.DNSRuleConfigR\x04rule\x12@\n" +
+	"\x0erewrite_server\x18\x03 \x01(\v2\x19.xray.common.net.EndpointR\rrewriteServer*:\n" +
 	"\n" +
 	"RuleAction\x12\n" +
 	"\n" +
@@ -245,7 +245,7 @@ var file_proxy_dns_config_proto_depIdxs = []int32{
 	0, // 0: xray.proxy.dns.DNSRuleConfig.action:type_name -> xray.proxy.dns.RuleAction
 	3, // 1: xray.proxy.dns.DNSRuleConfig.domain:type_name -> xray.common.geodata.DomainRule
 	1, // 2: xray.proxy.dns.Config.rule:type_name -> xray.proxy.dns.DNSRuleConfig
-	4, // 3: xray.proxy.dns.Config.server:type_name -> xray.common.net.Endpoint
+	4, // 3: xray.proxy.dns.Config.rewrite_server:type_name -> xray.common.net.Endpoint
 	4, // [4:4] is the sub-list for method output_type
 	4, // [4:4] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
