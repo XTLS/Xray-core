@@ -31,6 +31,28 @@ func TestCancelAll(t *testing.T) {
 	}
 }
 
+func TestCancelAllClosesTrackedConnections(t *testing.T) {
+	tracker := connectiontracker.New()
+
+	_, firstEntry := tracker.RegisterWithMeta("user@example.com", func() {}, "", "")
+	_, secondEntry := tracker.RegisterWithMeta("user@example.com", func() {}, "", "")
+
+	var firstClosed int32
+	var secondClosed int32
+
+	connectiontracker.WrapConn(&fakeConn{closeCount: &firstClosed}, firstEntry)
+	connectiontracker.WrapConn(&fakeConn{closeCount: &secondClosed}, secondEntry)
+
+	tracker.CancelAll("user@example.com")
+
+	if atomic.LoadInt32(&firstClosed) != 1 {
+		t.Error("first tracked connection was not closed during CancelAll")
+	}
+	if atomic.LoadInt32(&secondClosed) != 1 {
+		t.Error("second tracked connection was not closed during CancelAll")
+	}
+}
+
 func TestCancelAllDoesNotAffectOtherUsers(t *testing.T) {
 	tracker := connectiontracker.New()
 
@@ -273,6 +295,21 @@ func TestCloseConnCancelsAndRemoves(t *testing.T) {
 	}
 }
 
+func TestCloseConnClosesTrackedConnection(t *testing.T) {
+	tracker := connectiontracker.New()
+
+	id, entry := tracker.RegisterWithMeta("user@example.com", func() {}, "", "")
+	var closeCount int32
+	connectiontracker.WrapConn(&fakeConn{closeCount: &closeCount}, entry)
+
+	if ok := tracker.CloseConn(id); !ok {
+		t.Error("CloseConn: expected true for existing connection")
+	}
+	if atomic.LoadInt32(&closeCount) != 1 {
+		t.Error("CloseConn: tracked connection was not closed")
+	}
+}
+
 func TestCloseConnUnknownIDReturnsFalse(t *testing.T) {
 	tracker := connectiontracker.New()
 
@@ -354,9 +391,11 @@ func TestListConnectionsMetadataFields(t *testing.T) {
 // fakeConn is a minimal net.Conn for WrapConn tests.
 type fakeConn struct {
 	net.Conn
-	readData []byte
-	readErr  error
-	writeErr error
+	readData   []byte
+	readErr    error
+	writeErr   error
+	closeErr   error
+	closeCount *int32
 }
 
 func (f *fakeConn) Read(b []byte) (int, error) {
@@ -368,7 +407,12 @@ func (f *fakeConn) Write(b []byte) (int, error) {
 	return len(b), f.writeErr
 }
 
-func (f *fakeConn) Close() error                       { return nil }
+func (f *fakeConn) Close() error {
+	if f.closeCount != nil {
+		atomic.AddInt32(f.closeCount, 1)
+	}
+	return f.closeErr
+}
 func (f *fakeConn) LocalAddr() net.Addr                { return nil }
 func (f *fakeConn) RemoteAddr() net.Addr               { return nil }
 func (f *fakeConn) SetDeadline(_ time.Time) error      { return nil }

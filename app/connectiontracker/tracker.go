@@ -5,6 +5,7 @@ package connectiontracker
 
 import (
 	"context"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -29,6 +30,8 @@ type ConnEntry struct {
 	lastActivity int64 // atomic, Unix nanosecond timestamp
 	uplink       int64 // atomic, bytes received from client
 	downlink     int64 // atomic, bytes sent to client
+	closerMu     sync.Mutex
+	closer       io.Closer
 }
 
 // ConnectionInfo is a read-only snapshot of an active connection's state.
@@ -88,7 +91,6 @@ type AccessRecord struct {
 	cancel   context.CancelFunc
 	finished atomic.Bool
 }
-
 
 // NewManager creates an empty tracker manager.
 func NewManager() *Manager {
@@ -405,7 +407,7 @@ func (t *Tracker) CancelAll(email string) {
 			Connected: false,
 			Info:      disconnectInfo(id, entry),
 		})
-		entry.Cancel()
+		entry.cancelAndClose()
 	}
 }
 
@@ -430,7 +432,7 @@ func (t *Tracker) CloseConn(id uint32) bool {
 			Connected: false,
 			Info:      disconnectInfo(id, entry),
 		})
-		entry.Cancel()
+		entry.cancelAndClose()
 	}
 	return ok
 }
@@ -496,6 +498,9 @@ func (c *TrackedConn) Write(b []byte) (int, error) {
 // WrapConn wraps conn so that every Read and Write updates the traffic
 // counters in entry. Call after RegisterWithMeta to enable byte-level tracking.
 func WrapConn(conn stat.Connection, entry *ConnEntry) stat.Connection {
+	if entry != nil {
+		entry.setCloser(conn)
+	}
 	return &TrackedConn{Connection: conn, entry: entry}
 }
 
@@ -538,7 +543,42 @@ func (c *TrackedPacketConn) WritePacket(buffer *B.Buffer, destination M.Socksadd
 // updates the traffic counters in entry. Call after RegisterWithMeta to enable
 // byte-level tracking for UDP connections.
 func WrapPacketConn(conn N.PacketConn, entry *ConnEntry) N.PacketConn {
+	if entry != nil {
+		entry.setCloser(conn)
+	}
 	return &TrackedPacketConn{PacketConn: conn, entry: entry}
+}
+
+func (e *ConnEntry) setCloser(c io.Closer) {
+	if e == nil || c == nil {
+		return
+	}
+	e.closerMu.Lock()
+	e.closer = c
+	e.closerMu.Unlock()
+}
+
+func (e *ConnEntry) closeCloser() {
+	if e == nil {
+		return
+	}
+	e.closerMu.Lock()
+	closer := e.closer
+	e.closerMu.Unlock()
+	if closer == nil {
+		return
+	}
+	_ = closer.Close()
+}
+
+func (e *ConnEntry) cancelAndClose() {
+	if e == nil {
+		return
+	}
+	if e.Cancel != nil {
+		e.Cancel()
+	}
+	e.closeCloser()
 }
 
 // TrackedAccessReader counts request payload bytes read by an accepted request.
