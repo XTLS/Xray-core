@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -36,9 +37,10 @@ func init() {
 
 type MultiUserInbound struct {
 	sync.Mutex
-	networks []net.Network
-	users    []*protocol.MemoryUser
-	service  *shadowaead_2022.MultiService[int]
+	networks    []net.Network
+	users       []*protocol.MemoryUser
+	service     *shadowaead_2022.MultiService[int]
+	connTracker *proxy.ConnTracker
 }
 
 func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
@@ -63,8 +65,9 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 	}
 
 	inbound := &MultiUserInbound{
-		networks: networks,
-		users:    memUsers,
+		networks:    networks,
+		users:       memUsers,
+		connTracker: proxy.NewConnTracker(),
 	}
 	if config.Key == "" {
 		return nil, errors.New("missing key")
@@ -141,11 +144,14 @@ func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 	i.users = i.users[:ulen-1]
 
 	// sync to multi service
-	// Considering implements shadowsocks2022 in xray-core may have better performance.
-	i.service.UpdateUsersWithPasswords(
+	err := i.service.UpdateUsersWithPasswords(
 		C.MapIndexed(i.users, func(index int, it *protocol.MemoryUser) int { return index }),
 		C.Map(i.users, func(it *protocol.MemoryUser) string { return it.Account.(*MemoryAccount).Key }),
 	)
+	if err != nil {
+		return errors.New("failed to update users in service").Base(err)
+	}
+	i.connTracker.KillAll(email)
 
 	return nil
 }
@@ -226,9 +232,22 @@ func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, con
 
 func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
 	inbound := session.InboundFromContext(ctx)
+	i.Lock()
 	userInt, _ := A.UserFromContext[int](ctx)
+	if userInt >= len(i.users) {
+		i.Unlock()
+		return errors.New("user index out of range, user may have been removed")
+	}
 	user := i.users[userInt]
+	i.Unlock()
 	inbound.User = user
+
+	if user.Email != "" {
+		var cleanup func()
+		ctx, _, cleanup = i.connTracker.Track(ctx, user.Email, conn)
+		defer cleanup()
+	}
+
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,
@@ -251,9 +270,22 @@ func (i *MultiUserInbound) NewConnection(ctx context.Context, conn net.Conn, met
 
 func (i *MultiUserInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
 	inbound := session.InboundFromContext(ctx)
+	i.Lock()
 	userInt, _ := A.UserFromContext[int](ctx)
+	if userInt >= len(i.users) {
+		i.Unlock()
+		return errors.New("user index out of range, user may have been removed")
+	}
 	user := i.users[userInt]
+	i.Unlock()
 	inbound.User = user
+
+	if user.Email != "" {
+		var cleanup func()
+		ctx, _, cleanup = i.connTracker.Track(ctx, user.Email, conn)
+		defer cleanup()
+	}
+
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   metadata.Source,
 		To:     metadata.Destination,

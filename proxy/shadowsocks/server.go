@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
@@ -26,6 +27,7 @@ type Server struct {
 	validator     *Validator
 	policyManager policy.Manager
 	cone          bool
+	connTracker   *proxy.ConnTracker
 }
 
 // NewServer create a new Shadowsocks server.
@@ -48,6 +50,7 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+		connTracker:   proxy.NewConnTracker(),
 	}
 
 	return s, nil
@@ -60,7 +63,11 @@ func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (s *Server) RemoveUser(ctx context.Context, e string) error {
-	return s.validator.Del(e)
+	err := s.validator.Del(e)
+	if err == nil {
+		s.connTracker.KillAll(e)
+	}
+	return err
 }
 
 // GetUser implements proxy.UserManager.GetUser().
@@ -132,6 +139,12 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 
 	inbound := session.InboundFromContext(ctx)
 	var dest *net.Destination
+	var connCleanup func()
+	defer func() {
+		if connCleanup != nil {
+			connCleanup()
+		}
+	}()
 	reader := buf.NewPacketReader(conn)
 	for {
 		mpayload, err := reader.ReadMultiBuffer()
@@ -152,6 +165,9 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 				request, data, err = DecodeUDPPacket(s.validator, payload)
 				if err == nil {
 					inbound.User = request.User
+					if request.User.Email != "" && connCleanup == nil {
+						ctx, _, connCleanup = s.connTracker.Track(ctx, request.User.Email, conn)
+					}
 				}
 			}
 
@@ -221,6 +237,12 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 		panic("no inbound metadata")
 	}
 	inbound.User = request.User
+
+	if request.User.Email != "" {
+		var cleanup func()
+		ctx, _, cleanup = s.connTracker.Track(ctx, request.User.Email, conn)
+		defer cleanup()
+	}
 
 	dest := request.Destination()
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
