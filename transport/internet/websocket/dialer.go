@@ -94,14 +94,6 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 					pconn = newConn
 				}
 
-				// Wrap with TLS spoofing if configured
-				if spoofConn, err := tls.WrapWithSpoof(pconn, tConfig.Spoof, tConfig.SpoofMethod, tConfig.SpoofCount, tlsConfig.ServerName); err != nil {
-					pconn.Close()
-					return nil, err
-				} else {
-					pconn = spoofConn
-				}
-
 				// TLS and apply the handshake
 				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 				if err := cn.WebsocketHandshakeContext(ctx); err != nil {

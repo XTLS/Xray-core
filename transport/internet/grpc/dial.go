@@ -140,12 +140,6 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 					if config.ServerName == "" && address.Family().IsDomain() {
 						config.ServerName = address.Domain()
 					}
-					if spoofConn, err := tls.WrapWithSpoof(c, tlsConfig.Spoof, tlsConfig.SpoofMethod, tlsConfig.SpoofCount, config.ServerName); err != nil {
-						c.Close()
-						return nil, err
-					} else {
-						c = spoofConn
-					}
 					if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 						return tls.UClient(c, config, fingerprint), nil
 					} else { // Fallback to normal gRPC TLS
