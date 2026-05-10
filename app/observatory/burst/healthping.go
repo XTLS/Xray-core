@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/dice"
@@ -24,15 +25,12 @@ type HealthPingSettings struct {
 
 // HealthPing is the health checker for balancers
 type HealthPing struct {
-	ctx         context.Context
-	dispatcher  routing.Dispatcher
-	access      sync.Mutex
-	ticker      *time.Ticker
-	tickerClose chan struct{}
-
-	runMu     sync.Mutex
-	wg        sync.WaitGroup
-	runCancel context.CancelFunc
+	ctx           context.Context
+	cancelCtx     context.CancelFunc
+	cancelPending atomic.Pointer[context.CancelFunc]
+	dispatcher    routing.Dispatcher
+	access        sync.Mutex
+	ticker        *time.Ticker
 
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
@@ -66,10 +64,10 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 		settings.Destination = "https://connectivitycheck.gstatic.com/generate_204"
 	}
 	if settings.Interval == 0 {
-		settings.Interval = time.Duration(1) * time.Minute
-	} else if settings.Interval < time.Duration(10)*time.Second {
+		settings.Interval = 1 * time.Minute
+	} else if settings.Interval < 10*time.Second {
 		errors.LogWarning(ctx, "health check interval is too small, 10s is applied")
-		settings.Interval = time.Duration(10) * time.Second
+		settings.Interval = 10 * time.Second
 	}
 	if settings.SamplingCount <= 0 {
 		settings.SamplingCount = 10
@@ -77,10 +75,12 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	if settings.Timeout <= 0 {
 		// results are saved after all health pings finish,
 		// a larger timeout could possibly makes checks run longer
-		settings.Timeout = time.Duration(5) * time.Second
+		settings.Timeout = 5 * time.Second
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	return &HealthPing{
 		ctx:        ctx,
+		cancelCtx:  cancel,
 		dispatcher: dispatcher,
 		Settings:   settings,
 		Results:    nil,
@@ -94,36 +94,30 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 	}
 	interval := h.Settings.Interval * time.Duration(h.Settings.SamplingCount)
 	ticker := time.NewTicker(interval)
-	tickerClose := make(chan struct{})
-	runCtx, cancel := context.WithCancel(h.ctx)
 	h.ticker = ticker
-	h.tickerClose = tickerClose
-	h.runCancel = cancel
 
-	runRound := func(duration time.Duration, rounds int) {
-		tags, err := selector()
-		if err != nil {
-			errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
-			return
-		}
-		h.runMu.Lock()
-		defer h.runMu.Unlock()
-		if runCtx.Err() != nil {
-			return
-		}
-		h.doCheck(runCtx, tags, duration, rounds)
-		h.Cleanup(tags)
-	}
-
-	h.wg.Add(1)
 	go func() {
-		defer h.wg.Done()
-		runRound(0, 1)
 		for {
+			go func() {
+				tags, err := selector()
+				if err != nil {
+					errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
+					return
+				}
+				subCtx, cancel := context.WithCancel(h.ctx)
+				old := h.cancelPending.Swap(&cancel)
+				if old != nil {
+					errors.LogDebug(h.ctx, "scheduled health check not finished before next round, canceling previous one")
+					(*old)()
+				}
+				h.doCheck(subCtx, tags, interval, h.Settings.SamplingCount)
+				h.cancelPending.CompareAndSwap(&cancel, nil)
+				h.Cleanup(tags)
+			}()
 			select {
 			case <-ticker.C:
-				runRound(interval, h.Settings.SamplingCount)
-			case <-tickerClose:
+				continue
+			case <-h.ctx.Done():
 				return
 			}
 		}
@@ -137,13 +131,7 @@ func (h *HealthPing) StopScheduler() {
 	}
 	h.ticker.Stop()
 	h.ticker = nil
-	if h.runCancel != nil {
-		h.runCancel()
-		h.runCancel = nil
-	}
-	close(h.tickerClose)
-	h.tickerClose = nil
-	h.wg.Wait()
+	h.cancelCtx()
 }
 
 // Check implements the HealthChecker
@@ -152,8 +140,6 @@ func (h *HealthPing) Check(tags []string) error {
 		return nil
 	}
 	errors.LogInfo(h.ctx, "perform one-time health check for tags ", tags)
-	h.runMu.Lock()
-	defer h.runMu.Unlock()
 	h.doCheck(h.ctx, tags, 0, 1)
 	return nil
 }
@@ -164,15 +150,15 @@ type rtt struct {
 }
 
 // doCheck performs the 'rounds' amount checks in given 'duration'. You should make
-// sure all tags are valid for current balancer. ctx cancels pending pings.
+// sure all tags are valid for current balancer
+// cancel ctx will stop all pending checks
 func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.Duration, rounds int) {
 	count := len(tags) * rounds
 	if count == 0 {
 		return
 	}
 	ch := make(chan *rtt, count)
-	var wg sync.WaitGroup
-
+	timers := make([]*time.Timer, 0, count)
 	for _, tag := range tags {
 		handler := tag
 		client := newPingClient(
@@ -187,27 +173,13 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 			if duration > 0 {
 				delay = time.Duration(dice.RollInt63n(int64(duration)))
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				if delay > 0 {
-					t := time.NewTimer(delay)
-					select {
-					case <-t.C:
-					case <-ctx.Done():
-						t.Stop()
-						return
-					}
-				}
-				if ctx.Err() != nil {
-					return
-				}
+			timers = append(timers, time.AfterFunc(delay, func() {
 				errors.LogDebug(h.ctx, "checking ", handler)
-				measured, err := client.MeasureDelay(h.Settings.HttpMethod)
+				delay, err := client.MeasureDelay(h.Settings.HttpMethod)
 				if err == nil {
 					ch <- &rtt{
 						handler: handler,
-						value:   measured,
+						value:   delay,
 					}
 					return
 				}
@@ -229,19 +201,21 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 					handler: handler,
 					value:   rttFailed,
 				}
-			}()
+			}))
 		}
 	}
-
-	go func() {
-		wg.Wait()
-		close(ch)
-	}()
-
-	for rtt := range ch {
-		if rtt.value > 0 {
-			// should not put results when network is down or ctx was cancelled
-			h.PutResult(rtt.handler, rtt.value)
+	for i := 0; i < count; i++ {
+		select {
+		case rtt := <-ch:
+			if rtt.value > 0 {
+				// should not put results when network is down
+				h.PutResult(rtt.handler, rtt.value)
+			}
+		case <-ctx.Done():
+			for _, timer := range timers {
+				timer.Stop()
+			}
+			return
 		}
 	}
 }
