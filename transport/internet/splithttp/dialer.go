@@ -138,12 +138,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		}
 
 		if gotlsConfig != nil {
-			if spoofConn, err := tls.WrapWithSpoof(conn, tlsConfig.Spoof, tlsConfig.SpoofMethod, tlsConfig.SpoofCount, gotlsConfig.ServerName); err != nil {
-				conn.Close()
-				return nil, err
-			} else {
-				conn = spoofConn
-			}
 			if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 				conn = tls.UClient(conn, gotlsConfig, fingerprint)
 				if err := conn.(*tls.UConn).HandshakeContext(ctxInner); err != nil {
