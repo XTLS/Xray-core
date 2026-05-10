@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"github.com/xtls/xray-core/transport/internet/finalmask/rawpacket"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
@@ -1237,6 +1238,7 @@ var (
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
+		"rawpacket":     func() interface{} { return new(RawpacketMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
 	}, "type", "settings")
 
@@ -1444,6 +1446,23 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 	config.MaxSplitMin = int64(c.MaxSplit.From)
 	config.MaxSplitMax = int64(c.MaxSplit.To)
 
+	return config, nil
+}
+
+type RawpacketMask struct {
+	Payload string `json:"payload"`
+	Method  string `json:"method"`
+	TTL     int32  `json:"ttl"`
+	Count   int32  `json:"count"`
+}
+
+func (c *RawpacketMask) Build() (proto.Message, error) {
+	config := &rawpacket.Config{
+		Payload: c.Payload,
+		Method:  c.Method,
+		Ttl:     uint32(c.TTL),
+		Count:   c.Count,
+	}
 	return config, nil
 }
 
