@@ -30,6 +30,10 @@ type HealthPing struct {
 	ticker      *time.Ticker
 	tickerClose chan struct{}
 
+	runMu     sync.Mutex
+	wg        sync.WaitGroup
+	runCancel context.CancelFunc
+
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
 }
@@ -63,7 +67,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	}
 	if settings.Interval == 0 {
 		settings.Interval = time.Duration(1) * time.Minute
-	} else if settings.Interval < 10 {
+	} else if settings.Interval < time.Duration(10)*time.Second {
 		errors.LogWarning(ctx, "health check interval is too small, 10s is applied")
 		settings.Interval = time.Duration(10) * time.Second
 	}
@@ -91,31 +95,34 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 	interval := h.Settings.Interval * time.Duration(h.Settings.SamplingCount)
 	ticker := time.NewTicker(interval)
 	tickerClose := make(chan struct{})
+	runCtx, cancel := context.WithCancel(h.ctx)
 	h.ticker = ticker
 	h.tickerClose = tickerClose
-	go func() {
+	h.runCancel = cancel
+
+	runRound := func(duration time.Duration, rounds int) {
 		tags, err := selector()
 		if err != nil {
-			errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
+			errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
 			return
 		}
-		h.Check(tags)
-	}()
+		h.runMu.Lock()
+		defer h.runMu.Unlock()
+		if runCtx.Err() != nil {
+			return
+		}
+		h.doCheck(runCtx, tags, duration, rounds)
+		h.Cleanup(tags)
+	}
 
+	h.wg.Add(1)
 	go func() {
+		defer h.wg.Done()
+		runRound(0, 1)
 		for {
-			go func() {
-				tags, err := selector()
-				if err != nil {
-					errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
-					return
-				}
-				h.doCheck(tags, interval, h.Settings.SamplingCount)
-				h.Cleanup(tags)
-			}()
 			select {
 			case <-ticker.C:
-				continue
+				runRound(interval, h.Settings.SamplingCount)
 			case <-tickerClose:
 				return
 			}
@@ -130,8 +137,13 @@ func (h *HealthPing) StopScheduler() {
 	}
 	h.ticker.Stop()
 	h.ticker = nil
+	if h.runCancel != nil {
+		h.runCancel()
+		h.runCancel = nil
+	}
 	close(h.tickerClose)
 	h.tickerClose = nil
+	h.wg.Wait()
 }
 
 // Check implements the HealthChecker
@@ -140,7 +152,9 @@ func (h *HealthPing) Check(tags []string) error {
 		return nil
 	}
 	errors.LogInfo(h.ctx, "perform one-time health check for tags ", tags)
-	h.doCheck(tags, 0, 1)
+	h.runMu.Lock()
+	defer h.runMu.Unlock()
+	h.doCheck(h.ctx, tags, 0, 1)
 	return nil
 }
 
@@ -150,13 +164,14 @@ type rtt struct {
 }
 
 // doCheck performs the 'rounds' amount checks in given 'duration'. You should make
-// sure all tags are valid for current balancer
-func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) {
+// sure all tags are valid for current balancer. ctx cancels pending pings.
+func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.Duration, rounds int) {
 	count := len(tags) * rounds
 	if count == 0 {
 		return
 	}
 	ch := make(chan *rtt, count)
+	var wg sync.WaitGroup
 
 	for _, tag := range tags {
 		handler := tag
@@ -172,13 +187,27 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 			if duration > 0 {
 				delay = time.Duration(dice.RollInt63n(int64(duration)))
 			}
-			time.AfterFunc(delay, func() {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if delay > 0 {
+					t := time.NewTimer(delay)
+					select {
+					case <-t.C:
+					case <-ctx.Done():
+						t.Stop()
+						return
+					}
+				}
+				if ctx.Err() != nil {
+					return
+				}
 				errors.LogDebug(h.ctx, "checking ", handler)
-				delay, err := client.MeasureDelay(h.Settings.HttpMethod)
+				measured, err := client.MeasureDelay(h.Settings.HttpMethod)
 				if err == nil {
 					ch <- &rtt{
 						handler: handler,
-						value:   delay,
+						value:   measured,
 					}
 					return
 				}
@@ -200,13 +229,18 @@ func (h *HealthPing) doCheck(tags []string, duration time.Duration, rounds int) 
 					handler: handler,
 					value:   rttFailed,
 				}
-			})
+			}()
 		}
 	}
-	for i := 0; i < count; i++ {
-		rtt := <-ch
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	for rtt := range ch {
 		if rtt.value > 0 {
-			// should not put results when network is down
+			// should not put results when network is down or ctx was cancelled
 			h.PutResult(rtt.handler, rtt.value)
 		}
 	}
