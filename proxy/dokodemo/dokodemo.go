@@ -32,22 +32,22 @@ func init() {
 }
 
 type DokodemoDoor struct {
-	policyManager policy.Manager
-	config        *Config
-	address       net.Address
-	port          net.Port
-	portMap       map[string]string
-	sockopt       *session.Sockopt
+	policyManager  policy.Manager
+	config         *Config
+	rewriteAddress net.Address
+	rewritePort    net.Port
+	portMap        map[string]string
+	sockopt        *session.Sockopt
 }
 
 // Init initializes the DokodemoDoor instance with necessary parameters.
 func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.Sockopt) error {
-	if len(config.Networks) == 0 {
+	if len(config.AllowedNetworks) == 0 {
 		return errors.New("no network specified")
 	}
 	d.config = config
-	d.address = config.GetPredefinedAddress()
-	d.port = net.Port(config.Port)
+	d.rewriteAddress = config.GetPredefinedAddress()
+	d.rewritePort = net.Port(config.RewritePort)
 	d.portMap = config.PortMap
 	d.policyManager = pm
 	d.sockopt = sockopt
@@ -57,10 +57,10 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 
 // Network implements proxy.Inbound.
 func (d *DokodemoDoor) Network() []net.Network {
-	if slices.Contains(d.config.Networks, net.Network_TCP) {
-		return append(d.config.Networks, net.Network_UNIX)
+	if slices.Contains(d.config.AllowedNetworks, net.Network_TCP) {
+		return append(d.config.AllowedNetworks, net.Network_UNIX)
 	}
-	return d.config.Networks
+	return d.config.AllowedNetworks
 }
 
 func (d *DokodemoDoor) policy() policy.Session {
@@ -78,8 +78,8 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	}
 	dest := net.Destination{
 		Network: network,
-		Address: d.address,
-		Port:    d.port,
+		Address: d.rewriteAddress,
+		Port:    d.rewritePort,
 	}
 
 	if !d.config.FollowRedirect {

@@ -85,9 +85,9 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		if ip == nil {
 			return nil, errors.New("invalid ip address")
 		}
-		port, _ := strconv.Atoi(p)
-		if port == 0 {
-			return nil, errors.New("invalid port")
+		port, err := strconv.Atoi(p)
+		if err != nil {
+			return nil, errors.New("invalid port").Base(err)
 		}
 		addr := &net.UDPAddr{IP: ip, Port: port}
 		resolverAddrs = append(resolverAddrs, addr)

@@ -31,6 +31,7 @@ type VLessInboundFallback struct {
 }
 
 type VLessInboundConfig struct {
+	Users      []json.RawMessage       `json:"users"`
 	Clients    []json.RawMessage       `json:"clients"`
 	Decryption string                  `json:"decryption"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
@@ -41,21 +42,25 @@ type VLessInboundConfig struct {
 // Build implements Buildable
 func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config := new(inbound.Config)
-	config.Clients = make([]*protocol.User, len(c.Clients))
+
+	if c.Clients != nil {
+		c.Users = c.Clients
+	}
+	config.Users = make([]*protocol.User, len(c.Users))
 	switch c.Flow {
 	case vless.XRV, "":
 	default:
 		return nil, errors.New(`VLESS "settings.flow" doesn't support "` + c.Flow + `" in this version`)
 	}
 	processClient := func(idx int) error {
-		rawUser := c.Clients[idx]
+		rawUser := c.Users[idx]
 		user := new(protocol.User)
 		if err := json.Unmarshal(rawUser, user); err != nil {
-			return errors.New(`VLESS clients: invalid user`).Base(err)
+			return errors.New(`VLESS users: invalid user`).Base(err)
 		}
 		account := new(vless.Account)
 		if err := json.Unmarshal(rawUser, account); err != nil {
-			return errors.New(`VLESS clients: invalid user`).Base(err)
+			return errors.New(`VLESS users: invalid user`).Base(err)
 		}
 
 		u, err := uuid.ParseString(account.Id)
@@ -69,7 +74,7 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 			account.Flow = c.Flow
 		case vless.XRV:
 		default:
-			return errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
+			return errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
 		}
 
 		if len(account.Testseed) < 4 {
@@ -77,24 +82,24 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		}
 
 		if account.Encryption != "" {
-			return errors.New(`VLESS clients: "encryption" should not be in inbound settings`)
+			return errors.New(`VLESS users: "encryption" should not be in inbound settings`)
 		}
 
 		if account.Reverse != nil {
 			if account.Reverse.Tag == "" {
-				return errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
+				return errors.New(`VLESS users: "tag" can't be empty for "reverse"`)
 			}
 			if account.Reverse.Sniffing != nil { // may not be reached: error json unmarshal
-				return errors.New(`VLESS clients: inbound's "reverse" can't have "sniffing"`)
+				return errors.New(`VLESS users: inbound's "reverse" can't have "sniffing"`)
 			}
 		}
 
 		user.Account = serial.ToTypedMessage(account)
-		config.Clients[idx] = user
+		config.Users[idx] = user
 		return nil
 	}
 
-	if err := task.ParallelForN(len(c.Clients), processClient); err != nil {
+	if err := task.ParallelForN(len(c.Users), processClient); err != nil {
 		return nil, err
 	}
 

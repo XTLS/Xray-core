@@ -58,25 +58,37 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 }
 
 type DNSOutboundConfig struct {
-	Network    Network                  `json:"network"`
-	Address    *Address                 `json:"address"`
-	Port       uint16                   `json:"port"`
-	UserLevel  uint32                   `json:"userLevel"`
-	Rules      []*DNSOutboundRuleConfig `json:"rules"`
-	NonIPQuery *string                  `json:"nonIPQuery"` // todo: remove legacy
-	BlockTypes *[]int32                 `json:"blockTypes"` // todo: remove legacy
+	RewriteNetwork Network                  `json:"rewriteNetwork"`
+	RewriteAddress *Address                 `json:"rewriteAddress"`
+	RewritePort    uint16                   `json:"rewritePort"`
+	Network        Network                  `json:"network"`
+	Address        *Address                 `json:"address"`
+	Port           uint16                   `json:"port"`
+	UserLevel      uint32                   `json:"userLevel"`
+	Rules          []*DNSOutboundRuleConfig `json:"rules"`
+	NonIPQuery     *string                  `json:"nonIPQuery"` // todo: remove legacy
+	BlockTypes     *[]int32                 `json:"blockTypes"` // todo: remove legacy
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
+	if len(c.Network) > 0 {
+		c.RewriteNetwork = c.Network
+	}
+	if c.Address != nil {
+		c.RewriteAddress = c.Address
+	}
+	if c.Port != 0 {
+		c.RewritePort = c.Port
+	}
 	config := &dns.Config{
-		Server: &net.Endpoint{
-			Network: c.Network.Build(),
-			Port:    uint32(c.Port),
+		RewriteServer: &net.Endpoint{
+			Network: c.RewriteNetwork.Build(),
+			Port:    uint32(c.RewritePort),
 		},
 		UserLevel: c.UserLevel,
 	}
-	if c.Address != nil {
-		config.Server.Address = c.Address.Build()
+	if c.RewriteAddress != nil {
+		config.RewriteServer.Address = c.RewriteAddress.Build()
 	}
 
 	// todo: remove legacy

@@ -74,7 +74,7 @@ type Handler struct {
 	client          dns.Client
 	fdns            dns.FakeDNSEngine
 	ownLinkVerifier ownLinkVerifier
-	server          net.Destination
+	rewriteServer   net.Destination
 	timeout         time.Duration
 	rules           []*DNSRule
 }
@@ -87,8 +87,8 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 		h.ownLinkVerifier = v
 	}
 
-	if config.Server != nil {
-		h.server = config.Server.AsDestination()
+	if config.RewriteServer != nil {
+		h.rewriteServer = config.RewriteServer.AsDestination()
 	}
 
 	h.rules = make([]*DNSRule, 0, len(config.Rule))
@@ -161,14 +161,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	srcNetwork := ob.Target.Network
 
 	dest := ob.Target
-	if h.server.Network != net.Network_Unknown {
-		dest.Network = h.server.Network
+	if h.rewriteServer.Network != net.Network_Unknown {
+		dest.Network = h.rewriteServer.Network
 	}
-	if h.server.Address != nil {
-		dest.Address = h.server.Address
+	if h.rewriteServer.Address != nil {
+		dest.Address = h.rewriteServer.Address
 	}
-	if h.server.Port != 0 {
-		dest.Port = h.server.Port
+	if h.rewriteServer.Port != 0 {
+		dest.Port = h.rewriteServer.Port
 	}
 
 	errors.LogInfo(ctx, "handling DNS traffic to ", dest)

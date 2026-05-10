@@ -45,12 +45,17 @@ type ShadowsocksServerConfig struct {
 	Password    string                   `json:"password"`
 	Level       byte                     `json:"level"`
 	Email       string                   `json:"email"`
-	Users       []*ShadowsocksUserConfig `json:"clients"`
+	Users       []*ShadowsocksUserConfig `json:"users"`
+	Clients     []*ShadowsocksUserConfig `json:"clients"`
 	NetworkList *NetworkList             `json:"network"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
+
+	if v.Clients != nil {
+		v.Users = v.Clients
+	}
 
 	if C.Contains(shadowaead_2022.List, v.Cipher) {
 		return buildShadowsocks2022(v)

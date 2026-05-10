@@ -39,12 +39,16 @@ type HysteriaUserConfig struct {
 
 type HysteriaServerConfig struct {
 	Version int32                 `json:"version"`
-	Users   []*HysteriaUserConfig `json:"clients"`
+	Users   []*HysteriaUserConfig `json:"users"`
+	Clients []*HysteriaUserConfig `json:"clients"`
 }
 
 func (c *HysteriaServerConfig) Build() (proto.Message, error) {
 	config := new(hysteria.ServerConfig)
 
+	if c.Clients != nil {
+		c.Users = c.Clients
+	}
 	if len(c.Users) > 0 {
 		config.Users = make([]*protocol.User, len(c.Users))
 		processUser := func(idx int) error {
