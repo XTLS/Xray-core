@@ -13,8 +13,8 @@ import (
 
 // StaticHosts represents static domain-ip mapping in DNS server.
 type StaticHosts struct {
-	reps    [][]net.Address
-	matcher geodata.DomainMatcher
+	responses [][]net.Address
+	matcher   geodata.DomainMatcher
 }
 
 // NewStaticHosts creates a new StaticHosts instance.
@@ -45,12 +45,12 @@ func NewStaticHosts(hosts []*Config_HostMapping) (*StaticHosts, error) {
 				rep = append(rep, addr)
 			}
 		}
-		// if len(rep) == 0 {
-		// 	errors.LogError(context.Background(), "empty value in static hosts, ignore this rule: ", mapping.Domain)
-		// 	continue
-		// }
 		reps = append(reps, rep)
 		rules = append(rules, mapping.Domain)
+	}
+
+	if len(rules) == 0 {
+		return &StaticHosts{}, nil
 	}
 
 	matcher, err := geodata.DomainReg.BuildDomainMatcher(rules)
@@ -58,8 +58,8 @@ func NewStaticHosts(hosts []*Config_HostMapping) (*StaticHosts, error) {
 		return nil, err
 	}
 	return &StaticHosts{
-		reps:    reps,
-		matcher: matcher,
+		responses: reps,
+		matcher:   matcher,
 	}, nil
 }
 
@@ -76,8 +76,8 @@ func filterIP(ips []net.Address, option dns.IPOption) []net.Address {
 func (h *StaticHosts) lookupInternal(domain string) ([]net.Address, error) {
 	ips := make([]net.Address, 0)
 	found := false
-	for _, ruleIdx := range h.matcher.Match(domain) {
-		for _, rep := range h.reps[ruleIdx] {
+	for _, idx := range h.matcher.Match(domain) {
+		for _, rep := range h.responses[idx] {
 			if err, ok := rep.(dns.RCodeError); ok {
 				if uint16(err) == 0 {
 					return nil, dns.ErrEmptyResponse
@@ -85,7 +85,7 @@ func (h *StaticHosts) lookupInternal(domain string) ([]net.Address, error) {
 				return nil, err
 			}
 		}
-		ips = append(ips, h.reps[ruleIdx]...)
+		ips = append(ips, h.responses[idx]...)
 		found = true
 	}
 	if !found {
@@ -122,5 +122,8 @@ func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) (
 
 // Lookup returns IP addresses or proxied domain for the given domain, if exists in this StaticHosts.
 func (h *StaticHosts) Lookup(domain string, option dns.IPOption) ([]net.Address, error) {
+	if h.matcher == nil {
+		return nil, nil
+	}
 	return h.lookup(domain, option, 5)
 }

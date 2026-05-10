@@ -99,9 +99,8 @@ func TestXrayConfig(t *testing.T) {
 								Ip: []*geodata.IPRule{
 									{
 										Value: &geodata.IPRule_Custom{
-											Custom: &geodata.CIDR{
-												Ip:     []byte{10, 0, 0, 0},
-												Prefix: 8,
+											Custom: &geodata.CIDRRule{
+												Cidr: &geodata.CIDR{Ip: []byte{10, 0, 0, 0}, Prefix: 8},
 											},
 										},
 									},
@@ -216,8 +215,12 @@ func TestSniffingConfig_Build(t *testing.T) {
 		if rule == nil {
 			t.Fatalf("SniffingConfig.Build() produced a non-custom ip rule at index %d", i)
 		}
-		if !reflect.DeepEqual(rule.Ip, tc.ip) || rule.Prefix != tc.prefix {
-			t.Fatalf("SniffingConfig.Build() produced wrong ip rule at index %d: got (%v, %d), want (%v, %d)", i, rule.Ip, rule.Prefix, tc.ip, tc.prefix)
+		cidr := rule.GetCidr()
+		if cidr == nil {
+			t.Fatalf("SniffingConfig.Build() produced a custom ip rule without cidr at index %d", i)
+		}
+		if !reflect.DeepEqual(cidr.Ip, tc.ip) || cidr.Prefix != tc.prefix {
+			t.Fatalf("SniffingConfig.Build() produced wrong ip rule at index %d: got (%v, %d), want (%v, %d)", i, cidr.Ip, cidr.Prefix, tc.ip, tc.prefix)
 		}
 	}
 }

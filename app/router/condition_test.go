@@ -92,25 +92,22 @@ func TestRoutingRule(t *testing.T) {
 				Ip: []*geodata.IPRule{
 					{
 						Value: &geodata.IPRule_Custom{
-							Custom: &geodata.CIDR{
-								Ip:     []byte{8, 8, 8, 8},
-								Prefix: 32,
+							Custom: &geodata.CIDRRule{
+								Cidr: &geodata.CIDR{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
 							},
 						},
 					},
 					{
 						Value: &geodata.IPRule_Custom{
-							Custom: &geodata.CIDR{
-								Ip:     []byte{8, 8, 8, 8},
-								Prefix: 32,
+							Custom: &geodata.CIDRRule{
+								Cidr: &geodata.CIDR{Ip: []byte{8, 8, 8, 8}, Prefix: 32},
 							},
 						},
 					},
 					{
 						Value: &geodata.IPRule_Custom{
-							Custom: &geodata.CIDR{
-								Ip:     net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334").IP(),
-								Prefix: 128,
+							Custom: &geodata.CIDRRule{
+								Cidr: &geodata.CIDR{Ip: net.ParseAddress("2001:0db8:85a3:0000:0000:8a2e:0370:7334").IP(), Prefix: 128},
 							},
 						},
 					},
@@ -140,9 +137,8 @@ func TestRoutingRule(t *testing.T) {
 				SourceIp: []*geodata.IPRule{
 					{
 						Value: &geodata.IPRule_Custom{
-							Custom: &geodata.CIDR{
-								Ip:     []byte{192, 168, 0, 0},
-								Prefix: 16,
+							Custom: &geodata.CIDRRule{
+								Cidr: &geodata.CIDR{Ip: []byte{192, 168, 0, 0}, Prefix: 16},
 							},
 						},
 					},

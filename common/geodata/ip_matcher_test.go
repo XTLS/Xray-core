@@ -97,6 +97,90 @@ func TestIPMatcher(t *testing.T) {
 	}
 }
 
+func TestIPMatcherFullCIDR4(t *testing.T) {
+	matcher := buildIPMatcher(
+		"0.0.0.0/0",
+	)
+
+	testCases := []struct {
+		Input  string
+		Output bool
+	}{
+		{
+			Input:  "192.168.1.1",
+			Output: true,
+		},
+		{
+			Input:  "0.0.0.0",
+			Output: true,
+		},
+		{
+			Input:  "255.255.255.255",
+			Output: true,
+		},
+		{
+			Input:  "2001:cdba::3257:9652",
+			Output: false,
+		},
+		{
+			Input:  "::0",
+			Output: false,
+		},
+		{
+			Input:  "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+			Output: false,
+		},
+	}
+
+	for _, test := range testCases {
+		if v := matcher.Match(xnet.ParseAddress(test.Input).IP()); v != test.Output {
+			t.Error("unexpected output: ", v, " for test case ", test)
+		}
+	}
+}
+
+func TestIPMatcherFullCIDR6(t *testing.T) {
+	matcher := buildIPMatcher(
+		"::0/0",
+	)
+
+	testCases := []struct {
+		Input  string
+		Output bool
+	}{
+		{
+			Input:  "192.168.1.1",
+			Output: false,
+		},
+		{
+			Input:  "0.0.0.0",
+			Output: false,
+		},
+		{
+			Input:  "255.255.255.255",
+			Output: false,
+		},
+		{
+			Input:  "2001:cdba::3257:9652",
+			Output: true,
+		},
+		{
+			Input:  "::0",
+			Output: true,
+		},
+		{
+			Input:  "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+			Output: true,
+		},
+	}
+
+	for _, test := range testCases {
+		if v := matcher.Match(xnet.ParseAddress(test.Input).IP()); v != test.Output {
+			t.Error("unexpected output: ", v, " for test case ", test)
+		}
+	}
+}
+
 func TestIPMatcherRegression(t *testing.T) {
 	matcher := buildIPMatcher(
 		"98.108.20.0/22",
@@ -178,6 +262,34 @@ func TestIPReverseMatcher2(t *testing.T) {
 		},
 		{
 			Input:  "91.108.255.254",
+			Output: false,
+		},
+	}
+
+	for _, test := range testCases {
+		if v := matcher.Match(xnet.ParseAddress(test.Input).IP()); v != test.Output {
+			t.Error("unexpected output: ", v, " for test case ", test)
+		}
+	}
+}
+
+func TestIPCustomReverseMatcher(t *testing.T) {
+	matcher := buildIPMatcher("!8.8.8.8/32")
+
+	testCases := []struct {
+		Input  string
+		Output bool
+	}{
+		{
+			Input:  "8.8.8.8",
+			Output: false,
+		},
+		{
+			Input:  "1.1.1.1",
+			Output: true,
+		},
+		{
+			Input:  "2001:cdba::3257:9652",
 			Output: false,
 		},
 	}

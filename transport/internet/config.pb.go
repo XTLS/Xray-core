@@ -730,8 +730,6 @@ type SocketConfig struct {
 	// ReceiveOriginalDestAddress is for enabling IP_RECVORIGDSTADDR socket
 	// option. This option is for UDP only.
 	ReceiveOriginalDestAddress bool                 `protobuf:"varint,4,opt,name=receive_original_dest_address,json=receiveOriginalDestAddress,proto3" json:"receive_original_dest_address,omitempty"`
-	BindAddress                []byte               `protobuf:"bytes,5,opt,name=bind_address,json=bindAddress,proto3" json:"bind_address,omitempty"`
-	BindPort                   uint32               `protobuf:"varint,6,opt,name=bind_port,json=bindPort,proto3" json:"bind_port,omitempty"`
 	AcceptProxyProtocol        bool                 `protobuf:"varint,7,opt,name=accept_proxy_protocol,json=acceptProxyProtocol,proto3" json:"accept_proxy_protocol,omitempty"`
 	DomainStrategy             DomainStrategy       `protobuf:"varint,8,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.transport.internet.DomainStrategy" json:"domain_strategy,omitempty"`
 	DialerProxy                string               `protobuf:"bytes,9,opt,name=dialer_proxy,json=dialerProxy,proto3" json:"dialer_proxy,omitempty"`
@@ -809,20 +807,6 @@ func (x *SocketConfig) GetReceiveOriginalDestAddress() bool {
 		return x.ReceiveOriginalDestAddress
 	}
 	return false
-}
-
-func (x *SocketConfig) GetBindAddress() []byte {
-	if x != nil {
-		return x.BindAddress
-	}
-	return nil
-}
-
-func (x *SocketConfig) GetBindPort() uint32 {
-	if x != nil {
-		return x.BindPort
-	}
-	return 0
 }
 
 func (x *SocketConfig) GetAcceptProxyProtocol() bool {
@@ -1066,14 +1050,12 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x05level\x18\x03 \x01(\tR\x05level\x12\x10\n" +
 	"\x03opt\x18\x04 \x01(\tR\x03opt\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\tR\x05value\x12\x12\n" +
-	"\x04type\x18\x06 \x01(\tR\x04type\"\x89\t\n" +
+	"\x04type\x18\x06 \x01(\tR\x04type\"\xc9\b\n" +
 	"\fSocketConfig\x12\x12\n" +
 	"\x04mark\x18\x01 \x01(\x05R\x04mark\x12\x10\n" +
 	"\x03tfo\x18\x02 \x01(\x05R\x03tfo\x12H\n" +
 	"\x06tproxy\x18\x03 \x01(\x0e20.xray.transport.internet.SocketConfig.TProxyModeR\x06tproxy\x12A\n" +
-	"\x1dreceive_original_dest_address\x18\x04 \x01(\bR\x1areceiveOriginalDestAddress\x12!\n" +
-	"\fbind_address\x18\x05 \x01(\fR\vbindAddress\x12\x1b\n" +
-	"\tbind_port\x18\x06 \x01(\rR\bbindPort\x122\n" +
+	"\x1dreceive_original_dest_address\x18\x04 \x01(\bR\x1areceiveOriginalDestAddress\x122\n" +
 	"\x15accept_proxy_protocol\x18\a \x01(\bR\x13acceptProxyProtocol\x12P\n" +
 	"\x0fdomain_strategy\x18\b \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0edomainStrategy\x12!\n" +
 	"\fdialer_proxy\x18\t \x01(\tR\vdialerProxy\x125\n" +

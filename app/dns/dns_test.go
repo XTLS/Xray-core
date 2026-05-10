@@ -147,7 +147,9 @@ func TestUDPServerSubnet(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}
@@ -207,7 +209,9 @@ func TestUDPServer(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}
@@ -345,7 +349,9 @@ func TestPrioritizedDomain(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}
@@ -414,7 +420,9 @@ func TestUDPServerIPv6(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}
@@ -481,7 +489,9 @@ func TestStaticHostDomain(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}
@@ -538,15 +548,8 @@ func TestIPMatch(t *testing.T) {
 							Port: uint32(port),
 						},
 						ExpectedIp: []*geodata.IPRule{
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										// inner ip, will not match
-										Ip:     []byte{192, 168, 11, 1},
-										Prefix: 32,
-									},
-								},
-							},
+							// inner ip, will not match
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{192, 168, 11, 1}, Prefix: 32}}}},
 						},
 					},
 					// second dns, match ip
@@ -561,22 +564,8 @@ func TestIPMatch(t *testing.T) {
 							Port: uint32(port),
 						},
 						ExpectedIp: []*geodata.IPRule{
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{8, 8, 8, 8},
-										Prefix: 32,
-									},
-								},
-							},
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{8, 8, 8, 4},
-										Prefix: 32,
-									},
-								},
-							},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{8, 8, 8, 8}, Prefix: 32}}}},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{8, 8, 8, 4}, Prefix: 32}}}},
 						},
 					},
 				},
@@ -587,7 +576,9 @@ func TestIPMatch(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}
@@ -664,9 +655,9 @@ func TestLocalDomain(t *testing.T) {
 						},
 						ExpectedIp: []*geodata.IPRule{
 							// Will match localhost, localhost-a and localhost-b,
-							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDR{Ip: []byte{127, 0, 0, 2}, Prefix: 32}}},
-							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDR{Ip: []byte{127, 0, 0, 3}, Prefix: 32}}},
-							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDR{Ip: []byte{127, 0, 0, 4}, Prefix: 32}}},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{127, 0, 0, 2}, Prefix: 32}}}},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{127, 0, 0, 3}, Prefix: 32}}}},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{127, 0, 0, 4}, Prefix: 32}}}},
 						},
 					},
 					{
@@ -704,7 +695,9 @@ func TestLocalDomain(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}
@@ -887,22 +880,8 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 						},
 						ExpectedIp: []*geodata.IPRule{
 							// Will only match 8.8.8.8 and 8.8.4.4
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{8, 8, 8, 8},
-										Prefix: 32,
-									},
-								},
-							},
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{8, 8, 4, 4},
-										Prefix: 32,
-									},
-								},
-							},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{8, 8, 8, 8}, Prefix: 32}}}},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{8, 8, 4, 4}, Prefix: 32}}}},
 						},
 					},
 					{
@@ -922,14 +901,7 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 						},
 						ExpectedIp: []*geodata.IPRule{
 							// Will match 8.8.8.8 and 8.8.8.7, etc
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{8, 8, 8, 7},
-										Prefix: 24,
-									},
-								},
-							},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{8, 8, 8, 7}, Prefix: 24}}}},
 						},
 					},
 					{
@@ -949,14 +921,7 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 						},
 						ExpectedIp: []*geodata.IPRule{
 							// Will only match 8.8.7.7 (api.google.com)
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{8, 8, 7, 7},
-										Prefix: 32,
-									},
-								},
-							},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{8, 8, 7, 7}, Prefix: 32}}}},
 						},
 					},
 					{
@@ -976,14 +941,7 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 						},
 						ExpectedIp: []*geodata.IPRule{
 							// Will only match 8.8.7.8 (v2.api.google.com)
-							{
-								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{8, 8, 7, 8},
-										Prefix: 32,
-									},
-								},
-							},
+							{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{8, 8, 7, 8}, Prefix: 32}}}},
 						},
 					},
 				},
@@ -994,7 +952,9 @@ func TestMultiMatchPrioritizedDomain(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
 			},
 		},
 	}

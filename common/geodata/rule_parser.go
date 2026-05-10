@@ -17,6 +17,8 @@ func ParseIPRules(rules []string) ([]*IPRule, error) {
 	var ipRules []*IPRule
 
 	for i, r := range rules {
+		r, reverse := cutReversePrefix(r)
+
 		if strings.HasPrefix(r, "geoip:") {
 			r = "ext:" + DefaultGeoIPDat + ":" + r[len("geoip:"):]
 		}
@@ -32,9 +34,9 @@ func ParseIPRules(rules []string) ([]*IPRule, error) {
 		var rule isIPRule_Value
 		var err error
 		if prefix > 0 {
-			rule, err = parseGeoIPRule(r[prefix:])
+			rule, err = parseGeoIPRule(r[prefix:], reverse)
 		} else {
-			rule, err = parseCustomIPRule(r)
+			rule, err = parseCustomIPRule(r, reverse)
 		}
 		if err != nil {
 			return nil, errors.New("illegal ip rule: ", rules[i]).Base(err)
@@ -45,7 +47,16 @@ func ParseIPRules(rules []string) ([]*IPRule, error) {
 	return ipRules, nil
 }
 
-func parseGeoIPRule(rule string) (*IPRule_Geoip, error) {
+func cutReversePrefix(s string) (string, bool) {
+	reverse := false
+	for strings.HasPrefix(s, "!") {
+		s = s[1:]
+		reverse = !reverse
+	}
+	return s, reverse
+}
+
+func parseGeoIPRule(rule string, reverse bool) (*IPRule_Geoip, error) {
 	file, code, ok := strings.Cut(rule, ":")
 	if !ok {
 		return nil, errors.New("syntax error")
@@ -55,11 +66,8 @@ func parseGeoIPRule(rule string) (*IPRule_Geoip, error) {
 		return nil, errors.New("empty file")
 	}
 
-	reverse := false
-	if strings.HasPrefix(code, "!") {
-		code = code[1:]
-		reverse = true
-	}
+	code, codeReverse := cutReversePrefix(code)
+	reverse = reverse != codeReverse
 	if code == "" {
 		return nil, errors.New("empty code")
 	}
@@ -78,13 +86,16 @@ func parseGeoIPRule(rule string) (*IPRule_Geoip, error) {
 	}, nil
 }
 
-func parseCustomIPRule(rule string) (*IPRule_Custom, error) {
+func parseCustomIPRule(rule string, reverse bool) (*IPRule_Custom, error) {
 	cidr, err := parseCIDR(rule)
 	if err != nil {
 		return nil, err
 	}
 	return &IPRule_Custom{
-		Custom: cidr,
+		Custom: &CIDRRule{
+			Cidr:         cidr,
+			ReverseMatch: reverse,
+		},
 	}, nil
 }
 

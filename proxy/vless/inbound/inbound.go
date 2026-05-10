@@ -58,7 +58,7 @@ func init() {
 		c := config.(*Config)
 
 		validator := new(vless.MemoryValidator)
-		for _, user := range c.Clients {
+		for _, user := range c.Users {
 			u, err := user.ToMemoryUser()
 			if err != nil {
 				return nil, errors.New("failed to get VLESS user").Base(err).AtError()

@@ -48,7 +48,7 @@ func TestOutboundWithoutStatCounter(t *testing.T) {
 	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
 		Tag:           "tag",
-		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+		ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
 	})
 	conn, _ := h.(*Handler).Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146))
 	_, ok := conn.(*stat.CounterConnection)
@@ -78,7 +78,7 @@ func TestOutboundWithStatCounter(t *testing.T) {
 	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
 		Tag:           "tag",
-		ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+		ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
 	})
 	conn, _ := h.(*Handler).Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), 13146))
 	_, ok := conn.(*stat.CounterConnection)
@@ -118,7 +118,7 @@ func TestTagsCache(t *testing.T) {
 			tag := fmt.Sprintf("%s%d", tags_prefix, idx)
 			cfg := &core.OutboundHandlerConfig{
 				Tag:           tag,
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
 			}
 			if h, err := NewHandler(ctx, cfg); err == nil {
 				if err := ohm.AddHandler(ctx, h); err == nil {

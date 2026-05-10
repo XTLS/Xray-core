@@ -66,6 +66,11 @@ message CIDR {
   uint32 prefix = 2;
 }
 
+message CIDRRule {
+  CIDR cidr = 1;
+  bool reverse_match = 2;
+}
+
 message GeoIP {
   string code = 1;
   repeated CIDR cidr = 2;
@@ -85,6 +90,6 @@ message GeoIPRule {
 message IPRule {
   oneof value {
     GeoIPRule geoip = 1;
-    CIDR custom = 2;
+    CIDRRule custom = 2;
   }
 }

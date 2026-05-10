@@ -3,6 +3,7 @@ package strmatcher
 import (
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -99,10 +100,6 @@ func (t Type) New(pattern string) (Matcher, error) {
 	case Substr:
 		return SubstrMatcher(pattern), nil
 	case Domain:
-		pattern, err := ToDomain(pattern)
-		if err != nil {
-			return nil, err
-		}
 		return DomainMatcher(pattern), nil
 	case Regex: // 1. regex matching is case-sensitive
 		regex, err := regexp.Compile(pattern)
@@ -253,13 +250,12 @@ func AddMatcherToGroup(g MatcherGroup, matcher Matcher, value uint32) error {
 }
 
 // CompositeMatches flattens the matches slice to produce a single matched indices slice.
-// It is designed to avoid new memory allocation as possible.
 func CompositeMatches(matches [][]uint32) []uint32 {
 	switch len(matches) {
 	case 0:
 		return nil
 	case 1:
-		return matches[0]
+		return slices.Clone(matches[0])
 	default:
 		result := make([]uint32, 0, 5)
 		for i := 0; i < len(matches); i++ {
@@ -287,4 +283,66 @@ func CompositeMatchesReverse(matches [][]uint32) []uint32 {
 		}
 		return result
 	}
+}
+
+// MatcherSetForAll is an interface indicating a MatcherSet could accept all types of matchers.
+type MatcherSetForAll interface {
+	AddMatcher(matcher Matcher)
+}
+
+// MatcherSetForFull is an interface indicating a MatcherSet could accept FullMatchers.
+type MatcherSetForFull interface {
+	AddFullMatcher(matcher FullMatcher)
+}
+
+// MatcherSetForDomain is an interface indicating a MatcherSet could accept DomainMatchers.
+type MatcherSetForDomain interface {
+	AddDomainMatcher(matcher DomainMatcher)
+}
+
+// MatcherSetForSubstr is an interface indicating a MatcherSet could accept SubstrMatchers.
+type MatcherSetForSubstr interface {
+	AddSubstrMatcher(matcher SubstrMatcher)
+}
+
+// MatcherSetForRegex is an interface indicating a MatcherSet could accept RegexMatchers.
+type MatcherSetForRegex interface {
+	AddRegexMatcher(matcher *RegexMatcher)
+}
+
+// AddMatcherToSet is a helper function to try to add a Matcher to any kind of MatcherSet.
+// It returns error if the MatcherSet does not accept the provided Matcher's type.
+// This function is provided to help writing code to test a MatcherSet.
+func AddMatcherToSet(s MatcherSet, matcher Matcher) error {
+	if s, ok := s.(IndexMatcher); ok {
+		s.Add(matcher)
+		return nil
+	}
+	if s, ok := s.(MatcherSetForAll); ok {
+		s.AddMatcher(matcher)
+		return nil
+	}
+	switch matcher := matcher.(type) {
+	case FullMatcher:
+		if s, ok := s.(MatcherSetForFull); ok {
+			s.AddFullMatcher(matcher)
+			return nil
+		}
+	case DomainMatcher:
+		if s, ok := s.(MatcherSetForDomain); ok {
+			s.AddDomainMatcher(matcher)
+			return nil
+		}
+	case SubstrMatcher:
+		if s, ok := s.(MatcherSetForSubstr); ok {
+			s.AddSubstrMatcher(matcher)
+			return nil
+		}
+	case *RegexMatcher:
+		if s, ok := s.(MatcherSetForRegex); ok {
+			s.AddRegexMatcher(matcher)
+			return nil
+		}
+	}
+	return errors.New("cannot add matcher to matcher set")
 }

@@ -308,7 +308,7 @@ func TestServiceTestRoute(t *testing.T) {
 				TargetTag: &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
-				SourceIp:  []*geodata.IPRule{{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDR{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}},
+				SourceIp:  []*geodata.IPRule{{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}}},
 				TargetTag: &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{

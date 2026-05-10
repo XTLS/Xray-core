@@ -135,17 +135,15 @@ func TestRouterConfig(t *testing.T) {
 						Ip: []*geodata.IPRule{
 							{
 								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{10, 0, 0, 0},
-										Prefix: 8,
+									Custom: &geodata.CIDRRule{
+										Cidr: &geodata.CIDR{Ip: []byte{10, 0, 0, 0}, Prefix: 8},
 									},
 								},
 							},
 							{
 								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-										Prefix: 128,
+									Custom: &geodata.CIDRRule{
+										Cidr: &geodata.CIDR{Ip: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, Prefix: 128},
 									},
 								},
 							},
@@ -216,17 +214,15 @@ func TestRouterConfig(t *testing.T) {
 						Ip: []*geodata.IPRule{
 							{
 								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{10, 0, 0, 0},
-										Prefix: 8,
+									Custom: &geodata.CIDRRule{
+										Cidr: &geodata.CIDR{Ip: []byte{10, 0, 0, 0}, Prefix: 8},
 									},
 								},
 							},
 							{
 								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-										Prefix: 128,
+									Custom: &geodata.CIDRRule{
+										Cidr: &geodata.CIDR{Ip: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, Prefix: 128},
 									},
 								},
 							},

@@ -7,6 +7,8 @@
 package freedom
 
 import (
+	geodata "github.com/xtls/xray-core/common/geodata"
+	net "github.com/xtls/xray-core/common/net"
 	protocol "github.com/xtls/xray-core/common/protocol"
 	internet "github.com/xtls/xray-core/transport/internet"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -22,6 +24,52 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type RuleAction int32
+
+const (
+	RuleAction_Allow RuleAction = 0
+	RuleAction_Block RuleAction = 1
+)
+
+// Enum value maps for RuleAction.
+var (
+	RuleAction_name = map[int32]string{
+		0: "Allow",
+		1: "Block",
+	}
+	RuleAction_value = map[string]int32{
+		"Allow": 0,
+		"Block": 1,
+	}
+)
+
+func (x RuleAction) Enum() *RuleAction {
+	p := new(RuleAction)
+	*p = x
+	return p
+}
+
+func (x RuleAction) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RuleAction) Descriptor() protoreflect.EnumDescriptor {
+	return file_proxy_freedom_config_proto_enumTypes[0].Descriptor()
+}
+
+func (RuleAction) Type() protoreflect.EnumType {
+	return &file_proxy_freedom_config_proto_enumTypes[0]
+}
+
+func (x RuleAction) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RuleAction.Descriptor instead.
+func (RuleAction) EnumDescriptor() ([]byte, []int) {
+	return file_proxy_freedom_config_proto_rawDescGZIP(), []int{0}
+}
 
 type DestinationOverride struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
@@ -251,6 +299,134 @@ func (x *Noise) GetApplyTo() string {
 	return ""
 }
 
+type Range struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Min           uint64                 `protobuf:"varint,1,opt,name=min,proto3" json:"min,omitempty"`
+	Max           uint64                 `protobuf:"varint,2,opt,name=max,proto3" json:"max,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Range) Reset() {
+	*x = Range{}
+	mi := &file_proxy_freedom_config_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Range) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Range) ProtoMessage() {}
+
+func (x *Range) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_freedom_config_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Range.ProtoReflect.Descriptor instead.
+func (*Range) Descriptor() ([]byte, []int) {
+	return file_proxy_freedom_config_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Range) GetMin() uint64 {
+	if x != nil {
+		return x.Min
+	}
+	return 0
+}
+
+func (x *Range) GetMax() uint64 {
+	if x != nil {
+		return x.Max
+	}
+	return 0
+}
+
+type FinalRuleConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Action        RuleAction             `protobuf:"varint,1,opt,name=action,proto3,enum=xray.proxy.freedom.RuleAction" json:"action,omitempty"`
+	Networks      []net.Network          `protobuf:"varint,2,rep,packed,name=networks,proto3,enum=xray.common.net.Network" json:"networks,omitempty"`
+	PortList      *net.PortList          `protobuf:"bytes,3,opt,name=port_list,json=portList,proto3" json:"port_list,omitempty"`
+	Ip            []*geodata.IPRule      `protobuf:"bytes,4,rep,name=ip,proto3" json:"ip,omitempty"`
+	BlockDelay    *Range                 `protobuf:"bytes,5,opt,name=block_delay,json=blockDelay,proto3" json:"block_delay,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FinalRuleConfig) Reset() {
+	*x = FinalRuleConfig{}
+	mi := &file_proxy_freedom_config_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FinalRuleConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FinalRuleConfig) ProtoMessage() {}
+
+func (x *FinalRuleConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_freedom_config_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FinalRuleConfig.ProtoReflect.Descriptor instead.
+func (*FinalRuleConfig) Descriptor() ([]byte, []int) {
+	return file_proxy_freedom_config_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *FinalRuleConfig) GetAction() RuleAction {
+	if x != nil {
+		return x.Action
+	}
+	return RuleAction_Allow
+}
+
+func (x *FinalRuleConfig) GetNetworks() []net.Network {
+	if x != nil {
+		return x.Networks
+	}
+	return nil
+}
+
+func (x *FinalRuleConfig) GetPortList() *net.PortList {
+	if x != nil {
+		return x.PortList
+	}
+	return nil
+}
+
+func (x *FinalRuleConfig) GetIp() []*geodata.IPRule {
+	if x != nil {
+		return x.Ip
+	}
+	return nil
+}
+
+func (x *FinalRuleConfig) GetBlockDelay() *Range {
+	if x != nil {
+		return x.BlockDelay
+	}
+	return nil
+}
+
 type Config struct {
 	state               protoimpl.MessageState  `protogen:"open.v1"`
 	DomainStrategy      internet.DomainStrategy `protobuf:"varint,1,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.transport.internet.DomainStrategy" json:"domain_strategy,omitempty"`
@@ -259,13 +435,14 @@ type Config struct {
 	Fragment            *Fragment               `protobuf:"bytes,5,opt,name=fragment,proto3" json:"fragment,omitempty"`
 	ProxyProtocol       uint32                  `protobuf:"varint,6,opt,name=proxy_protocol,json=proxyProtocol,proto3" json:"proxy_protocol,omitempty"`
 	Noises              []*Noise                `protobuf:"bytes,7,rep,name=noises,proto3" json:"noises,omitempty"`
+	FinalRules          []*FinalRuleConfig      `protobuf:"bytes,8,rep,name=final_rules,json=finalRules,proto3" json:"final_rules,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_proxy_freedom_config_proto_msgTypes[3]
+	mi := &file_proxy_freedom_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -277,7 +454,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_freedom_config_proto_msgTypes[3]
+	mi := &file_proxy_freedom_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -290,7 +467,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_proxy_freedom_config_proto_rawDescGZIP(), []int{3}
+	return file_proxy_freedom_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Config) GetDomainStrategy() internet.DomainStrategy {
@@ -335,11 +512,18 @@ func (x *Config) GetNoises() []*Noise {
 	return nil
 }
 
+func (x *Config) GetFinalRules() []*FinalRuleConfig {
+	if x != nil {
+		return x.FinalRules
+	}
+	return nil
+}
+
 var File_proxy_freedom_config_proto protoreflect.FileDescriptor
 
 const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproxy/freedom/config.proto\x12\x12xray.proxy.freedom\x1a!common/protocol/server_spec.proto\x1a\x1ftransport/internet/config.proto\"S\n" +
+	"\x1aproxy/freedom/config.proto\x12\x12xray.proxy.freedom\x1a!common/protocol/server_spec.proto\x1a\x1ftransport/internet/config.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\"S\n" +
 	"\x13DestinationOverride\x12<\n" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\"\x98\x02\n" +
 	"\bFragment\x12!\n" +
@@ -362,7 +546,17 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\tdelay_min\x18\x03 \x01(\x04R\bdelayMin\x12\x1b\n" +
 	"\tdelay_max\x18\x04 \x01(\x04R\bdelayMax\x12\x16\n" +
 	"\x06packet\x18\x05 \x01(\fR\x06packet\x12\x19\n" +
-	"\bapply_to\x18\x06 \x01(\tR\aapplyTo\"\xe9\x02\n" +
+	"\bapply_to\x18\x06 \x01(\tR\aapplyTo\"+\n" +
+	"\x05Range\x12\x10\n" +
+	"\x03min\x18\x01 \x01(\x04R\x03min\x12\x10\n" +
+	"\x03max\x18\x02 \x01(\x04R\x03max\"\xa0\x02\n" +
+	"\x0fFinalRuleConfig\x126\n" +
+	"\x06action\x18\x01 \x01(\x0e2\x1e.xray.proxy.freedom.RuleActionR\x06action\x124\n" +
+	"\bnetworks\x18\x02 \x03(\x0e2\x18.xray.common.net.NetworkR\bnetworks\x126\n" +
+	"\tport_list\x18\x03 \x01(\v2\x19.xray.common.net.PortListR\bportList\x12+\n" +
+	"\x02ip\x18\x04 \x03(\v2\x1b.xray.common.geodata.IPRuleR\x02ip\x12:\n" +
+	"\vblock_delay\x18\x05 \x01(\v2\x19.xray.proxy.freedom.RangeR\n" +
+	"blockDelay\"\xaf\x03\n" +
 	"\x06Config\x12P\n" +
 	"\x0fdomain_strategy\x18\x01 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0edomainStrategy\x12Z\n" +
 	"\x14destination_override\x18\x03 \x01(\v2'.xray.proxy.freedom.DestinationOverrideR\x13destinationOverride\x12\x1d\n" +
@@ -370,7 +564,13 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"user_level\x18\x04 \x01(\rR\tuserLevel\x128\n" +
 	"\bfragment\x18\x05 \x01(\v2\x1c.xray.proxy.freedom.FragmentR\bfragment\x12%\n" +
 	"\x0eproxy_protocol\x18\x06 \x01(\rR\rproxyProtocol\x121\n" +
-	"\x06noises\x18\a \x03(\v2\x19.xray.proxy.freedom.NoiseR\x06noisesBX\n" +
+	"\x06noises\x18\a \x03(\v2\x19.xray.proxy.freedom.NoiseR\x06noises\x12D\n" +
+	"\vfinal_rules\x18\b \x03(\v2#.xray.proxy.freedom.FinalRuleConfigR\n" +
+	"finalRules*\"\n" +
+	"\n" +
+	"RuleAction\x12\t\n" +
+	"\x05Allow\x10\x00\x12\t\n" +
+	"\x05Block\x10\x01BX\n" +
 	"\x16com.xray.proxy.freedomP\x01Z'github.com/xtls/xray-core/proxy/freedom\xaa\x02\x12Xray.Proxy.Freedomb\x06proto3"
 
 var (
@@ -385,26 +585,39 @@ func file_proxy_freedom_config_proto_rawDescGZIP() []byte {
 	return file_proxy_freedom_config_proto_rawDescData
 }
 
-var file_proxy_freedom_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proxy_freedom_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proxy_freedom_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proxy_freedom_config_proto_goTypes = []any{
-	(*DestinationOverride)(nil),     // 0: xray.proxy.freedom.DestinationOverride
-	(*Fragment)(nil),                // 1: xray.proxy.freedom.Fragment
-	(*Noise)(nil),                   // 2: xray.proxy.freedom.Noise
-	(*Config)(nil),                  // 3: xray.proxy.freedom.Config
-	(*protocol.ServerEndpoint)(nil), // 4: xray.common.protocol.ServerEndpoint
-	(internet.DomainStrategy)(0),    // 5: xray.transport.internet.DomainStrategy
+	(RuleAction)(0),                 // 0: xray.proxy.freedom.RuleAction
+	(*DestinationOverride)(nil),     // 1: xray.proxy.freedom.DestinationOverride
+	(*Fragment)(nil),                // 2: xray.proxy.freedom.Fragment
+	(*Noise)(nil),                   // 3: xray.proxy.freedom.Noise
+	(*Range)(nil),                   // 4: xray.proxy.freedom.Range
+	(*FinalRuleConfig)(nil),         // 5: xray.proxy.freedom.FinalRuleConfig
+	(*Config)(nil),                  // 6: xray.proxy.freedom.Config
+	(*protocol.ServerEndpoint)(nil), // 7: xray.common.protocol.ServerEndpoint
+	(net.Network)(0),                // 8: xray.common.net.Network
+	(*net.PortList)(nil),            // 9: xray.common.net.PortList
+	(*geodata.IPRule)(nil),          // 10: xray.common.geodata.IPRule
+	(internet.DomainStrategy)(0),    // 11: xray.transport.internet.DomainStrategy
 }
 var file_proxy_freedom_config_proto_depIdxs = []int32{
-	4, // 0: xray.proxy.freedom.DestinationOverride.server:type_name -> xray.common.protocol.ServerEndpoint
-	5, // 1: xray.proxy.freedom.Config.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
-	0, // 2: xray.proxy.freedom.Config.destination_override:type_name -> xray.proxy.freedom.DestinationOverride
-	1, // 3: xray.proxy.freedom.Config.fragment:type_name -> xray.proxy.freedom.Fragment
-	2, // 4: xray.proxy.freedom.Config.noises:type_name -> xray.proxy.freedom.Noise
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	7,  // 0: xray.proxy.freedom.DestinationOverride.server:type_name -> xray.common.protocol.ServerEndpoint
+	0,  // 1: xray.proxy.freedom.FinalRuleConfig.action:type_name -> xray.proxy.freedom.RuleAction
+	8,  // 2: xray.proxy.freedom.FinalRuleConfig.networks:type_name -> xray.common.net.Network
+	9,  // 3: xray.proxy.freedom.FinalRuleConfig.port_list:type_name -> xray.common.net.PortList
+	10, // 4: xray.proxy.freedom.FinalRuleConfig.ip:type_name -> xray.common.geodata.IPRule
+	4,  // 5: xray.proxy.freedom.FinalRuleConfig.block_delay:type_name -> xray.proxy.freedom.Range
+	11, // 6: xray.proxy.freedom.Config.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
+	1,  // 7: xray.proxy.freedom.Config.destination_override:type_name -> xray.proxy.freedom.DestinationOverride
+	2,  // 8: xray.proxy.freedom.Config.fragment:type_name -> xray.proxy.freedom.Fragment
+	3,  // 9: xray.proxy.freedom.Config.noises:type_name -> xray.proxy.freedom.Noise
+	5,  // 10: xray.proxy.freedom.Config.final_rules:type_name -> xray.proxy.freedom.FinalRuleConfig
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_proxy_freedom_config_proto_init() }
@@ -417,13 +630,14 @@ func file_proxy_freedom_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_freedom_config_proto_rawDesc), len(file_proxy_freedom_config_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   4,
+			NumEnums:      1,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_proxy_freedom_config_proto_goTypes,
 		DependencyIndexes: file_proxy_freedom_config_proto_depIdxs,
+		EnumInfos:         file_proxy_freedom_config_proto_enumTypes,
 		MessageInfos:      file_proxy_freedom_config_proto_msgTypes,
 	}.Build()
 	File_proxy_freedom_config_proto = out.File

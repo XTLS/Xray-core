@@ -47,9 +47,8 @@ func TestResolveIP(t *testing.T) {
 						Ip: []*geodata.IPRule{
 							{
 								Value: &geodata.IPRule_Custom{
-									Custom: &geodata.CIDR{
-										Ip:     []byte{127, 0, 0, 0},
-										Prefix: 8,
+									Custom: &geodata.CIDRRule{
+										Cidr: &geodata.CIDR{Ip: []byte{127, 0, 0, 0}, Prefix: 8},
 									},
 								},
 							},

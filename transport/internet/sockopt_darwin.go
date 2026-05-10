@@ -288,32 +288,6 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 	return nil
 }
 
-func bindAddr(fd uintptr, address []byte, port uint32) error {
-	setReuseAddr(fd)
-	setReusePort(fd)
-
-	var sockaddr unix.Sockaddr
-
-	switch len(address) {
-	case net.IPv4len:
-		a4 := &unix.SockaddrInet4{
-			Port: int(port),
-		}
-		copy(a4.Addr[:], address)
-		sockaddr = a4
-	case net.IPv6len:
-		a6 := &unix.SockaddrInet6{
-			Port: int(port),
-		}
-		copy(a6.Addr[:], address)
-		sockaddr = a6
-	default:
-		return errors.New("unexpected length of ip")
-	}
-
-	return unix.Bind(int(fd), sockaddr)
-}
-
 func setReuseAddr(fd uintptr) error {
 	if err := unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
 		return errors.New("failed to set SO_REUSEADDR").Base(err).AtWarning()

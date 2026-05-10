@@ -4,12 +4,14 @@ import (
 	"context"
 	"net"
 	"sync"
+    "strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/signal/done"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
+    "github.com/xtls/xray-core/transport/internet"
 	"google.golang.org/grpc"
 )
 
@@ -73,14 +75,27 @@ func (c *Commander) Start() error {
 		}
 	}
 
+
 	if len(c.listen) > 0 {
-		if l, err := net.Listen("tcp", c.listen); err != nil {
+		var addr net.Addr
+		
+		if strings.HasPrefix(c.listen, "/") || strings.HasPrefix(c.listen, "@") {
+			addr = &net.UnixAddr{Name: c.listen, Net: "unix"}
+		} else {
+			tcpAddr, err := net.ResolveTCPAddr("tcp", c.listen)
+			if err != nil {
+				errors.LogErrorInner(context.Background(), err, "API server failed to parse listen address ", c.listen)
+				return err
+			}
+			addr = tcpAddr
+		}
+        l, err := internet.ListenSystem(context.Background(), addr, nil)
+		if err != nil {
 			errors.LogErrorInner(context.Background(), err, "API server failed to listen on ", c.listen)
 			return err
-		} else {
-			errors.LogInfo(context.Background(), "API server listening on ", l.Addr())
-			go listen(l)
 		}
+		errors.LogInfo(context.Background(), "API server listening on ", l.Addr())
+		go listen(l)
 		return nil
 	}
 

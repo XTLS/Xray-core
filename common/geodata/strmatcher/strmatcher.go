@@ -15,7 +15,7 @@ const (
 )
 
 // Matcher is the interface to determine a string matches a pattern.
-//   - This is a basic matcher to represent a certain kind of match semantic(full, substr, domain or regex).
+//   - This is a basic matcher to represent a certain kind of match semantic (full, substr, domain or regex).
 type Matcher interface {
 	// Type returns the matcher's type.
 	Type() Type
@@ -62,6 +62,7 @@ type IndexMatcher interface {
 	// Match returns the indices of all matchers that matches the input.
 	//   * Empty array is returned if no such matcher exists.
 	//   * The order of returned matchers should follow priority specification.
+	//   * The returned slice is owned by the caller and may be safely modified.
 	// Priority specification:
 	//   1. Priority between matcher types: full > domain > substr > regex.
 	//   2. Priority of same-priority matchers matching at same position: the early added takes precedence.
@@ -89,12 +90,31 @@ type ValueMatcher interface {
 	//   * Empty array is returned if no such matcher exists.
 	//   * The order of returned values should follow priority specification.
 	//   * Same value may appear multiple times if multiple matched matchers were added with that value.
+	//   * The returned slice is owned by the caller and may be safely modified.
 	// Priority specification:
 	//   1. Priority between matcher types: full > domain > substr > regex.
 	//   2. Priority of same-priority matchers matching at same position: the early added takes precedence.
 	//   3. Priority of domain matchers matching at different levels: the further matched domain takes precedence.
 	//   4. Priority of substr matchers matching at different positions: the further matched substr takes precedence.
 	Match(input string) []uint32
+
+	// MatchAny returns true as soon as one matching matcher is found.
+	MatchAny(input string) bool
+}
+
+// MatcherSet is an advanced type of matcher to accept a bunch of basic Matchers (of certain type, not all matcher types).
+// For example:
+//   - FullMatcherSet accepts FullMatcher and uses a hash table to facilitate lookup.
+//   - DomainMatcherSet accepts DomainMatcher and uses a trie to optimize both memory consumption and lookup speed.
+type MatcherSet interface {
+	// MatchAny returns true as soon as one matching matcher is found.
+	MatchAny(input string) bool
+}
+
+// AnyMatcher is a lightweight matcher for callers that only need existence checks.
+type AnyMatcher interface {
+	// Add adds a new Matcher to AnyMatcher.
+	Add(matcher Matcher)
 
 	// MatchAny returns true as soon as one matching matcher is found.
 	MatchAny(input string) bool
