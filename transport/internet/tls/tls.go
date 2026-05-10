@@ -5,17 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"math/big"
-	gonet "net"
 	"slices"
-	"strings"
 	"time"
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/utils"
-	"github.com/xtls/xray-core/transport/internet/tls/tlsspoof"
 )
 
 type Interface interface {
@@ -66,35 +62,6 @@ func (c *Conn) NegotiatedProtocol() string {
 func Client(c net.Conn, config *tls.Config) net.Conn {
 	tlsConn := tls.Client(c, config)
 	return &Conn{Conn: tlsConn}
-}
-
-// WrapWithSpoof wraps a connection with TLS spoofing if the config has
-// spoof settings. The spoofed ClientHello is injected via raw sockets
-// before the real TLS handshake, causing DPI middleboxes to see the
-// forged SNI while the actual connection proceeds normally.
-// spoofCount controls how many Write() calls trigger injection (0 = single-shot).
-func WrapWithSpoof(c net.Conn, spoofSNI string, spoofMethodStr string, spoofCount int32, serverName string) (net.Conn, error) {
-	spoofSNI, method, err := tlsspoof.ParseOptions(spoofSNI, spoofMethodStr)
-	if err != nil {
-		return nil, errors.New("tls_spoof: invalid options").Base(err)
-	}
-	if spoofSNI == "" {
-		return c, nil
-	}
-	if serverName == "" {
-		return nil, errors.New("tls_spoof: requires a TLS server name (SNI)")
-	}
-	if gonet.ParseIP(serverName) != nil {
-		return nil, errors.New("tls_spoof: cannot spoof when server name is an IP literal")
-	}
-	if strings.EqualFold(spoofSNI, serverName) {
-		return nil, errors.New("tls_spoof: spoof must differ from server_name")
-	}
-	wrapped, err := tlsspoof.NewConn(c, method, spoofSNI, int(spoofCount))
-	if err != nil {
-		return nil, errors.New("tls_spoof: failed to create spoof conn").Base(err)
-	}
-	return wrapped, nil
 }
 
 // Server initiates a TLS server handshake on the given connection.
