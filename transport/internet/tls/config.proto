@@ -87,11 +87,4 @@ message Config {
   SocketConfig ech_socket_settings = 21;
 
   repeated bytes pinned_peer_cert_sha256 = 22;
-
-  string spoof = 23;
-
-  string spoof_method = 24;
-
-  // Number of times to inject the fake ClientHello (0 or 1 = single-shot).
-  int32 spoof_count = 25;
 }
