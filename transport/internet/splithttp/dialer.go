@@ -183,6 +183,8 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		if quicParams.KeepAlivePeriod == 0 {
 			if keepAlivePeriod == 0 {
 				quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
+			} else if keepAlivePeriod > 0 {
+				quicConfig.KeepAlivePeriod = keepAlivePeriod
 			}
 		}
 		if quicParams.MaxIncomingStreams == 0 {
