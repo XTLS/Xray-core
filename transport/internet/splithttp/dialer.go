@@ -544,7 +544,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 				if xmuxClient != nil && (xmuxClient.LeftRequests.Add(-1) <= 0 ||
 					(xmuxClient.UnreusableAt != time.Time{} && lastWrite.After(xmuxClient.UnreusableAt))) {
+					xmuxClient.OpenUsage.Add(-1)
 					httpClient, xmuxClient = getHTTPClient(ctx, dest, streamSettings)
+					xmuxClient.OpenUsage.Add(1)
 				}
 
 				go func() {
