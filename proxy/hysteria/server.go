@@ -2,7 +2,6 @@ package hysteria
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -91,54 +90,30 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 		inbound.User = v.User()
 	}
 
-	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
-		r := io.Reader(conn)
-		b := make([]byte, MaxUDPSize)
-		df := &Defragger{}
-		var firstMsg *UDPMessage
-		var firstDest net.Destination
-
-		for {
-			n, err := r.Read(b)
-			if err != nil {
-				return err
-			}
-
-			msg, err := ParseUDPMessage(b[:n])
-			if err != nil {
-				continue
-			}
-
-			dfMsg := df.Feed(msg)
-			if dfMsg == nil {
-				continue
-			}
-
-			firstMsg = dfMsg
-			firstDest, err = net.ParseDestination("udp:" + firstMsg.Addr)
-			if err != nil {
-				errors.LogDebug(context.Background(), dfMsg.Addr, " ParseDestination err ", err)
-				continue
-			}
-
-			break
-		}
-
+	if _, ok := iConn.(*hysteria.InterConn); ok {
 		reader := &UDPReader{
-			Reader:    r,
-			buf:       b,
-			df:        df,
-			firstMsg:  firstMsg,
-			firstDest: &firstDest,
+			reader: conn,
+			df:     &Defragger{},
 		}
+
+		b := buf.New()
+		b.Resize(0, buf.Size)
+		n, addr, err := reader.ReadFrom(b.Bytes())
+		if err != nil {
+			b.Release()
+			return err
+		}
+		b.Resize(0, int32(n))
+		b.UDP = addr
+
+		reader.firstBuf = b
 
 		writer := &UDPWriter{
-			Writer: conn,
-			buf:    make([]byte, MaxUDPSize),
-			addr:   firstMsg.Addr,
+			writer: conn,
+			addr:   addr.NetAddr(),
 		}
 
-		return dispatcher.DispatchLink(ctx, firstDest, &transport.Link{
+		return dispatcher.DispatchLink(ctx, *addr, &transport.Link{
 			Reader: reader,
 			Writer: writer,
 		})

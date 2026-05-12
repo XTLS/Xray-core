@@ -3,11 +3,11 @@ package hysteria
 import (
 	"context"
 	go_tls "crypto/tls"
-	"encoding/binary"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"reflect"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -18,8 +18,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/common/task"
-	hyCtx "github.com/xtls/xray-core/proxy/hysteria/ctx"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
@@ -29,107 +27,25 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
-type udpSessionManagerClient struct {
-	conn   *quic.Conn
-	m      map[uint32]*InterUdpConn
-	next   uint32
-	closed bool
-	mutex  sync.RWMutex
-}
-
-func (m *udpSessionManagerClient) close(udpConn *InterUdpConn) {
-	if !udpConn.closed {
-		udpConn.closed = true
-		close(udpConn.ch)
-		delete(m.m, udpConn.id)
-	}
-}
-
-func (m *udpSessionManagerClient) run() {
-	for {
-		d, err := m.conn.ReceiveDatagram(context.Background())
-		if err != nil {
-			break
-		}
-
-		if len(d) < 4 {
-			continue
-		}
-		id := binary.BigEndian.Uint32(d[:4])
-
-		m.feed(id, d)
-	}
-
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.closed = true
-
-	for _, udpConn := range m.m {
-		m.close(udpConn)
-	}
-}
-
-func (m *udpSessionManagerClient) udp() (*InterUdpConn, error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if m.closed {
-		return nil, errors.New("closed")
-	}
-
-	udpConn := &InterUdpConn{
-		conn:   m.conn,
-		local:  m.conn.LocalAddr(),
-		remote: m.conn.RemoteAddr(),
-
-		id: m.next,
-		ch: make(chan []byte, udpMessageChanSize),
-	}
-	udpConn.closeFunc = func() {
-		m.mutex.Lock()
-		defer m.mutex.Unlock()
-		m.close(udpConn)
-	}
-	m.m[m.next] = udpConn
-	m.next++
-
-	return udpConn, nil
-}
-
-func (m *udpSessionManagerClient) feed(id uint32, d []byte) {
-	m.mutex.RLock()
-	defer m.mutex.RUnlock()
-
-	udpConn, ok := m.m[id]
-	if !ok {
-		return
-	}
-
-	select {
-	case udpConn.ch <- d:
-	default:
-	}
-}
-
 type client struct {
-	ctx            context.Context
+	sync.Mutex
+
 	dest           net.Destination
-	pktConn        net.PacketConn
-	conn           *quic.Conn
 	config         *Config
 	tlsConfig      *go_tls.Config
 	socketConfig   *internet.SocketConfig
 	udpmaskManager *finalmask.UdpmaskManager
 	quicParams     *internet.QuicParams
 
-	udpSM *udpSessionManagerClient
-	mutex sync.Mutex
+	conn    *quic.Conn
+	tr      *quic.Transport
+	pktConn net.PacketConn
+	udpSM   *udpSessionManager
 }
 
-func (c *client) status() Status {
+func (c *client) status() status {
 	if c.conn == nil {
-		return StatusUnknown
+		return StatusNull
 	}
 	select {
 	case <-c.conn.Context().Done():
@@ -140,14 +56,16 @@ func (c *client) status() Status {
 }
 
 func (c *client) close() {
-	_ = c.conn.CloseWithError(closeErrCodeOK, "")
-	_ = c.pktConn.Close()
-	c.pktConn = nil
+	c.conn.CloseWithError(closeErrCodeOK, "")
+	c.tr.Close()
+	c.pktConn.Close()
 	c.conn = nil
+	c.tr = nil
+	c.pktConn = nil
 	c.udpSM = nil
 }
 
-func (c *client) dial() error {
+func (c *client) dial(ctx context.Context) error {
 	status := c.status()
 	if status == StatusActive {
 		return nil
@@ -164,61 +82,6 @@ func (c *client) dial() error {
 		}
 	}
 
-	var index int
-	if len(quicParams.UdpHop.Ports) > 0 {
-		index = rand.Intn(len(quicParams.UdpHop.Ports))
-		c.dest.Port = net.Port(quicParams.UdpHop.Ports[index])
-	}
-
-	raw, err := internet.DialSystem(c.ctx, c.dest, c.socketConfig)
-	if err != nil {
-		return errors.New("failed to dial to dest").Base(err)
-	}
-
-	var pktConn net.PacketConn
-	var remote *net.UDPAddr
-
-	switch conn := raw.(type) {
-	case *internet.PacketConnWrapper:
-		pktConn = conn.PacketConn
-		remote = conn.RemoteAddr().(*net.UDPAddr)
-	case *net.UDPConn:
-		pktConn = conn
-		remote = conn.RemoteAddr().(*net.UDPAddr)
-	case *cnc.Connection:
-		fakeConn := &internet.FakePacketConn{Conn: conn}
-		pktConn = fakeConn
-		remote = fakeConn.RemoteAddr().(*net.UDPAddr)
-
-		if len(quicParams.UdpHop.Ports) > 0 {
-			raw.Close()
-			return errors.New("udphop requires being at the outermost level")
-		}
-	default:
-		raw.Close()
-		return errors.New("unknown conn ", reflect.TypeOf(conn))
-	}
-
-	if len(quicParams.UdpHop.Ports) > 0 {
-		addr := &udphop.UDPHopAddr{
-			IP:    remote.IP,
-			Ports: quicParams.UdpHop.Ports,
-		}
-		pktConn, err = udphop.NewUDPHopPacketConn(addr, index, quicParams.UdpHop.IntervalMin, quicParams.UdpHop.IntervalMax, c.udphopDialer, pktConn)
-		if err != nil {
-			raw.Close()
-			return errors.New("udphop err").Base(err)
-		}
-	}
-
-	if c.udpmaskManager != nil {
-		pktConn, err = c.udpmaskManager.WrapPacketConnClient(pktConn)
-		if err != nil {
-			raw.Close()
-			return errors.New("mask err").Base(err)
-		}
-	}
-
 	quicConfig := &quic.Config{
 		InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
 		MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
@@ -226,9 +89,10 @@ func (c *client) dial() error {
 		MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
 		MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
 		KeepAlivePeriod:                time.Duration(quicParams.KeepAlivePeriod) * time.Second,
-		DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery,
+		DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		EnableDatagrams:                true,
 		MaxDatagramFrameSize:           MaxDatagramFrameSize,
+		OmitMaxDatagramFrameSize:       time.Now().After(time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)),
 		DisablePathManager:             true,
 	}
 	if quicParams.InitStreamReceiveWindow == 0 {
@@ -250,16 +114,80 @@ func (c *client) dial() error {
 	// 	quicConfig.KeepAlivePeriod = 10 * time.Second
 	// }
 
-	var quicConn *quic.Conn
+	udpHopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
+		conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
+		if err != nil {
+			errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
+			return nil, errors.New("")
+		}
+
+		var pktConn net.PacketConn
+
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn = c.PacketConn
+		default:
+			panic(reflect.TypeOf(c))
+		}
+
+		return pktConn, nil
+	}
+
+	var pktConn net.PacketConn
+	var udpAddr *net.UDPAddr
+	if len(quicParams.UdpHop.Ports) > 0 {
+		index := rand.Intn(len(quicParams.UdpHop.Ports))
+		c.dest.Port = net.Port(quicParams.UdpHop.Ports[index])
+		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
+		if err != nil {
+			return errors.New("failed to dial to dest").Base(err)
+		}
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn = c.PacketConn
+			udpAddr = conn.RemoteAddr().(*net.UDPAddr)
+		default:
+			panic(reflect.TypeOf(c))
+		}
+		pktConn = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer, pktConn, index)
+	} else {
+		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
+		if err != nil {
+			return errors.New("failed to dial to dest").Base(err)
+		}
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn = c.PacketConn
+			udpAddr = c.RemoteAddr().(*net.UDPAddr)
+		case *cnc.Connection:
+			pktConn = &internet.FakePacketConn{Conn: c}
+			udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
+		default:
+			panic(reflect.TypeOf(c))
+		}
+	}
+
+	if c.udpmaskManager != nil {
+		newConn, err := c.udpmaskManager.WrapPacketConnClient(pktConn)
+		if err != nil {
+			pktConn.Close()
+			return errors.New("mask err").Base(err)
+		}
+		pktConn = newConn
+	}
+
+	tr := &quic.Transport{Conn: pktConn}
+
+	var conn *quic.Conn
 	rt := &http3.Transport{
 		TLSClientConfig: c.tlsConfig,
 		QUICConfig:      quicConfig,
 		Dial: func(ctx context.Context, _ string, tlsCfg *go_tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			qc, err := quic.DialEarly(ctx, pktConn, remote, tlsCfg, cfg)
+			qc, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 			if err != nil {
 				return nil, err
 			}
-			quicConn = qc
+			conn = qc
 			return qc, nil
 		},
 	}
@@ -273,77 +201,63 @@ func (c *client) dial() error {
 		Header: http.Header{
 			RequestHeaderAuth:   []string{c.config.Auth},
 			CommonHeaderCCRX:    []string{strconv.FormatUint(quicParams.BrutalDown, 10)},
-			CommonHeaderPadding: []string{authRequestPadding.String()},
+			CommonHeaderPadding: []string{AuthRequestPadding.String()},
 		},
 	}
 	resp, err := rt.RoundTrip(req)
 	if err != nil {
-		if quicConn != nil {
-			_ = quicConn.CloseWithError(closeErrCodeProtocolError, "")
+		if conn != nil {
+			_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		}
+		_ = tr.Close()
 		_ = pktConn.Close()
-		return errors.New("RoundTrip err").Base(err)
+		return err
 	}
 	if resp.StatusCode != StatusAuthOK {
-		_ = quicConn.CloseWithError(closeErrCodeProtocolError, "")
+		_ = conn.CloseWithError(closeErrCodeProtocolError, "")
+		_ = tr.Close()
 		_ = pktConn.Close()
-		return errors.New("auth failed")
+		return errors.New("auth failed code ", resp.StatusCode)
 	}
 	_ = resp.Body.Close()
 
-	serverUdp, _ := strconv.ParseBool(resp.Header.Get(ResponseHeaderUDPEnabled))
-	serverAuto := resp.Header.Get(CommonHeaderCCRX)
-	serverDown, _ := strconv.ParseUint(serverAuto, 10, 64)
+	// udp, _ := strconv.ParseBool(resp.Header.Get(ResponseHeaderUDPEnabled))
+	down, _ := strconv.ParseUint(resp.Header.Get(CommonHeaderCCRX), 10, 64)
 
 	switch quicParams.Congestion {
 	case "reno":
-		errors.LogDebug(c.ctx, "congestion reno")
 	case "bbr":
-		errors.LogDebug(c.ctx, "congestion bbr ", quicParams.BbrProfile)
-		congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
-	case "brutal", "":
-		if serverAuto == "auto" || quicParams.BrutalUp == 0 || serverDown == 0 {
-			errors.LogDebug(c.ctx, "congestion bbr ", quicParams.BbrProfile)
-			congestion.UseBBR(quicConn, bbr.Profile(quicParams.BbrProfile))
+		congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
+	case "", "brutal":
+		if quicParams.BrutalUp == 0 || down == 0 {
+			congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 		} else {
-			errors.LogDebug(c.ctx, "congestion brutal bytes per second ", min(quicParams.BrutalUp, serverDown))
-			congestion.UseBrutal(quicConn, min(quicParams.BrutalUp, serverDown))
+			congestion.UseBrutal(conn, min(quicParams.BrutalUp, down))
 		}
 	case "force-brutal":
-		errors.LogDebug(c.ctx, "congestion brutal bytes per second ", quicParams.BrutalUp)
-		congestion.UseBrutal(quicConn, quicParams.BrutalUp)
+		congestion.UseBrutal(conn, quicParams.BrutalUp)
 	default:
-		errors.LogDebug(c.ctx, "congestion reno")
+		panic(quicParams.Congestion)
 	}
 
 	c.pktConn = pktConn
-	c.conn = quicConn
-	if serverUdp {
-		c.udpSM = &udpSessionManagerClient{
-			conn: quicConn,
-			m:    make(map[uint32]*InterUdpConn),
-			next: 1,
-		}
-		go c.udpSM.run()
+	c.tr = tr
+	c.conn = conn
+	c.udpSM = &udpSessionManager{
+		conn: conn,
+		m:    make(map[uint32]*InterConn),
+		next: 1,
 	}
+	go c.udpSM.run()
 
 	return nil
 }
 
-func (c *client) clean() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (c *client) tcp(ctx context.Context) (stat.Connection, error) {
+	c.Lock()
+	defer c.Unlock()
 
-	if c.status() == StatusInactive {
-		c.close()
-	}
-}
-
-func (c *client) tcp() (stat.Connection, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	err := c.dial()
+	err := c.dial(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -362,63 +276,24 @@ func (c *client) tcp() (stat.Connection, error) {
 	}, nil
 }
 
-func (c *client) udp() (stat.Connection, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+func (c *client) udp(ctx context.Context) (stat.Connection, error) {
+	c.Lock()
+	defer c.Unlock()
 
-	err := c.dial()
+	err := c.dial(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	if c.udpSM == nil {
-		return nil, errors.New("server does not support udp")
 	}
 
 	return c.udpSM.udp()
 }
 
-func (c *client) setCtx(ctx context.Context) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	c.ctx = ctx
-}
-
-func (c *client) udphopDialer(addr *net.UDPAddr) (net.PacketConn, error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if c.status() != StatusActive {
-		errors.LogDebug(context.Background(), "skip hop: disconnected QUIC")
-		return nil, errors.New()
+func (c *client) clean() {
+	c.Lock()
+	if c.status() == StatusInactive {
+		c.close()
 	}
-
-	raw, err := internet.DialSystem(c.ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
-	if err != nil {
-		errors.LogDebug(context.Background(), "skip hop: failed to dial to dest")
-		raw.Close()
-		return nil, errors.New()
-	}
-
-	var pktConn net.PacketConn
-
-	switch conn := raw.(type) {
-	case *internet.PacketConnWrapper:
-		pktConn = conn.PacketConn
-	case *net.UDPConn:
-		pktConn = conn
-	case *cnc.Connection:
-		errors.LogDebug(context.Background(), "skip hop: udphop requires being at the outermost level")
-		raw.Close()
-		return nil, errors.New()
-	default:
-		errors.LogDebug(context.Background(), "skip hop: unknown conn ", reflect.TypeOf(conn))
-		raw.Close()
-		return nil, errors.New()
-	}
-
-	return pktConn, nil
+	c.Unlock()
 }
 
 type dialerConf struct {
@@ -427,16 +302,18 @@ type dialerConf struct {
 }
 
 type clientManager struct {
-	m     map[dialerConf]*client
-	mutex sync.Mutex
+	sync.RWMutex
+	m map[dialerConf]*client
 }
 
 func (m *clientManager) clean() {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	for _, c := range m.m {
-		c.clean()
+	ticker := time.NewTicker(idleCleanupInterval)
+	for range ticker.C {
+		m.RLock()
+		for _, c := range m.m {
+			c.clean()
+		}
+		m.RUnlock()
 	}
 }
 
@@ -449,44 +326,41 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("tls config is nil")
 	}
 
-	requireDatagram := hyCtx.RequireDatagramFromContext(ctx)
+	datagram := DatagramFromContext(ctx)
 	dest.Network = net.Network_UDP
-	config := streamSettings.ProtocolSettings.(*Config)
 
 	initmanager.Do(func() {
 		manager = &clientManager{
 			m: make(map[dialerConf]*client),
 		}
-		(&task.Periodic{
-			Interval: 30 * time.Second,
-			Execute: func() error {
-				manager.clean()
-				return nil
-			},
-		}).Start()
+		go manager.clean()
 	})
 
-	manager.mutex.Lock()
-	c, ok := manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}]
-	if !ok {
-		c = &client{
-			ctx:            ctx,
-			dest:           dest,
-			config:         config,
-			tlsConfig:      tlsConfig.GetTLSConfig(),
-			socketConfig:   streamSettings.SocketSettings,
-			udpmaskManager: streamSettings.UdpmaskManager,
-			quicParams:     streamSettings.QuicParams,
-		}
-		manager.m[dialerConf{Destination: dest, MemoryStreamConfig: streamSettings}] = c
-	}
-	c.setCtx(ctx)
-	manager.mutex.Unlock()
+	manager.RLock()
+	c := manager.m[dialerConf{dest, streamSettings}]
+	manager.RUnlock()
 
-	if requireDatagram {
-		return c.udp()
+	if c == nil {
+		manager.Lock()
+		c = manager.m[dialerConf{dest, streamSettings}]
+		if c == nil {
+			c = &client{
+				dest:           dest,
+				config:         streamSettings.ProtocolSettings.(*Config),
+				tlsConfig:      tlsConfig.GetTLSConfig(),
+				socketConfig:   streamSettings.SocketSettings,
+				udpmaskManager: streamSettings.UdpmaskManager,
+				quicParams:     streamSettings.QuicParams,
+			}
+			manager.m[dialerConf{dest, streamSettings}] = c
+		}
+		manager.Unlock()
 	}
-	return c.tcp()
+
+	if datagram {
+		return c.udp(ctx)
+	}
+	return c.tcp(ctx)
 }
 
 func init() {

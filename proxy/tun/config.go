@@ -3,6 +3,8 @@ package tun
 import (
 	"context"
 	"net"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -45,26 +47,53 @@ func (updater *InterfaceUpdater) Update() {
 	}
 
 	var got *net.Interface
-	for _, iface := range interfaces {
-		if iface.Index == updater.tunIndex {
-			continue
-		}
-		if updater.fixedName != "" {
+	if updater.fixedName != "" {
+		for _, iface := range interfaces {
+			if iface.Index == updater.tunIndex {
+				continue
+			}
 			if iface.Name == updater.fixedName {
 				got = &iface
 				break
 			}
-		} else {
-			addrs, err := iface.Addrs()
-			if err != nil {
+		}
+	} else {
+		var ifs []struct {
+			index int
+			score int
+		}
+		for i, iface := range interfaces {
+			if iface.Index == updater.tunIndex {
 				continue
 			}
-			if (iface.Flags&net.FlagUp != 0) &&
-				(iface.Flags&net.FlagLoopback == 0) &&
-				len(addrs) > 0 {
-				got = &iface
-				break
+			if strings.Contains(iface.Name, "vEthernet") {
+				continue
 			}
+			if iface.Flags&net.FlagUp == 0 {
+				continue
+			}
+			if iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			addrs, err := iface.Addrs()
+			if err != nil || len(addrs) == 0 {
+				continue
+			}
+			ifs = append(ifs, struct {
+				index int
+				score int
+			}{i, score(&iface, addrs)})
+		}
+		sort.Slice(ifs, func(i, j int) bool {
+			if ifs[i].score != ifs[j].score {
+				return ifs[i].score > ifs[j].score
+			}
+
+			return interfaces[ifs[i].index].Name < interfaces[ifs[j].index].Name
+		})
+		if len(ifs) > 0 {
+			iface := interfaces[ifs[0].index]
+			got = &iface
 		}
 	}
 
@@ -75,4 +104,22 @@ func (updater *InterfaceUpdater) Update() {
 
 	updater.iface = got
 	errors.LogInfo(context.Background(), "[tun] update interface ", got.Name, " ", got.Index)
+}
+
+func score(iface *net.Interface, addrs []net.Addr) int {
+	score := 0
+
+	name := strings.ToLower(iface.Name)
+	if strings.Contains(name, "wlan") || strings.Contains(name, "wi-fi") {
+		score += 2
+	}
+
+	for _, addr := range addrs {
+		if strings.HasPrefix(addr.String(), "192.168.") {
+			score += 1
+			break
+		}
+	}
+
+	return score
 }

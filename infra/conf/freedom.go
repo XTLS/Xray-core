@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"net"
@@ -8,7 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
-	v2net "github.com/xtls/xray-core/common/net"
+	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/transport/internet"
@@ -16,15 +17,16 @@ import (
 )
 
 type FreedomConfig struct {
-	TargetStrategy string      `json:"targetStrategy"`
-	DomainStrategy string      `json:"domainStrategy"`
-	Redirect       string      `json:"redirect"`
-	UserLevel      uint32      `json:"userLevel"`
-	Fragment       *Fragment   `json:"fragment"`
-	Noise          *Noise      `json:"noise"`
-	Noises         []*Noise    `json:"noises"`
-	ProxyProtocol  uint32      `json:"proxyProtocol"`
-	IPsBlocked     *StringList `json:"ipsBlocked"`
+	TargetStrategy string                    `json:"targetStrategy"`
+	DomainStrategy string                    `json:"domainStrategy"`
+	Redirect       string                    `json:"redirect"`
+	UserLevel      uint32                    `json:"userLevel"`
+	Fragment       *Fragment                 `json:"fragment"`
+	Noise          *Noise                    `json:"noise"`
+	Noises         []*Noise                  `json:"noises"`
+	ProxyProtocol  uint32                    `json:"proxyProtocol"`
+	IPsBlocked     *StringList               `json:"ipsBlocked"`
+	FinalRules     []*FreedomFinalRuleConfig `json:"finalRules"`
 }
 
 type Fragment struct {
@@ -41,8 +43,21 @@ type Noise struct {
 	ApplyTo string      `json:"applyTo"`
 }
 
+type FreedomFinalRuleConfig struct {
+	Action     string       `json:"action"`
+	Network    *NetworkList `json:"network"`
+	Port       *PortList    `json:"port"`
+	IP         *StringList  `json:"ip"`
+	BlockDelay *Int32Range  `json:"blockDelay"`
+}
+
 // Build implements Buildable
 func (c *FreedomConfig) Build() (proto.Message, error) {
+	if c.IPsBlocked != nil {
+		// todo: remove legacy
+		errors.LogWarning(context.Background(), `The feature "ipsBlocked" has been removed and migrated to "finalRules". Please update your config(s) according to release note and documentation.`)
+	}
+
 	config := new(freedom.Config)
 	targetStrategy := c.TargetStrategy
 	if targetStrategy == "" {
@@ -142,12 +157,13 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	config.UserLevel = c.UserLevel
+
 	if len(c.Redirect) > 0 {
 		host, portStr, err := net.SplitHostPort(c.Redirect)
 		if err != nil {
 			return nil, errors.New("invalid redirect address: ", c.Redirect, ": ", err).Base(err)
 		}
-		port, err := v2net.PortFromString(portStr)
+		port, err := xnet.PortFromString(portStr)
 		if err != nil {
 			return nil, errors.New("invalid redirect port: ", c.Redirect, ": ", err).Base(err)
 		}
@@ -158,19 +174,22 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		}
 
 		if len(host) > 0 {
-			config.DestinationOverride.Server.Address = v2net.NewIPOrDomain(v2net.ParseAddress(host))
+			config.DestinationOverride.Server.Address = xnet.NewIPOrDomain(xnet.ParseAddress(host))
 		}
 	}
+
 	if c.ProxyProtocol > 0 && c.ProxyProtocol <= 2 {
 		config.ProxyProtocol = c.ProxyProtocol
 	}
-	if c.IPsBlocked != nil {
-		rules, err := geodata.ParseIPRules(*c.IPsBlocked)
+
+	for _, r := range c.FinalRules {
+		rule, err := r.Build()
 		if err != nil {
 			return nil, err
 		}
-		config.IpsBlocked = &freedom.IPRules{Rules: rules}
+		config.FinalRules = append(config.FinalRules, rule)
 	}
+
 	return config, nil
 }
 
@@ -228,4 +247,42 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 		return nil, errors.New("Invalid applyTo, only ip/ipv4/ipv6 are supported")
 	}
 	return NConfig, nil
+}
+
+func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
+	rule := &freedom.FinalRuleConfig{}
+
+	switch strings.ToLower(c.Action) {
+	case "allow":
+		rule.Action = freedom.RuleAction_Allow
+	case "block":
+		rule.Action = freedom.RuleAction_Block
+	default:
+		return nil, errors.New("unknown action: ", c.Action)
+	}
+
+	if c.Network != nil {
+		rule.Networks = c.Network.Build()
+	}
+
+	if c.Port != nil {
+		rule.PortList = c.Port.Build()
+	}
+
+	if c.IP != nil {
+		rules, err := geodata.ParseIPRules(*c.IP)
+		if err != nil {
+			return nil, err
+		}
+		rule.Ip = rules
+	}
+
+	if c.BlockDelay != nil {
+		rule.BlockDelay = &freedom.Range{
+			Min: uint64(c.BlockDelay.From),
+			Max: uint64(c.BlockDelay.To),
+		}
+	}
+
+	return rule, nil
 }

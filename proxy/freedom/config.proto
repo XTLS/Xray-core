@@ -8,6 +8,8 @@ option java_multiple_files = true;
 
 import "common/protocol/server_spec.proto";
 import "transport/internet/config.proto";
+import "common/net/port.proto";
+import "common/net/network.proto";
 import "common/geodata/geodat.proto";
 
 message DestinationOverride {
@@ -24,6 +26,7 @@ message Fragment {
   uint64 max_split_min = 7;
   uint64 max_split_max = 8;
 }
+
 message Noise {
   uint64 length_min = 1;
   uint64 length_max = 2;
@@ -33,8 +36,22 @@ message Noise {
   string apply_to = 6;
 }
 
-message IPRules {
-  repeated xray.common.geodata.IPRule rules = 1;
+message Range {
+  uint64 min = 1;
+  uint64 max = 2;
+}
+
+enum RuleAction {
+  Allow = 0;
+  Block = 1;
+}
+
+message FinalRuleConfig {
+  RuleAction action = 1;
+  repeated xray.common.net.Network networks = 2;
+  xray.common.net.PortList port_list = 3;
+  repeated xray.common.geodata.IPRule ip = 4;
+  Range block_delay = 5;
 }
 
 message Config {
@@ -44,5 +61,5 @@ message Config {
   Fragment fragment = 5;
   uint32 proxy_protocol = 6;
   repeated Noise noises = 7;
-  optional IPRules ips_blocked = 8;
+  repeated FinalRuleConfig final_rules = 8;
 }

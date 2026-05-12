@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
 	"google.golang.org/protobuf/proto"
@@ -44,12 +45,17 @@ type ShadowsocksServerConfig struct {
 	Password    string                   `json:"password"`
 	Level       byte                     `json:"level"`
 	Email       string                   `json:"email"`
-	Users       []*ShadowsocksUserConfig `json:"clients"`
+	Users       []*ShadowsocksUserConfig `json:"users"`
+	Clients     []*ShadowsocksUserConfig `json:"clients"`
 	NetworkList *NetworkList             `json:"network"`
 }
 
 func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
+
+	if v.Clients != nil {
+		v.Users = v.Clients
+	}
 
 	if C.Contains(shadowaead_2022.List, v.Cipher) {
 		return buildShadowsocks2022(v)
@@ -59,23 +65,31 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 	config.Network = v.NetworkList.Build()
 
 	if v.Users != nil {
-		for _, user := range v.Users {
-			account := &shadowsocks.Account{
-				Password:   user.Password,
-				CipherType: cipherFromString(user.Cipher),
+		if len(v.Users) > 0 {
+			config.Users = make([]*protocol.User, len(v.Users))
+			processUser := func(idx int) error {
+				user := v.Users[idx]
+				account := &shadowsocks.Account{
+					Password:   user.Password,
+					CipherType: cipherFromString(user.Cipher),
+				}
+				if account.Password == "" {
+					return errors.New("Shadowsocks password is not specified.")
+				}
+				if account.CipherType < shadowsocks.CipherType_AES_128_GCM ||
+					account.CipherType > shadowsocks.CipherType_XCHACHA20_POLY1305 {
+					return errors.New("unsupported cipher method: ", user.Cipher)
+				}
+				config.Users[idx] = &protocol.User{
+					Email:   user.Email,
+					Level:   uint32(user.Level),
+					Account: serial.ToTypedMessage(account),
+				}
+				return nil
 			}
-			if account.Password == "" {
-				return nil, errors.New("Shadowsocks password is not specified.")
+			if err := task.ParallelForN(len(v.Users), processUser); err != nil {
+				return nil, err
 			}
-			if account.CipherType < shadowsocks.CipherType_AES_128_GCM ||
-				account.CipherType > shadowsocks.CipherType_XCHACHA20_POLY1305 {
-				return nil, errors.New("unsupported cipher method: ", user.Cipher)
-			}
-			config.Users = append(config.Users, &protocol.User{
-				Email:   user.Email,
-				Level:   uint32(user.Level),
-				Account: serial.ToTypedMessage(account),
-			})
 		}
 	} else {
 		account := &shadowsocks.Account{
@@ -121,18 +135,24 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 		config.Key = v.Password
 		config.Network = v.NetworkList.Build()
 
-		for _, user := range v.Users {
+		config.Users = make([]*protocol.User, len(v.Users))
+		processUser := func(idx int) error {
+			user := v.Users[idx]
 			if user.Cipher != "" {
-				return nil, errors.New("shadowsocks 2022 (multi-user): users must have empty method")
+				return errors.New("shadowsocks 2022 (multi-user): users must have empty method")
 			}
 			account := &shadowsocks_2022.Account{
 				Key: user.Password,
 			}
-			config.Users = append(config.Users, &protocol.User{
+			config.Users[idx] = &protocol.User{
 				Email:   user.Email,
 				Level:   uint32(user.Level),
 				Account: serial.ToTypedMessage(account),
-			})
+			}
+			return nil
+		}
+		if err := task.ParallelForN(len(v.Users), processUser); err != nil {
+			return nil, err
 		}
 		return config, nil
 	}

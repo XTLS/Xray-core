@@ -80,7 +80,7 @@ func extractInboundUsers(inb *core.InboundHandlerConfig) []*protocol.User {
 	case *vmessin.Config:
 		return ty.User
 	case *vlessin.Config:
-		return ty.Clients
+		return ty.Users
 	case *trojan.ServerConfig:
 		return ty.Users
 	case *shadowsocks.ServerConfig:

@@ -17,7 +17,7 @@ import (
 type Holder struct {
 	domainToIP cache.Lru
 	ipRange    *net.IPNet
-	mu         *sync.Mutex
+	mu         sync.Mutex
 
 	config *FakeDnsPool
 }
@@ -49,9 +49,7 @@ func (fkdns *Holder) Start() error {
 }
 
 func (fkdns *Holder) Close() error {
-	fkdns.domainToIP = nil
-	fkdns.ipRange = nil
-	fkdns.mu = nil
+	// nothing to do for now, just wait GC
 	return nil
 }
 
@@ -70,7 +68,7 @@ func NewFakeDNSHolder() (*Holder, error) {
 }
 
 func NewFakeDNSHolderConfigOnly(conf *FakeDnsPool) (*Holder, error) {
-	return &Holder{nil, nil, nil, conf}, nil
+	return &Holder{config: conf}, nil
 }
 
 func (fkdns *Holder) initializeFromConfig() error {
@@ -92,7 +90,6 @@ func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
 	}
 	fkdns.domainToIP = cache.NewLru(lruSize)
 	fkdns.ipRange = ipRange
-	fkdns.mu = new(sync.Mutex)
 	return nil
 }
 
@@ -103,7 +100,7 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	if v, ok := fkdns.domainToIP.Get(domain); ok {
 		return []net.Address{v.(net.Address)}
 	}
-	currentTimeMillis := uint64(time.Now().UnixNano() / 1e6)
+	currentTimeMillis := uint64(time.Now().UnixMilli())
 	ones, bits := fkdns.ipRange.Mask.Size()
 	rooms := bits - ones
 	if rooms < 64 {
@@ -202,12 +199,11 @@ func (h *HolderMulti) Start() error {
 }
 
 func (h *HolderMulti) Close() error {
+	var errs []error
 	for _, v := range h.holders {
-		if err := v.Close(); err != nil {
-			return errors.New("Cannot close all fake dns pools").Base(err)
-		}
+		errs = append(errs, v.Close())
 	}
-	return nil
+	return errors.Combine(errs...)
 }
 
 func (h *HolderMulti) createHolderGroups() error {
@@ -222,7 +218,7 @@ func (h *HolderMulti) createHolderGroups() error {
 }
 
 func NewFakeDNSHolderMulti(conf *FakeDnsPoolMulti) (*HolderMulti, error) {
-	holderMulti := &HolderMulti{nil, conf}
+	holderMulti := &HolderMulti{config: conf}
 	if err := holderMulti.createHolderGroups(); err != nil {
 		return nil, err
 	}

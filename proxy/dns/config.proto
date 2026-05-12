@@ -25,5 +25,5 @@ message DNSRuleConfig {
 message Config {
   uint32 user_level = 1;
   repeated DNSRuleConfig rule = 2;
-  xray.common.net.Endpoint server = 3;
+  xray.common.net.Endpoint rewrite_server = 3;
 }
