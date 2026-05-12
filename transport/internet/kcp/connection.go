@@ -302,7 +302,7 @@ func (c *Connection) waitForDataInput() error {
 	select {
 	case <-c.dataInput.Wait():
 	case <-timeout.C:
-		if !c.rd.IsZero() && c.rd.Before(time.Now()) {
+		if c.rd.IsZero() || c.rd.Before(time.Now()) {
 			return ErrIOTimeout
 		}
 	}
