@@ -16,8 +16,21 @@ var numberFinder = regexp.MustCompile(`\d+(\.\d+)?`)
 
 // NewWeightManager creates a new WeightManager with settings
 func NewWeightManager(s []*StrategyWeight, defaultWeight float64, scaler weightScaler) *WeightManager {
+	compiled := make([]*regexp.Regexp, len(s))
+	for i, w := range s {
+		if !w.Regexp {
+			continue
+		}
+		r, err := regexp.Compile(w.Match)
+		if err != nil {
+			errors.LogError(context.Background(), "invalid regexp: ", w.Match, " err: ", err)
+			continue
+		}
+		compiled[i] = r
+	}
 	return &WeightManager{
 		settings:      s,
+		compiled:      compiled,
 		cache:         make(map[string]float64),
 		scaler:        scaler,
 		defaultWeight: defaultWeight,
@@ -27,6 +40,7 @@ func NewWeightManager(s []*StrategyWeight, defaultWeight float64, scaler weightS
 // WeightManager manages weights for specific settings
 type WeightManager struct {
 	settings      []*StrategyWeight
+	compiled      []*regexp.Regexp
 	cache         map[string]float64
 	scaler        weightScaler
 	defaultWeight float64
@@ -52,8 +66,8 @@ func (s *WeightManager) Apply(tag string, value float64) float64 {
 }
 
 func (s *WeightManager) findValue(tag string) float64 {
-	for _, w := range s.settings {
-		matched := s.getMatch(tag, w.Match, w.Regexp)
+	for i, w := range s.settings {
+		matched := s.getMatch(tag, w.Match, s.compiled[i], w.Regexp)
 		if matched == "" {
 			continue
 		}
@@ -75,18 +89,15 @@ func (s *WeightManager) findValue(tag string) float64 {
 	return s.defaultWeight
 }
 
-func (s *WeightManager) getMatch(tag, find string, isRegexp bool) string {
+func (s *WeightManager) getMatch(tag, find string, re *regexp.Regexp, isRegexp bool) string {
 	if !isRegexp {
-		idx := strings.Index(tag, find)
-		if idx < 0 {
+		if !strings.Contains(tag, find) {
 			return ""
 		}
 		return find
 	}
-	r, err := regexp.Compile(find)
-	if err != nil {
-		errors.LogError(context.Background(), "invalid regexp: ", find, "err: ", err)
+	if re == nil {
 		return ""
 	}
-	return r.FindString(tag)
+	return re.FindString(tag)
 }
