@@ -40,7 +40,7 @@ func NewLeastLoadStrategy(settings *StrategyLeastLoadConfig) *LeastLoadStrategy 
 		costs: NewWeightManager(
 			settings.Costs, 1,
 			func(value, cost float64) float64 {
-				return value * math.Sqrt(cost)
+				return value * math.Pow(cost, 0.5)
 			},
 		),
 	}
