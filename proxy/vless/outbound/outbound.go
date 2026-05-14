@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	xctx "github.com/xtls/xray-core/common/ctx"
+	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
@@ -159,7 +160,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if h.testpre > 0 && h.reverse == nil {
 		h.initpre.Do(func() {
 			h.preConns = make(chan *ConnExpire)
-			for range h.testpre { // TODO: randomize
+			n := int(h.testpre)
+			if n > 1 {
+				n = dice.Roll(n/2) + n/2 + 1
+			}
+			for range n {
 				go func() {
 					defer func() { recover() }()
 					ctx := xctx.ContextWithID(context.Background(), session.NewID())
@@ -169,8 +174,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 							errors.LogWarningInner(ctx, err, "pre-connect failed")
 							continue
 						}
-						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
-						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
+						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Second * time.Duration(dice.Roll(60)+90))}
+						time.Sleep(time.Millisecond * time.Duration(dice.Roll(200)+100))
 					}
 				}()
 			}
