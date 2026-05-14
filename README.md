@@ -112,6 +112,7 @@
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [XrayUI-dev](https://github.com/PhoenixNil/XrayUI-dev)
+  - [Linqq Xray](https://github.com/Stiv455/Linqq-XrayUI)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
