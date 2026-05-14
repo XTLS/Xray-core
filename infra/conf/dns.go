@@ -160,6 +160,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 type DNSConfig struct {
 	Servers                []*NameServerConfig `json:"servers"`
 	Hosts                  *HostsWrapper       `json:"hosts"`
+	HostsFile              string              `json:"hostsFile"`
 	ClientIP               *Address            `json:"clientIp"`
 	Tag                    string              `json:"tag"`
 	QueryStrategy          string              `json:"queryStrategy"`
@@ -360,6 +361,17 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		config.NameServer = append(config.NameServer, ns)
 	}
 
+	if c.HostsFile != "" {
+		content, err := os.ReadFile(c.HostsFile)
+		if err != nil {
+			return nil, errors.New("failed to read hosts file").Base(err)
+		}
+		var hosts HostsWrapper
+		if err := json.Unmarshal(content, &hosts); err != nil {
+			return nil, errors.New("failed to parse hosts file").Base(err)
+		}
+		c.Hosts = &hosts
+	}
 	if c.Hosts != nil {
 		staticHosts, err := c.Hosts.Build()
 		if err != nil {
