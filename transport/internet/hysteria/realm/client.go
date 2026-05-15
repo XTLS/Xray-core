@@ -67,10 +67,10 @@ func NewRealmPeer(config *internet.RealmConfig, raw net.PacketConn) (*net.UDPAdd
 	}
 	errors.LogInfo(context.Background(), "[realm] punch peer ", result, " with ", time.Since(start))
 
-	return net.UDPAddrFromAddrPort(result), nil
+	return result, nil
 }
 
-func Punch(conn net.PacketConn, peers []netip.AddrPort, meta PunchMetadata, timeout, interval time.Duration) (netip.AddrPort, error) {
+func Punch(conn net.PacketConn, peers []netip.AddrPort, meta PunchMetadata, timeout, interval time.Duration) (*net.UDPAddr, error) {
 	defer conn.SetReadDeadline(time.Time{})
 	nextSend := time.Now()
 	deadline := nextSend.Add(timeout)
@@ -93,7 +93,7 @@ func Punch(conn net.PacketConn, peers []netip.AddrPort, meta PunchMetadata, time
 			if go_errors.As(err, &netErr) && netErr.Timeout() {
 				continue
 			}
-			return netip.AddrPort{}, err
+			return nil, err
 		}
 		packet, err := DecodePunchPacket(buf[:n], meta)
 		if err != nil {
@@ -102,6 +102,6 @@ func Punch(conn net.PacketConn, peers []netip.AddrPort, meta PunchMetadata, time
 		if packet.Type == PunchPacketHello {
 			sendPunchPacket(conn, addr.(*net.UDPAddr).AddrPort(), meta, PunchPacketAck)
 		}
-		return addr.(*net.UDPAddr).AddrPort(), nil
+		return addr.(*net.UDPAddr), nil
 	}
 }
