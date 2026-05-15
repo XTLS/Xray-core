@@ -22,6 +22,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
+	"github.com/xtls/xray-core/transport/internet/hysteria/realm"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -77,8 +78,9 @@ func (c *client) dial(ctx context.Context) error {
 	quicParams := c.quicParams
 	if quicParams == nil {
 		quicParams = &internet.QuicParams{
-			BbrProfile: string(bbr.ProfileStandard),
 			UdpHop:     &internet.UdpHop{},
+			Realm:      &internet.RealmConfig{},
+			BbrProfile: string(bbr.ProfileStandard),
 		}
 	}
 
@@ -164,6 +166,14 @@ func (c *client) dial(ctx context.Context) error {
 			udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
 		default:
 			panic(reflect.TypeOf(c))
+		}
+
+		if len(quicParams.Realm.StunServers) > 0 {
+			udpAddr, err = realm.NewRealmPeer(quicParams.Realm, pktConn)
+			if err != nil {
+				pktConn.Close()
+				return err
+			}
 		}
 	}
 

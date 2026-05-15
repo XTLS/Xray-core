@@ -70,20 +70,31 @@ message UdpHop {
   int64 interval_max = 3;
 }
 
+message RealmConfig {
+  string scheme = 1;
+  string host = 2;
+  string port = 3;
+  string token = 4;
+  string ID = 5;
+  repeated string stun_servers = 6;
+}
+
 message QuicParams {
-  string congestion = 1;
-  string bbr_profile = 2;
-  uint64 brutal_up = 3;
-  uint64 brutal_down = 4;
-  UdpHop udp_hop = 5;
-  uint64 init_stream_receive_window = 6;
-  uint64 max_stream_receive_window = 7;
-  uint64 init_conn_receive_window = 8;
-  uint64 max_conn_receive_window = 9;
-  int64 max_idle_timeout = 10;
-  int64 keep_alive_period = 11;
-  bool disable_path_mtu_discovery = 12;
-  int64 max_incoming_streams = 13;
+  UdpHop udp_hop = 1;
+  RealmConfig realm = 2;
+
+  string congestion = 3;
+  string bbr_profile = 4;
+  uint64 brutal_up = 5;
+  uint64 brutal_down = 6;
+  uint64 init_stream_receive_window = 7;
+  uint64 max_stream_receive_window = 8;
+  uint64 init_conn_receive_window = 9;
+  uint64 max_conn_receive_window = 10;
+  int64 max_idle_timeout = 11;
+  int64 keep_alive_period = 12;
+  bool disable_path_mtu_discovery = 13;
+  int64 max_incoming_streams = 14;
 }
 
 message ProxyConfig {
