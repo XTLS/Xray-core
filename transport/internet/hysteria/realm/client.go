@@ -77,6 +77,9 @@ func Punch(conn net.PacketConn, peers []netip.AddrPort, meta PunchMetadata, time
 	buf := make([]byte, punchMaxWireLen)
 	for {
 		now := time.Now()
+		if now.After(deadline) {
+			return nil, errors.New("timeout")
+		}
 		if now.After(nextSend) {
 			sendPunchPackets(conn, peers, meta, PunchPacketHello)
 			nextSend = now.Add(interval)
