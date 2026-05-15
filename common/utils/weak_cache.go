@@ -35,11 +35,11 @@ func (c *WeakCacheMap[K, V]) Store(key K, value *V) {
 	defer c.mu.Unlock()
 	weakPtr := weak.Make(value)
 	c.m[key] = weakPtr
-	runtime.AddCleanup(value, func(any) {
+	runtime.AddCleanup(value, func(struct{}) {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if c.m[key] == weakPtr {
 			delete(c.m, key)
 		}
-	}, nil)
+	}, struct{}{})
 }
