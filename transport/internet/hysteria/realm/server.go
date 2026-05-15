@@ -168,6 +168,7 @@ retry:
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "[realm] failed to register session for ", c.config.ID, " retry in ", backoff)
 		if waitctx(c.ctx, backoff) {
+			close(c.cleaned)
 			return
 		}
 		backoff *= 2
