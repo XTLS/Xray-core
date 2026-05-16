@@ -290,21 +290,25 @@ func (c *PunchPacketConn) eventsLoop(ctx context.Context, sid string, ttl int, e
 }
 
 func (c *PunchPacketConn) punch(ctx context.Context, sid string, ev *PunchEvent, timeout, interval time.Duration) {
+	errors.LogDebug(context.Background(), "[realm] start punch event ", ev.Nonce, " ", ev.Addresses)
+
 	locals := c.getlocals(false)
-	peers, err := parseAddrPorts(ev.Addresses)
-	if err != nil {
-		errors.LogDebug(context.Background(), "[realm] invalid event peers ", ev.Addresses, " ", ev.Nonce)
-		return
-	}
+
+	peers, _ := parseAddrPorts(ev.Addresses)
+	errors.LogDebug(context.Background(), "[realm] ", ev.Nonce, " get peers ", peers)
 	filteredPeers, seen := candidatePunchAddrs(locals, peers)
+	errors.LogDebug(context.Background(), "[realm] ", ev.Nonce, " filtered peers ", filteredPeers)
 	expandedPeers := expandSymmetricNATCandidates(filteredPeers, seen)
+	errors.LogDebug(context.Background(), "[realm] ", ev.Nonce, " expanded peers ", expandedPeers)
+
 	if len(expandedPeers) == 0 {
-		errors.LogDebug(context.Background(), "[realm] invalid event peers ", ev.Addresses, " ", ev.Nonce)
+		errors.LogDebug(context.Background(), "[realm] punch ", ev.Nonce, " FAIL > empty peers")
 		return
 	}
+
 	start := time.Now()
 	_ = c.rClient.ConnectResponse(ctx, c.config.ID, sid, ev.Nonce, addrPortStrings(locals))
-	errors.LogDebug(context.Background(), "[realm] connect response ", ev.Addresses, " ", ev.Nonce, " with ", time.Since(start))
+	errors.LogDebug(context.Background(), "[realm] ", ev.Nonce, " connect response ", locals, " with ", time.Since(start))
 
 	c.mu.Lock()
 	if _, ok := c.events[ev.Nonce]; ok {
@@ -316,24 +320,24 @@ func (c *PunchPacketConn) punch(ctx context.Context, sid string, ev *PunchEvent,
 	c.mu.Unlock()
 
 	start = time.Now()
-	sendPunchPackets(c, peers, ev.PunchMetadata, PunchPacketHello)
+	sendPunchPackets(c, expandedPeers, ev.PunchMetadata, PunchPacketHello)
 	deadline := time.NewTimer(timeout)
 	ticker := time.NewTicker(interval)
 	for {
 		select {
 		case <-ctx.Done():
-			errors.LogDebug(context.Background(), "[realm] punch ", ev.Nonce, " ", peers, " FAIL > session end")
+			errors.LogDebug(context.Background(), "[realm] punch ", ev.Nonce, " FAIL > session end")
 			goto end
 		case <-deadline.C:
-			errors.LogDebug(context.Background(), "[realm] punch ", ev.Nonce, " ", peers, " FAIL > timeout")
+			errors.LogDebug(context.Background(), "[realm] punch ", ev.Nonce, " FAIL > timeout")
 			goto end
 		case <-ticker.C:
-			sendPunchPackets(c, peers, ev.PunchMetadata, PunchPacketHello)
+			sendPunchPackets(c, expandedPeers, ev.PunchMetadata, PunchPacketHello)
 		case event := <-ch:
 			if event.Packet.Type == PunchPacketHello {
 				sendPunchPacket(c, event.Addr, ev.PunchMetadata, PunchPacketAck)
 			}
-			errors.LogDebug(context.Background(), "[realm] punch ", ev.Nonce, " ", peers, " SUCCESS peer ", event.Addr, " with ", time.Since(start))
+			errors.LogDebug(context.Background(), "[realm] punch ", ev.Nonce, " SUCCESS ", event.Addr, " with ", time.Since(start))
 			goto end
 		}
 	}

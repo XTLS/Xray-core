@@ -42,17 +42,12 @@ func NewRealmPeer(config *internet.RealmConfig, raw net.PacketConn) (*net.UDPAdd
 	if err != nil {
 		return nil, errors.New("http connect").Base(err)
 	}
-	errors.LogInfo(context.Background(), "[realm] ", config.ID, " ", meta.Nonce, " connect with ", time.Since(start))
+	errors.LogInfo(context.Background(), "[realm] ", config.ID, " ", meta.Nonce, " connect ", resp.Addresses, " with ", time.Since(start))
 
-	errors.LogDebug(context.Background(), "[realm] get peers ", resp.Addresses)
-	peers, err := parseAddrPorts(resp.Addresses)
-	if err != nil {
-		return nil, errors.New("invalid peers").Base(err)
-	}
-
+	peers, _ := parseAddrPorts(resp.Addresses)
+	errors.LogDebug(context.Background(), "[realm] get peers ", peers)
 	filteredPeers, seen := candidatePunchAddrs(locals, peers)
 	errors.LogDebug(context.Background(), "[realm] filtered peers ", filteredPeers)
-
 	expandedPeers := expandSymmetricNATCandidates(filteredPeers, seen)
 	errors.LogDebug(context.Background(), "[realm] expanded peers ", expandedPeers)
 
