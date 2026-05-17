@@ -3,7 +3,6 @@ package signal
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -12,24 +11,31 @@ type ActivityUpdater interface {
 }
 
 type ActivityTimer struct {
-	mu        sync.Mutex
-	timer     atomic.Pointer[time.Timer]
+	mu sync.Mutex
+	// timer will be nil if this timer is already finished
+	timer     *time.Timer
 	timeout   time.Duration
 	onTimeout func()
 }
 
 func (t *ActivityTimer) Update() {
-	t.mu.Lock()
+	// someone already called Update or closing, just return
+	if !t.mu.TryLock() {
+		return
+	}
 	defer t.mu.Unlock()
-	if timer := t.timer.Load(); timer != nil {
-		timer.Reset(t.timeout)
+	if t.timer != nil {
+		t.timer.Reset(t.timeout)
 	}
 }
 
 func (t *ActivityTimer) finish() {
-	if timer := t.timer.Swap(nil); timer != nil {
-		timer.Stop()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.timer != nil {
+		t.timer.Stop()
 		t.onTimeout()
+		t.timer = nil
 	}
 }
 
@@ -41,9 +47,9 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if timer := t.timer.Load(); timer != nil {
+	if t.timer != nil {
 		t.timeout = timeout
-		timer.Reset(timeout)
+		t.timer.Reset(timeout)
 	}
 }
 
@@ -52,10 +58,11 @@ func CancelAfterInactivity(ctx context.Context, cancel context.CancelFunc, timeo
 		timeout:   timeout,
 		onTimeout: cancel,
 	}
+	// strange situation
 	if timeout == 0 {
 		cancel()
 		return activityTimer
 	}
-	activityTimer.timer.Store(time.AfterFunc(timeout, activityTimer.finish))
+	activityTimer.timer = time.AfterFunc(timeout, activityTimer.finish)
 	return activityTimer
 }
