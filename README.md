@@ -73,7 +73,7 @@
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool), [VPainLess](https://github.com/vpainless/vpainless)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
-  - [Xray4Magisk](https://github.com/Asterisk4Magisk/Xray4Magisk)
+  - [box4magisk](https://github.com/CHIZI-0618/box4magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
 - Homebrew
   - `brew install xray`
@@ -115,6 +115,7 @@
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
+  - [AsteriskNG](https://github.com/Asterisk4Magisk/AsteriskNG)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
