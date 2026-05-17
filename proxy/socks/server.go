@@ -166,13 +166,16 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		if tempUDPConn == nil {
 			return errors.New("UDP associate with listen port failed")
 		}
-		ctx, cancel := context.WithCancel(ctx)
+		tempUDPConn.SetTimeout(plcy.Timeouts.ConnectionIdle)
 		errCh := make(chan error, 1)
 		go func() {
 			errCh <- s.handleUDPPayload(ctx, tempUDPConn, dispatcher)
 		}()
+		// Asociate TCP keeps the UDP alive
+		// Close UDP if TCP connection is closed
+		// Or Close TCP if UDP is idle timeout
 		io.Copy(buf.DiscardBytes, conn)
-		cancel()
+		tempUDPConn.Close()
 		return <-errCh
 	}
 	return nil

@@ -137,7 +137,7 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 	return "", nil
 }
 
-func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, *TempUDPConn, error) {
+func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Conn) (*protocol.RequestHeader, *TempUDPConn, error) {
 	var (
 		username string
 		err      error
@@ -205,9 +205,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 			return nil, nil, errors.New("failed to create UDP listener").Base(err)
 		}
 		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
-		tempUDPConn = &TempUDPConn{
-			UDPConn: udpHub,
-		}
+		tempUDPConn = NewTempUDPConn(udpHub, writer)
 	}
 	if err := writeSocks5Response(writer, statusSuccess, responseAddress, responsePort); err != nil {
 		common.CloseIfExists(tempUDPConn)
@@ -218,7 +216,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer io.Wri
 }
 
 // Handshake performs a Socks4/4a/5 handshake.
-func (s *ServerSession) Handshake(reader io.Reader, writer io.Writer) (*protocol.RequestHeader, *TempUDPConn, error) {
+func (s *ServerSession) Handshake(reader io.Reader, writer net.Conn) (*protocol.RequestHeader, *TempUDPConn, error) {
 	buffer := buf.StackNew()
 	if _, err := buffer.ReadFullFrom(reader, 2); err != nil {
 		buffer.Release()
