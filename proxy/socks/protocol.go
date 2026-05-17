@@ -1,6 +1,7 @@
 package socks
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 const (
@@ -200,7 +202,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 			// Use conn.LocalAddr() IP as remote address in the response by default
 			responseAddress = s.localAddress
 		}
-		udpHub, err := net.ListenUDP("udp", &net.UDPAddr{IP: responseAddress.IP()})
+		udpHub, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: responseAddress.IP(), Port: 0}, nil)
 		if err != nil {
 			return nil, nil, errors.New("failed to create UDP listener").Base(err)
 		}

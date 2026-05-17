@@ -10,9 +10,9 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 )
 
-func NewTempUDPConn(udpConn *net.UDPConn, tcpConn net.Conn) *TempUDPConn {
+func NewTempUDPConn(udpConn net.PacketConn, tcpConn net.Conn) *TempUDPConn {
 	return &TempUDPConn{
-		UDPConn:          udpConn,
+		PacketConn:       udpConn,
 		AssociateTCPConn: tcpConn,
 	}
 }
@@ -20,27 +20,27 @@ func NewTempUDPConn(udpConn *net.UDPConn, tcpConn net.Conn) *TempUDPConn {
 // TempUDPConn wait for the first packet to determine the remote address
 // SetTimeout MUST be called before any read/write operation
 type TempUDPConn struct {
-	*net.UDPConn
+	net.PacketConn
 	AssociateTCPConn net.Conn
 
 	timer           *signal.ActivityTimer
 	firstPacketDone atomic.Bool
-	remote          *net.UDPAddr
+	remote          net.Addr
 }
 
 func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 	c.timer.Update()
 	if c.firstPacketDone.CompareAndSwap(false, true) {
-		n, remote, err := c.UDPConn.ReadFromUDP(b)
+		n, remote, err := c.PacketConn.ReadFrom(b)
 		c.remote = remote
 		return n, err
 	}
 	for {
-		n, remote, err := c.UDPConn.ReadFromUDP(b)
+		n, remote, err := c.PacketConn.ReadFrom(b)
 		if err != nil {
 			return n, err
 		}
-		if remote.AddrPort() != c.remote.AddrPort() {
+		if remote.String() != c.remote.String() {
 			continue
 		}
 		return n, err
@@ -52,7 +52,7 @@ func (c *TempUDPConn) Write(b []byte) (n int, err error) {
 	if c.remote == nil {
 		return 0, errors.New("remote address not determined yet")
 	}
-	return c.UDPConn.WriteTo(b, c.remote)
+	return c.PacketConn.WriteTo(b, c.remote)
 }
 
 func (c *TempUDPConn) RemoteAddr() net.Addr {
@@ -68,5 +68,5 @@ func (c *TempUDPConn) SetTimeout(d time.Duration) {
 func (c *TempUDPConn) Close() error {
 	c.timer.SetTimeout(0)
 	c.AssociateTCPConn.Close()
-	return c.UDPConn.Close()
+	return c.PacketConn.Close()
 }
