@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package xray.proxy.mieru.account;
+option csharp_namespace = "Xray.Proxy.Mieru.Account";
+option go_package = "github.com/xtls/xray-core/proxy/mieru/account";
+option java_package = "com.xray.proxy.mieru.account";
+option java_multiple_files = true;
+
+message Account {
+  // Mieru user name.
+  string username = 1;
+  // Mieru raw password.
+  string password = 2;
+}

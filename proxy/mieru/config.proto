@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package xray.proxy.mieru;
+option csharp_namespace = "Xray.Proxy.Mieru";
+option go_package = "github.com/xtls/xray-core/proxy/mieru";
+option java_package = "com.xray.proxy.mieru";
+option java_multiple_files = true;
+
+import "common/protocol/server_spec.proto";
+import "common/protocol/user.proto";
+
+message ClientConfig {
+  // Target proxy server endpoint. Address and port are taken from here.
+  xray.common.protocol.ServerEndpoint server = 1;
+
+  // Mieru transport protocol used to reach the server: "TCP" or "UDP".
+  string transport = 2;
+
+  // Maximum L2 payload size for UDP transport. 0 means default.
+  int32 mtu = 3;
+
+  // Multiplexing aggressiveness: "DEFAULT", "OFF", "LOW", "MIDDLE", "HIGH".
+  string multiplexing = 4;
+
+  // Handshake mode: 1 = HANDSHAKE_STANDARD, 2 = HANDSHAKE_NO_WAIT.
+  int32 handshake_mode = 5;
+}
+
+message ServerConfig {
+  // The set of users authorized to connect.
+  repeated xray.common.protocol.User users = 1;
+
+  // Maximum L2 payload size for UDP transport. 0 means default.
+  int32 mtu = 2;
+
+  // If true, clients must supply a user hint for the server to attempt
+  // decryption.
+  bool user_hint_is_mandatory = 3;
+}
