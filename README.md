@@ -115,7 +115,6 @@
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
-  - [AsteriskNG](https://github.com/Asterisk4Magisk/AsteriskNG)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
