@@ -274,6 +274,13 @@ func (h *Handler) SocketSettings() *internet.SocketConfig {
 	return h.streamSettings.SocketSettings
 }
 
+func (h *Handler) UsesProxySettings() bool {
+	if h.senderSettings != nil && h.senderSettings.ProxySettings.HasTag() {
+		return true
+	}
+	return h.streamSettings != nil && h.streamSettings.SocketSettings != nil && len(h.streamSettings.SocketSettings.DialerProxy) > 0
+}
+
 // Dial implements internet.Dialer.
 func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
 	if h.senderSettings != nil {
