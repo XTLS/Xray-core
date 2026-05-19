@@ -18,13 +18,14 @@ import (
 type Router struct {
 	domainStrategy Config_DomainStrategy
 	rules          []*Rule
+	routeIndex     *routeIndex
 	balancers      map[string]*Balancer
 	dns            dns.Client
 
 	ctx        context.Context
 	ohm        outbound.Manager
 	dispatcher routing.Dispatcher
-	mu         sync.Mutex
+	mu         sync.RWMutex
 }
 
 // Route is an implementation of routing.Route.
@@ -85,9 +86,11 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 			}
 			rr.Balancer = brule
 		}
+		rr.meta = buildRuleMeta(rr.Condition)
 		r.rules = append(r.rules, rr)
 	}
 
+	r.rebuildRouteIndex()
 	return nil
 }
 
@@ -192,9 +195,11 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 			}
 			rr.Balancer = brule
 		}
+		rr.meta = buildRuleMeta(rr.Condition)
 		r.rules = append(r.rules, rr)
 	}
 
+	r.rebuildRouteIndex()
 	return nil
 }
 
@@ -224,6 +229,7 @@ func (r *Router) RemoveRule(tag string) error {
 			}
 		}
 		r.rules = newRules
+		r.rebuildRouteIndex()
 		return nil
 	}
 	return errors.New("empty tag name!")
@@ -232,8 +238,8 @@ func (r *Router) RemoveRule(tag string) error {
 
 // ListRule implements routing.Router
 func (r *Router) ListRule() []routing.Route {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	ruleList := make([]routing.Route, 0)
 	for _, rule := range r.rules {
 		ruleList = append(ruleList, &Route{
@@ -245,6 +251,9 @@ func (r *Router) ListRule() []routing.Route {
 }
 
 func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	// SkipDNSResolve is set from DNS module.
 	// the DOH remote server maybe a domain name,
 	// this prevents cycle resolving dead loop
@@ -254,10 +263,8 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
 
-	for _, rule := range r.rules {
-		if rule.Apply(ctx) {
-			return rule, ctx, nil
-		}
+	if rule, ctx, ok := r.matchRules(ctx); ok {
+		return rule, ctx, nil
 	}
 
 	if r.domainStrategy != Config_IpIfNonMatch || len(ctx.GetTargetDomain()) == 0 || skipDNSResolve {
@@ -266,14 +273,37 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 
 	ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 
-	// Try applying rules again if we have IPs.
-	for _, rule := range r.rules {
-		if rule.Apply(ctx) {
-			return rule, ctx, nil
-		}
+	if rule, ctx, ok := r.matchRules(ctx); ok {
+		return rule, ctx, nil
 	}
 
 	return nil, ctx, common.ErrNoClue
+}
+
+func (r *Router) rebuildRouteIndex() {
+	r.routeIndex = buildRouteIndex(r.rules)
+}
+
+func (r *Router) matchRules(ctx routing.Context) (*Rule, routing.Context, bool) {
+	if r.routeIndex == nil {
+		for _, rule := range r.rules {
+			if rule.Apply(ctx) {
+				return rule, ctx, true
+			}
+		}
+		return nil, ctx, false
+	}
+	indices := r.routeIndex.candidateIndices(ctx.GetInboundTag())
+	for _, i := range indices {
+		rule := r.rules[i]
+		if rule.meta != nil && !rule.meta.couldMatch(ctx) {
+			continue
+		}
+		if rule.Apply(ctx) {
+			return rule, ctx, true
+		}
+	}
+	return nil, ctx, false
 }
 
 // Start implements common.Runnable.

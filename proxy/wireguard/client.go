@@ -203,8 +203,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}, p.Timeouts.ConnectionIdle)
 	addrPort := netip.AddrPortFrom(toNetIpAddr(addr), destination.Port.Value())
 
-	var requestFunc func() error
-	var responseFunc func() error
+	var requestFunc func(context.Context) error
+	var responseFunc func(context.Context) error
 
 	if command == protocol.RequestCommandTCP {
 		conn, err := h.net.DialContextTCPAddrPort(ctx, addrPort)
@@ -213,13 +213,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		defer conn.Close()
 
-		requestFunc = func() error {
+		requestFunc = func(ctx context.Context) error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-			return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
 		}
-		responseFunc = func() error {
+		responseFunc = func(ctx context.Context) error {
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
-			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
 	} else if command == protocol.RequestCommandUDP {
 		conn, err := h.net.DialUDPAddrPort(netip.AddrPort{}, addrPort)
@@ -233,13 +233,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			dest: destination,
 		}
 
-		requestFunc = func() error {
+		requestFunc = func(ctx context.Context) error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-			return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
 		}
-		responseFunc = func() error {
+		responseFunc = func(ctx context.Context) error {
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
-			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
 	}
 
@@ -247,8 +247,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		ctx = newCtx
 	}
 
-	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))
-	if err := task.Run(ctx, requestFunc, responseDonePost); err != nil {
+	responseDonePost := task.OnSuccess(responseFunc, task.CloseCtx(link.Writer))
+	if err := task.RunContext(ctx, requestFunc, responseDonePost); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
 		return errors.New("connection ends").Base(err)

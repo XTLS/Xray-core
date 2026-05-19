@@ -283,20 +283,20 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
 	}
 
-	requestDone := func() error {
+	requestDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 		bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 		if err != nil {
 			return errors.New("failed to start decoding").Base(err)
 		}
-		if err := buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to transfer request").Base(err)
 		}
 		return nil
 	}
 
-	responseDone := func() error {
+	responseDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		writer := buf.NewBufferedWriter(buf.NewWriter(connection))
@@ -308,8 +308,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
 	}
 
-	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
+	requestDonePost := task.OnSuccess(requestDone, task.CloseCtx(link.Writer))
+	if err := task.RunContext(ctx, requestDonePost, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
 		return errors.New("connection ends").Base(err)

@@ -242,7 +242,7 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 		return err
 	}
 
-	responseDone := func() error {
+	responseDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
@@ -265,25 +265,25 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 			return err
 		}
 
-		if err := buf.Copy(link.Reader, responseWriter, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, link.Reader, responseWriter, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to transport all TCP response").Base(err)
 		}
 
 		return nil
 	}
 
-	requestDone := func() error {
+	requestDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
-		if err := buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to transport all TCP request").Base(err)
 		}
 
 		return nil
 	}
 
-	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
+	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.CloseCtx(link.Writer))
+	if err := task.RunContext(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
 		return errors.New("connection ends").Base(err)

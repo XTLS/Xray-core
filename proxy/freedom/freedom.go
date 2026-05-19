@@ -401,7 +401,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}, plcy.Timeouts.ConnectionIdle)
 
-	requestDone := func() error {
+	requestDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(plcy.Timeouts.DownlinkOnly)
 
 		var writer buf.Writer
@@ -430,14 +430,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		}
 
-		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, input, writer, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process request").Base(err)
 		}
 
 		return nil
 	}
 
-	responseDone := func() error {
+	responseDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
 		if destination.Network == net.Network_TCP && useSplice && proxy.IsRAWTransportWithoutSecurity(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
 			var writeConn net.Conn
@@ -454,7 +454,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		} else {
 			reader = NewPacketReader(conn, h, defaultRule, UDPOverride, destination)
 		}
-		if err := buf.Copy(reader, output, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, reader, output, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process response").Base(err)
 		}
 		return nil
@@ -464,7 +464,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		ctx = newCtx
 	}
 
-	if err := task.Run(ctx, requestDone, task.OnSuccess(responseDone, task.Close(output))); err != nil {
+	if err := task.RunContext(ctx, requestDone, task.OnSuccess(responseDone, task.CloseCtx(output))); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
 

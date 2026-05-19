@@ -318,7 +318,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Port = net.Port(666)
 	}
 
-	postRequest := func() error {
+	postRequest := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
@@ -366,7 +366,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 			}
 		}
-		err := buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
+		err := buf.CopyContext(ctx, clientReader, serverWriter, buf.UpdateActivity(timer))
 		if err != nil {
 			return errors.New("failed to transfer request payload").Base(err).AtInfo()
 		}
@@ -378,7 +378,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return nil
 	}
 
-	getResponse := func() error {
+	getResponse := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		responseAddons, err := encoding.DecodeResponseHeader(conn, request)
@@ -403,7 +403,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, trafficState, false, ctx)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
-			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
+			err = buf.CopyContext(ctx, serverReader, clientWriter, buf.UpdateActivity(timer))
 		}
 
 		if err != nil {
@@ -417,7 +417,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		ctx = newCtx
 	}
 
-	if err := task.Run(ctx, postRequest, task.OnSuccess(getResponse, task.Close(clientWriter))); err != nil {
+	if err := task.RunContext(ctx, postRequest, task.OnSuccess(getResponse, task.CloseCtx(clientWriter))); err != nil {
 		return errors.New("connection ends").Base(err).AtInfo()
 	}
 

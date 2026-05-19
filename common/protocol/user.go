@@ -1,6 +1,8 @@
 package protocol
 
 import (
+	"sync"
+
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 )
@@ -52,4 +54,36 @@ type MemoryUser struct {
 	Account Account
 	Email   string
 	Level   uint32
+
+	statNamesOnce sync.Once
+	uplinkStat    string
+	downlinkStat  string
+	onlineStat    string
+}
+
+func (u *MemoryUser) initStatNames() {
+	if u.Email == "" {
+		return
+	}
+	u.uplinkStat = "user>>>" + u.Email + ">>>traffic>>>uplink"
+	u.downlinkStat = "user>>>" + u.Email + ">>>traffic>>>downlink"
+	u.onlineStat = "user>>>" + u.Email + ">>>online"
+}
+
+// TrafficUplinkStatName returns the stats counter name for user uplink traffic.
+func (u *MemoryUser) TrafficUplinkStatName() string {
+	u.statNamesOnce.Do(u.initStatNames)
+	return u.uplinkStat
+}
+
+// TrafficDownlinkStatName returns the stats counter name for user downlink traffic.
+func (u *MemoryUser) TrafficDownlinkStatName() string {
+	u.statNamesOnce.Do(u.initStatNames)
+	return u.downlinkStat
+}
+
+// OnlineStatName returns the stats counter name for user online tracking.
+func (u *MemoryUser) OnlineStatName() string {
+	u.statNamesOnce.Do(u.initStatNames)
+	return u.onlineStat
 }

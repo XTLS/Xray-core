@@ -131,17 +131,17 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		}
 	}, p.Timeouts.ConnectionIdle)
 
-	var requestFunc func() error
-	var responseFunc func() error
+	var requestFunc func(context.Context) error
+	var responseFunc func(context.Context) error
 	if request.Command == protocol.RequestCommandTCP {
-		requestFunc = func() error {
+		requestFunc = func(ctx context.Context) error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-			return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
 		}
-		responseFunc = func() error {
+		responseFunc = func(ctx context.Context) error {
 			ob.CanSpliceCopy = 1
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
-			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
 	} else if request.Command == protocol.RequestCommandUDP {
 		udpConn, err := dialer.Dial(ctx, udpRequest.Destination())
@@ -149,16 +149,16 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer udpConn.Close()
-		requestFunc = func() error {
+		requestFunc = func(ctx context.Context) error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
 			writer := &UDPWriter{Writer: udpConn, Request: request}
-			return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, link.Reader, writer, buf.UpdateActivity(timer))
 		}
-		responseFunc = func() error {
+		responseFunc = func(ctx context.Context) error {
 			ob.CanSpliceCopy = 1
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
 			reader := &UDPReader{Reader: udpConn}
-			return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, reader, link.Writer, buf.UpdateActivity(timer))
 		}
 	}
 
@@ -166,8 +166,8 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		ctx = newCtx
 	}
 
-	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))
-	if err := task.Run(ctx, requestFunc, responseDonePost); err != nil {
+	responseDonePost := task.OnSuccess(responseFunc, task.CloseCtx(link.Writer))
+	if err := task.RunContext(ctx, requestFunc, responseDonePost); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
 

@@ -1,6 +1,7 @@
 package buf
 
 import (
+	"context"
 	"io"
 	"time"
 
@@ -88,8 +89,15 @@ func IsWriteError(err error) bool {
 	return ok
 }
 
-func copyInternal(reader Reader, writer Writer, handler *copyHandler) error {
+func copyInternal(ctx context.Context, reader Reader, writer Writer, handler *copyHandler) error {
 	for {
+		if ctx != nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+		}
 		buffer, err := reader.ReadMultiBuffer()
 		if !buffer.IsEmpty() {
 			for _, handler := range handler.onData {
@@ -109,11 +117,16 @@ func copyInternal(reader Reader, writer Writer, handler *copyHandler) error {
 
 // Copy dumps all payload from reader to writer or stops when an error occurs. It returns nil when EOF.
 func Copy(reader Reader, writer Writer, options ...CopyOption) error {
+	return CopyContext(context.Background(), reader, writer, options...)
+}
+
+// CopyContext is like Copy but returns when ctx is cancelled.
+func CopyContext(ctx context.Context, reader Reader, writer Writer, options ...CopyOption) error {
 	var handler copyHandler
 	for _, option := range options {
 		option(&handler)
 	}
-	err := copyInternal(reader, writer, &handler)
+	err := copyInternal(ctx, reader, writer, &handler)
 	if err != nil && errors.Cause(err) != io.EOF {
 		return err
 	}

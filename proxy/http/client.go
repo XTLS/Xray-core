@@ -141,22 +141,22 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		}
 	}, p.Timeouts.ConnectionIdle)
 
-	requestFunc := func() error {
+	requestFunc := func(ctx context.Context) error {
 		defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
-		return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
+		return buf.CopyContext(ctx, link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
 	}
-	responseFunc := func() error {
+	responseFunc := func(ctx context.Context) error {
 		ob.CanSpliceCopy = 1
 		defer timer.SetTimeout(p.Timeouts.UplinkOnly)
-		return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
+		return buf.CopyContext(ctx, buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 	}
 
 	if newCtx != nil {
 		ctx = newCtx
 	}
 
-	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))
-	if err := task.Run(ctx, requestFunc, responseDonePost); err != nil {
+	responseDonePost := task.OnSuccess(responseFunc, task.CloseCtx(link.Writer))
+	if err := task.RunContext(ctx, requestFunc, responseDonePost); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
 

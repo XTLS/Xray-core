@@ -224,9 +224,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 	timer := signal.CancelAfterInactivity(ctx, terminate, h.timeout)
 	defer timer.SetTimeout(0)
 
-	request := func() error {
+	request := func(runCtx context.Context) error {
 		defer timer.SetTimeout(0)
 		for {
+			if err := runCtx.Err(); err != nil {
+				return err
+			}
 			b, err := reader.ReadMessage()
 			if err == io.EOF {
 				return nil
@@ -280,9 +283,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 		}
 	}
 
-	response := func() error {
+	response := func(runCtx context.Context) error {
 		defer timer.SetTimeout(0)
 		for {
+			if err := runCtx.Err(); err != nil {
+				return err
+			}
 			b, err := connReader.ReadMessage()
 			if err == io.EOF {
 				return nil
@@ -300,7 +306,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 		}
 	}
 
-	if err := task.Run(ctx, request, response); err != nil {
+	if err := task.RunContext(ctx, request, response); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
 

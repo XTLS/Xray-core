@@ -34,18 +34,22 @@ type cachedReader struct {
 
 func (r *cachedReader) Cache(b *buf.Buffer, deadline time.Duration) error {
 	mb, err := r.reader.ReadMultiBufferTimeout(deadline)
-	if err != nil {
+	if err != nil && err != buf.ErrReadTimeout {
 		return err
 	}
 	r.Lock()
+	defer r.Unlock()
 	if !mb.IsEmpty() {
 		r.cache, _ = buf.MergeMulti(r.cache, mb)
 	}
 	b.Clear()
-	rawBytes := b.Extend(min(r.cache.Len(), b.Cap()))
-	n := r.cache.Copy(rawBytes)
+	if r.cache.IsEmpty() {
+		return nil
+	}
+	n := min(int(r.cache.Len()), int(b.Cap()))
+	rawBytes := b.Extend(int32(n))
+	n = r.cache.Copy(rawBytes)
 	b.Resize(0, int32(n))
-	r.Unlock()
 	return nil
 }
 
@@ -82,9 +86,7 @@ func (r *cachedReader) ReadMultiBufferTimeout(timeout time.Duration) (buf.MultiB
 
 func (r *cachedReader) Interrupt() {
 	r.Lock()
-	if r.cache != nil {
-		r.cache = buf.ReleaseMulti(r.cache)
-	}
+	r.cache = buf.ReleaseMulti(r.cache)
 	r.Unlock()
 	if p, ok := r.reader.(*pipe.Reader); ok {
 		p.Interrupt()
@@ -161,8 +163,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 	if user != nil && len(user.Email) > 0 {
 		p := d.policy.ForLevel(user.Level)
 		if p.Stats.UserUplink {
-			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+			if c, _ := stats.GetOrRegisterCounter(d.stats, user.TrafficUplinkStatName()); c != nil {
 				inboundLink.Writer = &SizeStatWriter{
 					Counter: c,
 					Writer:  inboundLink.Writer,
@@ -170,8 +171,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 			}
 		}
 		if p.Stats.UserDownlink {
-			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
-			if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+			if c, _ := stats.GetOrRegisterCounter(d.stats, user.TrafficDownlinkStatName()); c != nil {
 				outboundLink.Writer = &SizeStatWriter{
 					Counter: c,
 					Writer:  outboundLink.Writer,
@@ -180,7 +180,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		}
 
 		if p.Stats.UserOnline {
-			trackOnlineIP(ctx, d.stats, user.Email, sessionInbound.Source.Address.String())
+			trackOnlineIP(ctx, d.stats, user.OnlineStatName(), sessionInbound.Source.Address.String())
 		}
 	}
 
@@ -199,14 +199,12 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
 		if p.Stats.UserUplink {
-			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
+			if c, _ := stats.GetOrRegisterCounter(statsManager, user.TrafficUplinkStatName()); c != nil {
 				link.Reader.(*buf.TimeoutWrapperReader).Counter = c
 			}
 		}
 		if p.Stats.UserDownlink {
-			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
-			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
+			if c, _ := stats.GetOrRegisterCounter(statsManager, user.TrafficDownlinkStatName()); c != nil {
 				link.Writer = &SizeStatWriter{
 					Counter: c,
 					Writer:  link.Writer,
@@ -214,16 +212,15 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 			}
 		}
 		if p.Stats.UserOnline {
-			trackOnlineIP(ctx, statsManager, user.Email, sessionInbound.Source.Address.String())
+			trackOnlineIP(ctx, statsManager, user.OnlineStatName(), sessionInbound.Source.Address.String())
 		}
 	}
 
 	return link
 }
 
-func trackOnlineIP(ctx context.Context, sm stats.Manager, email, ip string) {
-	name := "user>>>" + email + ">>>online"
-	if om, _ := stats.GetOrRegisterOnlineMap(sm, name); om != nil {
+func trackOnlineIP(ctx context.Context, sm stats.Manager, onlineStatName, ip string) {
+	if om, _ := stats.GetOrRegisterOnlineMap(sm, onlineStatName); om != nil {
 		om.AddIP(ip)
 		context.AfterFunc(ctx, func() { om.RemoveIP(ip) })
 	}
@@ -376,8 +373,8 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 }
 
 func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, network net.Network) (SniffResult, error) {
-	payload := buf.NewWithSize(32767)
-	defer payload.Release()
+	payload := buf.GetSniffBuffer()
+	defer buf.PutSniffBuffer(payload)
 
 	sniffer := NewSniffer(ctx)
 
@@ -397,7 +394,7 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 			default:
 				cachingStartingTimeStamp := time.Now()
 				err := cReader.Cache(payload, cacheDeadline)
-				if err != nil {
+				if err != nil && err != buf.ErrReadTimeout {
 					return nil, err
 				}
 				cachingTimeElapsed := time.Since(cachingStartingTimeStamp)

@@ -13,11 +13,11 @@ import (
 )
 
 func TestExecuteParallel(t *testing.T) {
-	err := Run(context.Background(),
-		func() error {
+	err := RunContext(context.Background(),
+		func(context.Context) error {
 			time.Sleep(time.Millisecond * 200)
 			return errors.New("test")
-		}, func() error {
+		}, func(context.Context) error {
 			time.Sleep(time.Millisecond * 500)
 			return errors.New("test2")
 		})
@@ -27,15 +27,37 @@ func TestExecuteParallel(t *testing.T) {
 	}
 }
 
+func TestRunContextCancelsSiblings(t *testing.T) {
+	secondDone := make(chan struct{})
+	err := RunContext(context.Background(),
+		func(context.Context) error {
+			return errors.New("first failed")
+		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(secondDone)
+			return ctx.Err()
+		},
+	)
+	if r := cmp.Diff(err.Error(), "first failed"); r != "" {
+		t.Error(r)
+	}
+	select {
+	case <-secondDone:
+	case <-time.After(time.Second):
+		t.Fatal("sibling task was not cancelled")
+	}
+}
+
 func TestExecuteParallelContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	err := Run(ctx, func() error {
+	err := RunContext(ctx, func(context.Context) error {
 		time.Sleep(time.Millisecond * 2000)
 		return errors.New("test")
-	}, func() error {
+	}, func(context.Context) error {
 		time.Sleep(time.Millisecond * 5000)
 		return errors.New("test2")
-	}, func() error {
+	}, func(context.Context) error {
 		cancel()
 		return nil
 	})

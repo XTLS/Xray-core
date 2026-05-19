@@ -136,7 +136,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		},
 		DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
 			var connection net.Conn
-			taskErr := task.Run(ctx, func() error {
+			taskErr := task.RunContext(ctx, task.Adapt(func() error {
 				// MUST use Xray's built in context system
 				dest, err := v2net.ParseDestination(network + ":" + addr)
 				if err != nil {
@@ -149,7 +149,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 				}
 				connection = conn
 				return nil
-			})
+			}))
 			if taskErr != nil {
 				return nil, errors.New("cannot finish connection").Base(taskErr)
 			}
@@ -166,7 +166,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		Timeout: time.Second * 5,
 	}
 	var GETTime time.Duration
-	err := task.Run(o.ctx, func() error {
+	err := task.RunContext(o.ctx, task.Adapt(func() error {
 		startTime := time.Now()
 		probeURL := "https://www.google.com/generate_204"
 		if o.config.ProbeUrl != "" {
@@ -184,7 +184,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		endTime := time.Now()
 		GETTime = endTime.Sub(startTime)
 		return nil
-	})
+	}))
 	if err != nil {
 		var errorMessage = "the outbound " + outbound + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
 		errors.LogInfoInner(o.ctx, errorCollectorForRequest.UnderlyingError(), errorMessage)

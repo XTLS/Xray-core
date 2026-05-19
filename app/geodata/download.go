@@ -65,7 +65,7 @@ func newClient(baseCtx context.Context, dispatcher routing.Dispatcher, outbound 
 			DisableKeepAlives: true,
 			DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 				var conn net.Conn
-				err := task.Run(ctx, func() error {
+				err := task.RunContext(ctx, task.Adapt(func() error {
 					if tagged.Dialer == nil {
 						return errors.New("tagged dialer is not initialized")
 					}
@@ -79,7 +79,7 @@ func newClient(baseCtx context.Context, dispatcher routing.Dispatcher, outbound 
 					}
 					conn = c
 					return nil
-				})
+				}))
 				if err != nil {
 					return nil, errors.New("cannot finish connection").Base(err)
 				}

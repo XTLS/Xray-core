@@ -31,7 +31,8 @@ func (o *pipeOption) isFull(curSize int32) bool {
 
 type pipe struct {
 	sync.Mutex
-	data        buf.MultiBuffer
+	queue       []buf.MultiBuffer
+	queuedBytes int32
 	readSignal  *signal.Notifier
 	writeSignal *signal.Notifier
 	done        *done.Instance
@@ -46,17 +47,15 @@ var (
 )
 
 func (p *pipe) Len() int32 {
-	data := p.data
-	if data == nil {
-		return 0
-	}
-	return data.Len()
+	p.Lock()
+	defer p.Unlock()
+	return p.queuedBytes
 }
 
 func (p *pipe) getState(forRead bool) error {
 	switch p.state {
 	case open:
-		if !forRead && p.option.isFull(p.data.Len()) {
+		if !forRead && p.option.isFull(p.queuedBytes) {
 			return errBufferFull
 		}
 		return nil
@@ -64,7 +63,7 @@ func (p *pipe) getState(forRead bool) error {
 		if !forRead {
 			return io.ErrClosedPipe
 		}
-		if !p.data.IsEmpty() {
+		if p.queuedBytes > 0 {
 			return nil
 		}
 		return io.EOF
@@ -83,9 +82,18 @@ func (p *pipe) readMultiBufferInternal() (buf.MultiBuffer, error) {
 		return nil, err
 	}
 
-	data := p.data
-	p.data = nil
-	return data, nil
+	if len(p.queue) == 0 {
+		return nil, nil
+	}
+
+	mb := p.queue[0]
+	p.queue = p.queue[1:]
+	for _, next := range p.queue {
+		mb, _ = buf.MergeMulti(mb, next)
+	}
+	p.queue = nil
+	p.queuedBytes = 0
+	return mb, nil
 }
 
 func (p *pipe) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -121,6 +129,8 @@ func (p *pipe) ReadMultiBufferTimeout(d time.Duration) (buf.MultiBuffer, error) 
 		case <-p.done.Wait():
 		case <-timer.C:
 			return nil, buf.ErrReadTimeout
+		case err = <-p.errChan:
+			return nil, err
 		}
 	}
 }
@@ -133,11 +143,12 @@ func (p *pipe) writeMultiBufferInternal(mb buf.MultiBuffer) error {
 		return err
 	}
 
-	if p.data == nil {
-		p.data = mb
-	} else {
-		p.data, _ = buf.MergeMulti(p.data, mb)
+	if p.option.isFull(p.queuedBytes) {
+		return errBufferFull
 	}
+
+	p.queue = append(p.queue, mb)
+	p.queuedBytes += mb.Len()
 	return nil
 }
 
@@ -173,6 +184,14 @@ func (p *pipe) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	}
 }
 
+func (p *pipe) releaseQueueLocked() {
+	for _, mb := range p.queue {
+		buf.ReleaseMulti(mb)
+	}
+	p.queue = nil
+	p.queuedBytes = 0
+}
+
 func (p *pipe) Close() error {
 	p.Lock()
 	defer p.Unlock()
@@ -191,9 +210,8 @@ func (p *pipe) Interrupt() {
 	p.Lock()
 	defer p.Unlock()
 
-	if !p.data.IsEmpty() {
-		buf.ReleaseMulti(p.data)
-		p.data = nil
+	if p.queuedBytes > 0 {
+		p.releaseQueueLocked()
 		if p.state == closed {
 			p.state = errord
 		}

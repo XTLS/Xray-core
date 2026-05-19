@@ -270,9 +270,9 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		w.rawInput = nil
 
 		if inbound := session.InboundFromContext(w.ctx); inbound != nil && inbound.Conn != nil {
-			// if w.isUplink && inbound.CanSpliceCopy == 2 { // TODO: enable uplink splice
-			// 	inbound.CanSpliceCopy = 1
-			// }
+			if w.isUplink && inbound.CanSpliceCopy == 2 {
+				inbound.CanSpliceCopy = 1
+			}
 			if !w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 { // ob need to be passed in due to context can have more than one ob
 				w.ob.CanSpliceCopy = 1
 			}
@@ -323,6 +323,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	var isPadding *bool
 	var switchToDirectCopy *bool
 	var spliceReadyInbound *session.Inbound
+	var spliceReadyOutbound *session.Outbound
 	if w.isUplink {
 		isPadding = &w.trafficState.Outbound.IsPadding
 		switchToDirectCopy = &w.trafficState.Outbound.UplinkWriterDirectCopy
@@ -336,9 +337,9 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			if !w.isUplink && inbound.CanSpliceCopy == 2 {
 				spliceReadyInbound = inbound
 			}
-			// if w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 { // TODO: enable uplink splice
-			// 	w.ob.CanSpliceCopy = 1
-			// }
+		}
+		if w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 {
+			spliceReadyOutbound = w.ob
 		}
 		rawConn, _, writerCounter := UnwrapRawConn(w.conn)
 		w.Writer = buf.NewWriter(rawConn)
@@ -399,6 +400,9 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		// Enable splice only after this write has completed to avoid racing
 		// concurrent direct writes to the same TCP connection.
 		spliceReadyInbound.CanSpliceCopy = 1
+	}
+	if spliceReadyOutbound != nil && spliceReadyOutbound.CanSpliceCopy == 2 {
+		spliceReadyOutbound.CanSpliceCopy = 1
 	}
 	return nil
 }
@@ -793,7 +797,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 
 func readV(ctx context.Context, reader buf.Reader, writer buf.Writer, timer signal.ActivityUpdater, readCounter stats.Counter) error {
 	errors.LogDebug(ctx, "CopyRawConn (maybe) readv")
-	if err := buf.Copy(reader, writer, buf.UpdateActivity(timer), buf.AddToStatCounter(readCounter)); err != nil {
+	if err := buf.CopyContext(ctx, reader, writer, buf.UpdateActivity(timer), buf.AddToStatCounter(readCounter)); err != nil {
 		return errors.New("failed to process response").Base(err)
 	}
 	return nil

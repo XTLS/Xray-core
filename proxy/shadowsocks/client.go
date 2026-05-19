@@ -115,7 +115,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 
 	if request.Command == protocol.RequestCommandTCP {
-		requestDone := func() error {
+		requestDone := func(ctx context.Context) error {
 			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 			bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
 			bodyWriter, err := WriteTCPRequest(request, bufferedWriter)
@@ -131,10 +131,10 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 				return err
 			}
 
-			return buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, link.Reader, bodyWriter, buf.UpdateActivity(timer))
 		}
 
-		responseDone := func() error {
+		responseDone := func(ctx context.Context) error {
 			defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 			responseReader, err := ReadTCPResponse(user, conn)
@@ -142,11 +142,11 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 				return err
 			}
 
-			return buf.Copy(responseReader, link.Writer, buf.UpdateActivity(timer))
+			return buf.CopyContext(ctx, responseReader, link.Writer, buf.UpdateActivity(timer))
 		}
 
-		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
-		if err := task.Run(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
+		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.CloseCtx(link.Writer))
+		if err := task.RunContext(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
 			return errors.New("connection ends").Base(err)
 		}
 
@@ -155,7 +155,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	if request.Command == protocol.RequestCommandUDP {
 
-		requestDone := func() error {
+		requestDone := func(ctx context.Context) error {
 			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 			writer := &UDPWriter{
@@ -163,13 +163,13 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 				Request: request,
 			}
 
-			if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
+			if err := buf.CopyContext(ctx, link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
 				return errors.New("failed to transport all UDP request").Base(err)
 			}
 			return nil
 		}
 
-		responseDone := func() error {
+		responseDone := func(ctx context.Context) error {
 			defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 			reader := &UDPReader{
@@ -177,14 +177,14 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 				User:   user,
 			}
 
-			if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
+			if err := buf.CopyContext(ctx, reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
 				return errors.New("failed to transport all UDP response").Base(err)
 			}
 			return nil
 		}
 
-		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
-		if err := task.Run(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
+		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.CloseCtx(link.Writer))
+		if err := task.RunContext(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
 			return errors.New("connection ends").Base(err)
 		}
 

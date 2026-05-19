@@ -154,7 +154,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Port = net.Port(666)
 	}
 
-	requestDone := func() error {
+	requestDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 		writer := buf.NewBufferedWriter(buf.NewWriter(conn))
@@ -178,7 +178,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return err
 		}
 
-		if err := buf.Copy(input, bodyWriter, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, input, bodyWriter, buf.UpdateActivity(timer)); err != nil {
 			return err
 		}
 
@@ -191,7 +191,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return nil
 	}
 
-	responseDone := func() error {
+	responseDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
@@ -209,15 +209,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			bodyReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: bodyReader})
 		}
 
-		return buf.Copy(bodyReader, output, buf.UpdateActivity(timer))
+		return buf.CopyContext(ctx, bodyReader, output, buf.UpdateActivity(timer))
 	}
 
 	if newCtx != nil {
 		ctx = newCtx
 	}
 
-	responseDonePost := task.OnSuccess(responseDone, task.Close(output))
-	if err := task.Run(ctx, requestDone, responseDonePost); err != nil {
+	responseDonePost := task.OnSuccess(responseDone, task.CloseCtx(output))
+	if err := task.RunContext(ctx, requestDone, responseDonePost); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
 

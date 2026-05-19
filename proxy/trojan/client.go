@@ -96,7 +96,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		}
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 
-	postRequest := func() error {
+	postRequest := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
@@ -129,14 +129,14 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			return err.(*errors.Error).AtWarning()
 		}
 
-		if err = buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer)); err != nil {
+		if err = buf.CopyContext(ctx, link.Reader, bodyWriter, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to transfer request payload").Base(err).AtInfo()
 		}
 
 		return nil
 	}
 
-	getResponse := func() error {
+	getResponse := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 		var reader buf.Reader
@@ -147,15 +147,15 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		} else {
 			reader = buf.NewReader(conn)
 		}
-		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
+		return buf.CopyContext(ctx, reader, link.Writer, buf.UpdateActivity(timer))
 	}
 
 	if newCtx != nil {
 		ctx = newCtx
 	}
 
-	responseDoneAndCloseWriter := task.OnSuccess(getResponse, task.Close(link.Writer))
-	if err := task.Run(ctx, postRequest, responseDoneAndCloseWriter); err != nil {
+	responseDoneAndCloseWriter := task.OnSuccess(getResponse, task.CloseCtx(link.Writer))
+	if err := task.RunContext(ctx, postRequest, responseDoneAndCloseWriter); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
 

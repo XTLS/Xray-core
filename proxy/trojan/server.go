@@ -269,10 +269,10 @@ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Sess
 
 	var dest *net.Destination
 
-	requestDone := func() error {
+	requestDone := func(runCtx context.Context) error {
 		for {
 			select {
-			case <-ctx.Done():
+			case <-runCtx.Done():
 				return nil
 			default:
 				mb, err := clientReader.ReadMultiBuffer()
@@ -315,7 +315,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Sess
 
 	}
 
-	if err := task.Run(ctx, requestDone); err != nil {
+	if err := task.RunContext(ctx, requestDone); err != nil {
 		return err
 	}
 	return nil
@@ -335,25 +335,25 @@ func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Sess
 		return errors.New("failed to dispatch request to ", destination).Base(err)
 	}
 
-	requestDone := func() error {
+	requestDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-		if buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer)) != nil {
+		if err := buf.CopyContext(ctx, clientReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to transfer request").Base(err)
 		}
 		return nil
 	}
 
-	responseDone := func() error {
+	responseDone := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
-		if err := buf.Copy(link.Reader, clientWriter, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, link.Reader, clientWriter, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to write response").Base(err)
 		}
 		return nil
 	}
 
-	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
+	requestDonePost := task.OnSuccess(requestDone, task.CloseCtx(link.Writer))
+	if err := task.RunContext(ctx, requestDonePost, responseDone); err != nil {
 		common.Must(common.Interrupt(link.Reader))
 		common.Must(common.Interrupt(link.Writer))
 		return errors.New("connection ends").Base(err)
@@ -468,7 +468,7 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 	serverReader := buf.NewReader(conn)
 	serverWriter := buf.NewWriter(conn)
 
-	postRequest := func() error {
+	postRequest := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 		if fb.Xver != 0 {
 			ipType := 4
@@ -524,7 +524,7 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 				return errors.New("failed to set PROXY protocol v", fb.Xver).Base(err).AtWarning()
 			}
 		}
-		if err := buf.Copy(reader, serverWriter, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, reader, serverWriter, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to fallback request payload").Base(err).AtInfo()
 		}
 		return nil
@@ -532,15 +532,15 @@ func (s *Server) fallback(ctx context.Context, err error, sessionPolicy policy.S
 
 	writer := buf.NewWriter(connection)
 
-	getResponse := func() error {
+	getResponse := func(ctx context.Context) error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-		if err := buf.Copy(serverReader, writer, buf.UpdateActivity(timer)); err != nil {
+		if err := buf.CopyContext(ctx, serverReader, writer, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to deliver response payload").Base(err).AtInfo()
 		}
 		return nil
 	}
 
-	if err := task.Run(ctx, task.OnSuccess(postRequest, task.Close(serverWriter)), task.OnSuccess(getResponse, task.Close(writer))); err != nil {
+	if err := task.RunContext(ctx, task.OnSuccess(postRequest, task.CloseCtx(serverWriter)), task.OnSuccess(getResponse, task.CloseCtx(writer))); err != nil {
 		common.Must(common.Interrupt(serverReader))
 		common.Must(common.Interrupt(serverWriter))
 		return errors.New("fallback ends").Base(err).AtInfo()

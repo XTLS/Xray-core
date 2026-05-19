@@ -254,7 +254,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 	defer common.Close(link.Writer)
 	var result error = errWaitAnother
 
-	requestDone := func() error {
+	requestDone := func(context.Context) error {
 		request.Header.Set("Connection", "close")
 
 		requestWriter := buf.NewBufferedWriter(link.Writer)
@@ -265,7 +265,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 		return nil
 	}
 
-	responseDone := func() error {
+	responseDone := func(context.Context) error {
 		responseReader := bufio.NewReaderSize(&buf.BufferedReader{Reader: link.Reader}, buf.Size)
 		response, err := readResponseAndHandle100Continue(responseReader, request, writer)
 		if err == nil {
@@ -302,7 +302,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 		return nil
 	}
 
-	if err := task.Run(ctx, requestDone, responseDone); err != nil {
+	if err := task.RunContext(ctx, requestDone, responseDone); err != nil {
 		common.Interrupt(link.Reader)
 		common.Interrupt(link.Writer)
 		return errors.New("connection ends").Base(err)
