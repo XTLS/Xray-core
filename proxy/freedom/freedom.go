@@ -255,13 +255,6 @@ func (h *Handler) blackhole(ctx context.Context, input buf.Reader, output buf.Wr
 	return nil
 }
 
-func (h *Handler) udpDomainStrategy() internet.DomainStrategy {
-	if h.config.DomainStrategy.HasStrategy() {
-		return h.config.DomainStrategy
-	}
-	return h.socketStrategy
-}
-
 func isValidAddress(addr *net.IPOrDomain) bool {
 	if addr == nil {
 		return false
@@ -313,30 +306,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		dialDest := destination
 
 		if dialDest.Address.Family().IsDomain() {
-			if strategy := h.config.DomainStrategy; strategy.HasStrategy() {
-				if destination.Network == net.Network_UDP && origTargetAddr != nil && outGateway == nil {
-					strategy = strategy.GetDynamicStrategy(origTargetAddr.Family())
-				}
-				ips, err := internet.LookupForIP(dialDest.Address.Domain(), strategy, outGateway)
-				if err != nil { // SRV/TXT
-					errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
-					if h.config.DomainStrategy.ForceIP() || defaultRule != nil || len(h.finalRules) > 0 {
-						return err // retry
-					}
-				} else { // to ip
-					dialDest = net.Destination{
-						Network: dialDest.Network,
-						Address: net.IPAddress(ips[dice.Roll(len(ips))]),
-						Port:    dialDest.Port,
-					}
-					errors.LogInfo(ctx, "dialing to ", dialDest)
-					if rule := h.matchFinalRule(dialDest.Network, dialDest.Address, dialDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-						blockedDest = &dialDest
-						blockedRule = rule
-						return nil
-					}
-				}
-			} else if defaultRule != nil || len(h.finalRules) > 0 { // freedom asis + hasrules
+			if defaultRule != nil || len(h.finalRules) > 0 {
 				if strategy := h.socketStrategy; strategy.HasStrategy() {
 					ips, err := internet.LookupForIP(dialDest.Address.Domain(), strategy, outGateway)
 					if err != nil { // SRV/TXT
@@ -355,7 +325,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 							}
 						}
 					}
-				} else { // sockopt asis
+				} else {
 					addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
 					if err != nil { // SRV/TXT
 						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
@@ -647,11 +617,11 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					b.UDP.Address = ip
 				} else {
 					shouldUseSystemResolver := true
-					if resolveStrategy := w.Handler.udpDomainStrategy(); resolveStrategy.HasStrategy() {
-						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), resolveStrategy, w.OutGateway)
+					if strategy := w.Handler.socketStrategy; strategy.HasStrategy() {
+						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), strategy, w.OutGateway)
 						if err != nil {
 							// drop packet if resolve failed when forceIP
-							if resolveStrategy.ForceIP() {
+							if strategy.ForceIP() {
 								b.Release()
 								continue
 							}
