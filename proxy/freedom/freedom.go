@@ -301,22 +301,20 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var blockedDest *net.Destination
 	var blockedRule *FinalRule
 	err := retry.ExponentialBackoff(5, 100).On(func() error {
-		dialDest := destination
-
-		if dialDest.Address.Family().IsDomain() {
+		if destination.Address.Family().IsDomain() {
 			if defaultRule != nil || len(h.finalRules) > 0 {
 				if strategy := h.resolveStrategy; strategy.HasStrategy() {
-					ips, err := internet.LookupForIP(dialDest.Address.Domain(), strategy, outGateway)
+					ips, err := internet.LookupForIP(destination.Address.Domain(), strategy, outGateway)
 					if err != nil { // SRV/TXT
-						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
+						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
 						if strategy.ForceIP() {
 							return err // retry
 						}
 					}
 					for _, ip := range ips {
 						if addr := net.IPAddress(ip); addr != nil {
-							if rule := h.matchFinalRule(dialDest.Network, addr, dialDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-								blockedDest = &dialDest
+							if rule := h.matchFinalRule(destination.Network, addr, destination.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
+								blockedDest = &destination
 								blockedDest.Address = addr
 								blockedRule = rule
 								return nil
@@ -324,14 +322,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 						}
 					}
 				} else {
-					addrs, err := net.DefaultResolver.LookupIPAddr(ctx, dialDest.Address.Domain())
+					addrs, err := net.DefaultResolver.LookupIPAddr(ctx, destination.Address.Domain())
 					if err != nil { // SRV/TXT
-						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
+						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
 					}
 					for _, addr := range addrs {
 						if ipAddr := net.IPAddress(addr.IP); ipAddr != nil {
-							if rule := h.matchFinalRule(dialDest.Network, ipAddr, dialDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-								blockedDest = &dialDest
+							if rule := h.matchFinalRule(destination.Network, ipAddr, destination.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
+								blockedDest = &destination
 								blockedDest.Address = ipAddr
 								blockedRule = rule
 								return nil
@@ -341,14 +339,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				}
 			}
 		} else {
-			if rule := h.matchFinalRule(dialDest.Network, dialDest.Address, dialDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-				blockedDest = &dialDest
+			if rule := h.matchFinalRule(destination.Network, destination.Address, destination.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
+				blockedDest = &destination
 				blockedRule = rule
 				return nil
 			}
 		}
 
-		rawConn, err := dialer.Dial(ctx, dialDest)
+		rawConn, err := dialer.Dial(ctx, destination)
 		if err != nil {
 			return err
 		}
@@ -362,7 +360,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if blockedDest != nil {
 		return h.blackhole(ctx, input, output, blockedRule, blockedDest)
 	}
-	if defaultRule != nil || len(h.finalRules) > 0 {
+	if destination.Address.Family().IsDomain() && (defaultRule != nil || len(h.finalRules) > 0) {
 		if h.usesProxySettings {
 			errors.LogInfo(ctx, "skipping final rule check for proxied remote endpoint, original target: ", destination)
 		} else {

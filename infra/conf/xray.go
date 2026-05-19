@@ -381,7 +381,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 					senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP4 &&
 					senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP46 {
 					if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_AS_IS {
-						errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "streamSettings.sockopt.domainStrategy". Please update your config(s) if this is unintended.`)
+						errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "sockopt.domainStrategy". Please update your config(s) if this is unintended.`)
 					}
 					senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
 				}
