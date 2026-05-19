@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -326,6 +327,20 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
+	}
+
+	if fc, ok := ts.(*freedom.Config); ok && fc.DomainStrategy != internet.DomainStrategy_AS_IS {
+		errors.PrintDeprecatedFeatureWarning("freedom.domainStrategy", "streamSettings.sockopt.domainStrategy")
+		if senderSettings.StreamSettings == nil {
+			senderSettings.StreamSettings = &internet.StreamConfig{}
+		}
+		if senderSettings.StreamSettings.SocketSettings == nil {
+			senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
+		}
+		senderSettings.StreamSettings.SocketSettings.DomainStrategy = fc.DomainStrategy
+		if c.ProxySettings != nil && !c.ProxySettings.TransportLayerProxy {
+			errors.LogWarning(context.Background(), `The deprecated "freedom" outbound "domainStrategy" cannot be migrated correctly when "proxySettings.transportLayer" is false. Please update your config(s); the current combination is misconfigured.`)
+		}
 	}
 
 	return &core.OutboundHandlerConfig{
