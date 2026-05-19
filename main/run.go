@@ -91,7 +91,28 @@ func executeRun(cmd *base.Command, args []string) {
 		fmt.Println("Failed to start:", err)
 		os.Exit(-1)
 	}
-	defer server.Close()
+	defer func() {
+		closeErrCh := make(chan error, 1)
+		go func() {
+			closeErrCh <- server.Close()
+		}()
+		select {
+		case err := <-closeErrCh:
+			if err != nil {
+				fmt.Println("Failed to close server:", err)
+			}
+		case <-time.After(10 * time.Second):
+			fmt.Println("Timeout when closing, printing traces:")
+			buf := make([]byte, 1<<20)
+			n := runtime.Stack(buf, true)
+			blocks := strings.Split(string(buf[:n]), "\n\n")
+			for _, block := range blocks {
+				if strings.Contains(block, "github.com/xtls/xray-core/core.(*Instance).Close") {
+					fmt.Println(block)
+				}
+			}
+		}
+	}()
 
 	// Explicitly triggering GC to remove garbage from config loading.
 	runtime.GC()
