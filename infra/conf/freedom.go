@@ -27,6 +27,7 @@ type FreedomConfig struct {
 	ProxyProtocol  uint32                    `json:"proxyProtocol"`
 	IPsBlocked     *StringList               `json:"ipsBlocked"`
 	FinalRules     []*FreedomFinalRuleConfig `json:"finalRules"`
+	PrivacyGuard   *bool                     `json:"privacyGuard"`
 }
 
 type Fragment struct {

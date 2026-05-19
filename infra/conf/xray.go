@@ -343,6 +343,33 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		}
 	}
 
+	if fc, ok := rawConfig.(*FreedomConfig); ok && (fc.PrivacyGuard == nil || *fc.PrivacyGuard) {
+		if senderSettings.StreamSettings == nil {
+			senderSettings.StreamSettings = &internet.StreamConfig{}
+		}
+		if senderSettings.StreamSettings.SocketSettings == nil {
+			senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
+		}
+		if fc.PrivacyGuard == nil {
+			if senderSettings.StreamSettings.SocketSettings.DomainStrategy == internet.DomainStrategy_AS_IS {
+				senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
+			}
+		} else if *fc.PrivacyGuard {
+			if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP4 &&
+				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP46 &&
+				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP4 &&
+				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP46 {
+				if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_AS_IS {
+					errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "streamSettings.sockopt.domainStrategy". Please update your config(s) if this is unintended.`)
+				}
+				senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
+			}
+			if c.ProxySettings != nil && !c.ProxySettings.TransportLayerProxy {
+				errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" cannot be applied correctly when "proxySettings.transportLayer" is false. Please update your config(s); the current combination is misconfigured.`)
+			}
+		}
+	}
+
 	return &core.OutboundHandlerConfig{
 		SenderSettings: serial.ToTypedMessage(senderSettings),
 		Tag:            c.Tag,
