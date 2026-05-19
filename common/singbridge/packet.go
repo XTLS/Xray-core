@@ -40,8 +40,14 @@ type PacketConnWrapper struct {
 	T *signal.ActivityTimer
 }
 
-func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
+func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err error) {
 	w.T.Update()
+	defer func() {
+		if err != nil {
+			// uplinkonly
+			w.T.SetTimeout(2 * time.Second)
+		}
+	}()
 	if w.cached != nil {
 		mb, bb := buf.SplitFirst(w.cached)
 		if bb == nil {
@@ -60,11 +66,6 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 		}
 	}
 	mb, err := w.ReadMultiBuffer()
-	if err != nil {
-		// uplinkonly
-		w.T.SetTimeout(3 * time.Second)
-		return M.Socksaddr{}, err
-	}
 	nb, bb := buf.SplitFirst(mb)
 	if bb == nil {
 		return M.Socksaddr{}, nil
@@ -82,18 +83,22 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 	}
 }
 
-func (w *PacketConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksaddr) error {
+func (w *PacketConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksaddr) (err error) {
 	w.T.Update()
+	defer func() {
+		if err != nil {
+			// downlinkonly
+			w.T.SetTimeout(5 * time.Second)
+		}
+	}()
 	endpoint, err := ToDestination(destination, net.Network_UDP)
 	if err != nil {
-		// uplinkonly
-		w.T.SetTimeout(3 * time.Second)
 		return err
 	}
 	vBuf := buf.New()
 	vBuf.Write(buffer.Bytes())
 	vBuf.UDP = &endpoint
-	return w.Writer.WriteMultiBuffer(buf.MultiBuffer{vBuf})
+	return w.WriteMultiBuffer(buf.MultiBuffer{vBuf})
 }
 
 func (w *PacketConnWrapper) Close() error {

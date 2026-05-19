@@ -49,7 +49,7 @@ func (w *PipeConnWrapper) Read(b []byte) (n int, err error) {
 	n, err = w.R.Read(b)
 	if err != nil {
 		// uplinkonly
-		w.T.SetTimeout(3 * time.Second)
+		w.T.SetTimeout(2 * time.Second)
 	}
 	return
 }
@@ -75,7 +75,7 @@ func (w *PipeConnWrapper) Write(p []byte) (n int, err error) {
 		n = 0
 		buf.ReleaseMulti(mb)
 		// downlinkonly
-		w.T.SetTimeout(3 * time.Second)
+		w.T.SetTimeout(5 * time.Second)
 	}
 	return
 }
