@@ -330,16 +330,19 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	}
 
 	if fc, ok := ts.(*freedom.Config); ok && fc.DomainStrategy != internet.DomainStrategy_AS_IS {
-		errors.PrintDeprecatedFeatureWarning("freedom.domainStrategy", "streamSettings.sockopt.domainStrategy")
-		if senderSettings.StreamSettings == nil {
-			senderSettings.StreamSettings = &internet.StreamConfig{}
-		}
-		if senderSettings.StreamSettings.SocketSettings == nil {
-			senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
-		}
-		senderSettings.StreamSettings.SocketSettings.DomainStrategy = fc.DomainStrategy
+		errors.PrintDeprecatedFeatureWarning("freedom.domainStrategy", "sockopt.domainStrategy or targetStrategy")
 		if c.ProxySettings != nil && !c.ProxySettings.TransportLayerProxy {
-			errors.LogWarning(context.Background(), `The deprecated "freedom" outbound "domainStrategy" cannot be migrated correctly when "proxySettings.transportLayer" is false. Please update your config(s); the current combination is misconfigured.`)
+			if senderSettings.TargetStrategy == internet.DomainStrategy_AS_IS {
+				senderSettings.TargetStrategy = fc.DomainStrategy
+			}
+		} else {
+			if senderSettings.StreamSettings == nil {
+				senderSettings.StreamSettings = &internet.StreamConfig{}
+			}
+			if senderSettings.StreamSettings.SocketSettings == nil {
+				senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
+			}
+			senderSettings.StreamSettings.SocketSettings.DomainStrategy = fc.DomainStrategy
 		}
 	}
 
@@ -351,21 +354,41 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 			senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
 		}
 		if fc.PrivacyGuard == nil {
-			if senderSettings.StreamSettings.SocketSettings.DomainStrategy == internet.DomainStrategy_AS_IS {
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
+			if c.ProxySettings != nil && !c.ProxySettings.TransportLayerProxy {
+				if senderSettings.TargetStrategy == internet.DomainStrategy_AS_IS {
+					senderSettings.TargetStrategy = internet.DomainStrategy_USE_IP46
+				}
+			} else {
+				if senderSettings.TargetStrategy == internet.DomainStrategy_AS_IS &&
+					senderSettings.StreamSettings.SocketSettings.DomainStrategy == internet.DomainStrategy_AS_IS {
+					senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
+				}
 			}
 		} else if *fc.PrivacyGuard {
-			if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP4 &&
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP46 &&
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP4 &&
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP46 {
-				if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_AS_IS {
-					errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "streamSettings.sockopt.domainStrategy". Please update your config(s) if this is unintended.`)
-				}
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
-			}
 			if c.ProxySettings != nil && !c.ProxySettings.TransportLayerProxy {
-				errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" cannot be applied correctly when "proxySettings.transportLayer" is false. Please update your config(s); the current combination is misconfigured.`)
+				if senderSettings.TargetStrategy != internet.DomainStrategy_USE_IP4 &&
+					senderSettings.TargetStrategy != internet.DomainStrategy_USE_IP46 &&
+					senderSettings.TargetStrategy != internet.DomainStrategy_FORCE_IP4 &&
+					senderSettings.TargetStrategy != internet.DomainStrategy_FORCE_IP46 {
+					if senderSettings.TargetStrategy != internet.DomainStrategy_AS_IS {
+						errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "targetStrategy". Please update your config(s) if this is unintended.`)
+					}
+					senderSettings.TargetStrategy = internet.DomainStrategy_USE_IP46
+				}
+			} else {
+				if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP4 &&
+					senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP46 &&
+					senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP4 &&
+					senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP46 {
+					if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_AS_IS {
+						errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "streamSettings.sockopt.domainStrategy". Please update your config(s) if this is unintended.`)
+					}
+					senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
+				}
+				if senderSettings.TargetStrategy != internet.DomainStrategy_AS_IS {
+					errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "targetStrategy". Please update your config(s) if this is unintended.`)
+					senderSettings.TargetStrategy = internet.DomainStrategy_AS_IS
+				}
 			}
 		}
 	}

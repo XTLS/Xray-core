@@ -267,11 +267,14 @@ func (h *Handler) DestIpAddress() net.IP {
 	return internet.DestIpAddress()
 }
 
-func (h *Handler) SocketSettings() *internet.SocketConfig {
-	if h.streamSettings == nil {
-		return nil
+func (h *Handler) ResolveStrategy() internet.DomainStrategy {
+	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() {
+		return h.senderSettings.TargetStrategy
 	}
-	return h.streamSettings.SocketSettings
+	if h.streamSettings != nil && h.streamSettings.SocketSettings != nil {
+		return h.streamSettings.SocketSettings.DomainStrategy
+	}
+	return internet.DomainStrategy_AS_IS
 }
 
 func (h *Handler) UsesProxySettings() bool {

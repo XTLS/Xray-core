@@ -38,10 +38,8 @@ var defaultBlockAllRule *FinalRule
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
-		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithSocketSettings); ok {
-			if sockopt := handler.SocketSettings(); sockopt != nil {
-				h.socketStrategy = sockopt.DomainStrategy
-			}
+		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithResolveStrategy); ok {
+			h.resolveStrategy = handler.ResolveStrategy()
 		}
 		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithProxySettings); ok {
 			h.usesProxySettings = handler.UsesProxySettings()
@@ -96,8 +94,8 @@ func init() {
 	}
 }
 
-type handlerWithSocketSettings interface {
-	SocketSettings() *internet.SocketConfig
+type handlerWithResolveStrategy interface {
+	ResolveStrategy() internet.DomainStrategy
 }
 
 type handlerWithProxySettings interface {
@@ -117,7 +115,7 @@ type Handler struct {
 	policyManager     policy.Manager
 	config            *Config
 	finalRules        []*FinalRule
-	socketStrategy    internet.DomainStrategy
+	resolveStrategy   internet.DomainStrategy
 	usesProxySettings bool
 }
 
@@ -307,7 +305,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		if dialDest.Address.Family().IsDomain() {
 			if defaultRule != nil || len(h.finalRules) > 0 {
-				if strategy := h.socketStrategy; strategy.HasStrategy() {
+				if strategy := h.resolveStrategy; strategy.HasStrategy() {
 					ips, err := internet.LookupForIP(dialDest.Address.Domain(), strategy, outGateway)
 					if err != nil { // SRV/TXT
 						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", dialDest.Address.Domain())
@@ -617,7 +615,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					b.UDP.Address = ip
 				} else {
 					shouldUseSystemResolver := true
-					if strategy := w.Handler.socketStrategy; strategy.HasStrategy() {
+					if strategy := w.Handler.resolveStrategy; strategy.HasStrategy() {
 						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), strategy, w.OutGateway)
 						if err != nil {
 							// drop packet if resolve failed when forceIP
