@@ -34,6 +34,12 @@ import (
 	"golang.org/x/net/http2"
 )
 
+// spiderMaxBodyBytes caps how much of each SpiderX response is read into
+// memory before parsing for href candidates. The crawl only consumes HTML,
+// so 1 MiB is comfortably above realistic page sizes while keeping
+// per-iteration memory bounded.
+const spiderMaxBodyBytes = 1 << 20
+
 type Conn struct {
 	*reality.Conn
 }
@@ -241,7 +247,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 					}
 					defer resp.Body.Close()
 					req.Header.Set("Referer", req.URL.String())
-					if body, err = io.ReadAll(resp.Body); err != nil {
+					if body, err = io.ReadAll(io.LimitReader(resp.Body, spiderMaxBodyBytes)); err != nil {
 						break
 					}
 					maps.Lock()
