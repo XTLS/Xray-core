@@ -16,13 +16,11 @@ type noiseConn struct {
 }
 
 func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
-	conn := &noiseConn{
+	return &noiseConn{
 		PacketConn: raw,
 		config:     c,
 		m:          make(map[string]time.Time),
-	}
-
-	return conn, nil
+	}, nil
 }
 
 func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
