@@ -261,11 +261,6 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 
-	msgB := buf.New()
-	msgB.Resize(0, buf.Size)
-	msgBuf := msgB.Bytes()
-	defer msgB.Release()
-
 	b := buf.New()
 	b.Resize(0, buf.Size)
 	buf := b.Bytes()
@@ -295,7 +290,7 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		},
 	}
 
-	buf, err = msg.Marshal(msgBuf[:0])
+	buf, err = msg.Marshal(nil)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "drop packet to ", addr, " with size ", len(p))
 		return 0, nil

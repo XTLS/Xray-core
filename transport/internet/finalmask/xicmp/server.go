@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
@@ -283,11 +282,6 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 
-	b := buf.New()
-	b.Resize(0, buf.Size)
-	buf := b.Bytes()
-	defer b.Release()
-
 	r, ok := c.rec[addr.String()]
 	if !ok {
 		errors.LogError(context.Background(), "drop packet to ", addr, " with size ", len(p))
@@ -313,7 +307,7 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		},
 	}
 
-	buf, err = msg.Marshal(buf[:0])
+	buf, err := msg.Marshal(nil)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "drop packet to ", addr, " with size ", len(p))
 		return 0, nil
