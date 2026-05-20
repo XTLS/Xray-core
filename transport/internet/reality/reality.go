@@ -235,6 +235,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 					if !first && j == 0 {
 						req.Header.Set("Referer", firstURL)
 					}
+					req.Header.Del("Cookie") // avoid accumulating padding cookies across iterations
 					req.AddCookie(&http.Cookie{Name: "padding", Value: strings.Repeat("0", int(crypto.RandBetween(config.SpiderY[0], config.SpiderY[1])))})
 					if resp, err = client.Do(req); err != nil {
 						break
