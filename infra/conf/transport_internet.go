@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"net/netip"
 	"net/url"
 	"os"
 	"regexp"
@@ -1885,18 +1886,20 @@ func (c *Xdns) Build() (proto.Message, error) {
 }
 
 type Xicmp struct {
-	ListenIp string `json:"listenIp"`
-	Id       uint16 `json:"id"`
+	DGRAM bool     `json:"dgram"`
+	IPs   []string `json:"ips"`
 }
 
 func (c *Xicmp) Build() (proto.Message, error) {
-	config := &xicmp.Config{
-		Ip: c.ListenIp,
-		Id: int32(c.Id),
+	for _, ip := range c.IPs {
+		if _, err := netip.ParseAddr(ip); err != nil {
+			return nil, err
+		}
 	}
 
-	if config.Ip == "" {
-		config.Ip = "0.0.0.0"
+	config := &xicmp.Config{
+		DGRAM: c.DGRAM,
+		IPs:   c.IPs,
 	}
 
 	return config, nil
