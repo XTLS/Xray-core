@@ -290,9 +290,10 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, nil
 	}
 
-	addr = &net.IPAddr{IP: ip}
 	if c.udp {
 		addr = &net.UDPAddr{IP: ip}
+	} else {
+		addr = &net.IPAddr{IP: ip}
 	}
 
 	if ip.To4() != nil {
