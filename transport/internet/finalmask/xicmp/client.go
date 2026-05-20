@@ -149,17 +149,14 @@ func (c *xicmpConnClient) recv4() {
 		p := make([]byte, len(echo.Data))
 		copy(p, echo.Data)
 
-		pAddr := net.Addr(nil)
-		if c.udp {
-			pAddr = &net.UDPAddr{IP: addr.(*net.UDPAddr).IP, Port: c.id}
-		} else {
-			pAddr = &net.UDPAddr{IP: addr.(*net.IPAddr).IP, Port: c.id}
+		if !c.udp {
+			addr = &net.UDPAddr{IP: addr.(*net.IPAddr).IP}
 		}
 
 		select {
 		case c.readCh <- packet{
 			p:    p,
-			addr: pAddr,
+			addr: addr,
 		}:
 		case <-c.closedCh:
 			return
@@ -221,17 +218,14 @@ func (c *xicmpConnClient) recv6() {
 		p := make([]byte, len(echo.Data))
 		copy(p, echo.Data)
 
-		pAddr := net.Addr(nil)
-		if c.udp {
-			pAddr = &net.UDPAddr{IP: addr.(*net.UDPAddr).IP, Port: c.id}
-		} else {
-			pAddr = &net.UDPAddr{IP: addr.(*net.IPAddr).IP, Port: c.id}
+		if !c.udp {
+			addr = &net.UDPAddr{IP: addr.(*net.IPAddr).IP}
 		}
 
 		select {
 		case c.readCh <- packet{
 			p:    p,
-			addr: pAddr,
+			addr: addr,
 		}:
 		case <-c.closedCh:
 			return
