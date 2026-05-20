@@ -8,6 +8,7 @@ import (
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
 	finalmaskcustom "github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -290,5 +291,94 @@ func TestHeaderCustomUDPBuildRejectsExprWithoutArgs(t *testing.T) {
 	}`)
 	if err == nil || !strings.Contains(err.Error(), "transform args") {
 		t.Fatalf("expected transform arg rejection, got %v", err)
+	}
+}
+
+func TestSplitHTTPCompressionBuild(t *testing.T) {
+	parser := loadJSON(func() Buildable { return new(SplitHTTPConfig) })
+
+	msg, err := parser(`{
+		"mode": "packet-up",
+		"uplinkDataPlacement": "body",
+		"compression": {
+			"type": "zstd",
+			"bufferSize": 262144,
+			"compressLevel": 3
+		}
+	}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	config := msg.(*splithttp.Config)
+	if config.Compression == nil {
+		t.Fatal("expected compression config")
+	}
+	if config.Compression.Type != "zstd" {
+		t.Fatalf("unexpected compression type: %q", config.Compression.Type)
+	}
+	if config.Compression.BufferSize != 262144 {
+		t.Fatalf("unexpected buffer size: %d", config.Compression.BufferSize)
+	}
+	if config.Compression.CompressLevel != 3 {
+		t.Fatalf("unexpected compress level: %d", config.Compression.CompressLevel)
+	}
+}
+
+func TestSplitHTTPCompressionBuildRejectsUnsupportedType(t *testing.T) {
+	parser := loadJSON(func() Buildable { return new(SplitHTTPConfig) })
+
+	_, err := parser(`{
+		"compression": {
+			"type": "br"
+		}
+	}`)
+	if err == nil || !strings.Contains(err.Error(), "unsupported compression type") {
+		t.Fatalf("expected unsupported compression type rejection, got %v", err)
+	}
+}
+
+func TestSplitHTTPCompressionBuildRejectsSmallBuffer(t *testing.T) {
+	parser := loadJSON(func() Buildable { return new(SplitHTTPConfig) })
+
+	_, err := parser(`{
+		"compression": {
+			"type": "zstd",
+			"bufferSize": 1
+		}
+	}`)
+	if err == nil || !strings.Contains(err.Error(), "compression bufferSize") {
+		t.Fatalf("expected compression buffer size rejection, got %v", err)
+	}
+}
+
+func TestSplitHTTPCompressionBuildRejectsHeaderAndCookiePayload(t *testing.T) {
+	parser := loadJSON(func() Buildable { return new(SplitHTTPConfig) })
+
+	for _, placement := range []string{"header", "cookie"} {
+		_, err := parser(`{
+			"mode": "packet-up",
+			"uplinkDataPlacement": "` + placement + `",
+			"compression": {
+				"type": "zstd"
+			}
+		}`)
+		if err == nil || !strings.Contains(err.Error(), "compression cannot be used with uplinkDataPlacement") {
+			t.Fatalf("expected %s payload placement rejection, got %v", placement, err)
+		}
+	}
+}
+
+func TestSplitHTTPCompressionBuildRejectsInvalidLz4Level(t *testing.T) {
+	parser := loadJSON(func() Buildable { return new(SplitHTTPConfig) })
+
+	_, err := parser(`{
+		"compression": {
+			"type": "lz4",
+			"compressLevel": 10
+		}
+	}`)
+	if err == nil || !strings.Contains(err.Error(), "unsupported lz4 compressLevel") {
+		t.Fatalf("expected lz4 compressLevel rejection, got %v", err)
 	}
 }

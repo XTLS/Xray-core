@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform/filesystem"
@@ -214,34 +215,41 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 }
 
 type SplitHTTPConfig struct {
-	Host                 string            `json:"host"`
-	Path                 string            `json:"path"`
-	Mode                 string            `json:"mode"`
-	Headers              map[string]string `json:"headers"`
-	XPaddingBytes        Int32Range        `json:"xPaddingBytes"`
-	XPaddingObfsMode     bool              `json:"xPaddingObfsMode"`
-	XPaddingKey          string            `json:"xPaddingKey"`
-	XPaddingHeader       string            `json:"xPaddingHeader"`
-	XPaddingPlacement    string            `json:"xPaddingPlacement"`
-	XPaddingMethod       string            `json:"xPaddingMethod"`
-	UplinkHTTPMethod     string            `json:"uplinkHTTPMethod"`
-	SessionPlacement     string            `json:"sessionPlacement"`
-	SessionKey           string            `json:"sessionKey"`
-	SeqPlacement         string            `json:"seqPlacement"`
-	SeqKey               string            `json:"seqKey"`
-	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
-	UplinkDataKey        string            `json:"uplinkDataKey"`
-	UplinkChunkSize      Int32Range        `json:"uplinkChunkSize"`
-	NoGRPCHeader         bool              `json:"noGRPCHeader"`
-	NoSSEHeader          bool              `json:"noSSEHeader"`
-	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
-	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
-	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
-	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
-	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
-	Xmux                 XmuxConfig        `json:"xmux"`
-	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
-	Extra                json.RawMessage   `json:"extra"`
+	Host                 string             `json:"host"`
+	Path                 string             `json:"path"`
+	Mode                 string             `json:"mode"`
+	Headers              map[string]string  `json:"headers"`
+	XPaddingBytes        Int32Range         `json:"xPaddingBytes"`
+	XPaddingObfsMode     bool               `json:"xPaddingObfsMode"`
+	XPaddingKey          string             `json:"xPaddingKey"`
+	XPaddingHeader       string             `json:"xPaddingHeader"`
+	XPaddingPlacement    string             `json:"xPaddingPlacement"`
+	XPaddingMethod       string             `json:"xPaddingMethod"`
+	UplinkHTTPMethod     string             `json:"uplinkHTTPMethod"`
+	SessionPlacement     string             `json:"sessionPlacement"`
+	SessionKey           string             `json:"sessionKey"`
+	SeqPlacement         string             `json:"seqPlacement"`
+	SeqKey               string             `json:"seqKey"`
+	UplinkDataPlacement  string             `json:"uplinkDataPlacement"`
+	UplinkDataKey        string             `json:"uplinkDataKey"`
+	UplinkChunkSize      Int32Range         `json:"uplinkChunkSize"`
+	NoGRPCHeader         bool               `json:"noGRPCHeader"`
+	NoSSEHeader          bool               `json:"noSSEHeader"`
+	ScMaxEachPostBytes   Int32Range         `json:"scMaxEachPostBytes"`
+	ScMinPostsIntervalMs Int32Range         `json:"scMinPostsIntervalMs"`
+	ScMaxBufferedPosts   int64              `json:"scMaxBufferedPosts"`
+	ScStreamUpServerSecs Int32Range         `json:"scStreamUpServerSecs"`
+	ServerMaxHeaderBytes int32              `json:"serverMaxHeaderBytes"`
+	Compression          *CompressionConfig `json:"compression"`
+	Xmux                 XmuxConfig         `json:"xmux"`
+	DownloadSettings     *StreamConfig      `json:"downloadSettings"`
+	Extra                json.RawMessage    `json:"extra"`
+}
+
+type CompressionConfig struct {
+	Type          string `json:"type"`
+	BufferSize    int32  `json:"bufferSize"`
+	CompressLevel int32  `json:"compressLevel"`
 }
 
 type XmuxConfig struct {
@@ -384,6 +392,34 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("invalid negative value of maxHeaderBytes")
 	}
 
+	var compression *splithttp.CompressionConfig
+	if c.Compression != nil {
+		c.Compression.Type = strings.ToLower(c.Compression.Type)
+		switch c.Compression.Type {
+		case "", "none":
+			c.Compression.Type = "none"
+		case "zstd", "lz4":
+			if c.Compression.BufferSize > 0 && c.Compression.BufferSize < buf.Size {
+				return nil, errors.New("compression bufferSize must be at least ", buf.Size)
+			}
+			if c.Compression.Type == "lz4" && c.Compression.CompressLevel > 9 {
+				return nil, errors.New("unsupported lz4 compressLevel: ", c.Compression.CompressLevel)
+			}
+			if c.Mode == "packet-up" && (c.UplinkDataPlacement == splithttp.PlacementHeader || c.UplinkDataPlacement == splithttp.PlacementCookie) {
+				return nil, errors.New("compression cannot be used with uplinkDataPlacement: " + c.UplinkDataPlacement)
+			}
+		default:
+			return nil, errors.New("unsupported compression type: " + c.Compression.Type)
+		}
+		if c.Compression.Type != "none" {
+			compression = &splithttp.CompressionConfig{
+				Type:          c.Compression.Type,
+				BufferSize:    c.Compression.BufferSize,
+				CompressLevel: c.Compression.CompressLevel,
+			}
+		}
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -422,6 +458,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
+		Compression:          compression,
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),

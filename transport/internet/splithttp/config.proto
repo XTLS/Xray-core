@@ -22,6 +22,12 @@ message XmuxConfig {
   int64 hKeepAlivePeriod = 6;
 }
 
+message CompressionConfig {
+  string type = 1;
+  int32 bufferSize = 2;
+  int32 compressLevel = 3;
+}
+
 message Config {
   string host = 1;
   string path = 2;
@@ -50,4 +56,5 @@ message Config {
   string uplinkDataKey = 25;
   RangeConfig uplinkChunkSize = 26;
   int32 serverMaxHeaderBytes = 27;
+  CompressionConfig compression = 28;
 }

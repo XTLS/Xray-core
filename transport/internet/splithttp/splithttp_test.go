@@ -462,3 +462,108 @@ func Test_maxUpload(t *testing.T) {
 
 	common.Must(listen.Close())
 }
+
+func Test_ListenXHAndDial_PacketCompression(t *testing.T) {
+	listenPort := tcp.PickPort()
+	payload := bytes.Repeat([]byte("xhttp compressed packet payload "), 4096)
+	received := make(chan []byte, 1)
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path:                "/sh",
+			Mode:                "packet-up",
+			UplinkDataPlacement: PlacementBody,
+			Compression: &CompressionConfig{
+				Type:          "zstd",
+				BufferSize:    65536,
+				CompressLevel: 3,
+			},
+		},
+	}
+
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+			c.SetReadDeadline(time.Now().Add(2 * time.Second))
+			got := make([]byte, len(payload))
+			_, err := io.ReadFull(c, got)
+			if err == nil {
+				received <- got
+			}
+			common.Must2(c.Write([]byte("Response")))
+		}(conn)
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+	common.Must(err)
+	_, err = conn.Write(payload)
+	common.Must(err)
+
+	var b [1024]byte
+	n, _ := io.ReadFull(conn, b[:])
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
+	common.Must(conn.Close())
+
+	select {
+	case got := <-received:
+		if !bytes.Equal(got, payload) {
+			t.Fatal("server received payload different from original")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not receive payload")
+	}
+}
+
+func Test_ListenXHAndDial_StreamOneCompression(t *testing.T) {
+	listenPort := tcp.PickPort()
+	payload := bytes.Repeat([]byte("xhttp stream-one payload "), 4096)
+	responsePayload := bytes.Repeat([]byte("xhttp stream-one response "), 1024)
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "/sh",
+			Mode: "stream-one",
+			Compression: &CompressionConfig{
+				Type:          "zstd",
+				BufferSize:    65536,
+				CompressLevel: 3,
+			},
+		},
+	}
+
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+			c.SetReadDeadline(time.Now().Add(2 * time.Second))
+			got := make([]byte, len(payload))
+			_, err := io.ReadFull(c, got)
+			if err != nil {
+				return
+			}
+			if !bytes.Equal(got, payload) {
+				t.Error("server received payload different from original")
+				return
+			}
+			common.Must2(c.Write(responsePayload))
+		}(conn)
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+	common.Must(err)
+	_, err = conn.Write(payload)
+	common.Must(err)
+
+	got := make([]byte, len(responsePayload))
+	_, err = io.ReadFull(conn, got)
+	common.Must(err)
+	if !bytes.Equal(got, responsePayload) {
+		t.Fatal("client received response different from original")
+	}
+	common.Must(conn.Close())
+}

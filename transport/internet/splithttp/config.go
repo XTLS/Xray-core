@@ -1,6 +1,7 @@
 package splithttp
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -327,8 +328,20 @@ func (c *Config) FillPacketRequest(request *http.Request, sessionId string, seqS
 
 	if dataPlacement == PlacementBody || dataPlacement == PlacementAuto {
 		request.Header = c.GetRequestHeader()
-		request.Body = io.NopCloser(&buf.MultiBufferContainer{MultiBuffer: payload})
-		request.ContentLength = int64(payload.Len())
+		if compressionEnabled(c) {
+			data := make([]byte, payload.Len())
+			payload.Copy(data)
+			buf.ReleaseMulti(payload)
+			compressed, err := compressPayload(c, data)
+			if err != nil {
+				return err
+			}
+			request.Body = io.NopCloser(bytes.NewReader(compressed))
+			request.ContentLength = int64(len(compressed))
+		} else {
+			request.Body = io.NopCloser(&buf.MultiBufferContainer{MultiBuffer: payload})
+			request.ContentLength = int64(payload.Len())
+		}
 	} else {
 		data := make([]byte, payload.Len())
 		payload.Copy(data)

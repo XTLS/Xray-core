@@ -213,7 +213,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			}
 			httpSC := &httpServerConn{
 				Instance:       done.New(),
-				Reader:         request.Body,
+				Reader:         newCompressedReadCloser(h.config, request.Body),
 				ResponseWriter: writer,
 			}
 			err = currentSession.uploadQueue.Push(Packet{
@@ -313,6 +313,14 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				writer.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			if compressionEnabled(h.config) && len(bodyPayload) > 0 {
+				bodyPayload, readErr = decompressPayload(h.config, bodyPayload)
+				if readErr != nil {
+					errors.LogInfoInner(context.Background(), readErr, "failed to decompress body payload")
+					writer.WriteHeader(http.StatusBadRequest)
+					return
+				}
+			}
 		}
 
 		var payload []byte
@@ -393,6 +401,12 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 		if sessionId != "" { // if not stream-one
 			conn.reader = currentSession.uploadQueue
+		}
+		if compressionEnabled(h.config) {
+			conn.writer = newCompressedWriteCloser(h.config, conn.writer)
+			if sessionId == "" {
+				conn.reader = newCompressedReadCloser(h.config, conn.reader)
+			}
 		}
 
 		h.ln.addConn(stat.Connection(&conn))

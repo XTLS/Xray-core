@@ -462,6 +462,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil { // browser dialer only
 			return nil, err
 		}
+		applyClientCompression(transportConfiguration, mode, &conn)
 		return stat.Connection(&conn), nil
 	} else { // stream-down
 		if xmuxClient2 != nil {
@@ -480,6 +481,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if err != nil { // browser dialer only
 			return nil, err
 		}
+		applyClientCompression(transportConfiguration, mode, &conn)
 		return stat.Connection(&conn), nil
 	}
 
@@ -568,7 +570,18 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}()
 
+	applyClientCompression(transportConfiguration, mode, &conn)
 	return stat.Connection(&conn), nil
+}
+
+func applyClientCompression(config *Config, mode string, conn *splitConn) {
+	if !compressionEnabled(config) {
+		return
+	}
+	conn.reader = newCompressedReadCloser(config, conn.reader)
+	if mode == "stream-one" || mode == "stream-up" {
+		conn.writer = newCompressedWriteCloser(config, conn.writer)
+	}
 }
 
 // A wrapper around pipe that ensures the size limit is exactly honored.

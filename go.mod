@@ -9,9 +9,11 @@ require (
 	github.com/golang/mock v1.7.0-rc.1
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/klauspost/compress v1.17.4
 	github.com/klauspost/cpuid/v2 v2.3.0
 	github.com/miekg/dns v1.1.72
 	github.com/pelletier/go-toml v1.9.5
+	github.com/pierrec/lz4/v4 v4.1.26
 	github.com/pires/go-proxyproto v0.12.0
 	github.com/refraction-networking/utls v1.8.3-0.20260301010127-aa6edf4b11af
 	github.com/robfig/cron/v3 v3.0.1
@@ -41,7 +43,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/juju/ratelimit v1.0.2 // indirect
-	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
