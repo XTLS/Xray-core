@@ -248,20 +248,12 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, nil
 	}
 
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.closed() {
-		return 0, io.ErrClosedPipe
-	}
-
 	b := buf.New()
 	b.Resize(0, buf.Size)
 	buf := b.Bytes()
 	defer b.Release()
 
 	copy(buf, c.clientID[:])
-
 	copy(buf[8:], p)
 
 	ip := addr.(*net.UDPAddr).IP
@@ -274,12 +266,18 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		typ = ipv4.ICMPTypeEcho
 	}
 
+	c.mu.Lock()
+	seq := c.seq
+	c.seq += 1
+	c.seq %= 65536
+	c.mu.Unlock()
+
 	msg := icmp.Message{
 		Type: typ,
 		Code: 0,
 		Body: &icmp.Echo{
 			ID:   c.id,
-			Seq:  c.seq,
+			Seq:  seq,
 			Data: buf[:8+len(p)],
 		},
 	}
@@ -307,9 +305,6 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		errors.LogErrorInner(context.Background(), err, "xicmp write")
 		return 0, err
 	}
-
-	c.seq += 1
-	c.seq %= 65536
 
 	return len(p), nil
 }
