@@ -297,15 +297,15 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}
 
 	if ip.To4() != nil {
-		_, err := c.icmp4.WriteTo(buf, addr)
-		if err != nil {
-			errors.LogErrorInner(context.Background(), err, "xicmp write")
-		}
+		_, err = c.icmp4.WriteTo(buf, addr)
+
 	} else {
-		_, err := c.icmp6.WriteTo(buf, addr)
-		if err != nil {
-			errors.LogErrorInner(context.Background(), err, "xicmp write")
-		}
+		_, err = c.icmp6.WriteTo(buf, addr)
+	}
+
+	if err != nil {
+		errors.LogErrorInner(context.Background(), err, "xicmp write")
+		return 0, err
 	}
 
 	c.seq += 1

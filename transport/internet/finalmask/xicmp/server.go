@@ -276,19 +276,15 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.closed() {
-		return 0, io.ErrClosedPipe
-	}
-
 	r, ok := c.rec[addr.String()]
 	if !ok {
 		errors.LogError(context.Background(), "drop packet to ", addr, " with size ", len(p))
+		c.mu.Unlock()
 		return 0, nil
 	}
 	r.last = time.Now()
 	c.rec[addr.String()] = r
+	c.mu.Unlock()
 
 	// errors.LogDebug(context.Background(), "id ", r.id, " seq ", r.seq, " addr ", r.addr)
 
@@ -314,15 +310,15 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}
 
 	if r.addr.(*net.IPAddr).IP.To4() != nil {
-		_, err := c.icmp4.WriteTo(buf, r.addr)
-		if err != nil {
-			errors.LogErrorInner(context.Background(), err, "xicmp write")
-		}
+		_, err = c.icmp4.WriteTo(buf, r.addr)
+
 	} else {
-		_, err := c.icmp6.WriteTo(buf, r.addr)
-		if err != nil {
-			errors.LogErrorInner(context.Background(), err, "xicmp write")
-		}
+		_, err = c.icmp6.WriteTo(buf, r.addr)
+	}
+
+	if err != nil {
+		errors.LogErrorInner(context.Background(), err, "xicmp write")
+		return 0, err
 	}
 
 	return len(p), nil
