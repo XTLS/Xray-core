@@ -264,10 +264,10 @@ func validateHashAsset(asset *Asset) error {
 		return nil
 	}
 	if asset.HashUrl == "" || asset.HashFile == "" {
-		return errors.New("geodata hash_url and hash_file must be set together")
+		return errors.New("geodata hashUrl and hashFile must be set together")
 	}
 	if asset.HashFile == asset.File {
-		return errors.New("geodata hash_file must be different from file")
+		return errors.New("geodata hashFile must be different from file")
 	}
 	return ValidateHashType(asset.HashType)
 }
