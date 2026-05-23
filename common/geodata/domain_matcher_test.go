@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/xtls/xray-core/common/geodata/strmatcher"
+	"github.com/xtls/xray-core/common/utils"
 )
 
 func TestCompactDomainMatcher_PreservesCustomRuleIndices(t *testing.T) {
-	factory := &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
+	factory := &CompactDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.LinearAnyMatcher]()}
 	matcher, err := factory.BuildMatcher([]*DomainRule{
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "example.com"}}},
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Domain, Value: "example.com"}}},
@@ -31,7 +32,7 @@ func TestCompactDomainMatcher_PreservesCustomRuleIndices(t *testing.T) {
 func TestCompactDomainMatcher_PreservesMixedRuleIndices(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	factory := &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
+	factory := &CompactDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.LinearAnyMatcher]()}
 	matcher, err := factory.BuildMatcher([]*DomainRule{
 		{Value: &DomainRule_Geosite{Geosite: &GeoSiteRule{File: DefaultGeoSiteDat, Code: "CN"}}},
 		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "163.com"}}},
@@ -50,10 +51,11 @@ func TestCompactDomainMatcher_PreservesMixedRuleIndices(t *testing.T) {
 }
 
 func TestMphDomainMatcher_MatchReturnsDetachedSlice(t *testing.T) {
-	matcher, err := (&MphDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}).BuildMatcher([]*DomainRule{
-		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "example.com"}}},
-		{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Domain, Value: "example.com"}}},
-	})
+	matcher, err := (&MphDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.MphValueMatcher]()}).
+		BuildMatcher([]*DomainRule{
+			{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Full, Value: "example.com"}}},
+			{Value: &DomainRule_Custom{Custom: &Domain{Type: Domain_Domain, Value: "example.com"}}},
+		})
 	if err != nil {
 		t.Fatalf("BuildMatcher() failed: %v", err)
 	}
