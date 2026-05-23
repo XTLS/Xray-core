@@ -63,7 +63,7 @@ func parseDomainSpec(s string, defaultMethod string) (domainSpec, error) {
 }
 
 func parseResolver(s string) (Name, string, uint16, error) {
-	head, server, ok := strings.Cut(s, "://")
+	head, server, ok := strings.Cut(s, "+udp://")
 	if !ok {
 		return nil, "", 0, errors.New("invalid resolver scheme")
 	}

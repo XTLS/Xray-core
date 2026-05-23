@@ -629,10 +629,10 @@ func TestParseResolver(t *testing.T) {
 		resolver string
 		rrType   uint16
 	}{
-		{"example.com://1.1.1.1:53", RRTypeTXT},
-		{"example.com:txt://1.1.1.1:53", RRTypeTXT},
-		{"example.com:a://1.1.1.1:53", RRTypeA},
-		{"example.com:aaaa://1.1.1.1:53", RRTypeAAAA},
+		{"example.com+udp://1.1.1.1:53", RRTypeTXT},
+		{"example.com:txt+udp://1.1.1.1:53", RRTypeTXT},
+		{"example.com:a+udp://1.1.1.1:53", RRTypeA},
+		{"example.com:aaaa+udp://1.1.1.1:53", RRTypeAAAA},
 	}
 
 	for _, test := range tests {
