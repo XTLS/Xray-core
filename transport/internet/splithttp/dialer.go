@@ -439,19 +439,17 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	var closed atomic.Int32
 
 	reader, writer := io.Pipe()
-	initXmuxClient := xmuxClient
-	initXmuxClient2 := xmuxClient2
 	conn := splitConn{
 		writer: writer,
 		onClose: func() {
 			if closed.Add(1) > 1 {
 				return
 			}
-			if initXmuxClient != nil {
-				initXmuxClient.OpenUsage.Add(-1)
+			if xmuxClient != nil {
+				xmuxClient.OpenUsage.Add(-1)
 			}
-			if initXmuxClient2 != nil && initXmuxClient2 != initXmuxClient {
-				initXmuxClient2.OpenUsage.Add(-1)
+			if xmuxClient2 != nil && xmuxClient2 != xmuxClient {
+				xmuxClient2.OpenUsage.Add(-1)
 			}
 		},
 	}
@@ -510,6 +508,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		var seq int64
 		var lastWrite time.Time
 
+		dynamicHTTPClient := httpClient
+		dynamicXmuxClient := xmuxClient
 		for {
 			// by offloading the uploads into a buffered pipe, multiple conn.Write
 			// calls get automatically batched together into larger POST requests.
@@ -544,13 +544,13 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 				lastWrite = time.Now()
 
-				if xmuxClient != nil && (xmuxClient.LeftRequests.Add(-1) <= 0 ||
-					(xmuxClient.UnreusableAt != time.Time{} && lastWrite.After(xmuxClient.UnreusableAt))) {
-					httpClient, xmuxClient = getHTTPClient(ctx, dest, streamSettings)
+				if dynamicXmuxClient != nil && (dynamicXmuxClient.LeftRequests.Add(-1) <= 0 ||
+					(dynamicXmuxClient.UnreusableAt != time.Time{} && lastWrite.After(dynamicXmuxClient.UnreusableAt))) {
+					dynamicHTTPClient, dynamicXmuxClient = getHTTPClient(ctx, dest, streamSettings)
 				}
 
-				go func() {
-					err := httpClient.PostPacket(
+				go func(hClient DialerClient) {
+					err := hClient.PostPacket(
 						ctx,
 						requestURL.String(),
 						sessionId,
@@ -563,9 +563,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 						uploadPipeReader.Interrupt()
 						doSplit.Store(false)
 					}
-				}()
+				}(dynamicHTTPClient)
 
-				if _, ok := httpClient.(*DefaultDialerClient); ok {
+				if _, ok := dynamicHTTPClient.(*DefaultDialerClient); ok {
 					<-wroteRequest.Wait()
 				}
 			}
