@@ -70,6 +70,9 @@ func (g *Instance) reloadWithUpdate() error {
 		return err
 	}
 	defer clean(staged)
+	if len(staged) == 0 {
+		return nil
+	}
 
 	tx, err := swapAll(staged)
 	if err != nil {

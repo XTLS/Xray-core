@@ -52,15 +52,15 @@ func ResolveAsset(file string) (string, error) {
 	return path, err
 }
 
+func ResolveAssetPath(file string) (string, error) {
+	return resolveAssetPath(file)
+}
+
 func getAssetFileLocation(file string) (string, os.FileInfo, error) {
-	if !filepath.IsLocal(file) || file == "." {
-		return "", nil, errors.New("asset path must stay in asset directory")
-	}
-	local, err := filepath.Localize(file)
+	path, err := resolveAssetPath(file)
 	if err != nil {
 		return "", nil, err
 	}
-	path := platform.GetAssetLocation(local)
 	info, err := os.Stat(path)
 	if err != nil {
 		return "", nil, err
@@ -69,6 +69,18 @@ func getAssetFileLocation(file string) (string, os.FileInfo, error) {
 		return "", nil, errors.New("asset is not a regular file")
 	}
 	return path, info, nil
+}
+
+func resolveAssetPath(file string) (string, error) {
+	if !filepath.IsLocal(file) || file == "." {
+		return "", errors.New("asset path must stay in asset directory")
+	}
+	local, err := filepath.Localize(file)
+	if err != nil {
+		return "", err
+	}
+	path := platform.GetAssetLocation(local)
+	return path, nil
 }
 
 func ReadCert(file string) ([]byte, error) {

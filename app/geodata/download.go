@@ -1,6 +1,7 @@
 package geodata
 
 import (
+	"bytes"
 	"context"
 	go_errors "errors"
 	"io"
@@ -103,24 +104,80 @@ func newClient(baseCtx context.Context, dispatcher routing.Dispatcher, outbound 
 }
 
 func (d *downloader) download(assets []*Asset) ([]stage, error) {
-	staged := make([]stage, 0, len(assets))
+	staged := make([]stage, 0, len(assets)*2)
 	for _, asset := range assets {
-		stage, err := d.downloadOne(asset)
+		assetStages, err := d.downloadOne(asset)
 		if err != nil {
 			clean(staged)
 			return nil, err
 		}
-		staged = append(staged, stage)
+		staged = append(staged, assetStages...)
 	}
 	return staged, nil
 }
 
-func (d *downloader) downloadOne(asset *Asset) (stage, error) {
-	target, err := filesystem.ResolveAsset(asset.File)
+func (d *downloader) downloadOne(asset *Asset) ([]stage, error) {
+	if err := validateHashAsset(asset); err != nil {
+		return nil, err
+	}
+
+	if !hasHashAsset(asset) {
+		assetStage, err := d.downloadFile(asset.Url, asset.File, "geodata asset", false)
+		if err != nil {
+			return nil, err
+		}
+		return []stage{assetStage}, nil
+	}
+
+	hashStage, err := d.downloadFile(asset.HashUrl, asset.HashFile, "geodata hash", true)
+	if err != nil {
+		return nil, err
+	}
+
+	unchanged, known, err := hashStage.compareCurrentHash(asset.HashType, asset.File)
+	if err != nil {
+		clean([]stage{hashStage})
+		return nil, err
+	}
+	if unchanged {
+		clean([]stage{hashStage})
+		errors.LogInfo(d.ctx, "geodata hash is unchanged for ", asset.File, ", skipping asset download")
+		return nil, nil
+	}
+
+	if !known {
+		current, err := d.isAssetCurrent(asset, hashStage)
+		if err != nil {
+			clean([]stage{hashStage})
+			return nil, err
+		}
+		if current {
+			errors.LogInfo(d.ctx, "geodata asset is current for ", asset.File, ", updating hash file only")
+			return []stage{hashStage}, nil
+		}
+	}
+
+	assetStage, err := d.downloadFile(asset.Url, asset.File, "geodata asset", false)
+	if err != nil {
+		clean([]stage{hashStage})
+		return nil, err
+	}
+	staged := []stage{assetStage, hashStage}
+
+	if err := verifyHashFile(asset.HashType, assetStage.temp, hashStage.temp, asset.File); err != nil {
+		clean(staged)
+		return nil, err
+	}
+
+	return staged, nil
+}
+
+func (d *downloader) downloadFile(rawURL string, file string, kind string, allowMissing bool) (stage, error) {
+	target, err := resolveDownloadTarget(file, allowMissing)
 	if err != nil {
 		return stage{}, err
 	}
-	errors.LogInfo(d.ctx, "downloading geodata asset from ", asset.Url, " to ", target)
+	errors.LogInfo(d.ctx, "downloading ", kind, " from ", rawURL, " to ", target)
 
 	temp, err := tempFile(target, ".tmp")
 	if err != nil {
@@ -134,7 +191,7 @@ func (d *downloader) downloadOne(asset *Asset) (stage, error) {
 		}
 	}()
 
-	if err := d.fetch(asset.Url, temp); err != nil {
+	if err := d.fetch(rawURL, temp); err != nil {
 		temp.Close()
 		return stage{}, err
 	}
@@ -151,6 +208,68 @@ func (d *downloader) downloadOne(asset *Asset) (stage, error) {
 		target: target,
 		temp:   tempName,
 	}, nil
+}
+
+func resolveDownloadTarget(file string, allowMissing bool) (string, error) {
+	if !allowMissing {
+		return filesystem.ResolveAsset(file)
+	}
+
+	target, err := filesystem.ResolveAssetPath(file)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		if go_errors.Is(err, os.ErrNotExist) {
+			return target, nil
+		}
+		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", errors.New("asset is not a regular file")
+	}
+	return target, nil
+}
+
+func (s stage) compareCurrentHash(hashType string, expectedFile string) (same bool, known bool, err error) {
+	nextHash, err := readHashFileDigest(hashType, s.temp, expectedFile)
+	if err != nil {
+		return false, false, err
+	}
+	currentHash, err := readHashFileDigest(hashType, s.target, expectedFile)
+	if err != nil {
+		return false, false, nil
+	}
+	return bytes.Equal(nextHash, currentHash), true, nil
+}
+
+func (d *downloader) isAssetCurrent(asset *Asset, hashStage stage) (bool, error) {
+	target, err := filesystem.ResolveAsset(asset.File)
+	if err != nil {
+		return false, err
+	}
+	if err := verifyHashFile(asset.HashType, target, hashStage.temp, asset.File); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+func hasHashAsset(asset *Asset) bool {
+	return asset.HashUrl != "" || asset.HashFile != "" || asset.HashType != ""
+}
+
+func validateHashAsset(asset *Asset) error {
+	if !hasHashAsset(asset) {
+		return nil
+	}
+	if asset.HashUrl == "" || asset.HashFile == "" {
+		return errors.New("geodata hash_url and hash_file must be set together")
+	}
+	if asset.HashFile == asset.File {
+		return errors.New("geodata hash_file must be different from file")
+	}
+	return ValidateHashType(asset.HashType)
 }
 
 func (d *downloader) fetch(rawURL string, writer io.Writer) error {

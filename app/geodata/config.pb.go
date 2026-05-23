@@ -25,6 +25,9 @@ type Asset struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	File          string                 `protobuf:"bytes,2,opt,name=file,proto3" json:"file,omitempty"`
+	HashUrl       string                 `protobuf:"bytes,3,opt,name=hash_url,json=hashUrl,proto3" json:"hash_url,omitempty"`
+	HashFile      string                 `protobuf:"bytes,4,opt,name=hash_file,json=hashFile,proto3" json:"hash_file,omitempty"`
+	HashType      string                 `protobuf:"bytes,5,opt,name=hash_type,json=hashType,proto3" json:"hash_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -69,6 +72,27 @@ func (x *Asset) GetUrl() string {
 func (x *Asset) GetFile() string {
 	if x != nil {
 		return x.File
+	}
+	return ""
+}
+
+func (x *Asset) GetHashUrl() string {
+	if x != nil {
+		return x.HashUrl
+	}
+	return ""
+}
+
+func (x *Asset) GetHashFile() string {
+	if x != nil {
+		return x.HashFile
+	}
+	return ""
+}
+
+func (x *Asset) GetHashType() string {
+	if x != nil {
+		return x.HashType
 	}
 	return ""
 }
@@ -137,10 +161,13 @@ var File_app_geodata_config_proto protoreflect.FileDescriptor
 
 const file_app_geodata_config_proto_rawDesc = "" +
 	"\n" +
-	"\x18app/geodata/config.proto\x12\x10xray.app.geodata\"-\n" +
+	"\x18app/geodata/config.proto\x12\x10xray.app.geodata\"\x82\x01\n" +
 	"\x05Asset\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x12\n" +
-	"\x04file\x18\x02 \x01(\tR\x04file\"i\n" +
+	"\x04file\x18\x02 \x01(\tR\x04file\x12\x19\n" +
+	"\bhash_url\x18\x03 \x01(\tR\ahashUrl\x12\x1b\n" +
+	"\thash_file\x18\x04 \x01(\tR\bhashFile\x12\x1b\n" +
+	"\thash_type\x18\x05 \x01(\tR\bhashType\"i\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04cron\x18\x01 \x01(\tR\x04cron\x12\x1a\n" +
 	"\boutbound\x18\x02 \x01(\tR\boutbound\x12/\n" +

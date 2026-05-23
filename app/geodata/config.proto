@@ -10,6 +10,12 @@ message Asset {
   string url = 1;
 
   string file = 2;
+
+  string hash_url = 3;
+
+  string hash_file = 4;
+
+  string hash_type = 5;
 }
 
 message Config {

@@ -1,7 +1,9 @@
 package conf
 
 import (
+	go_errors "errors"
 	"net/url"
+	"os"
 
 	"github.com/robfig/cron/v3"
 	"github.com/xtls/xray-core/app/geodata"
@@ -11,8 +13,11 @@ import (
 )
 
 type GeodataAssetConfig struct {
-	URL  string `json:"url"`
-	File string `json:"file"`
+	URL      string `json:"url"`
+	File     string `json:"file"`
+	HashURL  string `json:"hashUrl"`
+	HashFile string `json:"hashFile"`
+	HashType string `json:"hashType"`
 }
 
 func (c *GeodataAssetConfig) Build() (*geodata.Asset, error) {
@@ -22,10 +27,56 @@ func (c *GeodataAssetConfig) Build() (*geodata.Asset, error) {
 	if _, err := filesystem.StatAsset(c.File); err != nil {
 		return nil, errors.New("invalid geodata asset file: ", c.File).Base(err)
 	}
-	return &geodata.Asset{
+	asset := &geodata.Asset{
 		Url:  c.URL,
 		File: c.File,
-	}, nil
+	}
+	if !c.hasHash() {
+		return asset, nil
+	}
+	if c.HashURL == "" || c.HashFile == "" {
+		return nil, errors.New("geodata hashUrl and hashFile must be set together")
+	}
+	if err := validateHTTPS(c.HashURL); err != nil {
+		return nil, errors.New("invalid geodata asset hash url: ", c.HashURL).Base(err)
+	}
+	if c.HashFile == c.File {
+		return nil, errors.New("geodata asset hash file must be different from file: ", c.HashFile)
+	}
+	if err := validateOptionalAssetFile(c.HashFile); err != nil {
+		return nil, errors.New("invalid geodata asset hash file: ", c.HashFile).Base(err)
+	}
+	hashType, err := geodata.NormalizeHashType(c.HashType)
+	if err != nil {
+		return nil, err
+	}
+	asset.HashUrl = c.HashURL
+	asset.HashFile = c.HashFile
+	asset.HashType = hashType
+
+	return asset, nil
+}
+
+func (c *GeodataAssetConfig) hasHash() bool {
+	return c.HashURL != "" || c.HashFile != "" || c.HashType != ""
+}
+
+func validateOptionalAssetFile(file string) error {
+	path, err := filesystem.ResolveAssetPath(file)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if go_errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("asset is not a regular file")
+	}
+	return nil
 }
 
 func validateHTTPS(s string) error {
