@@ -46,7 +46,13 @@ var (
 
 const (
 	// https://tools.ietf.org/html/rfc1035#section-3.2.2
+	RRTypeA = 1
+	// https://tools.ietf.org/html/rfc1035#section-3.2.2
+	RRTypeCNAME = 5
+	// https://tools.ietf.org/html/rfc1035#section-3.2.2
 	RRTypeTXT = 16
+	// https://tools.ietf.org/html/rfc3596#section-2.1
+	RRTypeAAAA = 28
 	// https://tools.ietf.org/html/rfc6891#section-6.1.1
 	RRTypeOPT = 41
 

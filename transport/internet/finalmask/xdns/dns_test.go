@@ -593,3 +593,113 @@ func TestRDataTXTRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestIPAnswerPayloadRoundTrip(t *testing.T) {
+	for _, rrType := range []uint16{RRTypeA, RRTypeAAAA} {
+		for _, payload := range [][]byte{
+			{},
+			{0x01},
+			[]byte("hello world"),
+			bytes.Repeat([]byte{0xab}, payloadChunkSizeForType(rrType)*3+1),
+		} {
+			question := Question{
+				Name:  mustParseName("example.com"),
+				Type:  rrType,
+				Class: ClassIN,
+			}
+			answers, err := answersForPayload(question, responseTTL, payload)
+			if err != nil {
+				t.Fatalf("answersForPayload(%d) err = %v", rrType, err)
+			}
+
+			if len(answers) > 1 {
+				answers[0], answers[len(answers)-1] = answers[len(answers)-1], answers[0]
+			}
+
+			decoded := decodeResponsePayload(answers)
+			if !bytes.Equal(decoded, payload) {
+				t.Fatalf("rrType=%d decoded %x want %x", rrType, decoded, payload)
+			}
+		}
+	}
+}
+
+func TestParseResolver(t *testing.T) {
+	tests := []struct {
+		resolver string
+		rrType   uint16
+	}{
+		{"example.com+udp://1.1.1.1:53", RRTypeTXT},
+		{"example.com:txt+udp://1.1.1.1:53", RRTypeTXT},
+		{"example.com:a+udp://1.1.1.1:53", RRTypeA},
+		{"example.com:aaaa+udp://1.1.1.1:53", RRTypeAAAA},
+	}
+
+	for _, test := range tests {
+		domain, server, rrType, err := parseResolver(test.resolver)
+		if err != nil {
+			t.Fatalf("parseResolver(%q) err = %v", test.resolver, err)
+		}
+		if domain.String() != "example.com" || server != "1.1.1.1:53" || rrType != test.rrType {
+			t.Fatalf("parseResolver(%q) = (%q, %q, %d)", test.resolver, domain.String(), server, rrType)
+		}
+	}
+}
+
+func TestParseDomainSpec(t *testing.T) {
+	tests := []struct {
+		spec    string
+		def     string
+		rrType  uint16
+		wantErr bool
+	}{
+		{"example.com", "", 0, false},
+		{"example.com", "txt", RRTypeTXT, false},
+		{"example.com:a", "", RRTypeA, false},
+		{"example.com:aaaa", "", RRTypeAAAA, false},
+		{"example.com:doh", "", 0, true},
+	}
+
+	for _, test := range tests {
+		got, err := parseDomainSpec(test.spec, test.def)
+		if test.wantErr {
+			if err == nil {
+				t.Fatalf("parseDomainSpec(%q, %q) err = nil", test.spec, test.def)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("parseDomainSpec(%q, %q) err = %v", test.spec, test.def, err)
+		}
+		if got.name.String() != "example.com" || got.rrType != test.rrType {
+			t.Fatalf("parseDomainSpec(%q, %q) = (%q, %d)", test.spec, test.def, got.name.String(), got.rrType)
+		}
+	}
+}
+
+func TestResponseForMethodRestriction(t *testing.T) {
+	query := &Message{
+		ID:    1,
+		Flags: 0x0100,
+		Question: []Question{{
+			Name:  mustParseName("abc.example.com"),
+			Type:  RRTypeTXT,
+			Class: ClassIN,
+		}},
+		Additional: []RR{{
+			Name:  Name{},
+			Type:  RRTypeOPT,
+			Class: 4096,
+		}},
+	}
+
+	resp, _ := responseFor(query, []domainSpec{{name: mustParseName("example.com"), rrType: RRTypeA}})
+	if resp == nil || resp.Rcode() != RcodeNameError {
+		t.Fatalf("responseFor method restriction rcode = %v", resp)
+	}
+
+	resp, _ = responseFor(query, []domainSpec{{name: mustParseName("example.com")}})
+	if resp == nil || resp.Rcode() != RcodeNoError {
+		t.Fatalf("responseFor unrestricted rcode = %v", resp)
+	}
+}
