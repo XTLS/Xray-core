@@ -439,17 +439,19 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	var closed atomic.Int32
 
 	reader, writer := io.Pipe()
+	initXmuxClient := xmuxClient
+	initXmuxClient2 := xmuxClient2
 	conn := splitConn{
 		writer: writer,
 		onClose: func() {
 			if closed.Add(1) > 1 {
 				return
 			}
-			if xmuxClient != nil {
-				xmuxClient.OpenUsage.Add(-1)
+			if initXmuxClient != nil {
+				initXmuxClient.OpenUsage.Add(-1)
 			}
-			if xmuxClient2 != nil && xmuxClient2 != xmuxClient {
-				xmuxClient2.OpenUsage.Add(-1)
+			if initXmuxClient2 != nil && initXmuxClient2 != initXmuxClient {
+				initXmuxClient2.OpenUsage.Add(-1)
 			}
 		},
 	}
@@ -544,9 +546,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 				if xmuxClient != nil && (xmuxClient.LeftRequests.Add(-1) <= 0 ||
 					(xmuxClient.UnreusableAt != time.Time{} && lastWrite.After(xmuxClient.UnreusableAt))) {
-					xmuxClient.OpenUsage.Add(-1)
 					httpClient, xmuxClient = getHTTPClient(ctx, dest, streamSettings)
-					xmuxClient.OpenUsage.Add(1)
 				}
 
 				go func() {
