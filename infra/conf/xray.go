@@ -173,6 +173,26 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 			return nil, err
 		}
 		receiverSettings.StreamSettings = ss
+		// TODO: Actually implement this breaking change
+		protocol := ss.GetEffectiveProtocol()
+		if (protocol == "websocket" || protocol == "httpupgrade" || protocol == "splithttp") &&
+			(c.StreamSetting.SocketSettings == nil || len(c.StreamSetting.SocketSettings.TrustedXForwardedFor) == 0) {
+			errors.LogWarning(context.Background(),
+				`====== SECURITY WARNING ======`,
+				"\n",
+				`inbound "`, c.Tag, `" using `, protocol, ` has not configured "sockopt.trustedXForwardedFor".`,
+				"\n",
+				`THIS IS VERY INSECURE!!!`,
+				"\n",
+				`For compatibility, Xray still allows this for now and still trusts X-Forwarded-For implicitly.`,
+				"\n",
+				`Please configure "sockopt.trustedXForwardedFor" immediately.`,
+				"\n",
+				`In future versions, this option must be explicitly set.`,
+				"\n",
+				`====== SECURITY WARNING ======`,
+			)
+		}
 		if strings.Contains(ss.SecurityType, "reality") && (receiverSettings.PortList == nil ||
 			len(receiverSettings.PortList.Ports()) != 1 || receiverSettings.PortList.Ports()[0] != 443) {
 			errors.LogWarning(context.Background(), `REALITY: Listening on non-443 ports may get your IP blocked by the GFW`)
