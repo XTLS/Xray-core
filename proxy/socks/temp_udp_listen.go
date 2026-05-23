@@ -23,24 +23,27 @@ type TempUDPConn struct {
 	net.PacketConn
 	AssociateTCPConn net.Conn
 
-	timer           *signal.ActivityTimer
-	firstPacketDone atomic.Bool
-	remote          net.Addr
+	timer  *signal.ActivityTimer
+	remote atomic.Pointer[net.Addr]
 }
 
 func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 	c.timer.Update()
-	if c.firstPacketDone.CompareAndSwap(false, true) {
-		n, remote, err := c.PacketConn.ReadFrom(b)
-		c.remote = remote
-		return n, err
-	}
 	for {
 		n, remote, err := c.PacketConn.ReadFrom(b)
 		if err != nil {
 			return n, err
 		}
-		if remote.String() != c.remote.String() {
+		if c.remote.Load() == nil {
+			tcpRemote, _, _ := net.SplitHostPort(c.AssociateTCPConn.RemoteAddr().String())
+			udpRemote, _, _ := net.SplitHostPort(remote.String())
+			if tcpRemote != udpRemote {
+				continue
+			} else {
+				c.remote.CompareAndSwap(nil, &remote)
+			}
+		}
+		if remote.String() != (*c.remote.Load()).String() {
 			continue
 		}
 		return n, err
@@ -49,14 +52,17 @@ func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 
 func (c *TempUDPConn) Write(b []byte) (n int, err error) {
 	c.timer.Update()
-	if c.remote == nil {
+	if c.remote.Load() == nil {
 		return 0, errors.New("remote address not determined yet")
 	}
-	return c.PacketConn.WriteTo(b, c.remote)
+	return c.PacketConn.WriteTo(b, *c.remote.Load())
 }
 
 func (c *TempUDPConn) RemoteAddr() net.Addr {
-	return c.remote
+	if c.remote.Load() == nil {
+		return nil
+	}
+	return *c.remote.Load()
 }
 
 func (c *TempUDPConn) SetTimeout(d time.Duration) {
