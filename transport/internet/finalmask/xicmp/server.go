@@ -270,7 +270,7 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	if len(p)+16 > finalmask.UDPSize {
+	if len(p)+8 > finalmask.UDPSize {
 		errors.LogError(context.Background(), "drop packet to ", addr, " with size ", len(p))
 		return 0, nil
 	}
