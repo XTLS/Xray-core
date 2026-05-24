@@ -39,26 +39,30 @@ func (c *udpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
 
-	n, addr, err = c.conn.ReadFrom(c.readBuf)
-	if err != nil {
-		return n, addr, err
-	}
+	for {
+		n, addr, err = c.conn.ReadFrom(c.readBuf)
+		if err != nil {
+			return n, addr, err
+		}
 
-	decoded := make([]byte, 0, n/4+1)
-	hints := make([]byte, 0, 4)
-	tableIndex := 0
-	hints, decoded, err = decodeBytes(c.tables, &tableIndex, c.readBuf[:n], hints, decoded)
-	if err != nil {
-		return 0, addr, err
+		decoded := make([]byte, 0, n/4+1)
+		hints := make([]byte, 0, 4)
+		tableIndex := 0
+		hints, decoded, err = decodeBytes(c.tables, &tableIndex, c.readBuf[:n], hints, decoded)
+		if err != nil {
+			// Drop unparseable datagram and continue reading
+			continue
+		}
+		if len(hints) != 0 {
+			// Incomplete hints, drop and continue
+			continue
+		}
+		if len(p) < len(decoded) {
+			return 0, addr, io.ErrShortBuffer
+		}
+		copy(p, decoded)
+		return len(decoded), addr, nil
 	}
-	if len(hints) != 0 {
-		return 0, addr, io.ErrUnexpectedEOF
-	}
-	if len(p) < len(decoded) {
-		return 0, addr, io.ErrShortBuffer
-	}
-	copy(p, decoded)
-	return len(decoded), addr, nil
 }
 
 func (c *udpConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
