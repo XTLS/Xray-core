@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	gonet "net"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -208,6 +209,13 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 		}
 		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
 		tempUDPConn = NewTempUDPConn(udpHub, writer)
+		if !(request.Address.IP().IsUnspecified() && request.Port == 0) {
+			var udpRemote gonet.Addr = &gonet.UDPAddr{
+				IP:   request.Address.IP(),
+				Port: int(request.Port),
+			}
+			tempUDPConn.remote.Store(&udpRemote)
+		}
 	}
 	if err := writeSocks5Response(writer, statusSuccess, responseAddress, responsePort); err != nil {
 		common.CloseIfExists(tempUDPConn)
