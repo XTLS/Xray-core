@@ -1256,6 +1256,7 @@ var (
 		"sudoku":           func() interface{} { return new(Sudoku) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
+		"realm":            func() interface{} { return new(Realm) },
 	}, "type", "settings")
 )
 

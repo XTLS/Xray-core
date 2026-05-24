@@ -72,10 +72,6 @@ func NewConnServer(config *Config, raw net.PacketConn) (net.PacketConn, error) {
 		stun:   make(chan STUNPacketEvent, defaultEventBuffer),
 	}
 
-	if len(conn.getlocals(true)) == 0 {
-		return nil, errors.New("empty locals")
-	}
-
 	go conn.run()
 
 	return conn, nil
@@ -161,7 +157,7 @@ func (c *realmConnServer) getlocals(force bool) []netip.AddrPort {
 	c.localsMu.Lock()
 	if force || time.Since(c.localsLast) > defaultStunCacheTTL {
 		start := time.Now()
-		servers := resolveSTUNServers(c.LocalAddr().(*net.UDPAddr).IP, c.stunServers)
+		servers := resolveSTUNServers(c.PacketConn.LocalAddr().(*net.UDPAddr).IP, c.stunServers)
 		errors.LogDebug(context.Background(), "[realm] update stun servers ", servers, " with ", time.Since(start))
 		if len(servers) > 0 {
 			start = time.Now()
@@ -185,7 +181,7 @@ func (c *realmConnServer) punch(ctx context.Context, meta PunchMetadata, peers [
 		return
 	}
 	ch := make(chan PunchPacketEvent, defaultEventBuffer)
-	c.events[meta] = make(chan PunchPacketEvent, defaultEventBuffer)
+	c.events[meta] = ch
 	c.mu.Unlock()
 
 	start := time.Now()
