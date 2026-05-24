@@ -5,6 +5,7 @@ import (
 	"context"
 	gotls "crypto/tls"
 	"encoding/base64"
+	"encoding/binary"
 	"reflect"
 	"strings"
 	"sync"
@@ -231,15 +232,32 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}
 
+	user := rec.User
+	account := user.Account.(*vless.MemoryAccount)
+
+	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.VlessRoute != 0 {
+		if outboundVlessRoute := net.PortFromBytes(account.ID.Bytes()[6:8]); outboundVlessRoute == 0 {
+			newAccount := *account
+			newAccountID := newAccount.ID.UUID()
+			binary.BigEndian.PutUint16(newAccountID[6:8], inbound.VlessRoute.Value())
+			newAccount.ID = protocol.NewID(newAccountID)
+			account = &newAccount
+
+			user = &protocol.MemoryUser{
+				Account: account,
+				Email:   rec.User.Email,
+				Level:   rec.User.Level,
+			}
+		}
+	}
+
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
-		User:    rec.User,
+		User:    user,
 		Command: command,
 		Address: target.Address,
 		Port:    target.Port,
 	}
-
-	account := request.User.Account.(*vless.MemoryAccount)
 
 	requestAddons := &encoding.Addons{
 		Flow: account.Flow,
