@@ -23,7 +23,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
-	"github.com/xtls/xray-core/transport/internet/hysteria/realm"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
@@ -257,9 +256,8 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 	quicParams := streamSettings.QuicParams
 	if quicParams == nil {
 		quicParams = &internet.QuicParams{
-			UdpHop:     &internet.UdpHop{},
-			Realm:      &internet.RealmConfig{},
 			BbrProfile: string(bbr.ProfileStandard),
+			UdpHop:     &internet.UdpHop{},
 		}
 	}
 
@@ -298,15 +296,6 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 	pktConn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)}, streamSettings.SocketSettings)
 	if err != nil {
 		return nil, err
-	}
-
-	if len(quicParams.Realm.StunServers) > 0 {
-		newConn, err := realm.NewPunchPacketConn(quicParams.Realm, pktConn)
-		if err != nil {
-			pktConn.Close()
-			return nil, err
-		}
-		pktConn = newConn
 	}
 
 	if streamSettings.UdpmaskManager != nil {

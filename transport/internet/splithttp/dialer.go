@@ -29,7 +29,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
-	"github.com/xtls/xray-core/transport/internet/hysteria/realm"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -163,9 +162,8 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		quicParams := streamSettings.QuicParams
 		if quicParams == nil {
 			quicParams = &internet.QuicParams{
-				UdpHop:     &internet.UdpHop{},
-				Realm:      &internet.RealmConfig{},
 				BbrProfile: string(bbr.ProfileStandard),
+				UdpHop:     &internet.UdpHop{},
 			}
 		}
 
@@ -248,14 +246,6 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 						udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
 					default:
 						panic(reflect.TypeOf(c))
-					}
-
-					if len(quicParams.Realm.StunServers) > 0 {
-						udpAddr, err = realm.NewRealmPeer(quicParams.Realm, pktConn)
-						if err != nil {
-							pktConn.Close()
-							return nil, err
-						}
 					}
 				}
 

@@ -1,14 +1,20 @@
 package realm
 
 import (
+	"context"
+	"errors"
 	"net"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pion/stun/v3"
 )
 
 const (
+	defaultSTUNTimeout   = 4 * time.Second
 	defaultPunchTimeout  = 10 * time.Second
 	defaultPunchInterval = 100 * time.Millisecond
 
@@ -17,18 +23,85 @@ const (
 	symmetricNATMaxPortsPerHost = 32
 )
 
-func sendPunchPackets(conn net.PacketConn, addrs []netip.AddrPort, meta PunchMetadata, packetType PunchPacketType) {
-	for _, addr := range addrs {
-		sendPunchPacket(conn, addr, meta, packetType)
+func resolveSTUNServers(local net.IP, servers []string) []*net.UDPAddr {
+	var network string
+	if local.IsUnspecified() {
+		network = "ip"
+	} else {
+		if local.To4() != nil {
+			network = "ip4"
+		} else {
+			network = "ip6"
+		}
 	}
+
+	var seen = make(map[string]struct{})
+	var addrs = make([]*net.UDPAddr, 0, len(servers))
+	for _, server := range servers {
+		h, p, err := net.SplitHostPort(server)
+		if err != nil {
+			continue
+		}
+		port, err := strconv.Atoi(p)
+		if err != nil {
+			continue
+		}
+		ips, err := net.DefaultResolver.LookupIP(context.Background(), network, h)
+		if err != nil {
+			continue
+		}
+		for _, ip := range ips {
+			if _, ok := seen[net.JoinHostPort(ip.String(), p)]; !ok {
+				seen[net.JoinHostPort(ip.String(), p)] = struct{}{}
+				addrs = append(addrs, &net.UDPAddr{IP: ip, Port: port})
+				break
+			}
+		}
+	}
+
+	return addrs
 }
 
-func sendPunchPacket(conn net.PacketConn, addr netip.AddrPort, meta PunchMetadata, packetType PunchPacketType) {
-	packet, err := EncodePunchPacket(packetType, meta)
-	if err != nil {
-		return
+func parseSTUNBindingResponse(packet []byte) (*stun.Message, netip.AddrPort, error) {
+	msg := stun.New()
+	if err := stun.Decode(packet, msg); err != nil {
+		return nil, netip.AddrPort{}, err
 	}
-	_, _ = conn.WriteTo(packet, net.UDPAddrFromAddrPort(addr))
+	if msg.Type != stun.BindingSuccess {
+		return nil, netip.AddrPort{}, errors.New("not a STUN binding success response")
+	}
+
+	var xorMapped stun.XORMappedAddress
+	if err := xorMapped.GetFrom(msg); err == nil {
+		addr, err := netIPPortToAddrPort(xorMapped.IP, xorMapped.Port)
+		return msg, addr, err
+	}
+
+	var mapped stun.MappedAddress
+	if err := mapped.GetFrom(msg); err == nil {
+		addr, err := netIPPortToAddrPort(mapped.IP, mapped.Port)
+		return msg, addr, err
+	}
+
+	return nil, netip.AddrPort{}, errors.New("STUN mapped address not found")
+}
+
+func netIPPortToAddrPort(ip net.IP, port int) (netip.AddrPort, error) {
+	if port <= 0 || port > 65535 {
+		return netip.AddrPort{}, errors.New("invalid STUN mapped port")
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		var addr [4]byte
+		copy(addr[:], ip4)
+		return netip.AddrPortFrom(netip.AddrFrom4(addr), uint16(port)), nil
+	}
+	ip16 := ip.To16()
+	if ip16 == nil {
+		return netip.AddrPort{}, errors.New("invalid STUN mapped IP")
+	}
+	var addr [16]byte
+	copy(addr[:], ip16)
+	return netip.AddrPortFrom(netip.AddrFrom16(addr), uint16(port)), nil
 }
 
 func candidatePunchAddrs(locals, peers []netip.AddrPort) ([]netip.AddrPort, map[netip.AddrPort]struct{}) {

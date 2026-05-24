@@ -32,6 +32,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
+	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
@@ -496,6 +497,11 @@ func (b Bandwidth) Bps() (uint64, error) {
 	return uint64(val*float64(mul)) / 8, nil
 }
 
+type UdpHop struct {
+	PortList PortList   `json:"ports"`
+	Interval Int32Range `json:"interval"`
+}
+
 type Masquerade struct {
 	Type string `json:"type"`
 
@@ -618,25 +624,13 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 	return certificate, nil
 }
 
-type UdpHop struct {
-	PortList PortList   `json:"ports"`
-	Interval Int32Range `json:"interval"`
-}
-
-type RealmConfig struct {
-	Url         string   `json:"url"`
-	StunServers []string `json:"stunServers"`
-}
-
 type QuicParamsConfig struct {
-	UdpHop UdpHop      `json:"udpHop"`
-	Realm  RealmConfig `json:"realm"`
-
 	Congestion                  string    `json:"congestion"`
 	Debug                       bool      `json:"debug"`
 	BbrProfile                  string    `json:"bbrProfile"`
 	BrutalUp                    Bandwidth `json:"brutalUp"`
 	BrutalDown                  Bandwidth `json:"brutalDown"`
+	UdpHop                      UdpHop    `json:"udpHop"`
 	InitStreamReceiveWindow     uint64    `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow      uint64    `json:"maxStreamReceiveWindow"`
 	InitConnectionReceiveWindow uint64    `json:"initConnectionReceiveWindow"`
@@ -1909,6 +1903,92 @@ func (c *Xicmp) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type Realm struct {
+	Url         string     `json:"url"`
+	StunServers []string   `json:"stunServers"`
+	TlsConfig   *TLSConfig `json:"tlsConfig"`
+}
+
+func (c *Realm) Build() (proto.Message, error) {
+	var scheme, host, port, token, id string
+	var stunServers []string
+	var tlsConfig *tls.Config
+
+	u, err := url.Parse(c.Url)
+	if err != nil {
+		return nil, err
+	}
+
+	switch u.Scheme {
+	case "realm":
+		scheme = "https"
+	case "realm+http":
+		scheme = "http"
+	default:
+		return nil, errors.New("invalid scheme", u.Scheme)
+	}
+
+	host = u.Hostname()
+	if host == "" {
+		return nil, errors.New("invalid host", host)
+	}
+
+	port = u.Port()
+	if port == "" {
+		port = "443"
+		if scheme == "http" {
+			port = "80"
+		}
+	}
+
+	token, err = url.PathUnescape(u.User.String())
+	if err != nil {
+		return nil, err
+	}
+	if token == "" {
+		return nil, errors.New("invalid token", token)
+	}
+
+	id, err = url.PathUnescape(strings.TrimPrefix(u.EscapedPath(), "/"))
+	if err != nil {
+		return nil, err
+	}
+	if id == "" {
+		return nil, errors.New("invalid id", id)
+	}
+
+	if len(c.StunServers) == 0 {
+		return nil, errors.New("empty stunServers")
+	}
+
+	for _, s := range c.StunServers {
+		_, _, err = net.SplitHostPort(s)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	stunServers = c.StunServers
+
+	if c.TlsConfig != nil {
+		tc, err := c.TlsConfig.Build()
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig = tc.(*tls.Config)
+	}
+
+	return &realm.Config{
+		Scheme:      scheme,
+		Host:        host,
+		Port:        port,
+		Token:       token,
+		ID:          id,
+		StunServers: stunServers,
+		TlsConfig:   tlsConfig,
+	}, nil
+}
+
 type Mask struct {
 	Type     string           `json:"type"`
 	Settings *json.RawMessage `json:"settings"`
@@ -2112,54 +2192,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
 		}
 		if c.FinalMask.QuicParams != nil {
-			if (c.FinalMask.QuicParams.UdpHop.Interval.From != 0 && c.FinalMask.QuicParams.UdpHop.Interval.From < 5) || (c.FinalMask.QuicParams.UdpHop.Interval.To != 0 && c.FinalMask.QuicParams.UdpHop.Interval.To < 5) {
-				return nil, errors.New("Interval must be at least 5")
-			}
-
-			var scheme, host, port, token, id string
-			var stunServers []string
-			if len(c.FinalMask.QuicParams.Realm.StunServers) > 0 {
-				u, err := url.Parse(c.FinalMask.QuicParams.Realm.Url)
-				if err != nil {
-					return nil, errors.New("realm url").Base(err)
-				}
-				switch u.Scheme {
-				case "realm":
-					scheme = "https"
-				case "realm+http":
-					scheme = "http"
-				default:
-					return nil, errors.New("realm invalid scheme", u.Scheme)
-				}
-				host = u.Hostname()
-				port = u.Port()
-				if port == "" {
-					port = "443"
-					if scheme == "http" {
-						port = "80"
-					}
-				}
-				token, err = url.PathUnescape(u.User.String())
-				if err != nil {
-					return nil, err
-				}
-				id, err = url.PathUnescape(strings.TrimPrefix(u.EscapedPath(), "/"))
-				if err != nil {
-					return nil, err
-				}
-				if token == "" || id == "" {
-					return nil, errors.New("realm empty token or id")
-				}
-
-				for _, s := range c.FinalMask.QuicParams.Realm.StunServers {
-					_, _, err = net.SplitHostPort(s)
-					if err != nil {
-						return nil, errors.New("realm invalid stun server ", s).Base(err)
-					}
-				}
-				stunServers = c.FinalMask.QuicParams.Realm.StunServers
-			}
-
 			profile := strings.ToLower(c.FinalMask.QuicParams.BbrProfile)
 			switch profile {
 			case "", string(bbr.ProfileConservative), string(bbr.ProfileStandard), string(bbr.ProfileAggressive):
@@ -2197,6 +2229,10 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
 			}
 
+			if (c.FinalMask.QuicParams.UdpHop.Interval.From != 0 && c.FinalMask.QuicParams.UdpHop.Interval.From < 5) || (c.FinalMask.QuicParams.UdpHop.Interval.To != 0 && c.FinalMask.QuicParams.UdpHop.Interval.To < 5) {
+				return nil, errors.New("Interval must be at least 5")
+			}
+
 			if c.FinalMask.QuicParams.InitStreamReceiveWindow > 0 && c.FinalMask.QuicParams.InitStreamReceiveWindow < 16384 {
 				return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
 			}
@@ -2225,24 +2261,15 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			}
 
 			config.QuicParams = &internet.QuicParams{
+				Congestion: c.FinalMask.QuicParams.Congestion,
+				BbrProfile: profile,
+				BrutalUp:   up,
+				BrutalDown: down,
 				UdpHop: &internet.UdpHop{
 					Ports:       c.FinalMask.QuicParams.UdpHop.PortList.Build().Ports(),
 					IntervalMin: int64(c.FinalMask.QuicParams.UdpHop.Interval.From),
 					IntervalMax: int64(c.FinalMask.QuicParams.UdpHop.Interval.To),
 				},
-				Realm: &internet.RealmConfig{
-					Scheme:      scheme,
-					Host:        host,
-					Port:        port,
-					Token:       token,
-					ID:          id,
-					StunServers: stunServers,
-				},
-
-				Congestion:              c.FinalMask.QuicParams.Congestion,
-				BbrProfile:              profile,
-				BrutalUp:                up,
-				BrutalDown:              down,
 				InitStreamReceiveWindow: c.FinalMask.QuicParams.InitStreamReceiveWindow,
 				MaxStreamReceiveWindow:  c.FinalMask.QuicParams.MaxStreamReceiveWindow,
 				InitConnReceiveWindow:   c.FinalMask.QuicParams.InitConnectionReceiveWindow,

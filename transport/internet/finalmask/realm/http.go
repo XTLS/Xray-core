@@ -7,13 +7,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 const maxErrorBodySize = 64 * 1024
@@ -22,9 +23,6 @@ const (
 	PunchNonceSize   = 16
 	PunchObfsKeySize = 32
 )
-
-var ErrInvalidClientConfig = errors.New("invalid realm client config")
-var ErrInvalidRealmID = errors.New("invalid realm id")
 
 type Client struct {
 	scheme     string
@@ -83,25 +81,19 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("realm server returned %d", e.StatusCode)
 }
 
-func NewClient(scheme, host, port, token string) (*Client, error) {
-	if scheme != "https" && scheme != "http" {
-		return nil, fmt.Errorf("%w: scheme must be http or https", ErrInvalidClientConfig)
-	}
-	if host == "" {
-		return nil, fmt.Errorf("%w: host is required", ErrInvalidClientConfig)
-	}
-	if port == "" {
-		return nil, fmt.Errorf("%w: port is required", ErrInvalidClientConfig)
-	}
-	if token == "" {
-		return nil, fmt.Errorf("%w: token is required", ErrInvalidClientConfig)
+func NewClient(scheme, host, port, token string, tlsConfig *tls.Config) *Client {
+	client := http.DefaultClient
+	if tlsConfig != nil {
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.TLSClientConfig = tlsConfig.GetTLSConfig()
+		client = &http.Client{Transport: tr}
 	}
 	return &Client{
 		scheme:     scheme,
 		hostport:   net.JoinHostPort(host, port),
 		token:      token,
-		httpClient: http.DefaultClient,
-	}, nil
+		httpClient: client,
+	}
 }
 
 func NewPunchMetadata() (PunchMetadata, error) {
@@ -208,9 +200,6 @@ func (c *Client) doJSON(ctx context.Context, method, realmID, subPath, token str
 }
 
 func (c *Client) newRequest(ctx context.Context, method, realmID, subPath, token string, body io.Reader) (*http.Request, error) {
-	if realmID == "" || strings.Contains(realmID, "/") {
-		return nil, fmt.Errorf("%w: realm id must be a single path segment", ErrInvalidRealmID)
-	}
 	u := &url.URL{
 		Scheme: c.scheme,
 		Host:   c.hostport,

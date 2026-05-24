@@ -7,13 +7,14 @@
 package internet
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	net "github.com/xtls/xray-core/common/net"
 	serial "github.com/xtls/xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -206,7 +207,7 @@ func (x SocketConfig_TProxyMode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SocketConfig_TProxyMode.Descriptor instead.
 func (SocketConfig_TProxyMode) EnumDescriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{7, 0}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{6, 0}
 }
 
 type TransportConfig struct {
@@ -442,113 +443,28 @@ func (x *UdpHop) GetIntervalMax() int64 {
 	return 0
 }
 
-type RealmConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scheme        string                 `protobuf:"bytes,1,opt,name=scheme,proto3" json:"scheme,omitempty"`
-	Host          string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
-	Port          string                 `protobuf:"bytes,3,opt,name=port,proto3" json:"port,omitempty"`
-	Token         string                 `protobuf:"bytes,4,opt,name=token,proto3" json:"token,omitempty"`
-	ID            string                 `protobuf:"bytes,5,opt,name=ID,proto3" json:"ID,omitempty"`
-	StunServers   []string               `protobuf:"bytes,6,rep,name=stun_servers,json=stunServers,proto3" json:"stun_servers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RealmConfig) Reset() {
-	*x = RealmConfig{}
-	mi := &file_transport_internet_config_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RealmConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RealmConfig) ProtoMessage() {}
-
-func (x *RealmConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RealmConfig.ProtoReflect.Descriptor instead.
-func (*RealmConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *RealmConfig) GetScheme() string {
-	if x != nil {
-		return x.Scheme
-	}
-	return ""
-}
-
-func (x *RealmConfig) GetHost() string {
-	if x != nil {
-		return x.Host
-	}
-	return ""
-}
-
-func (x *RealmConfig) GetPort() string {
-	if x != nil {
-		return x.Port
-	}
-	return ""
-}
-
-func (x *RealmConfig) GetToken() string {
-	if x != nil {
-		return x.Token
-	}
-	return ""
-}
-
-func (x *RealmConfig) GetID() string {
-	if x != nil {
-		return x.ID
-	}
-	return ""
-}
-
-func (x *RealmConfig) GetStunServers() []string {
-	if x != nil {
-		return x.StunServers
-	}
-	return nil
-}
-
 type QuicParams struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
-	UdpHop                  *UdpHop                `protobuf:"bytes,1,opt,name=udp_hop,json=udpHop,proto3" json:"udp_hop,omitempty"`
-	Realm                   *RealmConfig           `protobuf:"bytes,2,opt,name=realm,proto3" json:"realm,omitempty"`
-	Congestion              string                 `protobuf:"bytes,3,opt,name=congestion,proto3" json:"congestion,omitempty"`
-	BbrProfile              string                 `protobuf:"bytes,4,opt,name=bbr_profile,json=bbrProfile,proto3" json:"bbr_profile,omitempty"`
-	BrutalUp                uint64                 `protobuf:"varint,5,opt,name=brutal_up,json=brutalUp,proto3" json:"brutal_up,omitempty"`
-	BrutalDown              uint64                 `protobuf:"varint,6,opt,name=brutal_down,json=brutalDown,proto3" json:"brutal_down,omitempty"`
-	InitStreamReceiveWindow uint64                 `protobuf:"varint,7,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
-	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,8,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
-	InitConnReceiveWindow   uint64                 `protobuf:"varint,9,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
-	MaxConnReceiveWindow    uint64                 `protobuf:"varint,10,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
-	MaxIdleTimeout          int64                  `protobuf:"varint,11,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
-	KeepAlivePeriod         int64                  `protobuf:"varint,12,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
-	DisablePathMtuDiscovery bool                   `protobuf:"varint,13,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
-	MaxIncomingStreams      int64                  `protobuf:"varint,14,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
+	Congestion              string                 `protobuf:"bytes,1,opt,name=congestion,proto3" json:"congestion,omitempty"`
+	BbrProfile              string                 `protobuf:"bytes,2,opt,name=bbr_profile,json=bbrProfile,proto3" json:"bbr_profile,omitempty"`
+	BrutalUp                uint64                 `protobuf:"varint,3,opt,name=brutal_up,json=brutalUp,proto3" json:"brutal_up,omitempty"`
+	BrutalDown              uint64                 `protobuf:"varint,4,opt,name=brutal_down,json=brutalDown,proto3" json:"brutal_down,omitempty"`
+	UdpHop                  *UdpHop                `protobuf:"bytes,5,opt,name=udp_hop,json=udpHop,proto3" json:"udp_hop,omitempty"`
+	InitStreamReceiveWindow uint64                 `protobuf:"varint,6,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
+	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,7,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
+	InitConnReceiveWindow   uint64                 `protobuf:"varint,8,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
+	MaxConnReceiveWindow    uint64                 `protobuf:"varint,9,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
+	MaxIdleTimeout          int64                  `protobuf:"varint,10,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
+	KeepAlivePeriod         int64                  `protobuf:"varint,11,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
+	DisablePathMtuDiscovery bool                   `protobuf:"varint,12,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
+	MaxIncomingStreams      int64                  `protobuf:"varint,13,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
 
 func (x *QuicParams) Reset() {
 	*x = QuicParams{}
-	mi := &file_transport_internet_config_proto_msgTypes[4]
+	mi := &file_transport_internet_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -560,7 +476,7 @@ func (x *QuicParams) String() string {
 func (*QuicParams) ProtoMessage() {}
 
 func (x *QuicParams) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[4]
+	mi := &file_transport_internet_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -573,21 +489,7 @@ func (x *QuicParams) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuicParams.ProtoReflect.Descriptor instead.
 func (*QuicParams) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *QuicParams) GetUdpHop() *UdpHop {
-	if x != nil {
-		return x.UdpHop
-	}
-	return nil
-}
-
-func (x *QuicParams) GetRealm() *RealmConfig {
-	if x != nil {
-		return x.Realm
-	}
-	return nil
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *QuicParams) GetCongestion() string {
@@ -616,6 +518,13 @@ func (x *QuicParams) GetBrutalDown() uint64 {
 		return x.BrutalDown
 	}
 	return 0
+}
+
+func (x *QuicParams) GetUdpHop() *UdpHop {
+	if x != nil {
+		return x.UdpHop
+	}
+	return nil
 }
 
 func (x *QuicParams) GetInitStreamReceiveWindow() uint64 {
@@ -684,7 +593,7 @@ type ProxyConfig struct {
 
 func (x *ProxyConfig) Reset() {
 	*x = ProxyConfig{}
-	mi := &file_transport_internet_config_proto_msgTypes[5]
+	mi := &file_transport_internet_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -696,7 +605,7 @@ func (x *ProxyConfig) String() string {
 func (*ProxyConfig) ProtoMessage() {}
 
 func (x *ProxyConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[5]
+	mi := &file_transport_internet_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -709,7 +618,7 @@ func (x *ProxyConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyConfig.ProtoReflect.Descriptor instead.
 func (*ProxyConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{5}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ProxyConfig) GetTag() string {
@@ -740,7 +649,7 @@ type CustomSockopt struct {
 
 func (x *CustomSockopt) Reset() {
 	*x = CustomSockopt{}
-	mi := &file_transport_internet_config_proto_msgTypes[6]
+	mi := &file_transport_internet_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -752,7 +661,7 @@ func (x *CustomSockopt) String() string {
 func (*CustomSockopt) ProtoMessage() {}
 
 func (x *CustomSockopt) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[6]
+	mi := &file_transport_internet_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -765,7 +674,7 @@ func (x *CustomSockopt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CustomSockopt.ProtoReflect.Descriptor instead.
 func (*CustomSockopt) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{6}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CustomSockopt) GetSystem() string {
@@ -845,7 +754,7 @@ type SocketConfig struct {
 
 func (x *SocketConfig) Reset() {
 	*x = SocketConfig{}
-	mi := &file_transport_internet_config_proto_msgTypes[7]
+	mi := &file_transport_internet_config_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -857,7 +766,7 @@ func (x *SocketConfig) String() string {
 func (*SocketConfig) ProtoMessage() {}
 
 func (x *SocketConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[7]
+	mi := &file_transport_internet_config_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -870,7 +779,7 @@ func (x *SocketConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SocketConfig.ProtoReflect.Descriptor instead.
 func (*SocketConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{7}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SocketConfig) GetMark() int32 {
@@ -1032,7 +941,7 @@ type HappyEyeballsConfig struct {
 
 func (x *HappyEyeballsConfig) Reset() {
 	*x = HappyEyeballsConfig{}
-	mi := &file_transport_internet_config_proto_msgTypes[8]
+	mi := &file_transport_internet_config_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1044,7 +953,7 @@ func (x *HappyEyeballsConfig) String() string {
 func (*HappyEyeballsConfig) ProtoMessage() {}
 
 func (x *HappyEyeballsConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_config_proto_msgTypes[8]
+	mi := &file_transport_internet_config_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1057,7 +966,7 @@ func (x *HappyEyeballsConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HappyEyeballsConfig.ProtoReflect.Descriptor instead.
 func (*HappyEyeballsConfig) Descriptor() ([]byte, []int) {
-	return file_transport_internet_config_proto_rawDescGZIP(), []int{8}
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *HappyEyeballsConfig) GetPrioritizeIpv6() bool {
@@ -1112,35 +1021,27 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x06UdpHop\x12\x14\n" +
 	"\x05ports\x18\x01 \x03(\rR\x05ports\x12!\n" +
 	"\finterval_min\x18\x02 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\x96\x01\n" +
-	"\vRealmConfig\x12\x16\n" +
-	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x12\n" +
-	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
-	"\x04port\x18\x03 \x01(\tR\x04port\x12\x14\n" +
-	"\x05token\x18\x04 \x01(\tR\x05token\x12\x0e\n" +
-	"\x02ID\x18\x05 \x01(\tR\x02ID\x12!\n" +
-	"\fstun_servers\x18\x06 \x03(\tR\vstunServers\"\xae\x05\n" +
+	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\xf2\x04\n" +
 	"\n" +
-	"QuicParams\x128\n" +
-	"\audp_hop\x18\x01 \x01(\v2\x1f.xray.transport.internet.UdpHopR\x06udpHop\x12:\n" +
-	"\x05realm\x18\x02 \x01(\v2$.xray.transport.internet.RealmConfigR\x05realm\x12\x1e\n" +
+	"QuicParams\x12\x1e\n" +
 	"\n" +
-	"congestion\x18\x03 \x01(\tR\n" +
+	"congestion\x18\x01 \x01(\tR\n" +
 	"congestion\x12\x1f\n" +
-	"\vbbr_profile\x18\x04 \x01(\tR\n" +
+	"\vbbr_profile\x18\x02 \x01(\tR\n" +
 	"bbrProfile\x12\x1b\n" +
-	"\tbrutal_up\x18\x05 \x01(\x04R\bbrutalUp\x12\x1f\n" +
-	"\vbrutal_down\x18\x06 \x01(\x04R\n" +
-	"brutalDown\x12;\n" +
-	"\x1ainit_stream_receive_window\x18\a \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
-	"\x19max_stream_receive_window\x18\b \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
-	"\x18init_conn_receive_window\x18\t \x01(\x04R\x15initConnReceiveWindow\x125\n" +
-	"\x17max_conn_receive_window\x18\n" +
-	" \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
-	"\x10max_idle_timeout\x18\v \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
-	"\x11keep_alive_period\x18\f \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
-	"\x1adisable_path_mtu_discovery\x18\r \x01(\bR\x17disablePathMtuDiscovery\x120\n" +
-	"\x14max_incoming_streams\x18\x0e \x01(\x03R\x12maxIncomingStreams\"Q\n" +
+	"\tbrutal_up\x18\x03 \x01(\x04R\bbrutalUp\x12\x1f\n" +
+	"\vbrutal_down\x18\x04 \x01(\x04R\n" +
+	"brutalDown\x128\n" +
+	"\audp_hop\x18\x05 \x01(\v2\x1f.xray.transport.internet.UdpHopR\x06udpHop\x12;\n" +
+	"\x1ainit_stream_receive_window\x18\x06 \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
+	"\x19max_stream_receive_window\x18\a \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
+	"\x18init_conn_receive_window\x18\b \x01(\x04R\x15initConnReceiveWindow\x125\n" +
+	"\x17max_conn_receive_window\x18\t \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
+	"\x10max_idle_timeout\x18\n" +
+	" \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
+	"\x11keep_alive_period\x18\v \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
+	"\x1adisable_path_mtu_discovery\x18\f \x01(\bR\x17disablePathMtuDiscovery\x120\n" +
+	"\x14max_incoming_streams\x18\r \x01(\x03R\x12maxIncomingStreams\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
 	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\x93\x01\n" +
@@ -1227,7 +1128,7 @@ func file_transport_internet_config_proto_rawDescGZIP() []byte {
 }
 
 var file_transport_internet_config_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_transport_internet_config_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_transport_internet_config_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_transport_internet_config_proto_goTypes = []any{
 	(DomainStrategy)(0),          // 0: xray.transport.internet.DomainStrategy
 	(AddressPortStrategy)(0),     // 1: xray.transport.internet.AddressPortStrategy
@@ -1235,36 +1136,34 @@ var file_transport_internet_config_proto_goTypes = []any{
 	(*TransportConfig)(nil),      // 3: xray.transport.internet.TransportConfig
 	(*StreamConfig)(nil),         // 4: xray.transport.internet.StreamConfig
 	(*UdpHop)(nil),               // 5: xray.transport.internet.UdpHop
-	(*RealmConfig)(nil),          // 6: xray.transport.internet.RealmConfig
-	(*QuicParams)(nil),           // 7: xray.transport.internet.QuicParams
-	(*ProxyConfig)(nil),          // 8: xray.transport.internet.ProxyConfig
-	(*CustomSockopt)(nil),        // 9: xray.transport.internet.CustomSockopt
-	(*SocketConfig)(nil),         // 10: xray.transport.internet.SocketConfig
-	(*HappyEyeballsConfig)(nil),  // 11: xray.transport.internet.HappyEyeballsConfig
-	(*serial.TypedMessage)(nil),  // 12: xray.common.serial.TypedMessage
-	(*net.IPOrDomain)(nil),       // 13: xray.common.net.IPOrDomain
+	(*QuicParams)(nil),           // 6: xray.transport.internet.QuicParams
+	(*ProxyConfig)(nil),          // 7: xray.transport.internet.ProxyConfig
+	(*CustomSockopt)(nil),        // 8: xray.transport.internet.CustomSockopt
+	(*SocketConfig)(nil),         // 9: xray.transport.internet.SocketConfig
+	(*HappyEyeballsConfig)(nil),  // 10: xray.transport.internet.HappyEyeballsConfig
+	(*serial.TypedMessage)(nil),  // 11: xray.common.serial.TypedMessage
+	(*net.IPOrDomain)(nil),       // 12: xray.common.net.IPOrDomain
 }
 var file_transport_internet_config_proto_depIdxs = []int32{
-	12, // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
-	13, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
+	11, // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
+	12, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
 	3,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
-	12, // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
-	12, // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
-	12, // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
-	7,  // 6: xray.transport.internet.StreamConfig.quic_params:type_name -> xray.transport.internet.QuicParams
-	10, // 7: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
+	11, // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
+	11, // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
+	11, // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
+	6,  // 6: xray.transport.internet.StreamConfig.quic_params:type_name -> xray.transport.internet.QuicParams
+	9,  // 7: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
 	5,  // 8: xray.transport.internet.QuicParams.udp_hop:type_name -> xray.transport.internet.UdpHop
-	6,  // 9: xray.transport.internet.QuicParams.realm:type_name -> xray.transport.internet.RealmConfig
-	2,  // 10: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
-	0,  // 11: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
-	9,  // 12: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
-	1,  // 13: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
-	11, // 14: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	2,  // 9: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
+	0,  // 10: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
+	8,  // 11: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
+	1,  // 12: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
+	10, // 13: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_config_proto_init() }
@@ -1278,7 +1177,7 @@ func file_transport_internet_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_config_proto_rawDesc), len(file_transport_internet_config_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   9,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

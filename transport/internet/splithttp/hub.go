@@ -27,7 +27,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
-	"github.com/xtls/xray-core/transport/internet/hysteria/realm"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -481,12 +480,27 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		}
 		errors.LogInfo(ctx, "listening UNIX domain socket for XHTTP on ", address)
 	} else if l.isH3 { // quic
+		Conn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
+			IP:   address.IP(),
+			Port: int(port),
+		}, streamSettings.SocketSettings)
+		if err != nil {
+			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
+		}
+		if streamSettings.UdpmaskManager != nil {
+			newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(Conn)
+			if err != nil {
+				Conn.Close()
+				return nil, errors.New("mask err").Base(err)
+			}
+			Conn = newConn
+		}
+
 		quicParams := streamSettings.QuicParams
 		if quicParams == nil {
 			quicParams = &internet.QuicParams{
-				UdpHop:     &internet.UdpHop{},
-				Realm:      &internet.RealmConfig{},
 				BbrProfile: string(bbr.ProfileStandard),
+				UdpHop:     &internet.UdpHop{},
 			}
 		}
 
@@ -500,33 +514,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		}
 
-		pktConn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
-			IP:   address.IP(),
-			Port: int(port),
-		}, streamSettings.SocketSettings)
-		if err != nil {
-			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
-		}
-
-		if len(quicParams.Realm.StunServers) > 0 {
-			newConn, err := realm.NewPunchPacketConn(quicParams.Realm, pktConn)
-			if err != nil {
-				pktConn.Close()
-				return nil, err
-			}
-			pktConn = newConn
-		}
-
-		if streamSettings.UdpmaskManager != nil {
-			newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(pktConn)
-			if err != nil {
-				pktConn.Close()
-				return nil, errors.New("mask err").Base(err)
-			}
-			pktConn = newConn
-		}
-
-		l.h3listener, err = quic.ListenEarly(pktConn, tlsConfig, quicConfig)
+		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, quicConfig)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
