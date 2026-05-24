@@ -309,7 +309,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 
 	tr := &quic.Transport{Conn: pktConn}
 
-	listener, err := tr.Listen(tlsConfig.GetTLSConfig(), quicConfig)
+	listener, err := tr.Listen(tlsConfig.GetTLSConfig(tls.WithNextProto("h3")), quicConfig)
 	if err != nil {
 		_ = tr.Close()
 		_ = pktConn.Close()
