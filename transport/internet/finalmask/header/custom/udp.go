@@ -16,7 +16,6 @@ type udpCustomClient struct {
 	server []*UDPItem
 	merged []byte
 	read   int
-	addr   net.Addr
 	state  *stateStore
 	vars   map[string][]byte
 }
@@ -33,13 +32,13 @@ func (h *udpCustomClient) Serialize(b []byte) {
 func (h *udpCustomClient) Match(b []byte) bool {
 	var initial map[string][]byte
 	if h.state != nil {
-		initial, _ = h.state.get(udpStateKey(h.addr))
+		initial, _ = h.state.get(udpStateKey(nil))
 	}
 	vars, ok := matchUDPItems(h.server, b, h.read, initial)
 	if ok {
 		h.vars = vars
 		if h.state != nil {
-			h.state.set(udpStateKey(h.addr), vars)
+			h.state.set(udpStateKey(nil), vars)
 		}
 	}
 	return ok
@@ -110,16 +109,11 @@ func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	return len(p), nil
 }
 
-func (c *udpCustomClientConn) SetReadAddr(addr net.Addr) {
-	c.header.addr = addr
-}
-
 type udpCustomServer struct {
 	client []*UDPItem
 	server []*UDPItem
 	merged []byte
 	read   int
-	addr   net.Addr
 	state  *stateStore
 	vars   map[string][]byte
 }
@@ -136,13 +130,13 @@ func (h *udpCustomServer) Serialize(b []byte) {
 func (h *udpCustomServer) Match(b []byte) bool {
 	var initial map[string][]byte
 	if h.state != nil {
-		initial, _ = h.state.get(udpStateKey(h.addr))
+		initial, _ = h.state.get(udpStateKey(nil))
 	}
 	vars, ok := matchUDPItems(h.client, b, h.read, initial)
 	if ok {
 		h.vars = vars
 		if h.state != nil {
-			h.state.set(udpStateKey(h.addr), vars)
+			h.state.set(udpStateKey(nil), vars)
 		}
 	}
 	return ok
@@ -211,10 +205,6 @@ func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	copy(p, evaluated)
 
 	return len(p), nil
-}
-
-func (c *udpCustomServerConn) SetReadAddr(addr net.Addr) {
-	c.header.addr = addr
 }
 
 func matchUDPItems(items []*UDPItem, data []byte, totalSize int, initial map[string][]byte) (map[string][]byte, bool) {
@@ -294,7 +284,7 @@ type udpStandaloneWaiter struct {
 	done chan error
 }
 
-func NewConnClientUDPStandalone(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClientUDPStandalone(c *UDPStandaloneConfig, raw net.PacketConn) (net.PacketConn, error) {
 	clientSavedSizes := collectSavedUDPSizes(c.Client)
 	read, err := measureUDPItemsWithFallback(c.Server, clientSavedSizes)
 	if err != nil {
@@ -441,7 +431,7 @@ type udpCustomStandaloneServerConn struct {
 	read   int
 }
 
-func NewConnServerUDPStandalone(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServerUDPStandalone(c *UDPStandaloneConfig, raw net.PacketConn) (net.PacketConn, error) {
 	read, err := measureUDPItems(c.Client)
 	if err != nil {
 		return nil, err
