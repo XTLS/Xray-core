@@ -31,19 +31,20 @@ type TempUDPConn struct {
 
 func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 	c.timer.Update()
-	var remote net.Addr
-	for {
+	for var remote net.Addr; ; {
 		n, remote, err = c.PacketConn.ReadFrom(b)
 		if err != nil {
-			break
+			return
 		}
 		if c.remote.Load() == nil {
 			if remoteIP, _, _ := net.SplitHostPort(remote.String()); remoteIP == c.ExpectedRemoteIP {
 				c.remote.CompareAndSwap(nil, &remote)
-				break
+			} else {
+				continue
 			}
-		} else if remote.String() == (*c.remote.Load()).String() {
-			break
+		}
+		if remote.String() == (*c.remote.Load()).String() {
+			return
 		}
 	}
 }
