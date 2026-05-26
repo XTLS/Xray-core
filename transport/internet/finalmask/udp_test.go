@@ -15,12 +15,8 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
@@ -276,27 +272,32 @@ func TestPacketConnReadWrite(t *testing.T) {
 		},
 		{
 			name:   "dns",
-			mask:   &dns.Config{Domain: "www.baidu.com"},
+			mask:   &header.Config{ID: 0, Domain: "www.baidu.com"},
+			layers: 2,
+		},
+		{
+			name:   "dtls",
+			mask:   &header.Config{ID: 1},
 			layers: 2,
 		},
 		{
 			name:   "srtp",
-			mask:   &srtp.Config{},
+			mask:   &header.Config{ID: 2},
 			layers: 2,
 		},
 		{
 			name:   "utp",
-			mask:   &utp.Config{},
+			mask:   &header.Config{ID: 3},
 			layers: 2,
 		},
 		{
 			name:   "wechat",
-			mask:   &wechat.Config{},
+			mask:   &header.Config{ID: 4},
 			layers: 2,
 		},
 		{
 			name:   "wireguard",
-			mask:   &wireguard.Config{},
+			mask:   &header.Config{ID: 5},
 			layers: 2,
 		},
 		{

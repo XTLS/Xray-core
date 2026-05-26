@@ -16,8 +16,6 @@ func (c *TCPConfig) WrapConnServer(raw net.Conn) (net.Conn, error) {
 
 func (c *UDPConfig) UDP() {}
 
-func (c *UDPConfig) HeaderConn() {}
-
 func (c *UDPConfig) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
 	return NewConnClientUDP(c, raw)
 }
