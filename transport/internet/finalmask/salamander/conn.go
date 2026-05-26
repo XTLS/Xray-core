@@ -135,8 +135,20 @@ func (c *geckoConn) writeObfs(p []byte, addr net.Addr) (n int, err error) {
 	b := buf.New()
 	b.Resize(0, int32(len(p)+smSaltLen))
 	defer b.Release()
-	c.obfs.Obfuscate(b.Bytes(), p)
+	c.obfs.Obfuscate(p, b.Bytes())
 	return c.PacketConn.WriteTo(b.Bytes(), addr)
+}
+
+func (g *geckoConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if p[0]&0x80 != 0 {
+		// QUIC long header, do fragmentation.
+		return g.writeFragmented(p, addr)
+	}
+	// QUIC short header (data), pass through.
+	return g.writeObfs(p, addr)
 }
 
 func (g *geckoConn) writeFragmented(p []byte, addr net.Addr) (int, error) {
@@ -175,6 +187,50 @@ func (g *geckoConn) randomPadLen(chunkLen int) uint16 {
 		return 0
 	}
 	return uint16(lo - base + randIntn(g.maxPkt-lo+1))
+}
+
+func randomFragmentChunks() int {
+	return geckoMinFragmentChunks + randIntn(geckoMaxFragmentChunks-geckoMinFragmentChunks+1)
+}
+
+func randIntn(n int) int {
+	if n <= 1 {
+		return 0
+	}
+	var b [4]byte
+	_, _ = rand.Read(b[:])
+	return int(binary.BigEndian.Uint32(b[:]) % uint32(n))
+}
+
+func (g *geckoConn) ReadFrom(p []byte) (int, net.Addr, error) {
+	b := buf.New()
+	b.Resize(0, finalmask.UDPSize)
+	buf := b.Bytes()
+	defer b.Release()
+	for {
+		n, addr, err := g.readObfs(buf)
+		if err != nil {
+			return 0, addr, err
+		}
+		if n <= 0 {
+			continue
+		}
+		// Top bit set → Gecko fragment frame; clear → short-header packet
+		// or garbage, passed through for QUIC to handle.
+		if buf[0]&0x80 == 0 {
+			return copy(p, buf[:n]), addr, nil
+		}
+		h, payload, decErr := decodeFrame(buf[:n])
+		if decErr != nil {
+			// Malformed frame; drop silently.
+			continue
+		}
+		out, ready := g.acceptChunk(addr, h, payload)
+		if !ready {
+			continue
+		}
+		return copy(p, out), addr, nil
+	}
 }
 
 func (g *geckoConn) acceptChunk(addr net.Addr, h frameHeader, payload []byte) ([]byte, bool) {
@@ -279,63 +335,7 @@ func (g *geckoConn) evictOldestLocked() {
 	}
 }
 
-func (g *geckoConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	if p[0]&0x80 != 0 {
-		// QUIC long header, do fragmentation.
-		return g.writeFragmented(p, addr)
-	}
-	// QUIC short header (data), pass through.
-	return g.writeObfs(p, addr)
-}
-
-func (g *geckoConn) ReadFrom(p []byte) (int, net.Addr, error) {
-	b := buf.New()
-	b.Resize(0, finalmask.UDPSize)
-	buf := b.Bytes()
-	defer b.Release()
-	for {
-		n, addr, err := g.readObfs(buf)
-		if err != nil {
-			return 0, addr, err
-		}
-		if n <= 0 {
-			continue
-		}
-		// Top bit set → Gecko fragment frame; clear → short-header packet
-		// or garbage, passed through for QUIC to handle.
-		if buf[0]&0x80 == 0 {
-			return copy(p, buf[:n]), addr, nil
-		}
-		h, payload, decErr := decodeFrame(buf[:n])
-		if decErr != nil {
-			// Malformed frame; drop silently.
-			continue
-		}
-		out, ready := g.acceptChunk(addr, h, payload)
-		if !ready {
-			continue
-		}
-		return copy(p, out), addr, nil
-	}
-}
-
 func (g *geckoConn) Close() error {
 	g.closeOnce.Do(func() { close(g.closeCh) })
 	return g.PacketConn.Close()
-}
-
-func randomFragmentChunks() int {
-	return geckoMinFragmentChunks + randIntn(geckoMaxFragmentChunks-geckoMinFragmentChunks+1)
-}
-
-func randIntn(n int) int {
-	if n <= 1 {
-		return 0
-	}
-	var b [4]byte
-	_, _ = rand.Read(b[:])
-	return int(binary.BigEndian.Uint32(b[:]) % uint32(n))
 }

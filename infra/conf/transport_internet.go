@@ -1252,6 +1252,7 @@ var (
 		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
 		"noise":            func() interface{} { return new(NoiseMask) },
 		"salamander":       func() interface{} { return new(Salamander) },
+		"gecko":            func() interface{} { return new(Gecko) },
 		"sudoku":           func() interface{} { return new(Sudoku) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
@@ -1816,6 +1817,19 @@ func (c *Salamander) Build() (proto.Message, error) {
 	config := &salamander.Config{}
 	config.Password = c.Password
 	return config, nil
+}
+
+type Gecko struct {
+	Password   string     `json:"password"`
+	PacketSize Int32Range `json:"packetSize"`
+}
+
+func (c *Gecko) Build() (proto.Message, error) {
+	return &salamander.GeckoConfig{
+		Password:      c.Password,
+		MinPacketSize: c.PacketSize.From,
+		MaxPacketSize: c.PacketSize.To,
+	}, nil
 }
 
 type Sudoku struct {
