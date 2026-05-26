@@ -210,7 +210,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
 		expectedRemoteIP, _, _ := net.SplitHostPort(writer.RemoteAddr().String())
 		tempUDPConn = NewTempUDPConn(udpHub, writer, expectedRemoteIP)
-		if !(request.Address.IP().IsUnspecified() && request.Port == 0) {
+		if request.Address.IP().IsUnspecified() {
 			// only specified an IP without port
 			if request.Port == 0 {
 				tempUDPConn.ExpectedRemoteIP = request.Address.String()
