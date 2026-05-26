@@ -37,14 +37,12 @@ func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 		if err != nil {
 			return
 		}
-		if c.remote.Load() == nil {
+		if load := c.remote.Load(); load == nil {
 			if remoteIP, _, _ := net.SplitHostPort(remote.String()); remoteIP == c.ExpectedRemoteIP {
-				c.remote.CompareAndSwap(nil, &remote)
-			} else {
-				continue
+				c.remote.Store(&remote)
+				return
 			}
-		}
-		if remote.String() == (*c.remote.Load()).String() {
+		} else if remote.String() == (*load).String() {
 			return
 		}
 	}
