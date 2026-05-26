@@ -12,12 +12,19 @@ import (
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
-// CreateObject creates a new object based on the given Xray instance and config. The Xray instance may be nil.
+// NilInstanceErr is returned when an attempt is made to create an object with a nil instance pointer.
+type NilInstanceErr struct{}
+
+func (e NilInstanceErr) Error() string {
+	return "cannot create object from a nil instance"
+}
+
+// CreateObject creates a new object based on the given Xray instance and config.
 func CreateObject(v *Instance, config interface{}) (interface{}, error) {
-	ctx := v.ctx
-	if v != nil {
-		ctx = toContext(v.ctx, v)
+	if v == nil {
+		return nil, NilInstanceErr{}
 	}
+	ctx := toContext(v.ctx, v)
 	return common.CreateObject(ctx, config)
 }
 

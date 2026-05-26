@@ -3,6 +3,7 @@ package core_test
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -232,5 +233,16 @@ func TestXrayDialUDP(t *testing.T) {
 		if r := cmp.Diff(xor2(receive), payload); r != "" {
 			t.Error(r)
 		}
+	}
+}
+
+func TestNilInstanceCreateObject(t *testing.T) {
+	var inst *core.Instance
+	var conf string
+	var want core.NilInstanceErr
+
+	_, got := core.CreateObject(inst, conf)
+	if !errors.Is(got, want) {
+		t.Errorf("want:%T got:%T msg:%s", want, got, got)
 	}
 }
