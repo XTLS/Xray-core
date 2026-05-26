@@ -208,11 +208,12 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 			return nil, nil, errors.New("failed to create UDP listener").Base(err)
 		}
 		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
-		tempUDPConn = NewTempUDPConn(udpHub, writer)
+		expectedRemoteIP, _, _ := net.SplitHostPort(writer.RemoteAddr().String())
+		tempUDPConn = NewTempUDPConn(udpHub, writer, expectedRemoteIP)
 		if !(request.Address.IP().IsUnspecified() && request.Port == 0) {
 			// only specified an IP without port
 			if request.Port == 0 {
-				tempUDPConn.predefinedRemoteIP = request.Address.String()
+				tempUDPConn.ExpectedRemoteIP = request.Address.String()
 			} else { // specified both IP and port
 				var udpRemote gonet.Addr = &gonet.UDPAddr{
 					IP:   request.Address.IP(),
