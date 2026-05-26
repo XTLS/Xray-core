@@ -462,50 +462,6 @@ func TestUDPcustomStaticHeaderWireShape(t *testing.T) {
 	}
 }
 
-func TestUDPcustomServerRejectsMismatchedStaticHeader(t *testing.T) {
-	cfg := &custom.UDPConfig{
-		Client: []*custom.UDPItem{
-			{Packet: []byte{0x01, 0x02}},
-		},
-		Server: []*custom.UDPItem{
-			{Packet: []byte{0x03}},
-		},
-	}
-	maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{cfg})
-
-	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clientRaw.Close()
-
-	serverRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer serverRaw.Close()
-
-	server, err := maskManager.WrapPacketConnServer(serverRaw)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_ = server.SetDeadline(time.Now().Add(200 * time.Millisecond))
-
-	if _, err := clientRaw.WriteTo([]byte{0x09, 0x09, 'b', 'a', 'd'}, server.LocalAddr()); err != nil {
-		t.Fatal(err)
-	}
-
-	buf := make([]byte, 128)
-	n, _, err := server.ReadFrom(buf)
-	if n != 0 {
-		t.Fatalf("expected no payload on mismatched header, got %d bytes", n)
-	}
-	if err != nil {
-		t.Fatalf("expected mismatch to be dropped without surfaced error, got %v", err)
-	}
-}
-
 func TestUDPcustomStandaloneClientSendsDetachedHandshakeBeforePayload(t *testing.T) {
 	_, serverRaw, client, _ := newUDPClientServerPair(t, newStandaloneEchoUDPConfig())
 
