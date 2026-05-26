@@ -31,7 +31,8 @@ type TempUDPConn struct {
 
 func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 	c.timer.Update()
-	for var remote net.Addr; ; {
+	var remote net.Addr
+	for {
 		n, remote, err = c.PacketConn.ReadFrom(b)
 		if err != nil {
 			return
