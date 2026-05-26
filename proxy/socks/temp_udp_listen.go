@@ -23,6 +23,8 @@ type TempUDPConn struct {
 	net.PacketConn
 	AssociateTCPConn net.Conn
 
+	predefinedRemoteIP string
+
 	timer  *signal.ActivityTimer
 	remote atomic.Pointer[net.Addr]
 }
@@ -35,9 +37,14 @@ func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 			return n, err
 		}
 		if c.remote.Load() == nil {
-			tcpRemote, _, _ := net.SplitHostPort(c.AssociateTCPConn.RemoteAddr().String())
+			var expectedRemote string
+			if c.predefinedRemoteIP != "" {
+				expectedRemote = c.predefinedRemoteIP
+			} else {
+				expectedRemote, _, _ = net.SplitHostPort(c.AssociateTCPConn.RemoteAddr().String())
+			}
 			udpRemote, _, _ := net.SplitHostPort(remote.String())
-			if tcpRemote != udpRemote {
+			if expectedRemote != udpRemote {
 				continue
 			} else {
 				c.remote.CompareAndSwap(nil, &remote)
