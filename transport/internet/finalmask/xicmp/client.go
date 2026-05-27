@@ -13,13 +13,18 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
+
+var pool = sync.Pool{
+	New: func() any {
+		return make([]byte, finalmask.UDPSize)
+	},
+}
 
 type packet struct {
 	p    []byte
@@ -146,7 +151,7 @@ func (c *xicmpConnClient) recv4() {
 			continue
 		}
 
-		p := make([]byte, len(echo.Data))
+		p := pool.Get().([]byte)[:len(echo.Data)]
 		copy(p, echo.Data)
 
 		if !c.udp {
@@ -159,6 +164,7 @@ func (c *xicmpConnClient) recv4() {
 			addr: addr,
 		}:
 		case <-c.closedCh:
+			pool.Put(p)
 			return
 		}
 	}
@@ -215,7 +221,7 @@ func (c *xicmpConnClient) recv6() {
 			continue
 		}
 
-		p := make([]byte, len(echo.Data))
+		p := pool.Get().([]byte)[:len(echo.Data)]
 		copy(p, echo.Data)
 
 		if !c.udp {
@@ -228,6 +234,7 @@ func (c *xicmpConnClient) recv6() {
 			addr: addr,
 		}:
 		case <-c.closedCh:
+			pool.Put(p)
 			return
 		}
 	}
@@ -236,7 +243,11 @@ func (c *xicmpConnClient) recv6() {
 func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	select {
 	case packet := <-c.readCh:
-		return copy(p, packet.p), packet.addr, packet.err
+		if packet.p != nil {
+			n = copy(p, packet.p)
+			pool.Put(packet.p)
+		}
+		return n, packet.addr, packet.err
 	case <-c.closedCh:
 		return 0, nil, io.EOF
 	}
@@ -248,13 +259,11 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, nil
 	}
 
-	b := buf.New()
-	b.Resize(0, buf.Size)
-	buf := b.Bytes()
-	defer b.Release()
+	b := pool.Get().([]byte)[:finalmask.UDPSize]
+	defer pool.Put(b)
 
-	copy(buf, c.clientID[:])
-	copy(buf[8:], p)
+	copy(b, c.clientID[:])
+	copy(b[8:], p)
 
 	ip := addr.(*net.UDPAddr).IP
 	if len(c.ips) > 0 {
@@ -278,11 +287,11 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		Body: &icmp.Echo{
 			ID:   c.id,
 			Seq:  seq,
-			Data: buf[:8+len(p)],
+			Data: b[:8+len(p)],
 		},
 	}
 
-	buf, err = msg.Marshal(nil)
+	buf, err := msg.Marshal(nil)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "drop packet to ", addr, " with size ", len(p))
 		return 0, nil

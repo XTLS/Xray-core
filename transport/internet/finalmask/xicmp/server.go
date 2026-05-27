@@ -169,7 +169,7 @@ func (c *xicmpConnServer) recv4() {
 		}
 		c.mu.Unlock()
 
-		p := make([]byte, len(echo.Data[8:]))
+		p := pool.Get().([]byte)[:len(echo.Data[8:])]
 		copy(p, echo.Data[8:])
 
 		select {
@@ -178,6 +178,7 @@ func (c *xicmpConnServer) recv4() {
 			addr: cAddr,
 		}:
 		case <-c.closedCh:
+			pool.Put(p)
 			return
 		}
 	}
@@ -246,7 +247,7 @@ func (c *xicmpConnServer) recv6() {
 		}
 		c.mu.Unlock()
 
-		p := make([]byte, len(echo.Data[8:]))
+		p := pool.Get().([]byte)[:len(echo.Data[8:])]
 		copy(p, echo.Data[8:])
 
 		select {
@@ -255,6 +256,7 @@ func (c *xicmpConnServer) recv6() {
 			addr: cAddr,
 		}:
 		case <-c.closedCh:
+			pool.Put(p)
 			return
 		}
 	}
@@ -263,7 +265,11 @@ func (c *xicmpConnServer) recv6() {
 func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	select {
 	case packet := <-c.readCh:
-		return copy(p, packet.p), packet.addr, packet.err
+		if packet.p != nil {
+			n = copy(p, packet.p)
+			pool.Put(packet.p)
+		}
+		return n, packet.addr, packet.err
 	case <-c.closedCh:
 		return 0, nil, io.EOF
 	}
