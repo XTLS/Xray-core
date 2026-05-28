@@ -208,20 +208,14 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 			return nil, nil, errors.New("failed to create UDP listener").Base(err)
 		}
 		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
-		expectedRemoteIP, _, _ := net.SplitHostPort(writer.RemoteAddr().String())
-		tempUDPConn = NewTempUDPConn(udpHub, writer, expectedRemoteIP)
-		if !request.Address.IP().IsUnspecified() {
-			// only specified an IP without port
-			if request.Port == 0 {
-				tempUDPConn.ExpectedRemoteIP = request.Address.String()
-			} else { // specified both IP and port
-				var udpRemote gonet.Addr = &gonet.UDPAddr{
-					IP:   request.Address.IP(),
-					Port: int(request.Port),
-				}
-				tempUDPConn.remote.Store(&udpRemote)
-			}
+		expectedRemote := &gonet.UDPAddr{}
+		if request.Address.IP().IsUnspecified() {
+			expectedRemote.IP = writer.RemoteAddr().(*net.TCPAddr).IP // unix?
+		} else {
+			expectedRemote.IP = request.Address.IP() // panic?
+			expectedRemote.Port = int(request.Port)  // 0 is allowed
 		}
+		tempUDPConn = NewTempUDPConn(udpHub, writer, expectedRemote)
 	}
 	if err := writeSocks5Response(writer, statusSuccess, responseAddress, responsePort); err != nil {
 		common.CloseIfExists(tempUDPConn)
