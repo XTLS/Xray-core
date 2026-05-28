@@ -1451,6 +1451,7 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 
 type RawpacketMask struct {
 	Payload string `json:"payload"`
+	Sni     string `json:"sni"`
 	Method  string `json:"method"`
 	TTL     int32  `json:"ttl"`
 	Count   int32  `json:"count"`
@@ -1459,6 +1460,7 @@ type RawpacketMask struct {
 func (c *RawpacketMask) Build() (proto.Message, error) {
 	config := &rawpacket.Config{
 		Payload: c.Payload,
+		Sni:     c.Sni,
 		Method:  c.Method,
 		Ttl:     uint32(c.TTL),
 		Count:   c.Count,
