@@ -291,11 +291,10 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		},
 	}
 
-	buf, err := msg.Marshal(nil)
-	if err != nil {
-		errors.LogErrorInner(context.Background(), err, "drop packet to ", addr, " with size ", len(p))
-		return 0, nil
-	}
+	buf := pool.Get().([]byte)[:finalmask.UDPSize]
+	defer pool.Put(buf)
+
+	buf = common.Must2(msg.Marshal(buf[:0]))
 
 	if c.udp {
 		addr = &net.UDPAddr{IP: ip}
@@ -305,8 +304,9 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	if ip.To4() != nil {
 		_, err = c.icmp4.WriteTo(buf, addr)
-
 	} else {
+		clear(buf[2:4])
+		copy(buf[16:], p)
 		_, err = c.icmp6.WriteTo(buf, addr)
 	}
 
