@@ -1,0 +1,294 @@
+package minecraft
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/subtle"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"net"
+	"sync"
+	"time"
+)
+
+// Response by vanilla 26.1.2 server.
+var statusResponse = `{"description":"A Minecraft Server","players":{"max":20,"online":0},"version":{"name":"26.1.2","protocol":775},"enforcesSecureChat":true}`
+
+type serverState int
+
+var (
+	stateHandshake serverState = 1
+	stateFallback  serverState = 2
+	stateProxy     serverState = 3
+)
+
+type serverConn struct {
+	reader io.Reader
+	writer io.Writer
+	c      net.Conn
+
+	state serverState
+
+	handshakeLock sync.Mutex
+	shortIds      [][]byte
+	rsaPrivateKey *rsa.PrivateKey
+	rsaPublicKey  []byte
+}
+
+func (c *serverConn) handshake() error {
+	c.handshakeLock.Lock()
+	defer c.handshakeLock.Unlock()
+
+	if c.state != stateHandshake {
+		return nil
+	}
+
+	// handshake timeout
+	err := c.c.SetDeadline(time.Now().Add(time.Second * 30))
+	if err != nil {
+		return fmt.Errorf("set deadline: %w", err)
+	}
+	defer c.c.SetDeadline(time.Time{})
+
+	var (
+		protocolVersion Varint
+		serverAddress   String
+		serverPort      UnsignedShort
+		nextState       Varint
+	)
+
+	// handshake packet
+
+	pkt, err := readPacket(c.reader)
+	if err != nil {
+		return fmt.Errorf("read handshake packet: %w", err)
+	}
+
+	if pkt.packetID != 0 {
+		return fmt.Errorf("bad handshake packet id")
+	}
+
+	err = pkt.readFields(&protocolVersion, &serverAddress, &serverPort, &nextState)
+	if err != nil {
+		return fmt.Errorf("read handshake packet: %w", err)
+	}
+
+	if nextState == 1 {
+
+		// Ping
+
+		for range 2 {
+
+			pkt, err := readPacket(c.reader)
+			if err != nil {
+				return fmt.Errorf("read packet: %w", err)
+			}
+
+			if pkt.packetID == 0 {
+				// Status Request
+
+				err = writePacket(c.writer, 0, new(String((statusResponse))))
+				if err != nil {
+					return fmt.Errorf("write status response: %w", err)
+				}
+
+			} else if pkt.packetID == 1 {
+				// Ping
+
+				var payload Long
+				err = pkt.readFields(&payload)
+				if err != nil {
+					return fmt.Errorf("read ping packet: %w", err)
+				}
+
+				err = writePacket(c.writer, 1, &payload)
+				if err != nil {
+					return fmt.Errorf("write ping response: %w", err)
+				}
+
+			}
+
+		}
+
+		return fmt.Errorf("ping")
+
+	} else if nextState == 2 {
+
+		// Login
+
+		// login start
+
+		pkt, err := readPacket(c.reader)
+		if err != nil {
+			return fmt.Errorf("read login start packet: %w", err)
+		}
+
+		if pkt.packetID != 0 {
+			return fmt.Errorf("bad login start packet id")
+		}
+
+		var (
+			username String
+			uuid     UUID
+		)
+
+		err = pkt.readFields(&username, &uuid)
+		if err != nil {
+			return fmt.Errorf("read login start packet: %w", err)
+		}
+
+		// encrypt request
+
+		var (
+			serverId           String = String("")
+			publicKey          Bytes  = Bytes(c.rsaPublicKey)
+			verifyToken        Bytes  = Bytes(make([]byte, 4))
+			shouldAuthenticate Varint = Varint(1)
+		)
+
+		rand.Read(verifyToken)
+
+		err = writePacket(c.writer, 0x01, &serverId, &publicKey, &verifyToken, &shouldAuthenticate)
+		if err != nil {
+			return fmt.Errorf("write encryption request: %w", err)
+		}
+
+		// encrypt response
+
+		var (
+			encryptedSharedSecret Bytes
+			encryptedVerifyToken  Bytes
+
+			sharedSecret         []byte
+			decryptedVerifyToken []byte
+		)
+
+		pkt, err = readPacket(c.reader)
+		if err != nil {
+			return fmt.Errorf("read encrypt response: %w", err)
+		}
+
+		if pkt.packetID != 0x01 {
+			return fmt.Errorf("bad encrypt response packet id")
+		}
+
+		err = pkt.readFields(&encryptedSharedSecret, &encryptedVerifyToken)
+		if err != nil {
+			return fmt.Errorf("read encrypt response: %w", err)
+		}
+
+		sharedSecret, err = rsa.DecryptPKCS1v15(rand.Reader, c.rsaPrivateKey, encryptedSharedSecret)
+		if err != nil {
+			return fmt.Errorf("decrypt shared secret: %w", err)
+		}
+
+		decryptedVerifyToken, err = rsa.DecryptPKCS1v15(rand.Reader, c.rsaPrivateKey, encryptedVerifyToken)
+		if err != nil {
+			return fmt.Errorf("decrypt verify token: %w", err)
+		}
+
+		if len(decryptedVerifyToken) < 4 || !bytes.Equal(verifyToken, decryptedVerifyToken[:4]) {
+			return fmt.Errorf("verify token mismatch")
+		}
+
+		c.reader, err = newCryptoReader(c.reader, sharedSecret)
+		if err != nil {
+			return fmt.Errorf("new crypto reader: %w", err)
+		}
+
+		c.writer, err = newCryptoWriter(c.writer, sharedSecret)
+		if err != nil {
+			return fmt.Errorf("new crypto writer: %w", err)
+		}
+
+		// verify short id
+
+		shortId := decryptedVerifyToken[4:]
+
+		var ok byte = 0
+		for _, s := range c.shortIds {
+			ok |= byte(subtle.ConstantTimeCompare(s, shortId))
+		}
+
+		if ok == 0 {
+			return fmt.Errorf("bad short id")
+		}
+
+		return nil
+
+	} else {
+		return fmt.Errorf("bad handshake packet: bad next state: %d", nextState)
+	}
+}
+
+func (c *serverConn) Read(b []byte) (int, error) {
+	err := c.handshake()
+	if err != nil {
+		return 0, fmt.Errorf("handshake: %w", err)
+	}
+
+	return c.reader.Read(b)
+}
+
+func (c *serverConn) Write(b []byte) (int, error) {
+	err := c.handshake()
+	if err != nil {
+		return 0, fmt.Errorf("handshake: %w", err)
+	}
+
+	return c.writer.Write(b)
+}
+
+func (c *serverConn) Close() error {
+	return c.c.Close()
+}
+
+func (c *serverConn) LocalAddr() net.Addr {
+	return c.c.LocalAddr()
+}
+
+func (c *serverConn) RemoteAddr() net.Addr {
+	return c.c.RemoteAddr()
+}
+
+func (c *serverConn) SetDeadline(t time.Time) error {
+	return c.c.SetDeadline(t)
+}
+
+func (c *serverConn) SetReadDeadline(t time.Time) error {
+	return c.c.SetReadDeadline(t)
+}
+
+func (c *serverConn) SetWriteDeadline(t time.Time) error {
+	return c.c.SetWriteDeadline(t)
+}
+
+func wrapConnServer(c net.Conn, shortIds [][]byte, privateKey string) (net.Conn, error) {
+
+	s := &serverConn{
+		reader:   bufio.NewReader(c),
+		writer:   c,
+		c:        c,
+		state:    stateHandshake,
+		shortIds: shortIds,
+	}
+
+	p, _ := pem.Decode([]byte(privateKey))
+	if p == nil {
+		panic("minecraft finalmask: malformatted private key")
+	}
+
+	var err error
+	s.rsaPrivateKey, err = x509.ParsePKCS1PrivateKey(p.Bytes)
+	if err != nil {
+		panic("minecraft finalmask: malformatted private key")
+	}
+
+	s.rsaPublicKey = x509.MarshalPKCS1PublicKey(&s.rsaPrivateKey.PublicKey)
+
+	return s, nil
+}

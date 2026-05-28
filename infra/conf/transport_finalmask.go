@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"net/url"
 	"regexp"
@@ -13,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"github.com/xtls/xray-core/transport/internet/finalmask/minecraft"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
@@ -712,6 +714,44 @@ func (c *Xdns) Build() (proto.Message, error) {
 	return &xdns.Config{
 		Domains:   c.Domains,
 		Resolvers: c.Resolvers,
+	}, nil
+}
+
+type Minecraft struct {
+	Usernames       []string `json:"usernames"`
+	ShortId         string   `json:"shortId"`
+	PublicKeySha256 string   `json:"publicKeySha256"`
+
+	ShortIds   []string `json:"shortIds"`
+	PrivateKey string   `json:"privateKey"`
+}
+
+func (c *Minecraft) Build() (proto.Message, error) {
+
+	if c.Usernames == nil || len(c.Usernames) == 0 {
+		c.Usernames = []string{"Dream"}
+	}
+
+	shortIds := make([][]byte, len(c.ShortIds))
+	for k, v := range c.ShortIds {
+		var err error
+		shortIds[k], err = hex.DecodeString(v)
+		if err != nil || len(shortIds) > 8 {
+			return nil, fmt.Errorf("bad short ids: %s", v)
+		}
+	}
+
+	shortId, err := hex.DecodeString(c.ShortId)
+	if err != nil {
+		return nil, fmt.Errorf("bad short id: %s", c.ShortId)
+	}
+
+	return &minecraft.Config{
+		ShortIds:        shortIds,
+		ShortId:         shortId,
+		Usernames:       c.Usernames,
+		PublicKeySha256: c.PublicKeySha256,
+		PrivateKey:      c.PrivateKey,
 	}, nil
 }
 
