@@ -319,7 +319,9 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		_, err = c.icmp4.WriteTo(buf, r.addr)
 	} else {
 		clear(buf[2:4])
-		copy(buf[8:], p)
+		if len(p) > 24 {
+			copy(buf[32:36], p[24:])
+		}
 		_, err = c.icmp6.WriteTo(buf, r.addr)
 	}
 
