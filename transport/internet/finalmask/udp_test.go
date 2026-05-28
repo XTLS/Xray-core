@@ -154,9 +154,8 @@ func (h *captureUDPHandler) NewPacketConnection(_ context.Context, _ singN.Packe
 
 func (h *captureUDPHandler) NewError(_ context.Context, _ error) {}
 
-func newStandaloneEchoUDPConfig() *custom.UDPConfig {
-	return &custom.UDPConfig{
-		Mode: "standalone",
+func newStandaloneEchoUDPConfig() *custom.UDPStandaloneConfig {
+	return &custom.UDPStandaloneConfig{
 		Client: []*custom.UDPItem{
 			{Packet: []byte{0xAA}},
 			{Rand: 2, Save: "txid"},
@@ -168,9 +167,8 @@ func newStandaloneEchoUDPConfig() *custom.UDPConfig {
 	}
 }
 
-func newStandaloneStunLikeUDPConfig() *custom.UDPConfig {
-	return &custom.UDPConfig{
-		Mode: "standalone",
+func newStandaloneStunLikeUDPConfig() *custom.UDPStandaloneConfig {
+	return &custom.UDPStandaloneConfig{
 		Client: []*custom.UDPItem{
 			{Packet: []byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}},
 			{Rand: 12, RandMin: 0x2A, RandMax: 0x2A, Save: "txid"},
@@ -185,9 +183,8 @@ func newStandaloneStunLikeUDPConfig() *custom.UDPConfig {
 	}
 }
 
-func newStandaloneStunLikeUDPServerConfig() *custom.UDPConfig {
-	return &custom.UDPConfig{
-		Mode: "standalone",
+func newStandaloneStunLikeUDPServerConfig() *custom.UDPStandaloneConfig {
+	return &custom.UDPStandaloneConfig{
 		Client: []*custom.UDPItem{
 			{Packet: []byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}},
 			{Rand: 12, RandMin: 0x2A, RandMax: 0x2A, Save: "txid"},
@@ -236,7 +233,7 @@ func newStandaloneStunLikeUDPServerConfig() *custom.UDPConfig {
 	}
 }
 
-func newUDPClientServerPair(t *testing.T, cfg *custom.UDPConfig) (net.PacketConn, net.PacketConn, net.PacketConn, net.PacketConn) {
+func newUDPClientServerPair(t *testing.T, cfg *custom.UDPStandaloneConfig) (net.PacketConn, net.PacketConn, net.PacketConn, net.PacketConn) {
 	t.Helper()
 
 	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")

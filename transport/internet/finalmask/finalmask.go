@@ -31,19 +31,6 @@ func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketCon
 	var conns []net.PacketConn
 	for i, mask := range m.udpmasks {
 		if _, ok := mask.(headerConn); ok {
-			if mode, ok := mask.(headerConnMode); ok && !mode.UseHeaderConn() {
-				if len(conns) > 0 {
-					raw = &headerManagerConn{sizes: sizes, conns: conns, PacketConn: raw}
-					sizes = nil
-					conns = nil
-				}
-				var err error
-				raw, err = mask.WrapPacketConnClient(raw, i, len(m.udpmasks)-1)
-				if err != nil {
-					return nil, err
-				}
-				continue
-			}
 			conn, err := mask.WrapPacketConnClient(nil, i, len(m.udpmasks)-1)
 			if err != nil {
 				return nil, err
@@ -77,19 +64,6 @@ func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketCon
 	var conns []net.PacketConn
 	for i, mask := range m.udpmasks {
 		if _, ok := mask.(headerConn); ok {
-			if mode, ok := mask.(headerConnMode); ok && !mode.UseHeaderConn() {
-				if len(conns) > 0 {
-					raw = &headerManagerConn{sizes: sizes, conns: conns, PacketConn: raw}
-					sizes = nil
-					conns = nil
-				}
-				var err error
-				raw, err = mask.WrapPacketConnServer(raw, i, len(m.udpmasks)-1)
-				if err != nil {
-					return nil, err
-				}
-				continue
-			}
 			conn, err := mask.WrapPacketConnServer(nil, i, len(m.udpmasks)-1)
 			if err != nil {
 				return nil, err
@@ -126,10 +100,6 @@ type headerConn interface {
 	HeaderConn()
 }
 
-type headerConnMode interface {
-	UseHeaderConn() bool
-}
-
 type headerSize interface {
 	Size() int
 }
@@ -141,10 +111,6 @@ type headerManagerConn struct {
 	sizes    []int
 	conns    []net.PacketConn
 	writeBuf [UDPSize]byte
-}
-
-type headerReadAddrAware interface {
-	SetReadAddr(net.Addr)
 }
 
 func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
@@ -173,9 +139,6 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 	}
 
 	for i := range c.conns {
-		if aware, ok := c.conns[i].(headerReadAddrAware); ok {
-			aware.SetReadAddr(addr)
-		}
 		n, _, err = c.conns[i].ReadFrom(newBuf)
 		if n == 0 || err != nil {
 			errors.LogDebug(context.Background(), addr, " mask read err ", err)
@@ -211,7 +174,7 @@ func (c *headerManagerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) 
 	n = copy(c.writeBuf[sum:], p)
 
 	for i := len(c.conns) - 1; i >= 0; i-- {
-		n, err = c.conns[i].WriteTo(c.writeBuf[sum-c.sizes[i]:n+sum], addr)
+		n, err = c.conns[i].WriteTo(c.writeBuf[sum-c.sizes[i]:n+sum], nil)
 		if n == 0 || err != nil {
 			errors.LogDebug(context.Background(), addr, " mask write err ", err)
 			return 0, nil
