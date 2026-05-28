@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	goerrors "errors"
+	"fmt"
 	"io"
 	mathrand "math/rand"
 	"net"
 	"net/netip"
 	"sync"
 	"time"
+	_ "unsafe"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -265,36 +268,16 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	copy(b, c.clientID[:])
 	copy(b[8:], p)
 
-	ip := addr.(*net.UDPAddr).IP
-	if len(c.ips) > 0 {
-		ip = c.ips[mathrand.Intn(len(c.ips))].AsSlice()
-	}
-
-	typ := icmp.Type(ipv6.ICMPTypeEchoRequest)
-	if ip.To4() != nil {
-		typ = ipv4.ICMPTypeEcho
-	}
-
 	c.mu.Lock()
 	seq := c.seq
 	c.seq += 1
 	c.seq %= 65536
 	c.mu.Unlock()
 
-	msg := icmp.Message{
-		Type: typ,
-		Code: 0,
-		Body: &icmp.Echo{
-			ID:   c.id,
-			Seq:  seq,
-			Data: b[:8+len(p)],
-		},
+	ip := addr.(*net.UDPAddr).IP
+	if len(c.ips) > 0 {
+		ip = c.ips[mathrand.Intn(len(c.ips))].AsSlice()
 	}
-
-	buf := pool.Get().([]byte)[:finalmask.UDPSize]
-	defer pool.Put(buf)
-
-	buf = common.Must2(msg.Marshal(buf[:0]))
 
 	if c.udp {
 		addr = &net.UDPAddr{IP: ip}
@@ -302,13 +285,14 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		addr = &net.IPAddr{IP: ip}
 	}
 
+	buf := pool.Get().([]byte)[:finalmask.UDPSize]
+	defer pool.Put(buf)
+
 	if ip.To4() != nil {
+		buf = marshal(buf, ipv4.ICMPTypeEcho, c.id, seq, b[:8+len(p)])
 		_, err = c.icmp4.WriteTo(buf, addr)
 	} else {
-		clear(buf[2:4])
-		if len(p) > 16 {
-			copy(buf[32:36], p[16:])
-		}
+		buf = marshal(buf, ipv6.ICMPTypeEchoRequest, c.id, seq, b[:8+len(p)])
 		_, err = c.icmp6.WriteTo(buf, addr)
 	}
 
@@ -353,4 +337,30 @@ func (c *xicmpConnClient) SetWriteDeadline(t time.Time) error {
 	_ = c.icmp4.SetWriteDeadline(t)
 	_ = c.icmp6.SetWriteDeadline(t)
 	return nil
+}
+
+//go:linkname checksum golang.org/x/net/icmp.checksum
+func checksum(b []byte) uint16
+
+func marshal(b []byte, typ icmp.Type, id, seq int, data []byte) []byte {
+	is4 := false
+	switch typ := typ.(type) {
+	case ipv4.ICMPType:
+		is4 = true
+		b[0] = byte(typ)
+	case ipv6.ICMPType:
+		b[0] = byte(typ)
+	default:
+		panic(fmt.Sprintf("%T %v", typ, typ))
+	}
+	clear(b[1:4])
+	binary.BigEndian.PutUint16(b[4:], uint16(id))
+	binary.BigEndian.PutUint16(b[6:], uint16(seq))
+	copy(b[8:], data)
+	if is4 {
+		s := checksum(b[:8+len(data)])
+		b[2] ^= byte(s)
+		b[3] ^= byte(s >> 8)
+	}
+	return b[:8+len(data)]
 }

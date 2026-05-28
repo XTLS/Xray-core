@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
@@ -295,33 +294,14 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	// errors.LogDebug(context.Background(), "id ", r.id, " seq ", r.seq, " addr ", r.addr)
 
-	typ := icmp.Type(ipv6.ICMPTypeEchoReply)
-	if r.addr.(*net.IPAddr).IP.To4() != nil {
-		typ = ipv4.ICMPTypeEchoReply
-	}
-
-	msg := icmp.Message{
-		Type: typ,
-		Code: 0,
-		Body: &icmp.Echo{
-			ID:   r.id,
-			Seq:  r.seq,
-			Data: p,
-		},
-	}
-
 	buf := pool.Get().([]byte)[:finalmask.UDPSize]
 	defer pool.Put(buf)
 
-	buf = common.Must2(msg.Marshal(buf[:0]))
-
 	if r.addr.(*net.IPAddr).IP.To4() != nil {
+		buf = marshal(buf, ipv4.ICMPTypeEchoReply, r.id, r.seq, p)
 		_, err = c.icmp4.WriteTo(buf, r.addr)
 	} else {
-		clear(buf[2:4])
-		if len(p) > 24 {
-			copy(buf[32:36], p[24:])
-		}
+		buf = marshal(buf, ipv6.ICMPTypeEchoReply, r.id, r.seq, p)
 		_, err = c.icmp6.WriteTo(buf, r.addr)
 	}
 
