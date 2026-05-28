@@ -1,3 +1,4 @@
+// Minecraft protocol
 package minecraft
 
 import (
@@ -274,7 +275,13 @@ func (v *Bytes) readFrom(r io.Reader) error {
 }
 
 func (v *Bytes) writeTo(w io.Writer) error {
-	_, err := w.Write(*v)
+	length := Varint(len(*v))
+	err := length.writeTo(w)
+	if err != nil {
+		return fmt.Errorf("write bytes length: %w", err)
+	}
+
+	_, err = w.Write(*v)
 	if err != nil {
 		return fmt.Errorf("write bytes: %w", err)
 	}
@@ -324,4 +331,8 @@ func writePacket(w io.Writer, packetID int, fields ...field) error {
 	}
 
 	return nil
+}
+
+func writeDisconnectPacket(w io.Writer, reason string) error {
+	return writePacket(w, 0x00, new(String(reason)))
 }
