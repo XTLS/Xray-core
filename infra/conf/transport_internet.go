@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/url"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
+	"github.com/xtls/xray-core/transport/internet/finalmask/minecraft"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
@@ -48,12 +50,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var (
-	tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"none": func() interface{} { return new(NoOpConnectionAuthenticator) },
-		"http": func() interface{} { return new(Authenticator) },
-	}, "type", "")
-)
+var tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
+	"none": func() interface{} { return new(NoOpConnectionAuthenticator) },
+	"http": func() interface{} { return new(Authenticator) },
+}, "type", "")
 
 type KCPConfig struct {
 	Mtu              *uint32 `json:"mtu"`
@@ -1037,7 +1037,7 @@ type HappyEyeballsConfig struct {
 }
 
 func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
-	var innerHappyEyeballsConfig = struct {
+	innerHappyEyeballsConfig := struct {
 		PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
 		TryDelayMs       uint64 `json:"tryDelayMs"`
 		Interleave       uint32 `json:"interleave"`
@@ -1165,7 +1165,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
-	var happyEyeballs = &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 0, MaxConcurrentTry: 4}
+	happyEyeballs := &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 0, MaxConcurrentTry: 4}
 	if c.HappyEyeballsSettings != nil {
 		happyEyeballs.PrioritizeIpv6 = c.HappyEyeballsSettings.PrioritizeIPv6
 		happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave
@@ -1238,6 +1238,7 @@ var (
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
+		"minecraft":     func() interface{} { return new },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -1810,6 +1811,44 @@ func (c *Salamander) Build() (proto.Message, error) {
 	config := &salamander.Config{}
 	config.Password = c.Password
 	return config, nil
+}
+
+type Minecraft struct {
+	Usernames       []string `json:"usernames"`
+	ShortId         string   `json:"shortId"`
+	PublicKeySha256 string   `json:"publicKeySha256"`
+
+	ShortIds   []string `json:"shortIds"`
+	PrivateKey string   `json:"privateKey"`
+}
+
+func (c *Minecraft) Build() (proto.Message, error) {
+
+	if c.Usernames == nil || len(c.Usernames) == 0 {
+		c.Usernames = []string{"Dream"}
+	}
+
+	shortIds := make([][]byte, len(c.ShortIds))
+	for k, v := range c.ShortIds {
+		var err error
+		shortIds[k], err = hex.DecodeString(v)
+		if err != nil || len(shortIds) > 8 {
+			return nil, fmt.Errorf("bad short ids: %s", v)
+		}
+	}
+
+	shortId, err := hex.DecodeString(c.ShortId)
+	if err != nil {
+		return nil, fmt.Errorf("bad short id: %s", c.ShortId)
+	}
+
+	return &minecraft.Config{
+		ShortIds:        shortIds,
+		ShortId:         shortId,
+		Usernames:       c.Usernames,
+		PublicKeySha256: c.PublicKeySha256,
+		PrivateKey:      c.PrivateKey,
+	}, nil
 }
 
 type Sudoku struct {
