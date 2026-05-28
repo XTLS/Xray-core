@@ -28,7 +28,6 @@ type TempUDPConn struct {
 }
 
 func (c *TempUDPConn) Read(b []byte) (n int, err error) {
-	c.Timer.Update()
 	var remote net.Addr
 	for {
 		n, remote, err = c.PacketConn.ReadFrom(b)
@@ -39,10 +38,12 @@ func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 		expected := c.ExpectedRemote.Load()
 		if remote.IP.Equal(expected.IP) {
 			if remote.Port == expected.Port {
+				c.Timer.Update()
 				return
 			}
 			if expected.Port == 0 {
 				c.ExpectedRemote.Store(remote)
+				c.Timer.Update()
 				return
 			}
 		}
