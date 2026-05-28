@@ -1,15 +1,27 @@
 package minecraft
 
 import (
+	"fmt"
 	"net"
 )
 
 func (c *Config) TCP() {
 }
 
-func (c *Config) WrapConnClient(net.Conn) (net.Conn, error) {
+func (c *Config) WrapConnClient(conn net.Conn) (net.Conn, error) {
+	cc, err := newClientConn(conn, c.Usernames, c.ShortId, c.PublicKeySha256)
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
+
+	return cc, nil
 }
 
 func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
-	return wrapConnServer(conn, c.ShortIds, c.PrivateKey)
+	cc, err := wrapConnServer(conn, c.ShortIds, c.PrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
+
+	return cc, nil
 }

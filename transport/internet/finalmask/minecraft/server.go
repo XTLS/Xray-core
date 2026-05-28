@@ -21,9 +21,8 @@ var statusResponse = `{"description":"A Minecraft Server","players":{"max":20,"o
 type serverState int
 
 var (
-	stateHandshake serverState = 1
-	stateFallback  serverState = 2
-	stateProxy     serverState = 3
+	serverStateHandshake serverState = 1
+	serverStateProxy     serverState = 3
 )
 
 type serverConn struct {
@@ -43,7 +42,7 @@ func (c *serverConn) handshake() error {
 	c.handshakeLock.Lock()
 	defer c.handshakeLock.Unlock()
 
-	if c.state != stateHandshake {
+	if c.state != serverStateHandshake {
 		return nil
 	}
 
@@ -77,7 +76,8 @@ func (c *serverConn) handshake() error {
 		return fmt.Errorf("read handshake packet: %w", err)
 	}
 
-	if nextState == 1 {
+	switch nextState {
+	case 1:
 
 		// Ping
 
@@ -88,16 +88,15 @@ func (c *serverConn) handshake() error {
 				return fmt.Errorf("read packet: %w", err)
 			}
 
-			if pkt.packetID == 0 {
-				// Status Request
+			switch pkt.packetID {
+			case 0: // Status Request
 
 				err = writePacket(c.writer, 0, new(String((statusResponse))))
 				if err != nil {
 					return fmt.Errorf("write status response: %w", err)
 				}
 
-			} else if pkt.packetID == 1 {
-				// Ping
+			case 1: // Ping
 
 				var payload Long
 				err = pkt.readFields(&payload)
@@ -116,7 +115,7 @@ func (c *serverConn) handshake() error {
 
 		return fmt.Errorf("ping")
 
-	} else if nextState == 2 {
+	case 2:
 
 		// Login
 
@@ -215,12 +214,15 @@ func (c *serverConn) handshake() error {
 		}
 
 		if ok == 0 {
+			writeDisconnectPacket(c.writer, `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`)
 			return fmt.Errorf("bad short id")
 		}
 
+		c.state = serverStateProxy
+
 		return nil
 
-	} else {
+	default:
 		return fmt.Errorf("bad handshake packet: bad next state: %d", nextState)
 	}
 }
@@ -267,13 +269,13 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.c.SetWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, shortIds [][]byte, privateKey string) (net.Conn, error) {
+func wrapConnServer(c net.Conn, shortIds [][]byte, privateKey string) (*serverConn, error) {
 
 	s := &serverConn{
 		reader:   bufio.NewReader(c),
 		writer:   c,
 		c:        c,
-		state:    stateHandshake,
+		state:    serverStateHandshake,
 		shortIds: shortIds,
 	}
 
@@ -282,13 +284,21 @@ func wrapConnServer(c net.Conn, shortIds [][]byte, privateKey string) (net.Conn,
 		panic("minecraft finalmask: malformatted private key")
 	}
 
-	var err error
-	s.rsaPrivateKey, err = x509.ParsePKCS1PrivateKey(p.Bytes)
+	k, err := x509.ParsePKCS8PrivateKey(p.Bytes)
 	if err != nil {
-		panic("minecraft finalmask: malformatted private key")
+		panic("minecraft finalmask: malformatted private key: " + err.Error())
 	}
 
-	s.rsaPublicKey = x509.MarshalPKCS1PublicKey(&s.rsaPrivateKey.PublicKey)
+	var ok bool
+	s.rsaPrivateKey, ok = k.(*rsa.PrivateKey)
+	if !ok {
+		panic("minecraft finalmask: rsa private key required")
+	}
+
+	s.rsaPublicKey, err = x509.MarshalPKIXPublicKey(&s.rsaPrivateKey.PublicKey)
+	if err != nil {
+		panic("minecraft finalmask: marshal public key: " + err.Error())
+	}
 
 	return s, nil
 }
