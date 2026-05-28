@@ -75,18 +75,27 @@ type Conn struct {
 }
 
 func NewConnClient(cfg *Config, conn net.Conn) (net.Conn, error) {
-	if cfg.Payload == "" {
+	if cfg.Payload == "" && cfg.Sni == "" {
 		return conn, nil
 	}
 	if !PlatformSupported {
 		return nil, errors.New("rawpacket is not supported on this platform")
 	}
-	payload, err := base64.StdEncoding.DecodeString(cfg.Payload)
-	if err != nil {
-		return nil, fmt.Errorf("rawpacket: invalid base64 payload: %w", err)
-	}
-	if len(payload) == 0 {
-		return nil, errors.New("rawpacket: payload is empty")
+	var payload []byte
+	var err error
+	if cfg.Payload != "" {
+		payload, err = base64.StdEncoding.DecodeString(cfg.Payload)
+		if err != nil {
+			return nil, fmt.Errorf("rawpacket: invalid base64 payload: %w", err)
+		}
+		if len(payload) == 0 {
+			return nil, errors.New("rawpacket: payload is empty")
+		}
+	} else {
+		payload, err = BuildFakeClientHello(cfg.Sni)
+		if err != nil {
+			return nil, fmt.Errorf("rawpacket: build fake ClientHello: %w", err)
+		}
 	}
 	method, err := ParseMethod(cfg.Method)
 	if err != nil {
@@ -120,18 +129,24 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 	if c.injectionCount >= c.maxInjections {
 		return c.Conn.Write(b)
 	}
+	closeSpoofer := false
+	defer func() {
+		if closeSpoofer {
+			if closeErr := c.spoofer.Close(); closeErr != nil && err == nil {
+				err = fmt.Errorf("rawpacket: close spoofer: %w", closeErr)
+			}
+		}
+	}()
 	err = c.spoofer.Inject(c.fakePayload)
 	if err != nil {
 		return 0, fmt.Errorf("rawpacket: inject: %w", err)
 	}
 	c.injectionCount++
 	if c.injectionCount >= c.maxInjections {
-		closeErr := c.spoofer.Close()
-		if closeErr != nil {
-			return 0, fmt.Errorf("rawpacket: close spoofer: %w", closeErr)
-		}
+		closeSpoofer = true
 	}
-	return c.Conn.Write(b)
+	n, err = c.Conn.Write(b)
+	return n, err
 }
 
 func (c *Conn) Close() error {
@@ -164,6 +179,8 @@ func wrapPermissionError(err error) error {
 		return fmt.Errorf("%w\n  Hint: rawpacket requires root on macOS. Run with: sudo ./xray", err)
 	case "freebsd":
 		return fmt.Errorf("%w\n  Hint: rawpacket requires root on FreeBSD. Run with: sudo ./xray", err)
+	case "windows":
+		return fmt.Errorf("%w\n  Hint: rawpacket requires Administrator on Windows (WinDivert driver)", err)
 	default:
 		return err
 	}

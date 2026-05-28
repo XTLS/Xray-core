@@ -8,7 +8,11 @@ option java_multiple_files = true;
 
 message Config {
   // Base64-encoded fake payload bytes to inject before the real traffic.
+  // When empty, sni is used to auto-generate a TLS ClientHello.
   string payload = 1;
+
+  // Fake SNI hostname for auto-generated ClientHello when payload is empty.
+  string sni = 5;
 
   // Corruption method to make the fake packet dropped by the server.
   // Available: wrong-sequence, wrong-checksum, wrong-ack, wrong-md5, wrong-timestamp.
