@@ -163,7 +163,19 @@ func (s *ClassicNameServer) getCacheController() *CacheController {
 func (s *ClassicNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.Name(), " querying DNS for: ", fqdn)
 
-	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	if err != nil {
+		errors.LogErrorInner(ctx, err, "failed to build dns query for ", fqdn)
+		if noResponseErrCh != nil {
+			if option.IPv4Enable {
+				noResponseErrCh <- err
+			}
+			if option.IPv6Enable {
+				noResponseErrCh <- err
+			}
+		}
+		return
+	}
 
 	for _, req := range reqs {
 		udpReq := &udpDnsRequest{
