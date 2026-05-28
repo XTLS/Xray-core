@@ -294,15 +294,17 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	// errors.LogDebug(context.Background(), "id ", r.id, " seq ", r.seq, " addr ", r.addr)
 
-	buf := pool.Get().([]byte)[:finalmask.UDPSize]
-	defer pool.Put(buf)
+	b := pool.Get().([]byte)[:finalmask.UDPSize]
+	defer pool.Put(b)
+
+	copy(b[8:], p)
 
 	if r.addr.(*net.IPAddr).IP.To4() != nil {
-		buf = marshal(buf, ipv4.ICMPTypeEchoReply, r.id, r.seq, p)
-		_, err = c.icmp4.WriteTo(buf, r.addr)
+		b = marshal(b, ipv4.ICMPTypeEchoReply, r.id, r.seq, len(p))
+		_, err = c.icmp4.WriteTo(b, r.addr)
 	} else {
-		buf = marshal(buf, ipv6.ICMPTypeEchoReply, r.id, r.seq, p)
-		_, err = c.icmp6.WriteTo(buf, r.addr)
+		b = marshal(b, ipv6.ICMPTypeEchoReply, r.id, r.seq, len(p))
+		_, err = c.icmp6.WriteTo(b, r.addr)
 	}
 
 	if err != nil {

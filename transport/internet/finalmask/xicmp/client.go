@@ -262,12 +262,6 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, nil
 	}
 
-	b := pool.Get().([]byte)[:finalmask.UDPSize]
-	defer pool.Put(b)
-
-	copy(b, c.clientID[:])
-	copy(b[8:], p)
-
 	c.mu.Lock()
 	seq := c.seq
 	c.seq += 1
@@ -285,15 +279,18 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		addr = &net.IPAddr{IP: ip}
 	}
 
-	buf := pool.Get().([]byte)[:finalmask.UDPSize]
-	defer pool.Put(buf)
+	b := pool.Get().([]byte)[:finalmask.UDPSize]
+	defer pool.Put(b)
+
+	copy(b[8:], c.clientID[:])
+	copy(b[16:], p)
 
 	if ip.To4() != nil {
-		buf = marshal(buf, ipv4.ICMPTypeEcho, c.id, seq, b[:8+len(p)])
-		_, err = c.icmp4.WriteTo(buf, addr)
+		b = marshal(b, ipv4.ICMPTypeEcho, c.id, seq, 8+len(p))
+		_, err = c.icmp4.WriteTo(b, addr)
 	} else {
-		buf = marshal(buf, ipv6.ICMPTypeEchoRequest, c.id, seq, b[:8+len(p)])
-		_, err = c.icmp6.WriteTo(buf, addr)
+		b = marshal(b, ipv6.ICMPTypeEchoRequest, c.id, seq, 8+len(p))
+		_, err = c.icmp6.WriteTo(b, addr)
 	}
 
 	if err != nil {
@@ -342,7 +339,7 @@ func (c *xicmpConnClient) SetWriteDeadline(t time.Time) error {
 //go:linkname checksum golang.org/x/net/icmp.checksum
 func checksum(b []byte) uint16
 
-func marshal(b []byte, typ icmp.Type, id, seq int, data []byte) []byte {
+func marshal(b []byte, typ icmp.Type, id, seq int, dataLen int) []byte {
 	is4 := false
 	switch typ := typ.(type) {
 	case ipv4.ICMPType:
@@ -356,11 +353,10 @@ func marshal(b []byte, typ icmp.Type, id, seq int, data []byte) []byte {
 	clear(b[1:4])
 	binary.BigEndian.PutUint16(b[4:], uint16(id))
 	binary.BigEndian.PutUint16(b[6:], uint16(seq))
-	copy(b[8:], data)
 	if is4 {
-		s := checksum(b[:8+len(data)])
+		s := checksum(b[:8+dataLen])
 		b[2] ^= byte(s)
 		b[3] ^= byte(s >> 8)
 	}
-	return b[:8+len(data)]
+	return b[:8+dataLen]
 }
