@@ -2,6 +2,8 @@ package header
 
 import (
 	"net"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type headerConn struct {
@@ -28,6 +30,8 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		header = &wechat{}
 	case WIREGUARD:
 		header = &wireguard{}
+	default:
+		return nil, errors.New("invalid id ", c.ID)
 	}
 	return &headerConn{
 		PacketConn: raw,

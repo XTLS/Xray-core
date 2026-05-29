@@ -1238,16 +1238,14 @@ var (
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"header-custom":  func() interface{} { return new(HeaderCustomUDP) },
-		"mkcp-header":    func() interface{} { return new(Header) },
-		"mkcp-original":  func() interface{} { return new(Original) },
-		"mkcp-aes128gcm": func() interface{} { return new(Aes128Gcm) },
-		"noise":          func() interface{} { return new(NoiseMask) },
-		"salamander":     func() interface{} { return new(Salamander) },
-		"sudoku":         func() interface{} { return new(Sudoku) },
-		"xdns":           func() interface{} { return new(Xdns) },
-		"xicmp":          func() interface{} { return new(Xicmp) },
-		"realm":          func() interface{} { return new(Realm) },
+		"header-custom": func() interface{} { return new(HeaderCustomUDP) },
+		"mkcp-legacy":   func() interface{} { return new(MkcpLegacy) },
+		"noise":         func() interface{} { return new(NoiseMask) },
+		"salamander":    func() interface{} { return new(Salamander) },
+		"sudoku":        func() interface{} { return new(Sudoku) },
+		"xdns":          func() interface{} { return new(Xdns) },
+		"xicmp":         func() interface{} { return new(Xicmp) },
+		"realm":         func() interface{} { return new(Realm) },
 	}, "type", "settings")
 )
 
@@ -1740,39 +1738,34 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 	}
 }
 
-type Header struct {
-	ID     int    `json:"id"`
-	Domain string `json:"domain"`
-}
-
-func (c *Header) Build() (proto.Message, error) {
-	if c.ID < 0 || c.ID > 5 {
-		return nil, errors.New("invalid id")
-	}
-	config := &header.Config{
-		ID:     int32(c.ID),
-		Domain: c.Domain,
-	}
-	if len(c.Domain) == 0 {
-		config.Domain = "www.baidu.com"
-	}
-	return config, nil
-}
-
-type Original struct{}
-
-func (c *Original) Build() (proto.Message, error) {
-	return &original.Config{}, nil
-}
-
-type Aes128Gcm struct {
+type MkcpLegacy struct {
+	ID       int    `json:"id"`
 	Password string `json:"password"`
+	Domain   string `json:"domain"`
 }
 
-func (c *Aes128Gcm) Build() (proto.Message, error) {
-	return &aes128gcm.Config{
-		Password: c.Password,
-	}, nil
+func (c *MkcpLegacy) Build() (proto.Message, error) {
+	switch c.ID {
+	case 0:
+		return &original.Config{}, nil
+	case 1:
+		return &aes128gcm.Config{
+			Password: c.Password,
+		}, nil
+	default:
+		id := c.ID - 2
+		domain := c.Domain
+		if id < 0 || id > 5 {
+			return nil, errors.New("invalid id")
+		}
+		if len(domain) == 0 {
+			domain = "www.baidu.com"
+		}
+		return &header.Config{
+			ID:     int32(id),
+			Domain: domain,
+		}, nil
+	}
 }
 
 type Salamander struct {
