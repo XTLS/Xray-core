@@ -7,13 +7,15 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/proxy/dns"
+	"golang.org/x/net/dns/dnsmessage"
 	"google.golang.org/protobuf/proto"
 )
 
 type DNSOutboundRuleConfig struct {
-	Action string      `json:"action"`
-	QType  *PortList   `json:"qtype"`
-	Domain *StringList `json:"domain"`
+	Action     string            `json:"action"`
+	QType      *PortList         `json:"qtype"`
+	Domain     *StringList       `json:"domain"`
+	RejectCode *dnsmessage.RCode `json:"rejectCode"`
 }
 
 func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
@@ -26,6 +28,9 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Action = dns.RuleAction_Drop
 	case "reject":
 		rule.Action = dns.RuleAction_Reject
+		if c.RejectCode != nil {
+			rule.RejectCode = new(uint32(*c.RejectCode))
+		}
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
 	default:
