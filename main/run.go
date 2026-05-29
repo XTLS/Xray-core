@@ -28,15 +28,15 @@ var cmdRun = &base.Command{
 	Long: `
 Run Xray with config, the default command.
 
-The -config=file, -c=file flags set the config files for 
+The -config=file, -c=file flags set the config files for
 Xray. Multiple assign is accepted.
 
 The -confdir=dir flag sets a dir with multiple json config
 
-The -format=json flag sets the format of config files. 
+The -format=json flag sets the format of config files.
 Default "auto".
 
-The -test flag tells Xray to test config files only, 
+The -test flag tells Xray to test config files only,
 without launching the server.
 
 The -dump flag tells Xray to print the merged config.
@@ -92,12 +92,6 @@ func executeRun(cmd *base.Command, args []string) {
 		os.Exit(-1)
 	}
 	defer server.Close()
-
-	/*
-		conf.FileCache = nil
-		conf.IPCache = nil
-		conf.SiteCache = nil
-	*/
 
 	// Explicitly triggering GC to remove garbage from config loading.
 	runtime.GC()
@@ -217,8 +211,6 @@ func getConfigFormat() string {
 
 func startXray() (core.Server, error) {
 	configFiles := getConfigFilePath(true)
-
-	// config, err := core.LoadConfig(getConfigFormat(), configFiles[0], configFiles)
 
 	c, err := core.LoadConfig(getConfigFormat(), configFiles)
 	if err != nil {

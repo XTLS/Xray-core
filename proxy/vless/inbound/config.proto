@@ -18,7 +18,7 @@ message Fallback {
 }
 
 message Config {
-  repeated xray.common.protocol.User clients = 1;
+  repeated xray.common.protocol.User users = 1;
   repeated Fallback fallbacks = 2;
 
   string decryption = 3;

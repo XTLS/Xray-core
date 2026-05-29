@@ -3,6 +3,7 @@ package tls
 import (
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -43,7 +44,6 @@ func TestECHDial(t *testing.T) {
 	echConfigCache, ok := GlobalECHConfigCache.Load(ECHCacheKey("udp://1.1.1.1", "encryptedsni.com", nil))
 	if !ok {
 		t.Error("ECH config cache not found")
-
 	}
 	ok = echConfigCache.UpdateLock.TryLock()
 	if !ok {
@@ -59,21 +59,11 @@ func TestECHDial(t *testing.T) {
 func TestECHDialFail(t *testing.T) {
 	config := &Config{
 		ServerName:    "cloudflare.com",
-		EchConfigList: "udp://127.0.0.1",
-		EchForceQuery: "half",
+		EchConfigList: "udp://0.0.0.0",
 	}
-	config.GetTLSConfig()
-	// check cache
-	echConfigCache, ok := GlobalECHConfigCache.Load(ECHCacheKey("udp://127.0.0.1", "cloudflare.com", nil))
-	if !ok {
-		t.Error("ECH config cache not found")
-	}
-	configRecord := echConfigCache.configRecord.Load()
-	if configRecord == nil {
-		t.Error("ECH config record not found in cache")
-		return
-	}
-	if configRecord.err == nil {
-		t.Error("unexpected nil error in ECH config record")
+	tlsConfig := config.GetTLSConfig()
+	ApplyECH(config, tlsConfig)
+	if !slices.Equal(tlsConfig.EncryptedClientHelloConfigList, []byte{1, 1, 4, 5, 1, 4}) {
+		t.Error("ECH config should be invalid when query failed", " but got ", tlsConfig.EncryptedClientHelloConfigList)
 	}
 }

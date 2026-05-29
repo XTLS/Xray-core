@@ -25,9 +25,11 @@ type Item struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RandMin       int64                  `protobuf:"varint,1,opt,name=rand_min,json=randMin,proto3" json:"rand_min,omitempty"`
 	RandMax       int64                  `protobuf:"varint,2,opt,name=rand_max,json=randMax,proto3" json:"rand_max,omitempty"`
-	Packet        []byte                 `protobuf:"bytes,3,opt,name=packet,proto3" json:"packet,omitempty"`
-	DelayMin      int64                  `protobuf:"varint,4,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
-	DelayMax      int64                  `protobuf:"varint,5,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
+	RandRangeMin  int32                  `protobuf:"varint,3,opt,name=rand_range_min,json=randRangeMin,proto3" json:"rand_range_min,omitempty"`
+	RandRangeMax  int32                  `protobuf:"varint,4,opt,name=rand_range_max,json=randRangeMax,proto3" json:"rand_range_max,omitempty"`
+	Packet        []byte                 `protobuf:"bytes,5,opt,name=packet,proto3" json:"packet,omitempty"`
+	DelayMin      int64                  `protobuf:"varint,6,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
+	DelayMax      int64                  `protobuf:"varint,7,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -72,6 +74,20 @@ func (x *Item) GetRandMin() int64 {
 func (x *Item) GetRandMax() int64 {
 	if x != nil {
 		return x.RandMax
+	}
+	return 0
+}
+
+func (x *Item) GetRandRangeMin() int32 {
+	if x != nil {
+		return x.RandRangeMin
+	}
+	return 0
+}
+
+func (x *Item) GetRandRangeMax() int32 {
+	if x != nil {
+		return x.RandRangeMax
 	}
 	return 0
 }
@@ -161,13 +177,15 @@ var File_transport_internet_finalmask_noise_config_proto protoreflect.FileDescri
 
 const file_transport_internet_finalmask_noise_config_proto_rawDesc = "" +
 	"\n" +
-	"/transport/internet/finalmask/noise/config.proto\x12'xray.transport.internet.finalmask.noise\"\x8e\x01\n" +
+	"/transport/internet/finalmask/noise/config.proto\x12'xray.transport.internet.finalmask.noise\"\xda\x01\n" +
 	"\x04Item\x12\x19\n" +
 	"\brand_min\x18\x01 \x01(\x03R\arandMin\x12\x19\n" +
-	"\brand_max\x18\x02 \x01(\x03R\arandMax\x12\x16\n" +
-	"\x06packet\x18\x03 \x01(\fR\x06packet\x12\x1b\n" +
-	"\tdelay_min\x18\x04 \x01(\x03R\bdelayMin\x12\x1b\n" +
-	"\tdelay_max\x18\x05 \x01(\x03R\bdelayMax\"\x87\x01\n" +
+	"\brand_max\x18\x02 \x01(\x03R\arandMax\x12$\n" +
+	"\x0erand_range_min\x18\x03 \x01(\x05R\frandRangeMin\x12$\n" +
+	"\x0erand_range_max\x18\x04 \x01(\x05R\frandRangeMax\x12\x16\n" +
+	"\x06packet\x18\x05 \x01(\fR\x06packet\x12\x1b\n" +
+	"\tdelay_min\x18\x06 \x01(\x03R\bdelayMin\x12\x1b\n" +
+	"\tdelay_max\x18\a \x01(\x03R\bdelayMax\"\x87\x01\n" +
 	"\x06Config\x12\x1b\n" +
 	"\treset_min\x18\x01 \x01(\x03R\bresetMin\x12\x1b\n" +
 	"\treset_max\x18\x02 \x01(\x03R\bresetMax\x12C\n" +

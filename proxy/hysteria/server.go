@@ -2,7 +2,6 @@ package hysteria
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -82,72 +81,44 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "hysteria"
 	inbound.CanSpliceCopy = 3
-
-	var useremail string
-	var userlevel uint32
-	type User interface{ User() *protocol.MemoryUser }
-	if v, ok := conn.(User); ok {
-		inbound.User = v.User()
-		if inbound.User != nil {
-			useremail = inbound.User.Email
-			userlevel = inbound.User.Level
-		}
-	}
+	inbound.User = &protocol.MemoryUser{}
 
 	iConn := stat.TryUnwrapStatsConn(conn)
-	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
-		r := io.Reader(conn)
-		b := make([]byte, MaxUDPSize)
-		df := &Defragger{}
-		var firstMsg *UDPMessage
-		var firstDest net.Destination
 
-		for {
-			n, err := r.Read(b)
-			if err != nil {
-				return err
-			}
+	type User interface{ User() *protocol.MemoryUser }
+	if v, ok := iConn.(User); ok && v.User() != nil {
+		inbound.User = v.User()
+	}
 
-			msg, err := ParseUDPMessage(b[:n])
-			if err != nil {
-				continue
-			}
-
-			dfMsg := df.Feed(msg)
-			if dfMsg == nil {
-				continue
-			}
-
-			firstMsg = dfMsg
-			firstDest, err = net.ParseDestination("udp:" + firstMsg.Addr)
-			if err != nil {
-				errors.LogDebug(context.Background(), dfMsg.Addr, " ParseDestination err ", err)
-				continue
-			}
-
-			break
-		}
-
+	if _, ok := iConn.(*hysteria.InterConn); ok {
 		reader := &UDPReader{
-			Reader:    r,
-			buf:       b,
-			df:        df,
-			firstMsg:  firstMsg,
-			firstDest: &firstDest,
+			reader: conn,
+			df:     &Defragger{},
 		}
+
+		b := buf.New()
+		b.Resize(0, buf.Size)
+		n, addr, err := reader.ReadFrom(b.Bytes())
+		if err != nil {
+			b.Release()
+			return err
+		}
+		b.Resize(0, int32(n))
+		b.UDP = addr
+
+		reader.firstBuf = b
 
 		writer := &UDPWriter{
-			Writer: conn,
-			buf:    make([]byte, MaxUDPSize),
-			addr:   firstMsg.Addr,
+			writer: conn,
+			addr:   addr.NetAddr(),
 		}
 
-		return dispatcher.DispatchLink(ctx, firstDest, &transport.Link{
+		return dispatcher.DispatchLink(ctx, *addr, &transport.Link{
 			Reader: reader,
 			Writer: writer,
 		})
 	} else {
-		sessionPolicy := s.policyManager.ForLevel(userlevel)
+		sessionPolicy := s.policyManager.ForLevel(inbound.User.Level)
 
 		common.Must(conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)))
 		addr, err := ReadTCPRequest(conn)
@@ -171,7 +142,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			To:     dest,
 			Status: log.AccessAccepted,
 			Reason: "",
-			Email:  useremail,
+			Email:  inbound.User.Email,
 		})
 		errors.LogInfo(ctx, "tunnelling request to ", dest)
 

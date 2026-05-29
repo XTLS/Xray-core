@@ -12,6 +12,7 @@ import (
 	. "github.com/xtls/xray-core/app/router/command"
 	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/testing/mocks"
@@ -303,12 +304,12 @@ func TestServiceTestRoute(t *testing.T) {
 				TargetTag:      &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
-				Domain:    []*router.Domain{{Type: router.Domain_Domain, Value: "com"}},
+				Domain:    []*geodata.DomainRule{{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "com"}}}},
 				TargetTag: &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
-				SourceGeoip: []*router.GeoIP{{CountryCode: "private", Cidr: []*router.CIDR{{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}},
-				TargetTag:   &router.RoutingRule_Tag{Tag: "out"},
+				SourceIp:  []*geodata.IPRule{{Value: &geodata.IPRule_Custom{Custom: &geodata.CIDRRule{Cidr: &geodata.CIDR{Ip: []byte{127, 0, 0, 0}, Prefix: 8}}}}},
+				TargetTag: &router.RoutingRule_Tag{Tag: "out"},
 			},
 			{
 				UserEmail: []string{"example@example.com"},

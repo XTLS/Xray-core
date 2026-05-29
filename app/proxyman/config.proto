@@ -10,6 +10,7 @@ import "common/net/address.proto";
 import "common/net/port.proto";
 import "transport/internet/config.proto";
 import "common/serial/typed_message.proto";
+import "common/geodata/geodat.proto";
 
 message InboundConfig {}
 
@@ -20,7 +21,10 @@ message SniffingConfig {
   // Override target destination if sniff'ed protocol is in the given list.
   // Supported values are "http", "tls", "fakedns".
   repeated string destination_override = 2;
-  repeated string domains_excluded = 3;
+
+  repeated xray.common.geodata.DomainRule domains_excluded = 3;
+
+  repeated xray.common.geodata.IPRule ips_excluded = 6;
 
   // Whether should only try to sniff metadata without waiting for client input.
   // Can be used to support SMTP like protocol where server send the first

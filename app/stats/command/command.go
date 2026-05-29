@@ -3,12 +3,10 @@ package command
 import (
 	"context"
 	"runtime"
+	"strings"
 	"time"
 
-	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/core"
 	feature_stats "github.com/xtls/xray-core/features/stats"
 	grpc "google.golang.org/grpc"
@@ -70,9 +68,10 @@ func (s *statsServer) GetStatsOnlineIpList(ctx context.Context, request *GetStat
 	}
 
 	ips := make(map[string]int64)
-	for ip, t := range c.IPTimeMap() {
-		ips[ip] = t.Unix()
-	}
+	c.ForEach(func(ip string, lastSeen int64) bool {
+		ips[ip] = lastSeen
+		return true
+	})
 
 	return &GetStatsOnlineIpListResponse{
 		Name: request.Name,
@@ -86,21 +85,87 @@ func (s *statsServer) GetAllOnlineUsers(ctx context.Context, request *GetAllOnli
 	}, nil
 }
 
-func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
-	matcher, err := strmatcher.Substr.New(request.Pattern)
-	if err != nil {
-		return nil, err
+func (s *statsServer) GetUsersStats(ctx context.Context, request *GetUsersStatsRequest) (*GetUsersStatsResponse, error) {
+	userMap := make(map[string]*UserStat)
+
+	s.stats.VisitOnlineMaps(func(name string, om feature_stats.OnlineMap) bool {
+		if om.Count() == 0 {
+			return true
+		}
+
+		_, rest, _ := strings.Cut(name, ">>>")
+		email, _, _ := strings.Cut(rest, ">>>")
+
+		user := &UserStat{Email: email}
+		om.ForEach(func(ip string, lastSeen int64) bool {
+			user.Ips = append(user.Ips, &OnlineIPEntry{
+				Ip:       ip,
+				LastSeen: lastSeen,
+			})
+			return true
+		})
+		if len(user.Ips) > 0 {
+			userMap[email] = user
+		}
+		return true
+	})
+
+	if request.IncludeTraffic {
+		for _, u := range userMap {
+			u.Traffic = &TrafficUserStat{}
+		}
+		const (
+			prefixUser     = "user>>>"
+			suffixUplink   = ">>>traffic>>>uplink"
+			suffixDownlink = ">>>traffic>>>downlink"
+		)
+		s.stats.VisitCounters(func(name string, c feature_stats.Counter) bool {
+			var email string
+			var isUplink bool
+
+			if strings.HasSuffix(name, suffixUplink) {
+				email = name[len(prefixUser) : len(name)-len(suffixUplink)]
+				isUplink = true
+			} else if strings.HasSuffix(name, suffixDownlink) {
+				email = name[len(prefixUser) : len(name)-len(suffixDownlink)]
+			} else {
+				return true
+			}
+
+			u, ok := userMap[email]
+			if !ok {
+				return true
+			}
+
+			var value int64
+			if request.Reset_ {
+				value = c.Set(0)
+			} else {
+				value = c.Value()
+			}
+
+			if isUplink {
+				u.Traffic.Uplink = value
+			} else {
+				u.Traffic.Downlink = value
+			}
+			return true
+		})
 	}
 
+	resp := &GetUsersStatsResponse{}
+	for _, u := range userMap {
+		resp.Users = append(resp.Users, u)
+	}
+
+	return resp, nil
+}
+
+func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest) (*QueryStatsResponse, error) {
 	response := &QueryStatsResponse{}
 
-	manager, ok := s.stats.(*stats.Manager)
-	if !ok {
-		return nil, errors.New("QueryStats only works its own stats.Manager.")
-	}
-
-	manager.VisitCounters(func(name string, c feature_stats.Counter) bool {
-		if matcher.Match(name) {
+	s.stats.VisitCounters(func(name string, c feature_stats.Counter) bool {
+		if strings.Contains(name, request.Pattern) {
 			var value int64
 			if request.Reset_ {
 				value = c.Set(0)

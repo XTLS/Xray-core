@@ -127,15 +127,20 @@ func genEDNS0Options(clientIP net.IP, padding int) *dnsmessage.Resource {
 	return opt
 }
 
-func buildReqMsgs(domain string, option dns_feature.IPOption, reqIDGen func() uint16, reqOpts *dnsmessage.Resource) []*dnsRequest {
+func buildReqMsgs(domain string, option dns_feature.IPOption, reqIDGen func() uint16, reqOpts *dnsmessage.Resource) ([]*dnsRequest, error) {
+	name, err := dnsmessage.NewName(domain)
+	if err != nil {
+		return nil, err
+	}
+
 	qA := dnsmessage.Question{
-		Name:  dnsmessage.MustNewName(domain),
+		Name:  name,
 		Type:  dnsmessage.TypeA,
 		Class: dnsmessage.ClassINET,
 	}
 
 	qAAAA := dnsmessage.Question{
-		Name:  dnsmessage.MustNewName(domain),
+		Name:  name,
 		Type:  dnsmessage.TypeAAAA,
 		Class: dnsmessage.ClassINET,
 	}
@@ -175,7 +180,7 @@ func buildReqMsgs(domain string, option dns_feature.IPOption, reqIDGen func() ui
 		})
 	}
 
-	return reqs
+	return reqs, nil
 }
 
 // parseResponse parses DNS answers from the returned payload

@@ -17,6 +17,7 @@ const (
 	UseFreedomSplice = "xray.buf.splice"
 	UseVmessPadding  = "xray.vmess.padding"
 	UseCone          = "xray.cone.disabled"
+	UseStrictJSON    = "xray.json.strict"
 
 	BufferSize           = "xray.ray.buffer.size"
 	BrowserDialerAddress = "xray.browser.dialer"
@@ -24,8 +25,6 @@ const (
 	XUDPBaseKey          = "xray.xudp.basekey"
 
 	TunFdKey = "xray.tun.fd"
-
-	MphCachePath = "xray.mph.cache"
 )
 
 type EnvFlag struct {

@@ -73,8 +73,6 @@
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool), [VPainLess](https://github.com/vpainless/vpainless)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
-  - [NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk)
-  - [Xray4Magisk](https://github.com/Asterisk4Magisk/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
 - Homebrew
   - `brew install xray`
@@ -111,6 +109,8 @@
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
+  - [OneXray](https://github.com/OneXray/OneXray)
+  - [XrayUI-dev](https://github.com/PhoenixNil/XrayUI-dev)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
@@ -118,7 +118,8 @@
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
-  - [NetProxy-Magisk](https://github.com/Fanju6/NetProxy-Magisk)
+  - [OneXray](https://github.com/OneXray/OneXray)
+  - [AsteriskNG](https://github.com/Asterisk4Magisk/AsteriskNG)
 - iOS & macOS arm64 & tvOS
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
@@ -143,10 +144,12 @@
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
+  - [OneXray](https://github.com/OneXray/OneXray)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
 - iOS & macOS arm64 & tvOS
+  - [Anywhere](https://github.com/NodePassProject/Anywhere)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
   - [Loon](https://apps.apple.com/us/app/loon/id1373567447)
   - [Egern](https://apps.apple.com/us/app/egern/id1616105820)
@@ -159,6 +162,7 @@
   - [xtls-sdk](https://github.com/remnawave/xtls-sdk)
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
+  - [flutter_vless](https://github.com/XIIIFOX/flutter_vless)
   - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
   - [xray-api](https://github.com/XVGuardian/xray-api)
 - [XrayR](https://github.com/XrayR-project/XrayR)
@@ -205,26 +209,34 @@ CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ld
 
 If you are compiling a Windows x86-64 target, add this environment variable before compiling:
 
-```
+```bash
 GOAMD64=v2
 ```
 
 If you are compiling a macOS x86-64 target, add this environment variable before compiling:
 
-```
+```bash
 GOAMD64=v3
 ```
 
 If you are compiling a Windows ARM64 target, add this environment variable before compiling:
 
-```
+```bash
 GOARM64=v8.2
 ```
 
 If you are compiling a macOS ARM64 target, add this environment variable before compiling:
 
-```
+```bash
 GOARM64=v8.4
+```
+
+For Android:
+
+```bash
+GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC=/path/to/aarch64-linux-android24-clang go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid= -checklinkname=0" -v ./main
+GOOS=android GOARCH=amd64 CGO_ENABLED=1 CC=/path/to/x86_64-linux-android24-clang go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid= -checklinkname=0" -v ./main
+
 ```
 
 If you are compiling a 32-bit MIPS/MIPSLE target, use this command instead:

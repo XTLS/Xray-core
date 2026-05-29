@@ -14,6 +14,7 @@ import (
 type tcpCustomClient struct {
 	clients []*TCPSequence
 	servers []*TCPSequence
+	state   *stateStore
 }
 
 type tcpCustomClientConn struct {
@@ -31,6 +32,7 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 		header: &tcpCustomClient{
 			clients: c.Clients,
 			servers: c.Servers,
+			state:   newStateStore(5 * time.Second),
 		},
 	}
 
@@ -63,16 +65,20 @@ func (c *tcpCustomClientConn) Read(p []byte) (n int, err error) {
 
 func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 	c.once.Do(func() {
+		ctx := newEvalContextWithAddrs(c.LocalAddr(), c.RemoteAddr())
+		if vars, ok := c.header.state.get(tcpStateKey(c.LocalAddr(), c.RemoteAddr())); ok {
+			ctx.vars = cloneVars(vars)
+		}
 		i := 0
 		j := 0
 		for i = range c.header.clients {
-			if !writeSequence(c.Conn, c.header.clients[i]) {
+			if !writeSequenceWithContext(c.Conn, c.header.clients[i], ctx) {
 				c.wg.Done()
 				return
 			}
 
 			if j < len(c.header.servers) {
-				if !readSequence(c.Conn, c.header.servers[j]) {
+				if !readSequenceWithContext(c.Conn, c.header.servers[j], ctx) {
 					c.wg.Done()
 					return
 				}
@@ -81,13 +87,14 @@ func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 		}
 
 		for j < len(c.header.servers) {
-			if !readSequence(c.Conn, c.header.servers[j]) {
+			if !readSequenceWithContext(c.Conn, c.header.servers[j], ctx) {
 				c.wg.Done()
 				return
 			}
 			j++
 		}
 
+		c.header.state.set(tcpStateKey(c.LocalAddr(), c.RemoteAddr()), ctx.vars)
 		c.auth = true
 		c.wg.Done()
 	})
@@ -105,6 +112,7 @@ type tcpCustomServer struct {
 	clients []*TCPSequence
 	servers []*TCPSequence
 	errors  []*TCPSequence
+	state   *stateStore
 }
 
 type tcpCustomServerConn struct {
@@ -123,6 +131,7 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 			clients: c.Clients,
 			servers: c.Servers,
 			errors:  c.Errors,
+			state:   newStateStore(5 * time.Second),
 		},
 	}
 
@@ -145,19 +154,23 @@ func (c *tcpCustomServerConn) Splice() bool {
 
 func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 	c.once.Do(func() {
+		ctx := newEvalContextWithAddrs(c.LocalAddr(), c.RemoteAddr())
+		if vars, ok := c.header.state.get(tcpStateKey(c.LocalAddr(), c.RemoteAddr())); ok {
+			ctx.vars = cloneVars(vars)
+		}
 		i := 0
 		j := 0
 		for i = range c.header.clients {
-			if !readSequence(c.Conn, c.header.clients[i]) {
+			if !readSequenceWithContext(c.Conn, c.header.clients[i], ctx) {
 				if i < len(c.header.errors) {
-					writeSequence(c.Conn, c.header.errors[i])
+					writeSequenceWithContext(c.Conn, c.header.errors[i], ctx)
 				}
 				c.wg.Done()
 				return
 			}
 
 			if j < len(c.header.servers) {
-				if !writeSequence(c.Conn, c.header.servers[j]) {
+				if !writeSequenceWithContext(c.Conn, c.header.servers[j], ctx) {
 					c.wg.Done()
 					return
 				}
@@ -166,13 +179,14 @@ func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 		}
 
 		for j < len(c.header.servers) {
-			if !writeSequence(c.Conn, c.header.servers[j]) {
+			if !writeSequenceWithContext(c.Conn, c.header.servers[j], ctx) {
 				c.wg.Done()
 				return
 			}
 			j++
 		}
 
+		c.header.state.set(tcpStateKey(c.LocalAddr(), c.RemoteAddr()), ctx.vars)
 		c.auth = true
 		c.wg.Done()
 	})
@@ -197,24 +211,56 @@ func (c *tcpCustomServerConn) Write(p []byte) (n int, err error) {
 }
 
 func readSequence(r io.Reader, sequence *TCPSequence) bool {
+	return readSequenceWithContext(r, sequence, newEvalContext())
+}
+
+func readSequenceWithContext(r io.Reader, sequence *TCPSequence, ctx *evalContext) bool {
 	for _, item := range sequence.Sequence {
-		length := max(int(item.Rand), len(item.Packet))
+		length, err := measureItem(item.Rand, item.Packet, item.Save, item.Var, item.Expr, sizeMapFromEvalContext(ctx))
+		if err != nil {
+			return false
+		}
 		buf := make([]byte, length)
 		n, err := io.ReadFull(r, buf)
 		if err != nil {
 			return false
 		}
-		if item.Rand > 0 && n != length {
+		if n != length {
 			return false
 		}
-		if len(item.Packet) > 0 && !bytes.Equal(item.Packet, buf[:n]) {
-			return false
+		switch {
+		case item.Rand > 0:
+		case len(item.Packet) > 0:
+			if !bytes.Equal(item.Packet, buf[:n]) {
+				return false
+			}
+		case item.Var != "":
+			saved, ok := ctx.vars[item.Var]
+			if !ok || !bytes.Equal(saved, buf[:n]) {
+				return false
+			}
+		case item.Expr != nil:
+			evaluated, err := evaluateExpr(item.Expr, ctx)
+			if err != nil {
+				return false
+			}
+			expected, err := evaluated.asBytes()
+			if err != nil || !bytes.Equal(expected, buf[:n]) {
+				return false
+			}
+		}
+		if item.Save != "" {
+			ctx.vars[item.Save] = append([]byte(nil), buf[:n]...)
 		}
 	}
 	return true
 }
 
 func writeSequence(w io.Writer, sequence *TCPSequence) bool {
+	return writeSequenceWithContext(w, sequence, newEvalContext())
+}
+
+func writeSequenceWithContext(w io.Writer, sequence *TCPSequence, ctx *evalContext) bool {
 	var merged []byte
 	for _, item := range sequence.Sequence {
 		if item.DelayMax > 0 {
@@ -227,13 +273,11 @@ func writeSequence(w io.Writer, sequence *TCPSequence) bool {
 			}
 			time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
 		}
-		if item.Rand > 0 {
-			buf := make([]byte, item.Rand)
-			crypto.RandBytesBetween(buf, byte(item.RandMin), byte(item.RandMax))
-			merged = append(merged, buf...)
-		} else {
-			merged = append(merged, item.Packet...)
+		evaluated, err := evaluateItem(item.Rand, item.RandMin, item.RandMax, item.Packet, item.Save, item.Var, item.Expr, ctx)
+		if err != nil {
+			return false
 		}
+		merged = append(merged, evaluated...)
 	}
 	if len(merged) > 0 {
 		_, err := w.Write(merged)
@@ -243,4 +287,16 @@ func writeSequence(w io.Writer, sequence *TCPSequence) bool {
 		merged = nil
 	}
 	return true
+}
+
+func tcpStateKey(local, remote net.Addr) string {
+	localKey := ""
+	if local != nil {
+		localKey = local.String()
+	}
+	remoteKey := ""
+	if remote != nil {
+		remoteKey = remote.String()
+	}
+	return localKey + "|" + remoteKey
 }

@@ -2,7 +2,7 @@ package udp
 
 import (
 	"context"
-	reflect "reflect"
+	"reflect"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -25,45 +25,30 @@ func init() {
 			}
 
 			if streamSettings != nil && streamSettings.UdpmaskManager != nil {
+				var pktConn net.PacketConn
+				var udpAddr *net.UDPAddr
 				switch c := conn.(type) {
 				case *internet.PacketConnWrapper:
-					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(c.PacketConn)
-					if err != nil {
-						conn.Close()
-						return nil, errors.New("mask err").Base(err)
-					}
-					c.PacketConn = pktConn
-				case *net.UDPConn:
-					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(c)
-					if err != nil {
-						conn.Close()
-						return nil, errors.New("mask err").Base(err)
-					}
-					conn = &internet.PacketConnWrapper{
-						PacketConn: pktConn,
-						Dest:       c.RemoteAddr().(*net.UDPAddr),
-					}
+					pktConn = c.PacketConn
+					udpAddr = c.RemoteAddr().(*net.UDPAddr)
 				case *cnc.Connection:
-					fakeConn := &internet.FakePacketConn{Conn: c}
-					pktConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(fakeConn)
-					if err != nil {
-						conn.Close()
-						return nil, errors.New("mask err").Base(err)
-					}
-					conn = &internet.PacketConnWrapper{
-						PacketConn: pktConn,
-						Dest: &net.UDPAddr{
-							IP:   []byte{0, 0, 0, 0},
-							Port: 0,
-						},
-					}
+					pktConn = &internet.FakePacketConn{Conn: c}
+					udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
 				default:
-					conn.Close()
-					return nil, errors.New("unknown conn ", reflect.TypeOf(c))
+					panic(reflect.TypeOf(c))
+				}
+				newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
+				if err != nil {
+					pktConn.Close()
+					return nil, errors.New("mask err").Base(err)
+				}
+				pktConn = newConn
+				conn = &internet.PacketConnWrapper{
+					PacketConn: pktConn,
+					Dest:       udpAddr,
 				}
 			}
 
-			// TODO: handle dialer options
 			return conn, nil
 		}))
 }

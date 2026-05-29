@@ -2,6 +2,7 @@ package dokodemo
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,22 +32,22 @@ func init() {
 }
 
 type DokodemoDoor struct {
-	policyManager policy.Manager
-	config        *Config
-	address       net.Address
-	port          net.Port
-	portMap       map[string]string
-	sockopt       *session.Sockopt
+	policyManager  policy.Manager
+	config         *Config
+	rewriteAddress net.Address
+	rewritePort    net.Port
+	portMap        map[string]string
+	sockopt        *session.Sockopt
 }
 
 // Init initializes the DokodemoDoor instance with necessary parameters.
 func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.Sockopt) error {
-	if len(config.Networks) == 0 {
+	if len(config.AllowedNetworks) == 0 {
 		return errors.New("no network specified")
 	}
 	d.config = config
-	d.address = config.GetPredefinedAddress()
-	d.port = net.Port(config.Port)
+	d.rewriteAddress = config.GetPredefinedAddress()
+	d.rewritePort = net.Port(config.RewritePort)
 	d.portMap = config.PortMap
 	d.policyManager = pm
 	d.sockopt = sockopt
@@ -56,7 +57,10 @@ func (d *DokodemoDoor) Init(config *Config, pm policy.Manager, sockopt *session.
 
 // Network implements proxy.Inbound.
 func (d *DokodemoDoor) Network() []net.Network {
-	return d.config.Networks
+	if slices.Contains(d.config.AllowedNetworks, net.Network_TCP) {
+		return append(d.config.AllowedNetworks, net.Network_UNIX)
+	}
+	return d.config.AllowedNetworks
 }
 
 func (d *DokodemoDoor) policy() policy.Session {
@@ -68,10 +72,14 @@ func (d *DokodemoDoor) policy() policy.Session {
 // Process implements proxy.Inbound.
 func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	errors.LogDebug(ctx, "processing connection from: ", conn.RemoteAddr())
+	// forward to TCP if from UNIX
+	if network == net.Network_UNIX {
+		network = net.Network_TCP
+	}
 	dest := net.Destination{
 		Network: network,
-		Address: d.address,
-		Port:    d.port,
+		Address: d.rewriteAddress,
+		Port:    d.rewritePort,
 	}
 
 	if !d.config.FollowRedirect {
@@ -87,7 +95,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 				}
 			}
 		}
-		if dest.Port == 0 {
+		if dest.Port == 0 && port != "" {
 			dest.Port = net.Port(common.Must2(strconv.Atoi(port)))
 		}
 		if d.portMap != nil && d.portMap[port] != "" {
@@ -182,9 +190,11 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 		}
 	}
 
-	if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
-		Reader: reader,
-		Writer: writer},
+	if err := dispatcher.DispatchLink(
+		ctx, dest, &transport.Link{
+			Reader: reader,
+			Writer: writer,
+		},
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}

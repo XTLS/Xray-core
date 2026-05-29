@@ -445,17 +445,18 @@ func (x *UdpHop) GetIntervalMax() int64 {
 type QuicParams struct {
 	state                   protoimpl.MessageState `protogen:"open.v1"`
 	Congestion              string                 `protobuf:"bytes,1,opt,name=congestion,proto3" json:"congestion,omitempty"`
-	BrutalUp                uint64                 `protobuf:"varint,2,opt,name=brutal_up,json=brutalUp,proto3" json:"brutal_up,omitempty"`
-	BrutalDown              uint64                 `protobuf:"varint,3,opt,name=brutal_down,json=brutalDown,proto3" json:"brutal_down,omitempty"`
-	UdpHop                  *UdpHop                `protobuf:"bytes,4,opt,name=udp_hop,json=udpHop,proto3" json:"udp_hop,omitempty"`
-	InitStreamReceiveWindow uint64                 `protobuf:"varint,5,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
-	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,6,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
-	InitConnReceiveWindow   uint64                 `protobuf:"varint,7,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
-	MaxConnReceiveWindow    uint64                 `protobuf:"varint,8,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
-	MaxIdleTimeout          int64                  `protobuf:"varint,9,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
-	KeepAlivePeriod         int64                  `protobuf:"varint,10,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
-	DisablePathMtuDiscovery bool                   `protobuf:"varint,11,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
-	MaxIncomingStreams      int64                  `protobuf:"varint,12,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
+	BbrProfile              string                 `protobuf:"bytes,2,opt,name=bbr_profile,json=bbrProfile,proto3" json:"bbr_profile,omitempty"`
+	BrutalUp                uint64                 `protobuf:"varint,3,opt,name=brutal_up,json=brutalUp,proto3" json:"brutal_up,omitempty"`
+	BrutalDown              uint64                 `protobuf:"varint,4,opt,name=brutal_down,json=brutalDown,proto3" json:"brutal_down,omitempty"`
+	UdpHop                  *UdpHop                `protobuf:"bytes,5,opt,name=udp_hop,json=udpHop,proto3" json:"udp_hop,omitempty"`
+	InitStreamReceiveWindow uint64                 `protobuf:"varint,6,opt,name=init_stream_receive_window,json=initStreamReceiveWindow,proto3" json:"init_stream_receive_window,omitempty"`
+	MaxStreamReceiveWindow  uint64                 `protobuf:"varint,7,opt,name=max_stream_receive_window,json=maxStreamReceiveWindow,proto3" json:"max_stream_receive_window,omitempty"`
+	InitConnReceiveWindow   uint64                 `protobuf:"varint,8,opt,name=init_conn_receive_window,json=initConnReceiveWindow,proto3" json:"init_conn_receive_window,omitempty"`
+	MaxConnReceiveWindow    uint64                 `protobuf:"varint,9,opt,name=max_conn_receive_window,json=maxConnReceiveWindow,proto3" json:"max_conn_receive_window,omitempty"`
+	MaxIdleTimeout          int64                  `protobuf:"varint,10,opt,name=max_idle_timeout,json=maxIdleTimeout,proto3" json:"max_idle_timeout,omitempty"`
+	KeepAlivePeriod         int64                  `protobuf:"varint,11,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
+	DisablePathMtuDiscovery bool                   `protobuf:"varint,12,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
+	MaxIncomingStreams      int64                  `protobuf:"varint,13,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -493,6 +494,13 @@ func (*QuicParams) Descriptor() ([]byte, []int) {
 func (x *QuicParams) GetCongestion() string {
 	if x != nil {
 		return x.Congestion
+	}
+	return ""
+}
+
+func (x *QuicParams) GetBbrProfile() string {
+	if x != nil {
+		return x.BbrProfile
 	}
 	return ""
 }
@@ -722,8 +730,6 @@ type SocketConfig struct {
 	// ReceiveOriginalDestAddress is for enabling IP_RECVORIGDSTADDR socket
 	// option. This option is for UDP only.
 	ReceiveOriginalDestAddress bool                 `protobuf:"varint,4,opt,name=receive_original_dest_address,json=receiveOriginalDestAddress,proto3" json:"receive_original_dest_address,omitempty"`
-	BindAddress                []byte               `protobuf:"bytes,5,opt,name=bind_address,json=bindAddress,proto3" json:"bind_address,omitempty"`
-	BindPort                   uint32               `protobuf:"varint,6,opt,name=bind_port,json=bindPort,proto3" json:"bind_port,omitempty"`
 	AcceptProxyProtocol        bool                 `protobuf:"varint,7,opt,name=accept_proxy_protocol,json=acceptProxyProtocol,proto3" json:"accept_proxy_protocol,omitempty"`
 	DomainStrategy             DomainStrategy       `protobuf:"varint,8,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.transport.internet.DomainStrategy" json:"domain_strategy,omitempty"`
 	DialerProxy                string               `protobuf:"bytes,9,opt,name=dialer_proxy,json=dialerProxy,proto3" json:"dialer_proxy,omitempty"`
@@ -801,20 +807,6 @@ func (x *SocketConfig) GetReceiveOriginalDestAddress() bool {
 		return x.ReceiveOriginalDestAddress
 	}
 	return false
-}
-
-func (x *SocketConfig) GetBindAddress() []byte {
-	if x != nil {
-		return x.BindAddress
-	}
-	return nil
-}
-
-func (x *SocketConfig) GetBindPort() uint32 {
-	if x != nil {
-		return x.BindPort
-	}
-	return 0
 }
 
 func (x *SocketConfig) GetAcceptProxyProtocol() bool {
@@ -1028,25 +1020,27 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x06UdpHop\x12\x14\n" +
 	"\x05ports\x18\x01 \x03(\rR\x05ports\x12!\n" +
 	"\finterval_min\x18\x02 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\xd1\x04\n" +
+	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\xf2\x04\n" +
 	"\n" +
 	"QuicParams\x12\x1e\n" +
 	"\n" +
 	"congestion\x18\x01 \x01(\tR\n" +
-	"congestion\x12\x1b\n" +
-	"\tbrutal_up\x18\x02 \x01(\x04R\bbrutalUp\x12\x1f\n" +
-	"\vbrutal_down\x18\x03 \x01(\x04R\n" +
+	"congestion\x12\x1f\n" +
+	"\vbbr_profile\x18\x02 \x01(\tR\n" +
+	"bbrProfile\x12\x1b\n" +
+	"\tbrutal_up\x18\x03 \x01(\x04R\bbrutalUp\x12\x1f\n" +
+	"\vbrutal_down\x18\x04 \x01(\x04R\n" +
 	"brutalDown\x128\n" +
-	"\audp_hop\x18\x04 \x01(\v2\x1f.xray.transport.internet.UdpHopR\x06udpHop\x12;\n" +
-	"\x1ainit_stream_receive_window\x18\x05 \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
-	"\x19max_stream_receive_window\x18\x06 \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
-	"\x18init_conn_receive_window\x18\a \x01(\x04R\x15initConnReceiveWindow\x125\n" +
-	"\x17max_conn_receive_window\x18\b \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
-	"\x10max_idle_timeout\x18\t \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
-	"\x11keep_alive_period\x18\n" +
-	" \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
-	"\x1adisable_path_mtu_discovery\x18\v \x01(\bR\x17disablePathMtuDiscovery\x120\n" +
-	"\x14max_incoming_streams\x18\f \x01(\x03R\x12maxIncomingStreams\"Q\n" +
+	"\audp_hop\x18\x05 \x01(\v2\x1f.xray.transport.internet.UdpHopR\x06udpHop\x12;\n" +
+	"\x1ainit_stream_receive_window\x18\x06 \x01(\x04R\x17initStreamReceiveWindow\x129\n" +
+	"\x19max_stream_receive_window\x18\a \x01(\x04R\x16maxStreamReceiveWindow\x127\n" +
+	"\x18init_conn_receive_window\x18\b \x01(\x04R\x15initConnReceiveWindow\x125\n" +
+	"\x17max_conn_receive_window\x18\t \x01(\x04R\x14maxConnReceiveWindow\x12(\n" +
+	"\x10max_idle_timeout\x18\n" +
+	" \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
+	"\x11keep_alive_period\x18\v \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
+	"\x1adisable_path_mtu_discovery\x18\f \x01(\bR\x17disablePathMtuDiscovery\x120\n" +
+	"\x14max_incoming_streams\x18\r \x01(\x03R\x12maxIncomingStreams\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
 	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\x93\x01\n" +
@@ -1056,14 +1050,12 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x05level\x18\x03 \x01(\tR\x05level\x12\x10\n" +
 	"\x03opt\x18\x04 \x01(\tR\x03opt\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\tR\x05value\x12\x12\n" +
-	"\x04type\x18\x06 \x01(\tR\x04type\"\x89\t\n" +
+	"\x04type\x18\x06 \x01(\tR\x04type\"\xc9\b\n" +
 	"\fSocketConfig\x12\x12\n" +
 	"\x04mark\x18\x01 \x01(\x05R\x04mark\x12\x10\n" +
 	"\x03tfo\x18\x02 \x01(\x05R\x03tfo\x12H\n" +
 	"\x06tproxy\x18\x03 \x01(\x0e20.xray.transport.internet.SocketConfig.TProxyModeR\x06tproxy\x12A\n" +
-	"\x1dreceive_original_dest_address\x18\x04 \x01(\bR\x1areceiveOriginalDestAddress\x12!\n" +
-	"\fbind_address\x18\x05 \x01(\fR\vbindAddress\x12\x1b\n" +
-	"\tbind_port\x18\x06 \x01(\rR\bbindPort\x122\n" +
+	"\x1dreceive_original_dest_address\x18\x04 \x01(\bR\x1areceiveOriginalDestAddress\x122\n" +
 	"\x15accept_proxy_protocol\x18\a \x01(\bR\x13acceptProxyProtocol\x12P\n" +
 	"\x0fdomain_strategy\x18\b \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0edomainStrategy\x12!\n" +
 	"\fdialer_proxy\x18\t \x01(\tR\vdialerProxy\x125\n" +

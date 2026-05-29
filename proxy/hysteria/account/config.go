@@ -113,7 +113,7 @@ func (v *Validator) GetAll() []*protocol.MemoryUser {
 	v.mutex.Lock()
 	defer v.mutex.Unlock()
 
-	var users = make([]*protocol.MemoryUser, 0, len(v.users))
+	users := make([]*protocol.MemoryUser, 0, len(v.users))
 	for _, user := range v.users {
 		users = append(users, user)
 	}

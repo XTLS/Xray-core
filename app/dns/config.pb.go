@@ -7,7 +7,7 @@
 package dns
 
 import (
-	router "github.com/xtls/xray-core/app/router"
+	geodata "github.com/xtls/xray-core/common/geodata"
 	net "github.com/xtls/xray-core/common/net"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -22,58 +22,6 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
-
-type DomainMatchingType int32
-
-const (
-	DomainMatchingType_Full      DomainMatchingType = 0
-	DomainMatchingType_Subdomain DomainMatchingType = 1
-	DomainMatchingType_Keyword   DomainMatchingType = 2
-	DomainMatchingType_Regex     DomainMatchingType = 3
-)
-
-// Enum value maps for DomainMatchingType.
-var (
-	DomainMatchingType_name = map[int32]string{
-		0: "Full",
-		1: "Subdomain",
-		2: "Keyword",
-		3: "Regex",
-	}
-	DomainMatchingType_value = map[string]int32{
-		"Full":      0,
-		"Subdomain": 1,
-		"Keyword":   2,
-		"Regex":     3,
-	}
-)
-
-func (x DomainMatchingType) Enum() *DomainMatchingType {
-	p := new(DomainMatchingType)
-	*p = x
-	return p
-}
-
-func (x DomainMatchingType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (DomainMatchingType) Descriptor() protoreflect.EnumDescriptor {
-	return file_app_dns_config_proto_enumTypes[0].Descriptor()
-}
-
-func (DomainMatchingType) Type() protoreflect.EnumType {
-	return &file_app_dns_config_proto_enumTypes[0]
-}
-
-func (x DomainMatchingType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use DomainMatchingType.Descriptor instead.
-func (DomainMatchingType) EnumDescriptor() ([]byte, []int) {
-	return file_app_dns_config_proto_rawDescGZIP(), []int{0}
-}
 
 type QueryStrategy int32
 
@@ -111,11 +59,11 @@ func (x QueryStrategy) String() string {
 }
 
 func (QueryStrategy) Descriptor() protoreflect.EnumDescriptor {
-	return file_app_dns_config_proto_enumTypes[1].Descriptor()
+	return file_app_dns_config_proto_enumTypes[0].Descriptor()
 }
 
 func (QueryStrategy) Type() protoreflect.EnumType {
-	return &file_app_dns_config_proto_enumTypes[1]
+	return &file_app_dns_config_proto_enumTypes[0]
 }
 
 func (x QueryStrategy) Number() protoreflect.EnumNumber {
@@ -124,30 +72,29 @@ func (x QueryStrategy) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use QueryStrategy.Descriptor instead.
 func (QueryStrategy) EnumDescriptor() ([]byte, []int) {
-	return file_app_dns_config_proto_rawDescGZIP(), []int{1}
+	return file_app_dns_config_proto_rawDescGZIP(), []int{0}
 }
 
 type NameServer struct {
-	state             protoimpl.MessageState       `protogen:"open.v1"`
-	Address           *net.Endpoint                `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	ClientIp          []byte                       `protobuf:"bytes,5,opt,name=client_ip,json=clientIp,proto3" json:"client_ip,omitempty"`
-	SkipFallback      bool                         `protobuf:"varint,6,opt,name=skipFallback,proto3" json:"skipFallback,omitempty"`
-	PrioritizedDomain []*NameServer_PriorityDomain `protobuf:"bytes,2,rep,name=prioritized_domain,json=prioritizedDomain,proto3" json:"prioritized_domain,omitempty"`
-	ExpectedGeoip     []*router.GeoIP              `protobuf:"bytes,3,rep,name=expected_geoip,json=expectedGeoip,proto3" json:"expected_geoip,omitempty"`
-	OriginalRules     []*NameServer_OriginalRule   `protobuf:"bytes,4,rep,name=original_rules,json=originalRules,proto3" json:"original_rules,omitempty"`
-	QueryStrategy     QueryStrategy                `protobuf:"varint,7,opt,name=query_strategy,json=queryStrategy,proto3,enum=xray.app.dns.QueryStrategy" json:"query_strategy,omitempty"`
-	ActPrior          bool                         `protobuf:"varint,8,opt,name=actPrior,proto3" json:"actPrior,omitempty"`
-	Tag               string                       `protobuf:"bytes,9,opt,name=tag,proto3" json:"tag,omitempty"`
-	TimeoutMs         uint64                       `protobuf:"varint,10,opt,name=timeoutMs,proto3" json:"timeoutMs,omitempty"`
-	DisableCache      *bool                        `protobuf:"varint,11,opt,name=disableCache,proto3,oneof" json:"disableCache,omitempty"`
-	ServeStale        *bool                        `protobuf:"varint,15,opt,name=serveStale,proto3,oneof" json:"serveStale,omitempty"`
-	ServeExpiredTTL   *uint32                      `protobuf:"varint,16,opt,name=serveExpiredTTL,proto3,oneof" json:"serveExpiredTTL,omitempty"`
-	FinalQuery        bool                         `protobuf:"varint,12,opt,name=finalQuery,proto3" json:"finalQuery,omitempty"`
-	UnexpectedGeoip   []*router.GeoIP              `protobuf:"bytes,13,rep,name=unexpected_geoip,json=unexpectedGeoip,proto3" json:"unexpected_geoip,omitempty"`
-	ActUnprior        bool                         `protobuf:"varint,14,opt,name=actUnprior,proto3" json:"actUnprior,omitempty"`
-	PolicyID          uint32                       `protobuf:"varint,17,opt,name=policyID,proto3" json:"policyID,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Address         *net.Endpoint          `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	ClientIp        []byte                 `protobuf:"bytes,5,opt,name=client_ip,json=clientIp,proto3" json:"client_ip,omitempty"`
+	SkipFallback    bool                   `protobuf:"varint,6,opt,name=skipFallback,proto3" json:"skipFallback,omitempty"`
+	Domain          []*geodata.DomainRule  `protobuf:"bytes,2,rep,name=domain,proto3" json:"domain,omitempty"`
+	ExpectedIp      []*geodata.IPRule      `protobuf:"bytes,3,rep,name=expected_ip,json=expectedIp,proto3" json:"expected_ip,omitempty"`
+	QueryStrategy   QueryStrategy          `protobuf:"varint,7,opt,name=query_strategy,json=queryStrategy,proto3,enum=xray.app.dns.QueryStrategy" json:"query_strategy,omitempty"`
+	ActPrior        bool                   `protobuf:"varint,8,opt,name=actPrior,proto3" json:"actPrior,omitempty"`
+	Tag             string                 `protobuf:"bytes,9,opt,name=tag,proto3" json:"tag,omitempty"`
+	TimeoutMs       uint64                 `protobuf:"varint,10,opt,name=timeoutMs,proto3" json:"timeoutMs,omitempty"`
+	DisableCache    *bool                  `protobuf:"varint,11,opt,name=disableCache,proto3,oneof" json:"disableCache,omitempty"`
+	ServeStale      *bool                  `protobuf:"varint,15,opt,name=serveStale,proto3,oneof" json:"serveStale,omitempty"`
+	ServeExpiredTTL *uint32                `protobuf:"varint,16,opt,name=serveExpiredTTL,proto3,oneof" json:"serveExpiredTTL,omitempty"`
+	FinalQuery      bool                   `protobuf:"varint,12,opt,name=finalQuery,proto3" json:"finalQuery,omitempty"`
+	UnexpectedIp    []*geodata.IPRule      `protobuf:"bytes,13,rep,name=unexpected_ip,json=unexpectedIp,proto3" json:"unexpected_ip,omitempty"`
+	ActUnprior      bool                   `protobuf:"varint,14,opt,name=actUnprior,proto3" json:"actUnprior,omitempty"`
+	PolicyID        uint32                 `protobuf:"varint,17,opt,name=policyID,proto3" json:"policyID,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *NameServer) Reset() {
@@ -201,23 +148,16 @@ func (x *NameServer) GetSkipFallback() bool {
 	return false
 }
 
-func (x *NameServer) GetPrioritizedDomain() []*NameServer_PriorityDomain {
+func (x *NameServer) GetDomain() []*geodata.DomainRule {
 	if x != nil {
-		return x.PrioritizedDomain
+		return x.Domain
 	}
 	return nil
 }
 
-func (x *NameServer) GetExpectedGeoip() []*router.GeoIP {
+func (x *NameServer) GetExpectedIp() []*geodata.IPRule {
 	if x != nil {
-		return x.ExpectedGeoip
-	}
-	return nil
-}
-
-func (x *NameServer) GetOriginalRules() []*NameServer_OriginalRule {
-	if x != nil {
-		return x.OriginalRules
+		return x.ExpectedIp
 	}
 	return nil
 }
@@ -278,9 +218,9 @@ func (x *NameServer) GetFinalQuery() bool {
 	return false
 }
 
-func (x *NameServer) GetUnexpectedGeoip() []*router.GeoIP {
+func (x *NameServer) GetUnexpectedIp() []*geodata.IPRule {
 	if x != nil {
-		return x.UnexpectedGeoip
+		return x.UnexpectedIp
 	}
 	return nil
 }
@@ -429,114 +369,9 @@ func (x *Config) GetEnableParallelQuery() bool {
 	return false
 }
 
-type NameServer_PriorityDomain struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          DomainMatchingType     `protobuf:"varint,1,opt,name=type,proto3,enum=xray.app.dns.DomainMatchingType" json:"type,omitempty"`
-	Domain        string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NameServer_PriorityDomain) Reset() {
-	*x = NameServer_PriorityDomain{}
-	mi := &file_app_dns_config_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NameServer_PriorityDomain) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NameServer_PriorityDomain) ProtoMessage() {}
-
-func (x *NameServer_PriorityDomain) ProtoReflect() protoreflect.Message {
-	mi := &file_app_dns_config_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NameServer_PriorityDomain.ProtoReflect.Descriptor instead.
-func (*NameServer_PriorityDomain) Descriptor() ([]byte, []int) {
-	return file_app_dns_config_proto_rawDescGZIP(), []int{0, 0}
-}
-
-func (x *NameServer_PriorityDomain) GetType() DomainMatchingType {
-	if x != nil {
-		return x.Type
-	}
-	return DomainMatchingType_Full
-}
-
-func (x *NameServer_PriorityDomain) GetDomain() string {
-	if x != nil {
-		return x.Domain
-	}
-	return ""
-}
-
-type NameServer_OriginalRule struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Rule          string                 `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
-	Size          uint32                 `protobuf:"varint,2,opt,name=size,proto3" json:"size,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NameServer_OriginalRule) Reset() {
-	*x = NameServer_OriginalRule{}
-	mi := &file_app_dns_config_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NameServer_OriginalRule) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NameServer_OriginalRule) ProtoMessage() {}
-
-func (x *NameServer_OriginalRule) ProtoReflect() protoreflect.Message {
-	mi := &file_app_dns_config_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NameServer_OriginalRule.ProtoReflect.Descriptor instead.
-func (*NameServer_OriginalRule) Descriptor() ([]byte, []int) {
-	return file_app_dns_config_proto_rawDescGZIP(), []int{0, 1}
-}
-
-func (x *NameServer_OriginalRule) GetRule() string {
-	if x != nil {
-		return x.Rule
-	}
-	return ""
-}
-
-func (x *NameServer_OriginalRule) GetSize() uint32 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
 type Config_HostMapping struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
-	Type   DomainMatchingType     `protobuf:"varint,1,opt,name=type,proto3,enum=xray.app.dns.DomainMatchingType" json:"type,omitempty"`
-	Domain string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
+	Domain *geodata.DomainRule    `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
 	Ip     [][]byte               `protobuf:"bytes,3,rep,name=ip,proto3" json:"ip,omitempty"`
 	// ProxiedDomain indicates the mapped domain has the same IP address on this
 	// domain. Xray will use this domain for IP queries.
@@ -547,7 +382,7 @@ type Config_HostMapping struct {
 
 func (x *Config_HostMapping) Reset() {
 	*x = Config_HostMapping{}
-	mi := &file_app_dns_config_proto_msgTypes[4]
+	mi := &file_app_dns_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -559,7 +394,7 @@ func (x *Config_HostMapping) String() string {
 func (*Config_HostMapping) ProtoMessage() {}
 
 func (x *Config_HostMapping) ProtoReflect() protoreflect.Message {
-	mi := &file_app_dns_config_proto_msgTypes[4]
+	mi := &file_app_dns_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -575,18 +410,11 @@ func (*Config_HostMapping) Descriptor() ([]byte, []int) {
 	return file_app_dns_config_proto_rawDescGZIP(), []int{1, 0}
 }
 
-func (x *Config_HostMapping) GetType() DomainMatchingType {
-	if x != nil {
-		return x.Type
-	}
-	return DomainMatchingType_Full
-}
-
-func (x *Config_HostMapping) GetDomain() string {
+func (x *Config_HostMapping) GetDomain() *geodata.DomainRule {
 	if x != nil {
 		return x.Domain
 	}
-	return ""
+	return nil
 }
 
 func (x *Config_HostMapping) GetIp() [][]byte {
@@ -607,15 +435,15 @@ var File_app_dns_config_proto protoreflect.FileDescriptor
 
 const file_app_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\x1a\x17app/router/config.proto\"\xdf\a\n" +
+	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xde\x05\n" +
 	"\n" +
 	"NameServer\x123\n" +
 	"\aaddress\x18\x01 \x01(\v2\x19.xray.common.net.EndpointR\aaddress\x12\x1b\n" +
 	"\tclient_ip\x18\x05 \x01(\fR\bclientIp\x12\"\n" +
-	"\fskipFallback\x18\x06 \x01(\bR\fskipFallback\x12V\n" +
-	"\x12prioritized_domain\x18\x02 \x03(\v2'.xray.app.dns.NameServer.PriorityDomainR\x11prioritizedDomain\x12=\n" +
-	"\x0eexpected_geoip\x18\x03 \x03(\v2\x16.xray.app.router.GeoIPR\rexpectedGeoip\x12L\n" +
-	"\x0eoriginal_rules\x18\x04 \x03(\v2%.xray.app.dns.NameServer.OriginalRuleR\roriginalRules\x12B\n" +
+	"\fskipFallback\x18\x06 \x01(\bR\fskipFallback\x127\n" +
+	"\x06domain\x18\x02 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12<\n" +
+	"\vexpected_ip\x18\x03 \x03(\v2\x1b.xray.common.geodata.IPRuleR\n" +
+	"expectedIp\x12B\n" +
 	"\x0equery_strategy\x18\a \x01(\x0e2\x1b.xray.app.dns.QueryStrategyR\rqueryStrategy\x12\x1a\n" +
 	"\bactPrior\x18\b \x01(\bR\bactPrior\x12\x10\n" +
 	"\x03tag\x18\t \x01(\tR\x03tag\x12\x1c\n" +
@@ -628,21 +456,15 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\x0fserveExpiredTTL\x18\x10 \x01(\rH\x02R\x0fserveExpiredTTL\x88\x01\x01\x12\x1e\n" +
 	"\n" +
 	"finalQuery\x18\f \x01(\bR\n" +
-	"finalQuery\x12A\n" +
-	"\x10unexpected_geoip\x18\r \x03(\v2\x16.xray.app.router.GeoIPR\x0funexpectedGeoip\x12\x1e\n" +
+	"finalQuery\x12@\n" +
+	"\runexpected_ip\x18\r \x03(\v2\x1b.xray.common.geodata.IPRuleR\funexpectedIp\x12\x1e\n" +
 	"\n" +
 	"actUnprior\x18\x0e \x01(\bR\n" +
 	"actUnprior\x12\x1a\n" +
-	"\bpolicyID\x18\x11 \x01(\rR\bpolicyID\x1a^\n" +
-	"\x0ePriorityDomain\x124\n" +
-	"\x04type\x18\x01 \x01(\x0e2 .xray.app.dns.DomainMatchingTypeR\x04type\x12\x16\n" +
-	"\x06domain\x18\x02 \x01(\tR\x06domain\x1a6\n" +
-	"\fOriginalRule\x12\x12\n" +
-	"\x04rule\x18\x01 \x01(\tR\x04rule\x12\x12\n" +
-	"\x04size\x18\x02 \x01(\rR\x04sizeB\x0f\n" +
+	"\bpolicyID\x18\x11 \x01(\rR\bpolicyIDB\x0f\n" +
 	"\r_disableCacheB\r\n" +
 	"\v_serveStaleB\x12\n" +
-	"\x10_serveExpiredTTL\"\x98\x05\n" +
+	"\x10_serveExpiredTTLJ\x04\b\x04\x10\x05\"\x82\x05\n" +
 	"\x06Config\x129\n" +
 	"\vname_server\x18\x05 \x03(\v2\x18.xray.app.dns.NameServerR\n" +
 	"nameServer\x12\x1b\n" +
@@ -658,17 +480,11 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\x0fdisableFallback\x18\n" +
 	" \x01(\bR\x0fdisableFallback\x126\n" +
 	"\x16disableFallbackIfMatch\x18\v \x01(\bR\x16disableFallbackIfMatch\x120\n" +
-	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x1a\x92\x01\n" +
-	"\vHostMapping\x124\n" +
-	"\x04type\x18\x01 \x01(\x0e2 .xray.app.dns.DomainMatchingTypeR\x04type\x12\x16\n" +
-	"\x06domain\x18\x02 \x01(\tR\x06domain\x12\x0e\n" +
+	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x1a}\n" +
+	"\vHostMapping\x127\n" +
+	"\x06domain\x18\x02 \x01(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x0e\n" +
 	"\x02ip\x18\x03 \x03(\fR\x02ip\x12%\n" +
-	"\x0eproxied_domain\x18\x04 \x01(\tR\rproxiedDomainJ\x04\b\a\x10\b*E\n" +
-	"\x12DomainMatchingType\x12\b\n" +
-	"\x04Full\x10\x00\x12\r\n" +
-	"\tSubdomain\x10\x01\x12\v\n" +
-	"\aKeyword\x10\x02\x12\t\n" +
-	"\x05Regex\x10\x03*B\n" +
+	"\x0eproxied_domain\x18\x04 \x01(\tR\rproxiedDomainJ\x04\b\a\x10\b*B\n" +
 	"\rQueryStrategy\x12\n" +
 	"\n" +
 	"\x06USE_IP\x10\x00\x12\v\n" +
@@ -689,36 +505,32 @@ func file_app_dns_config_proto_rawDescGZIP() []byte {
 	return file_app_dns_config_proto_rawDescData
 }
 
-var file_app_dns_config_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_app_dns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_app_dns_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_app_dns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_app_dns_config_proto_goTypes = []any{
-	(DomainMatchingType)(0),           // 0: xray.app.dns.DomainMatchingType
-	(QueryStrategy)(0),                // 1: xray.app.dns.QueryStrategy
-	(*NameServer)(nil),                // 2: xray.app.dns.NameServer
-	(*Config)(nil),                    // 3: xray.app.dns.Config
-	(*NameServer_PriorityDomain)(nil), // 4: xray.app.dns.NameServer.PriorityDomain
-	(*NameServer_OriginalRule)(nil),   // 5: xray.app.dns.NameServer.OriginalRule
-	(*Config_HostMapping)(nil),        // 6: xray.app.dns.Config.HostMapping
-	(*net.Endpoint)(nil),              // 7: xray.common.net.Endpoint
-	(*router.GeoIP)(nil),              // 8: xray.app.router.GeoIP
+	(QueryStrategy)(0),         // 0: xray.app.dns.QueryStrategy
+	(*NameServer)(nil),         // 1: xray.app.dns.NameServer
+	(*Config)(nil),             // 2: xray.app.dns.Config
+	(*Config_HostMapping)(nil), // 3: xray.app.dns.Config.HostMapping
+	(*net.Endpoint)(nil),       // 4: xray.common.net.Endpoint
+	(*geodata.DomainRule)(nil), // 5: xray.common.geodata.DomainRule
+	(*geodata.IPRule)(nil),     // 6: xray.common.geodata.IPRule
 }
 var file_app_dns_config_proto_depIdxs = []int32{
-	7,  // 0: xray.app.dns.NameServer.address:type_name -> xray.common.net.Endpoint
-	4,  // 1: xray.app.dns.NameServer.prioritized_domain:type_name -> xray.app.dns.NameServer.PriorityDomain
-	8,  // 2: xray.app.dns.NameServer.expected_geoip:type_name -> xray.app.router.GeoIP
-	5,  // 3: xray.app.dns.NameServer.original_rules:type_name -> xray.app.dns.NameServer.OriginalRule
-	1,  // 4: xray.app.dns.NameServer.query_strategy:type_name -> xray.app.dns.QueryStrategy
-	8,  // 5: xray.app.dns.NameServer.unexpected_geoip:type_name -> xray.app.router.GeoIP
-	2,  // 6: xray.app.dns.Config.name_server:type_name -> xray.app.dns.NameServer
-	6,  // 7: xray.app.dns.Config.static_hosts:type_name -> xray.app.dns.Config.HostMapping
-	1,  // 8: xray.app.dns.Config.query_strategy:type_name -> xray.app.dns.QueryStrategy
-	0,  // 9: xray.app.dns.NameServer.PriorityDomain.type:type_name -> xray.app.dns.DomainMatchingType
-	0,  // 10: xray.app.dns.Config.HostMapping.type:type_name -> xray.app.dns.DomainMatchingType
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	4, // 0: xray.app.dns.NameServer.address:type_name -> xray.common.net.Endpoint
+	5, // 1: xray.app.dns.NameServer.domain:type_name -> xray.common.geodata.DomainRule
+	6, // 2: xray.app.dns.NameServer.expected_ip:type_name -> xray.common.geodata.IPRule
+	0, // 3: xray.app.dns.NameServer.query_strategy:type_name -> xray.app.dns.QueryStrategy
+	6, // 4: xray.app.dns.NameServer.unexpected_ip:type_name -> xray.common.geodata.IPRule
+	1, // 5: xray.app.dns.Config.name_server:type_name -> xray.app.dns.NameServer
+	3, // 6: xray.app.dns.Config.static_hosts:type_name -> xray.app.dns.Config.HostMapping
+	0, // 7: xray.app.dns.Config.query_strategy:type_name -> xray.app.dns.QueryStrategy
+	5, // 8: xray.app.dns.Config.HostMapping.domain:type_name -> xray.common.geodata.DomainRule
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_app_dns_config_proto_init() }
@@ -732,8 +544,8 @@ func file_app_dns_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_dns_config_proto_rawDesc), len(file_app_dns_config_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   5,
+			NumEnums:      1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
