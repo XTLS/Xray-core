@@ -27,6 +27,8 @@ type clientConn struct {
 	usernames     []string
 	shortId       []byte
 	publicKeyHash []byte
+	address       string
+	port          uint16
 }
 
 type clientState int
@@ -36,7 +38,7 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, usernames []string, shortId []byte, publicKeyHashHex string) (*clientConn, error) {
+func newClientConn(c net.Conn, usernames []string, shortId []byte, publicKeyHashHex string, address string, port uint16) (*clientConn, error) {
 	publicKeyHash, err := hex.DecodeString(publicKeyHashHex)
 	if err != nil {
 		return nil, fmt.Errorf("decode public key hash: %w", err)
@@ -51,6 +53,8 @@ func newClientConn(c net.Conn, usernames []string, shortId []byte, publicKeyHash
 		usernames:     usernames,
 		shortId:       shortId,
 		publicKeyHash: publicKeyHash,
+		address:       address,
+		port:          port,
 	}, nil
 }
 
@@ -71,8 +75,8 @@ func (c *clientConn) handshake() error {
 
 	var (
 		protocolVersion Varint        = Varint(775)
-		serverAddress   String        = String("mc.hypixel.net")
-		serverPort      UnsignedShort = UnsignedShort(25565)
+		serverAddress   String        = String(c.address)
+		serverPort      UnsignedShort = UnsignedShort(c.port)
 		nextState       Varint        = Varint(2)
 	)
 
