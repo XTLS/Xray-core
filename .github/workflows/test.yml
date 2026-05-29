@@ -8,6 +8,7 @@ on:
 jobs:
   check-assets:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     steps:
       - name: Restore Geodat Cache
         uses: actions/cache/restore@v5
@@ -36,6 +37,7 @@ jobs:
 
   check-proto:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v6
@@ -52,6 +54,7 @@ jobs:
 
   check-format:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     permissions:
       contents: read
     steps:
@@ -65,12 +68,12 @@ jobs:
           cache: false
       - name: Check Format
         run: |
-          # go install -v github.com/daixiang0/gci@latest
           go install -v mvdan.cc/gofumpt@latest
-          go run ./infra/vformat/main.go -mode dryrun -pwd ./
+          go run ./infra/vformat/main.go -mode check -pwd ./
 
   test:
     needs: check-assets
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     permissions:
       contents: read
     runs-on: ${{ matrix.os }}

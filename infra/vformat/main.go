@@ -161,7 +161,6 @@ func main() {
 		suffix = ".exe"
 	}
 	gofmt := "gofumpt" + suffix
-	/* goimports := "gci" + suffix */
 
 	if gofmtPath, err := exec.LookPath(gofmt); err != nil {
 		fmt.Println("Can not find", gofmt, "in system path or current working directory.")
@@ -169,13 +168,6 @@ func main() {
 	} else {
 		gofmt = gofmtPath
 	}
-
-	/* if goimportsPath, err := exec.LookPath(goimports); err != nil {
-		fmt.Println("Can not find", goimports, "in system path or current working directory.")
-		os.Exit(1)
-	} else {
-		goimports = goimportsPath
-	} */
 
 	rawFilesSlice := make([]string, 0, 1000)
 	walkErr := filepath.Walk(pwd, func(path string, info os.FileInfo, err error) error {
@@ -208,13 +200,9 @@ func main() {
 		gofmtArgs := []string{
 			"-l", "-e", "-w",
 		}
-		/* goimportsArgs := []string{
-			"write",
-		} */
 
 		fmt.Println("Formatting Go source files...")
 		RunMany(gofmt, gofmtArgs, rawFilesSlice)
-		/* (goimports, goimportsArgs, rawFilesSlice) */
 		fmt.Println("Do NOT forget to commit file changes.")
 	}
 
@@ -222,19 +210,12 @@ func main() {
 		gofmtListArgs := []string{
 			"-l", "-e",
 		}
-		/* goimportsListArgs := []string{
-			"list",
-		} */
 
 		fmt.Println("Checking files thar are not properly formatted...")
 		formatRequired := RunMany(gofmt, gofmtListArgs, rawFilesSlice)
-		/* formatImportRequired := RunMany(goimports, goimportsListArgs, rawFilesSlice) */
 		if formatRequired {
 			fmt.Println("Format problem(s) found.")
 		}
-		/* if formatImportRequired {
-			fmt.Println("Format problem(s) in import found.")
-		} */
 
 		if isDryrun {
 			if formatRequired {
@@ -243,18 +224,9 @@ func main() {
 				}
 				RunMany(gofmt, gofmtShowArgs, rawFilesSlice)
 			}
-			/* formatImportRequired {
-				goimportsShowArgs := []string{
-					"diff",
-				}
-				RunMany(goimports, goimportsShowArgs, rawFilesSlice)
-			} */
 		}
 
-		/* if formatRequired || formatImportRequired { */
 		if formatRequired {
-			/* fmt.Println("Please run 'go install -v github.com/daixiang0/gci@latest', 'go install -v mvdan.cc/gofumpt@latest', then run 'go run ./infra/vformat/main.go' to format the Go source files.")
-			os.Exit(1) */
 			fmt.Println("Please run 'go install -v mvdan.cc/gofumpt@latest', then run 'go run ./infra/vformat/main.go' to format the Go source files.")
 			os.Exit(1)
 		} else {
