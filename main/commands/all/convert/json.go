@@ -38,7 +38,6 @@ Examples:
 }
 
 func executeTypedMessageToJson(cmd *base.Command, args []string) {
-
 	var injectTypeInfo bool
 	cmd.Flag.BoolVar(&injectTypeInfo, "t", false, "")
 	cmd.Flag.BoolVar(&injectTypeInfo, "type", false, "")
