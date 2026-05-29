@@ -718,6 +718,8 @@ func (c *Xdns) Build() (proto.Message, error) {
 }
 
 type Minecraft struct {
+	Address         string   `json:"address"`
+	Port            uint16   `json:"port"`
 	Usernames       []string `json:"usernames"`
 	ShortId         string   `json:"shortId"`
 	PublicKeySha256 string   `json:"publicKeySha256"`
@@ -728,8 +730,16 @@ type Minecraft struct {
 
 func (c *Minecraft) Build() (proto.Message, error) {
 
-	if c.Usernames == nil || len(c.Usernames) == 0 {
+	if len(c.Usernames) == 0 {
 		c.Usernames = []string{"Dream"}
+	}
+
+	if c.Port == 0 {
+		c.Port = 25565
+	}
+
+	if c.Address == "" {
+		c.Address = "localhost"
 	}
 
 	shortIds := make([][]byte, len(c.ShortIds))
@@ -752,6 +762,8 @@ func (c *Minecraft) Build() (proto.Message, error) {
 		Usernames:       c.Usernames,
 		PublicKeySha256: c.PublicKeySha256,
 		PrivateKey:      c.PrivateKey,
+		Addresss:        c.Address,
+		Port:            uint32(c.Port),
 	}, nil
 }
 

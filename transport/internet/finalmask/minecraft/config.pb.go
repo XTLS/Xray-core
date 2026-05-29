@@ -24,10 +24,12 @@ const (
 type Config struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ShortIds        [][]byte               `protobuf:"bytes,1,rep,name=short_ids,json=shortIds,proto3" json:"short_ids,omitempty"`
-	Usernames       []string               `protobuf:"bytes,2,rep,name=usernames,proto3" json:"usernames,omitempty"`
 	PrivateKey      string                 `protobuf:"bytes,3,opt,name=private_key,json=privateKey,proto3" json:"private_key,omitempty"`
+	Usernames       []string               `protobuf:"bytes,2,rep,name=usernames,proto3" json:"usernames,omitempty"`
 	ShortId         []byte                 `protobuf:"bytes,4,opt,name=short_id,json=shortId,proto3" json:"short_id,omitempty"`
 	PublicKeySha256 string                 `protobuf:"bytes,5,opt,name=public_key_sha256,json=publicKeySha256,proto3" json:"public_key_sha256,omitempty"`
+	Addresss        string                 `protobuf:"bytes,6,opt,name=addresss,proto3" json:"addresss,omitempty"`
+	Port            uint32                 `protobuf:"varint,7,opt,name=port,proto3" json:"port,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -69,18 +71,18 @@ func (x *Config) GetShortIds() [][]byte {
 	return nil
 }
 
-func (x *Config) GetUsernames() []string {
-	if x != nil {
-		return x.Usernames
-	}
-	return nil
-}
-
 func (x *Config) GetPrivateKey() string {
 	if x != nil {
 		return x.PrivateKey
 	}
 	return ""
+}
+
+func (x *Config) GetUsernames() []string {
+	if x != nil {
+		return x.Usernames
+	}
+	return nil
 }
 
 func (x *Config) GetShortId() []byte {
@@ -97,18 +99,34 @@ func (x *Config) GetPublicKeySha256() string {
 	return ""
 }
 
+func (x *Config) GetAddresss() string {
+	if x != nil {
+		return x.Addresss
+	}
+	return ""
+}
+
+func (x *Config) GetPort() uint32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
 var File_config_proto protoreflect.FileDescriptor
 
 const file_config_proto_rawDesc = "" +
 	"\n" +
-	"\fconfig.proto\x12+xray.transport.internet.finalmask.minecraft\"\xab\x01\n" +
+	"\fconfig.proto\x12+xray.transport.internet.finalmask.minecraft\"\xdb\x01\n" +
 	"\x06Config\x12\x1b\n" +
-	"\tshort_ids\x18\x01 \x03(\fR\bshortIds\x12\x1c\n" +
-	"\tusernames\x18\x02 \x03(\tR\tusernames\x12\x1f\n" +
+	"\tshort_ids\x18\x01 \x03(\fR\bshortIds\x12\x1f\n" +
 	"\vprivate_key\x18\x03 \x01(\tR\n" +
-	"privateKey\x12\x19\n" +
+	"privateKey\x12\x1c\n" +
+	"\tusernames\x18\x02 \x03(\tR\tusernames\x12\x19\n" +
 	"\bshort_id\x18\x04 \x01(\fR\ashortId\x12*\n" +
-	"\x11public_key_sha256\x18\x05 \x01(\tR\x0fpublicKeySha256B\xa3\x01\n" +
+	"\x11public_key_sha256\x18\x05 \x01(\tR\x0fpublicKeySha256\x12\x1a\n" +
+	"\baddresss\x18\x06 \x01(\tR\baddresss\x12\x12\n" +
+	"\x04port\x18\a \x01(\rR\x04portB\xa3\x01\n" +
 	"/com.xray.transport.internet.finalmask.minecraftP\x01Z@github.com/xtls/xray-core/transport/internet/finalmask/minecraft\xaa\x02+Xray.Transport.Internet.Finalmask.Minecraftb\x06proto3"
 
 var (

@@ -14,4 +14,6 @@ message Config {
     repeated string usernames = 2;
     bytes short_id = 4;
     string public_key_sha256 = 5;
+    string addresss = 6;
+    uint32 port = 7;
 }
