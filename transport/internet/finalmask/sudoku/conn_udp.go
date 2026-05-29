@@ -1,10 +1,12 @@
 package sudoku
 
 import (
-	"io"
+	"context"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type udpConn struct {
@@ -39,26 +41,31 @@ func (c *udpConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
 
-	n, addr, err = c.conn.ReadFrom(c.readBuf)
-	if err != nil {
-		return n, addr, err
-	}
+	for {
+		n, addr, err = c.conn.ReadFrom(c.readBuf)
+		if err != nil {
+			return n, addr, err
+		}
 
-	decoded := make([]byte, 0, n/4+1)
-	hints := make([]byte, 0, 4)
-	tableIndex := 0
-	hints, decoded, err = decodeBytes(c.tables, &tableIndex, c.readBuf[:n], hints, decoded)
-	if err != nil {
-		return 0, addr, err
+		decoded := make([]byte, 0, n/4+1)
+		hints := make([]byte, 0, 4)
+		tableIndex := 0
+		hints, decoded, err = decodeBytes(c.tables, &tableIndex, c.readBuf[:n], hints, decoded)
+		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "drop packet from ", addr, " with size ", n)
+			continue
+		}
+		if len(hints) != 0 {
+			errors.LogError(context.Background(), "drop packet from ", addr, " with size ", n)
+			continue
+		}
+		if len(p) < len(decoded) {
+			errors.LogError(context.Background(), "drop packet from ", addr, " with size ", n)
+			continue
+		}
+		copy(p, decoded)
+		return len(decoded), addr, nil
 	}
-	if len(hints) != 0 {
-		return 0, addr, io.ErrUnexpectedEOF
-	}
-	if len(p) < len(decoded) {
-		return 0, addr, io.ErrShortBuffer
-	}
-	copy(p, decoded)
-	return len(decoded), addr, nil
 }
 
 func (c *udpConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -68,16 +75,15 @@ func (c *udpConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	// UDP decoding restarts at table 0 for every datagram, so encoding must do the same.
 	encoded, err := newCodec(c.tables, c.pMin, c.pMax).encode(p)
 	if err != nil {
-		return 0, err
+		errors.LogErrorInner(context.Background(), err, "drop packet to ", addr, " with size ", len(p))
+		return 0, nil
 	}
 
-	nn, err := c.conn.WriteTo(encoded, addr)
+	_, err = c.conn.WriteTo(encoded, addr)
 	if err != nil {
 		return 0, err
 	}
-	if nn != len(encoded) {
-		return 0, io.ErrShortWrite
-	}
+
 	return len(p), nil
 }
 

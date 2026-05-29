@@ -29,7 +29,6 @@ type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
 	cone          bool
-	udpFilter     *UDPFilter
 	httpServer    *http.Server
 }
 
@@ -46,7 +45,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	}
 	if config.AuthType == AuthType_PASSWORD {
 		httpConfig.Accounts = config.Accounts
-		s.udpFilter = new(UDPFilter) // We only use this when auth is enabled
 	}
 	s.httpServer, _ = http.NewServer(ctx, httpConfig)
 	return s, nil
@@ -60,11 +58,7 @@ func (s *Server) policy() policy.Session {
 
 // Network implements proxy.Inbound.
 func (s *Server) Network() []net.Network {
-	list := []net.Network{net.Network_TCP}
-	if s.config.UdpEnabled {
-		list = append(list, net.Network_UDP)
-	}
-	return list
+	return []net.Network{net.Network_TCP}
 }
 
 // Process implements proxy.Inbound.
@@ -94,8 +88,6 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			return s.httpServer.ProcessWithFirstbyte(ctx, network, conn, dispatcher, firstbyte...)
 		}
 		return s.processTCP(ctx, conn, dispatcher, firstbyte)
-	case net.Network_UDP:
-		return s.handleUDPPayload(ctx, conn, dispatcher)
 	default:
 		return errors.New("unknown network: ", network)
 	}
@@ -126,7 +118,8 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		Reader: buf.NewReader(conn),
 		Buffer: buf.MultiBuffer{buf.FromBytes(firstbyte)},
 	}
-	request, err := svrSession.Handshake(reader, conn)
+	request, tempUDPConn, err := svrSession.Handshake(reader, conn)
+	defer common.CloseIfExists(tempUDPConn)
 	if err != nil {
 		if inbound.Source.IsValid() {
 			log.Record(&log.AccessMessage{
@@ -170,26 +163,25 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	}
 
 	if request.Command == protocol.RequestCommandUDP {
-		if s.udpFilter != nil {
-			s.udpFilter.Add(conn.RemoteAddr())
+		if tempUDPConn == nil {
+			return errors.New("UDP associate with listen port failed")
 		}
-		return s.handleUDP(conn)
+		tempUDPConn.SetTimeout(plcy.Timeouts.ConnectionIdle)
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- s.handleUDPPayload(ctx, tempUDPConn, dispatcher)
+		}()
+		// Associated TCP keeps the UDP alive
+		// Close UDP if TCP connection is closed
+		// Or Close TCP if UDP is idle timeout
+		io.Copy(buf.DiscardBytes, conn)
+		tempUDPConn.Close()
+		return <-errCh
 	}
-
 	return nil
 }
 
-func (*Server) handleUDP(c io.Reader) error {
-	// The TCP connection closes after this method returns. We need to wait until
-	// the client closes it.
-	return common.Error2(io.Copy(buf.DiscardBytes, c))
-}
-
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	if s.udpFilter != nil && !s.udpFilter.Check(conn.RemoteAddr()) {
-		errors.LogDebug(ctx, "Unauthorized UDP access from ", conn.RemoteAddr().String())
-		return nil
-	}
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		payload := packet.Payload
 		errors.LogDebug(ctx, "writing back UDP response with ", payload.Len(), " bytes")

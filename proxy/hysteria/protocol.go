@@ -253,6 +253,9 @@ func FragUDPMessage(m *UDPMessage, maxSize int) []UDPMessage {
 	}
 	fullPayload := m.Data
 	maxPayloadSize := maxSize - m.HeaderSize()
+	if maxPayloadSize <= 0 {
+		return nil
+	}
 	off := 0
 	fragID := uint8(0)
 	fragCount := uint8((len(fullPayload) + maxPayloadSize - 1) / maxPayloadSize) // round up

@@ -23,8 +23,8 @@ const (
 
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ip            string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
-	Id            int32                  `protobuf:"varint,2,opt,name=id,proto3" json:"id,omitempty"`
+	DGRAM         bool                   `protobuf:"varint,1,opt,name=DGRAM,proto3" json:"DGRAM,omitempty"`
+	IPs           []string               `protobuf:"bytes,2,rep,name=IPs,proto3" json:"IPs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -59,28 +59,28 @@ func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_finalmask_xicmp_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Config) GetIp() string {
+func (x *Config) GetDGRAM() bool {
 	if x != nil {
-		return x.Ip
+		return x.DGRAM
 	}
-	return ""
+	return false
 }
 
-func (x *Config) GetId() int32 {
+func (x *Config) GetIPs() []string {
 	if x != nil {
-		return x.Id
+		return x.IPs
 	}
-	return 0
+	return nil
 }
 
 var File_transport_internet_finalmask_xicmp_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_xicmp_config_proto_rawDesc = "" +
 	"\n" +
-	"/transport/internet/finalmask/xicmp/config.proto\x12'xray.transport.internet.finalmask.xicmp\"(\n" +
-	"\x06Config\x12\x0e\n" +
-	"\x02ip\x18\x01 \x01(\tR\x02ip\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\x05R\x02idB\x97\x01\n" +
+	"/transport/internet/finalmask/xicmp/config.proto\x12'xray.transport.internet.finalmask.xicmp\"0\n" +
+	"\x06Config\x12\x14\n" +
+	"\x05DGRAM\x18\x01 \x01(\bR\x05DGRAM\x12\x10\n" +
+	"\x03IPs\x18\x02 \x03(\tR\x03IPsB\x97\x01\n" +
 	"+com.xray.transport.internet.finalmask.xicmpP\x01Z<github.com/xtls/xray-core/transport/internet/finalmask/xicmp\xaa\x02'Xray.Transport.Internet.Finalmask.Xicmpb\x06proto3"
 
 var (

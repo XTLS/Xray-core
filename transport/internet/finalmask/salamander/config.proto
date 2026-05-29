@@ -10,3 +10,8 @@ message Config {
   string password = 1;
 }
 
+message GeckoConfig {
+  string password = 1;
+  int32 MinPacketSize = 2;
+  int32 MaxPacketSize = 3;
+}

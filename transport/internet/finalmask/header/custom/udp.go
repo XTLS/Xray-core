@@ -2,11 +2,14 @@ package custom
 
 import (
 	"bytes"
+	"context"
 	"net"
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const udpStandaloneBufferSize = 4096
@@ -16,7 +19,6 @@ type udpCustomClient struct {
 	server []*UDPItem
 	merged []byte
 	read   int
-	addr   net.Addr
 	state  *stateStore
 	vars   map[string][]byte
 }
@@ -30,16 +32,16 @@ func (h *udpCustomClient) Serialize(b []byte) {
 	copy(b, evaluated)
 }
 
-func (h *udpCustomClient) Match(b []byte) bool {
+func (h *udpCustomClient) Match(b []byte, addr net.Addr) bool {
 	var initial map[string][]byte
 	if h.state != nil {
-		initial, _ = h.state.get(udpStateKey(h.addr))
+		initial, _ = h.state.get(udpStateKey(addr))
 	}
 	vars, ok := matchUDPItems(h.server, b, h.read, initial)
 	if ok {
 		h.vars = vars
 		if h.state != nil {
-			h.state.set(udpStateKey(h.addr), vars)
+			h.state.set(udpStateKey(addr), vars)
 		}
 	}
 	return ok
@@ -74,24 +76,38 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) 
 	return conn, nil
 }
 
-func (c *udpCustomClientConn) Size() int {
-	return len(c.header.merged)
-}
-
 func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if !c.header.Match(p) {
-		return 0, addr, errors.New("header mismatch")
+	b := p
+	if len(b) < finalmask.UDPSize {
+		buf := buf.New()
+		buf.Resize(0, finalmask.UDPSize)
+		b = buf.Bytes()
+		defer buf.Release()
 	}
 
-	return len(p) - c.header.read, addr, nil
+	for {
+		n, addr, err := c.PacketConn.ReadFrom(b)
+		if err != nil {
+			return n, addr, err
+		}
+
+		if !c.header.Match(b[:n], addr) {
+			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", n, " > header mismatch")
+			continue
+		}
+
+		copy(p, b[c.header.read:n])
+		return n - c.header.read, addr, nil
+	}
 }
 
 func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	var localAddr net.Addr
-	if c.PacketConn != nil {
-		localAddr = c.PacketConn.LocalAddr()
-	}
-	ctx := newEvalContextWithAddrs(localAddr, addr)
+	buf := buf.New()
+	buf.Resize(0, finalmask.UDPSize)
+	b := buf.Bytes()
+	defer buf.Release()
+
+	ctx := newEvalContextWithAddrs(c.PacketConn.LocalAddr(), addr)
 	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {
 		ctx.vars = cloneVars(vars)
 	} else if len(c.header.vars) > 0 {
@@ -99,19 +115,23 @@ func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	}
 	evaluated, err := evaluateUDPItemsWithContext(c.header.client, ctx)
 	if err != nil {
-		return 0, err
+		errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+		return 0, nil
 	}
 	if len(evaluated) != len(c.header.merged) {
-		return 0, errors.New("header size mismatch")
+		errors.LogError(context.Background(), "[mask] drop packet to ", addr, " with size ", len(p), " > header size mismatch")
+		return 0, nil
 	}
 	c.header.state.set(udpStateKey(addr), ctx.vars)
-	copy(p, evaluated)
+	copy(b, evaluated)
+	copy(b[len(evaluated):], p)
+	_, err = c.PacketConn.WriteTo(b[:len(evaluated)+len(p)], addr)
+	if err != nil {
+		errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+		return 0, err
+	}
 
 	return len(p), nil
-}
-
-func (c *udpCustomClientConn) SetReadAddr(addr net.Addr) {
-	c.header.addr = addr
 }
 
 type udpCustomServer struct {
@@ -119,7 +139,6 @@ type udpCustomServer struct {
 	server []*UDPItem
 	merged []byte
 	read   int
-	addr   net.Addr
 	state  *stateStore
 	vars   map[string][]byte
 }
@@ -133,16 +152,16 @@ func (h *udpCustomServer) Serialize(b []byte) {
 	copy(b, evaluated)
 }
 
-func (h *udpCustomServer) Match(b []byte) bool {
+func (h *udpCustomServer) Match(b []byte, addr net.Addr) bool {
 	var initial map[string][]byte
 	if h.state != nil {
-		initial, _ = h.state.get(udpStateKey(h.addr))
+		initial, _ = h.state.get(udpStateKey(addr))
 	}
 	vars, ok := matchUDPItems(h.client, b, h.read, initial)
 	if ok {
 		h.vars = vars
 		if h.state != nil {
-			h.state.set(udpStateKey(h.addr), vars)
+			h.state.set(udpStateKey(addr), vars)
 		}
 	}
 	return ok
@@ -177,24 +196,38 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) 
 	return conn, nil
 }
 
-func (c *udpCustomServerConn) Size() int {
-	return len(c.header.merged)
-}
-
 func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if !c.header.Match(p) {
-		return 0, addr, errors.New("header mismatch")
+	b := p
+	if len(b) < finalmask.UDPSize {
+		buf := buf.New()
+		buf.Resize(0, finalmask.UDPSize)
+		b = buf.Bytes()
+		defer buf.Release()
 	}
 
-	return len(p) - c.header.read, addr, nil
+	for {
+		n, addr, err := c.PacketConn.ReadFrom(b)
+		if err != nil {
+			return n, addr, err
+		}
+
+		if !c.header.Match(b[:n], addr) {
+			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", n, " > header mismatch")
+			continue
+		}
+
+		copy(p, b[c.header.read:n])
+		return n - c.header.read, addr, nil
+	}
 }
 
 func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	var localAddr net.Addr
-	if c.PacketConn != nil {
-		localAddr = c.PacketConn.LocalAddr()
-	}
-	ctx := newEvalContextWithAddrs(localAddr, addr)
+	buf := buf.New()
+	buf.Resize(0, finalmask.UDPSize)
+	b := buf.Bytes()
+	defer buf.Release()
+
+	ctx := newEvalContextWithAddrs(c.PacketConn.LocalAddr(), addr)
 	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {
 		ctx.vars = cloneVars(vars)
 	} else if len(c.header.vars) > 0 {
@@ -202,19 +235,23 @@ func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	}
 	evaluated, err := evaluateUDPItemsWithContext(c.header.server, ctx)
 	if err != nil {
-		return 0, err
+		errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+		return 0, nil
 	}
 	if len(evaluated) != len(c.header.merged) {
-		return 0, errors.New("header size mismatch")
+		errors.LogError(context.Background(), "[mask] drop packet to ", addr, " with size ", len(p), " > header size mismatch")
+		return 0, nil
 	}
 	c.header.state.set(udpStateKey(addr), ctx.vars)
-	copy(p, evaluated)
+	copy(b, evaluated)
+	copy(b[len(evaluated):], p)
+	_, err = c.PacketConn.WriteTo(b[:len(evaluated)+len(p)], addr)
+	if err != nil {
+		errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+		return 0, err
+	}
 
 	return len(p), nil
-}
-
-func (c *udpCustomServerConn) SetReadAddr(addr net.Addr) {
-	c.header.addr = addr
 }
 
 func matchUDPItems(items []*UDPItem, data []byte, totalSize int, initial map[string][]byte) (map[string][]byte, bool) {
@@ -294,7 +331,7 @@ type udpStandaloneWaiter struct {
 	done chan error
 }
 
-func NewConnClientUDPStandalone(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClientUDPStandalone(c *UDPStandaloneConfig, raw net.PacketConn) (net.PacketConn, error) {
 	clientSavedSizes := collectSavedUDPSizes(c.Client)
 	read, err := measureUDPItemsWithFallback(c.Server, clientSavedSizes)
 	if err != nil {
@@ -441,7 +478,7 @@ type udpCustomStandaloneServerConn struct {
 	read   int
 }
 
-func NewConnServerUDPStandalone(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServerUDPStandalone(c *UDPStandaloneConfig, raw net.PacketConn) (net.PacketConn, error) {
 	read, err := measureUDPItems(c.Client)
 	if err != nil {
 		return nil, err
