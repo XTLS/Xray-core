@@ -1739,22 +1739,23 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 }
 
 type MkcpLegacy struct {
-	ID       int    `json:"id"`
-	Password string `json:"password"`
-	Domain   string `json:"domain"`
+	ID    int    `json:"id"`
+	Value string `json:"value"`
 }
 
 func (c *MkcpLegacy) Build() (proto.Message, error) {
 	switch c.ID {
 	case 0:
-		return &original.Config{}, nil
-	case 1:
-		return &aes128gcm.Config{
-			Password: c.Password,
-		}, nil
+		if len(c.Value) == 0 {
+			return &original.Config{}, nil
+		} else {
+			return &aes128gcm.Config{
+				Password: c.Value,
+			}, nil
+		}
 	default:
-		id := c.ID - 2
-		domain := c.Domain
+		id := c.ID - 1
+		domain := c.Value
 		if id < 0 || id > 5 {
 			return nil, errors.New("invalid id")
 		}
