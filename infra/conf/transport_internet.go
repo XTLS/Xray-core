@@ -1739,33 +1739,37 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 }
 
 type MkcpLegacy struct {
-	ID    int    `json:"id"`
-	Value string `json:"value"`
+	Header string `json:"header"`
+	Value  string `json:"value"`
 }
 
 func (c *MkcpLegacy) Build() (proto.Message, error) {
-	switch c.ID {
-	case 0:
+	if len(c.Header) == 0 {
 		if len(c.Value) == 0 {
 			return &original.Config{}, nil
 		} else {
-			return &aes128gcm.Config{
-				Password: c.Value,
-			}, nil
+			return &aes128gcm.Config{Password: c.Value}, nil
 		}
-	default:
-		id := c.ID - 1
+	}
+	switch strings.ToLower(c.Header) {
+	case "dns":
 		domain := c.Value
-		if id < 0 || id > 5 {
-			return nil, errors.New("invalid id")
-		}
 		if len(domain) == 0 {
 			domain = "www.baidu.com"
 		}
-		return &header.Config{
-			ID:     int32(id),
-			Domain: domain,
-		}, nil
+		return &header.Config{ID: 0, Domain: domain}, nil
+	case "dtls":
+		return &header.Config{ID: 1}, nil
+	case "srtp":
+		return &header.Config{ID: 2}, nil
+	case "utp":
+		return &header.Config{ID: 3}, nil
+	case "wechat":
+		return &header.Config{ID: 4}, nil
+	case "wireguard":
+		return &header.Config{ID: 5}, nil
+	default:
+		return nil, errors.New("invalid header ", c.Header)
 	}
 }
 
