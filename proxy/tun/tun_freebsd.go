@@ -27,8 +27,10 @@ type FreeBSDTun struct {
 	mtu    uint32
 }
 
-var _ Tun = (*FreeBSDTun)(nil)
-var _ GVisorDevice = (*FreeBSDTun)(nil)
+var (
+	_ Tun          = (*FreeBSDTun)(nil)
+	_ GVisorDevice = (*FreeBSDTun)(nil)
+)
 
 // NewTun builds new tun interface handler
 func NewTun(options *Config) (Tun, error) {

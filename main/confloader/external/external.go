@@ -52,7 +52,7 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 // When the ":/" separator is omitted on a socket target, the request is
 // made to "/".
 func FetchHTTPContent(target string) ([]byte, error) {
-    httpURL, socketPath := utils.SplitHTTPUnixURL(target)
+	httpURL, socketPath := utils.SplitHTTPUnixURL(target)
 
 	parsedTarget, err := url.Parse(httpURL)
 	if err != nil {
@@ -63,15 +63,15 @@ func FetchHTTPContent(target string) ([]byte, error) {
 		Timeout: 30 * time.Second,
 	}
 
-    if socketPath != "" {
-        dialAddr := utils.ResolveSocketPath(socketPath)
-        client.Transport = &http.Transport{
-            DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-                var d net.Dialer
-                return d.DialContext(ctx, "unix", dialAddr)
-            },
-        }
-    }
+	if socketPath != "" {
+		dialAddr := utils.ResolveSocketPath(socketPath)
+		client.Transport = &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", dialAddr)
+			},
+		}
+	}
 
 	resp, err := client.Do(&http.Request{
 		Method: "GET",
@@ -94,7 +94,6 @@ func FetchHTTPContent(target string) ([]byte, error) {
 
 	return content, nil
 }
-
 
 // isRemoteSource reports whether arg should be fetched via HTTP (regular
 // network or Unix socket) rather than read from the local filesystem.
@@ -123,7 +122,6 @@ func isRemoteSource(arg string) bool {
 	info, err := os.Stat(arg)
 	return err == nil && info.Mode()&os.ModeSocket != 0
 }
-
 
 // httpUnixToCanonical converts the deprecated http+unix:///path/to/socket.sock/api
 // URL into the canonical /path/to/socket.sock:/api form by inserting ":"

@@ -326,9 +326,7 @@ func ConvertToGoECHKeys(data []byte) ([]tls.EncryptedClientHelloKey, error) {
 			return keys, ErrInvalidLen
 		}
 		child := cryptobyte.String(s[:2+keyLength+2+configLength])
-		var (
-			sk, config cryptobyte.String
-		)
+		var sk, config cryptobyte.String
 		if !child.ReadUint16LengthPrefixed(&sk) || !child.ReadUint16LengthPrefixed(&config) || !child.Empty() {
 			return keys, ErrInvalidLen
 		}

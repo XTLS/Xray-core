@@ -153,9 +153,11 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		if inbound.CanSpliceCopy == 2 {
 			inbound.CanSpliceCopy = 1
 		}
-		if err := dispatcher.DispatchLink(ctx, dest, &transport.Link{
-			Reader: reader,
-			Writer: buf.NewWriter(conn)},
+		if err := dispatcher.DispatchLink(
+			ctx, dest, &transport.Link{
+				Reader: reader,
+				Writer: buf.NewWriter(conn),
+			},
 		); err != nil {
 			return errors.New("failed to dispatch request").Base(err)
 		}

@@ -123,10 +123,12 @@ func (c *scriptedPacketConn) SetDeadline(t time.Time) error {
 	c.deadline.Store(t.UnixNano())
 	return nil
 }
+
 func (c *scriptedPacketConn) SetReadDeadline(t time.Time) error {
 	c.deadline.Store(t.UnixNano())
 	return nil
 }
+
 func (c *scriptedPacketConn) SetWriteDeadline(t time.Time) error {
 	c.deadline.Store(t.UnixNano())
 	return nil

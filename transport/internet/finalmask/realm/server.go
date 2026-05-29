@@ -16,9 +16,11 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-const defaultEventBuffer = 16
-const defaultStunCacheTTL = time.Second * 10
-const defaultHeartbeatInterval = time.Second * 15
+const (
+	defaultEventBuffer       = 16
+	defaultStunCacheTTL      = time.Second * 10
+	defaultHeartbeatInterval = time.Second * 15
+)
 
 type PunchPacketEvent struct {
 	Addr   netip.AddrPort
@@ -124,15 +126,15 @@ func (c *realmConnServer) waitctx(ctx context.Context, t time.Duration) bool {
 }
 
 func (c *realmConnServer) discover(servers []*net.UDPAddr) []netip.AddrPort {
-	var transactionIDs = make(map[[stun.TransactionIDSize]byte]struct{}, len(servers))
+	transactionIDs := make(map[[stun.TransactionIDSize]byte]struct{}, len(servers))
 	for _, server := range servers {
 		msg := common.Must2(stun.Build(stun.TransactionID, stun.BindingRequest))
 		transactionIDs[msg.TransactionID] = struct{}{}
 		_, _ = c.PacketConn.WriteTo(msg.Raw, server)
 	}
 
-	var deadline = time.NewTimer(c.stunTimeout)
-	var results = make([]netip.AddrPort, 0, len(servers))
+	deadline := time.NewTimer(c.stunTimeout)
+	results := make([]netip.AddrPort, 0, len(servers))
 	for len(transactionIDs) > 0 {
 		select {
 		case <-deadline.C:

@@ -69,7 +69,7 @@ func (t *stackGVisor) Start() error {
 	tcpForwarder := tcp.NewForwarder(ipStack, 0, 65535, func(r *tcp.ForwarderRequest) {
 		go func(r *tcp.ForwarderRequest) {
 			var wq waiter.Queue
-			var id = r.ID()
+			id := r.ID()
 
 			// Perform a TCP three-way handshake.
 			ep, err := r.CreateEndpoint(&wq)

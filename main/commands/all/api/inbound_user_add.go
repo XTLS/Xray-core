@@ -62,7 +62,8 @@ func addInboundUserAction(ctx context.Context, client handlerService.HandlerServ
 		Operation: cserial.ToTypedMessage(
 			&handlerService.AddUserOperation{
 				User: user,
-			}),
+			},
+		),
 	})
 	return err
 }

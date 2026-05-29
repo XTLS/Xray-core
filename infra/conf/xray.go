@@ -177,7 +177,8 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		protocol := ss.GetEffectiveProtocol()
 		if (protocol == "websocket" || protocol == "httpupgrade" || protocol == "splithttp") &&
 			(c.StreamSetting.SocketSettings == nil || len(c.StreamSetting.SocketSettings.TrustedXForwardedFor) == 0) {
-			errors.LogWarning(context.Background(),
+			errors.LogWarning(
+				context.Background(),
 				`====== SECURITY WARNING ======`,
 				"\n",
 				`inbound "`, c.Tag, `" using `, protocol, ` has not configured "sockopt.trustedXForwardedFor".`,
@@ -285,7 +286,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 
 	if c.SendThrough != nil {
 		address := ParseSendThough(c.SendThrough)
-		//Check if CIDR exists
+		// Check if CIDR exists
 		if strings.Contains(*c.SendThrough, "/") {
 			senderSettings.ViaCidr = strings.Split(*c.SendThrough, "/")[1]
 		} else {
@@ -469,7 +470,6 @@ func (c *Config) Override(o *Config, fn string) {
 				c.InboundConfigs = append(c.InboundConfigs, o.InboundConfigs[i])
 				errors.LogInfo(context.Background(), "[", fn, "] appended inbound with tag: ", o.InboundConfigs[i].Tag)
 			}
-
 		}
 	}
 

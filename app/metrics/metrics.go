@@ -85,7 +85,6 @@ func (p *MetricsHandler) Type() interface{} {
 }
 
 func (p *MetricsHandler) Start() error {
-
 	// direct listen a port if listen is set
 	if p.listen != "" {
 		TCPlistener, err := net.Listen("tcp", p.listen)

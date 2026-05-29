@@ -25,7 +25,8 @@ func Test_parseResponse(t *testing.T) {
 
 	ans = new(dns.Msg)
 	ans.Id = 1
-	ans.Answer = append(ans.Answer,
+	ans.Answer = append(
+		ans.Answer,
 		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")),
 		common.Must2(dns.NewRR("google.com. IN A 8.8.8.8")),
@@ -35,7 +36,8 @@ func Test_parseResponse(t *testing.T) {
 
 	ans = new(dns.Msg)
 	ans.Id = 2
-	ans.Answer = append(ans.Answer,
+	ans.Answer = append(
+		ans.Answer,
 		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),

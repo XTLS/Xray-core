@@ -19,18 +19,18 @@ import (
 // Filesystem paths and abstract sockets on other platforms are returned
 // unchanged.
 func ResolveSocketPath(path string) string {
-    if len(path) == 0 || path[0] != '@' {
-        return path
-    }
-    if runtime.GOOS != "linux" && runtime.GOOS != "android" {
-        return path
-    }
-    if len(path) > 1 && path[1] == '@' {
-        fullAddr := make([]byte, len(syscall.RawSockaddrUnix{}.Path))
-        copy(fullAddr, path[1:])
-        return string(fullAddr)
-    }
-    return path
+	if len(path) == 0 || path[0] != '@' {
+		return path
+	}
+	if runtime.GOOS != "linux" && runtime.GOOS != "android" {
+		return path
+	}
+	if len(path) > 1 && path[1] == '@' {
+		fullAddr := make([]byte, len(syscall.RawSockaddrUnix{}.Path))
+		copy(fullAddr, path[1:])
+		return string(fullAddr)
+	}
+	return path
 }
 
 // SplitHTTPUnixURL splits a target into an HTTP URL and an optional Unix
@@ -44,12 +44,11 @@ func ResolveSocketPath(path string) string {
 // The :/ separator delimits the socket path from the HTTP request path.
 // If omitted, "/" is used.
 func SplitHTTPUnixURL(raw string) (httpURL, socketPath string) {
-    if len(raw) == 0 || (!filepath.IsAbs(raw) && raw[0] != '@') {
-        return raw, ""
-    }
-    if idx := strings.Index(raw, ":/"); idx >= 0 {
-        return "http://localhost" + raw[idx+1:], raw[:idx]
-    }
-    return "http://localhost/", raw
+	if len(raw) == 0 || (!filepath.IsAbs(raw) && raw[0] != '@') {
+		return raw, ""
+	}
+	if idx := strings.Index(raw, ":/"); idx >= 0 {
+		return "http://localhost" + raw[idx+1:], raw[:idx]
+	}
+	return "http://localhost/", raw
 }
-

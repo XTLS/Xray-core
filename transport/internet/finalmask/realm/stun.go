@@ -35,8 +35,8 @@ func resolveSTUNServers(local net.IP, servers []string) []*net.UDPAddr {
 		}
 	}
 
-	var seen = make(map[string]struct{})
-	var addrs = make([]*net.UDPAddr, 0, len(servers))
+	seen := make(map[string]struct{})
+	addrs := make([]*net.UDPAddr, 0, len(servers))
 	for _, server := range servers {
 		h, p, err := net.SplitHostPort(server)
 		if err != nil {
@@ -116,8 +116,8 @@ func candidatePunchAddrs(locals, peers []netip.AddrPort) ([]netip.AddrPort, map[
 			break
 		}
 	}
-	var seen = make(map[netip.AddrPort]struct{}, len(peers))
-	var candidates = make([]netip.AddrPort, 0, len(peers))
+	seen := make(map[netip.AddrPort]struct{}, len(peers))
+	candidates := make([]netip.AddrPort, 0, len(peers))
 	for _, peer := range peers {
 		if _, ok := seen[peer]; ok {
 			continue

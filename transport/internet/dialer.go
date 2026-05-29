@@ -133,7 +133,6 @@ func redirect(ctx context.Context, dst net.Destination, obt string, h outbound.H
 		cnc.ConnectionOnClose(common.ChainedClosable{uw, dw}),
 	)
 	return nc
-
 }
 
 func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (*net.Destination, error) {
