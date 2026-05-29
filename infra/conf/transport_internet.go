@@ -24,13 +24,8 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/dtls"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
@@ -1243,21 +1238,14 @@ var (
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"header-custom":    func() interface{} { return new(HeaderCustomUDP) },
-		"header-dns":       func() interface{} { return new(Dns) },
-		"header-dtls":      func() interface{} { return new(Dtls) },
-		"header-srtp":      func() interface{} { return new(Srtp) },
-		"header-utp":       func() interface{} { return new(Utp) },
-		"header-wechat":    func() interface{} { return new(Wechat) },
-		"header-wireguard": func() interface{} { return new(Wireguard) },
-		"mkcp-original":    func() interface{} { return new(Original) },
-		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
-		"noise":            func() interface{} { return new(NoiseMask) },
-		"salamander":       func() interface{} { return new(Salamander) },
-		"sudoku":           func() interface{} { return new(Sudoku) },
-		"xdns":             func() interface{} { return new(Xdns) },
-		"xicmp":            func() interface{} { return new(Xicmp) },
-		"realm":            func() interface{} { return new(Realm) },
+		"header-custom": func() interface{} { return new(HeaderCustomUDP) },
+		"mkcp-legacy":   func() interface{} { return new(MkcpLegacy) },
+		"noise":         func() interface{} { return new(NoiseMask) },
+		"salamander":    func() interface{} { return new(Salamander) },
+		"sudoku":        func() interface{} { return new(Sudoku) },
+		"xdns":          func() interface{} { return new(Xdns) },
+		"xicmp":         func() interface{} { return new(Xicmp) },
+		"realm":         func() interface{} { return new(Realm) },
 	}, "type", "settings")
 )
 
@@ -1750,65 +1738,39 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 	}
 }
 
-type Dns struct {
-	Domain string `json:"domain"`
+type MkcpLegacy struct {
+	Header string `json:"header"`
+	Value  string `json:"value"`
 }
 
-func (c *Dns) Build() (proto.Message, error) {
-	config := &dns.Config{}
-	config.Domain = "www.baidu.com"
-
-	if len(c.Domain) > 0 {
-		config.Domain = c.Domain
+func (c *MkcpLegacy) Build() (proto.Message, error) {
+	if len(c.Header) == 0 {
+		if len(c.Value) == 0 {
+			return &original.Config{}, nil
+		} else {
+			return &aes128gcm.Config{Password: c.Value}, nil
+		}
 	}
-
-	return config, nil
-}
-
-type Dtls struct{}
-
-func (c *Dtls) Build() (proto.Message, error) {
-	return &dtls.Config{}, nil
-}
-
-type Srtp struct{}
-
-func (c *Srtp) Build() (proto.Message, error) {
-	return &srtp.Config{}, nil
-}
-
-type Utp struct{}
-
-func (c *Utp) Build() (proto.Message, error) {
-	return &utp.Config{}, nil
-}
-
-type Wechat struct{}
-
-func (c *Wechat) Build() (proto.Message, error) {
-	return &wechat.Config{}, nil
-}
-
-type Wireguard struct{}
-
-func (c *Wireguard) Build() (proto.Message, error) {
-	return &wireguard.Config{}, nil
-}
-
-type Original struct{}
-
-func (c *Original) Build() (proto.Message, error) {
-	return &original.Config{}, nil
-}
-
-type Aes128Gcm struct {
-	Password string `json:"password"`
-}
-
-func (c *Aes128Gcm) Build() (proto.Message, error) {
-	return &aes128gcm.Config{
-		Password: c.Password,
-	}, nil
+	switch strings.ToLower(c.Header) {
+	case "dns":
+		domain := c.Value
+		if len(domain) == 0 {
+			domain = "www.baidu.com"
+		}
+		return &header.Config{ID: 0, Domain: domain}, nil
+	case "dtls":
+		return &header.Config{ID: 1}, nil
+	case "srtp":
+		return &header.Config{ID: 2}, nil
+	case "utp":
+		return &header.Config{ID: 3}, nil
+	case "wechat":
+		return &header.Config{ID: 4}, nil
+	case "wireguard":
+		return &header.Config{ID: 5}, nil
+	default:
+		return nil, errors.New("invalid header ", c.Header)
+	}
 }
 
 type Salamander struct {
