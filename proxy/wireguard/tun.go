@@ -156,7 +156,7 @@ func createGVisorTun(localAddresses []netip.Addr, mtu int, handler promiscuousMo
 		tcpForwarder := tcp.NewForwarder(gstack, 0, 65535, func(r *tcp.ForwarderRequest) {
 			go func(r *tcp.ForwarderRequest) {
 				var wq waiter.Queue
-				var id = r.ID()
+				id := r.ID()
 
 				ep, err := r.CreateEndpoint(&wq)
 				if err != nil {

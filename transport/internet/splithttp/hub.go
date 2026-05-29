@@ -344,7 +344,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Payload: payload,
 			Seq:     seq,
 		})
-
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to upload (PushPayload)")
 			writer.WriteHeader(http.StatusInternalServerError)
@@ -604,6 +603,7 @@ func (ln *Listener) Close() error {
 	}
 	return errors.New("listener does not have an HTTP/3 server or a net.listener")
 }
+
 func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *gotls.Config {
 	config := tls.ConfigFromStreamSettings(streamSettings)
 	if config == nil {
@@ -611,6 +611,7 @@ func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *gotls.Config {
 	}
 	return config.GetTLSConfig()
 }
+
 func init() {
 	common.Must(internet.RegisterTransportListener(protocolName, ListenXH))
 }

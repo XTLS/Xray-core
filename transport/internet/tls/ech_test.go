@@ -44,7 +44,6 @@ func TestECHDial(t *testing.T) {
 	echConfigCache, ok := GlobalECHConfigCache.Load(ECHCacheKey("udp://1.1.1.1", "encryptedsni.com", nil))
 	if !ok {
 		t.Error("ECH config cache not found")
-
 	}
 	ok = echConfigCache.UpdateLock.TryLock()
 	if !ok {

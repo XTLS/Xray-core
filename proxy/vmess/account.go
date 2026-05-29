@@ -1,8 +1,9 @@
 package vmess
 
 import (
-	"google.golang.org/protobuf/proto"
 	"strings"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
@@ -30,7 +31,7 @@ func (a *MemoryAccount) Equals(account protocol.Account) bool {
 }
 
 func (a *MemoryAccount) ToProto() proto.Message {
-	var test = ""
+	test := ""
 	if a.AuthenticatedLengthExperiment {
 		test = "AuthenticatedLength|"
 	}

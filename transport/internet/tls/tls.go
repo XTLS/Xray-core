@@ -22,8 +22,10 @@ type Interface interface {
 	NegotiatedProtocol() string
 }
 
-var _ buf.Writer = (*Conn)(nil)
-var _ Interface = (*Conn)(nil)
+var (
+	_ buf.Writer = (*Conn)(nil)
+	_ Interface  = (*Conn)(nil)
+)
 
 type Conn struct {
 	*tls.Conn

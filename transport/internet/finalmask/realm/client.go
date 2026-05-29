@@ -91,15 +91,15 @@ func (c *realmConnClient) getpeer() (net.PacketConn, error) {
 }
 
 func (c *realmConnClient) discover(servers []*net.UDPAddr) []netip.AddrPort {
-	var transactionIDs = make(map[[stun.TransactionIDSize]byte]struct{}, len(servers))
+	transactionIDs := make(map[[stun.TransactionIDSize]byte]struct{}, len(servers))
 	for _, server := range servers {
 		msg := common.Must2(stun.Build(stun.TransactionID, stun.BindingRequest))
 		transactionIDs[msg.TransactionID] = struct{}{}
 		_, _ = c.PacketConn.WriteTo(msg.Raw, server)
 	}
 
-	var buf = make([]byte, 1500)
-	var results = make([]netip.AddrPort, 0, len(servers))
+	buf := make([]byte, 1500)
+	results := make([]netip.AddrPort, 0, len(servers))
 	c.PacketConn.SetReadDeadline(time.Now().Add(defaultSTUNTimeout))
 	for len(transactionIDs) > 0 {
 		n, _, err := c.PacketConn.ReadFrom(buf)
