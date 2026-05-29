@@ -65,13 +65,77 @@ func (x *Config) GetPassword() string {
 	return ""
 }
 
+type GeckoConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	MinPacketSize int32                  `protobuf:"varint,2,opt,name=MinPacketSize,proto3" json:"MinPacketSize,omitempty"`
+	MaxPacketSize int32                  `protobuf:"varint,3,opt,name=MaxPacketSize,proto3" json:"MaxPacketSize,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GeckoConfig) Reset() {
+	*x = GeckoConfig{}
+	mi := &file_transport_internet_finalmask_salamander_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GeckoConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeckoConfig) ProtoMessage() {}
+
+func (x *GeckoConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_salamander_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeckoConfig.ProtoReflect.Descriptor instead.
+func (*GeckoConfig) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_salamander_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GeckoConfig) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *GeckoConfig) GetMinPacketSize() int32 {
+	if x != nil {
+		return x.MinPacketSize
+	}
+	return 0
+}
+
+func (x *GeckoConfig) GetMaxPacketSize() int32 {
+	if x != nil {
+		return x.MaxPacketSize
+	}
+	return 0
+}
+
 var File_transport_internet_finalmask_salamander_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_salamander_config_proto_rawDesc = "" +
 	"\n" +
 	"4transport/internet/finalmask/salamander/config.proto\x12,xray.transport.internet.finalmask.salamander\"$\n" +
 	"\x06Config\x12\x1a\n" +
-	"\bpassword\x18\x01 \x01(\tR\bpasswordB\xa6\x01\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\"u\n" +
+	"\vGeckoConfig\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\x12$\n" +
+	"\rMinPacketSize\x18\x02 \x01(\x05R\rMinPacketSize\x12$\n" +
+	"\rMaxPacketSize\x18\x03 \x01(\x05R\rMaxPacketSizeB\xa6\x01\n" +
 	"0com.xray.transport.internet.finalmask.salamanderP\x01ZAgithub.com/xtls/xray-core/transport/internet/finalmask/salamander\xaa\x02,Xray.Transport.Internet.Finalmask.Salamanderb\x06proto3"
 
 var (
@@ -86,9 +150,10 @@ func file_transport_internet_finalmask_salamander_config_proto_rawDescGZIP() []b
 	return file_transport_internet_finalmask_salamander_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_salamander_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_transport_internet_finalmask_salamander_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_transport_internet_finalmask_salamander_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.transport.internet.finalmask.salamander.Config
+	(*Config)(nil),      // 0: xray.transport.internet.finalmask.salamander.Config
+	(*GeckoConfig)(nil), // 1: xray.transport.internet.finalmask.salamander.GeckoConfig
 }
 var file_transport_internet_finalmask_salamander_config_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -109,7 +174,7 @@ func file_transport_internet_finalmask_salamander_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_salamander_config_proto_rawDesc), len(file_transport_internet_finalmask_salamander_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

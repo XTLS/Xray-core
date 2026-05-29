@@ -1811,13 +1811,21 @@ func (c *Aes128Gcm) Build() (proto.Message, error) {
 }
 
 type Salamander struct {
-	Password string `json:"password"`
+	Password   string      `json:"password"`
+	PacketSize *Int32Range `json:"packetSize"`
 }
 
 func (c *Salamander) Build() (proto.Message, error) {
-	config := &salamander.Config{}
-	config.Password = c.Password
-	return config, nil
+	if c.PacketSize != nil {
+		return &salamander.GeckoConfig{
+			Password:      c.Password,
+			MinPacketSize: c.PacketSize.From,
+			MaxPacketSize: c.PacketSize.To,
+		}, nil
+	}
+	return &salamander.Config{
+		Password: c.Password,
+	}, nil
 }
 
 type Sudoku struct {
