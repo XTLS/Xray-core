@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package xray.transport.internet.finalmask.realm;
+option csharp_namespace = "Xray.Transport.Internet.Finalmask.Realm";
+option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/realm";
+option java_package = "com.xray.transport.internet.finalmask.realm";
+option java_multiple_files = true;
+
+import "transport/internet/tls/config.proto";
+
+message Config {
+  string scheme = 1;
+  string host = 2;
+  string port = 3;
+  string token = 4;
+  string ID = 5;
+  repeated string stun_servers = 6;
+  xray.transport.internet.tls.Config tls_config = 7;
+}

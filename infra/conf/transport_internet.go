@@ -32,6 +32,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
+	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
@@ -1255,6 +1256,7 @@ var (
 		"sudoku":           func() interface{} { return new(Sudoku) },
 		"xdns":             func() interface{} { return new(Xdns) },
 		"xicmp":            func() interface{} { return new(Xicmp) },
+		"realm":            func() interface{} { return new(Realm) },
 	}, "type", "settings")
 )
 
@@ -1906,6 +1908,92 @@ func (c *Xicmp) Build() (proto.Message, error) {
 	}
 
 	return config, nil
+}
+
+type Realm struct {
+	Url         string     `json:"url"`
+	StunServers []string   `json:"stunServers"`
+	TlsConfig   *TLSConfig `json:"tlsConfig"`
+}
+
+func (c *Realm) Build() (proto.Message, error) {
+	var scheme, host, port, token, id string
+	var stunServers []string
+	var tlsConfig *tls.Config
+
+	u, err := url.Parse(c.Url)
+	if err != nil {
+		return nil, err
+	}
+
+	switch u.Scheme {
+	case "realm":
+		scheme = "https"
+	case "realm+http":
+		scheme = "http"
+	default:
+		return nil, errors.New("invalid scheme", u.Scheme)
+	}
+
+	host = u.Hostname()
+	if host == "" {
+		return nil, errors.New("invalid host", host)
+	}
+
+	port = u.Port()
+	if port == "" {
+		port = "443"
+		if scheme == "http" {
+			port = "80"
+		}
+	}
+
+	token, err = url.PathUnescape(u.User.String())
+	if err != nil {
+		return nil, err
+	}
+	if token == "" {
+		return nil, errors.New("invalid token", token)
+	}
+
+	id, err = url.PathUnescape(strings.TrimPrefix(u.EscapedPath(), "/"))
+	if err != nil {
+		return nil, err
+	}
+	if id == "" {
+		return nil, errors.New("invalid id", id)
+	}
+
+	if len(c.StunServers) == 0 {
+		return nil, errors.New("empty stunServers")
+	}
+
+	for _, s := range c.StunServers {
+		_, _, err = net.SplitHostPort(s)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	stunServers = c.StunServers
+
+	if c.TlsConfig != nil {
+		tc, err := c.TlsConfig.Build()
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig = tc.(*tls.Config)
+	}
+
+	return &realm.Config{
+		Scheme:      scheme,
+		Host:        host,
+		Port:        port,
+		Token:       token,
+		ID:          id,
+		StunServers: stunServers,
+		TlsConfig:   tlsConfig,
+	}, nil
 }
 
 type Mask struct {
