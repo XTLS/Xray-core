@@ -752,7 +752,7 @@ func (c *Minecraft) Build() (proto.Message, error) {
 	}
 
 	shortId, err := hex.DecodeString(c.ShortId)
-	if err != nil {
+	if err != nil || len(shortId) > 8 {
 		return nil, fmt.Errorf("bad short id: %s", c.ShortId)
 	}
 
