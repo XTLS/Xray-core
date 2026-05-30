@@ -2,9 +2,11 @@ package conf
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/netip"
 	"net/url"
@@ -24,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"github.com/xtls/xray-core/transport/internet/finalmask/minecraft"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
@@ -1435,6 +1438,41 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 	config.MaxSplitMax = int64(c.MaxSplit.To)
 
 	return config, nil
+}
+
+type Minecraft struct {
+	Hostname  string   `json:"hostname"`
+	Usernames []string `json:"usernames"`
+	Password  string   `json:"password"`
+}
+
+func (c *Minecraft) Build() (proto.Message, error) {
+
+	if len(c.Usernames) == 0 {
+		c.Usernames = []string{"Dream"}
+	}
+
+	if c.Password == "" {
+		return nil, fmt.Errorf("empty password")
+	}
+
+	rsaPrivateKey, err := minecraft.DeriveRSAKey(c.Password)
+	if err != nil {
+		return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
+	}
+
+	rsaPublicKey, err := x509.MarshalPKIXPublicKey(&rsaPrivateKey.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal minecraft rsa public key: %w", err)
+	}
+
+	return &minecraft.Config{
+		Password:      c.Password,
+		Usernames:     c.Usernames,
+		Hostname:      c.Hostname,
+		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
+		RsaPublicKey:  rsaPublicKey,
+	}, nil
 }
 
 type NoiseItem struct {
