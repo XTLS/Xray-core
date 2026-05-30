@@ -8,12 +8,10 @@ option java_multiple_files = true;
 
 
 message Config {
-    repeated bytes short_ids = 1;
-    string private_key = 3;
-
+    string password = 1;
     repeated string usernames = 2;
-    bytes short_id = 4;
-    string public_key_sha256 = 5;
     string addresss = 6;
     uint32 port = 7;
+    bytes rsa_private_key = 8;
+    bytes rsa_public_key = 9;
 }

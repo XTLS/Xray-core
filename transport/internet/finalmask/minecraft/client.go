@@ -7,7 +7,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"math/big"
@@ -25,8 +24,8 @@ type clientConn struct {
 
 	handshakeLock sync.Mutex
 	usernames     []string
-	shortId       []byte
-	publicKeyHash []byte
+	password      string
+	rsaPublicKey  []byte
 	address       string
 	port          uint16
 }
@@ -38,10 +37,9 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, usernames []string, shortId []byte, publicKeyHashHex string, address string, port uint16) (*clientConn, error) {
-	publicKeyHash, err := hex.DecodeString(publicKeyHashHex)
-	if err != nil {
-		return nil, fmt.Errorf("decode public key hash: %w", err)
+func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, address string, port uint16) (*clientConn, error) {
+	if len(rsaPublicKey) == 0 {
+		return nil, fmt.Errorf("empty rsa public key")
 	}
 
 	return &clientConn{
@@ -51,8 +49,8 @@ func newClientConn(c net.Conn, usernames []string, shortId []byte, publicKeyHash
 		state:         clientStateHandshake,
 		handshakeLock: sync.Mutex{},
 		usernames:     usernames,
-		shortId:       shortId,
-		publicKeyHash: publicKeyHash,
+		password:      password,
+		rsaPublicKey:  rsaPublicKey,
 		address:       address,
 		port:          port,
 	}, nil
@@ -121,12 +119,8 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("read encryption request fields: %w", err)
 	}
 
-	// verify public key hash
-	if len(c.publicKeyHash) > 0 {
-		keyHash := sha256.Sum256(publicKey)
-		if !bytes.Equal(keyHash[:], c.publicKeyHash) {
-			return fmt.Errorf("server public key mismatch")
-		}
+	if !bytes.Equal(publicKey, c.rsaPublicKey) {
+		return fmt.Errorf("server public key mismatch")
 	}
 
 	k, err := x509.ParsePKIXPublicKey(publicKey)
@@ -147,7 +141,7 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("encrypt shared secret: %w", err)
 	}
 
-	verifyToken = append(verifyToken, c.shortId...) // append short id
+	verifyToken = append(verifyToken, []byte(c.password)...) // append pre-shared password
 
 	encryptedVerifyToken, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPublicKey, verifyToken)
 	if err != nil {

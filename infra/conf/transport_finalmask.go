@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -718,14 +719,10 @@ func (c *Xdns) Build() (proto.Message, error) {
 }
 
 type Minecraft struct {
-	Address         string   `json:"address"`
-	Port            uint16   `json:"port"`
-	Usernames       []string `json:"usernames"`
-	ShortId         string   `json:"shortId"`
-	PublicKeySha256 string   `json:"publicKeySha256"`
-
-	ShortIds   []string `json:"shortIds"`
-	PrivateKey string   `json:"privateKey"`
+	Address   string   `json:"address"`
+	Port      uint16   `json:"port"`
+	Usernames []string `json:"usernames"`
+	Password  string   `json:"password"`
 }
 
 func (c *Minecraft) Build() (proto.Message, error) {
@@ -742,28 +739,27 @@ func (c *Minecraft) Build() (proto.Message, error) {
 		c.Address = "localhost"
 	}
 
-	shortIds := make([][]byte, len(c.ShortIds))
-	for k, v := range c.ShortIds {
-		var err error
-		shortIds[k], err = hex.DecodeString(v)
-		if err != nil || len(shortIds) > 8 {
-			return nil, fmt.Errorf("bad short ids: %s", v)
-		}
+	if c.Password == "" {
+		return nil, fmt.Errorf("empty password")
 	}
 
-	shortId, err := hex.DecodeString(c.ShortId)
-	if err != nil || len(shortId) > 8 {
-		return nil, fmt.Errorf("bad short id: %s", c.ShortId)
+	rsaPrivateKey, err := minecraft.DeriveRSAKey(c.Password)
+	if err != nil {
+		return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
+	}
+
+	rsaPublicKey, err := x509.MarshalPKIXPublicKey(&rsaPrivateKey.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal minecraft rsa public key: %w", err)
 	}
 
 	return &minecraft.Config{
-		ShortIds:        shortIds,
-		ShortId:         shortId,
-		Usernames:       c.Usernames,
-		PublicKeySha256: c.PublicKeySha256,
-		PrivateKey:      c.PrivateKey,
-		Addresss:        c.Address,
-		Port:            uint32(c.Port),
+		Password:      c.Password,
+		Usernames:     c.Usernames,
+		Addresss:      c.Address,
+		Port:          uint32(c.Port),
+		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
+		RsaPublicKey:  rsaPublicKey,
 	}, nil
 }
 

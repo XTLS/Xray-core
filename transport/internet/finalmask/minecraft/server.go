@@ -7,7 +7,6 @@ import (
 	"crypto/rsa"
 	"crypto/subtle"
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
@@ -33,7 +32,7 @@ type serverConn struct {
 	state serverState
 
 	handshakeLock sync.Mutex
-	shortIds      [][]byte
+	password      string
 	rsaPrivateKey *rsa.PrivateKey
 	rsaPublicKey  []byte
 }
@@ -204,18 +203,12 @@ func (c *serverConn) handshake() error {
 			return fmt.Errorf("new crypto writer: %w", err)
 		}
 
-		// verify short id
+		// verify password
+		receivedPassword := decryptedVerifyToken[4:]
 
-		shortId := decryptedVerifyToken[4:]
-
-		var ok byte = 0
-		for _, s := range c.shortIds {
-			ok |= byte(subtle.ConstantTimeCompare(s, shortId))
-		}
-
-		if ok == 0 {
+		if subtle.ConstantTimeCompare(receivedPassword, []byte(c.password)) != 1 {
 			writeDisconnectPacket(c.writer, `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`)
-			return fmt.Errorf("bad short id")
+			return fmt.Errorf("bad password")
 		}
 
 		c.state = serverStateProxy
@@ -269,35 +262,27 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.c.SetWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, shortIds [][]byte, privateKey string) (*serverConn, error) {
+func wrapConnServer(c net.Conn, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte) (*serverConn, error) {
+	if len(rsaPrivateKeyDER) == 0 {
+		return nil, fmt.Errorf("empty rsa private key")
+	}
+	if len(rsaPublicKey) == 0 {
+		return nil, fmt.Errorf("empty rsa public key")
+	}
+
+	rsaPrivateKey, err := x509.ParsePKCS1PrivateKey(rsaPrivateKeyDER)
+	if err != nil {
+		return nil, fmt.Errorf("parse rsa private key: %w", err)
+	}
 
 	s := &serverConn{
-		reader:   bufio.NewReader(c),
-		writer:   c,
-		c:        c,
-		state:    serverStateHandshake,
-		shortIds: shortIds,
-	}
-
-	p, _ := pem.Decode([]byte(privateKey))
-	if p == nil {
-		panic("minecraft finalmask: malformatted private key")
-	}
-
-	k, err := x509.ParsePKCS8PrivateKey(p.Bytes)
-	if err != nil {
-		panic("minecraft finalmask: malformatted private key: " + err.Error())
-	}
-
-	var ok bool
-	s.rsaPrivateKey, ok = k.(*rsa.PrivateKey)
-	if !ok {
-		panic("minecraft finalmask: rsa private key required")
-	}
-
-	s.rsaPublicKey, err = x509.MarshalPKIXPublicKey(&s.rsaPrivateKey.PublicKey)
-	if err != nil {
-		panic("minecraft finalmask: marshal public key: " + err.Error())
+		reader:        bufio.NewReader(c),
+		writer:        c,
+		c:             c,
+		state:         serverStateHandshake,
+		password:      password,
+		rsaPrivateKey: rsaPrivateKey,
+		rsaPublicKey:  rsaPublicKey,
 	}
 
 	return s, nil
