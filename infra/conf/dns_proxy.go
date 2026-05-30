@@ -71,6 +71,7 @@ type DNSOutboundConfig struct {
 	Port           uint16                   `json:"port"`
 	UserLevel      uint32                   `json:"userLevel"`
 	Rules          []*DNSOutboundRuleConfig `json:"rules"`
+	RejectCode     *dnsmessage.RCode        `json:"rejectCode"`
 	NonIPQuery     *string                  `json:"nonIPQuery"` // todo: remove legacy
 	BlockTypes     *[]int32                 `json:"blockTypes"` // todo: remove legacy
 }
@@ -116,6 +117,10 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 			return nil, err
 		}
 		config.Rule = append(config.Rule, rule)
+	}
+
+	if c.RejectCode != nil {
+		config.RejectCode = new(uint32(*c.RejectCode))
 	}
 
 	return config, nil

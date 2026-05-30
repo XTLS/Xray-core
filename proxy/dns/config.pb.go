@@ -148,6 +148,7 @@ type Config struct {
 	UserLevel     uint32                 `protobuf:"varint,1,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
 	Rule          []*DNSRuleConfig       `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
 	RewriteServer *net.Endpoint          `protobuf:"bytes,3,opt,name=rewrite_server,json=rewriteServer,proto3" json:"rewrite_server,omitempty"`
+	RejectCode    *uint32                `protobuf:"varint,4,opt,name=reject_code,json=rejectCode,proto3,oneof" json:"reject_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -203,6 +204,13 @@ func (x *Config) GetRewriteServer() *net.Endpoint {
 	return nil
 }
 
+func (x *Config) GetRejectCode() uint32 {
+	if x != nil && x.RejectCode != nil {
+		return *x.RejectCode
+	}
+	return 0
+}
+
 var File_proxy_dns_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dns_config_proto_rawDesc = "" +
@@ -214,12 +222,15 @@ const file_proxy_dns_config_proto_rawDesc = "" +
 	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12$\n" +
 	"\vreject_code\x18\x04 \x01(\rH\x00R\n" +
 	"rejectCode\x88\x01\x01B\x0e\n" +
-	"\f_reject_code\"\x9c\x01\n" +
+	"\f_reject_code\"\xd2\x01\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x01 \x01(\rR\tuserLevel\x121\n" +
 	"\x04rule\x18\x02 \x03(\v2\x1d.xray.proxy.dns.DNSRuleConfigR\x04rule\x12@\n" +
-	"\x0erewrite_server\x18\x03 \x01(\v2\x19.xray.common.net.EndpointR\rrewriteServer*:\n" +
+	"\x0erewrite_server\x18\x03 \x01(\v2\x19.xray.common.net.EndpointR\rrewriteServer\x12$\n" +
+	"\vreject_code\x18\x04 \x01(\rH\x00R\n" +
+	"rejectCode\x88\x01\x01B\x0e\n" +
+	"\f_reject_code*:\n" +
 	"\n" +
 	"RuleAction\x12\n" +
 	"\n" +
@@ -270,6 +281,7 @@ func file_proxy_dns_config_proto_init() {
 		return
 	}
 	file_proxy_dns_config_proto_msgTypes[0].OneofWrappers = []any{}
+	file_proxy_dns_config_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

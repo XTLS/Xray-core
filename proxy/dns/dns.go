@@ -78,6 +78,7 @@ type Handler struct {
 	rewriteServer   net.Destination
 	timeout         time.Duration
 	rules           []*DNSRule
+	rejectCode      dnsmessage.RCode
 }
 
 func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager policy.Manager) error {
@@ -92,9 +93,14 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 		h.rewriteServer = config.RewriteServer.AsDestination()
 	}
 
+	h.rejectCode = dnsmessage.RCodeRefused
+	if config.RejectCode != nil {
+		h.rejectCode = dnsmessage.RCode(*config.RejectCode)
+	}
+
 	h.rules = make([]*DNSRule, 0, len(config.Rule))
 	for _, r := range config.Rule {
-		rejectCode := dnsmessage.RCodeRefused
+		rejectCode := h.rejectCode
 		if r.RejectCode != nil {
 			rejectCode = dnsmessage.RCode(*r.RejectCode)
 		}
@@ -152,7 +158,7 @@ func (h *Handler) applyRules(qType dnsmessage.Type, domain string) (RuleAction, 
 	if qType == dnsmessage.TypeA || qType == dnsmessage.TypeAAAA {
 		return RuleAction_Hijack, dnsmessage.RCodeSuccess
 	}
-	return RuleAction_Reject, dnsmessage.RCodeRefused
+	return RuleAction_Reject, h.rejectCode
 }
 
 // Process implements proxy.Outbound.
