@@ -73,7 +73,7 @@ func TestHandshakeSuccess(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, usernames, password, publicKey, "localhost", uint16(ln.Addr().(*net.TCPAddr).Port))
+	client, err := newClientConn(clientRaw, usernames, password, publicKey, "localhost")
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, usernames, clientPassword, clientPublicKey, "localhost", uint16(ln.Addr().(*net.TCPAddr).Port))
+	client, err := newClientConn(clientRaw, usernames, clientPassword, clientPublicKey, "localhost")
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
