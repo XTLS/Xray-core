@@ -1,24 +1,28 @@
 package conf
 
 import (
+	"math"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/proxy/dns"
-	"golang.org/x/net/dns/dnsmessage"
 	"google.golang.org/protobuf/proto"
 )
 
 type DNSOutboundRuleConfig struct {
-	Action     string            `json:"action"`
-	QType      *PortList         `json:"qtype"`
-	Domain     *StringList       `json:"domain"`
-	RejectCode *dnsmessage.RCode `json:"rejectCode"`
+	Action string      `json:"action"`
+	QType  *PortList   `json:"qtype"`
+	Domain *StringList `json:"domain"`
+	RCode  *uint32     `json:"rcode"`
 }
 
 func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
+	if c.RCode != nil && *c.RCode > math.MaxUint16 {
+		return nil, errors.New("rcode out of range: ", *c.RCode)
+	}
+
 	rule := &dns.DNSRuleConfig{}
 
 	switch strings.ToLower(c.Action) {
@@ -28,23 +32,16 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Action = dns.RuleAction_Drop
 	case "reject":
 		rule.Action = dns.RuleAction_Reject
-		if c.RejectCode != nil {
-			rule.RejectCode = new(uint32(*c.RejectCode))
-		}
+		rule.Rcode = c.RCode
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
+		rule.Rcode = c.RCode
 	default:
 		return nil, errors.New("unknown action: ", c.Action)
 	}
 
 	if c.QType != nil {
 		for _, r := range c.QType.Range {
-			if r.From > r.To {
-				return nil, errors.New("invalid qtype range: ", r.String())
-			}
-			if r.To > 65535 {
-				return nil, errors.New("dns rule qtype out of range: ", r.String())
-			}
 			for qtype := r.From; qtype <= r.To; qtype++ {
 				rule.Qtype = append(rule.Qtype, int32(qtype))
 			}

@@ -20,7 +20,7 @@ message DNSRuleConfig {
   RuleAction action = 1;
   repeated int32 qtype = 2;
   repeated xray.common.geodata.DomainRule domain = 3;
-  optional uint32 reject_code = 4;
+  optional uint32 rcode = 4;
 }
 
 message Config {

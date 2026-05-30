@@ -42,10 +42,10 @@ func init() {
 }
 
 type DNSRule struct {
-	action     RuleAction
-	qTypes     []uint16
-	domains    geodata.DomainMatcher
-	rejectCode dnsmessage.RCode
+	action  RuleAction
+	qTypes  []uint16
+	domains geodata.DomainMatcher
+	rcode   dnsmessage.RCode
 }
 
 func (r *DNSRule) matchQType(qType uint16) bool {
@@ -94,14 +94,14 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 
 	h.rules = make([]*DNSRule, 0, len(config.Rule))
 	for _, r := range config.Rule {
-		rejectCode := dnsmessage.RCodeRefused
-		if r.RejectCode != nil {
-			rejectCode = dnsmessage.RCode(*r.RejectCode)
+		rcode := dnsmessage.RCodeRefused
+		if r.Rcode != nil {
+			rcode = dnsmessage.RCode(*r.Rcode)
 		}
 		rule := &DNSRule{
-			action:     r.Action,
-			qTypes:     make([]uint16, 0, len(r.Qtype)),
-			rejectCode: rejectCode,
+			action: r.Action,
+			qTypes: make([]uint16, 0, len(r.Qtype)),
+			rcode:  rcode,
 		}
 		for _, t := range r.Qtype {
 			rule.qTypes = append(rule.qTypes, uint16(t))
@@ -146,7 +146,7 @@ func (h *Handler) applyRules(qType dnsmessage.Type, domain string) (RuleAction, 
 	qCode := uint16(qType)
 	for _, r := range h.rules {
 		if r.Apply(qCode, domain) {
-			return r.action, r.rejectCode
+			return r.action, r.rcode
 		}
 	}
 	if qType == dnsmessage.TypeA || qType == dnsmessage.TypeAAAA {
@@ -271,7 +271,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 				b.Release()
 				if qType != dnsmessage.TypeA && qType != dnsmessage.TypeAAAA {
 					errors.LogError(ctx, "can only hijack A/AAAA records")
-					if err := h.rejectNonIPQuery(id, qType, domain, writer, dnsmessage.RCodeRefused); err != nil {
+					if err := h.rejectNonIPQuery(id, qType, domain, writer, rcode); err != nil {
 						return err
 					}
 				} else {

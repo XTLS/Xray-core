@@ -80,7 +80,7 @@ type DNSRuleConfig struct {
 	Action        RuleAction             `protobuf:"varint,1,opt,name=action,proto3,enum=xray.proxy.dns.RuleAction" json:"action,omitempty"`
 	Qtype         []int32                `protobuf:"varint,2,rep,packed,name=qtype,proto3" json:"qtype,omitempty"`
 	Domain        []*geodata.DomainRule  `protobuf:"bytes,3,rep,name=domain,proto3" json:"domain,omitempty"`
-	RejectCode    *uint32                `protobuf:"varint,4,opt,name=reject_code,json=rejectCode,proto3,oneof" json:"reject_code,omitempty"`
+	Rcode         *uint32                `protobuf:"varint,4,opt,name=rcode,proto3,oneof" json:"rcode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -136,9 +136,9 @@ func (x *DNSRuleConfig) GetDomain() []*geodata.DomainRule {
 	return nil
 }
 
-func (x *DNSRuleConfig) GetRejectCode() uint32 {
-	if x != nil && x.RejectCode != nil {
-		return *x.RejectCode
+func (x *DNSRuleConfig) GetRcode() uint32 {
+	if x != nil && x.Rcode != nil {
+		return *x.Rcode
 	}
 	return 0
 }
@@ -207,14 +207,13 @@ var File_proxy_dns_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xc8\x01\n" +
+	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xb7\x01\n" +
 	"\rDNSRuleConfig\x122\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x14\n" +
 	"\x05qtype\x18\x02 \x03(\x05R\x05qtype\x127\n" +
-	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12$\n" +
-	"\vreject_code\x18\x04 \x01(\rH\x00R\n" +
-	"rejectCode\x88\x01\x01B\x0e\n" +
-	"\f_reject_code\"\x9c\x01\n" +
+	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x19\n" +
+	"\x05rcode\x18\x04 \x01(\rH\x00R\x05rcode\x88\x01\x01B\b\n" +
+	"\x06_rcode\"\x9c\x01\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x01 \x01(\rR\tuserLevel\x121\n" +
