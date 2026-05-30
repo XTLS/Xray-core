@@ -167,7 +167,9 @@ func expandSymmetricNATCandidates(candidates []netip.AddrPort, seen map[netip.Ad
 			added++
 		}
 	}
-	sortAddrPorts(candidates)
+	slices.SortFunc(candidates, func(a, b netip.AddrPort) int {
+		return strings.Compare(a.String(), b.String())
+	})
 	return candidates
 }
 
@@ -195,12 +197,6 @@ func predictablePortGroup(ports []uint16) bool {
 		}
 	}
 	return true
-}
-
-func sortAddrPorts(addrs []netip.AddrPort) {
-	slices.SortFunc(addrs, func(a, b netip.AddrPort) int {
-		return strings.Compare(a.String(), b.String())
-	})
 }
 
 func addrPortStrings(addrs []netip.AddrPort) []string {
