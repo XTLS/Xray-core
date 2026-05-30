@@ -50,7 +50,8 @@ func executeRemoveUsers(cmd *base.Command, args []string) {
 			Operation: cserial.ToTypedMessage(
 				&handlerService.RemoveUserOperation{
 					Email: email,
-				}),
+				},
+			),
 		})
 		if err == nil {
 			success += 1

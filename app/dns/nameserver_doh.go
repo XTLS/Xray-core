@@ -137,14 +137,32 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 	if s.Name()+"." == "DOH//"+fqdn {
 		errors.LogError(ctx, s.Name(), " tries to resolve itself! Use IP or set \"hosts\" instead")
 		if noResponseErrCh != nil {
-			noResponseErrCh <- errors.New("tries to resolve itself!", s.Name())
+			err := errors.New("tries to resolve itself!", s.Name())
+			if option.IPv4Enable {
+				noResponseErrCh <- err
+			}
+			if option.IPv6Enable {
+				noResponseErrCh <- err
+			}
 		}
 		return
 	}
 
 	// As we don't want our traffic pattern looks like DoH, we use Random-Length Padding instead of Block-Length Padding recommended in RFC 8467
 	// Although DoH server like 1.1.1.1 will pad the response to Block-Length 468, at least it is better than no padding for response at all
-	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, int(crypto.RandBetween(100, 300))))
+	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, int(crypto.RandBetween(100, 300))))
+	if err != nil {
+		errors.LogErrorInner(ctx, err, "failed to build dns query for ", fqdn)
+		if noResponseErrCh != nil {
+			if option.IPv4Enable {
+				noResponseErrCh <- err
+			}
+			if option.IPv6Enable {
+				noResponseErrCh <- err
+			}
+		}
+		return
+	}
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {

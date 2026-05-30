@@ -134,7 +134,6 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 		for {
 			buff := buf.NewWithSize(device.MaxMessageSize)
 			n, err := buff.ReadFrom(c)
-
 			if err != nil {
 				buff.Release()
 				endpoint.conn = nil

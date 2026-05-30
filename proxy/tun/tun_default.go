@@ -9,8 +9,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
-type DefaultTun struct {
-}
+type DefaultTun struct{}
 
 // DefaultTun implements Tun
 var _ Tun = (*DefaultTun)(nil)

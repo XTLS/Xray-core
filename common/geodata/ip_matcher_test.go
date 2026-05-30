@@ -315,7 +315,7 @@ func TestIPMatcherAnyMatchAndMatches(t *testing.T) {
 	}
 
 	if !matcher.AnyMatch([]net.IP{
-		net.IP{},
+		{},
 		ip("1.1.1.1"),
 		ip("8.8.8.8"),
 	}) {
@@ -345,7 +345,7 @@ func TestIPMatcherAnyMatchAndMatches(t *testing.T) {
 
 	if matcher.Matches([]net.IP{
 		ip("8.8.8.8"),
-		net.IP{},
+		{},
 	}) {
 		t.Fatal("expect Matches to be false when any IP is invalid")
 	}
@@ -362,7 +362,7 @@ func TestIPMatcherFilterIPs(t *testing.T) {
 	}
 
 	matched, unmatched := matcher.FilterIPs([]net.IP{
-		net.IP{},
+		{},
 		ip("8.8.8.8"),
 		ip("91.108.255.254"),
 		ip("1.1.1.1"),

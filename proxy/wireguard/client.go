@@ -185,6 +185,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		addr = net.IPAddress(ips[dice.Roll(len(ips))])
 	}
+	destination.Address = addr
 
 	var newCtx context.Context
 	var newCancel context.CancelFunc

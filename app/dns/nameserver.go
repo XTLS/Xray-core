@@ -135,7 +135,7 @@ func NewClient(
 			}
 		}
 
-		var timeoutMs = 4000 * time.Millisecond
+		timeoutMs := 4000 * time.Millisecond
 		if ns.TimeoutMs > 0 {
 			timeoutMs = time.Duration(ns.TimeoutMs) * time.Millisecond
 		}

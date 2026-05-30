@@ -68,7 +68,6 @@ func (e *LinkEndpoint) IsAttached() bool {
 }
 
 func (e *LinkEndpoint) Wait() {
-
 }
 
 func (e *LinkEndpoint) ARPHardwareType() header.ARPHardwareType {
@@ -91,7 +90,6 @@ func (e *LinkEndpoint) Close() {
 }
 
 func (e *LinkEndpoint) SetOnCloseAction(_ func()) {
-
 }
 
 func (e *LinkEndpoint) WritePackets(packetBufferList stack.PacketBufferList) (int, tcpip.Error) {

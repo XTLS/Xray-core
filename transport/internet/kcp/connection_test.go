@@ -36,8 +36,8 @@ func TestConnectionReadTimeout(t *testing.T) {
 }
 
 func TestConnectionInterface(t *testing.T) {
-	_ = (io.Writer)(new(Connection))
-	_ = (io.Reader)(new(Connection))
-	_ = (buf.Reader)(new(Connection))
-	_ = (buf.Writer)(new(Connection))
+	_ = io.Writer(new(Connection))
+	_ = io.Reader(new(Connection))
+	_ = buf.Reader(new(Connection))
+	_ = buf.Writer(new(Connection))
 }

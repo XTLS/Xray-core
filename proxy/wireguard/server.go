@@ -162,7 +162,6 @@ func (s *Server) forwardConnection(dest net.Destination, conn net.Conn) {
 		Reader: buf.NewReader(conn),
 		Writer: buf.NewWriter(conn),
 	})
-
 	if err != nil {
 		errors.LogInfoInner(ctx, err, "connection ends")
 	}

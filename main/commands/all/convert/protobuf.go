@@ -41,7 +41,6 @@ Examples:
 }
 
 func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
-
 	var optFile string
 	var optDump bool
 	var optType bool
@@ -60,7 +59,7 @@ func executeConvertConfigsToProtobuf(cmd *base.Command, args []string) {
 	}
 
 	if len(optFile) > 0 {
-		switch core.GetFormat(optFile){
+		switch core.GetFormat(optFile) {
 		case "protobuf", "":
 			fmt.Println("Output ProtoBuf file is ", optFile)
 		default:

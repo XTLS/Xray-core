@@ -16,8 +16,6 @@ import (
 	routing_session "github.com/xtls/xray-core/features/routing/session"
 )
 
-
-
 func ptr[T any](v T) *T { return &v }
 
 type event struct {

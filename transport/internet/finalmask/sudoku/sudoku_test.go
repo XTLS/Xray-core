@@ -934,7 +934,8 @@ func cloneConfig(cfg *Config) *Config {
 }
 
 func defaultApps(cfg *core.Config) *core.Config {
-	cfg.App = append(cfg.App,
+	cfg.App = append(
+		cfg.App,
 		serial.ToTypedMessage(&log.Config{
 			ErrorLogLevel: clog.Severity_Warning,
 			ErrorLogType:  log.LogType_Console,
