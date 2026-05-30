@@ -80,7 +80,7 @@ func (c *realmConnClient) getpeer() (net.PacketConn, error) {
 	}
 
 	start = time.Now()
-	peer, err := c.punch(meta, peers)
+	peer, err := c.punch(meta, expandedPeers)
 	if err != nil {
 		return nil, errors.New("punch fail").Base(err)
 	}
