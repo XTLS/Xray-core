@@ -27,5 +27,4 @@ message Config {
   uint32 user_level = 1;
   repeated DNSRuleConfig rule = 2;
   xray.common.net.Endpoint rewrite_server = 3;
-  optional uint32 reject_code = 4;
 }
