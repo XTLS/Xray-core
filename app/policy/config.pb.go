@@ -291,12 +291,18 @@ func (x *Policy_Timeout) GetDownlinkOnly() *Second {
 }
 
 type Policy_Stats struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserUplink    bool                   `protobuf:"varint,1,opt,name=user_uplink,json=userUplink,proto3" json:"user_uplink,omitempty"`
-	UserDownlink  bool                   `protobuf:"varint,2,opt,name=user_downlink,json=userDownlink,proto3" json:"user_downlink,omitempty"`
-	UserOnline    bool                   `protobuf:"varint,3,opt,name=user_online,json=userOnline,proto3" json:"user_online,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	UserUplink   bool                   `protobuf:"varint,1,opt,name=user_uplink,json=userUplink,proto3" json:"user_uplink,omitempty"`
+	UserDownlink bool                   `protobuf:"varint,2,opt,name=user_downlink,json=userDownlink,proto3" json:"user_downlink,omitempty"`
+	UserOnline   bool                   `protobuf:"varint,3,opt,name=user_online,json=userOnline,proto3" json:"user_online,omitempty"`
+	// Whether or not to enable per-user-per-inbound uplink stat counter
+	// (counter name: useri>>>{email}>>>inbound>>>{tag}>>>traffic>>>uplink).
+	// [remnawave-fork] field band 50-99 reserved for fork features; see FORK.md.
+	UserInboundUplink bool `protobuf:"varint,50,opt,name=user_inbound_uplink,json=userInboundUplink,proto3" json:"user_inbound_uplink,omitempty"`
+	// Whether or not to enable per-user-per-inbound downlink stat counter.
+	UserInboundDownlink bool `protobuf:"varint,51,opt,name=user_inbound_downlink,json=userInboundDownlink,proto3" json:"user_inbound_downlink,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Policy_Stats) Reset() {
@@ -346,6 +352,20 @@ func (x *Policy_Stats) GetUserDownlink() bool {
 func (x *Policy_Stats) GetUserOnline() bool {
 	if x != nil {
 		return x.UserOnline
+	}
+	return false
+}
+
+func (x *Policy_Stats) GetUserInboundUplink() bool {
+	if x != nil {
+		return x.UserInboundUplink
+	}
+	return false
+}
+
+func (x *Policy_Stats) GetUserInboundDownlink() bool {
+	if x != nil {
+		return x.UserInboundDownlink
 	}
 	return false
 }
@@ -469,7 +489,7 @@ const file_app_policy_config_proto_rawDesc = "" +
 	"\n" +
 	"\x17app/policy/config.proto\x12\x0fxray.app.policy\"\x1e\n" +
 	"\x06Second\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\rR\x05value\"\xc7\x04\n" +
+	"\x05value\x18\x01 \x01(\rR\x05value\"\xac\x05\n" +
 	"\x06Policy\x129\n" +
 	"\atimeout\x18\x01 \x01(\v2\x1f.xray.app.policy.Policy.TimeoutR\atimeout\x123\n" +
 	"\x05stats\x18\x02 \x01(\v2\x1d.xray.app.policy.Policy.StatsR\x05stats\x126\n" +
@@ -479,13 +499,15 @@ const file_app_policy_config_proto_rawDesc = "" +
 	"\x0fconnection_idle\x18\x02 \x01(\v2\x17.xray.app.policy.SecondR\x0econnectionIdle\x128\n" +
 	"\vuplink_only\x18\x03 \x01(\v2\x17.xray.app.policy.SecondR\n" +
 	"uplinkOnly\x12<\n" +
-	"\rdownlink_only\x18\x04 \x01(\v2\x17.xray.app.policy.SecondR\fdownlinkOnly\x1an\n" +
+	"\rdownlink_only\x18\x04 \x01(\v2\x17.xray.app.policy.SecondR\fdownlinkOnly\x1a\xd2\x01\n" +
 	"\x05Stats\x12\x1f\n" +
 	"\vuser_uplink\x18\x01 \x01(\bR\n" +
 	"userUplink\x12#\n" +
 	"\ruser_downlink\x18\x02 \x01(\bR\fuserDownlink\x12\x1f\n" +
 	"\vuser_online\x18\x03 \x01(\bR\n" +
-	"userOnline\x1a(\n" +
+	"userOnline\x12.\n" +
+	"\x13user_inbound_uplink\x182 \x01(\bR\x11userInboundUplink\x122\n" +
+	"\x15user_inbound_downlink\x183 \x01(\bR\x13userInboundDownlink\x1a(\n" +
 	"\x06Buffer\x12\x1e\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\x05R\n" +

@@ -58,10 +58,14 @@ func (*SessionConfig) Descriptor() ([]byte, []int) {
 }
 
 type Config struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Settings      *SessionConfig         `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Settings *SessionConfig         `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	// Inbound tags for which per-user-per-inbound traffic stat counters are
+	// emitted (see Policy.Stats.user_inbound_uplink/downlink). Empty = none.
+	// [remnawave-fork] field band 50-99 reserved for fork features; see FORK.md.
+	TrackedInboundTags []string `protobuf:"bytes,50,rep,name=tracked_inbound_tags,json=trackedInboundTags,proto3" json:"tracked_inbound_tags,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -101,14 +105,22 @@ func (x *Config) GetSettings() *SessionConfig {
 	return nil
 }
 
+func (x *Config) GetTrackedInboundTags() []string {
+	if x != nil {
+		return x.TrackedInboundTags
+	}
+	return nil
+}
+
 var File_app_dispatcher_config_proto protoreflect.FileDescriptor
 
 const file_app_dispatcher_config_proto_rawDesc = "" +
 	"\n" +
 	"\x1bapp/dispatcher/config.proto\x12\x13xray.app.dispatcher\"\x15\n" +
-	"\rSessionConfigJ\x04\b\x01\x10\x02\"H\n" +
+	"\rSessionConfigJ\x04\b\x01\x10\x02\"z\n" +
 	"\x06Config\x12>\n" +
-	"\bsettings\x18\x01 \x01(\v2\".xray.app.dispatcher.SessionConfigR\bsettingsB[\n" +
+	"\bsettings\x18\x01 \x01(\v2\".xray.app.dispatcher.SessionConfigR\bsettings\x120\n" +
+	"\x14tracked_inbound_tags\x182 \x03(\tR\x12trackedInboundTagsB[\n" +
 	"\x17com.xray.app.dispatcherP\x01Z(github.com/xtls/xray-core/app/dispatcher\xaa\x02\x13Xray.App.Dispatcherb\x06proto3"
 
 var (

@@ -29,6 +29,10 @@ type Stats struct {
 	UserDownlink bool
 	// Whether or not to enable online map for user.
 	UserOnline bool
+	// Whether or not to enable stat counter for per-user-per-inbound uplink traffic.
+	UserInboundUplink bool
+	// Whether or not to enable stat counter for per-user-per-inbound downlink traffic.
+	UserInboundDownlink bool
 }
 
 // Buffer contains settings for internal buffer.

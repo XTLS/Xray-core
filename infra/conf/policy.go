@@ -9,10 +9,12 @@ type Policy struct {
 	ConnectionIdle    *uint32 `json:"connIdle"`
 	UplinkOnly        *uint32 `json:"uplinkOnly"`
 	DownlinkOnly      *uint32 `json:"downlinkOnly"`
-	StatsUserUplink   bool    `json:"statsUserUplink"`
-	StatsUserDownlink bool    `json:"statsUserDownlink"`
-	StatsUserOnline   bool    `json:"statsUserOnline"`
-	BufferSize        *int32  `json:"bufferSize"`
+	StatsUserUplink          bool   `json:"statsUserUplink"`
+	StatsUserDownlink        bool   `json:"statsUserDownlink"`
+	StatsUserOnline          bool   `json:"statsUserOnline"`
+	StatsUserInboundUplink   bool   `json:"statsUserInboundUplink"`
+	StatsUserInboundDownlink bool   `json:"statsUserInboundDownlink"`
+	BufferSize               *int32 `json:"bufferSize"`
 }
 
 func (t *Policy) Build() (*policy.Policy, error) {
@@ -33,9 +35,11 @@ func (t *Policy) Build() (*policy.Policy, error) {
 	p := &policy.Policy{
 		Timeout: config,
 		Stats: &policy.Policy_Stats{
-			UserUplink:   t.StatsUserUplink,
-			UserDownlink: t.StatsUserDownlink,
-			UserOnline:   t.StatsUserOnline,
+			UserUplink:          t.StatsUserUplink,
+			UserDownlink:        t.StatsUserDownlink,
+			UserOnline:          t.StatsUserOnline,
+			UserInboundUplink:   t.StatsUserInboundUplink,
+			UserInboundDownlink: t.StatsUserInboundDownlink,
 		},
 	}
 

@@ -12,4 +12,8 @@ message SessionConfig {
 
 message Config {
   SessionConfig settings = 1;
+  // Inbound tags for which per-user-per-inbound traffic stat counters are
+  // emitted (see Policy.Stats.user_inbound_uplink/downlink). Empty = none.
+  // [remnawave-fork] field band 50-99 reserved for fork features; see FORK.md.
+  repeated string tracked_inbound_tags = 50;
 }

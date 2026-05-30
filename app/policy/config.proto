@@ -23,6 +23,12 @@ message Policy {
     bool user_uplink = 1;
     bool user_downlink = 2;
     bool user_online = 3;
+    // Whether or not to enable per-user-per-inbound uplink stat counter
+    // (counter name: useri>>>{email}>>>inbound>>>{tag}>>>traffic>>>uplink).
+    // [remnawave-fork] field band 50-99 reserved for fork features; see FORK.md.
+    bool user_inbound_uplink = 50;
+    // Whether or not to enable per-user-per-inbound downlink stat counter.
+    bool user_inbound_downlink = 51;
   }
 
   message Buffer {

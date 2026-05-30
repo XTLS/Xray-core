@@ -627,7 +627,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if err != nil {
 			return err
 		}
-		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
+		// nil tracked-inbound allowlist: per-user-per-inbound stats are not tracked
+		// on the VLESS reverse-proxy (Rvs) path; the normal data path goes through
+		// DispatchLink which supplies the dispatcher's allowlist.
+		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, nil, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
 	}
 
 	if err := dispatch.DispatchLink(ctx, request.Destination(), &transport.Link{

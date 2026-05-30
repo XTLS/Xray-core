@@ -98,6 +98,9 @@ type DefaultDispatcher struct {
 	policy policy.Manager
 	stats  stats.Manager
 	fdns   dns.FakeDNSEngine
+	// trackedInboundTags is the set of inbound tags for which per-user-per-inbound
+	// traffic counters are emitted. nil/empty => the feature is off for all inbounds.
+	trackedInboundTags map[string]bool
 }
 
 func init() {
@@ -121,7 +124,19 @@ func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router rou
 	d.router = router
 	d.policy = pm
 	d.stats = sm
+	if config != nil && len(config.TrackedInboundTags) > 0 {
+		d.trackedInboundTags = make(map[string]bool, len(config.TrackedInboundTags))
+		for _, tag := range config.TrackedInboundTags {
+			d.trackedInboundTags[tag] = true
+		}
+	}
 	return nil
+}
+
+// userInboundStatsEnabled reports whether per-user-per-inbound counters should be
+// emitted for the given inbound tag (i.e. the tag is on the tracked allowlist).
+func (d *DefaultDispatcher) userInboundStatsEnabled(tag string) bool {
+	return len(tag) > 0 && d.trackedInboundTags[tag]
 }
 
 // Type implements common.HasType.
@@ -179,6 +194,30 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 			}
 		}
 
+		// Per-user-per-inbound counters: additive on top of the per-user counters
+		// above. Gated by the inbound-tag allowlist AND the policy flags, so this
+		// never alters existing per-user stats wiring.
+		if d.userInboundStatsEnabled(sessionInbound.Tag) {
+			if p.Stats.UserInboundUplink {
+				name := "useri>>>" + user.Email + ">>>inbound>>>" + sessionInbound.Tag + ">>>traffic>>>uplink"
+				if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+					inboundLink.Writer = &SizeStatWriter{
+						Counter: c,
+						Writer:  inboundLink.Writer,
+					}
+				}
+			}
+			if p.Stats.UserInboundDownlink {
+				name := "useri>>>" + user.Email + ">>>inbound>>>" + sessionInbound.Tag + ">>>traffic>>>downlink"
+				if c, _ := stats.GetOrRegisterCounter(d.stats, name); c != nil {
+					outboundLink.Writer = &SizeStatWriter{
+						Counter: c,
+						Writer:  outboundLink.Writer,
+					}
+				}
+			}
+		}
+
 		if p.Stats.UserOnline {
 			trackOnlineIP(ctx, d.stats, user.Email, sessionInbound.Source.Address.String())
 		}
@@ -187,7 +226,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 	return inboundLink, outboundLink
 }
 
-func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager stats.Manager, link *transport.Link) *transport.Link {
+func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager stats.Manager, trackedInboundTags map[string]bool, link *transport.Link) *transport.Link {
 	sessionInbound := session.InboundFromContext(ctx)
 	var user *protocol.MemoryUser
 	if sessionInbound != nil {
@@ -206,6 +245,19 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
+			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
+				link.Writer = &SizeStatWriter{
+					Counter: c,
+					Writer:  link.Writer,
+				}
+			}
+		}
+		// Per-user-per-inbound downlink counter (additive). NOTE: on this path only
+		// downlink is covered — buf.TimeoutWrapperReader exposes a single Counter
+		// slot already taken by the per-user uplink above, so the combined uplink is
+		// emitted only via getLink (the primary connection path). See plan/Risks.
+		if len(sessionInbound.Tag) > 0 && trackedInboundTags[sessionInbound.Tag] && p.Stats.UserInboundDownlink {
+			name := "useri>>>" + user.Email + ">>>inbound>>>" + sessionInbound.Tag + ">>>traffic>>>downlink"
 			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
 				link.Writer = &SizeStatWriter{
 					Counter: c,
@@ -338,7 +390,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		content = new(session.Content)
 		ctx = session.ContextWithContent(ctx, content)
 	}
-	outbound = WrapLink(ctx, d.policy, d.stats, outbound)
+	outbound = WrapLink(ctx, d.policy, d.stats, d.trackedInboundTags, outbound)
 	sniffingRequest := content.SniffingRequest
 	if !sniffingRequest.Enabled {
 		d.routedDispatch(ctx, outbound, destination)

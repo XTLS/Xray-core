@@ -362,6 +362,15 @@ type Config struct {
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
 	Version          *VersionConfig          `json:"version"`
 	Geodata          *GeodataConfig          `json:"geodata"`
+	Dispatcher       *DispatcherConfig       `json:"dispatcher"`
+}
+
+// DispatcherConfig carries settings for the core dispatcher app.
+type DispatcherConfig struct {
+	// TrackedInboundTags lists inbound tags for which per-user-per-inbound
+	// traffic stat counters are emitted (gated additionally by the
+	// statsUserInbound{Uplink,Downlink} policy flags). Empty = none.
+	TrackedInboundTags []string `json:"trackedInboundTags"`
 }
 
 func (c *Config) findInboundTag(tag string) int {
@@ -482,9 +491,14 @@ func (c *Config) Build() (*core.Config, error) {
 		return nil, errors.New("failed to post-process configuration file").Base(err)
 	}
 
+	dispatcherConfig := &dispatcher.Config{}
+	if c.Dispatcher != nil {
+		dispatcherConfig.TrackedInboundTags = c.Dispatcher.TrackedInboundTags
+	}
+
 	config := &core.Config{
 		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&dispatcher.Config{}),
+			serial.ToTypedMessage(dispatcherConfig),
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 		},
