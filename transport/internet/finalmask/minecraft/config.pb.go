@@ -25,10 +25,9 @@ type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
 	Usernames     []string               `protobuf:"bytes,2,rep,name=usernames,proto3" json:"usernames,omitempty"`
-	Addresss      string                 `protobuf:"bytes,6,opt,name=addresss,proto3" json:"addresss,omitempty"`
-	Port          uint32                 `protobuf:"varint,7,opt,name=port,proto3" json:"port,omitempty"`
 	RsaPrivateKey []byte                 `protobuf:"bytes,8,opt,name=rsa_private_key,json=rsaPrivateKey,proto3" json:"rsa_private_key,omitempty"`
 	RsaPublicKey  []byte                 `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
+	Hostname      string                 `protobuf:"bytes,10,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -77,20 +76,6 @@ func (x *Config) GetUsernames() []string {
 	return nil
 }
 
-func (x *Config) GetAddresss() string {
-	if x != nil {
-		return x.Addresss
-	}
-	return ""
-}
-
-func (x *Config) GetPort() uint32 {
-	if x != nil {
-		return x.Port
-	}
-	return 0
-}
-
 func (x *Config) GetRsaPrivateKey() []byte {
 	if x != nil {
 		return x.RsaPrivateKey
@@ -105,18 +90,25 @@ func (x *Config) GetRsaPublicKey() []byte {
 	return nil
 }
 
+func (x *Config) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
 var File_config_proto protoreflect.FileDescriptor
 
 const file_config_proto_rawDesc = "" +
 	"\n" +
-	"\fconfig.proto\x12+xray.transport.internet.finalmask.minecraft\"\xc0\x01\n" +
+	"\fconfig.proto\x12+xray.transport.internet.finalmask.minecraft\"\xac\x01\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12\x1c\n" +
-	"\tusernames\x18\x02 \x03(\tR\tusernames\x12\x1a\n" +
-	"\baddresss\x18\x06 \x01(\tR\baddresss\x12\x12\n" +
-	"\x04port\x18\a \x01(\rR\x04port\x12&\n" +
+	"\tusernames\x18\x02 \x03(\tR\tusernames\x12&\n" +
 	"\x0frsa_private_key\x18\b \x01(\fR\rrsaPrivateKey\x12$\n" +
-	"\x0ersa_public_key\x18\t \x01(\fR\frsaPublicKeyB\xa3\x01\n" +
+	"\x0ersa_public_key\x18\t \x01(\fR\frsaPublicKey\x12\x1a\n" +
+	"\bhostname\x18\n" +
+	" \x01(\tR\bhostnameB\xa3\x01\n" +
 	"/com.xray.transport.internet.finalmask.minecraftP\x01Z@github.com/xtls/xray-core/transport/internet/finalmask/minecraft\xaa\x02+Xray.Transport.Internet.Finalmask.Minecraftb\x06proto3"
 
 var (

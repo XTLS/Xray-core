@@ -719,8 +719,7 @@ func (c *Xdns) Build() (proto.Message, error) {
 }
 
 type Minecraft struct {
-	Address   string   `json:"address"`
-	Port      uint16   `json:"port"`
+	Hostname  string   `json:"hostname"`
 	Usernames []string `json:"usernames"`
 	Password  string   `json:"password"`
 }
@@ -729,14 +728,6 @@ func (c *Minecraft) Build() (proto.Message, error) {
 
 	if len(c.Usernames) == 0 {
 		c.Usernames = []string{"Dream"}
-	}
-
-	if c.Port == 0 {
-		c.Port = 25565
-	}
-
-	if c.Address == "" {
-		c.Address = "localhost"
 	}
 
 	if c.Password == "" {
@@ -756,8 +747,7 @@ func (c *Minecraft) Build() (proto.Message, error) {
 	return &minecraft.Config{
 		Password:      c.Password,
 		Usernames:     c.Usernames,
-		Addresss:      c.Address,
-		Port:          uint32(c.Port),
+		Hostname:      c.Hostname,
 		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
 		RsaPublicKey:  rsaPublicKey,
 	}, nil

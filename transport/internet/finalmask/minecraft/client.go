@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -26,8 +27,7 @@ type clientConn struct {
 	usernames     []string
 	password      string
 	rsaPublicKey  []byte
-	address       string
-	port          uint16
+	hostname      string
 }
 
 type clientState int
@@ -37,7 +37,7 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, address string, port uint16) (*clientConn, error) {
+func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, hostname string) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
@@ -51,8 +51,7 @@ func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey
 		usernames:     usernames,
 		password:      password,
 		rsaPublicKey:  rsaPublicKey,
-		address:       address,
-		port:          port,
+		hostname:      hostname,
 	}, nil
 }
 
@@ -73,10 +72,22 @@ func (c *clientConn) handshake() error {
 
 	var (
 		protocolVersion Varint        = Varint(775)
-		serverAddress   String        = String(c.address)
-		serverPort      UnsignedShort = UnsignedShort(c.port)
+		serverAddress   String        = String(c.hostname)
+		serverPort      UnsignedShort = UnsignedShort(25565)
 		nextState       Varint        = Varint(2)
 	)
+
+	host, portString, err := net.SplitHostPort(c.c.RemoteAddr().String())
+	if err == nil {
+		port, err := strconv.Atoi(portString)
+		if err == nil {
+			serverPort = UnsignedShort(port)
+		}
+
+		if serverAddress == "" {
+			serverAddress = String(host)
+		}
+	}
 
 	err = writePacket(c.writer, 0x00, &protocolVersion, &serverAddress, &serverPort, &nextState)
 	if err != nil {

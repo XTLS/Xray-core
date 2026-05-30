@@ -10,8 +10,7 @@ option java_multiple_files = true;
 message Config {
     string password = 1;
     repeated string usernames = 2;
-    string addresss = 6;
-    uint32 port = 7;
     bytes rsa_private_key = 8;
     bytes rsa_public_key = 9;
+    string hostname = 10;
 }
