@@ -28,10 +28,6 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Action = dns.RuleAction_Drop
 	case "return":
 		rule.Action = dns.RuleAction_Return
-	case "reject":
-		errors.PrintDeprecatedFeatureWarning(`action "reject"`, `action "return" with "rCode": 5`)
-		rule.Action = dns.RuleAction_Return
-		c.RCode = 5
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
 	default:
