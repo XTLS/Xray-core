@@ -2,7 +2,6 @@ package conf
 
 import (
 	"math"
-	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -16,33 +15,27 @@ type DNSOutboundRuleConfig struct {
 	Action string      `json:"action"`
 	QType  *PortList   `json:"qtype"`
 	Domain *StringList `json:"domain"`
-	RCode  string      `json:"rcode"`
+	RCode  *uint32     `json:"rcode"`
 }
 
 func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
-	rule := &dns.DNSRuleConfig{}
-	if c.RCode != "" {
-		rcode, err := strconv.ParseUint(c.RCode, 10, 16)
-		if err != nil {
-			return nil, errors.New("invalid rcode: ", c.RCode)
-		}
-		if rcode > math.MaxUint16 {
-			return nil, errors.New("rcode out of range: ", c.RCode)
-		}
-		rule.Rcode = new(uint32(rcode))
+	if c.RCode != nil && *c.RCode > math.MaxUint16 {
+		return nil, errors.New("rcode out of range: ", *c.RCode)
 	}
+
+	rule := &dns.DNSRuleConfig{}
 
 	switch strings.ToLower(c.Action) {
 	case "direct":
 		rule.Action = dns.RuleAction_Direct
-		rule.Rcode = nil
 	case "drop":
 		rule.Action = dns.RuleAction_Drop
-		rule.Rcode = nil
 	case "reject":
 		rule.Action = dns.RuleAction_Reject
+		rule.Rcode = c.RCode
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
+		rule.Rcode = c.RCode
 	default:
 		return nil, errors.New("unknown action: ", c.Action)
 	}
