@@ -1,7 +1,6 @@
 package conf
 
 import (
-	"math"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -36,8 +35,8 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 
 	if c.QType != nil {
 		for _, r := range c.QType.Range {
-			for qtype := r.From; qtype <= r.To; qtype++ {
-				rule.QType = append(rule.QType, int32(qtype))
+			for qType := r.From; qType <= r.To; qType++ {
+				rule.QType = append(rule.QType, int32(qType))
 			}
 		}
 	}
@@ -50,7 +49,7 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Domain = rules
 	}
 
-	if c.RCode > math.MaxUint16 {
+	if c.RCode > 65535 {
 		return nil, errors.New("rcode out of range: ", c.RCode)
 	}
 	rule.RCode = c.RCode
@@ -137,11 +136,11 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 			rule.Action = dns.RuleAction_Return
 			rule.RCode = 5
 		}
-		for _, qtype := range *c.BlockTypes {
-			if qtype < 0 || qtype > 65535 {
-				return nil, errors.New("legacy blockTypes qtype out of range: ", qtype)
+		for _, qType := range *c.BlockTypes {
+			if qType < 0 || qType > 65535 {
+				return nil, errors.New("legacy blockTypes qType out of range: ", qType)
 			}
-			rule.QType = append(rule.QType, qtype)
+			rule.QType = append(rule.QType, qType)
 		}
 		rules = append(rules, rule)
 	}
