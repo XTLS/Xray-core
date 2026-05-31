@@ -87,7 +87,8 @@ func TestDnsProxyConfig(t *testing.T) {
 				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Reject,
+						Action: dns.RuleAction_Return,
+						Rcode:  5,
 						Domain: []*geodata.DomainRule{
 							{
 								Value: &geodata.DomainRule_Custom{
@@ -143,7 +144,8 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 						Qtype:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Reject,
+						Action: dns.RuleAction_Return,
+						Rcode:  5,
 					},
 				},
 			},
@@ -157,15 +159,17 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Reject,
+						Action: dns.RuleAction_Return,
 						Qtype:  []int32{1, 65},
+						Rcode:  5,
 					},
 					{
 						Action: dns.RuleAction_Hijack,
 						Qtype:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Reject,
+						Action: dns.RuleAction_Return,
+						Rcode:  5,
 					},
 				},
 			},

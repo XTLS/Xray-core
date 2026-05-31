@@ -15,14 +15,10 @@ type DNSOutboundRuleConfig struct {
 	Action string      `json:"action"`
 	QType  *PortList   `json:"qtype"`
 	Domain *StringList `json:"domain"`
-	RCode  *uint32     `json:"rcode"`
+	RCode  uint32      `json:"rcode"`
 }
 
 func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
-	if c.RCode != nil && *c.RCode > math.MaxUint16 {
-		return nil, errors.New("rcode out of range: ", *c.RCode)
-	}
-
 	rule := &dns.DNSRuleConfig{}
 
 	switch strings.ToLower(c.Action) {
@@ -30,12 +26,14 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Action = dns.RuleAction_Direct
 	case "drop":
 		rule.Action = dns.RuleAction_Drop
+	case "return":
+		rule.Action = dns.RuleAction_Return
 	case "reject":
-		rule.Action = dns.RuleAction_Reject
-		rule.Rcode = c.RCode
+		errors.PrintDeprecatedFeatureWarning(`action "reject"`, `action "return" with "rcode": 5`)
+		rule.Action = dns.RuleAction_Return
+		c.RCode = 5
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
-		rule.Rcode = c.RCode
 	default:
 		return nil, errors.New("unknown action: ", c.Action)
 	}
@@ -55,6 +53,11 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		}
 		rule.Domain = rules
 	}
+
+	if c.RCode > math.MaxUint16 {
+		return nil, errors.New("rcode out of range: ", c.RCode)
+	}
+	rule.Rcode = c.RCode
 
 	return rule, nil
 }
@@ -135,7 +138,8 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 	if c.BlockTypes != nil && len(*c.BlockTypes) > 0 {
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Reject
+			rule.Action = dns.RuleAction_Return
+			rule.Rcode = 5
 		}
 		for _, qtype := range *c.BlockTypes {
 			if qtype < 0 || qtype > 65535 {
@@ -154,9 +158,10 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 	}
 
 	{
-		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Reject}
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Return}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Reject
+			rule.Action = dns.RuleAction_Return
+			rule.Rcode = 5
 		} else if mode == "drop" {
 			rule.Action = dns.RuleAction_Drop
 		} else if mode == "skip" {

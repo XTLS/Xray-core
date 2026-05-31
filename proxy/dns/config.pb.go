@@ -28,7 +28,7 @@ type RuleAction int32
 const (
 	RuleAction_Direct RuleAction = 0
 	RuleAction_Drop   RuleAction = 1
-	RuleAction_Reject RuleAction = 2
+	RuleAction_Return RuleAction = 2
 	RuleAction_Hijack RuleAction = 3
 )
 
@@ -37,13 +37,13 @@ var (
 	RuleAction_name = map[int32]string{
 		0: "Direct",
 		1: "Drop",
-		2: "Reject",
+		2: "Return",
 		3: "Hijack",
 	}
 	RuleAction_value = map[string]int32{
 		"Direct": 0,
 		"Drop":   1,
-		"Reject": 2,
+		"Return": 2,
 		"Hijack": 3,
 	}
 )
@@ -80,7 +80,7 @@ type DNSRuleConfig struct {
 	Action        RuleAction             `protobuf:"varint,1,opt,name=action,proto3,enum=xray.proxy.dns.RuleAction" json:"action,omitempty"`
 	Qtype         []int32                `protobuf:"varint,2,rep,packed,name=qtype,proto3" json:"qtype,omitempty"`
 	Domain        []*geodata.DomainRule  `protobuf:"bytes,3,rep,name=domain,proto3" json:"domain,omitempty"`
-	Rcode         *uint32                `protobuf:"varint,4,opt,name=rcode,proto3,oneof" json:"rcode,omitempty"`
+	Rcode         uint32                 `protobuf:"varint,4,opt,name=rcode,proto3" json:"rcode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -137,8 +137,8 @@ func (x *DNSRuleConfig) GetDomain() []*geodata.DomainRule {
 }
 
 func (x *DNSRuleConfig) GetRcode() uint32 {
-	if x != nil && x.Rcode != nil {
-		return *x.Rcode
+	if x != nil {
+		return x.Rcode
 	}
 	return 0
 }
@@ -207,13 +207,12 @@ var File_proxy_dns_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xb7\x01\n" +
+	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xa8\x01\n" +
 	"\rDNSRuleConfig\x122\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x14\n" +
 	"\x05qtype\x18\x02 \x03(\x05R\x05qtype\x127\n" +
-	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x19\n" +
-	"\x05rcode\x18\x04 \x01(\rH\x00R\x05rcode\x88\x01\x01B\b\n" +
-	"\x06_rcode\"\x9c\x01\n" +
+	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x14\n" +
+	"\x05rcode\x18\x04 \x01(\rR\x05rcode\"\x9c\x01\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x01 \x01(\rR\tuserLevel\x121\n" +
@@ -225,7 +224,7 @@ const file_proxy_dns_config_proto_rawDesc = "" +
 	"\x06Direct\x10\x00\x12\b\n" +
 	"\x04Drop\x10\x01\x12\n" +
 	"\n" +
-	"\x06Reject\x10\x02\x12\n" +
+	"\x06Return\x10\x02\x12\n" +
 	"\n" +
 	"\x06Hijack\x10\x03BL\n" +
 	"\x12com.xray.proxy.dnsP\x01Z#github.com/xtls/xray-core/proxy/dns\xaa\x02\x0eXray.Proxy.Dnsb\x06proto3"
@@ -268,7 +267,6 @@ func file_proxy_dns_config_proto_init() {
 	if File_proxy_dns_config_proto != nil {
 		return
 	}
-	file_proxy_dns_config_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

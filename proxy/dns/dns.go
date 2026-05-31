@@ -94,14 +94,10 @@ func (h *Handler) Init(config *Config, dnsClient dns.Client, policyManager polic
 
 	h.rules = make([]*DNSRule, 0, len(config.Rule))
 	for _, r := range config.Rule {
-		rcode := dnsmessage.RCodeRefused
-		if r.Rcode != nil {
-			rcode = dnsmessage.RCode(*r.Rcode)
-		}
 		rule := &DNSRule{
 			action: r.Action,
 			qTypes: make([]uint16, 0, len(r.Qtype)),
-			rcode:  rcode,
+			rcode:  dnsmessage.RCode(r.Rcode),
 		}
 		for _, t := range r.Qtype {
 			rule.qTypes = append(rule.qTypes, uint16(t))
@@ -152,7 +148,7 @@ func (h *Handler) applyRules(qType dnsmessage.Type, domain string) (RuleAction, 
 	if qType == dnsmessage.TypeA || qType == dnsmessage.TypeAAAA {
 		return RuleAction_Hijack, dnsmessage.RCodeSuccess
 	}
-	return RuleAction_Reject, dnsmessage.RCodeRefused
+	return RuleAction_Return, dnsmessage.RCodeSuccess
 }
 
 // Process implements proxy.Outbound.
@@ -261,7 +257,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 			case RuleAction_Drop:
 				b.Release()
 				errors.LogInfo(ctx, "blocked type ", qType, " query for domain ", domain)
-			case RuleAction_Reject:
+			case RuleAction_Return:
 				b.Release()
 				errors.LogInfo(ctx, "rejected type ", qType, " query for domain ", domain)
 				if err := h.rejectNonIPQuery(id, qType, domain, writer, rcode); err != nil {
