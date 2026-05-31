@@ -424,7 +424,7 @@ func TestDNSRules(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
 					Rule: []*dns_proxy.DNSRuleConfig{
 						{
-							Qtype: []int32{int32(dns.TypeA)},
+							QType: []int32{int32(dns.TypeA)},
 							Domain: []*geodata.DomainRule{
 								{
 									Value: &geodata.DomainRule_Custom{
@@ -438,7 +438,7 @@ func TestDNSRules(t *testing.T) {
 							Action: dns_proxy.RuleAction_Direct,
 						},
 						{
-							Qtype: []int32{int32(dns.TypeA)},
+							QType: []int32{int32(dns.TypeA)},
 							Domain: []*geodata.DomainRule{
 								{
 									Value: &geodata.DomainRule_Custom{
@@ -450,7 +450,7 @@ func TestDNSRules(t *testing.T) {
 								},
 							},
 							Action: dns_proxy.RuleAction_Return,
-							Rcode:  5,
+							RCode:  5,
 						},
 					},
 				}),

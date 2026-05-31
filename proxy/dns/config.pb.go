@@ -78,9 +78,9 @@ func (RuleAction) EnumDescriptor() ([]byte, []int) {
 type DNSRuleConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Action        RuleAction             `protobuf:"varint,1,opt,name=action,proto3,enum=xray.proxy.dns.RuleAction" json:"action,omitempty"`
-	Qtype         []int32                `protobuf:"varint,2,rep,packed,name=qtype,proto3" json:"qtype,omitempty"`
+	QType         []int32                `protobuf:"varint,2,rep,packed,name=q_type,json=qType,proto3" json:"q_type,omitempty"`
 	Domain        []*geodata.DomainRule  `protobuf:"bytes,3,rep,name=domain,proto3" json:"domain,omitempty"`
-	Rcode         uint32                 `protobuf:"varint,4,opt,name=rcode,proto3" json:"rcode,omitempty"`
+	RCode         uint32                 `protobuf:"varint,4,opt,name=r_code,json=rCode,proto3" json:"r_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -122,9 +122,9 @@ func (x *DNSRuleConfig) GetAction() RuleAction {
 	return RuleAction_Direct
 }
 
-func (x *DNSRuleConfig) GetQtype() []int32 {
+func (x *DNSRuleConfig) GetQType() []int32 {
 	if x != nil {
-		return x.Qtype
+		return x.QType
 	}
 	return nil
 }
@@ -136,9 +136,9 @@ func (x *DNSRuleConfig) GetDomain() []*geodata.DomainRule {
 	return nil
 }
 
-func (x *DNSRuleConfig) GetRcode() uint32 {
+func (x *DNSRuleConfig) GetRCode() uint32 {
 	if x != nil {
-		return x.Rcode
+		return x.RCode
 	}
 	return 0
 }
@@ -207,12 +207,12 @@ var File_proxy_dns_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xa8\x01\n" +
+	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xaa\x01\n" +
 	"\rDNSRuleConfig\x122\n" +
-	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x14\n" +
-	"\x05qtype\x18\x02 \x03(\x05R\x05qtype\x127\n" +
-	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x14\n" +
-	"\x05rcode\x18\x04 \x01(\rR\x05rcode\"\x9c\x01\n" +
+	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x15\n" +
+	"\x06q_type\x18\x02 \x03(\x05R\x05qType\x127\n" +
+	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x15\n" +
+	"\x06r_code\x18\x04 \x01(\rR\x05rCode\"\x9c\x01\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x01 \x01(\rR\tuserLevel\x121\n" +

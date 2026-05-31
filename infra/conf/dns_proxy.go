@@ -13,9 +13,9 @@ import (
 
 type DNSOutboundRuleConfig struct {
 	Action string      `json:"action"`
-	QType  *PortList   `json:"qtype"`
+	QType  *PortList   `json:"qType"`
 	Domain *StringList `json:"domain"`
-	RCode  uint32      `json:"rcode"`
+	RCode  uint32      `json:"rCode"`
 }
 
 func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
@@ -29,7 +29,7 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 	case "return":
 		rule.Action = dns.RuleAction_Return
 	case "reject":
-		errors.PrintDeprecatedFeatureWarning(`action "reject"`, `action "return" with "rcode": 5`)
+		errors.PrintDeprecatedFeatureWarning(`action "reject"`, `action "return" with "rCode": 5`)
 		rule.Action = dns.RuleAction_Return
 		c.RCode = 5
 	case "hijack":
@@ -41,7 +41,7 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 	if c.QType != nil {
 		for _, r := range c.QType.Range {
 			for qtype := r.From; qtype <= r.To; qtype++ {
-				rule.Qtype = append(rule.Qtype, int32(qtype))
+				rule.QType = append(rule.QType, int32(qtype))
 			}
 		}
 	}
@@ -57,7 +57,7 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 	if c.RCode > math.MaxUint16 {
 		return nil, errors.New("rcode out of range: ", c.RCode)
 	}
-	rule.Rcode = c.RCode
+	rule.RCode = c.RCode
 
 	return rule, nil
 }
@@ -139,21 +139,21 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
 		if mode == "reject" {
 			rule.Action = dns.RuleAction_Return
-			rule.Rcode = 5
+			rule.RCode = 5
 		}
 		for _, qtype := range *c.BlockTypes {
 			if qtype < 0 || qtype > 65535 {
 				return nil, errors.New("legacy blockTypes qtype out of range: ", qtype)
 			}
-			rule.Qtype = append(rule.Qtype, qtype)
+			rule.QType = append(rule.QType, qtype)
 		}
 		rules = append(rules, rule)
 	}
 
 	{
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Hijack}
-		rule.Qtype = append(rule.Qtype, 1)
-		rule.Qtype = append(rule.Qtype, 28)
+		rule.QType = append(rule.QType, 1)
+		rule.QType = append(rule.QType, 28)
 		rules = append(rules, rule)
 	}
 
@@ -161,7 +161,7 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Return}
 		if mode == "reject" {
 			rule.Action = dns.RuleAction_Return
-			rule.Rcode = 5
+			rule.RCode = 5
 		} else if mode == "drop" {
 			rule.Action = dns.RuleAction_Drop
 		} else if mode == "skip" {
