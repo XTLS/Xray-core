@@ -50,7 +50,7 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 	}
 
 	if c.RCode > 65535 {
-		return nil, errors.New("rcode out of range: ", c.RCode)
+		return nil, errors.New("rCode out of range: ", c.RCode)
 	}
 	rule.RCode = c.RCode
 
