@@ -91,12 +91,13 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	dialOptions := []grpc.DialOption{
+		grpc.WithDisableRetry(),
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
-				BaseDelay:  500 * time.Millisecond,
-				Multiplier: 1.5,
+				BaseDelay:  1000 * time.Millisecond,
+				Multiplier: 2,
 				Jitter:     0.2,
-				MaxDelay:   19 * time.Second,
+				MaxDelay:   3600 * time.Second,
 			},
 			MinConnectTimeout: 5 * time.Second,
 		}),
