@@ -40,20 +40,24 @@ func (o *Observer) createResult() []*observatory.OutboundStatus {
 	o.hp.access.Lock()
 	defer o.hp.access.Unlock()
 	for name, value := range o.hp.Results {
+		// Compute the statistics once: getStatistics() does a full recompute on
+		// every call and filters samples by the current time, so calling it per
+		// field both wasted work and risked an internally inconsistent status.
+		stats := value.getStatistics()
 		status := observatory.OutboundStatus{
-			Alive:           value.getStatistics().All != value.getStatistics().Fail,
-			Delay:           value.getStatistics().Average.Milliseconds(),
+			Alive:           stats.All != stats.Fail,
+			Delay:           stats.Average.Milliseconds(),
 			LastErrorReason: "",
 			OutboundTag:     name,
 			LastSeenTime:    0,
 			LastTryTime:     0,
 			HealthPing: &observatory.HealthPingMeasurementResult{
-				All:       int64(value.getStatistics().All),
-				Fail:      int64(value.getStatistics().Fail),
-				Deviation: int64(value.getStatistics().Deviation),
-				Average:   int64(value.getStatistics().Average),
-				Max:       int64(value.getStatistics().Max),
-				Min:       int64(value.getStatistics().Min),
+				All:       int64(stats.All),
+				Fail:      int64(stats.Fail),
+				Deviation: int64(stats.Deviation),
+				Average:   int64(stats.Average),
+				Max:       int64(stats.Max),
+				Min:       int64(stats.Min),
 			},
 		}
 		result = append(result, &status)

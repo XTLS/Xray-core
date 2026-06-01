@@ -39,7 +39,16 @@ type Observer struct {
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
-	return &ObservationResult{Status: o.status}, nil
+	// Return a snapshot under the lock: the background prober reassigns o.status
+	// and mutates its elements in place, while consumers (router strategies,
+	// metrics, the command service) read the result on other goroutines.
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+	status := make([]*OutboundStatus, len(o.status))
+	for i, s := range o.status {
+		status[i] = proto.Clone(s).(*OutboundStatus)
+	}
+	return &ObservationResult{Status: status}, nil
 }
 
 func (o *Observer) Type() interface{} {
