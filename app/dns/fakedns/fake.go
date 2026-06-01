@@ -108,9 +108,10 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	}
 	bigIntIP := big.NewInt(0).SetBytes(fkdns.ipRange.IP)
 	bigIntIP = bigIntIP.Add(bigIntIP, new(big.Int).SetUint64(currentTimeMillis))
+	ipSize := len(fkdns.ipRange.IP)
 	var ip net.Address
 	for {
-		ip = net.IPAddress(bigIntIP.Bytes())
+		ip = net.IPAddress(fixedSizeBytes(bigIntIP, ipSize))
 
 		// if we run for a long time, we may go back to beginning and start seeing the IP in use
 		if _, ok := fkdns.domainToIP.PeekKeyFromValue(ip); !ok {
@@ -118,12 +119,27 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 		}
 
 		bigIntIP = bigIntIP.Add(bigIntIP, big.NewInt(1))
-		if !fkdns.ipRange.Contains(bigIntIP.Bytes()) {
+		if !fkdns.ipRange.Contains(fixedSizeBytes(bigIntIP, ipSize)) {
 			bigIntIP = big.NewInt(0).SetBytes(fkdns.ipRange.IP)
 		}
 	}
 	fkdns.domainToIP.Put(domain, ip)
 	return []net.Address{ip}
+}
+
+// fixedSizeBytes returns the big-endian representation of n in exactly size
+// bytes. big.Int.Bytes() strips leading zero bytes, so a pool whose network
+// base begins with a zero byte (e.g. the NAT64 prefix 64:ff9b::/96) would
+// otherwise yield a short slice that net.IPAddress rejects (returning nil) and
+// that IPNet.Contains never matches.
+func fixedSizeBytes(n *big.Int, size int) []byte {
+	raw := n.Bytes()
+	if len(raw) >= size {
+		return raw[len(raw)-size:]
+	}
+	fixed := make([]byte, size)
+	copy(fixed[size-len(raw):], raw)
+	return fixed
 }
 
 // GetDomainFromFakeDNS checks if an IP is a fake IP and have corresponding domain name
