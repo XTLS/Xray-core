@@ -144,6 +144,14 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			return nil, err
 		}
 
+		// Header protection samples block.BlockSize() bytes starting 4 bytes
+		// into the packet number field. A packet that passed the length check
+		// above can still be too short to contain that sample (e.g. a crafted
+		// Initial with a small Length field), which would slice out of range.
+		if len(b) < hdrLen+4+block.BlockSize() {
+			return nil, common.ErrNoClue
+		}
+
 		cache.Clear()
 		mask := cache.Extend(int32(block.BlockSize()))
 		block.Encrypt(mask, b[hdrLen+4:hdrLen+4+len(mask)])

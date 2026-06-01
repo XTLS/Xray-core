@@ -285,3 +285,16 @@ func TestSniffFakeQUICPacketWithTooShortData(t *testing.T) {
 		t.Error("failed")
 	}
 }
+
+func TestSniffFakeQUICPacketWithShortHeaderProtectionSample(t *testing.T) {
+	// A crafted Initial packet whose Length field (4) is large enough to pass
+	// the length check but too small to contain the 16-byte header-protection
+	// sample. This used to slice out of range and panic, which crashes the
+	// process because the sniffer runs in a goroutine without recover.
+	pkt, err := hex.DecodeString("c0000000010000000400000000")
+	common.Must(err)
+	_, err = quic.SniffQUIC(pkt)
+	if err == nil {
+		t.Error("failed")
+	}
+}
