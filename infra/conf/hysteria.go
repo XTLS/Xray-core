@@ -20,6 +20,9 @@ func (c *HysteriaClientConfig) Build() (proto.Message, error) {
 	if c.Version != 2 {
 		return nil, errors.New("version != 2")
 	}
+	if c.Address == nil {
+		return nil, errors.New("Hysteria client: \"address\" is not set")
+	}
 
 	config := &hysteria.ClientConfig{}
 	config.Version = c.Version

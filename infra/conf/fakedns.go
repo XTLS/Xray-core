@@ -76,6 +76,9 @@ func (FakeDNSPostProcessingStage) Process(config *Config) error {
 
 	if config.DNSConfig != nil {
 		for _, v := range config.DNSConfig.Servers {
+			if v == nil || v.Address == nil {
+				continue
+			}
 			if v.Address.Family().IsDomain() && strings.EqualFold(v.Address.Domain(), "fakedns") {
 				fakeDNSInUse = true
 			}
