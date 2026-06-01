@@ -12,14 +12,15 @@ import "common/geodata/geodat.proto";
 enum RuleAction {
   Direct = 0;
   Drop = 1;
-  Reject = 2;
+  Return = 2;
   Hijack = 3;
 }
 
 message DNSRuleConfig {
   RuleAction action = 1;
-  repeated int32 qtype = 2;
+  repeated int32 q_type = 2;
   repeated xray.common.geodata.DomainRule domain = 3;
+  uint32 r_code = 4;
 }
 
 message Config {
