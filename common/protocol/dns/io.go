@@ -101,6 +101,7 @@ func (r *TCPReader) ReadMessage() (*buf.Buffer, error) {
 	}
 	b := buf.New()
 	if _, err := b.ReadFullFrom(r.reader, int32(size)); err != nil {
+		b.Release()
 		return nil, err
 	}
 	return b, nil

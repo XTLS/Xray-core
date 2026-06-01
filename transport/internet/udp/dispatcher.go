@@ -210,6 +210,8 @@ s:
 		}
 	case packet = <-c.cache:
 	}
+	// Release the pooled payload buffer once its bytes have been copied out.
+	defer packet.Payload.Release()
 	return copy(p, packet.Payload.Bytes()), &net.UDPAddr{
 		IP:   packet.Source.Address.IP(),
 		Port: int(packet.Source.Port),
