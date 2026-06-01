@@ -24,7 +24,7 @@ type Router struct {
 	ctx        context.Context
 	ohm        outbound.Manager
 	dispatcher routing.Dispatcher
-	mu         sync.Mutex
+	mu         sync.RWMutex
 }
 
 // Route is an implementation of routing.Route.
@@ -230,8 +230,8 @@ func (r *Router) RemoveRule(tag string) error {
 
 // ListRule implements routing.Router
 func (r *Router) ListRule() []routing.Route {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	ruleList := make([]routing.Route, 0)
 	for _, rule := range r.rules {
 		ruleList = append(ruleList, &Route{
@@ -240,6 +240,13 @@ func (r *Router) ListRule() []routing.Route {
 		})
 	}
 	return ruleList
+}
+
+// getRules returns a snapshot of the current rule set under the read lock.
+func (r *Router) getRules() []*Rule {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.rules
 }
 
 func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context, error) {
@@ -252,7 +259,13 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
 
-	for _, rule := range r.rules {
+	// Snapshot the rule set under the read lock: ReloadRules/RemoveRule replace
+	// it under the write lock (via the routing API) while this runs on the hot
+	// path. The rules are iterated without holding the lock, so rule.Apply (which
+	// may resolve DNS) never blocks reloads.
+	rules := r.getRules()
+
+	for _, rule := range rules {
 		if rule.Apply(ctx) {
 			return rule, ctx, nil
 		}
@@ -265,7 +278,7 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 
 	// Try applying rules again if we have IPs.
-	for _, rule := range r.rules {
+	for _, rule := range rules {
 		if rule.Apply(ctx) {
 			return rule, ctx, nil
 		}
