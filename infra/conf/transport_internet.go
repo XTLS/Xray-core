@@ -635,7 +635,6 @@ type QuicParamsConfig struct {
 }
 
 type TLSConfig struct {
-	AllowInsecure           bool             `json:"allowInsecure"`
 	Certs                   []*TLSCertConfig `json:"certificates"`
 	ServerName              string           `json:"serverName"`
 	ALPN                    *StringList      `json:"alpn"`
@@ -650,11 +649,14 @@ type TLSConfig struct {
 	MasterKeyLog            string           `json:"masterKeyLog"`
 	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
 	VerifyPeerCertByName    string           `json:"verifyPeerCertByName"`
-	VerifyPeerCertInNames   []string         `json:"verifyPeerCertInNames"`
 	ECHServerKeys           string           `json:"echServerKeys"`
 	ECHConfigList           string           `json:"echConfigList"`
-	ECHForceQuery           string           `json:"echForceQuery"`
 	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
+
+	// Deprecated items
+	AllowInsecure         bool     `json:"allowInsecure"`
+	VerifyPeerCertInNames []string `json:"verifyPeerCertInNames"`
+	ECHForceQuery         string   `json:"echForceQuery"`
 }
 
 // Build implements Buildable.
@@ -740,11 +742,9 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	}
 	switch c.ECHForceQuery {
 	case "none", "half", "full", "":
-		config.EchForceQuery = c.ECHForceQuery
 	default:
 		return nil, errors.New(`invalid "echForceQuery": `, c.ECHForceQuery)
 	}
-	config.EchForceQuery = c.ECHForceQuery
 	config.EchConfigList = c.ECHConfigList
 	if c.ECHSocketSettings != nil {
 		ss, err := c.ECHSocketSettings.Build()
