@@ -7,7 +7,6 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
@@ -187,9 +186,6 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 }
 
 func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
-	server.ctx = context.WithValue(server.ctx, "cone",
-		platform.NewEnvFlag(platform.UseCone).GetValue(func() string { return "" }) != "true")
-
 	for _, appSettings := range config.App {
 		settings, err := appSettings.GetInstance()
 		if err != nil {
