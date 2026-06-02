@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +16,7 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/common/session"
 	"golang.org/x/net/http2"
 
 	"github.com/miekg/dns"
@@ -200,23 +200,27 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 				IdleConnTimeout: net.ConnIdleTimeout,
 				ReadIdleTimeout: net.ChromeH2KeepAlivePeriod,
 				DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+					host, _, err := net.SplitHostPort(addr)
+					if err != nil {
+						return nil, err
+					}
 					dest, err := net.ParseDestination(network + ":" + addr)
 					if err != nil {
 						return nil, err
 					}
+					dnsCtx := ctx
+					if h2c {
+						dnsCtx = session.ContextWithMitmAlpn11(dnsCtx, false) // for insurance
+						dnsCtx = session.ContextWithMitmServerName(dnsCtx, host)
+					}
 					var conn net.Conn
-
-					conn, err = internet.DialSystem(ctx, dest, sockopt)
+					conn, err = internet.DialSystem(dnsCtx, dest, sockopt)
 					if err != nil {
 						return nil, err
 					}
 
 					if !h2c {
-						u, err := url.Parse(server)
-						if err != nil {
-							return nil, err
-						}
-						conn = utls.UClient(conn, &utls.Config{ServerName: u.Hostname()}, utls.HelloChrome_Auto)
+						conn = utls.UClient(conn, &utls.Config{ServerName: host}, utls.HelloChrome_Auto)
 						if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
 							return nil, err
 						}
@@ -239,6 +243,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		utils.TryDefaultHeadersWith(req.Header, "fetch")
 		req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
+		req.URL.Scheme = "https"
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err
