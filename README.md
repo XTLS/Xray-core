@@ -120,8 +120,6 @@
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [AsteriskNG](https://github.com/Asterisk4Magisk/AsteriskNG)
-- HarmonyOS
-  - [Hey](https://github.com/popsiclelmlm/Hey)
 - iOS & macOS arm64 & tvOS
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
@@ -147,6 +145,8 @@
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
+- HarmonyOS
+  - [Hey](https://github.com/popsiclelmlm/Hey)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
