@@ -635,6 +635,7 @@ type QuicParamsConfig struct {
 }
 
 type TLSConfig struct {
+	AllowInsecure           bool             `json:"allowInsecure"`
 	Certs                   []*TLSCertConfig `json:"certificates"`
 	ServerName              string           `json:"serverName"`
 	ALPN                    *StringList      `json:"alpn"`
@@ -652,11 +653,6 @@ type TLSConfig struct {
 	ECHServerKeys           string           `json:"echServerKeys"`
 	ECHConfigList           string           `json:"echConfigList"`
 	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
-
-	// Deprecated items
-	AllowInsecure         bool     `json:"allowInsecure"`
-	VerifyPeerCertInNames []string `json:"verifyPeerCertInNames"`
-	ECHForceQuery         string   `json:"echForceQuery"`
 }
 
 // Build implements Buildable.
@@ -700,7 +696,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.MasterKeyLog = c.MasterKeyLog
 
 	if c.AllowInsecure {
-		return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"`)
+		return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"(pcs) and "verifyPeerCertByName"(vcn)`)
 	}
 	if c.PinnedPeerCertSha256 != "" {
 		for v := range strings.SplitSeq(c.PinnedPeerCertSha256, ",") {
@@ -719,10 +715,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			config.PinnedPeerCertSha256 = append(config.PinnedPeerCertSha256, hashValue)
 		}
 	}
-
-	if c.VerifyPeerCertInNames != nil {
-		return nil, errors.PrintRemovedFeatureError(`"verifyPeerCertInNames"`, `"verifyPeerCertByName"`)
-	}
 	if c.VerifyPeerCertByName != "" {
 		for v := range strings.SplitSeq(c.VerifyPeerCertByName, ",") {
 			v = strings.TrimSpace(v)
@@ -739,11 +731,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			return nil, errors.New("invalid ECH Config", c.ECHServerKeys)
 		}
 		config.EchServerKeys = EchPrivateKey
-	}
-	switch c.ECHForceQuery {
-	case "none", "half", "full", "":
-	default:
-		return nil, errors.New(`invalid "echForceQuery": `, c.ECHForceQuery)
 	}
 	config.EchConfigList = c.ECHConfigList
 	if c.ECHSocketSettings != nil {
