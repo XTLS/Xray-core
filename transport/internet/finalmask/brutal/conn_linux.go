@@ -6,7 +6,6 @@ import (
 	"context"
 	"net"
 	"reflect"
-	"syscall"
 
 	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common"
@@ -28,7 +27,7 @@ func NewConn(c *Config, raw net.Conn) (net.Conn, error) {
 			errors.LogErrorInner(context.Background(), err, "failed to set congestion")
 			return
 		}
-		if err := syscall.SetsockoptString(int(fd), unix.IPPROTO_TCP, 23301, string(c.Params)); err != nil {
+		if err := unix.SetsockoptString(int(fd), unix.IPPROTO_TCP, 23301, string(c.Params)); err != nil {
 			errors.LogErrorInner(context.Background(), err, "failed to set params")
 			return
 		}
