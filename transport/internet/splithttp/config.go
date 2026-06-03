@@ -481,6 +481,9 @@ func init() {
 }
 
 func (c *RangeConfig) rand() int32 {
+	if c == nil {
+		return 0
+	}
 	return int32(crypto.RandBetween(int64(c.From), int64(c.To)))
 }
 
