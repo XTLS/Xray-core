@@ -233,6 +233,8 @@ type SplitHTTPConfig struct {
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
+	SessionIDTable       string            `json:"sessionIDTable"`
+	SessionIDLength      Int32Range        `json:"sessionIDLength"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
@@ -378,6 +380,17 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("invalid negative value of maxHeaderBytes")
 	}
 
+	if c.SessionIDTable != "" {
+		if c.SessionIDLength.From <= 0 {
+			return nil, errors.New("sessionIDLength.from must be greater than 0")
+		}
+		for i := 0; i < len(c.SessionIDTable); i++ {
+			if c.SessionIDTable[i] >= 0x80 {
+				return nil, errors.New("sessionIDTable must contain only ASCII characters")
+			}
+		}
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -416,6 +429,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
+		SessionIDTable:       c.SessionIDTable,
+		SessionIDLength:      newRangeConfig(c.SessionIDLength),
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),

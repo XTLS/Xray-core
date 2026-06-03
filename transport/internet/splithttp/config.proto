@@ -50,4 +50,6 @@ message Config {
   string uplinkDataKey = 25;
   RangeConfig uplinkChunkSize = 26;
   int32 serverMaxHeaderBytes = 27;
+  string sessionIDTable = 28;
+  RangeConfig sessionIDLength = 29;
 }
