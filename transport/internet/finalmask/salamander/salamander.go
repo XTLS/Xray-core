@@ -24,16 +24,21 @@ type SalamanderObfuscator struct {
 	PSK     []byte
 	RandSrc *rand.Rand
 
-	lk sync.Mutex
+	lk       sync.Mutex
+	keyInput []byte
 }
 
 func NewSalamanderObfuscator(psk []byte) (*SalamanderObfuscator, error) {
 	if len(psk) < smPSKMinLen {
 		return nil, ErrPSKTooShort
 	}
+	pskCopy := append([]byte(nil), psk...)
+	keyInput := make([]byte, len(pskCopy)+smSaltLen)
+	copy(keyInput, pskCopy)
 	return &SalamanderObfuscator{
-		PSK:     psk,
-		RandSrc: rand.New(rand.NewSource(time.Now().UnixNano())),
+		PSK:      pskCopy,
+		RandSrc:  rand.New(rand.NewSource(time.Now().UnixNano())),
+		keyInput: keyInput,
 	}, nil
 }
 
@@ -44,8 +49,8 @@ func (o *SalamanderObfuscator) Obfuscate(in, out []byte) int {
 	}
 	o.lk.Lock()
 	_, _ = o.RandSrc.Read(out[:smSaltLen])
+	key := o.keyLocked(out[:smSaltLen])
 	o.lk.Unlock()
-	key := o.key(out[:smSaltLen])
 	for i, c := range in {
 		out[i+smSaltLen] = c ^ key[i%smKeyLen]
 	}
@@ -57,13 +62,16 @@ func (o *SalamanderObfuscator) Deobfuscate(in, out []byte) int {
 	if outLen <= 0 || len(out) < outLen {
 		return 0
 	}
-	key := o.key(in[:smSaltLen])
+	o.lk.Lock()
+	key := o.keyLocked(in[:smSaltLen])
+	o.lk.Unlock()
 	for i, c := range in[smSaltLen:] {
 		out[i] = c ^ key[i%smKeyLen]
 	}
 	return outLen
 }
 
-func (o *SalamanderObfuscator) key(salt []byte) [smKeyLen]byte {
-	return blake2b.Sum256(append(o.PSK, salt...))
+func (o *SalamanderObfuscator) keyLocked(salt []byte) [smKeyLen]byte {
+	copy(o.keyInput[len(o.PSK):], salt[:smSaltLen])
+	return blake2b.Sum256(o.keyInput)
 }

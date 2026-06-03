@@ -22,8 +22,8 @@ import (
 )
 
 func TestInterfaces(t *testing.T) {
-	_ = (outbound.Handler)(new(Handler))
-	_ = (outbound.Manager)(new(Manager))
+	_ = outbound.Handler(new(Handler))
+	_ = outbound.Manager(new(Manager))
 }
 
 const xrayKey core.XrayKey = 1
@@ -43,7 +43,7 @@ func TestOutboundWithoutStatCounter(t *testing.T) {
 	}
 
 	v, _ := core.New(config)
-	v.AddFeature((outbound.Manager)(new(Manager)))
+	v.AddFeature(outbound.Manager(new(Manager)))
 	ctx := context.WithValue(context.Background(), xrayKey, v)
 	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
@@ -73,7 +73,7 @@ func TestOutboundWithStatCounter(t *testing.T) {
 	}
 
 	v, _ := core.New(config)
-	v.AddFeature((outbound.Manager)(new(Manager)))
+	v.AddFeature(outbound.Manager(new(Manager)))
 	ctx := context.WithValue(context.Background(), xrayKey, v)
 	ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{}})
 	h, _ := NewHandler(ctx, &core.OutboundHandlerConfig{
@@ -88,7 +88,6 @@ func TestOutboundWithStatCounter(t *testing.T) {
 }
 
 func TestTagsCache(t *testing.T) {
-
 	test_duration := 10 * time.Second
 	threads_num := 50
 	delay := 10 * time.Millisecond

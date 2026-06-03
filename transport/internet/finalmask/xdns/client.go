@@ -73,7 +73,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	var resolverAddrs []*net.UDPAddr
-	var resolverSend = make(map[string]*atomic.Uint32)
+	resolverSend := make(map[string]*atomic.Uint32)
 	for _, rs := range servers {
 		h, p, err := net.SplitHostPort(rs)
 		if err != nil {

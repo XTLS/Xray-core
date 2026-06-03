@@ -49,7 +49,7 @@ type layerMaskTcp struct {
 
 type failingWrapMask struct{}
 
-func (failingWrapMask) TCP() {}
+func (failingWrapMask) TCP()                                            {}
 func (f failingWrapMask) WrapConnClient(raw net.Conn) (net.Conn, error) { return raw, nil }
 func (f failingWrapMask) WrapConnServer(raw net.Conn) (net.Conn, error) {
 	return nil, io.ErrClosedPipe

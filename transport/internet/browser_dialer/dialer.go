@@ -26,9 +26,11 @@ type task struct {
 	StreamResponse bool   `json:"streamResponse"`
 }
 
-var conns chan *websocket.Conn
-var server *http.Server
-var mu sync.Mutex
+var (
+	conns  chan *websocket.Conn
+	server *http.Server
+	mu     sync.Mutex
+)
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   0,

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"net/netip"
 	"net/url"
 	"os"
 	"regexp"
@@ -13,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -31,8 +31,10 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
+	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
@@ -49,12 +51,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var (
-	tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"none": func() interface{} { return new(NoOpConnectionAuthenticator) },
-		"http": func() interface{} { return new(Authenticator) },
-	}, "type", "")
-)
+var tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
+	"none": func() interface{} { return new(NoOpConnectionAuthenticator) },
+	"http": func() interface{} { return new(Authenticator) },
+}, "type", "")
 
 type KCPConfig struct {
 	Mtu              *uint32 `json:"mtu"`
@@ -657,10 +657,8 @@ type TLSConfig struct {
 	MasterKeyLog            string           `json:"masterKeyLog"`
 	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
 	VerifyPeerCertByName    string           `json:"verifyPeerCertByName"`
-	VerifyPeerCertInNames   []string         `json:"verifyPeerCertInNames"`
 	ECHServerKeys           string           `json:"echServerKeys"`
 	ECHConfigList           string           `json:"echConfigList"`
-	ECHForceQuery           string           `json:"echForceQuery"`
 	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
 }
 
@@ -705,12 +703,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.MasterKeyLog = c.MasterKeyLog
 
 	if c.AllowInsecure {
-		if time.Now().After(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)) {
-			return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"`)
-		} else {
-			errors.LogWarning(context.Background(), `"allowInsecure" will be removed automatically after 2026-06-01, please use "pinnedPeerCertSha256"(pcs) and "verifyPeerCertByName"(vcn) instead, PLEASE CONTACT YOUR SERVICE PROVIDER (AIRPORT)`)
-			config.AllowInsecure = true
-		}
+		return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"(pcs) and "verifyPeerCertByName"(vcn)`)
 	}
 	if c.PinnedPeerCertSha256 != "" {
 		for v := range strings.SplitSeq(c.PinnedPeerCertSha256, ",") {
@@ -729,10 +722,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			config.PinnedPeerCertSha256 = append(config.PinnedPeerCertSha256, hashValue)
 		}
 	}
-
-	if c.VerifyPeerCertInNames != nil {
-		return nil, errors.PrintRemovedFeatureError(`"verifyPeerCertInNames"`, `"verifyPeerCertByName"`)
-	}
 	if c.VerifyPeerCertByName != "" {
 		for v := range strings.SplitSeq(c.VerifyPeerCertByName, ",") {
 			v = strings.TrimSpace(v)
@@ -750,13 +739,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 		config.EchServerKeys = EchPrivateKey
 	}
-	switch c.ECHForceQuery {
-	case "none", "half", "full", "":
-		config.EchForceQuery = c.ECHForceQuery
-	default:
-		return nil, errors.New(`invalid "echForceQuery": `, c.ECHForceQuery)
-	}
-	config.EchForceQuery = c.ECHForceQuery
 	config.EchConfigList = c.ECHConfigList
 	if c.ECHSocketSettings != nil {
 		ss, err := c.ECHSocketSettings.Build()
@@ -1038,7 +1020,7 @@ type HappyEyeballsConfig struct {
 }
 
 func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
-	var innerHappyEyeballsConfig = struct {
+	innerHappyEyeballsConfig := struct {
 		PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
 		TryDelayMs       uint64 `json:"tryDelayMs"`
 		Interleave       uint32 `json:"interleave"`
@@ -1166,7 +1148,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		return nil, errors.New("unsupported address and port strategy: ", c.AddressPortStrategy)
 	}
 
-	var happyEyeballs = &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 0, MaxConcurrentTry: 4}
+	happyEyeballs := &internet.HappyEyeballsConfig{Interleave: 1, PrioritizeIpv6: false, TryDelayMs: 0, MaxConcurrentTry: 4}
 	if c.HappyEyeballsSettings != nil {
 		happyEyeballs.PrioritizeIpv6 = c.HappyEyeballsSettings.PrioritizeIPv6
 		happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave
@@ -1243,20 +1225,14 @@ var (
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"header-custom":    func() interface{} { return new(HeaderCustomUDP) },
-		"header-dns":       func() interface{} { return new(Dns) },
-		"header-dtls":      func() interface{} { return new(Dtls) },
-		"header-srtp":      func() interface{} { return new(Srtp) },
-		"header-utp":       func() interface{} { return new(Utp) },
-		"header-wechat":    func() interface{} { return new(Wechat) },
-		"header-wireguard": func() interface{} { return new(Wireguard) },
-		"mkcp-original":    func() interface{} { return new(Original) },
-		"mkcp-aes128gcm":   func() interface{} { return new(Aes128Gcm) },
-		"noise":            func() interface{} { return new(NoiseMask) },
-		"salamander":       func() interface{} { return new(Salamander) },
-		"sudoku":           func() interface{} { return new(Sudoku) },
-		"xdns":             func() interface{} { return new(Xdns) },
-		"xicmp":            func() interface{} { return new(Xicmp) },
+		"header-custom": func() interface{} { return new(HeaderCustomUDP) },
+		"mkcp-legacy":   func() interface{} { return new(MkcpLegacy) },
+		"noise":         func() interface{} { return new(NoiseMask) },
+		"salamander":    func() interface{} { return new(Salamander) },
+		"sudoku":        func() interface{} { return new(Sudoku) },
+		"xdns":          func() interface{} { return new(Xdns) },
+		"xicmp":         func() interface{} { return new(Xicmp) },
+		"realm":         func() interface{} { return new(Realm) },
 	}, "type", "settings")
 )
 
@@ -1768,75 +1744,57 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 	}
 }
 
-type Dns struct {
-	Domain string `json:"domain"`
+type MkcpLegacy struct {
+	Header string `json:"header"`
+	Value  string `json:"value"`
 }
 
-func (c *Dns) Build() (proto.Message, error) {
-	config := &dns.Config{}
-	config.Domain = "www.baidu.com"
-
-	if len(c.Domain) > 0 {
-		config.Domain = c.Domain
+func (c *MkcpLegacy) Build() (proto.Message, error) {
+	if len(c.Header) == 0 {
+		if len(c.Value) == 0 {
+			return &original.Config{}, nil
+		} else {
+			return &aes128gcm.Config{Password: c.Value}, nil
+		}
 	}
-
-	return config, nil
-}
-
-type Dtls struct{}
-
-func (c *Dtls) Build() (proto.Message, error) {
-	return &dtls.Config{}, nil
-}
-
-type Srtp struct{}
-
-func (c *Srtp) Build() (proto.Message, error) {
-	return &srtp.Config{}, nil
-}
-
-type Utp struct{}
-
-func (c *Utp) Build() (proto.Message, error) {
-	return &utp.Config{}, nil
-}
-
-type Wechat struct{}
-
-func (c *Wechat) Build() (proto.Message, error) {
-	return &wechat.Config{}, nil
-}
-
-type Wireguard struct{}
-
-func (c *Wireguard) Build() (proto.Message, error) {
-	return &wireguard.Config{}, nil
-}
-
-type Original struct{}
-
-func (c *Original) Build() (proto.Message, error) {
-	return &original.Config{}, nil
-}
-
-type Aes128Gcm struct {
-	Password string `json:"password"`
-}
-
-func (c *Aes128Gcm) Build() (proto.Message, error) {
-	return &aes128gcm.Config{
-		Password: c.Password,
-	}, nil
+	switch strings.ToLower(c.Header) {
+	case "dns":
+		domain := c.Value
+		if len(domain) == 0 {
+			domain = "www.baidu.com"
+		}
+		return &header.Config{ID: 0, Domain: domain}, nil
+	case "dtls":
+		return &header.Config{ID: 1}, nil
+	case "srtp":
+		return &header.Config{ID: 2}, nil
+	case "utp":
+		return &header.Config{ID: 3}, nil
+	case "wechat":
+		return &header.Config{ID: 4}, nil
+	case "wireguard":
+		return &header.Config{ID: 5}, nil
+	default:
+		return nil, errors.New("invalid header ", c.Header)
+	}
 }
 
 type Salamander struct {
-	Password string `json:"password"`
+	Password   string      `json:"password"`
+	PacketSize *Int32Range `json:"packetSize"`
 }
 
 func (c *Salamander) Build() (proto.Message, error) {
-	config := &salamander.Config{}
-	config.Password = c.Password
-	return config, nil
+	if c.PacketSize != nil {
+		return &salamander.GeckoConfig{
+			Password:      c.Password,
+			MinPacketSize: c.PacketSize.From,
+			MaxPacketSize: c.PacketSize.To,
+		}, nil
+	}
+	return &salamander.Config{
+		Password: c.Password,
+	}, nil
 }
 
 type Sudoku struct {
@@ -1912,21 +1870,109 @@ func (c *Xdns) Build() (proto.Message, error) {
 }
 
 type Xicmp struct {
-	ListenIp string `json:"listenIp"`
-	Id       uint16 `json:"id"`
+	DGRAM bool     `json:"dgram"`
+	IPs   []string `json:"ips"`
 }
 
 func (c *Xicmp) Build() (proto.Message, error) {
-	config := &xicmp.Config{
-		Ip: c.ListenIp,
-		Id: int32(c.Id),
+	for _, ip := range c.IPs {
+		if _, err := netip.ParseAddr(ip); err != nil {
+			return nil, err
+		}
 	}
 
-	if config.Ip == "" {
-		config.Ip = "0.0.0.0"
+	config := &xicmp.Config{
+		DGRAM: c.DGRAM,
+		IPs:   c.IPs,
 	}
 
 	return config, nil
+}
+
+type Realm struct {
+	Url         string     `json:"url"`
+	StunServers []string   `json:"stunServers"`
+	TlsConfig   *TLSConfig `json:"tlsConfig"`
+}
+
+func (c *Realm) Build() (proto.Message, error) {
+	var scheme, host, port, token, id string
+	var stunServers []string
+	var tlsConfig *tls.Config
+
+	u, err := url.Parse(c.Url)
+	if err != nil {
+		return nil, err
+	}
+
+	switch u.Scheme {
+	case "realm":
+		scheme = "https"
+	case "realm+http":
+		scheme = "http"
+	default:
+		return nil, errors.New("invalid scheme", u.Scheme)
+	}
+
+	host = u.Hostname()
+	if host == "" {
+		return nil, errors.New("invalid host", host)
+	}
+
+	port = u.Port()
+	if port == "" {
+		port = "443"
+		if scheme == "http" {
+			port = "80"
+		}
+	}
+
+	token, err = url.PathUnescape(u.User.String())
+	if err != nil {
+		return nil, err
+	}
+	if token == "" {
+		return nil, errors.New("invalid token", token)
+	}
+
+	id, err = url.PathUnescape(strings.TrimPrefix(u.EscapedPath(), "/"))
+	if err != nil {
+		return nil, err
+	}
+	if id == "" {
+		return nil, errors.New("invalid id", id)
+	}
+
+	if len(c.StunServers) == 0 {
+		return nil, errors.New("empty stunServers")
+	}
+
+	for _, s := range c.StunServers {
+		_, _, err = net.SplitHostPort(s)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	stunServers = c.StunServers
+
+	if c.TlsConfig != nil {
+		tc, err := c.TlsConfig.Build()
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig = tc.(*tls.Config)
+	}
+
+	return &realm.Config{
+		Scheme:      scheme,
+		Host:        host,
+		Port:        port,
+		Token:       token,
+		ID:          id,
+		StunServers: stunServers,
+		TlsConfig:   tlsConfig,
+	}, nil
 }
 
 type Mask struct {

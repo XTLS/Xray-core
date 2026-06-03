@@ -138,7 +138,7 @@ func (s *handlerServer) GetInboundUsers(ctx context.Context, request *GetInbound
 	if len(request.Email) > 0 {
 		return &GetInboundUserResponse{Users: []*protocol.User{protocol.ToProtoUser(um.GetUser(ctx, request.Email))}}, nil
 	}
-	var result = make([]*protocol.User, 0, 100)
+	result := make([]*protocol.User, 0, 100)
 	users := um.GetUsers(ctx)
 	for _, u := range users {
 		result = append(result, protocol.ToProtoUser(u))

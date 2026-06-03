@@ -317,8 +317,10 @@ func (m *clientManager) clean() {
 	}
 }
 
-var manager *clientManager
-var initmanager sync.Once
+var (
+	manager     *clientManager
+	initmanager sync.Once
+)
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)

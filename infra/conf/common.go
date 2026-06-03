@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -199,7 +200,7 @@ func (v *PortRange) UnmarshalJSON(data []byte) error {
 	if err == nil {
 		v.From = uint32(from)
 		v.To = uint32(to)
-		if v.From > v.To {
+		if v.From > v.To || v.To > math.MaxUint16 {
 			return errors.New("invalid port range ", v.From, " -> ", v.To)
 		}
 		return nil

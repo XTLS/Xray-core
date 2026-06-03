@@ -640,7 +640,8 @@ func (b *bbrSender) OnCongestionEventEx(priorInFlight congestion.ByteCount, even
 func (b *bbrSender) PacingRate() Bandwidth {
 	if b.pacingRate == 0 {
 		return Bandwidth(b.highGain * float64(
-			BandwidthFromDelta(b.initialCongestionWindow, b.getMinRtt())))
+			BandwidthFromDelta(b.initialCongestionWindow, b.getMinRtt()),
+		))
 	}
 
 	return b.pacingRate

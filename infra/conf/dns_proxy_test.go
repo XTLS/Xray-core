@@ -35,10 +35,10 @@ func TestDnsProxyConfig(t *testing.T) {
 			Input: `{
 				"rules": [{
 					"action": "direct",
-					"qtype": "1,3,23-24"
+					"qType": "1,3,23-24"
 				}, {
 					"action": "drop",
-					"qtype": 28,
+					"qType": 28,
 					"domain": ["domain:example.com", "full:example.com"]
 				}]
 			}`,
@@ -48,11 +48,11 @@ func TestDnsProxyConfig(t *testing.T) {
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Direct,
-						Qtype:  []int32{1, 3, 23, 24},
+						QType:  []int32{1, 3, 23, 24},
 					},
 					{
 						Action: dns.RuleAction_Drop,
-						Qtype:  []int32{28},
+						QType:  []int32{28},
 						Domain: []*geodata.DomainRule{
 							{
 								Value: &geodata.DomainRule_Custom{
@@ -78,7 +78,8 @@ func TestDnsProxyConfig(t *testing.T) {
 		{
 			Input: `{
 				"rules": [{
-					"action": "reject",
+					"action": "return",
+					"rCode": 5,
 					"domain": "keyword:example"
 				}]
 			}`,
@@ -87,7 +88,8 @@ func TestDnsProxyConfig(t *testing.T) {
 				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Reject,
+						Action: dns.RuleAction_Return,
+						RCode:  5,
 						Domain: []*geodata.DomainRule{
 							{
 								Value: &geodata.DomainRule_Custom{
@@ -106,7 +108,7 @@ func TestDnsProxyConfig(t *testing.T) {
 			Input: `{
 				"rules": [{
 					"action": "drop",
-					"qtype": 257
+					"qType": 257
 				}]
 			}`,
 			Parser: loadJSON(creator),
@@ -115,7 +117,7 @@ func TestDnsProxyConfig(t *testing.T) {
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Drop,
-						Qtype:  []int32{257},
+						QType:  []int32{257},
 					},
 				},
 			},
@@ -140,10 +142,11 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Hijack,
-						Qtype:  []int32{1, 28},
+						QType:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Reject,
+						Action: dns.RuleAction_Return,
+						RCode:  5,
 					},
 				},
 			},
@@ -157,15 +160,17 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 				RewriteServer: &net.Endpoint{},
 				Rule: []*dns.DNSRuleConfig{
 					{
-						Action: dns.RuleAction_Reject,
-						Qtype:  []int32{1, 65},
+						Action: dns.RuleAction_Return,
+						QType:  []int32{1, 65},
+						RCode:  5,
 					},
 					{
 						Action: dns.RuleAction_Hijack,
-						Qtype:  []int32{1, 28},
+						QType:  []int32{1, 28},
 					},
 					{
-						Action: dns.RuleAction_Reject,
+						Action: dns.RuleAction_Return,
+						RCode:  5,
 					},
 				},
 			},
@@ -181,11 +186,11 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Drop,
-						Qtype:  []int32{1},
+						QType:  []int32{1},
 					},
 					{
 						Action: dns.RuleAction_Hijack,
-						Qtype:  []int32{1, 28},
+						QType:  []int32{1, 28},
 					},
 					{
 						Action: dns.RuleAction_Drop,
@@ -204,11 +209,11 @@ func TestDnsProxyConfigLegacyCompatibility(t *testing.T) {
 				Rule: []*dns.DNSRuleConfig{
 					{
 						Action: dns.RuleAction_Drop,
-						Qtype:  []int32{65, 28},
+						QType:  []int32{65, 28},
 					},
 					{
 						Action: dns.RuleAction_Hijack,
-						Qtype:  []int32{1, 28},
+						QType:  []int32{1, 28},
 					},
 					{
 						Action: dns.RuleAction_Direct,
@@ -228,7 +233,7 @@ func TestDnsProxyConfigRejectsMixedLegacyAndNewFields(t *testing.T) {
 	_, err := loadJSON(creator)(`{
 		"rules": [{
 			"action": "direct",
-			"qtype": 65
+			"qType": 65
 		}],
 		"blockTypes": [65]
 	}`)
