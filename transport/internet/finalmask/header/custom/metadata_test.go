@@ -3,6 +3,7 @@ package custom
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -124,8 +125,8 @@ func TestMetadataAliasesExposeDstNames(t *testing.T) {
 	}
 }
 
-func TestMetadataUDPWriteUsesRemotePort(t *testing.T) {
-	cfg := &UDPConfig{
+func TestMetadataUDPStandaloneWriteUsesRemotePort(t *testing.T) {
+	cfg := &UDPStandaloneConfig{
 		Client: []*UDPItem{
 			{
 				Expr: &Expr{
@@ -134,6 +135,11 @@ func TestMetadataUDPWriteUsesRemotePort(t *testing.T) {
 						{Value: &ExprArg_Metadata{Metadata: "remote_port"}},
 					},
 				},
+			},
+		},
+		Server: []*UDPItem{
+			{
+				Packet: []byte{0xCA, 0xFE},
 			},
 		},
 	}
@@ -156,25 +162,47 @@ func TestMetadataUDPWriteUsesRemotePort(t *testing.T) {
 	}
 
 	payload := []byte("meta")
+	errCh := make(chan error, 1)
+	go func() {
+		wire := make([]byte, 64)
+		_ = serverRaw.SetDeadline(time.Now().Add(time.Second))
+
+		n, addr, err := serverRaw.ReadFrom(wire)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		wantPort := uint16(serverRaw.LocalAddr().(*net.UDPAddr).Port)
+		if n != 2 {
+			errCh <- fmt.Errorf("unexpected handshake size: %d", n)
+			return
+		}
+		if got := binary.BigEndian.Uint16(wire[:2]); got != wantPort {
+			errCh <- fmt.Errorf("unexpected encoded port: got=%d want=%d", got, wantPort)
+			return
+		}
+		if _, err := serverRaw.WriteTo([]byte{0xCA, 0xFE}, addr); err != nil {
+			errCh <- err
+			return
+		}
+
+		n, _, err = serverRaw.ReadFrom(wire)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if !bytes.Equal(wire[:n], payload) {
+			errCh <- fmt.Errorf("unexpected payload: %q", wire[:n])
+			return
+		}
+		errCh <- nil
+	}()
+
 	if _, err := client.WriteTo(payload, serverRaw.LocalAddr()); err != nil {
 		t.Fatal(err)
 	}
-
-	wire := make([]byte, 64)
-	_ = serverRaw.SetDeadline(time.Now().Add(time.Second))
-	n, _, err := serverRaw.ReadFrom(wire)
-	if err != nil {
+	if err := <-errCh; err != nil {
 		t.Fatal(err)
-	}
-	if n != len(payload)+2 {
-		t.Fatalf("unexpected wire size: %d", n)
-	}
-	wantPort := uint16(serverRaw.LocalAddr().(*net.UDPAddr).Port)
-	if got := binary.BigEndian.Uint16(wire[:2]); got != wantPort {
-		t.Fatalf("unexpected encoded port: got=%d want=%d", got, wantPort)
-	}
-	if !bytes.Equal(wire[2:n], payload) {
-		t.Fatalf("unexpected payload: %q", wire[2:n])
 	}
 }
 

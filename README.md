@@ -73,7 +73,6 @@
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool), [VPainLess](https://github.com/vpainless/vpainless)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
-  - [Xray4Magisk](https://github.com/Asterisk4Magisk/Xray4Magisk)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
 - Homebrew
   - `brew install xray`
@@ -120,6 +119,7 @@
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [OneXray](https://github.com/OneXray/OneXray)
+  - [AsteriskNG](https://github.com/Asterisk4Magisk/AsteriskNG)
 - iOS & macOS arm64 & tvOS
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
@@ -162,6 +162,7 @@
   - [xtls-sdk](https://github.com/remnawave/xtls-sdk)
   - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
+  - [flutter_vless](https://github.com/XIIIFOX/flutter_vless)
   - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
   - [xray-api](https://github.com/XVGuardian/xray-api)
 - [XrayR](https://github.com/XrayR-project/XrayR)

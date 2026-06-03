@@ -1755,11 +1755,17 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 		})
 	}
 
-	return &custom.UDPConfig{
-		Client: client,
-		Server: server,
-		Mode:   c.Mode,
-	}, nil
+	if c.Mode == "standalone" {
+		return &custom.UDPStandaloneConfig{
+			Client: client,
+			Server: server,
+		}, nil
+	} else {
+		return &custom.UDPConfig{
+			Client: client,
+			Server: server,
+		}, nil
+	}
 }
 
 type Dns struct {

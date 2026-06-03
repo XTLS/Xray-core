@@ -511,7 +511,6 @@ type UDPConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Client        []*UDPItem             `protobuf:"bytes,1,rep,name=client,proto3" json:"client,omitempty"`
 	Server        []*UDPItem             `protobuf:"bytes,2,rep,name=server,proto3" json:"server,omitempty"`
-	Mode          string                 `protobuf:"bytes,3,opt,name=mode,proto3" json:"mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -560,11 +559,56 @@ func (x *UDPConfig) GetServer() []*UDPItem {
 	return nil
 }
 
-func (x *UDPConfig) GetMode() string {
+type UDPStandaloneConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Client        []*UDPItem             `protobuf:"bytes,1,rep,name=client,proto3" json:"client,omitempty"`
+	Server        []*UDPItem             `protobuf:"bytes,2,rep,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UDPStandaloneConfig) Reset() {
+	*x = UDPStandaloneConfig{}
+	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UDPStandaloneConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UDPStandaloneConfig) ProtoMessage() {}
+
+func (x *UDPStandaloneConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_header_custom_config_proto_msgTypes[7]
 	if x != nil {
-		return x.Mode
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return ""
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UDPStandaloneConfig.ProtoReflect.Descriptor instead.
+func (*UDPStandaloneConfig) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_header_custom_config_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UDPStandaloneConfig) GetClient() []*UDPItem {
+	if x != nil {
+		return x.Client
+	}
+	return nil
+}
+
+func (x *UDPStandaloneConfig) GetServer() []*UDPItem {
+	if x != nil {
+		return x.Server
+	}
+	return nil
 }
 
 var File_transport_internet_finalmask_header_custom_config_proto protoreflect.FileDescriptor
@@ -605,11 +649,13 @@ const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" 
 	"\x06packet\x18\x04 \x01(\fR\x06packet\x12\x12\n" +
 	"\x04save\x18\x05 \x01(\tR\x04save\x12\x10\n" +
 	"\x03var\x18\x06 \x01(\tR\x03var\x12I\n" +
-	"\x04expr\x18\a \x01(\v25.xray.transport.internet.finalmask.header.custom.ExprR\x04expr\"\xc3\x01\n" +
+	"\x04expr\x18\a \x01(\v25.xray.transport.internet.finalmask.header.custom.ExprR\x04expr\"\xaf\x01\n" +
 	"\tUDPConfig\x12P\n" +
 	"\x06client\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06client\x12P\n" +
-	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06server\x12\x12\n" +
-	"\x04mode\x18\x03 \x01(\tR\x04modeB\xaf\x01\n" +
+	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06server\"\xb9\x01\n" +
+	"\x13UDPStandaloneConfig\x12P\n" +
+	"\x06client\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06client\x12P\n" +
+	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06serverB\xaf\x01\n" +
 	"3com.xray.transport.internet.finalmask.header.customP\x01ZDgithub.com/xtls/xray-core/transport/internet/finalmask/header/custom\xaa\x02/Xray.Transport.Internet.Finalmask.Header.Customb\x06proto3"
 
 var (
@@ -624,15 +670,16 @@ func file_transport_internet_finalmask_header_custom_config_proto_rawDescGZIP() 
 	return file_transport_internet_finalmask_header_custom_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_header_custom_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_transport_internet_finalmask_header_custom_config_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_transport_internet_finalmask_header_custom_config_proto_goTypes = []any{
-	(*Expr)(nil),        // 0: xray.transport.internet.finalmask.header.custom.Expr
-	(*ExprArg)(nil),     // 1: xray.transport.internet.finalmask.header.custom.ExprArg
-	(*TCPItem)(nil),     // 2: xray.transport.internet.finalmask.header.custom.TCPItem
-	(*TCPSequence)(nil), // 3: xray.transport.internet.finalmask.header.custom.TCPSequence
-	(*TCPConfig)(nil),   // 4: xray.transport.internet.finalmask.header.custom.TCPConfig
-	(*UDPItem)(nil),     // 5: xray.transport.internet.finalmask.header.custom.UDPItem
-	(*UDPConfig)(nil),   // 6: xray.transport.internet.finalmask.header.custom.UDPConfig
+	(*Expr)(nil),                // 0: xray.transport.internet.finalmask.header.custom.Expr
+	(*ExprArg)(nil),             // 1: xray.transport.internet.finalmask.header.custom.ExprArg
+	(*TCPItem)(nil),             // 2: xray.transport.internet.finalmask.header.custom.TCPItem
+	(*TCPSequence)(nil),         // 3: xray.transport.internet.finalmask.header.custom.TCPSequence
+	(*TCPConfig)(nil),           // 4: xray.transport.internet.finalmask.header.custom.TCPConfig
+	(*UDPItem)(nil),             // 5: xray.transport.internet.finalmask.header.custom.UDPItem
+	(*UDPConfig)(nil),           // 6: xray.transport.internet.finalmask.header.custom.UDPConfig
+	(*UDPStandaloneConfig)(nil), // 7: xray.transport.internet.finalmask.header.custom.UDPStandaloneConfig
 }
 var file_transport_internet_finalmask_header_custom_config_proto_depIdxs = []int32{
 	1,  // 0: xray.transport.internet.finalmask.header.custom.Expr.args:type_name -> xray.transport.internet.finalmask.header.custom.ExprArg
@@ -645,11 +692,13 @@ var file_transport_internet_finalmask_header_custom_config_proto_depIdxs = []int
 	0,  // 7: xray.transport.internet.finalmask.header.custom.UDPItem.expr:type_name -> xray.transport.internet.finalmask.header.custom.Expr
 	5,  // 8: xray.transport.internet.finalmask.header.custom.UDPConfig.client:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
 	5,  // 9: xray.transport.internet.finalmask.header.custom.UDPConfig.server:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	5,  // 10: xray.transport.internet.finalmask.header.custom.UDPStandaloneConfig.client:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
+	5,  // 11: xray.transport.internet.finalmask.header.custom.UDPStandaloneConfig.server:type_name -> xray.transport.internet.finalmask.header.custom.UDPItem
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_header_custom_config_proto_init() }
@@ -670,7 +719,7 @@ func file_transport_internet_finalmask_header_custom_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_header_custom_config_proto_rawDesc), len(file_transport_internet_finalmask_header_custom_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

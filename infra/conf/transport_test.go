@@ -195,8 +195,7 @@ func TestHeaderCustomUDPBuild(t *testing.T) {
 				"mode": "standalone"
 			}`,
 			Parser: parser,
-			Output: &finalmaskcustom.UDPConfig{
-				Mode: "standalone",
+			Output: &finalmaskcustom.UDPStandaloneConfig{
 				Client: []*finalmaskcustom.UDPItem{
 					{
 						RandMax: 255,
