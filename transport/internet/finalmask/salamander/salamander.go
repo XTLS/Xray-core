@@ -21,7 +21,7 @@ var ErrPSKTooShort = fmt.Errorf("PSK must be at least %d bytes", smPSKMinLen)
 // the BLAKE2b-256 hash of a pre-shared key combined with a random salt.
 // Packet format: [8-byte salt][payload]
 type SalamanderObfuscator struct {
-	PSK     []byte
+	PSK []byte
 
 	lk       sync.Mutex
 	keyInput []byte
