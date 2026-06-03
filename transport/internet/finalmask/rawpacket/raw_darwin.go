@@ -2,15 +2,14 @@ package rawpacket
 
 import (
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
 	"syscall"
-
-	"errors"
-	"fmt"
 
 	"golang.org/x/sys/unix"
 )

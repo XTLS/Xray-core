@@ -17,17 +17,17 @@ const PlatformSupported = true
 // FreeBSD tcp_info offsets for snd_nxt and rcv_nxt.
 // Derived from FreeBSD sys/netinet/tcp.h struct tcp_info layout.
 //
-// struct tcp_info {
-//     u8 state, __ca, __retrans, __probes, __backoff, opts, wscale  = 8 bytes (with pad)
-//     u32 rto, __ato, snd_mss, rcv_mss                             = 16 bytes (offset 8)
-//     u32 __unacked, __sacked, __lost, __retrans, __fackets         = 20 bytes (offset 24)
-//     u32 __last_data_sent, __last_ack_sent, last_data_recv, __last_ack_recv = 16 bytes (offset 44)
-//     u32 __pmtu, __rcv_ssthresh, rtt, rttvar, snd_ssthresh, snd_cwnd, __advmss, __reordering = 32 bytes (offset 60)
-//     u32 __rcv_rtt, rcv_space                                     = 8 bytes  (offset 92)
-//     u32 snd_wnd, snd_bwnd                                        = 8 bytes  (offset 100)
-//     u32 snd_nxt, rcv_nxt                                         = 8 bytes  (offset 108)
-//     ... remaining fields
-// }
+//	struct tcp_info {
+//	    u8 state, __ca, __retrans, __probes, __backoff, opts, wscale  = 8 bytes (with pad)
+//	    u32 rto, __ato, snd_mss, rcv_mss                             = 16 bytes (offset 8)
+//	    u32 __unacked, __sacked, __lost, __retrans, __fackets         = 20 bytes (offset 24)
+//	    u32 __last_data_sent, __last_ack_sent, last_data_recv, __last_ack_recv = 16 bytes (offset 44)
+//	    u32 __pmtu, __rcv_ssthresh, rtt, rttvar, snd_ssthresh, snd_cwnd, __advmss, __reordering = 32 bytes (offset 60)
+//	    u32 __rcv_rtt, rcv_space                                     = 8 bytes  (offset 92)
+//	    u32 snd_wnd, snd_bwnd                                        = 8 bytes  (offset 100)
+//	    u32 snd_nxt, rcv_nxt                                         = 8 bytes  (offset 108)
+//	    ... remaining fields
+//	}
 const (
 	freebsdTCPInfoSndNxtOffset = 108
 	freebsdTCPInfoRcvNxtOffset = 112

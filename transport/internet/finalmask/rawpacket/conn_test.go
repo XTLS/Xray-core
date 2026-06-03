@@ -43,7 +43,7 @@ type recordingConn struct {
 	writes [][]byte
 }
 
-func (c *recordingConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (c *recordingConn) Read([]byte) (int, error) { return 0, io.EOF }
 func (c *recordingConn) Write(b []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -141,11 +141,11 @@ func TestBuildFakeClientHelloEmptySNI(t *testing.T) {
 
 type discardConn struct{}
 
-func (discardConn) Read([]byte) (int, error)           { return 0, io.EOF }
-func (discardConn) Write([]byte) (int, error)          { return 0, errors.New("unexpected write") }
-func (discardConn) Close() error                       { return nil }
-func (discardConn) LocalAddr() net.Addr                { return nil }
-func (discardConn) RemoteAddr() net.Addr               { return nil }
-func (discardConn) SetDeadline(time.Time) error        { return nil }
-func (discardConn) SetReadDeadline(time.Time) error    { return nil }
-func (discardConn) SetWriteDeadline(time.Time) error   { return nil }
+func (discardConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (discardConn) Write([]byte) (int, error)        { return 0, errors.New("unexpected write") }
+func (discardConn) Close() error                     { return nil }
+func (discardConn) LocalAddr() net.Addr              { return nil }
+func (discardConn) RemoteAddr() net.Addr             { return nil }
+func (discardConn) SetDeadline(time.Time) error      { return nil }
+func (discardConn) SetReadDeadline(time.Time) error  { return nil }
+func (discardConn) SetWriteDeadline(time.Time) error { return nil }

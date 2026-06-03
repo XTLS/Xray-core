@@ -2,9 +2,8 @@ package rawpacket
 
 import (
 	"encoding/binary"
-	"net/netip"
-
 	"fmt"
+	"net/netip"
 )
 
 const (

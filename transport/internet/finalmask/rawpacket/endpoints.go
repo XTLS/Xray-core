@@ -1,10 +1,9 @@
 package rawpacket
 
 import (
+	"errors"
 	"net"
 	"net/netip"
-
-	"errors"
 )
 
 // The returned addresses are v4-unmapped and share the same family.

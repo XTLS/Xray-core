@@ -3,9 +3,8 @@
 package rawpacket
 
 import (
-	"net"
-
 	"errors"
+	"net"
 )
 
 const PlatformSupported = false
