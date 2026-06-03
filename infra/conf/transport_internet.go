@@ -1232,7 +1232,7 @@ var (
 	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"brutal":        func() interface{} { return new(Brutal) },
+		"force-brutal":  func() interface{} { return new(Brutal) },
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
@@ -1252,7 +1252,7 @@ var (
 
 type Brutal struct {
 	Rate uint64 `json:"rate"`
-	Cwnd uint64 `json:"cwnd"`
+	Cwnd uint32 `json:"cwnd"`
 }
 
 func (c *Brutal) Build() (proto.Message, error) {
@@ -1272,7 +1272,7 @@ func (c *Brutal) Build() (proto.Message, error) {
 	}
 	params := make([]byte, 16)
 	binary.NativeEndian.PutUint64(params, rate)
-	binary.NativeEndian.PutUint64(params[8:], cwnd)
+	binary.NativeEndian.PutUint32(params[8:], cwnd)
 	return &brutal.Config{
 		Params: params,
 	}, nil
