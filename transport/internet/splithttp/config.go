@@ -1,9 +1,13 @@
 package splithttp
 
 import (
+	crand "crypto/rand"
+	"encoding/base32"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 
@@ -11,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -211,6 +216,82 @@ func (c *Config) GetNormalizedSessionPlacement() string {
 		return PlacementPath
 	}
 	return c.SessionPlacement
+}
+
+func (c *Config) GetNormalizedSessionIdFormat() string {
+	if c.SessionIdFormat == "" {
+		return SessionIdFormatUuid
+	}
+	return c.SessionIdFormat
+}
+
+func (c *Config) GetNormalizedSessionIdLength() RangeConfig {
+	if c.SessionIdLength == nil || c.SessionIdLength.From <= 0 || c.SessionIdLength.To <= 0 {
+		return RangeConfig{From: 16, To: 32}
+	}
+	return *c.SessionIdLength
+}
+
+func (c *Config) GenerateSessionId() string {
+	format := c.GetNormalizedSessionIdFormat()
+	if format == SessionIdFormatUuid {
+		sessionIdUuid := uuid.New()
+		return sessionIdUuid.String()
+	}
+
+	lengthRange := c.GetNormalizedSessionIdLength()
+	length := int(lengthRange.rand())
+
+	switch format {
+	case SessionIdFormatHex:
+		randomBytes := randomBytesForEncodedLength(length, 2)
+		return hex.EncodeToString(randomBytes)[:length]
+	case SessionIdFormatBase64Url:
+		randomBytes := randomBytesForEncodedLength(length, 4.0/3.0)
+		return base64.RawURLEncoding.EncodeToString(randomBytes)[:length]
+	case SessionIdFormatBase32:
+		randomBytes := randomBytesForEncodedLength(length, 8.0/5.0)
+		return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(randomBytes))[:length]
+	case SessionIdFormatBase58:
+		return generateBase58SessionId(length)
+	case SessionIdFormatAlnum:
+		return generateAlnumSessionId(length)
+	default:
+		sessionIdUuid := uuid.New()
+		return sessionIdUuid.String()
+	}
+}
+
+func randomBytesForEncodedLength(length int, expansion float64) []byte {
+	byteLength := int(float64(length)/expansion) + 2
+	if byteLength < 1 {
+		byteLength = 1
+	}
+	randomBytes := make([]byte, byteLength)
+	common.Must2(io.ReadFull(crand.Reader, randomBytes))
+	return randomBytes
+}
+
+func generateBase58SessionId(length int) string {
+	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+	result := make([]byte, length)
+	maxIndex := big.NewInt(int64(len(alphabet)))
+	for i := range result {
+		index := common.Must2(crand.Int(crand.Reader, maxIndex))
+		result[i] = alphabet[index.Int64()]
+	}
+	return string(result)
+}
+
+func generateAlnumSessionId(length int) string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	result := make([]byte, length)
+	maxIndex := big.NewInt(int64(len(alphabet)))
+	for i := range result {
+		index := common.Must2(crand.Int(crand.Reader, maxIndex))
+		result[i] = alphabet[index.Int64()]
+	}
+	return string(result)
 }
 
 func (c *Config) GetNormalizedSeqPlacement() string {

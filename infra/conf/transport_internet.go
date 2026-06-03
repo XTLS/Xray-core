@@ -221,6 +221,8 @@ type SplitHTTPConfig struct {
 	UplinkHTTPMethod     string            `json:"uplinkHTTPMethod"`
 	SessionPlacement     string            `json:"sessionPlacement"`
 	SessionKey           string            `json:"sessionKey"`
+	SessionIdFormat      string            `json:"sessionIdFormat"`
+	SessionIdLength      Int32Range        `json:"sessionIdLength"`
 	SeqPlacement         string            `json:"seqPlacement"`
 	SeqKey               string            `json:"seqKey"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
@@ -339,6 +341,18 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("unsupported session placement: " + c.SessionPlacement)
 	}
 
+	switch c.SessionIdFormat {
+	case "":
+		c.SessionIdFormat = splithttp.SessionIdFormatUuid
+	case splithttp.SessionIdFormatUuid, splithttp.SessionIdFormatHex, splithttp.SessionIdFormatBase64Url, splithttp.SessionIdFormatBase32, splithttp.SessionIdFormatBase58, splithttp.SessionIdFormatAlnum:
+	default:
+		return nil, errors.New("unsupported session id format: " + c.SessionIdFormat)
+	}
+
+	if c.SessionIdLength != (Int32Range{}) && (c.SessionIdLength.From <= 0 || c.SessionIdLength.To <= 0 || c.SessionIdLength.From > c.SessionIdLength.To) {
+		return nil, errors.New("invalid session id length")
+	}
+
 	switch c.SeqPlacement {
 	case "":
 		c.SeqPlacement = "path"
@@ -405,6 +419,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		SessionPlacement:     c.SessionPlacement,
 		SeqPlacement:         c.SeqPlacement,
 		SessionKey:           c.SessionKey,
+		SessionIdFormat:      c.SessionIdFormat,
+		SessionIdLength:      newRangeConfig(c.SessionIdLength),
 		SeqKey:               c.SeqKey,
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,
