@@ -236,6 +236,10 @@ type SplitHTTPConfig struct {
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
+	SessionGeneratorType      string       `json:"sessionGeneratorType"`
+	SessionGeneratorMinLength int32        `json:"sessionGeneratorMinLength"`
+	SessionGeneratorMaxLength int32        `json:"sessionGeneratorMaxLength"`
+	SessionGeneratorAlphabet  string       `json:"sessionGeneratorAlphabet"`
 	Extra                json.RawMessage   `json:"extra"`
 }
 
@@ -391,6 +395,27 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		c.Xmux.HMaxReusableSecs.To = 3000
 	}
 
+	switch c.SessionGeneratorType {
+	case "":
+		c.SessionGeneratorType = "uuid"
+	case "uuid", "randstr":
+	default:
+		return nil, errors.New("unsupported sessionGeneratorType: ", c.SessionGeneratorType)
+	}
+
+	if c.SessionGeneratorMinLength < 0 {
+		return nil, errors.New("sessionGeneratorMinLength must be >= 0")
+	}
+	if c.SessionGeneratorMaxLength < 0 {
+		return nil, errors.New("sessionGeneratorMaxLength must be >= 0")
+	}
+	if c.SessionGeneratorMaxLength > 0 && c.SessionGeneratorMinLength > c.SessionGeneratorMaxLength {
+		return nil, errors.New("sessionGeneratorMaxLength must be >= sessionGeneratorMinLength")
+	}
+	if c.SessionGeneratorAlphabet != "" && strings.TrimSpace(c.SessionGeneratorAlphabet) == "" {
+		return nil, errors.New("sessionGeneratorAlphabet cannot be empty when provided")
+	}
+
 	config := &splithttp.Config{
 		Host:                 c.Host,
 		Path:                 c.Path,
@@ -425,6 +450,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 			HMaxReusableSecs: newRangeConfig(c.Xmux.HMaxReusableSecs),
 			HKeepAlivePeriod: c.Xmux.HKeepAlivePeriod,
 		},
+		SessionGeneratorType:      c.SessionGeneratorType,
+		SessionGeneratorMinLength: c.SessionGeneratorMinLength,
+		SessionGeneratorMaxLength: c.SessionGeneratorMaxLength,
+		SessionGeneratorAlphabet:  c.SessionGeneratorAlphabet,
 	}
 
 	if c.DownloadSettings != nil {

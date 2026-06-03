@@ -1,9 +1,11 @@
 package splithttp
 
 import (
+	cryptoRand "crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -204,6 +207,87 @@ func (c *Config) GetNormalizedServerMaxHeaderBytes() int {
 	} else {
 		return int(c.ServerMaxHeaderBytes)
 	}
+}
+
+func (c *Config) GetNormalizedSessionGeneratorType() string {
+	value := strings.ToLower(strings.TrimSpace(c.SessionGeneratorType))
+	if value == "" {
+		return "uuid"
+	}
+
+	switch value {
+	case "randstr", "uuid":
+		return value
+	default:
+		return "uuid"
+	}
+}
+
+func (c *Config) GenerateSessionID() string {
+	generatorType := c.GetNormalizedSessionGeneratorType()
+	switch generatorType {
+	case "uuid":
+		u := uuid.New()
+		return u.String()
+	case "randstr":
+		min, max, alphabet := c.getSessionGeneratorParams()
+		return generateRandomString(min, max, alphabet)
+	default:
+		u := uuid.New()
+		return u.String()
+	}
+}
+
+func (c *Config) getSessionGeneratorParams() (int, int, string) {
+	min := 16
+	max := 32
+	alphabet := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	if v := c.GetSessionGeneratorMinLength(); v > 0 {
+		min = int(v)
+	}
+	if v := c.GetSessionGeneratorMaxLength(); v > 0 {
+		max = int(v)
+	}
+	if min <= 0 {
+		min = 1
+	}
+	if max < min {
+		max = min
+	}
+	if a := c.GetSessionGeneratorAlphabet(); a != "" {
+		alphabet = a
+	}
+	return min, max, alphabet
+}
+
+func generateRandomString(min, max int, alphabet string) string {
+	if min <= 0 {
+		min = 1
+	}
+	if max < min {
+		max = min
+	}
+	nRange := big.NewInt(int64(max - min + 1))
+	nBig, err := cryptoRand.Int(cryptoRand.Reader, nRange)
+	var length int
+	if err != nil {
+		length = min
+	} else {
+		length = min + int(nBig.Int64())
+	}
+
+	b := make([]byte, length)
+	alphaLen := big.NewInt(int64(len(alphabet)))
+	for i := 0; i < length; i++ {
+		idx, err := cryptoRand.Int(cryptoRand.Reader, alphaLen)
+		if err != nil {
+			b[i] = alphabet[0]
+			continue
+		}
+		b[i] = alphabet[idx.Int64()]
+	}
+	return string(b)
 }
 
 func (c *Config) GetNormalizedSessionPlacement() string {

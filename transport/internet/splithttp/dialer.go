@@ -24,7 +24,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
@@ -376,8 +375,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	sessionId := ""
 	if mode != "stream-one" {
-		sessionIdUuid := uuid.New()
-		sessionId = sessionIdUuid.String()
+		sessionId = transportConfiguration.GenerateSessionID()
 	}
 
 	errors.LogInfo(ctx, fmt.Sprintf("XHTTP is dialing to %s, mode %s, HTTP version %s, host %s", dest, mode, httpVersion, requestURL.Host))
