@@ -213,6 +213,13 @@ func (c *Config) GetNormalizedSessionPlacement() string {
 	return c.SessionPlacement
 }
 
+func (c *Config) GetNormalizedSessionIdFormat() string {
+	if c.SessionIdFormat == "" {
+		return SessionIdFormatUUID
+	}
+	return c.SessionIdFormat
+}
+
 func (c *Config) GetNormalizedSeqPlacement() string {
 	if c.SeqPlacement == "" {
 		return PlacementPath

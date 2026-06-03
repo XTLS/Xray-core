@@ -2,7 +2,9 @@ package splithttp
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	gotls "crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math/rand"
@@ -46,6 +48,52 @@ var (
 	globalDialerMap    map[dialerConf]*XmuxManager
 	globalDialerAccess sync.Mutex
 )
+
+const (
+	sessionIDRandomBytes   = 16
+	sessionIDBase62Length  = 22
+	sessionIDBase62Chars   = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+	sessionIDBase62MaxByte = 248 // 62 * 4, used for unbiased rejection sampling.
+)
+
+func newSessionID(format string) string {
+	switch format {
+	case SessionIdFormatRandomHex:
+		return randomHexSessionID()
+	case SessionIdFormatRandomBase62:
+		return randomBase62SessionID()
+	default:
+		sessionID := uuid.New()
+		return sessionID.String()
+	}
+}
+
+func randomHexSessionID() string {
+	token := make([]byte, sessionIDRandomBytes)
+	common.Must2(cryptoRand.Read(token))
+	return hex.EncodeToString(token)
+}
+
+func randomBase62SessionID() string {
+	token := make([]byte, sessionIDBase62Length)
+	randomBytes := make([]byte, sessionIDBase62Length)
+
+	for i := 0; i < len(token); {
+		common.Must2(cryptoRand.Read(randomBytes))
+		for _, b := range randomBytes {
+			if b >= sessionIDBase62MaxByte {
+				continue
+			}
+			token[i] = sessionIDBase62Chars[int(b)%len(sessionIDBase62Chars)]
+			i++
+			if i == len(token) {
+				break
+			}
+		}
+	}
+
+	return string(token)
+}
 
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
@@ -376,8 +424,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	sessionId := ""
 	if mode != "stream-one" {
-		sessionIdUuid := uuid.New()
-		sessionId = sessionIdUuid.String()
+		sessionId = newSessionID(transportConfiguration.GetNormalizedSessionIdFormat())
 	}
 
 	errors.LogInfo(ctx, fmt.Sprintf("XHTTP is dialing to %s, mode %s, HTTP version %s, host %s", dest, mode, httpVersion, requestURL.Host))
