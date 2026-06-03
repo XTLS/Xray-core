@@ -1270,7 +1270,7 @@ func (c *Brutal) Build() (proto.Message, error) {
 	if cwnd < 5 || cwnd > 80 {
 		return nil, errors.New("invalid cwnd ", cwnd)
 	}
-	params := make([]byte, 12) // __packed https://github.com/apernet/tcp-brutal/blob/204aeea3437a83599c1c1fa1b97e4425cfdfc49d/brutal.c#L75
+	params := make([]byte, 16)
 	binary.NativeEndian.PutUint64(params, rate)
 	binary.NativeEndian.PutUint32(params[8:], cwnd)
 	return &brutal.Config{
