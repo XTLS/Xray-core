@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/netip"
 	"syscall"
@@ -152,11 +153,14 @@ func (s *freebsdSpoofer) Inject(payload []byte) error {
 	if err != nil {
 		return err
 	}
+	ip := IPv4(frame)
+	// Non-zero IP ID avoids DPI flagging.
+	ip.SetID(uint16(rand.Uint32()))
 	// FreeBSD inherits the historical BSD quirk: with IP_HDRINCL the kernel
 	// expects ip_len and ip_off in host byte order, not network byte order.
-	ip := IPv4(frame)
 	binary.NativeEndian.PutUint16(ip[2:4], ip.TotalLength())
 	binary.NativeEndian.PutUint16(ip[6:8], uint16(ip.Flags())<<13|ip.FragmentOffset())
+	ip.RecalcChecksum()
 	err = unix.Sendto(s.rawFD, frame, 0, s.rawSockAddr)
 	if err != nil {
 		return fmt.Errorf("rawpacket: sendto raw socket: %w", err)

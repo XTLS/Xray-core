@@ -2,6 +2,7 @@ package rawpacket
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"net/netip"
 
@@ -75,13 +76,9 @@ func openLinuxRawSocket(dst netip.AddrPort) (int, unix.Sockaddr, error) {
 	return fd, sockaddr, nil
 }
 
-// loadSequenceNumbers puts the socket briefly into TCP_REPAIR mode to read
-// snd_nxt and rcv_nxt from the kernel. TCP_REPAIR requires CAP_NET_ADMIN;
-// callers must run as root or grant both CAP_NET_RAW and CAP_NET_ADMIN.
-//
-// If the TCP_REPAIR_OFF revert fails, the socket would stay in TCP_REPAIR
-// state and subsequent Write() calls would silently buffer instead of sending.
-// Surface that error so callers can abort.
+// loadSequenceNumbers briefly enters TCP_REPAIR mode to read snd_nxt and
+// rcv_nxt from the kernel, then immediately exits TCP_REPAIR. TCP_REPAIR
+// requires CAP_NET_ADMIN.
 func (s *linuxSpoofer) loadSequenceNumbers(tcpConn *net.TCPConn) error {
 	rawConn, err := tcpConn.SyscallConn()
 	if err != nil {
@@ -91,12 +88,8 @@ func (s *linuxSpoofer) loadSequenceNumbers(tcpConn *net.TCPConn) error {
 	err = rawConn.Control(func(raw uintptr) {
 		fd := int(raw)
 
-		if s.method == MethodWrongTimestamp {
-			timestamp, tsErr := unix.GetsockoptInt(fd, unix.IPPROTO_TCP, unix.TCP_TIMESTAMP)
-			if tsErr != nil {
-				ctrlErr = fmt.Errorf("rawpacket: read timestamp: %w", tsErr)
-				return
-			}
+		timestamp, tsErr := unix.GetsockoptInt(fd, unix.IPPROTO_TCP, unix.TCP_TIMESTAMP)
+		if tsErr == nil {
 			s.timestamp = uint32(timestamp)
 		}
 
@@ -150,6 +143,14 @@ func (s *linuxSpoofer) Inject(payload []byte) error {
 	frame, err := buildSpoofFrame(s.method, s.src, s.dst, s.sendNext, s.receiveNext, s.timestamp, nil, payload, s.ttl)
 	if err != nil {
 		return err
+	}
+	// Use a non-zero IP ID. The buildSpoofFrame → buildTCPSegment path
+	// passes id=0 to IPv4.Encode; override it with a random value since
+	// IP ID 0 is a DPI red flag.
+	if s.src.Addr().Is4() && len(frame) >= IPv4MinimumSize {
+		ip := IPv4(frame)
+		ip.SetID(uint16(rand.Uint32()))
+		ip.RecalcChecksum()
 	}
 	err = unix.Sendto(s.rawFD, frame, 0, s.rawSockAddr)
 	if err != nil {

@@ -73,18 +73,27 @@ func reject() *Filter {
 // OutboundTCP returns a filter matching outbound TCP packets on the given
 // 5-tuple. Both addresses must share an address family (IPv4 or IPv6).
 func OutboundTCP(src, dst netip.AddrPort) (*Filter, error) {
+	return tcpFilter(src, dst, true)
+}
+
+// BidirectionalTCP returns a filter matching TCP packets in either direction
+// on the given 5-tuple. Both addresses must share an address family.
+func BidirectionalTCP(src, dst netip.AddrPort) (*Filter, error) {
+	return tcpFilter(src, dst, false)
+}
+
+func tcpFilter(src, dst netip.AddrPort, outboundOnly bool) (*Filter, error) {
 	if !src.IsValid() || !dst.IsValid() {
 		return nil, errors.New("windivert: filter: invalid address port")
 	}
 	if src.Addr().Is4() != dst.Addr().Is4() {
 		return nil, errors.New("windivert: filter: mixed IPv4/IPv6")
 	}
-	f := &Filter{
-		flags: filterFlagOutbound,
+	f := &Filter{}
+	if outboundOnly {
+		f.flags = filterFlagOutbound
+		f.add(fieldOutbound, testEQ, argUint32(1))
 	}
-	// Insts chain as AND: each test's failure = REJECT, success = next inst.
-	// The final inst's success = ACCEPT.
-	f.add(fieldOutbound, testEQ, argUint32(1))
 	if src.Addr().Is4() {
 		f.flags |= filterFlagIP
 		f.add(fieldIP, testEQ, argUint32(1))

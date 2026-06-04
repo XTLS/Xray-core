@@ -100,6 +100,23 @@ func (b IPv4) Flags() uint8           { return uint8(binary.BigEndian.Uint16(b[6
 func (b IPv4) FragmentOffset() uint16 { return binary.BigEndian.Uint16(b[6:]) & 0x1fff }
 func (b IPv4) Protocol() uint8        { return b[9] }
 func (b IPv4) HeaderLength() uint8    { return (b[0] & 0x0f) * 4 }
+func (b IPv4) ID() uint16             { return binary.BigEndian.Uint16(b[4:]) }
+func (b IPv4) Src() netip.Addr        { return netip.AddrFrom4([4]byte(b[12:16])) }
+func (b IPv4) Dst() netip.Addr        { return netip.AddrFrom4([4]byte(b[16:20])) }
+
+func (b IPv4) SetID(id uint16) {
+	binary.BigEndian.PutUint16(b[4:], id)
+}
+
+func (b IPv4) SetTotalLength(n uint16) {
+	binary.BigEndian.PutUint16(b[2:], n)
+}
+
+func (b IPv4) RecalcChecksum() {
+	binary.BigEndian.PutUint16(b[10:], 0)
+	csum := Checksum(b[:20], 0)
+	binary.BigEndian.PutUint16(b[10:], ^csum)
+}
 
 func (b IPv4) Encode(totalLength uint16, id uint16, ttl uint8, protocol uint8, src, dst netip.Addr) {
 	b[0] = (4 << 4) | 5 // IPv4, Header Length = 20
@@ -120,6 +137,12 @@ type IPv6 []byte
 
 func (b IPv6) PayloadLength() uint16    { return binary.BigEndian.Uint16(b[4:]) }
 func (b IPv6) TransportProtocol() uint8 { return b[6] }
+func (b IPv6) Src() netip.Addr         { return netip.AddrFrom16([16]byte(b[8:24])) }
+func (b IPv6) Dst() netip.Addr         { return netip.AddrFrom16([16]byte(b[24:40])) }
+
+func (b IPv6) SetPayloadLength(n uint16) {
+	binary.BigEndian.PutUint16(b[4:], n)
+}
 
 func (b IPv6) Encode(payloadLength uint16, transportProtocol uint8, hopLimit uint8, src, dst netip.Addr) {
 	binary.BigEndian.PutUint32(b[0:], 6<<28) // Version 6, Traffic Class 0, Flow Label 0
@@ -135,8 +158,26 @@ type TCP []byte
 func (b TCP) DataOffset() uint8       { return (b[12] >> 4) * 4 }
 func (b TCP) SequenceNumber() uint32  { return binary.BigEndian.Uint32(b[4:]) }
 func (b TCP) AckNumber() uint32       { return binary.BigEndian.Uint32(b[8:]) }
+func (b TCP) Flags() uint8            { return b[13] }
+func (b TCP) WindowSize() uint16      { return binary.BigEndian.Uint16(b[14:]) }
 func (b TCP) Options() []byte         { return b[TCPMinimumSize:b.DataOffset()] }
 func (b TCP) SetChecksum(csum uint16) { binary.BigEndian.PutUint16(b[16:], csum) }
+
+func (b TCP) SetSequenceNumber(seq uint32) {
+	binary.BigEndian.PutUint32(b[4:], seq)
+}
+
+func (b TCP) SetAckNumber(ack uint32) {
+	binary.BigEndian.PutUint32(b[8:], ack)
+}
+
+func (b TCP) SetFlags(flags uint8) {
+	b[13] = flags
+}
+
+func (b TCP) SetWindowSize(wind uint16) {
+	binary.BigEndian.PutUint16(b[14:], wind)
+}
 
 func (b TCP) Encode(srcPort, dstPort uint16, seqNum, ackNum uint32, dataOffset uint8, flags uint8, windowSize uint16) {
 	binary.BigEndian.PutUint16(b[0:], srcPort)

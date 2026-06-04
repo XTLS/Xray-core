@@ -150,12 +150,12 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 }
 
 func (c *Conn) Close() error {
-	connErr := c.Conn.Close()
 	spooferErr := c.spoofer.Close()
-	if connErr != nil {
-		return connErr
+	connErr := c.Conn.Close()
+	if spooferErr != nil {
+		return spooferErr
 	}
-	return spooferErr
+	return connErr
 }
 
 func (c *Conn) TcpMaskConn() {}

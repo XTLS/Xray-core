@@ -3,6 +3,7 @@
 package rawpacket
 
 import (
+	"encoding/binary"
 	"errors"
 	"net"
 	"net/netip"
@@ -45,7 +46,7 @@ func newRawSpoofer(conn net.Conn, method Method, ttl uint8) (rawSpoofer, error) 
 	if err != nil {
 		return nil, err
 	}
-	filter, err := windivert.OutboundTCP(src, dst)
+	filter, err := windivert.BidirectionalTCP(src, dst)
 	if err != nil {
 		return nil, err
 	}
@@ -113,22 +114,54 @@ func (s *windowsSpoofer) run() {
 			return
 		}
 		pkt := buf[:n]
-		seq, ack, tcpOptions, payloadLen, ok := parseTCPPacket(pkt, addr.IPv6())
+		seq, _, _, payloadLen, ok := parseTCPPacket(pkt, addr.IPv6())
 		if !ok {
-			// Our filter is OutboundTCP(src, dst); a non-TCP or truncated
-			// match means driver state is suspect. Re-inject so the kernel
-			// still sees the byte stream, then abort — continuing would risk
-			// reordering against an unknown reference point.
 			_, sendErr := s.divertH.Send(pkt, &addr)
 			if sendErr != nil {
 				s.recordErr(sendErr)
 				return
 			}
-			s.recordErr(errors.New("windivert received malformed packet matching spoof filter"))
-			return
+			continue
 		}
-		if payloadLen == 0 {
-			// Handshake ACK, keepalive, FIN — pass through unchanged.
+
+		// Check direction. s.src is the local (client) address.
+		var isOutbound bool
+		if addr.IPv6() {
+			if len(pkt) < IPv6MinimumSize+TCPMinimumSize {
+				_, _ = s.divertH.Send(pkt, &addr)
+				continue
+			}
+			ip6 := IPv6(pkt)
+			srcIP := ip6.Src()
+			srcPort := binary.BigEndian.Uint16(pkt[IPv6MinimumSize:])
+			if srcIP == s.src.Addr() && srcPort == s.src.Port() {
+				isOutbound = true
+			} else if srcIP == s.dst.Addr() && srcPort == s.dst.Port() {
+				isOutbound = false
+			} else {
+				_, _ = s.divertH.Send(pkt, &addr)
+				continue
+			}
+		} else {
+			if len(pkt) < IPv4MinimumSize+TCPMinimumSize {
+				_, _ = s.divertH.Send(pkt, &addr)
+				continue
+			}
+			ip4 := IPv4(pkt)
+			srcIP := ip4.Src()
+			srcPort := binary.BigEndian.Uint16(pkt[IPv4MinimumSize:])
+			if srcIP == s.src.Addr() && srcPort == s.src.Port() {
+				isOutbound = true
+			} else if srcIP == s.dst.Addr() && srcPort == s.dst.Port() {
+				isOutbound = false
+			} else {
+				_, _ = s.divertH.Send(pkt, &addr)
+				continue
+			}
+		}
+
+		if !isOutbound {
+			// Inbound (server→client) — pass through unchanged.
 			_, err := s.divertH.Send(pkt, &addr)
 			if err != nil {
 				s.recordErr(err)
@@ -137,7 +170,17 @@ func (s *windowsSpoofer) run() {
 			continue
 		}
 
-		// Non-empty outbound TCP payload = the real ClientHello.
+		if payloadLen == 0 {
+			// Outbound ACK, keepalive, FIN — pass through unchanged.
+			_, err := s.divertH.Send(pkt, &addr)
+			if err != nil {
+				s.recordErr(err)
+				return
+			}
+			continue
+		}
+
+		// Outbound data packet — the real ClientHello.
 		var fake []byte
 		select {
 		case fake = <-s.fakeReady:
@@ -151,20 +194,21 @@ func (s *windowsSpoofer) run() {
 			continue
 		}
 
-		var timestamp uint32
-		if tsVal, hasTS := ParseTCPOptions(tcpOptions); hasTS {
-			timestamp = tsVal
-		}
-		frame, err := buildSpoofFrame(s.method, s.src, s.dst, seq, ack, timestamp, tcpOptions, fake, s.ttl)
+		// Build the spoofed packet from the captured real packet template.
+		// This preserves all TCP options and IP ID sequencing from the real
+		// connection. synSeq is derived from the captured data seq (first
+		// data after handshake always has seq = synSeq + 1).
+		synSeq := seq - 1
+		frame, err := buildSpoofFromCapturedPacket(pkt, addr.IPv6(), synSeq, fake, s.method)
 		if err != nil {
 			s.recordErr(err)
 			return
 		}
 		fakeAddr := addr // inherit Outbound, IfIdx
-		// buildSpoofFrame emits ready-to-wire bytes. The driver recomputes
-		// checksums on Send when TCPChecksum/IPChecksum are 0 — which would
-		// overwrite the intentionally corrupt checksum in WrongChecksum mode.
-		// Force both to 1 to keep our bytes intact.
+		// buildSpoofFromCapturedPacket emits ready-to-wire bytes with
+		// correct checksums. The driver would recompute checksums on Send
+		// when TCPChecksum/IPChecksum are 0. Force both to 1 to preserve
+		// intentional corruption (wrong-checksum method) and keep our bytes.
 		fakeAddr.SetIPChecksum(true)
 		fakeAddr.SetTCPChecksum(true)
 		_, err = s.divertH.Send(frame, &fakeAddr)

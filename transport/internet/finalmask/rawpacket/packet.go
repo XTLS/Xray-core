@@ -2,8 +2,10 @@ package rawpacket
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net/netip"
+	"time"
 )
 
 const (
@@ -81,19 +83,51 @@ func buildSpoofTCPSegment(method Method, src, dst netip.AddrPort, sendNext, rece
 	return segment, nil
 }
 
+func buildTimestampOption(tsVal, tsEcr uint32) []byte {
+	b := make([]byte, TCPOptionTSLength+2)
+	EncodeTSOption(tsVal, tsEcr, b)
+	return b
+}
+
 func resolveSpoofPacketInfo(method Method, sendNext, receiveNext, timestamp uint32, tcpOptions, payload []byte) (spoofPacketInfo, error) {
 	packetInfo := spoofPacketInfo{seqNum: sendNext, ackNum: receiveNext}
+	// Always include a valid TCP timestamp option in all methods.
+	// Modern TCP connections always carry timestamps. A segment without
+	// them is immediately flagged as anomalous by DPI equipment.
+	tsVal := timestamp
+	if tsVal == 0 {
+		tsVal = uint32(time.Now().UnixMilli())
+	}
+	tsOpt := buildTimestampOption(tsVal, 0)
 	switch method {
 	case MethodWrongSequence:
 		packetInfo.seqNum = sendNext - uint32(len(payload))
+		packetInfo.options = tsOpt
 	case MethodWrongChecksum:
 		packetInfo.corrupt = true
+		packetInfo.options = tsOpt
 	case MethodWrongAcknowledgment:
 		packetInfo.ackNum = receiveNext - uint32(defaultWindowSize/2)
+		packetInfo.options = tsOpt
 	case MethodWrongMD5Sig:
-		packetInfo.options = buildMD5SignatureOptions()
+		md5Opt := buildMD5SignatureOptions()
+		combined := make([]byte, 0, len(tsOpt)+2+len(md5Opt))
+		combined = append(combined, tsOpt...)
+		combined = append(combined, TCPOptionNOP, TCPOptionNOP)
+		combined = append(combined, md5Opt...)
+		packetInfo.options = combined
 	case MethodWrongTimestamp:
-		packetInfo.options = buildWrongTimestampOptions(timestamp, tcpOptions)
+		backdated := tsVal
+		if backdated > tcpTimestampBackdate {
+			backdated -= tcpTimestampBackdate
+		} else {
+			backdated = 0
+		}
+		if rewriteTCPOptionTimestamp(tcpOptions, backdated) {
+			packetInfo.options = tcpOptions
+		} else {
+			packetInfo.options = buildTimestampOption(backdated, 0)
+		}
 	default:
 		return packetInfo, fmt.Errorf("rawpacket: unknown method %v", method)
 	}
@@ -104,21 +138,6 @@ func buildMD5SignatureOptions() []byte {
 	options := make([]byte, tcpOptionMD5SignatureLength+2)
 	options[0] = tcpOptionMD5Signature
 	options[1] = tcpOptionMD5SignatureLength
-	return options
-}
-
-func buildWrongTimestampOptions(timestamp uint32, tcpOptions []byte) []byte {
-	spoofedTimestamp := timestamp
-	if spoofedTimestamp > tcpTimestampBackdate {
-		spoofedTimestamp -= tcpTimestampBackdate
-	} else {
-		spoofedTimestamp = 0
-	}
-	if rewriteTCPOptionTimestamp(tcpOptions, spoofedTimestamp) {
-		return tcpOptions
-	}
-	options := make([]byte, TCPOptionTSLength+2)
-	EncodeTSOption(spoofedTimestamp, 0, options)
 	return options
 }
 
@@ -148,6 +167,145 @@ func rewriteTCPOptionTimestamp(tcpOptions []byte, timestamp uint32) bool {
 		i += optionLen
 	}
 	return false
+}
+
+// buildSpoofFromCapturedPacket takes a captured IP+TCP packet and builds a
+// spoofed version that preserves the real connection's TCP options, IP ID
+// sequencing, and window size.
+func buildSpoofFromCapturedPacket(captured []byte, isV6 bool, synSeq uint32, fakePayload []byte, method Method) ([]byte, error) {
+	var ipHdrLen int
+	var srcAddr, dstAddr netip.Addr
+
+	if isV6 {
+		if len(captured) < IPv6MinimumSize+TCPMinimumSize {
+			return nil, errors.New("rawpacket: captured packet too short for IPv6")
+		}
+		ip := IPv6(captured)
+		if ip.TransportProtocol() != TCPProtocolNumber {
+			return nil, errors.New("rawpacket: captured packet is not TCP")
+		}
+		ipHdrLen = IPv6MinimumSize
+		srcAddr = ip.Src()
+		dstAddr = ip.Dst()
+	} else {
+		if len(captured) < IPv4MinimumSize+TCPMinimumSize {
+			return nil, errors.New("rawpacket: captured packet too short for IPv4")
+		}
+		ip := IPv4(captured)
+		if ip.Protocol() != TCPProtocolNumber {
+			return nil, errors.New("rawpacket: captured packet is not TCP")
+		}
+		ipHdrLen = int(ip.HeaderLength())
+		if ipHdrLen < IPv4MinimumSize || ipHdrLen > len(captured) {
+			return nil, fmt.Errorf("rawpacket: invalid IPv4 header length %d", ipHdrLen)
+		}
+		srcAddr = ip.Src()
+		dstAddr = ip.Dst()
+	}
+
+	if ipHdrLen+TCPMinimumSize > len(captured) {
+		return nil, errors.New("rawpacket: captured packet truncated")
+	}
+
+	tcp := TCP(captured[ipHdrLen:])
+	tcpHdrLen := int(tcp.DataOffset())
+	if tcpHdrLen < TCPMinimumSize || ipHdrLen+tcpHdrLen > len(captured) {
+		return nil, fmt.Errorf("rawpacket: invalid TCP header length %d in captured packet", tcpHdrLen)
+	}
+
+	capturedAck := tcp.AckNumber()
+	capturedFlags := tcp.Flags()
+
+	// Preserve captured TCP options (timestamp, SACK, window scale, etc.)
+	// We work on a copy, not the original.
+	tcpOpts := make([]byte, tcpHdrLen-TCPMinimumSize)
+	copy(tcpOpts, tcp.Options())
+
+	// Determine captured total length
+	var totalLen int
+	if isV6 {
+		totalLen = ipHdrLen + int(IPv6(captured).PayloadLength())
+	} else {
+		totalLen = int(IPv4(captured).TotalLength())
+	}
+	if totalLen > len(captured) {
+		totalLen = len(captured)
+	}
+	originalPayloadLen := totalLen - ipHdrLen - tcpHdrLen
+	if originalPayloadLen < 0 {
+		originalPayloadLen = 0
+	}
+
+	// Allocate output: IP hdr + TCP hdr (with copied options) + fake payload
+	newTotalLen := ipHdrLen + tcpHdrLen + len(fakePayload)
+	out := make([]byte, newTotalLen)
+
+	// Copy IP header
+	copy(out[:ipHdrLen], captured[:ipHdrLen])
+
+	// Copy TCP header + options (original payload is NOT copied)
+	copy(out[ipHdrLen:ipHdrLen+tcpHdrLen], captured[ipHdrLen:ipHdrLen+tcpHdrLen])
+
+	// Write fake payload
+	copy(out[ipHdrLen+tcpHdrLen:], fakePayload)
+
+	// --- Modify IP header ---
+	if isV6 {
+		ip6 := IPv6(out)
+		ip6.SetPayloadLength(uint16(tcpHdrLen + len(fakePayload)))
+	} else {
+		ip4 := IPv4(out)
+		ip4.SetTotalLength(uint16(newTotalLen))
+		// Increment IP ID by 1 to maintain sequential appearance
+		ip4.SetID(ip4.ID() + 1)
+		ip4.RecalcChecksum()
+	}
+
+	// --- Modify TCP header ---
+	tcpOut := TCP(out[ipHdrLen:])
+
+	// Determine new seq/ack based on method
+	switch method {
+	case MethodWrongSequence:
+		// seq = synSeq + 1 - len(fake) places the spoofed packet before the window
+		newSeq := (synSeq + 1 - uint32(len(fakePayload))) & 0xffffffff
+		tcpOut.SetSequenceNumber(newSeq)
+	case MethodWrongAcknowledgment:
+		tcpOut.SetAckNumber(capturedAck - uint32(defaultWindowSize/2))
+	}
+
+	// Backdate timestamp for wrong-timestamp method
+	if method == MethodWrongTimestamp {
+		opts := tcpOut.Options()
+		tsSlice := make([]byte, len(opts))
+		copy(tsSlice, opts)
+		if tsVal, hasTS := ParseTCPOptions(tsSlice); hasTS {
+			backdated := tsVal
+			if backdated > tcpTimestampBackdate {
+				backdated -= tcpTimestampBackdate
+			} else {
+				backdated = 0
+			}
+			rewriteTCPOptionTimestamp(opts, backdated)
+		}
+	}
+
+	// Set PSH flag since the spoofed packet is a data segment
+	tcpOut.SetFlags(capturedFlags | TCPFlagPsh)
+
+	// Recalculate TCP checksum
+	tcpOut.SetChecksum(0)
+	tcpLen := tcpHdrLen + len(fakePayload)
+	pseudo := PseudoHeaderChecksum(TCPProtocolNumber, srcAddr.AsSlice(), dstAddr.AsSlice(), uint16(tcpLen))
+	tcpChecksum := ^tcpOut.CalculateChecksum(pseudo)
+
+	// Apply checksum corruption for wrong-checksum method
+	if method == MethodWrongChecksum {
+		tcpChecksum ^= 0xFFFF
+	}
+	tcpOut.SetChecksum(tcpChecksum)
+
+	return out, nil
 }
 
 func applyTCPChecksum(tcp TCP, srcAddr, dstAddr netip.Addr, payload []byte, corrupt bool) {
