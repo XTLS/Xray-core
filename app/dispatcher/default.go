@@ -199,7 +199,6 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
 
-		// тег inbound для комбинированного счётчика
 		inboundTag := ""
 		if sessionInbound != nil {
 			inboundTag = sessionInbound.Tag
