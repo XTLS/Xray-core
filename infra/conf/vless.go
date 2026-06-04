@@ -30,12 +30,18 @@ type VLessInboundFallback struct {
 	Xver uint64          `json:"xver"`
 }
 
+type VLessInboundReverse struct {
+	Tag   string   `json:"tag"`
+	Email []string `json:"email"`
+}
+
 type VLessInboundConfig struct {
 	Users      []json.RawMessage       `json:"users"`
 	Clients    []json.RawMessage       `json:"clients"`
 	Decryption string                  `json:"decryption"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
 	Flow       string                  `json:"flow"`
+	Reverses   []*VLessInboundReverse  `json:"reverses"`
 	Testseed   []uint32                `json:"testseed"`
 }
 
@@ -52,6 +58,24 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	default:
 		return nil, errors.New(`VLESS "settings.flow" doesn't support "` + c.Flow + `" in this version`)
 	}
+
+	reverseTagByEmail := make(map[string]string)
+	for _, rv := range c.Reverses {
+		if rv.Tag == "" {
+			return nil, errors.New(`VLESS reverses: "tag" can't be empty`)
+		}
+		for _, e := range rv.Email {
+			if e == "" {
+				return nil, errors.New(`VLESS reverses: "email" can't be empty`)
+			}
+			le := strings.ToLower(e)
+			if _, ok := reverseTagByEmail[le]; ok {
+				return nil, errors.New(`VLESS reverses: duplicated "email": ` + e)
+			}
+			reverseTagByEmail[le] = rv.Tag
+		}
+	}
+
 	processClient := func(idx int) error {
 		rawUser := c.Users[idx]
 		user := new(protocol.User)
@@ -83,6 +107,13 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 
 		if account.Encryption != "" {
 			return errors.New(`VLESS users: "encryption" should not be in inbound settings`)
+		}
+
+		if tag, ok := reverseTagByEmail[strings.ToLower(user.Email)]; ok && user.Email != "" {
+			if account.Reverse != nil {
+				return errors.New(`VLESS users: "` + user.Email + `" has both per-client "reverse" and inbound-level "reverses"`)
+			}
+			account.Reverse = &vless.Reverse{Tag: tag}
 		}
 
 		if account.Reverse != nil {

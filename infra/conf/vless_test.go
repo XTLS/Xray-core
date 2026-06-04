@@ -155,5 +155,49 @@ func TestVLessInbound(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: `{
+				"clients": [
+					{
+						"id": "27848739-7e62-4138-9fd3-098a63964b6b",
+						"flow": "xtls-rprx-vision",
+						"email": "home@example.com"
+					},
+					{
+						"id": "ac04551d-6ebf-4685-86e2-17c12491f7f4",
+						"flow": "xtls-rprx-vision",
+						"email": "roam@example.com"
+					}
+				],
+				"decryption": "none",
+				"reverses": [
+					{
+						"tag": "reverse-out",
+						"email": ["HOME@example.com"]
+					}
+				]
+			}`,
+			Parser: loadJSON(creator),
+			Output: &inbound.Config{
+				Users: []*protocol.User{
+					{
+						Account: serial.ToTypedMessage(&vless.Account{
+							Id:      "27848739-7e62-4138-9fd3-098a63964b6b",
+							Flow:    "xtls-rprx-vision",
+							Reverse: &vless.Reverse{Tag: "reverse-out"},
+						}),
+						Email: "home@example.com",
+					},
+					{
+						Account: serial.ToTypedMessage(&vless.Account{
+							Id:   "ac04551d-6ebf-4685-86e2-17c12491f7f4",
+							Flow: "xtls-rprx-vision",
+						}),
+						Email: "roam@example.com",
+					},
+				},
+				Decryption: "none",
+			},
+		},
 	})
 }
