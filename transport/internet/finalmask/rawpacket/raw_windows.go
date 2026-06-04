@@ -53,7 +53,7 @@ func newRawSpoofer(conn net.Conn, method Method, ttl uint8) (rawSpoofer, error) 
 		return nil, err
 	}
 	log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: opening WinDivert handle filter=%q src=%s dst=%s method=%s", filter, src, dst, method)})
-	divertH, err := windivert.Open(filter, windivert.LayerNetwork, 0, 0)
+	divertH, err := windivert.Open(filter, windivert.LayerNetwork, windivert.PriorityLowest, 0)
 	if err != nil {
 		return nil, err
 	}
