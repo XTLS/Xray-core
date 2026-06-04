@@ -5,6 +5,7 @@ package rawpacket
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/transport/internet/finalmask/rawpacket/windivert"
 	"golang.org/x/sys/windows"
 )
@@ -50,10 +52,12 @@ func newRawSpoofer(conn net.Conn, method Method, ttl uint8) (rawSpoofer, error) 
 	if err != nil {
 		return nil, err
 	}
+	log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: opening WinDivert handle filter=%q src=%s dst=%s method=%s", filter, src, dst, method)})
 	divertH, err := windivert.Open(filter, windivert.LayerNetwork, 0, 0)
 	if err != nil {
 		return nil, err
 	}
+	log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: WinDivert opened src=%s dst=%s method=%s", src, dst, method)})
 	s := &windowsSpoofer{
 		method:    method,
 		src:       src,
@@ -68,11 +72,14 @@ func newRawSpoofer(conn net.Conn, method Method, ttl uint8) (rawSpoofer, error) 
 }
 
 func (s *windowsSpoofer) Inject(payload []byte) error {
+	log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: Inject called payload_len=%d", len(payload))})
 	select {
 	case s.fakeReady <- payload:
+		log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: "rawpacket: injected payload onto fakeReady"})
 		return nil
 	case <-s.done:
 		if p := s.runErr.Load(); p != nil {
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Inject failed spoofer closed err=%v", *p)})
 			return *p
 		}
 		return errors.New("rawpacket: spoofer closed before Inject")
@@ -101,23 +108,31 @@ func (s *windowsSpoofer) recordErr(err error) { s.runErr.Store(&err) }
 func (s *windowsSpoofer) run() {
 	defer close(s.done)
 	defer s.divertH.Close()
+	defer log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: "rawpacket: run() exiting"})
 
+	log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: "rawpacket: run() started"})
 	buf := make([]byte, windivert.MTUMax)
+	packetCount := 0
 	for {
 		n, addr, err := s.divertH.Recv(buf)
 		if err != nil {
 			if errors.Is(err, windows.ERROR_OPERATION_ABORTED) ||
 				errors.Is(err, windows.ERROR_NO_DATA) {
+				log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: Recv returned expected err=%v", err)})
 				return
 			}
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Recv err=%v", err)})
 			s.recordErr(err)
 			return
 		}
 		pkt := buf[:n]
+		packetCount++
 		seq, _, _, payloadLen, ok := parseTCPPacket(pkt, addr.IPv6())
 		if !ok {
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: pkt#%d not TCP/passthrough len=%d", packetCount, n)})
 			_, sendErr := s.divertH.Send(pkt, &addr)
 			if sendErr != nil {
+				log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Send err after parse fail=%v", sendErr)})
 				s.recordErr(sendErr)
 				return
 			}
@@ -139,6 +154,7 @@ func (s *windowsSpoofer) run() {
 			} else if srcIP == s.dst.Addr() && srcPort == s.dst.Port() {
 				isOutbound = false
 			} else {
+				log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: pkt#%d direction-unknown (neither side) passthrough", packetCount)})
 				_, _ = s.divertH.Send(pkt, &addr)
 				continue
 			}
@@ -155,15 +171,17 @@ func (s *windowsSpoofer) run() {
 			} else if srcIP == s.dst.Addr() && srcPort == s.dst.Port() {
 				isOutbound = false
 			} else {
+				log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: pkt#%d direction-unknown (neither side) passthrough", packetCount)})
 				_, _ = s.divertH.Send(pkt, &addr)
 				continue
 			}
 		}
 
 		if !isOutbound {
-			// Inbound (server→client) — pass through unchanged.
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: pkt#%d inbound seq=%d payload=%d passthrough", packetCount, seq, payloadLen)})
 			_, err := s.divertH.Send(pkt, &addr)
 			if err != nil {
+				log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Send err inbound=%v", err)})
 				s.recordErr(err)
 				return
 			}
@@ -171,9 +189,10 @@ func (s *windowsSpoofer) run() {
 		}
 
 		if payloadLen == 0 {
-			// Outbound ACK, keepalive, FIN — pass through unchanged.
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: pkt#%d outbound ack/ctrl passthrough", packetCount)})
 			_, err := s.divertH.Send(pkt, &addr)
 			if err != nil {
+				log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Send err outbound-ctrl=%v", err)})
 				s.recordErr(err)
 				return
 			}
@@ -181,13 +200,17 @@ func (s *windowsSpoofer) run() {
 		}
 
 		// Outbound data packet — the real ClientHello.
+		log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: pkt#%d outbound DATA seq=%d payload=%d", packetCount, seq, payloadLen)})
 		var fake []byte
 		select {
 		case fake = <-s.fakeReady:
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: fakeReady consumed fake_len=%d", len(fake))})
 		default:
 			// Inject() not yet called — pass through and keep observing.
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: "rawpacket: fakeReady empty, pass-through until Inject called"})
 			_, err := s.divertH.Send(pkt, &addr)
 			if err != nil {
+				log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Send err data-passthrough=%v", err)})
 				s.recordErr(err)
 				return
 			}
@@ -199,8 +222,10 @@ func (s *windowsSpoofer) run() {
 		// connection. synSeq is derived from the captured data seq (first
 		// data after handshake always has seq = synSeq + 1).
 		synSeq := seq - 1
+		log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: fmt.Sprintf("rawpacket: building spoof seq=%d synSeq=%d fake=%d method=%s", seq, synSeq, len(fake), s.method)})
 		frame, err := buildSpoofFromCapturedPacket(pkt, addr.IPv6(), synSeq, fake, s.method)
 		if err != nil {
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: buildSpoofFromCapturedPacket err=%v", err)})
 			s.recordErr(err)
 			return
 		}
@@ -211,16 +236,21 @@ func (s *windowsSpoofer) run() {
 		// intentional corruption (wrong-checksum method) and keep our bytes.
 		fakeAddr.SetIPChecksum(true)
 		fakeAddr.SetTCPChecksum(true)
+		log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: "rawpacket: sending fake frame"})
 		_, err = s.divertH.Send(frame, &fakeAddr)
 		if err != nil {
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Send fake err=%v", err)})
 			s.recordErr(err)
 			return
 		}
+		log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: "rawpacket: sending real frame"})
 		_, err = s.divertH.Send(pkt, &addr)
 		if err != nil {
+			log.Record(&log.GeneralMessage{Severity: log.Severity_Error, Content: fmt.Sprintf("rawpacket: Send real err=%v", err)})
 			s.recordErr(err)
 			return
 		}
+		log.Record(&log.GeneralMessage{Severity: log.Severity_Debug, Content: "rawpacket: reorder complete"})
 		return // single-shot reorder complete
 	}
 }
