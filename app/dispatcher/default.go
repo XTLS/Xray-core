@@ -198,12 +198,30 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
+
+		// тег inbound для комбинированного счётчика
+		inboundTag := ""
+		if sessionInbound != nil {
+			inboundTag = sessionInbound.Tag
+		}
+
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
+			counters := []stats.Counter{}
 			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
-				link.Reader.(*buf.TimeoutWrapperReader).Counter = c
+				counters = append(counters, c)
+			}
+			if inboundTag != "" {
+				combName := "user>>>" + user.Email + ">>>inbound>>>" + inboundTag + ">>>traffic>>>uplink"
+				if cc, _ := stats.GetOrRegisterCounter(statsManager, combName); cc != nil {
+					counters = append(counters, cc)
+				}
+			}
+			if len(counters) > 0 {
+				link.Reader.(*buf.TimeoutWrapperReader).Counter = &multiCounter{counters: counters}
 			}
 		}
+
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
 			if c, _ := stats.GetOrRegisterCounter(statsManager, name); c != nil {
@@ -212,7 +230,17 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 					Writer:  link.Writer,
 				}
 			}
+			if inboundTag != "" {
+				combName := "user>>>" + user.Email + ">>>inbound>>>" + inboundTag + ">>>traffic>>>downlink"
+				if cc, _ := stats.GetOrRegisterCounter(statsManager, combName); cc != nil {
+					link.Writer = &SizeStatWriter{
+						Counter: cc,
+						Writer:  link.Writer,
+					}
+				}
+			}
 		}
+
 		if p.Stats.UserOnline {
 			trackOnlineIP(ctx, statsManager, user.Email, sessionInbound.Source.Address.String())
 		}
