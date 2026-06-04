@@ -98,7 +98,7 @@ func resolveSpoofPacketInfo(method Method, sendNext, receiveNext, timestamp uint
 	if tsVal == 0 {
 		tsVal = uint32(time.Now().UnixMilli())
 	}
-	packetInfo.seqNum = sendNext - uint32(len(payload))
+	packetInfo.seqNum = sendNext - uint32(len(payload) + int(defaultWindowSize))
 	tsOpt := buildTimestampOption(tsVal, 0)
 	switch method {
 	case MethodWrongSequence:
@@ -265,8 +265,9 @@ func buildSpoofFromCapturedPacket(captured []byte, isV6 bool, synSeq uint32, fak
 	tcpOut := TCP(out[ipHdrLen:])
 
 	// Always use before-window seq so the server drops the fake packet.
-	// All methods apply this; method-specific corruption is applied on top.
-	newSeq := (synSeq + 1 - uint32(len(fakePayload))) & 0xffffffff
+	// The offset is large enough to place the fake clearly outside the
+	// server's receive window, preventing the server from accepting it.
+	newSeq := (synSeq + 1 - uint32(len(fakePayload)+int(defaultWindowSize))) & 0xffffffff
 	tcpOut.SetSequenceNumber(newSeq)
 
 	if method == MethodWrongAcknowledgment {
