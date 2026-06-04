@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package xray.proxy.ssh;
+option csharp_namespace = "Xray.Proxy.Ssh";
+option go_package = "github.com/xtls/xray-core/proxy/ssh";
+option java_package = "com.xray.proxy.ssh";
+option java_multiple_files = true;
+
+import "common/protocol/server_spec.proto";
+
+message Account {
+  string username = 1;
+  string password = 2;
+  string private_key = 3;
+  string private_key_passphrase = 4;
+  string host_key_sha256 = 5;
+}
+
+message ClientConfig {
+  xray.common.protocol.ServerEndpoint server = 1;
+}
