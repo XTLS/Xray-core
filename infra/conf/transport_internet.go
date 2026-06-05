@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"math"
+	"math/big"
 	"net/netip"
 	"net/url"
 	"os"
@@ -381,6 +382,14 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 
 	if c.SessionIDTable != "" {
+		if predefined, ok := splithttp.PredefinedTable[c.SessionIDTable]; ok {
+			c.SessionIDTable = predefined
+		}
+		room := roomSize(len(c.SessionIDTable), c.SessionIDLength.From, c.SessionIDLength.To)
+		// 2.1B possiblities should be enough
+		if room.Cmp(big.NewInt(2<<30)) < 0 {
+			return nil, errors.New("sessionIDTable or sessionIDLength is too small")
+		}
 		if c.SessionIDLength.From <= 0 {
 			return nil, errors.New("sessionIDLength.from must be greater than 0")
 		}
@@ -452,6 +461,17 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	}
 
 	return config, nil
+}
+
+func roomSize(tableSize int, min, max int32) *big.Int {
+	base := big.NewInt(int64(tableSize))
+	sum := new(big.Int)
+	term := new(big.Int)
+	for k := min; k <= max; k++ {
+		term.Exp(base, big.NewInt(int64(k)), nil)
+		sum.Add(sum, term)
+	}
+	return sum
 }
 
 const (

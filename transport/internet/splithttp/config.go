@@ -488,22 +488,23 @@ func (c *RangeConfig) rand() int32 {
 }
 
 // predefined
-var (
-	base62Table   = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	hexTable      = "0123456789abcdef"
-	hexTableUpper = "0123456789ABCDEF"
-)
+var PredefinedTable = map[string]string{
+	"number":   "0123456789",
+	"base62":   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+	"base36":   "0123456789abcdefghijklmnopqrstuvwxyz",
+	"BASE36":   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+	"hex":      "0123456789abcdef",
+	"HEX":      "0123456789ABCDEF",
+	"Alphabet": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+	"ALPHABET": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+	"alphabet": "abcdefghijklmnopqrstuvwxyz",
+}
 
 func (c *Config) GenerateSessionID() string {
 	length := c.SessionIDLength.rand()
 	table := c.SessionIDTable
-	switch table {
-	case "base62":
-		table = base62Table
-	case "hex":
-		table = hexTable
-	case "HEX":
-		table = hexTableUpper
+	if predefined, ok := PredefinedTable[table]; ok {
+		table = predefined
 	}
 	if table != "" && length > 0 {
 		id := make([]byte, length)
