@@ -40,10 +40,11 @@ type ConnectionHandler interface {
 // Handler implements ConnectionHandler
 var _ ConnectionHandler = (*Handler)(nil)
 
+// Handler implements common.Runnable
+var _ common.Runnable = (*Handler)(nil)
+
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
-	var err error
-
 	// Retrieve tag and sniffing config from context (set by AlwaysOnInboundHandler)
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		t.tag = inbound.Tag
@@ -56,6 +57,10 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.policyManager = pm
 	t.dispatcher = dispatcher
 
+	return nil
+}
+
+func (t *Handler) Start() error {
 	tunName := t.config.Name
 	tunInterface, err := NewTun(t.config)
 	if err != nil {
@@ -92,7 +97,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 
 	tunStackOptions := StackOptions{
 		Tun:         tunInterface,
-		IdleTimeout: pm.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+		IdleTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
 	}
 	tunStack, err := NewStack(t.ctx, tunStackOptions, t)
 	if err != nil {
@@ -167,7 +172,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 
 // Close implements common.Closable.
 func (t *Handler) Close() error {
-	return errors.Combine(t.stack.Close(), t.tun.Close())
+	return errors.Combine(common.CloseIfExists(t.stack), common.CloseIfExists(t.tun))
 }
 
 // Network implements proxy.Inbound

@@ -170,6 +170,12 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 
 // Start implements common.Runnable.
 func (h *AlwaysOnInboundHandler) Start() error {
+	// for inbound without worker (TUN)
+	if run, ok := h.proxy.(common.Runnable); ok {
+		if err := run.Start(); err != nil {
+			return errors.New("failed to start proxy").Base(err)
+		}
+	}
 	for _, worker := range h.workers {
 		if err := worker.Start(); err != nil {
 			return err
