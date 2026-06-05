@@ -973,6 +973,8 @@ func (p TransportProtocol) Build() (string, error) {
 	switch strings.ToLower(string(p)) {
 	case "raw", "tcp":
 		return "tcp", nil
+	case "rawpacket":
+		return "rawpacket", nil
 	case "xhttp", "splithttp":
 		return "splithttp", nil
 	case "kcp", "mkcp":
@@ -1420,20 +1422,44 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 }
 
 type RawpacketMask struct {
-	Payload string `json:"payload"`
-	Sni     string `json:"sni"`
-	Method  string `json:"method"`
-	TTL     int32  `json:"ttl"`
-	Count   int32  `json:"count"`
+	Mode          string   `json:"mode"`
+	RemoteAddress string   `json:"remoteAddress"`
+	RemotePort    uint16   `json:"remotePort"`
+	RecvPort      uint16   `json:"recvPort"`
+	SpoofIPs      []string `json:"spoofIPs"`
+	Protocols     []string `json:"protocols"`
+	MTU           uint16   `json:"mtu"`
+	Target        string   `json:"target"`
+	TTL           uint8    `json:"ttl"`
+	SendTransport string   `json:"sendTransport"`
+	RecvTransport string   `json:"recvTransport"`
+	RelayAddress  string   `json:"relayAddress"`
+	RelayPort     uint16   `json:"relayPort"`
+	ClientIP      string   `json:"clientIP"`
+	ClientPort    uint16   `json:"clientPort"`
+	PeerSpoofIP   string   `json:"peerSpoofIP"`
+	SpoofPort     uint16   `json:"spoofPort"`
 }
 
 func (c *RawpacketMask) Build() (proto.Message, error) {
 	config := &rawpacket.Config{
-		Payload: c.Payload,
-		Sni:     c.Sni,
-		Method:  c.Method,
-		Ttl:     uint32(c.TTL),
-		Count:   c.Count,
+		Mode:          c.Mode,
+		RemoteAddress: c.RemoteAddress,
+		RemotePort:    uint32(c.RemotePort),
+		RecvPort:      uint32(c.RecvPort),
+		SpoofIps:      c.SpoofIPs,
+		Protocols:     c.Protocols,
+		Mtu:           uint32(c.MTU),
+		Target:        c.Target,
+		Ttl:           uint32(c.TTL),
+		SendTransport: c.SendTransport,
+		RecvTransport: c.RecvTransport,
+		RelayAddress:  c.RelayAddress,
+		RelayPort:     uint32(c.RelayPort),
+		ClientIp:      c.ClientIP,
+		ClientPort:    uint32(c.ClientPort),
+		PeerSpoofIp:   c.PeerSpoofIP,
+		SpoofPort:     uint32(c.SpoofPort),
 	}
 	return config, nil
 }
@@ -2007,6 +2033,7 @@ type StreamConfig struct {
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
 	FinalMask           *FinalMask         `json:"finalmask"`
+	RawpacketSettings   *RawpacketMask     `json:"rawpacketSettings"`
 	TLSSettings         *TLSConfig         `json:"tlsSettings"`
 	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
 	RAWSettings         *TCPConfig         `json:"rawSettings"`
@@ -2136,6 +2163,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "httpupgrade",
 			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+	if c.RawpacketSettings != nil {
+		rs, err := c.RawpacketSettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build rawpacket config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "rawpacket",
+			Settings:     serial.ToTypedMessage(rs),
 		})
 	}
 	if c.HysteriaSettings != nil {

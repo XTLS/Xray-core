@@ -1,187 +1,189 @@
 package rawpacket
 
 import (
-	"encoding/base64"
-	"errors"
 	"fmt"
 	"net"
-	"runtime"
-	"syscall"
+	"net/netip"
+	"strconv"
 )
 
-type Method int
+func (c *Config) TCP() {}
 
-const (
-	MethodWrongSequence Method = iota
-	MethodWrongChecksum
-	MethodWrongAcknowledgment
-	MethodWrongMD5Sig
-	MethodWrongTimestamp
-)
-
-const (
-	MethodNameWrongSequence       = "wrong-sequence"
-	MethodNameWrongChecksum       = "wrong-checksum"
-	MethodNameWrongAcknowledgment = "wrong-ack"
-	MethodNameWrongMD5Sig         = "wrong-md5"
-	MethodNameWrongTimestamp      = "wrong-timestamp"
-)
-
-func ParseMethod(s string) (Method, error) {
-	switch s {
-	case "", MethodNameWrongSequence:
-		return MethodWrongSequence, nil
-	case MethodNameWrongChecksum:
-		return MethodWrongChecksum, nil
-	case MethodNameWrongAcknowledgment:
-		return MethodWrongAcknowledgment, nil
-	case MethodNameWrongMD5Sig:
-		return MethodWrongMD5Sig, nil
-	case MethodNameWrongTimestamp:
-		return MethodWrongTimestamp, nil
-	default:
-		return 0, fmt.Errorf("rawpacket: unknown method: %s", s)
-	}
-}
-
-func (m Method) String() string {
-	switch m {
-	case MethodWrongSequence:
-		return MethodNameWrongSequence
-	case MethodWrongChecksum:
-		return MethodNameWrongChecksum
-	case MethodWrongAcknowledgment:
-		return MethodNameWrongAcknowledgment
-	case MethodWrongMD5Sig:
-		return MethodNameWrongMD5Sig
-	case MethodWrongTimestamp:
-		return MethodNameWrongTimestamp
-	default:
-		return "unknown"
-	}
-}
-
-type rawSpoofer interface {
-	Inject(payload []byte) error
-	Close() error
-}
-
-type Conn struct {
-	net.Conn
-	spoofer        rawSpoofer
-	fakePayload    []byte
-	injectionCount int
-	maxInjections  int
-}
-
-func NewConnClient(cfg *Config, conn net.Conn) (net.Conn, error) {
-	if cfg.Payload == "" && cfg.Sni == "" {
-		return conn, nil
-	}
+func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
 	if !PlatformSupported {
-		return nil, errors.New("rawpacket is not supported on this platform")
+		return nil, fmt.Errorf("rawpacket is not supported on this platform")
 	}
-	var payload []byte
-	var err error
-	if cfg.Payload != "" {
-		payload, err = base64.StdEncoding.DecodeString(cfg.Payload)
-		if err != nil {
-			return nil, fmt.Errorf("rawpacket: invalid base64 payload: %w", err)
-		}
-		if len(payload) == 0 {
-			return nil, errors.New("rawpacket: payload is empty")
-		}
-	} else {
-		payload, err = BuildFakeClientHello(cfg.Sni)
-		if err != nil {
-			return nil, fmt.Errorf("rawpacket: build fake ClientHello: %w", err)
-		}
+
+	mode := c.Mode
+	if mode == "" {
+		mode = "local"
 	}
-	method, err := ParseMethod(cfg.Method)
+
+	switch mode {
+	case "local":
+		return c.dialLocal()
+	case "remote":
+		return nil, fmt.Errorf("rawpacket: remote mode must be used as server")
+	default:
+		return nil, fmt.Errorf("rawpacket: unknown mode: %s", mode)
+	}
+}
+
+func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
+	if c.Mode == "remote" {
+		go c.startRelay()
+		return raw, nil
+	}
+	return raw, nil
+}
+
+func toNetIP(s string) net.IP {
+	if s == "" {
+		return nil
+	}
+	return net.ParseIP(s)
+}
+
+func toNetipAddr(s string) netip.Addr {
+	if s == "" {
+		return netip.Addr{}
+	}
+	ip, err := netip.ParseAddr(s)
+	if err != nil {
+		return netip.Addr{}
+	}
+	return ip.Unmap()
+}
+
+func (c *Config) dialLocal() (net.Conn, error) {
+	remoteIP := c.RemoteAddress
+	if remoteIP == "" {
+		return nil, fmt.Errorf("rawpacket: remoteAddress required")
+	}
+	remotePort := uint16(c.RemotePort)
+	if remotePort == 0 {
+		remotePort = 443
+	}
+
+	recvPort := uint16(c.RecvPort)
+	if recvPort == 0 {
+		recvPort = 60000
+	}
+
+	spoofIPs := c.SpoofIps
+	if len(spoofIPs) == 0 {
+		return nil, fmt.Errorf("rawpacket: at least one spoof IP required")
+	}
+
+	ttl := uint8(c.Ttl)
+	if ttl == 0 {
+		ttl = 64
+	}
+
+	sendProto := c.SendTransport
+	if sendProto == "" {
+		sendProto = "tcp"
+	}
+
+	recvProto := c.RecvTransport
+	if recvProto == "" {
+		recvProto = "udp"
+	}
+
+	relayAddrPort, err := netip.ParseAddrPort(net.JoinHostPort(remoteIP, strconv.Itoa(int(remotePort))))
+	if err != nil {
+		return nil, fmt.Errorf("rawpacket: parse remote address: %w", err)
+	}
+
+	ips, err := ParseIPs(spoofIPs)
 	if err != nil {
 		return nil, err
 	}
-	ttl := uint8(cfg.Ttl)
-	if ttl == 0 {
-		ttl = 3
-	}
-	spoofer, err := newRawSpoofer(conn, method, ttl)
+
+	return DialSpoof(relayAddrPort, ips, recvPort, ttl, sendProto, recvProto, toNetipAddr(c.PeerSpoofIp))
+}
+
+func (c *Config) startRelay() {
+	cfg, err := c.buildRelayConfig()
 	if err != nil {
-		return nil, wrapPermissionError(err)
+		return
 	}
-	maxInjections := int(cfg.Count)
-	if maxInjections <= 0 {
-		maxInjections = 1
+	r, err := NewRelay(cfg)
+	if err != nil {
+		return
 	}
-	return &Conn{
-		Conn:          conn,
-		spoofer:       spoofer,
-		fakePayload:   payload,
-		maxInjections: maxInjections,
+	defer r.Close()
+	r.Run()
+}
+
+func (c *Config) buildRelayConfig() (*RelayConfig, error) {
+	spoofIPs := c.SpoofIps
+	if len(spoofIPs) == 0 {
+		return nil, fmt.Errorf("rawpacket: at least one spoof IP required for relay")
+	}
+
+	target := c.Target
+	if target == "" {
+		target = "127.0.0.1:443"
+	}
+
+	relayPort := uint16(c.RelayPort)
+	if relayPort == 0 {
+		relayPort = 443
+	}
+
+	sendProto := c.SendTransport
+	if sendProto == "" {
+		sendProto = "udp"
+	}
+
+	recvProto := c.RecvTransport
+	if recvProto == "" {
+		recvProto = "tcp"
+	}
+
+	clientIP := c.ClientIp
+	clientPort := uint16(c.ClientPort)
+
+	if clientIP == "" {
+		clientIP = firstStr(spoofIPs)
+	}
+	if clientPort == 0 {
+		clientPort = uint16(c.RecvPort)
+		if clientPort == 0 {
+			clientPort = 60000
+		}
+	}
+
+	spoofPort := uint16(c.SpoofPort)
+	if spoofPort == 0 {
+		spoofPort = 443
+	}
+
+	fwdTransport := c.SendTransport
+	if fwdTransport == "udp" {
+		fwdTransport = "udp"
+	} else {
+		fwdTransport = "tcp"
+	}
+
+	return &RelayConfig{
+		ListenPort:       relayPort,
+		ForwardAddr:      target,
+		ForwardTransport: fwdTransport,
+		ClientIP:         toNetipAddr(clientIP),
+		ClientPort:       clientPort,
+		SpoofIPs:         spoofIPs,
+		SpoofPort:        spoofPort,
+		PeerSpoofIP:      toNetipAddr(c.PeerSpoofIp),
+		SendTransport:    sendProto,
+		RecvTransport:    recvProto,
 	}, nil
 }
 
-func NewConnServer(_ *Config, conn net.Conn) (net.Conn, error) {
-	return conn, nil
-}
-
-func (c *Conn) Write(b []byte) (n int, err error) {
-	if c.injectionCount >= c.maxInjections {
-		return c.Conn.Write(b)
+func firstStr(ss []string) string {
+	if len(ss) > 0 {
+		return ss[0]
 	}
-	closeSpoofer := false
-	defer func() {
-		if closeSpoofer {
-			if closeErr := c.spoofer.Close(); closeErr != nil && err == nil {
-				err = fmt.Errorf("rawpacket: close spoofer: %w", closeErr)
-			}
-		}
-	}()
-	err = c.spoofer.Inject(c.fakePayload)
-	if err != nil {
-		return 0, fmt.Errorf("rawpacket: inject: %w", err)
-	}
-	c.injectionCount++
-	if c.injectionCount >= c.maxInjections {
-		closeSpoofer = true
-	}
-	n, err = c.Conn.Write(b)
-	return n, err
-}
-
-func (c *Conn) Close() error {
-	spooferErr := c.spoofer.Close()
-	connErr := c.Conn.Close()
-	if spooferErr != nil {
-		return spooferErr
-	}
-	return connErr
-}
-
-func (c *Conn) TcpMaskConn() {}
-
-func (c *Conn) RawConn() net.Conn {
-	return c.Conn
-}
-
-func (c *Conn) Splice() bool {
-	return c.injectionCount >= c.maxInjections
-}
-
-func wrapPermissionError(err error) error {
-	if !errors.Is(err, syscall.EPERM) && !errors.Is(err, syscall.EACCES) {
-		return err
-	}
-	switch runtime.GOOS {
-	case "linux":
-		return fmt.Errorf("%w\n  Hint: run as root, or grant capabilities:\n  sudo setcap cap_net_raw,cap_net_admin+ep /path/to/xray", err)
-	case "darwin":
-		return fmt.Errorf("%w\n  Hint: rawpacket requires root on macOS. Run with: sudo ./xray", err)
-	case "freebsd":
-		return fmt.Errorf("%w\n  Hint: rawpacket requires root on FreeBSD. Run with: sudo ./xray", err)
-	case "windows":
-		return fmt.Errorf("%w\n  Hint: rawpacket requires Administrator on Windows (WinDivert driver)", err)
-	default:
-		return err
-	}
+	return ""
 }

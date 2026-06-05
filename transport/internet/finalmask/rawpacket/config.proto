@@ -7,21 +7,54 @@ option java_package = "com.xray.transport.internet.finalmask.rawpacket";
 option java_multiple_files = true;
 
 message Config {
-  // Base64-encoded fake payload bytes to inject before the real traffic.
-  // When empty, sni is used to auto-generate a TLS ClientHello.
-  string payload = 1;
+  // Mode: "local" (client) or "remote" (server).
+  string mode = 6;
 
-  // Fake SNI hostname for auto-generated ClientHello when payload is empty.
-  string sni = 5;
+  // Remote server address (local/client mode).
+  string remote_address = 7;
 
-  // Corruption method to make the fake packet dropped by the server.
-  // Available: wrong-sequence, wrong-checksum, wrong-ack, wrong-md5, wrong-timestamp.
-  string method = 2;
+  // Remote server port (client mode).
+  uint32 remote_port = 8;
 
-  // TTL of the fake packet. A low value (e.g. 3-5) ensures the packet
-  // is seen by middleboxes but does not reach the destination server.
-  uint32 ttl = 3;
+  // Local port for receiving responses from the relay (client mode).
+  uint32 recv_port = 9;
 
-  // How many Write() calls trigger injection. 0 or 1 = single-shot (default).
-  int32 count = 4;
+  // List of IP addresses to spoof as source.
+  repeated string spoof_ips = 10;
+
+  // List of transport protocols to use: tcp, udp, icmp, icmpv6.
+  repeated string protocols = 11;
+
+  // MTU for packet fragmentation.
+  uint32 mtu = 12;
+
+  // Target address for the relay (e.g. "127.0.0.1:443").
+  string target = 13;
+
+  // TTL for outgoing packets.
+  uint32 ttl = 14;
+
+  // Send transport: "tcp", "udp", "icmp", "icmpv6" (default: "tcp").
+  string send_transport = 15;
+
+  // Receive transport: "tcp", "udp", "icmp", "icmpv6" (default: "udp").
+  string recv_transport = 16;
+
+  // Relay address (for the relay sender, defaults to first spoof IP).
+  string relay_address = 17;
+
+  // Port the relay listens on (remote/server mode).
+  uint32 relay_port = 18;
+
+  // Client IP address (remote/server mode) — where to send responses.
+  string client_ip = 19;
+
+  // Client port (remote/server mode).
+  uint32 client_port = 20;
+
+  // Expected peer spoof IP for receive filtering (nil = accept all).
+  string peer_spoof_ip = 21;
+
+  // Source port to use in spoofed packets (default: 443).
+  uint32 spoof_port = 22;
 }
