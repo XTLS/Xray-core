@@ -181,28 +181,24 @@ jobs:
 
       - name: Build Xray
         run: |
-          # Special processing for ARM64
-          if [[ ${GOARCH} == 'arm64' ]]; then
-            if [[ ${GOOS} == 'darwin' ]]; then
-              GOARM64="v8.4"
-            fi
-            if [[ ${GOOS} == 'windows' ]]; then
-              GOARM64="v8.2"
-            fi
-          fi
-          # Special processing for x86-64
+          # Special processing for x86-64 and ARM64
           if [[ ${GOARCH} == 'amd64' ]]; then
-            if [[ ${GOOS} == 'darwin' ]]; then
-              GOAMD64="v3"
-            fi
             if [[ ${GOOS} == 'windows' ]]; then
               GOAMD64="v2"
+            elif [[ ${GOOS} == 'darwin' ]]; then
+              GOAMD64="v3"
+            fi
+          elif [[ ${GOARCH} == 'arm64' ]]; then
+            if [[ ${GOOS} == 'windows' ]]; then
+              GOARM64="v8.2"
+            elif [[ ${GOOS} == 'darwin' ]]; then
+              GOARM64="v8.4"
             fi
           fi
-          # Special processing for 32-bit ARM
-          if [[ ${GOARCH} == 'arm' ]] && [[ ${GOOS} != 'linux' ]]; then
-            GOARM="7"
-          fi
+          # Special processing for 32-bit ARM, after linux/arm v5/v6 removed
+          # if [[ ${GOARCH} == 'arm' ]]; then
+          #   GOARM="7"
+          # fi
           # Building
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)

@@ -9,7 +9,15 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
+  delay-bubble:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    steps:
+      - name: Sleep for 20 As A Bubble
+        run: sleep 20
+
   build:
+    needs: delay-bubble
     permissions:
       contents: write
     strategy:
@@ -62,6 +70,9 @@ jobs:
           else
             echo 'Building Xray...'
             go build -o build_assets/xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            if [[ ${GOARCH} == 'mips' || ${GOARCH} == 'mipsle' ]]; then
+              GOMIPS=softfloat go build -o build_assets/xray_softfloat -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+            fi
           fi
 
       - name: Copy README.md & LICENSE
