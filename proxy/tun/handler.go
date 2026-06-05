@@ -3,6 +3,7 @@ package tun
 import (
 	"context"
 	"net/netip"
+	"strings"
 	"syscall"
 
 	"github.com/xtls/xray-core/common"
@@ -83,7 +84,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 			return c.Control(func(fd uintptr) {
 				addrPort, _ := netip.ParseAddrPort(address)
 				// skip loopback
-				if addrPort.Addr().IsLoopback() {
+				if addrPort.Addr().IsLoopback() || strings.HasPrefix(strings.ToLower(address), "localhost:") {
 					return
 				}
 				err := setinterface(network, address, fd, iface)
