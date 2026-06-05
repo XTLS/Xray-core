@@ -80,7 +80,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 				return nil
 			}
 			return c.Control(func(fd uintptr) {
-				_, ipStr, _ := net.SplitHostPort(address)
+				ipStr, _, _ := net.SplitHostPort(address)
 				ip := net.ParseIP(ipStr)
 				// skip loopback
 				if ip != nil && ip.IsLoopback() {
