@@ -87,14 +87,20 @@ func (s *statsServer) GetAllOnlineUsers(ctx context.Context, request *GetAllOnli
 
 func (s *statsServer) GetUsersStats(ctx context.Context, request *GetUsersStatsRequest) (*GetUsersStatsResponse, error) {
 	userMap := make(map[string]*UserStat)
+	const (
+		prefixUser   = "user>>>"
+		suffixOnline = ">>>online"
+	)
 
 	s.stats.VisitOnlineMaps(func(name string, om feature_stats.OnlineMap) bool {
 		if om.Count() == 0 {
 			return true
 		}
+		if !strings.HasPrefix(name, prefixUser) || !strings.HasSuffix(name, suffixOnline) {
+			return true
+		}
 
-		_, rest, _ := strings.Cut(name, ">>>")
-		email, _, _ := strings.Cut(rest, ">>>")
+		email := name[len(prefixUser) : len(name)-len(suffixOnline)]
 
 		user := &UserStat{Email: email}
 		om.ForEach(func(ip string, lastSeen int64) bool {

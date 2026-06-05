@@ -2,6 +2,7 @@ package stats_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -12,6 +13,31 @@ import (
 
 func TestInterface(t *testing.T) {
 	_ = stats.Manager(new(Manager))
+}
+
+func TestGetAllOnlineUsersIgnoresInboundScopedMaps(t *testing.T) {
+	m, err := NewManager(context.Background(), &Config{})
+	common.Must(err)
+
+	userMap, err := m.RegisterOnlineMap("user>>>alice@example.com>>>online")
+	common.Must(err)
+	userMap.AddIP("198.51.100.1")
+
+	inboundMap, err := m.RegisterOnlineMap("inbound>>>vless-443>>>user>>>alice@example.com>>>online")
+	common.Must(err)
+	inboundMap.AddIP("198.51.100.2")
+
+	emptyUserMap, err := m.RegisterOnlineMap("user>>>bob@example.com>>>online")
+	common.Must(err)
+	emptyUserMap.AddIP("198.51.100.3")
+	emptyUserMap.RemoveIP("198.51.100.3")
+
+	usersOnline := m.GetAllOnlineUsers()
+	slices.Sort(usersOnline)
+
+	if len(usersOnline) != 1 || usersOnline[0] != "user>>>alice@example.com>>>online" {
+		t.Fatalf("unexpected online users: %#v", usersOnline)
+	}
 }
 
 func TestStatsChannelRunnable(t *testing.T) {

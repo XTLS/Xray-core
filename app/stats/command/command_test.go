@@ -89,3 +89,34 @@ func TestQueryStats(t *testing.T) {
 		t.Error(r)
 	}
 }
+
+func TestGetUsersStatsIgnoresInboundScopedMaps(t *testing.T) {
+	m, err := stats.NewManager(context.Background(), &stats.Config{})
+	common.Must(err)
+
+	userMap, err := m.RegisterOnlineMap("user>>>alice@example.com>>>online")
+	common.Must(err)
+	userMap.AddIP("198.51.100.1")
+
+	inboundMap, err := m.RegisterOnlineMap("inbound>>>vless-443>>>user>>>alice@example.com>>>online")
+	common.Must(err)
+	inboundMap.AddIP("198.51.100.2")
+
+	s := NewStatsServer(m)
+	resp, err := s.GetUsersStats(context.Background(), &GetUsersStatsRequest{})
+	common.Must(err)
+
+	if r := cmp.Diff(resp.Users, []*UserStat{
+		{
+			Email: "alice@example.com",
+			Ips: []*OnlineIPEntry{
+				{Ip: "198.51.100.1"},
+			},
+		},
+	}, cmpopts.SortSlices(func(s1, s2 *UserStat) bool { return s1.Email < s2.Email }),
+		cmpopts.SortSlices(func(s1, s2 *OnlineIPEntry) bool { return s1.Ip < s2.Ip }),
+		cmpopts.IgnoreFields(OnlineIPEntry{}, "LastSeen"),
+		cmpopts.IgnoreUnexported(UserStat{}, OnlineIPEntry{})); r != "" {
+		t.Error(r)
+	}
+}
