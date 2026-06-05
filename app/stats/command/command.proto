@@ -73,6 +73,12 @@ message UserStat {
   TrafficUserStat traffic = 3;
 }
 
+message OnlineUserByInbound {
+  string inbound_tag = 1;
+  string email = 2;
+  repeated OnlineIPEntry ips = 3;
+}
+
 message GetUsersStatsRequest {
   bool include_traffic = 1;
   bool reset = 2;
@@ -80,6 +86,12 @@ message GetUsersStatsRequest {
 
 message GetUsersStatsResponse {
   repeated UserStat users = 1;
+}
+
+message GetOnlineUsersByInboundRequest {}
+
+message GetOnlineUsersByInboundResponse {
+  repeated OnlineUserByInbound users = 1;
 }
 
 service StatsService {
@@ -90,6 +102,7 @@ service StatsService {
   rpc GetStatsOnlineIpList(GetStatsRequest) returns (GetStatsOnlineIpListResponse) {}
   rpc GetAllOnlineUsers(GetAllOnlineUsersRequest) returns (GetAllOnlineUsersResponse) {}
   rpc GetUsersStats(GetUsersStatsRequest) returns (GetUsersStatsResponse) {}
+  rpc GetOnlineUsersByInbound(GetOnlineUsersByInboundRequest) returns (GetOnlineUsersByInboundResponse) {}
 }
 
 message Config {}

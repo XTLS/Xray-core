@@ -87,14 +87,20 @@ func (s *statsServer) GetAllOnlineUsers(ctx context.Context, request *GetAllOnli
 
 func (s *statsServer) GetUsersStats(ctx context.Context, request *GetUsersStatsRequest) (*GetUsersStatsResponse, error) {
 	userMap := make(map[string]*UserStat)
+	const (
+		prefixUser   = "user>>>"
+		suffixOnline = ">>>online"
+	)
 
 	s.stats.VisitOnlineMaps(func(name string, om feature_stats.OnlineMap) bool {
 		if om.Count() == 0 {
 			return true
 		}
+		if !strings.HasPrefix(name, prefixUser) || !strings.HasSuffix(name, suffixOnline) {
+			return true
+		}
 
-		_, rest, _ := strings.Cut(name, ">>>")
-		email, _, _ := strings.Cut(rest, ">>>")
+		email := name[len(prefixUser) : len(name)-len(suffixOnline)]
 
 		user := &UserStat{Email: email}
 		om.ForEach(func(ip string, lastSeen int64) bool {
@@ -157,6 +163,48 @@ func (s *statsServer) GetUsersStats(ctx context.Context, request *GetUsersStatsR
 	for _, u := range userMap {
 		resp.Users = append(resp.Users, u)
 	}
+
+	return resp, nil
+}
+
+func (s *statsServer) GetOnlineUsersByInbound(ctx context.Context, request *GetOnlineUsersByInboundRequest) (*GetOnlineUsersByInboundResponse, error) {
+	const (
+		prefixInbound = "inbound>>>"
+		userMarker    = ">>>user>>>"
+		suffixOnline  = ">>>online"
+	)
+
+	resp := &GetOnlineUsersByInboundResponse{}
+	s.stats.VisitOnlineMaps(func(name string, om feature_stats.OnlineMap) bool {
+		if om.Count() == 0 {
+			return true
+		}
+		if !strings.HasPrefix(name, prefixInbound) || !strings.HasSuffix(name, suffixOnline) {
+			return true
+		}
+
+		body := name[len(prefixInbound) : len(name)-len(suffixOnline)]
+		inboundTag, email, ok := strings.Cut(body, userMarker)
+		if !ok || inboundTag == "" || email == "" {
+			return true
+		}
+
+		user := &OnlineUserByInbound{
+			InboundTag: inboundTag,
+			Email:      email,
+		}
+		om.ForEach(func(ip string, lastSeen int64) bool {
+			user.Ips = append(user.Ips, &OnlineIPEntry{
+				Ip:       ip,
+				LastSeen: lastSeen,
+			})
+			return true
+		})
+		if len(user.Ips) > 0 {
+			resp.Users = append(resp.Users, user)
+		}
+		return true
+	})
 
 	return resp, nil
 }

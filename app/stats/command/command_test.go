@@ -89,3 +89,76 @@ func TestQueryStats(t *testing.T) {
 		t.Error(r)
 	}
 }
+
+func TestGetUsersStatsIgnoresInboundScopedMaps(t *testing.T) {
+	m, err := stats.NewManager(context.Background(), &stats.Config{})
+	common.Must(err)
+
+	userMap, err := m.RegisterOnlineMap("user>>>alice@example.com>>>online")
+	common.Must(err)
+	userMap.AddIP("198.51.100.1")
+
+	inboundMap, err := m.RegisterOnlineMap("inbound>>>vless-443>>>user>>>alice@example.com>>>online")
+	common.Must(err)
+	inboundMap.AddIP("198.51.100.2")
+
+	s := NewStatsServer(m)
+	resp, err := s.GetUsersStats(context.Background(), &GetUsersStatsRequest{})
+	common.Must(err)
+
+	if r := cmp.Diff(resp.Users, []*UserStat{
+		{
+			Email: "alice@example.com",
+			Ips: []*OnlineIPEntry{
+				{Ip: "198.51.100.1"},
+			},
+		},
+	}, cmpopts.SortSlices(func(s1, s2 *UserStat) bool { return s1.Email < s2.Email }),
+		cmpopts.SortSlices(func(s1, s2 *OnlineIPEntry) bool { return s1.Ip < s2.Ip }),
+		cmpopts.IgnoreFields(OnlineIPEntry{}, "LastSeen"),
+		cmpopts.IgnoreUnexported(UserStat{}, OnlineIPEntry{})); r != "" {
+		t.Error(r)
+	}
+}
+
+func TestGetOnlineUsersByInbound(t *testing.T) {
+	m, err := stats.NewManager(context.Background(), &stats.Config{})
+	common.Must(err)
+
+	userMap, err := m.RegisterOnlineMap("user>>>alice@example.com>>>online")
+	common.Must(err)
+	userMap.AddIP("198.51.100.1")
+
+	inboundMap, err := m.RegisterOnlineMap("inbound>>>vless-443>>>user>>>alice@example.com>>>online")
+	common.Must(err)
+	inboundMap.AddIP("198.51.100.2")
+
+	emptyInboundMap, err := m.RegisterOnlineMap("inbound>>>vless-8443>>>user>>>bob@example.com>>>online")
+	common.Must(err)
+	emptyInboundMap.AddIP("198.51.100.3")
+	emptyInboundMap.RemoveIP("198.51.100.3")
+
+	s := NewStatsServer(m)
+	resp, err := s.GetOnlineUsersByInbound(context.Background(), &GetOnlineUsersByInboundRequest{})
+	common.Must(err)
+
+	if r := cmp.Diff(resp.Users, []*OnlineUserByInbound{
+		{
+			InboundTag: "vless-443",
+			Email:      "alice@example.com",
+			Ips: []*OnlineIPEntry{
+				{Ip: "198.51.100.2"},
+			},
+		},
+	}, cmpopts.SortSlices(func(s1, s2 *OnlineUserByInbound) bool {
+		if s1.InboundTag == s2.InboundTag {
+			return s1.Email < s2.Email
+		}
+		return s1.InboundTag < s2.InboundTag
+	}),
+		cmpopts.SortSlices(func(s1, s2 *OnlineIPEntry) bool { return s1.Ip < s2.Ip }),
+		cmpopts.IgnoreFields(OnlineIPEntry{}, "LastSeen"),
+		cmpopts.IgnoreUnexported(OnlineUserByInbound{}, OnlineIPEntry{})); r != "" {
+		t.Error(r)
+	}
+}
