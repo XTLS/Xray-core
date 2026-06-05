@@ -106,24 +106,26 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	h.config.WriteResponseHeader(writer, request.Method, request.Header)
-	length := int(h.config.GetNormalizedXPaddingBytes().rand())
-	config := XPaddingConfig{Length: length}
+	applyResponsePadding := func() {
+		length := int(h.config.GetNormalizedXPaddingBytes().rand())
+		config := XPaddingConfig{Length: length}
 
-	if h.config.XPaddingObfsMode {
-		config.Placement = XPaddingPlacement{
-			Placement: h.config.XPaddingPlacement,
-			Key:       h.config.XPaddingKey,
-			Header:    h.config.XPaddingHeader,
+		if h.config.XPaddingObfsMode {
+			config.Placement = XPaddingPlacement{
+				Placement: h.config.XPaddingPlacement,
+				Key:       h.config.XPaddingKey,
+				Header:    h.config.XPaddingHeader,
+			}
+			config.Method = PaddingMethod(h.config.XPaddingMethod)
+		} else {
+			config.Placement = XPaddingPlacement{
+				Placement: PlacementHeader,
+				Header:    "X-Padding",
+			}
 		}
-		config.Method = PaddingMethod(h.config.XPaddingMethod)
-	} else {
-		config.Placement = XPaddingPlacement{
-			Placement: PlacementHeader,
-			Header:    "X-Padding",
-		}
+
+		h.config.ApplyXPaddingToResponse(writer, config)
 	}
-
-	h.config.ApplyXPaddingToResponse(writer, config)
 
 	if request.Method == "OPTIONS" {
 		writer.WriteHeader(http.StatusOK)
@@ -225,6 +227,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			} else {
 				writer.Header().Set("X-Accel-Buffering", "no")
 				writer.Header().Set("Cache-Control", "no-store")
+				applyResponsePadding()
 				writer.WriteHeader(http.StatusOK)
 				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
 				referrer := request.Header.Get("Referer")
@@ -355,6 +358,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Cache-Control", "no-store")
 		}
 
+		applyResponsePadding()
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" || sessionId == "" { // stream-down, stream-one
 		if sessionId != "" {
@@ -376,6 +380,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
 
+		applyResponsePadding()
 		writer.WriteHeader(http.StatusOK)
 		writer.(http.Flusher).Flush()
 
