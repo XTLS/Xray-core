@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build linux
 
 package xicmp
 
@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
@@ -33,6 +34,7 @@ type record struct {
 	id   int
 	seq  int
 	addr net.Addr
+	dst  net.IP
 	last time.Time
 }
 
@@ -40,6 +42,8 @@ type xicmpConnServer struct {
 	conn     net.PacketConn
 	icmp4    *icmp.PacketConn
 	icmp6    *icmp.PacketConn
+	ipv4PC   *ipv4.PacketConn
+	ipv6PC   *ipv6.PacketConn
 	ips      map[netip.Addr]struct{}
 	rec      map[string]record
 	readCh   chan packet
@@ -66,11 +70,16 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		conn:     raw,
 		icmp4:    icmp4,
 		icmp6:    icmp6,
+		ipv4PC:   icmp4.IPv4PacketConn(),
+		ipv6PC:   icmp6.IPv6PacketConn(),
 		ips:      ips,
 		rec:      make(map[string]record),
 		readCh:   make(chan packet),
 		closedCh: make(chan struct{}),
 	}
+
+	common.Must(conn.ipv4PC.SetControlMessage(ipv4.FlagDst, true))
+	common.Must(conn.ipv6PC.SetControlMessage(ipv6.FlagDst, true))
 
 	go conn.clean()
 	go conn.recv4()
@@ -116,7 +125,7 @@ func (c *xicmpConnServer) recv4() {
 			return
 		}
 
-		n, addr, err := c.icmp4.ReadFrom(b[:])
+		n, cm, addr, err := c.ipv4PC.ReadFrom(b[:])
 		if err != nil {
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
@@ -167,6 +176,7 @@ func (c *xicmpConnServer) recv4() {
 			id:   echo.ID,
 			seq:  echo.Seq,
 			addr: addr,
+			dst:  cm.Dst,
 			last: time.Now(),
 		}
 		c.mu.Unlock()
@@ -194,7 +204,7 @@ func (c *xicmpConnServer) recv6() {
 			return
 		}
 
-		n, addr, err := c.icmp6.ReadFrom(b[:])
+		n, cm, addr, err := c.ipv6PC.ReadFrom(b[:])
 		if err != nil {
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
@@ -245,6 +255,7 @@ func (c *xicmpConnServer) recv6() {
 			id:   echo.ID,
 			seq:  echo.Seq,
 			addr: addr,
+			dst:  cm.Dst,
 			last: time.Now(),
 		}
 		c.mu.Unlock()
@@ -303,10 +314,10 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	if r.addr.(*net.IPAddr).IP.To4() != nil {
 		b = marshal(b, ipv4.ICMPTypeEchoReply, r.id, r.seq, len(p))
-		_, err = c.icmp4.WriteTo(b, r.addr)
+		_, err = c.ipv4PC.WriteTo(b, &ipv4.ControlMessage{Src: r.dst}, r.addr)
 	} else {
 		b = marshal(b, ipv6.ICMPTypeEchoReply, r.id, r.seq, len(p))
-		_, err = c.icmp6.WriteTo(b, r.addr)
+		_, err = c.ipv6PC.WriteTo(b, &ipv6.ControlMessage{Src: r.dst}, r.addr)
 	}
 
 	if err != nil {
