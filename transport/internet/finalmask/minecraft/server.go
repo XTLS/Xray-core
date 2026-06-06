@@ -90,7 +90,7 @@ func (c *serverConn) handshake() error {
 			switch pkt.packetID {
 			case 0: // Status Request
 
-				err = writePacket(c.writer, 0, new(String((statusResponse))))
+				err = writePacket(c.writer, 0, new(String(statusResponse)))
 				if err != nil {
 					return fmt.Errorf("write status response: %w", err)
 				}

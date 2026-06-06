@@ -18,7 +18,6 @@ type mcPacket struct {
 }
 
 func readPacket(b io.Reader) (*mcPacket, error) {
-
 	var packetLength Varint
 	err := packetLength.readFrom(b)
 	if err != nil {
@@ -49,7 +48,6 @@ func readPacket(b io.Reader) (*mcPacket, error) {
 }
 
 func (p *mcPacket) readFields(fields ...field) error {
-
 	r := bytes.NewReader(p.data)
 
 	for _, field := range fields {
@@ -251,7 +249,6 @@ func (v *UUID) writeTo(w io.Writer) error {
 type Bytes []byte
 
 func (v *Bytes) readFrom(r io.Reader) error {
-
 	var length Varint
 	err := length.readFrom(r)
 	if err != nil {

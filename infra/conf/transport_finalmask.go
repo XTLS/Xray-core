@@ -725,7 +725,6 @@ type Minecraft struct {
 }
 
 func (c *Minecraft) Build() (proto.Message, error) {
-
 	if len(c.Usernames) == 0 {
 		c.Usernames = []string{"Dream"}
 	}
