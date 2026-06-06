@@ -68,6 +68,9 @@ jobs:
   wintun:
     if: github.event.schedule == '30 22 * * *' || github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      ASSETVER: 0.14.1
+      ASSETHASH: 07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51
     steps:
       - name: Restore Wintun Cache
         uses: actions/cache/restore@v5
@@ -113,12 +116,17 @@ jobs:
             fi
             if [[ "$missing" == true ]]; then
               FILENAME=wintun.zip
-              DOWNLOAD_FILE=wintun-0.14.1.zip
+              DOWNLOAD_FILE=wintun-${ASSETVER}.zip
               echo -e "Downloading https://www.wintun.net/builds/${DOWNLOAD_FILE}..."
               curl -L "https://www.wintun.net/builds/${DOWNLOAD_FILE}" -o "${FILENAME}"
-              echo -e "Unpacking wintun..."
-              unzip -u ${FILENAME} -d resources/
-              echo "unhit=true" >> $GITHUB_OUTPUT
+              if [[ "$(sha256sum "./${FILENAME}" | awk -F ' ' '{print $1}')" == "${ASSETHASH}" ]]; then
+                echo -e "Unpacking wintun..."
+                unzip -u ${FILENAME} -d resources/
+                echo "unhit=true" >> $GITHUB_OUTPUT
+              else
+                echo -e "Digest of ${FILENAME} mismatch."
+                exit 1
+              fi
             fi
 
       - name: Save Wintun Cache

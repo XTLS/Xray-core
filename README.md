@@ -222,6 +222,14 @@ If you are compiling a 32-bit MIPS/MIPSLE target, use this command instead:
 CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
 
+## Third-Party Components Notice
+
+**Certain optional features dynamically load third-party components. These optional components are separate works distributed under their own licenses. Users may replace these components under the licenses from these components.**
+
+These components include:
+
+- **Wintun**: A TUN library and virtual NIC driver for Windows, binary distributed under **Prebuilt Binaries License** bundled from wintun.net. This component is used by TUN inbound on Windows.
+
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/XTLS/Xray-core.svg)](https://starchart.cc/XTLS/Xray-core)

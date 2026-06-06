@@ -1,0 +1,20 @@
+Third-Party Notice: Wintun
+
+This distribution contains unmodified official precompiled
+and pre-signed Wintun binaries.
+
+Project:
+Wintun
+
+Copyright:
+Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
+
+Redistribution License:
+Prebuilt Binaries License (PBL) from Wintun
+
+Source:
+https://www.wintun.net/
+
+Notes:
+Wintun is an optional runtime-loaded component used for
+TUN inbound functionality on supported Windows platforms.
