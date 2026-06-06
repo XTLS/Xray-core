@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -654,10 +653,8 @@ type TLSConfig struct {
 	MasterKeyLog            string           `json:"masterKeyLog"`
 	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
 	VerifyPeerCertByName    string           `json:"verifyPeerCertByName"`
-	VerifyPeerCertInNames   []string         `json:"verifyPeerCertInNames"`
 	ECHServerKeys           string           `json:"echServerKeys"`
 	ECHConfigList           string           `json:"echConfigList"`
-	ECHForceQuery           string           `json:"echForceQuery"`
 	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
 }
 
@@ -702,12 +699,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 	config.MasterKeyLog = c.MasterKeyLog
 
 	if c.AllowInsecure {
-		if time.Now().After(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)) {
-			return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"`)
-		} else {
-			errors.LogWarning(context.Background(), `"allowInsecure" will be removed automatically after 2026-06-01, please use "pinnedPeerCertSha256"(pcs) and "verifyPeerCertByName"(vcn) instead, PLEASE CONTACT YOUR SERVICE PROVIDER (AIRPORT)`)
-			config.AllowInsecure = true
-		}
+		return nil, errors.PrintRemovedFeatureError(`"allowInsecure"`, `"pinnedPeerCertSha256"(pcs) and "verifyPeerCertByName"(vcn)`)
 	}
 	if c.PinnedPeerCertSha256 != "" {
 		for v := range strings.SplitSeq(c.PinnedPeerCertSha256, ",") {
@@ -726,10 +718,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 			config.PinnedPeerCertSha256 = append(config.PinnedPeerCertSha256, hashValue)
 		}
 	}
-
-	if c.VerifyPeerCertInNames != nil {
-		return nil, errors.PrintRemovedFeatureError(`"verifyPeerCertInNames"`, `"verifyPeerCertByName"`)
-	}
 	if c.VerifyPeerCertByName != "" {
 		for v := range strings.SplitSeq(c.VerifyPeerCertByName, ",") {
 			v = strings.TrimSpace(v)
@@ -747,13 +735,6 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		}
 		config.EchServerKeys = EchPrivateKey
 	}
-	switch c.ECHForceQuery {
-	case "none", "half", "full", "":
-		config.EchForceQuery = c.ECHForceQuery
-	default:
-		return nil, errors.New(`invalid "echForceQuery": `, c.ECHForceQuery)
-	}
-	config.EchForceQuery = c.ECHForceQuery
 	config.EchConfigList = c.ECHConfigList
 	if c.ECHSocketSettings != nil {
 		ss, err := c.ECHSocketSettings.Build()
