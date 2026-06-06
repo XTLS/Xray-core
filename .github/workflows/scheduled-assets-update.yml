@@ -99,7 +99,6 @@ jobs:
               echo -e "Checking if wintun.dll for ${ARCHITECTURE} exists..."
               if [ -s "./resources/wintun/bin/${ARCHITECTURE}/wintun.dll" ]; then
                   echo -e "wintun.dll for ${ARCHITECTURE} exists"
-                  continue
               else
                   echo -e "wintun.dll for ${ARCHITECTURE} is missing"
                   missing=true
