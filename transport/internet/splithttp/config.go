@@ -316,6 +316,9 @@ func (c *Config) FillStreamRequest(request *http.Request, sessionId string, seqS
 
 	c.ApplyXPaddingToRequest(request, config)
 	c.ApplyMetaToRequest(request, sessionId, "")
+	if c.pathMetaIsOffPath() {
+		c.DecorateRequestPath(request)
+	}
 
 	if request.Body != nil && !c.NoGRPCHeader { // stream-up/one
 		request.Header.Set("Content-Type", "application/grpc")
@@ -366,6 +369,9 @@ func (c *Config) FillPacketRequest(request *http.Request, sessionId string, seqS
 
 	c.ApplyXPaddingToRequest(request, config)
 	c.ApplyMetaToRequest(request, sessionId, seqStr)
+	if c.pathMetaIsOffPath() {
+		c.DecorateRequestPath(request)
+	}
 
 	return nil
 }

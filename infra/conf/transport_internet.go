@@ -223,6 +223,7 @@ type SplitHTTPConfig struct {
 	SessionKey           string            `json:"sessionKey"`
 	SeqPlacement         string            `json:"seqPlacement"`
 	SeqKey               string            `json:"seqKey"`
+	PathPool             []string          `json:"pathPool"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
 	UplinkDataKey        string            `json:"uplinkDataKey"`
 	UplinkChunkSize      Int32Range        `json:"uplinkChunkSize"`
@@ -406,6 +407,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		SeqPlacement:         c.SeqPlacement,
 		SessionKey:           c.SessionKey,
 		SeqKey:               c.SeqKey,
+		PathPool:             c.PathPool,
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,
 		UplinkChunkSize:      newRangeConfig(c.UplinkChunkSize),
