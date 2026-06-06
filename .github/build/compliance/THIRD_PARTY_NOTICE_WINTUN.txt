@@ -16,5 +16,6 @@ Source:
 https://www.wintun.net/
 
 Notes:
-Wintun is an optional runtime-loaded component used for
-TUN inbound functionality on supported Windows platforms.
+Wintun is an optional runtime-loaded component only used
+for TUN inbound functionality on supported Windows
+platforms.
