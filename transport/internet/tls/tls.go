@@ -157,6 +157,41 @@ func copyConfig(c *tls.Config) *utls.Config {
 		EncryptedClientHelloConfigList: c.EncryptedClientHelloConfigList,
 		NextProtos:                     c.NextProtos,
 	}
+
+	if c.GetClientCertificate != nil {
+		config.GetClientCertificate = func(cri *utls.CertificateRequestInfo) (*utls.Certificate, error) {
+			tlsCRI := &tls.CertificateRequestInfo{
+				AcceptableCAs:    cri.AcceptableCAs,
+				SignatureSchemes: make([]tls.SignatureScheme, len(cri.SignatureSchemes)),
+				Version:          cri.Version,
+			}
+			for i, scheme := range cri.SignatureSchemes {
+				tlsCRI.SignatureSchemes[i] = tls.SignatureScheme(scheme)
+			}
+			cert, err := c.GetClientCertificate(tlsCRI)
+			if err != nil {
+				return nil, err
+			}
+			if cert == nil {
+				return new(utls.Certificate), nil
+			}
+			utlsCert := &utls.Certificate{
+				Certificate:                 cert.Certificate,
+				PrivateKey:                  cert.PrivateKey,
+				OCSPStaple:                  cert.OCSPStaple,
+				SignedCertificateTimestamps: cert.SignedCertificateTimestamps,
+				Leaf:                        cert.Leaf,
+			}
+			if cert.SupportedSignatureAlgorithms != nil {
+				utlsCert.SupportedSignatureAlgorithms = make([]utls.SignatureScheme, len(cert.SupportedSignatureAlgorithms))
+				for i, alg := range cert.SupportedSignatureAlgorithms {
+					utlsCert.SupportedSignatureAlgorithms[i] = utls.SignatureScheme(alg)
+				}
+			}
+			return utlsCert, nil
+		}
+	}
+
 	return config
 }
 

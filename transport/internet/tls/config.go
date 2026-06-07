@@ -243,6 +243,22 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 	}
 }
 
+func getGetClientCertificateFunc(certs []*tls.Certificate) func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	return func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		for _, cert := range certs {
+			if cert == nil {
+				continue
+			}
+
+			if err := cri.SupportsCertificate(cert); err == nil {
+				return cert, nil
+			}
+		}
+
+		return new(tls.Certificate), nil
+	}
+}
+
 func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 		if len(certs) == 0 {
@@ -408,7 +424,11 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 	if len(caCerts) > 0 {
 		config.GetCertificate = getGetCertificateFunc(config, caCerts)
 	} else {
-		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
+		encCerts := c.BuildCertificates()
+		config.GetCertificate = getNewGetCertificateFunc(encCerts, c.RejectUnknownSni)
+		if len(encCerts) > 0 {
+			config.GetClientCertificate = getGetClientCertificateFunc(encCerts)
+		}
 	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
