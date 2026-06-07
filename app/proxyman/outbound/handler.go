@@ -6,7 +6,6 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
-	"os"
 
 	"github.com/xtls/xray-core/common/dice"
 

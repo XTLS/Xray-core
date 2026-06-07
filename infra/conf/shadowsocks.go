@@ -203,12 +203,12 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 	if v.Address != nil {
 		v.Servers = []*ShadowsocksServerTarget{
 			{
-				Address:   v.Address,
-				Port:      v.Port,
-				Level:     v.Level,
-				Email:     v.Email,
-				Cipher:    v.Cipher,
-				Password:  v.Password,
+				Address:  v.Address,
+				Port:     v.Port,
+				Level:    v.Level,
+				Email:    v.Email,
+				Cipher:   v.Cipher,
+				Password: v.Password,
 			},
 		}
 	}
