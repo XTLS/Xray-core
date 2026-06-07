@@ -250,6 +250,7 @@ func (tun *kernelTun) Close() (err error) {
 		errs = append(errs, fmt.Errorf("failed to close device: %w", err))
 	}
 	tun.handle.Close()
+	errs = append(errs, tun.Device.Close())
 	return goerrors.Join(errs...)
 }
 
