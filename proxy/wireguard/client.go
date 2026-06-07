@@ -411,6 +411,7 @@ func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				ip, err := c.resolveFunc(b.UDP.Address.String())
 				if err != nil {
 					errors.LogErrorInner(context.Background(), err, "drop packet to ", b.UDP, " with size ", len(b.Bytes()))
+					b.Release()
 					continue
 				}
 				dst = &net.UDPAddr{
