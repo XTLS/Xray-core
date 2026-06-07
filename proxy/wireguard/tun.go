@@ -345,19 +345,23 @@ type udpConn struct {
 }
 
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	q, ok := <-c.queue
-	if !ok {
-		return nil, io.EOF
+	for {
+		q, ok := <-c.queue
+		if !ok {
+			return nil, io.EOF
+		}
+
+		b := buf.New()
+		if _, err := b.Write(q.p); err != nil {
+			errors.LogErrorInner(context.Background(), err, "drop packet to ", q.dest, " with size ", len(q.p))
+			b.Release()
+			continue
+		}
+
+		b.UDP = q.dest
+
+		return buf.MultiBuffer{b}, nil
 	}
-
-	b := buf.New()
-	if _, err := b.Write(q.p); err != nil {
-		return nil, err
-	}
-
-	b.UDP = q.dest
-
-	return buf.MultiBuffer{b}, nil
 }
 
 func (c *udpConn) Read(p []byte) (int, error) {
@@ -376,7 +380,13 @@ func (c *udpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for i, b := range mb {
 		dst := c.dst
 		if b.UDP != nil {
-			dst = *b.UDP
+			if b.UDP != nil {
+				if b.UDP.Address.Family().IsDomain() {
+					errors.LogError(context.Background(), "impossible domain packet ", b.UDP, " reply via original target ", dst)
+				} else {
+					dst = *b.UDP
+				}
+			}
 		}
 		err := c.writeFunc(b.Bytes(), dst, c.src)
 		if err != nil {
