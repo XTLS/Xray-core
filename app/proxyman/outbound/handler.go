@@ -306,11 +306,6 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			ob := outbounds[len(outbounds)-1]
 			h.SetOutboundGateway(ctx, ob)
 		}
-
-	}
-
-	if conn, err := h.getUoTConnection(ctx, dest); err != os.ErrInvalid {
-		return conn, err
 	}
 
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
