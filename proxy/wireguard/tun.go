@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/netip"
 	"runtime"
 	"strconv"
 	"strings"
@@ -13,9 +12,7 @@ import (
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/proxy/wireguard/gvisortun"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -25,76 +22,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/tcp"
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 	"gvisor.dev/gvisor/pkg/waiter"
-
-	"golang.zx2c4.com/wireguard/conn"
-	"golang.zx2c4.com/wireguard/device"
-	"golang.zx2c4.com/wireguard/tun"
 )
-
-type tunCreator func(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (Tunnel, error)
-
-type promiscuousModeHandler func(dest net.Destination, conn net.Conn)
-
-type Tunnel interface {
-	BuildDevice(ipc string, bind conn.Bind) error
-	DialContextTCPAddrPort(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
-	DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, error)
-	Close() error
-}
-
-type tunnel struct {
-	tun    tun.Device
-	device *device.Device
-	rw     sync.Mutex
-}
-
-func (t *tunnel) BuildDevice(ipc string, bind conn.Bind) (err error) {
-	t.rw.Lock()
-	defer t.rw.Unlock()
-
-	if t.device != nil {
-		return errors.New("device is already initialized")
-	}
-
-	logger := &device.Logger{
-		Verbosef: func(format string, args ...any) {
-			log.Record(&log.GeneralMessage{
-				Severity: log.Severity_Debug,
-				Content:  fmt.Sprintf(format, args...),
-			})
-		},
-		Errorf: func(format string, args ...any) {
-			log.Record(&log.GeneralMessage{
-				Severity: log.Severity_Error,
-				Content:  fmt.Sprintf(format, args...),
-			})
-		},
-	}
-
-	t.device = device.NewDevice(t.tun, bind, logger)
-	if err = t.device.IpcSet(ipc); err != nil {
-		return err
-	}
-	if err = t.device.Up(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *tunnel) Close() (err error) {
-	t.rw.Lock()
-	defer t.rw.Unlock()
-
-	if t.device == nil {
-		return nil
-	}
-
-	t.device.Close()
-	t.device = nil
-	err = t.tun.Close()
-	t.tun = nil
-	return nil
-}
 
 func CalculateInterfaceName(name string) (tunName string) {
 	if runtime.GOOS == "darwin" {
@@ -121,93 +49,61 @@ func CalculateInterfaceName(name string) (tunName string) {
 	return
 }
 
-var _ Tunnel = (*gvisorNet)(nil)
+func createForwarder(gstack *stack.Stack, handler func(conn net.Conn, dest net.Destination)) {
+	gstack.SetPromiscuousMode(1, true)
+	gstack.SetSpoofing(1, true)
 
-type gvisorNet struct {
-	tunnel
-	net *gvisortun.Net
-}
+	tcpForwarder := tcp.NewForwarder(gstack, 0, 65535, func(r *tcp.ForwarderRequest) {
+		go func(r *tcp.ForwarderRequest) {
+			var wq waiter.Queue
+			id := r.ID()
 
-func (g *gvisorNet) Close() error {
-	return g.tunnel.Close()
-}
-
-func (g *gvisorNet) DialContextTCPAddrPort(ctx context.Context, addr netip.AddrPort) (
-	net.Conn, error,
-) {
-	return g.net.DialContextTCPAddrPort(ctx, addr)
-}
-
-func (g *gvisorNet) DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, error) {
-	return g.net.DialUDPAddrPort(laddr, raddr)
-}
-
-func createGVisorTun(localAddresses []netip.Addr, mtu int, handler promiscuousModeHandler) (Tunnel, error) {
-	out := &gvisorNet{}
-	tun, n, gstack, err := gvisortun.CreateNetTUN(localAddresses, mtu, handler != nil)
-	if err != nil {
-		return nil, err
-	}
-
-	if handler != nil {
-		// handler is only used for promiscuous mode
-		// capture all packets and send to handler
-
-		tcpForwarder := tcp.NewForwarder(gstack, 0, 65535, func(r *tcp.ForwarderRequest) {
-			go func(r *tcp.ForwarderRequest) {
-				var wq waiter.Queue
-				id := r.ID()
-
-				ep, err := r.CreateEndpoint(&wq)
-				if err != nil {
-					errors.LogError(context.Background(), err.String())
-					r.Complete(true)
-					return
-				}
-
-				options := ep.SocketOptions()
-				options.SetKeepAlive(false)
-				options.SetReuseAddress(true)
-				options.SetReusePort(true)
-
-				handler(net.TCPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)), gonet.NewTCPConn(&wq, ep))
-
-				ep.Close()
-				r.Complete(false)
-			}(r)
-		})
-		gstack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
-
-		manager := &udpManager{
-			stack:   gstack,
-			handler: handler,
-			m:       make(map[string]*udpConn),
-		}
-
-		gstack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
-			data := pkt.Clone().Data().AsRange().ToSlice()
-			// if len(data) == 0 {
-			// 	return false
-			// }
-			srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
-			dstIP := net.IPAddress(id.LocalAddress.AsSlice())
-			if srcIP == nil || dstIP == nil {
-				panic(id)
+			ep, err := r.CreateEndpoint(&wq)
+			if err != nil {
+				errors.LogError(context.Background(), err.String())
+				r.Complete(true)
+				return
 			}
-			src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
-			dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))
-			manager.feed(src, dst, data)
-			return true
-		})
+
+			options := ep.SocketOptions()
+			options.SetKeepAlive(false)
+			options.SetReuseAddress(true)
+			options.SetReusePort(true)
+
+			handler(gonet.NewTCPConn(&wq, ep), net.TCPDestination(net.IPAddress(id.LocalAddress.AsSlice()), net.Port(id.LocalPort)))
+
+			ep.Close()
+			r.Complete(false)
+		}(r)
+	})
+	gstack.SetTransportProtocolHandler(tcp.ProtocolNumber, tcpForwarder.HandlePacket)
+
+	manager := &udpManager{
+		stack:   gstack,
+		handler: handler,
+		m:       make(map[string]*udpConn),
 	}
 
-	out.tun, out.net = tun, n
-	return out, nil
+	gstack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
+		data := pkt.Clone().Data().AsRange().ToSlice()
+		// if len(data) == 0 {
+		// 	return false
+		// }
+		srcIP := net.IPAddress(id.RemoteAddress.AsSlice())
+		dstIP := net.IPAddress(id.LocalAddress.AsSlice())
+		if srcIP == nil || dstIP == nil {
+			panic(id)
+		}
+		src := net.UDPDestination(srcIP, net.Port(id.RemotePort))
+		dst := net.UDPDestination(dstIP, net.Port(id.LocalPort))
+		manager.feed(src, dst, data)
+		return true
+	})
 }
 
 type udpManager struct {
 	stack   *stack.Stack
-	handler func(dest net.Destination, conn net.Conn)
+	handler func(conn net.Conn, dest net.Destination)
 	m       map[string]*udpConn
 	mutex   sync.RWMutex
 }
@@ -246,7 +142,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 			m.mutex.Unlock()
 		}
 		m.m[src.NetAddr()] = uc
-		go m.handler(dst, uc)
+		go m.handler(uc, dst)
 	}
 
 	select {
