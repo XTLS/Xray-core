@@ -2,7 +2,6 @@ package finalmask_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"io"
 	"net"
