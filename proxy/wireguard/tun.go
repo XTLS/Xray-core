@@ -380,12 +380,10 @@ func (c *udpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for i, b := range mb {
 		dst := c.dst
 		if b.UDP != nil {
-			if b.UDP != nil {
-				if b.UDP.Address.Family().IsDomain() {
-					errors.LogError(context.Background(), "impossible domain packet ", b.UDP, " reply via original target ", dst)
-				} else {
-					dst = *b.UDP
-				}
+			if b.UDP.Address.Family().IsDomain() {
+				errors.LogError(context.Background(), "impossible domain packet ", b.UDP, " reply via original target ", dst)
+			} else {
+				dst = *b.UDP
 			}
 		}
 		err := c.writeFunc(b.Bytes(), dst, c.src)
