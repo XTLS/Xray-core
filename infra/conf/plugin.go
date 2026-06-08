@@ -13,12 +13,12 @@ type PluginOutboundConfig struct {
 }
 
 func (c *PluginOutboundConfig) Build() (proto.Message, error) {
-	var paramsStr string
+	var paramsBytes []byte
 	if c.Params != nil {
-		paramsStr = string(*c.Params)
+		paramsBytes = []byte(*c.Params)
 	}
 	return &plugin.ClientConfig{
 		Name:   c.Name,
-		Params: paramsStr,
+		Params: paramsBytes,
 	}, nil
 }

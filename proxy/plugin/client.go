@@ -16,7 +16,7 @@ import (
 
 type Client struct {
 	name   string
-	params string
+	params []byte
 }
 
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {

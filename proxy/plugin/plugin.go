@@ -10,7 +10,7 @@ import (
 
 type OutboundHandlerFunc func(ctx context.Context, dest v2net.Destination, link *transport.Link) error
 
-type OnPluginRegisteredFunc func(tag string, name string, params string)
+type OnPluginRegisteredFunc func(tag string, name string, params []byte)
 
 var (
 	handlersMu sync.RWMutex
@@ -38,7 +38,7 @@ func SetOnPluginRegistered(cb OnPluginRegisteredFunc) {
 	onPluginRegistered = cb
 }
 
-func TriggerOnPluginRegistered(tag string, name string, params string) {
+func TriggerOnPluginRegistered(tag string, name string, params []byte) {
 	onPluginRegisteredMu.Lock()
 	cb := onPluginRegistered
 	onPluginRegisteredMu.Unlock()

@@ -5,5 +5,5 @@ option go_package = "github.com/xtls/xray-core/proxy/plugin";
 
 message ClientConfig {
   string name = 1;
-  string params = 2;
+  bytes params = 2;
 }
