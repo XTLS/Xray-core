@@ -321,11 +321,7 @@ func (h *Handler) resolveRemote(host string) (net.IP, error) {
 		}
 		ips := make([]net.IP, 0, len(addrs))
 		for _, addr := range addrs {
-			if ip := net.ParseIP(addr); ip != nil {
-				ips = append(ips, ip)
-				continue
-			}
-			errors.LogError(context.Background(), "skip invalid addr ", addr)
+			ips = append(ips, net.ParseIP(addr))
 		}
 		return ips, nil
 	})
