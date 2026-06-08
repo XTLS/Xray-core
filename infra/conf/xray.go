@@ -14,7 +14,9 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/proxy/plugin"
 	"github.com/xtls/xray-core/transport/internet"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -48,6 +50,7 @@ var (
 		"hysteria":    func() interface{} { return new(HysteriaClientConfig) },
 		"dns":         func() interface{} { return new(DNSOutboundConfig) },
 		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
+		"plugin":      func() interface{} { return new(PluginOutboundConfig) },
 	}, "protocol", "settings")
 )
 
@@ -655,4 +658,20 @@ func ParseSendThough(Addr *string) *Address {
 	var addr Address
 	addr.Address = net.ParseAddress(strings.Split(*Addr, "/")[0])
 	return &addr
+}
+
+type PluginOutboundConfig struct {
+	Name   string           `json:"name"`
+	Params *json.RawMessage `json:"params"`
+}
+
+func (c *PluginOutboundConfig) Build() (proto.Message, error) {
+	var paramsStr string
+	if c.Params != nil {
+		paramsStr = string(*c.Params)
+	}
+	return &plugin.ClientConfig{
+		Name:   c.Name,
+		Params: paramsStr,
+	}, nil
 }
