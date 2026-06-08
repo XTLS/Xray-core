@@ -489,15 +489,15 @@ func (c *RangeConfig) rand() int32 {
 
 // predefined
 var PredefinedTable = map[string]string{
-	"number":   "0123456789",
-	"base62":   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
-	"base36":   "0123456789abcdefghijklmnopqrstuvwxyz",
-	"BASE36":   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-	"hex":      "0123456789abcdef",
-	"HEX":      "0123456789ABCDEF",
-	"Alphabet": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
 	"ALPHABET": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+	"Alphabet": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+	"BASE36":   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+	"Base62":   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+	"HEX":      "0123456789ABCDEF",
 	"alphabet": "abcdefghijklmnopqrstuvwxyz",
+	"base36":   "0123456789abcdefghijklmnopqrstuvwxyz",
+	"hex":      "0123456789abcdef",
+	"number":   "0123456789",
 }
 
 func (c *Config) GenerateSessionID() string {
