@@ -126,6 +126,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}
 
+	if err := h.dev.Up(); err != nil {
+		return err
+	}
+
 	var addr netip.Addr
 	if ob.Target.Address.Family().IsDomain() {
 		ip, err := h.resolveRemote(ob.Target.Address.String())
@@ -259,11 +263,7 @@ func (h *Handler) init(ctx context.Context) error {
 		}
 		return pktConn, nil
 	}
-	bind := &bind{
-		resolveFunc: resolveFunc,
-		listenFunc:  listenFunc,
-		reserved:    h.conf.Reserved,
-	}
+	bind := &bind{}
 	logger := &device.Logger{
 		Verbosef: func(format string, args ...any) {
 			log.Record(&log.GeneralMessage{
@@ -279,6 +279,10 @@ func (h *Handler) init(ctx context.Context) error {
 		},
 	}
 	dev := device.NewDevice(h.tun, bind, logger)
+	bind.resolveFunc = resolveFunc
+	bind.listenFunc = listenFunc
+	bind.downFunc = dev.Down
+	bind.reserved = h.conf.Reserved
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + h.conf.SecretKey + "\n")
 	for _, peer := range h.conf.Peers {

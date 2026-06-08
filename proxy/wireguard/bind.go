@@ -17,9 +17,12 @@ import (
 type bind struct {
 	resolveFunc func(host string) (net.IP, error)
 	listenFunc  func() (net.PacketConn, error)
+	downFunc    func() error
 	reserved    []byte
+
 	net.PacketConn
-	mu sync.Mutex
+	closeCh chan struct{}
+	mu      sync.Mutex
 }
 
 func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err error) {
@@ -35,19 +38,31 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 		return nil, 0, err
 	}
 	b.PacketConn = c
+	ch := make(chan struct{})
+	b.closeCh = ch
 
 	return []conn.ReceiveFunc{
 		func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
 			for {
 				n, addr, err := c.ReadFrom(bufs[0])
 				if err != nil {
-					if goerrors.Is(err, io.EOF) {
+					if goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, net.ErrClosed) {
+						select {
+						case <-ch:
+						default:
+							errors.LogErrorInner(context.Background(), err, "unexpected closed")
+							if b.downFunc != nil {
+								go func() {
+									err = b.downFunc()
+									if err != nil {
+										errors.LogErrorInner(context.Background(), err, "down err")
+									}
+								}()
+							}
+						}
 						return 0, net.ErrClosed
 					}
-					var netErr net.Error
-					if goerrors.As(err, &netErr) {
-						return 0, err
-					}
+					errors.LogErrorInner(context.Background(), err, "bind recv err")
 					continue
 				}
 				if n > 3 {
@@ -68,6 +83,7 @@ func (b *bind) Close() error {
 	defer b.mu.Unlock()
 	if b.PacketConn != nil {
 		_ = b.PacketConn.Close()
+		close(b.closeCh)
 		b.PacketConn = nil
 	}
 	return nil
