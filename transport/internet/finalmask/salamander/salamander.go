@@ -1,11 +1,11 @@
 package salamander
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"sync"
-	"time"
 
+	"github.com/xtls/xray-core/common"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -21,8 +21,7 @@ var ErrPSKTooShort = fmt.Errorf("PSK must be at least %d bytes", smPSKMinLen)
 // the BLAKE2b-256 hash of a pre-shared key combined with a random salt.
 // Packet format: [8-byte salt][payload]
 type SalamanderObfuscator struct {
-	PSK     []byte
-	RandSrc *rand.Rand
+	PSK []byte
 
 	lk       sync.Mutex
 	keyInput []byte
@@ -37,7 +36,6 @@ func NewSalamanderObfuscator(psk []byte) (*SalamanderObfuscator, error) {
 	copy(keyInput, pskCopy)
 	return &SalamanderObfuscator{
 		PSK:      pskCopy,
-		RandSrc:  rand.New(rand.NewSource(time.Now().UnixNano())),
 		keyInput: keyInput,
 	}, nil
 }
@@ -47,8 +45,8 @@ func (o *SalamanderObfuscator) Obfuscate(in, out []byte) int {
 	if len(out) < outLen {
 		return 0
 	}
+	common.Must2(rand.Read(out[:smSaltLen]))
 	o.lk.Lock()
-	_, _ = o.RandSrc.Read(out[:smSaltLen])
 	key := o.keyLocked(out[:smSaltLen])
 	o.lk.Unlock()
 	for i, c := range in {
