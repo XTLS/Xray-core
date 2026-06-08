@@ -20,7 +20,7 @@ func newCryptoReader(r io.Reader, sharedSecret []byte) (*cryptoStream, error) {
 		return nil, fmt.Errorf("new aes cipher: %w", err)
 	}
 
-	stream := newCFB8Decrypter(blockCipher, sharedSecret)
+	stream := newCFB8Decrypt(blockCipher, sharedSecret)
 
 	return &cryptoStream{stream: stream, r: r}, nil
 }
@@ -46,7 +46,7 @@ func newCryptoWriter(w io.Writer, sharedSecret []byte) (*cryptoStream, error) {
 		return nil, fmt.Errorf("new aes cipher: %w", err)
 	}
 
-	stream := newCFB8Encrypter(blockCipher, sharedSecret)
+	stream := newCFB8Encrypt(blockCipher, sharedSecret)
 
 	return &cryptoStream{stream: stream, w: w}, nil
 }
