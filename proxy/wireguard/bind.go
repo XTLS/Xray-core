@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"golang.zx2c4.com/wireguard/conn"
 )
@@ -53,10 +54,7 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 							errors.LogErrorInner(context.Background(), err, "unexpected closed")
 							if b.downFunc != nil {
 								go func() {
-									err = b.downFunc()
-									if err != nil {
-										errors.LogErrorInner(context.Background(), err, "down err")
-									}
+									common.Must(b.downFunc())
 								}()
 							}
 						}
@@ -82,8 +80,8 @@ func (b *bind) Close() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.PacketConn != nil {
-		_ = b.PacketConn.Close()
 		close(b.closeCh)
+		_ = b.PacketConn.Close()
 		b.PacketConn = nil
 	}
 	return nil
