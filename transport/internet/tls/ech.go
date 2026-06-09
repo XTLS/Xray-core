@@ -234,6 +234,9 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		if err != nil {
 			return nil, 0, err
 		}
+		// h2c: in config is just for claim
+		// change scheme to https and expect outbound to handle TLS (freedom + tlsSetting)
+		req.URL.Scheme = "https"
 		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
 		utils.TryDefaultHeadersWith(req.Header, "fetch")
