@@ -24,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
@@ -31,15 +32,19 @@ import (
 )
 
 type Handler struct {
-	conf           *DeviceConfig
-	sockopt        *internet.SocketConfig
-	udpmaskManager *finalmask.UdpmaskManager
-	policyManager  policy.Manager
-	dns            dns.Client
-	tun            tun.Device
-	tnet           *Net
-	dev            *device.Device
-	mu             sync.Mutex
+	conf          *DeviceConfig
+	policyManager policy.Manager
+	dns           dns.Client
+
+	sockopt         *internet.SocketConfig
+	udpmaskManager  *finalmask.UdpmaskManager
+	uplinkCounter   stats.Counter
+	downlinkCounter stats.Counter
+
+	tun  tun.Device
+	tnet *Net
+	dev  *device.Device
+	mu   sync.Mutex
 }
 
 func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
@@ -53,6 +58,25 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	if streamSettings != nil {
 		sockopt = streamSettings.SocketSettings
 		udpmaskManager = streamSettings.UdpmaskManager
+	}
+	tag := session.FullHandlerFromContext(ctx).Tag()
+	var uplinkCounter stats.Counter
+	var downlinkCounter stats.Counter
+	if len(tag) > 0 && p.ForSystem().Stats.OutboundUplink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "outbound>>>" + tag + ">>>traffic>>>uplink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			uplinkCounter = c
+		}
+	}
+	if len(tag) > 0 && p.ForSystem().Stats.OutboundDownlink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "outbound>>>" + tag + ">>>traffic>>>downlink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			downlinkCounter = c
+		}
 	}
 
 	if len(conf.Peers) == 0 {
@@ -100,13 +124,17 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	}
 
 	return &Handler{
-		conf:           conf,
-		sockopt:        sockopt,
-		udpmaskManager: udpmaskManager,
-		policyManager:  p,
-		dns:            d,
-		tun:            tun,
-		tnet:           tnet,
+		conf:          conf,
+		policyManager: p,
+		dns:           d,
+
+		sockopt:         sockopt,
+		udpmaskManager:  udpmaskManager,
+		uplinkCounter:   uplinkCounter,
+		downlinkCounter: downlinkCounter,
+
+		tun:  tun,
+		tnet: tnet,
 	}, nil
 }
 
@@ -268,6 +296,13 @@ func (h *Handler) init(ctx context.Context) error {
 				return nil, errors.New("mask err").Base(err)
 			}
 			pktConn = newConn
+		}
+		if h.uplinkCounter != nil || h.downlinkCounter != nil {
+			pktConn = &PacketCounterConnection{
+				PacketConn:   pktConn,
+				ReadCounter:  h.downlinkCounter,
+				WriteCounter: h.uplinkCounter,
+			}
 		}
 		return pktConn, nil
 	}
@@ -438,4 +473,26 @@ func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		b.Release()
 	}
 	return nil
+}
+
+type PacketCounterConnection struct {
+	net.PacketConn
+	ReadCounter  stats.Counter
+	WriteCounter stats.Counter
+}
+
+func (c *PacketCounterConnection) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	n, addr, err = c.PacketConn.ReadFrom(p)
+	if err == nil && c.ReadCounter != nil {
+		c.ReadCounter.Add(int64(n))
+	}
+	return
+}
+
+func (c *PacketCounterConnection) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	n, err = c.PacketConn.WriteTo(p, addr)
+	if err == nil && c.WriteCounter != nil {
+		c.WriteCounter.Add(int64(n))
+	}
+	return
 }

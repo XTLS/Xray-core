@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -25,14 +26,17 @@ import (
 )
 
 type Server struct {
-	conf            *DeviceConfig
-	ctx             context.Context
+	conf          *DeviceConfig
+	ctx           context.Context
+	policyManager policy.Manager
+	dispatcher    routing.Dispatcher
+
 	tag             string
 	src             net.Destination
 	sniffingRequest session.SniffingRequest
 	streamSettings  *internet.MemoryStreamConfig
-	policyManager   policy.Manager
-	dispatcher      routing.Dispatcher
+	uplinkCounter   stats.Counter
+	downlinkCounter stats.Counter
 
 	tun   tun.Device
 	stack *stack.Stack
@@ -48,6 +52,25 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 	inbound := session.InboundFromContext(ctx)
 	content := session.ContentFromContext(ctx)
 	streamSettings := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
+	tag := inbound.Tag
+	var uplinkCounter stats.Counter
+	var downlinkCounter stats.Counter
+	if len(tag) > 0 && p.ForSystem().Stats.InboundUplink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + tag + ">>>traffic>>>uplink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			uplinkCounter = c
+		}
+	}
+	if len(tag) > 0 && p.ForSystem().Stats.InboundDownlink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + tag + ">>>traffic>>>downlink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			downlinkCounter = c
+		}
+	}
 
 	if len(conf.Peers) == 0 {
 		return nil, errors.New("empty peers")
@@ -79,14 +102,17 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 	}
 
 	return &Server{
-		conf:            conf,
-		ctx:             core.ToBackgroundDetachedContext(ctx),
+		conf:          conf,
+		ctx:           core.ToBackgroundDetachedContext(ctx),
+		policyManager: p,
+		dispatcher:    d,
+
 		tag:             inbound.Tag,
 		src:             inbound.Source,
 		sniffingRequest: content.SniffingRequest,
 		streamSettings:  streamSettings,
-		policyManager:   p,
-		dispatcher:      d,
+		uplinkCounter:   uplinkCounter,
+		downlinkCounter: downlinkCounter,
 
 		tun:   tun,
 		stack: stack,
@@ -140,6 +166,13 @@ func (s *Server) Start() error {
 				return nil, errors.New("mask err").Base(err)
 			}
 			pktConn = newConn
+		}
+		if s.uplinkCounter != nil || s.downlinkCounter != nil {
+			pktConn = &PacketCounterConnection{
+				PacketConn:   pktConn,
+				ReadCounter:  s.uplinkCounter,
+				WriteCounter: s.downlinkCounter,
+			}
 		}
 		return pktConn, nil
 	}
