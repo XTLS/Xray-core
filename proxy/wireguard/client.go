@@ -170,7 +170,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	switch ob.Target.Network {
 	case net.Network_TCP:
-		conn, err := h.tnet.DialContextTCPAddrPort(ctx, addrPort)
+		var conn net.Conn
+		var err error
+		if sessionPolicy.Timeouts.Handshake != 0 {
+			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, sessionPolicy.Timeouts.Handshake)
+			conn, err = h.tnet.DialContextTCPAddrPort(timeoutCtx, addrPort)
+			timeoutCancel()
+		} else {
+			conn, err = h.tnet.DialContextTCPAddrPort(ctx, addrPort)
+		}
 		if err != nil {
 			return errors.New("failed to create TCP connection").Base(err)
 		}
