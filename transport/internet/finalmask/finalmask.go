@@ -256,7 +256,7 @@ func (l *tcpListener) Accept() (net.Conn, error) {
 
 	newConn, err := l.m.WrapConnServer(conn)
 	if err != nil {
-		errors.LogDebugInner(context.Background(), err, "mask err")
+		errors.LogErrorInner(context.Background(), err, "[mask] failed to wrap connection")
 		_ = conn.Close()
 		return nil, err
 	}
