@@ -47,7 +47,7 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 			for {
 				n, addr, err := c.ReadFrom(bufs[0])
 				if err != nil {
-					if goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, net.ErrClosed) {
+					if goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, net.ErrClosed) {
 						select {
 						case <-ch:
 						default:
