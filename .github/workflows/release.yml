@@ -241,8 +241,10 @@ jobs:
         run: |
           mv -f resources/geo* build_assets/
           if [[ ${GOOS} == 'windows' ]]; then
-            echo 'CreateObject("Wscript.Shell").Run "xray.exe -config config.json",0' > build_assets/xray_no_window.vbs
-            echo 'Start-Process -FilePath ".\xray.exe" -ArgumentList "-config .\config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
+            cp .github/build/windows/* build_assets/
+          fi
+          if [[ ${GOOS} == 'windows' ]]; then
+            echo 'Adding Wintun into packages'
             if [[ ${GOARCH} == 'amd64' ]]; then
               mv resources/wintun/bin/amd64/wintun.dll build_assets/
             fi
@@ -252,7 +254,7 @@ jobs:
             if [[ ${GOARCH} == 'arm64' ]]; then
               mv resources/wintun/bin/arm64/wintun.dll build_assets/
             fi
-            mv resources/wintun/LICENSE.txt build_assets/LICENSE-wintun.txt
+            mv resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
           fi
 
       - name: Copy README.md & LICENSE
