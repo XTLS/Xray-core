@@ -144,7 +144,7 @@ jobs:
             if [[ ${GOARCH} == '386' ]]; then
               mv resources/wintun/bin/x86/wintun.dll build_assets/
             fi
-            mv resources/wintun/LICENSE.txt build_assets/LICENSE-WINTUN.txt
+            mv resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
           fi
 
       - name: Copy README.md & LICENSE

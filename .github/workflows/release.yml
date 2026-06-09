@@ -254,7 +254,7 @@ jobs:
             if [[ ${GOARCH} == 'arm64' ]]; then
               mv resources/wintun/bin/arm64/wintun.dll build_assets/
             fi
-            mv resources/wintun/LICENSE.txt build_assets/LICENSE-WINTUN.txt
+            mv resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
           fi
 
       - name: Copy README.md & LICENSE
