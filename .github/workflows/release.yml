@@ -245,7 +245,6 @@ jobs:
           fi
           if [[ ${GOOS} == 'windows' ]]; then
             echo 'Adding Wintun into packages'
-            cp .github/build/compliance/THIRD_PARTY_NOTICE_WINTUN.txt build_assets/
             if [[ ${GOARCH} == 'amd64' ]]; then
               mv resources/wintun/bin/amd64/wintun.dll build_assets/
             fi

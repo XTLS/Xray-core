@@ -186,6 +186,27 @@
 - [Xray-core v1.0.0](https://github.com/XTLS/Xray-core/releases/tag/v1.0.0) was forked from [v2fly-core 9a03cc5](https://github.com/v2fly/v2ray-core/commit/9a03cc5c98d04cc28320fcee26dbc236b3291256), and we have made & accumulated a huge number of enhancements over time, check [the release notes for each version](https://github.com/XTLS/Xray-core/releases).
 - For third-party projects used in [Xray-core](https://github.com/XTLS/Xray-core), check your local or [the latest go.mod](https://github.com/XTLS/Xray-core/blob/main/go.mod).
 
+### Bundled Third-Party Components Redistribution
+
+**Certain optional features dynamically load third-party components. These optional components are separate works distributed under their own licenses, and are bundled into the ZIP package for ease of use. Users may replace these components under the licenses from these components.**
+
+These components include:
+
+#### Wintun
+
+This distribution contains unmodified official precompiled and pre-signed Wintun binaries.
+
+- Project: Wintun
+- Copyright: Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
+- Redistribution License: Prebuilt Binaries License (PBL) bundled with official precompiled and pre-signed binaries from wintun.net
+- Component(s): wintun.dll
+- Source: https://www.wintun.net/
+- Included in:
+  - Windows x86 (windows-32, win7-32)
+  - Windows x86-64 (windows-64, win7-64)
+  - Windows AArch64 (windows-arm64)
+- Notes: Wintun is an optional runtime-loaded component only used for TUN inbound functionality on supported Windows platforms.
+
 ## One-line Compilation
 
 ### Windows (PowerShell)
@@ -221,14 +242,6 @@ If you are compiling a 32-bit MIPS/MIPSLE target, use this command instead:
 ```bash
 CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
-
-## Third-Party Components Notice
-
-**Certain optional features dynamically load third-party components. These optional components are separate works distributed under their own licenses. Users may replace these components under the licenses from these components.**
-
-These components include:
-
-- **Wintun**: A TUN library and virtual NIC driver for Windows, binary distributed under **Prebuilt Binaries License** bundled from wintun.net. This component is used by TUN inbound on Windows.
 
 ## Stargazers over time
 
