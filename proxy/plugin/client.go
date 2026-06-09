@@ -94,16 +94,16 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 									downlinkCounter = c
 								}
 							}
-							if downlinkCounter != nil {
+							if uplinkCounter != nil {
 								link.Reader = &sizeStatReader{
 									Reader:  link.Reader,
-									counter: downlinkCounter,
+									counter: uplinkCounter,
 								}
 							}
-							if uplinkCounter != nil {
+							if downlinkCounter != nil {
 								link.Writer = &sizeStatWriter{
 									Writer:  link.Writer,
-									counter: uplinkCounter,
+									counter: downlinkCounter,
 								}
 							}
 						}
