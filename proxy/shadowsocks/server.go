@@ -25,7 +25,6 @@ type Server struct {
 	config        *ServerConfig
 	validator     *Validator
 	policyManager policy.Manager
-	cone          bool
 }
 
 // NewServer create a new Shadowsocks server.
@@ -47,7 +46,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		validator:     validator,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	return s, nil
@@ -185,7 +183,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 
 			data.UDP = &destination
 
-			if !s.cone || dest == nil {
+			if dest == nil {
 				dest = &destination
 			}
 

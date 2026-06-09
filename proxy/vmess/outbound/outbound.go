@@ -31,7 +31,6 @@ import (
 type Handler struct {
 	server        *protocol.ServerSpec
 	policyManager policy.Manager
-	cone          bool
 }
 
 // New creates a new VMess outbound handler.
@@ -48,7 +47,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	handler := &Handler{
 		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	return handler, nil
@@ -148,7 +146,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 
-	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
+	if request.Command == protocol.RequestCommandUDP && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)
