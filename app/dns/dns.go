@@ -387,50 +387,30 @@ func (s *DNS) parallelQuery(domain string, option dns.IPOption) ([]net.IP, uint3
 	var errs []error
 	clients := s.sortClients(domain)
 
-	resultsChan := asyncQueryAll(domain, option, clients, s.ctx)
+	groups, _ := makeGroups( /*s.ctx,*/ clients)
 
-	groups, groupOf := makeGroups( /*s.ctx,*/ clients)
-	results := make([]*queryResult, len(clients))
-	pending := make([]int, len(groups))
-	for gi, g := range groups {
-		pending[gi] = g.end - g.start + 1
-	}
+	for _, g := range groups {
+		groupClients := clients[g.start : g.end+1]
+		resultsChan := asyncQueryAll(domain, option, groupClients, s.ctx)
+		results := make([]queryResult, len(groupClients))
 
-	nextGroup := 0
-	for range clients {
-		result := <-resultsChan
-		results[result.index] = &result
+		for i := range groupClients {
+			result := <-resultsChan
+			results[result.index] = result
+			if result.err == nil && len(result.ips) > 0 {
+				return result.ips, result.ttl, nil
+			}
 
-		gi := groupOf[result.index]
-		pending[gi]--
-
-		for nextGroup < len(groups) {
-			g := groups[nextGroup]
-
-			// group race, minimum rtt -> return
-			for j := g.start; j <= g.end; j++ {
-				r := results[j]
-				if r != nil && r.err == nil && len(r.ips) > 0 {
-					return r.ips, r.ttl, nil
+			if i == len(groupClients)-1 {
+				for j, r := range results {
+					e := r.err
+					if e == nil {
+						e = dns.ErrEmptyResponse
+					}
+					errors.LogInfoInner(s.ctx, e, "failed to lookup ip for domain ", domain, " at server ", groupClients[j].Name(), " in parallel query mode")
+					errs = append(errs, e)
 				}
 			}
-
-			// current group is incomplete and no one success -> continue pending
-			if pending[nextGroup] > 0 {
-				break
-			}
-
-			// all failed -> log and continue next group
-			for j := g.start; j <= g.end; j++ {
-				r := results[j]
-				e := r.err
-				if e == nil {
-					e = dns.ErrEmptyResponse
-				}
-				errors.LogInfoInner(s.ctx, e, "failed to lookup ip for domain ", domain, " at server ", clients[j].Name(), " in parallel query mode")
-				errs = append(errs, e)
-			}
-			nextGroup++
 		}
 	}
 
