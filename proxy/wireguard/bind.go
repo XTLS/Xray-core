@@ -91,7 +91,7 @@ func (b *bind) SetMark(mark uint32) error {
 	return nil
 }
 
-func (b *bind) Send(bufs [][]byte, ep conn.Endpoint) error {
+func (b *bind) Send(bufs [][]byte, ep conn.Endpoint) (err error) {
 	b.mu.Lock()
 	c := b.PacketConn
 	b.mu.Unlock()
@@ -100,15 +100,17 @@ func (b *bind) Send(bufs [][]byte, ep conn.Endpoint) error {
 		return syscall.EAFNOSUPPORT
 	}
 
-	if len(bufs[0]) > 3 && len(b.reserved) == 3 {
-		bufs[0][1] = b.reserved[0]
-		bufs[0][2] = b.reserved[1]
-		bufs[0][3] = b.reserved[2]
-	}
-
-	_, err := c.WriteTo(bufs[0], net.UDPAddrFromAddrPort(ep.(*conn.StdNetEndpoint).AddrPort))
-	if err != nil {
-		errors.LogErrorInner(context.Background(), err, "bind send err")
+	for i := range bufs {
+		if len(bufs[i]) > 3 && len(b.reserved) == 3 {
+			bufs[i][1] = b.reserved[0]
+			bufs[i][2] = b.reserved[1]
+			bufs[i][3] = b.reserved[2]
+		}
+		_, err = c.WriteTo(bufs[i], net.UDPAddrFromAddrPort(ep.(*conn.StdNetEndpoint).AddrPort))
+		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "bind send err")
+			break
+		}
 	}
 	return err
 }
