@@ -220,8 +220,10 @@ type SplitHTTPConfig struct {
 	XPaddingPlacement    string            `json:"xPaddingPlacement"`
 	XPaddingMethod       string            `json:"xPaddingMethod"`
 	UplinkHTTPMethod     string            `json:"uplinkHTTPMethod"`
-	SessionPlacement     string            `json:"sessionPlacement"`
-	SessionKey           string            `json:"sessionKey"`
+	SessionIDPlacement   string            `json:"sessionIDPlacement"`
+	SessionIDKey         string            `json:"sessionIDKey"`
+	SessionIDTable       string            `json:"sessionIDTable"`
+	SessionIDLength      Int32Range        `json:"sessionIDLength"`
 	SeqPlacement         string            `json:"seqPlacement"`
 	SeqKey               string            `json:"seqKey"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
@@ -234,8 +236,6 @@ type SplitHTTPConfig struct {
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
-	SessionIDTable       string            `json:"sessionIDTable"`
-	SessionIDLength      Int32Range        `json:"sessionIDLength"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
@@ -334,12 +334,12 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("uplinkHTTPMethod can be GET only in packet-up mode")
 	}
 
-	switch c.SessionPlacement {
+	switch c.SessionIDPlacement {
 	case "":
-		c.SessionPlacement = "path"
+		c.SessionIDPlacement = "path"
 	case "path", "cookie", "header", "query":
 	default:
-		return nil, errors.New("unsupported session placement: " + c.SessionPlacement)
+		return nil, errors.New("unsupported session placement: " + c.SessionIDPlacement)
 	}
 
 	switch c.SeqPlacement {
@@ -350,12 +350,31 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("unsupported seq placement: " + c.SeqPlacement)
 	}
 
-	if c.SessionPlacement != "path" && c.SessionKey == "" {
-		switch c.SessionPlacement {
+	if c.SessionIDPlacement != "path" && c.SessionIDKey == "" {
+		switch c.SessionIDPlacement {
 		case "cookie", "query":
-			c.SessionKey = "x_session"
+			c.SessionIDKey = "x_session"
 		case "header":
-			c.SessionKey = "X-Session"
+			c.SessionIDKey = "X-Session"
+		}
+	}
+
+	if c.SessionIDTable != "" {
+		if predefined, ok := splithttp.PredefinedTable[c.SessionIDTable]; ok {
+			c.SessionIDTable = predefined
+		}
+		room := roomSize(len(c.SessionIDTable), c.SessionIDLength.From, c.SessionIDLength.To)
+		// 2.1B possiblities should be enough
+		if room.Cmp(big.NewInt(2<<30)) < 0 {
+			return nil, errors.New("sessionIDTable or sessionIDLength is too small")
+		}
+		if c.SessionIDLength.From <= 0 {
+			return nil, errors.New("sessionIDLength.from must be greater than 0")
+		}
+		for i := 0; i < len(c.SessionIDTable); i++ {
+			if c.SessionIDTable[i] >= 0x80 {
+				return nil, errors.New("sessionIDTable must contain only ASCII characters")
+			}
 		}
 	}
 
@@ -379,25 +398,6 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 
 	if c.ServerMaxHeaderBytes < 0 {
 		return nil, errors.New("invalid negative value of maxHeaderBytes")
-	}
-
-	if c.SessionIDTable != "" {
-		if predefined, ok := splithttp.PredefinedTable[c.SessionIDTable]; ok {
-			c.SessionIDTable = predefined
-		}
-		room := roomSize(len(c.SessionIDTable), c.SessionIDLength.From, c.SessionIDLength.To)
-		// 2.1B possiblities should be enough
-		if room.Cmp(big.NewInt(2<<30)) < 0 {
-			return nil, errors.New("sessionIDTable or sessionIDLength is too small")
-		}
-		if c.SessionIDLength.From <= 0 {
-			return nil, errors.New("sessionIDLength.from must be greater than 0")
-		}
-		for i := 0; i < len(c.SessionIDTable); i++ {
-			if c.SessionIDTable[i] >= 0x80 {
-				return nil, errors.New("sessionIDTable must contain only ASCII characters")
-			}
-		}
 	}
 
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
@@ -424,9 +424,9 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		XPaddingPlacement:    c.XPaddingPlacement,
 		XPaddingMethod:       c.XPaddingMethod,
 		UplinkHTTPMethod:     c.UplinkHTTPMethod,
-		SessionPlacement:     c.SessionPlacement,
+		SessionIDPlacement:   c.SessionIDPlacement,
 		SeqPlacement:         c.SeqPlacement,
-		SessionKey:           c.SessionKey,
+		SessionIDKey:         c.SessionIDKey,
 		SeqKey:               c.SeqKey,
 		UplinkDataPlacement:  c.UplinkDataPlacement,
 		UplinkDataKey:        c.UplinkDataKey,

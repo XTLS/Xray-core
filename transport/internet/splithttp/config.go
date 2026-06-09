@@ -209,10 +209,10 @@ func (c *Config) GetNormalizedServerMaxHeaderBytes() int {
 }
 
 func (c *Config) GetNormalizedSessionPlacement() string {
-	if c.SessionPlacement == "" {
+	if c.SessionIDPlacement == "" {
 		return PlacementPath
 	}
-	return c.SessionPlacement
+	return c.SessionIDPlacement
 }
 
 func (c *Config) GetNormalizedSeqPlacement() string {
@@ -230,8 +230,8 @@ func (c *Config) GetNormalizedUplinkDataPlacement() string {
 }
 
 func (c *Config) GetNormalizedSessionKey() string {
-	if c.SessionKey != "" {
-		return c.SessionKey
+	if c.SessionIDKey != "" {
+		return c.SessionIDKey
 	}
 	switch c.GetNormalizedSessionPlacement() {
 	case PlacementHeader:
