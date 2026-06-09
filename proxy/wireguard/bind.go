@@ -3,7 +3,6 @@ package wireguard
 import (
 	"context"
 	goerrors "errors"
-	"io"
 	"net"
 	"net/netip"
 	"strconv"
@@ -47,21 +46,21 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 			for {
 				n, addr, err := c.ReadFrom(bufs[0])
 				if err != nil {
-					if goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, net.ErrClosed) {
-						select {
-						case <-ch:
-						default:
-							errors.LogErrorInner(context.Background(), err, "unexpected closed")
-							if b.downFunc != nil {
-								go func() {
-									common.Must(b.downFunc())
-								}()
-							}
-						}
-						return 0, net.ErrClosed
+					var netErr net.Error
+					if goerrors.As(err, &netErr) && netErr.Timeout() {
+						continue
 					}
-					errors.LogErrorInner(context.Background(), err, "bind recv err")
-					continue
+					select {
+					case <-ch:
+					default:
+						errors.LogErrorInner(context.Background(), err, "unexpected closed")
+						if b.downFunc != nil {
+							go func() {
+								common.Must(b.downFunc())
+							}()
+						}
+					}
+					return 0, net.ErrClosed
 				}
 				if n > 3 {
 					bufs[0][1] = 0
