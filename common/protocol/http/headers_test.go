@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"bufio"
+	gonet "net"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,10 +13,17 @@ import (
 	. "github.com/xtls/xray-core/common/protocol/http"
 )
 
-func TestParseXForwardedFor(t *testing.T) {
+func TestParseTrustedXForwardedFor(t *testing.T) {
 	header := http.Header{}
 	header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
-	addrs := ParseXForwardedFor(header)
+	clientAddr := &gonet.TCPAddr{IP: gonet.ParseIP("127.0.0.1"), Port: 12345}
+
+	if addrs := ParseTrustedXForwardedFor(header, nil, clientAddr); addrs != nil {
+		t.Fatalf("unexpected trusted X-Forwarded-For: %v", addrs)
+	}
+
+	header.Add("X-Trusted-CDN", "")
+	addrs := ParseTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, clientAddr)
 	if r := cmp.Diff(addrs, []net.Address{net.ParseAddress("129.78.138.66"), net.ParseAddress("129.78.64.103")}); r != "" {
 		t.Error(r)
 	}
