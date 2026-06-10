@@ -1,25 +1,50 @@
 package http
 
 import (
+	"context"
+	gonet "net"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 )
 
-// ParseXForwardedFor parses X-Forwarded-For header in http headers, and return the IP list in it.
-func ParseXForwardedFor(header http.Header) []net.Address {
-	xff := header.Get("X-Forwarded-For")
-	if xff == "" {
-		return nil
-	}
+func parseXForwardedFor(xff string) []net.Address {
 	list := strings.Split(xff, ",")
 	addrs := make([]net.Address, 0, len(list))
 	for _, proxy := range list {
 		addrs = append(addrs, net.ParseAddress(proxy))
 	}
 	return addrs
+}
+
+// ParseTrustedXForwardedFor parses forwarding headers only when a configured trusted header is present.
+func ParseTrustedXForwardedFor(header http.Header, trusted []string, clientAddr gonet.Addr) []net.Address {
+	key := "X-Real-IP"
+	value := header.Get(key)
+	if value == "" {
+		key = "X-Forwarded-For"
+		value = header.Get(key)
+	}
+	if value == "" {
+		return nil
+	}
+	for _, t := range trusted {
+		if len(header.Values(t)) > 0 {
+			if key == "X-Real-IP" {
+				return []net.Address{net.ParseAddress(value)}
+			}
+			return parseXForwardedFor(value)
+		}
+	}
+	if len(trusted) == 0 {
+		errors.LogWarning(context.Background(), `received "`, key, `" from `, clientAddr, ` but "sockopt.trustedXForwardedFor" is not configured; ignoring it and using the real remote address`)
+	} else {
+		errors.LogError(context.Background(), `ignored potentially forged "`, key, `" from `, clientAddr, `: `, value)
+	}
+	return nil
 }
 
 // RemoveHopByHopHeaders removes hop by hop headers in http header list.
