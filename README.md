@@ -41,9 +41,9 @@
 
 ## Telegram
 
-[Project X](https://t.me/projectXray)
-
 [Project X Channel](https://t.me/projectXtls)
+
+[Project X](https://t.me/projectXray) (中文 / English)
 
 [Project VLESS](https://t.me/projectVless) (Русский)
 
@@ -53,7 +53,7 @@
 
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install) (**Official**)
-  - [tempest](https://github.com/team-cloudchaser/tempest) (supports [`systemd`](https://systemd.io) and [OpenRC](https://github.com/OpenRC/openrc); Linux-only)
+  - [tempest](https://github.com/team-cloudchaser/tempest) (supports [`Systemd`](https://systemd.io) and [`OpenRC`](https://github.com/OpenRC/openrc); Linux-only)
 - Docker
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
@@ -69,11 +69,9 @@
   - [TX-UI](https://github.com/AghayeCoder/tx-ui)
   - [CELERITY](https://github.com/ClickDevTech/CELERITY-panel)
 - One Click
-  - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
-  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool), [VPainLess](https://github.com/vpainless/vpainless)
-  - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
-- Magisk
-  - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
+  - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
+  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [VPainLess](https://github.com/vpainless/vpainless)
+  - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [ProxySU](https://github.com/proxysu/ProxySU)
 - Homebrew
   - `brew install xray`
 
@@ -90,9 +88,7 @@
 - Tutorial
   - [XTLS Vision](https://github.com/chika0801/Xray-install)
   - [REALITY (English)](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
-  - [XTLS-Iran-Reality (English)](https://github.com/SasukeFreestyle/XTLS-Iran-Reality)
   - [Xray REALITY with 'steal oneself' (English)](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)
-  - [Xray with WireGuard inbound (English)](https://g800.pages.dev/wireguard)
 
 ## GUI Clients
 
@@ -113,7 +109,6 @@
   - [XrayUI-dev](https://github.com/PhoenixNil/XrayUI-dev)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
@@ -166,10 +161,6 @@
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [flutter_vless](https://github.com/XIIIFOX/flutter_vless)
   - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
-  - [xray-api](https://github.com/XVGuardian/xray-api)
-- [XrayR](https://github.com/XrayR-project/XrayR)
-  - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
-  - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)
 - Cores
   - [Amnezia VPN](https://github.com/amnezia-vpn)
   - [mihomo](https://github.com/MetaCubeX/mihomo)
