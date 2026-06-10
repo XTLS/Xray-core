@@ -20,21 +20,29 @@ func parseXForwardedFor(xff string) []net.Address {
 	return addrs
 }
 
-// ParseTrustedXForwardedFor parses X-Forwarded-For only when a configured trusted header is present.
+// ParseTrustedXForwardedFor parses forwarding headers only when a configured trusted header is present.
 func ParseTrustedXForwardedFor(header http.Header, trusted []string, clientAddr gonet.Addr) []net.Address {
-	xff := header.Get("X-Forwarded-For")
-	if xff == "" {
+	key := "X-Real-IP"
+	value := header.Get(key)
+	if value == "" {
+		key = "X-Forwarded-For"
+		value = header.Get(key)
+	}
+	if value == "" {
 		return nil
 	}
-	for _, key := range trusted {
-		if len(header.Values(key)) > 0 {
-			return parseXForwardedFor(xff)
+	for _, t := range trusted {
+		if len(header.Values(t)) > 0 {
+			if key == "X-Real-IP" {
+				return []net.Address{net.ParseAddress(value)}
+			}
+			return parseXForwardedFor(value)
 		}
 	}
 	if len(trusted) == 0 {
-		errors.LogWarning(context.Background(), `received "X-Forwarded-For" from `, clientAddr, ` but "sockopt.trustedXForwardedFor" is not configured; ignoring it and using the real remote address`)
+		errors.LogWarning(context.Background(), `received "`, key, `" from `, clientAddr, ` but "sockopt.trustedXForwardedFor" is not configured; ignoring it and using the real remote address`)
 	} else {
-		errors.LogError(context.Background(), `ignored potentially forged "X-Forwarded-For" from `, clientAddr, `: `, xff)
+		errors.LogError(context.Background(), `ignored potentially forged "`, key, `" from `, clientAddr, `: `, value)
 	}
 	return nil
 }
