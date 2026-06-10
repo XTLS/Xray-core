@@ -266,6 +266,23 @@ func (h *Handler) DestIpAddress() net.IP {
 	return internet.DestIpAddress()
 }
 
+func (h *Handler) ResolveStrategy() internet.DomainStrategy {
+	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() {
+		return h.senderSettings.TargetStrategy
+	}
+	if h.streamSettings != nil && h.streamSettings.SocketSettings != nil {
+		return h.streamSettings.SocketSettings.DomainStrategy
+	}
+	return internet.DomainStrategy_AS_IS
+}
+
+func (h *Handler) UsesProxySettings() bool {
+	if h.senderSettings != nil && h.senderSettings.ProxySettings.HasTag() {
+		return true
+	}
+	return h.streamSettings != nil && h.streamSettings.SocketSettings != nil && len(h.streamSettings.SocketSettings.DialerProxy) > 0
+}
+
 // Dial implements internet.Dialer.
 func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
 	if h.senderSettings != nil {
