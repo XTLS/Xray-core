@@ -9,8 +9,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/peer"
 )
 
 type HunkConn interface {
@@ -38,31 +36,8 @@ func NewHunkReadWriter(hc HunkConn, cancel context.CancelFunc) *HunkReaderWriter
 	return &HunkReaderWriter{hc, cancel, done.New(), nil, 0}
 }
 
-func NewHunkConn(hc HunkConn, cancel context.CancelFunc) net.Conn {
-	var rAddr net.Addr
-	pr, ok := peer.FromContext(hc.Context())
-	if ok {
-		rAddr = pr.Addr
-	} else {
-		rAddr = &net.TCPAddr{
-			IP:   []byte{0, 0, 0, 0},
-			Port: 0,
-		}
-	}
-
-	md, ok := metadata.FromIncomingContext(hc.Context())
-	if ok {
-		header := md.Get("x-real-ip")
-		if len(header) > 0 {
-			realip := net.ParseAddress(header[0])
-			if realip.Family().IsIP() {
-				rAddr = &net.TCPAddr{
-					IP:   realip.IP(),
-					Port: 0,
-				}
-			}
-		}
-	}
+func NewHunkConn(hc HunkConn, cancel context.CancelFunc, trustedXForwardedFor []string) net.Conn {
+	rAddr := remoteAddrFromContext(hc.Context(), trustedXForwardedFor)
 	wrc := NewHunkReadWriter(hc, cancel)
 	return cnc.NewConnection(
 		cnc.ConnectionInput(wrc),
