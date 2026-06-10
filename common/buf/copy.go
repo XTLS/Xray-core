@@ -56,6 +56,10 @@ type readError struct {
 	error
 }
 
+func NewReadError(err error) error {
+	return readError{err}
+}
+
 func (e readError) Error() string {
 	return e.error.Error()
 }
@@ -72,6 +76,10 @@ func IsReadError(err error) bool {
 
 type writeError struct {
 	error
+}
+
+func NewWriteError(err error) error {
+	return writeError{err}
 }
 
 func (e writeError) Error() string {
