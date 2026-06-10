@@ -27,7 +27,6 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.zx2c4.com/wireguard/device"
 )
 
@@ -36,8 +35,7 @@ type Handler struct {
 	policyManager policy.Manager
 	dns           dns.Client
 
-	sockopt         *internet.SocketConfig
-	udpmaskManager  *finalmask.UdpmaskManager
+	streamSettings  *internet.MemoryStreamConfig
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
@@ -53,12 +51,6 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	d := v.GetFeature(dns.ClientType()).(dns.Client)
 
 	streamSettings := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
-	var sockopt *internet.SocketConfig
-	var udpmaskManager *finalmask.UdpmaskManager
-	if streamSettings != nil {
-		sockopt = streamSettings.SocketSettings
-		udpmaskManager = streamSettings.UdpmaskManager
-	}
 	tag := session.FullHandlerFromContext(ctx).Tag()
 	var uplinkCounter stats.Counter
 	var downlinkCounter stats.Counter
@@ -128,8 +120,7 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		policyManager: p,
 		dns:           d,
 
-		sockopt:         sockopt,
-		udpmaskManager:  udpmaskManager,
+		streamSettings:  streamSettings,
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
 
@@ -276,7 +267,7 @@ func (h *Handler) init(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		conn, err := internet.DialSystem(ctx, dest, h.sockopt)
+		conn, err := internet.DialSystem(ctx, dest, h.streamSettings.SocketSettings)
 		if err != nil {
 			return nil, err
 		}
@@ -289,8 +280,8 @@ func (h *Handler) init(ctx context.Context) error {
 		default:
 			panic(reflect.TypeOf(c))
 		}
-		if h.udpmaskManager != nil {
-			newConn, err := h.udpmaskManager.WrapPacketConnClient(pktConn)
+		if h.streamSettings.UdpmaskManager != nil {
+			newConn, err := h.streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
 			if err != nil {
 				pktConn.Close()
 				return nil, errors.New("mask err").Base(err)
