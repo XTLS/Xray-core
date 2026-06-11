@@ -293,6 +293,7 @@ func (c *OutboundDetourConfig) checkOutboundTLSConflict(rawConfig interface{}, s
 
 	return nil
 }
+
 func (c *OutboundDetourConfig) checkVMessTLSConflict(vmCfg *VMessOutboundConfig) error {
 	sec := ""
 	if vmCfg.Address != nil {
