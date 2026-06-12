@@ -36,6 +36,81 @@ type IPMatcher interface {
 	SetReverse(reverse bool)
 }
 
+type PrebuildPrivateIPMatcher struct {
+	reverse bool
+}
+
+func (m *PrebuildPrivateIPMatcher) Match(ip net.IP) bool {
+	ip4 := ip.To4()
+	ip16 := ip.To16()
+	if ip4 == nil && ip16 == nil {
+		return false
+	}
+	private := ip.IsPrivate() || ip.IsLoopback() || ip.IsMulticast() || ip.IsLinkLocalUnicast()
+	if !private {
+		if ip4 != nil {
+			private = ip4[0] == 0 ||
+				// 100.64.0.0/10
+				(ip4[0] == 100 && ip4[1]&0xc0 == 64) ||
+				// 192.0.0/2.0/24
+				(ip4[0] == 192 && ((ip4[1] == 0 && ip4[2] == 0) || (ip4[1] == 0 && ip4[2] == 2) || (ip4[1] == 88 && ip4[2] == 99))) ||
+				// 198.18.0.0/15
+				(ip4[0] == 198 && (ip4[1] == 18 || ip4[1] == 19 || (ip4[1] == 51 && ip4[2] == 100))) ||
+				// 203.0.113.0/24
+				(ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113) ||
+				ip4[0] >= 224
+		} else if ip16 != nil {
+			private = ip.IsUnspecified()
+		}
+	}
+	return private != m.reverse
+}
+
+func (m *PrebuildPrivateIPMatcher) AnyMatch(ips []net.IP) bool {
+	for _, ip := range ips {
+		if m.Match(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *PrebuildPrivateIPMatcher) Matches(ips []net.IP) bool {
+	if len(ips) == 0 {
+		return false
+	}
+	for _, ip := range ips {
+		if !m.Match(ip) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *PrebuildPrivateIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
+	matched = make([]net.IP, 0, len(ips))
+	unmatched = make([]net.IP, 0, len(ips))
+	for _, ip := range ips {
+		if len(ip) == 0 {
+			continue
+		}
+		if m.Match(ip) {
+			matched = append(matched, ip)
+		} else {
+			unmatched = append(unmatched, ip)
+		}
+	}
+	return
+}
+
+func (m *PrebuildPrivateIPMatcher) ToggleReverse() {
+	m.reverse = !m.reverse
+}
+
+func (m *PrebuildPrivateIPMatcher) SetReverse(reverse bool) {
+	m.reverse = reverse
+}
+
 type IPSet struct {
 	ipv4, ipv6 *netipx.IPSet
 	max4, max6 uint8
@@ -948,6 +1023,10 @@ func (f *IPSetFactory) createFrom(yield func(func(*CIDR)) error) (*IPSet, error)
 	return &IPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
 }
 
+func isPrivateGeoIPCode(code string) bool {
+	return strings.EqualFold(code, "PRIVATE")
+}
+
 func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error) {
 	n := len(rules)
 	posCustom := make([]*CIDR, 0, n)
@@ -974,7 +1053,7 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 		}
 	}
 
-	subs := make([]*HeuristicIPMatcher, 0, 4)
+	var subs []IPMatcher
 
 	if len(posCustom) > 0 {
 		ipset, err := f.CreateFromCIDRs(posCustom)
@@ -992,6 +1071,13 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: true})
 	}
 
+	posGeoip = slices.DeleteFunc(posGeoip, func(rule *GeoIPRule) bool {
+		if isPrivateGeoIPCode(rule.Code) {
+			subs = append(subs, &PrebuildPrivateIPMatcher{})
+			return true
+		}
+		return false
+	})
 	if len(posGeoip) > 0 {
 		ipset, err := f.GetOrCreateFromGeoIPRules(posGeoip)
 		if err != nil {
@@ -1000,6 +1086,13 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: false})
 	}
 
+	negGeoip = slices.DeleteFunc(negGeoip, func(rule *GeoIPRule) bool {
+		if isPrivateGeoIPCode(rule.Code) {
+			subs = append(subs, &PrebuildPrivateIPMatcher{reverse: true})
+			return true
+		}
+		return false
+	})
 	if len(negGeoip) > 0 {
 		ipset, err := f.GetOrCreateFromGeoIPRules(negGeoip)
 		if err != nil {
@@ -1014,7 +1107,7 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 	case 1:
 		return subs[0], nil
 	default:
-		return &HeuristicMultiIPMatcher{matchers: subs}, nil
+		return &GeneralMultiIPMatcher{matchers: subs}, nil
 	}
 }
 

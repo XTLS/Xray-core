@@ -73,8 +73,10 @@ func parseGeoIPRule(rule string, reverse bool) (*IPRule_Geoip, error) {
 	}
 	code = strings.ToUpper(code)
 
-	if err := checkFile(file, code); err != nil {
-		return nil, err
+	if !isPrivateGeoIPCode(code) {
+		if err := checkFile(file, code); err != nil {
+			return nil, err
+		}
 	}
 
 	return &IPRule_Geoip{
