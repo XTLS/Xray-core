@@ -86,8 +86,12 @@ type Certificate struct {
 	// If true, one-Time Loading
 	OneTimeLoading bool `protobuf:"varint,7,opt,name=One_time_loading,json=OneTimeLoading,proto3" json:"One_time_loading,omitempty"`
 	BuildChain     bool `protobuf:"varint,8,opt,name=build_chain,json=buildChain,proto3" json:"build_chain,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Abuse proto data for storage hotreload data
+	ParsedCache   []byte `protobuf:"bytes,9,opt,name=parsed_cache,json=parsedCache,proto3" json:"parsed_cache,omitempty"`
+	OcspData      []byte `protobuf:"bytes,10,opt,name=ocsp_data,json=ocspData,proto3" json:"ocsp_data,omitempty"`
+	LastReload    int64  `protobuf:"varint,11,opt,name=last_reload,json=lastReload,proto3" json:"last_reload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Certificate) Reset() {
@@ -174,6 +178,27 @@ func (x *Certificate) GetBuildChain() bool {
 		return x.BuildChain
 	}
 	return false
+}
+
+func (x *Certificate) GetParsedCache() []byte {
+	if x != nil {
+		return x.ParsedCache
+	}
+	return nil
+}
+
+func (x *Certificate) GetOcspData() []byte {
+	if x != nil {
+		return x.OcspData
+	}
+	return nil
+}
+
+func (x *Certificate) GetLastReload() int64 {
+	if x != nil {
+		return x.LastReload
+	}
+	return 0
 }
 
 type Config struct {
@@ -363,7 +388,7 @@ var File_transport_internet_tls_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\n" +
-	"#transport/internet/tls/config.proto\x12\x1bxray.transport.internet.tls\x1a\x1ftransport/internet/config.proto\"\x83\x03\n" +
+	"#transport/internet/tls/config.proto\x12\x1bxray.transport.internet.tls\x1a\x1ftransport/internet/config.proto\"\xe4\x03\n" +
 	"\vCertificate\x12 \n" +
 	"\vcertificate\x18\x01 \x01(\fR\vcertificate\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\fR\x03key\x12D\n" +
@@ -373,7 +398,12 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\bkey_path\x18\x06 \x01(\tR\akeyPath\x12(\n" +
 	"\x10One_time_loading\x18\a \x01(\bR\x0eOneTimeLoading\x12\x1f\n" +
 	"\vbuild_chain\x18\b \x01(\bR\n" +
-	"buildChain\"D\n" +
+	"buildChain\x12!\n" +
+	"\fparsed_cache\x18\t \x01(\fR\vparsedCache\x12\x1b\n" +
+	"\tocsp_data\x18\n" +
+	" \x01(\fR\bocspData\x12\x1f\n" +
+	"\vlast_reload\x18\v \x01(\x03R\n" +
+	"lastReload\"D\n" +
 	"\x05Usage\x12\x10\n" +
 	"\fENCIPHERMENT\x10\x00\x12\x14\n" +
 	"\x10AUTHORITY_VERIFY\x10\x01\x12\x13\n" +

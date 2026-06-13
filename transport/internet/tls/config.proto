@@ -35,6 +35,11 @@ message Certificate {
   bool One_time_loading = 7;
 
   bool build_chain = 8;
+
+  // Abuse proto data for storage hotreload data
+  bytes parsed_cache = 9;
+  bytes ocsp_data = 10;
+  int64 last_reload = 11;
 }
 
 message Config {
