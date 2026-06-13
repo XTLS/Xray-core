@@ -77,16 +77,18 @@ func New(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	}, nil
 }
 
-func (h *Handler) Close() (err error) {
-	go func() {
-		h.wgLock.Lock()
-		defer h.wgLock.Unlock()
+func (h *Handler) Close() error {
+	h.wgLock.Lock()
+	defer h.wgLock.Unlock()
 
-		if h.net != nil {
-			_ = h.net.Close()
-			h.net = nil
-		}
-	}()
+	if h.net != nil {
+		_ = h.net.Close()
+		h.net = nil
+	}
+	if h.bind != nil {
+		_ = h.bind.Close()
+		h.bind = nil
+	}
 
 	return nil
 }
@@ -128,10 +130,14 @@ func (h *Handler) processWireGuard(ctx context.Context, dialer internet.Dialer) 
 		dialer:   dialer,
 		reserved: h.conf.Reserved,
 	}
+
+	bind := h.bind
 	defer func() {
-		if err != nil {
-			h.bind.Close()
-			h.bind = nil
+		if err != nil && bind != nil {
+			_ = bind.Close()
+			if h.bind == bind {
+				h.bind = nil
+			}
 		}
 	}()
 
@@ -207,13 +213,33 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var requestFunc func() error
 	var responseFunc func() error
 
+	var conn net.Conn
+	var err error
+
+	h.wgLock.Lock()
+	netTun := h.net
+	if netTun == nil {
+		h.wgLock.Unlock()
+		return errors.New("wireguard tunnel is closed")
+	}
+
 	if command == protocol.RequestCommandTCP {
-		conn, err := h.net.DialContextTCPAddrPort(ctx, addrPort)
-		if err != nil {
+		conn, err = netTun.DialContextTCPAddrPort(ctx, addrPort)
+	} else if command == protocol.RequestCommandUDP {
+		conn, err = netTun.DialUDPAddrPort(netip.AddrPort{}, addrPort)
+	}
+
+	h.wgLock.Unlock()
+
+	if err != nil {
+		if command == protocol.RequestCommandTCP {
 			return errors.New("failed to create TCP connection").Base(err)
 		}
-		defer conn.Close()
+		return errors.New("failed to create UDP connection").Base(err)
+	}
+	defer conn.Close()
 
+	if command == protocol.RequestCommandTCP {
 		requestFunc = func() error {
 			defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
 			return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
@@ -223,12 +249,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
 	} else if command == protocol.RequestCommandUDP {
-		conn, err := h.net.DialUDPAddrPort(netip.AddrPort{}, addrPort)
-		if err != nil {
-			return errors.New("failed to create UDP connection").Base(err)
-		}
-		defer conn.Close()
-
 		conn = &udpConnClient{
 			Conn: conn,
 			dest: destination,
