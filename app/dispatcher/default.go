@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/app/connectiontracker"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -498,7 +499,9 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				accessMessage.Detour = inTag + " >> " + tag
 			}
 		}
-		log.Record(accessMessage)
+		if connectiontracker.AccessRecordFromContext(ctx) == nil {
+			log.Record(accessMessage)
+		}
 	}
 
 	handler.Dispatch(ctx, link)
