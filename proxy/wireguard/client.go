@@ -218,8 +218,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	h.wgLock.Lock()
 	netTun := h.net
+	h.wgLock.Unlock()
+
 	if netTun == nil {
-		h.wgLock.Unlock()
 		return errors.New("wireguard tunnel is closed")
 	}
 
@@ -228,8 +229,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	} else if command == protocol.RequestCommandUDP {
 		conn, err = netTun.DialUDPAddrPort(netip.AddrPort{}, addrPort)
 	}
-
-	h.wgLock.Unlock()
 
 	if err != nil {
 		if command == protocol.RequestCommandTCP {

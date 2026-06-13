@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"runtime"
 	"strconv"
+	"sync"
 
 	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/device"
@@ -30,6 +31,8 @@ type netBind struct {
 	workers   int
 	readQueue chan *netReadInfo
 	closedCh  chan struct{}
+	mu        sync.Mutex
+	isClosed  bool
 }
 
 // SetMark implements conn.Bind
@@ -77,7 +80,11 @@ func (bind *netBind) BatchSize() int {
 
 // Open implements conn.Bind
 func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
+	bind.mu.Lock()
 	bind.closedCh = make(chan struct{})
+	bind.isClosed = false
+	closedCh := bind.closedCh
+	bind.mu.Unlock()
 	errors.LogDebug(context.Background(), "bind opened")
 
 	fun := func(bufs [][]byte, sizes []int, eps []conn.Endpoint) (n int, err error) {
@@ -86,7 +93,7 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 			sizes[0], eps[0] = copy(bufs[0], r.buff.Bytes()), r.endpoint
 			r.buff.Release()
 			return 1, nil
-		case <-bind.closedCh:
+		case <-closedCh:
 			errors.LogDebug(context.Background(), "recv func closed")
 			return 0, gonet.ErrClosed
 		}
@@ -109,6 +116,12 @@ func (bind *netBind) Open(uport uint16) ([]conn.ReceiveFunc, uint16, error) {
 // Close implements conn.Bind
 func (bind *netBind) Close() error {
 	errors.LogDebug(context.Background(), "bind closed")
+	bind.mu.Lock()
+	defer bind.mu.Unlock()
+	if bind.isClosed {
+		return nil
+	}
+	bind.isClosed = true
 	if bind.closedCh != nil {
 		close(bind.closedCh)
 	}
@@ -129,6 +142,10 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 		return err
 	}
 	endpoint.conn = c
+
+	bind.mu.Lock()
+	closedCh := bind.closedCh
+	bind.mu.Unlock()
 
 	go func() {
 		for {
@@ -153,7 +170,7 @@ func (bind *netBindClient) connectTo(endpoint *netEndpoint) error {
 				buff:     buff,
 				endpoint: endpoint,
 			}:
-			case <-bind.closedCh:
+			case <-closedCh:
 				buff.Release()
 				endpoint.conn = nil
 				c.Close()
