@@ -140,7 +140,7 @@ func (c *client) dial(ctx context.Context) error {
 	var index int
 
 	if len(quicParams.UdpHop.Ports) > 0 {
-		index := rand.Intn(len(quicParams.UdpHop.Ports))
+		index = rand.Intn(len(quicParams.UdpHop.Ports))
 		c.dest.Port = net.Port(quicParams.UdpHop.Ports[index])
 	}
 

@@ -223,7 +223,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				var index int
 
 				if len(quicParams.UdpHop.Ports) > 0 {
-					index := rand.Intn(len(quicParams.UdpHop.Ports))
+					index = rand.Intn(len(quicParams.UdpHop.Ports))
 					dest.Port = net.Port(quicParams.UdpHop.Ports[index])
 				}
 
