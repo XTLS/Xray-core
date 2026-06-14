@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"net"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/xtls/xray-core/transport/internet/finalmask"
@@ -240,16 +239,6 @@ func (u *UdpHopPacketConn) SetWriteDeadline(t time.Time) error {
 		_ = u.prevConn.SetWriteDeadline(t)
 	}
 	return u.currentConn.SetWriteDeadline(t)
-}
-
-func (u *UdpHopPacketConn) SyscallConn() (syscall.RawConn, error) {
-	u.connMutex.RLock()
-	defer u.connMutex.RUnlock()
-	sc, ok := u.currentConn.(syscall.Conn)
-	if !ok {
-		return nil, errors.New("not supported")
-	}
-	return sc.SyscallConn()
 }
 
 func ToAddrs(ip net.IP, ports []uint32) []net.Addr {
