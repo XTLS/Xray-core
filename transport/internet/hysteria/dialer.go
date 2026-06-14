@@ -3,10 +3,10 @@ package hysteria
 import (
 	"context"
 	go_tls "crypto/tls"
-	"fmt"
 	"math/rand"
 	"net/http"
 	"net/url"
+	reflect "reflect"
 	"runtime"
 	"strconv"
 	"sync"
@@ -129,7 +129,7 @@ func (c *client) dial(ctx context.Context) error {
 		case *cnc.Connection:
 			pktConn = &internet.FakePacketConn{Conn: c}
 		default:
-			return nil, fmt.Errorf("unsupported connection type: %T", c)
+			panic(reflect.TypeOf(c))
 		}
 
 		return pktConn, nil
@@ -137,39 +137,30 @@ func (c *client) dial(ctx context.Context) error {
 
 	var pktConn net.PacketConn
 	var udpAddr *net.UDPAddr
+	var index int
+
 	if len(quicParams.UdpHop.Ports) > 0 {
 		index := rand.Intn(len(quicParams.UdpHop.Ports))
 		c.dest.Port = net.Port(quicParams.UdpHop.Ports[index])
-		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
-		if err != nil {
-			return errors.New("failed to dial to dest").Base(err)
-		}
-		switch c := conn.(type) {
-		case *internet.PacketConnWrapper:
-			pktConn = c.PacketConn
-			udpAddr = conn.RemoteAddr().(*net.UDPAddr)
-		case *cnc.Connection:
-			pktConn = &internet.FakePacketConn{Conn: c}
-			udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
-		default:
-			return fmt.Errorf("unsupported connection type: %T", c)
-		}
+	}
+
+	raw, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
+	if err != nil {
+		return errors.New("failed to dial to dest").Base(err)
+	}
+	switch c := raw.(type) {
+	case *internet.PacketConnWrapper:
+		pktConn = c.PacketConn
+		udpAddr = raw.RemoteAddr().(*net.UDPAddr)
+	case *cnc.Connection:
+		pktConn = &internet.FakePacketConn{Conn: c}
+		udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
+	default:
+		panic(reflect.TypeOf(c))
+	}
+
+	if len(quicParams.UdpHop.Ports) > 0 {
 		pktConn = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer, pktConn, index)
-	} else {
-		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
-		if err != nil {
-			return errors.New("failed to dial to dest").Base(err)
-		}
-		switch c := conn.(type) {
-		case *internet.PacketConnWrapper:
-			pktConn = c.PacketConn
-			udpAddr = c.RemoteAddr().(*net.UDPAddr)
-		case *cnc.Connection:
-			pktConn = &internet.FakePacketConn{Conn: c}
-			udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
-		default:
-			return fmt.Errorf("unsupported connection type: %T", c)
-		}
 	}
 
 	if c.udpmaskManager != nil {
@@ -242,7 +233,7 @@ func (c *client) dial(ctx context.Context) error {
 	case "force-brutal":
 		congestion.UseBrutal(conn, quicParams.BrutalUp)
 	default:
-		return fmt.Errorf("unsupported congestion type: %s", quicParams.Congestion)
+		panic(quicParams.Congestion)
 	}
 
 	c.pktConn = pktConn

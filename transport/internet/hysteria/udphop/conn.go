@@ -138,8 +138,8 @@ func (u *UdpHopPacketConn) hop() {
 	if u.closed {
 		return
 	}
-	u.addrIndex = rand.Intn(len(u.Addrs))
-	newConn, err := u.ListenUDPFunc(u.Addrs[u.addrIndex].(*net.UDPAddr))
+	addrIndex := rand.Intn(len(u.Addrs))
+	newConn, err := u.ListenUDPFunc(u.Addrs[addrIndex].(*net.UDPAddr))
 	if err != nil {
 		return
 	}
@@ -147,6 +147,7 @@ func (u *UdpHopPacketConn) hop() {
 		_ = u.prevConn.Close()
 	}
 	u.prevConn = u.currentConn
+	u.addrIndex = addrIndex
 	u.currentConn = newConn
 	if !u.deadline.IsZero() {
 		_ = u.currentConn.SetDeadline(u.deadline)
