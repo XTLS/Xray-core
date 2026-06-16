@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/hysteria/account"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -27,6 +28,14 @@ type Server struct {
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
+	v := core.MustFromContext(ctx)
+	p := v.GetFeature(policy.ManagerType()).(policy.Manager)
+
+	streamSettings := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
+	if _, ok := streamSettings.ProtocolSettings.(*hysteria.Config); !ok {
+		return nil, errors.New("not hysteria transport")
+	}
+
 	validator := account.NewValidator()
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
@@ -39,14 +48,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		}
 	}
 
-	v := core.MustFromContext(ctx)
-	s := &Server{
+	return &Server{
 		config:        config,
 		validator:     validator,
-		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-	}
-
-	return s, nil
+		policyManager: p,
+	}, nil
 }
 
 func (s *Server) HysteriaInboundValidator() *account.Validator {
