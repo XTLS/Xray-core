@@ -2,6 +2,7 @@ package burst
 
 import (
 	"context"
+	stderrors "errors"
 	"io"
 	"net/http"
 	"time"
@@ -37,6 +38,12 @@ func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler 
 			dest, err := net.ParseDestination(network + ":" + addr)
 			if err != nil {
 				return nil, err
+			}
+			if dispatcher == nil {
+				return nil, stderrors.New("burst observatory dispatcher is unavailable")
+			}
+			if tagged.Dialer == nil {
+				return nil, stderrors.New("tagged outbound dialer is unavailable")
 			}
 			return tagged.Dialer(ctxv, dispatcher, dest, handler)
 		},
