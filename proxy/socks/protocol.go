@@ -209,8 +209,6 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 		}
 		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
 		expectedRemote := &gonet.UDPAddr{}
-		// if request address is a domain(udp associate should not have request domain)
-		// treat it as unspecified
 		if request.Address.Family().IsDomain() || request.Address.IP().IsUnspecified() {
 			expectedRemote.IP = writer.RemoteAddr().(*net.TCPAddr).IP // unix?
 		} else {
