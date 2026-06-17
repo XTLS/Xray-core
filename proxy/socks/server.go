@@ -4,6 +4,7 @@ import (
 	"context"
 	goerrors "errors"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -216,18 +217,24 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 	defer udpServer.RemoveRay()
 
 	inbound := session.InboundFromContext(ctx)
-	if inbound != nil && inbound.Source.IsValid() {
-		errors.LogInfo(ctx, "client UDP connection from ", inbound.Source)
-	}
 
 	var dest *net.Destination
 
 	reader := buf.NewPacketReader(conn)
+	var changeRemote sync.Once
 	for {
 		mpayload, err := reader.ReadMultiBuffer()
 		if err != nil {
 			return err
 		}
+		changeRemote.Do(func() {
+			if inbound != nil {
+				// change source to real remote UDP address
+				inbound.Source = net.DestinationFromAddr(conn.RemoteAddr())
+				inbound.Local = net.DestinationFromAddr(conn.LocalAddr())
+				errors.LogInfo(ctx, "client UDP connection from ", inbound.Source)
+			}
+		})
 
 		for _, payload := range mpayload {
 			request, err := DecodeUDPPacket(payload)

@@ -196,9 +196,6 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 	var tempUDPConn *TempUDPConn
 	//nolint:gocritic // Use if else chain for clarity
 	if request.Command == protocol.RequestCommandUDP {
-		if request.Address.Family().IsDomain() {
-			return nil, nil, errors.New("domain name in UDP associate is illegal")
-		}
 		if s.config.Address != nil {
 			// Use configured IP as remote address in the response to UDP Associate
 			responseAddress = s.config.Address.AsAddress()
@@ -212,7 +209,9 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 		}
 		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
 		expectedRemote := &gonet.UDPAddr{}
-		if request.Address.IP().IsUnspecified() {
+		// if request address is a domain(udp associate should not have request domain)
+		// treat it as unspecified
+		if request.Address.Family().IsDomain() || request.Address.IP().IsUnspecified() {
 			expectedRemote.IP = writer.RemoteAddr().(*net.TCPAddr).IP // unix?
 		} else {
 			expectedRemote.IP = request.Address.IP()
