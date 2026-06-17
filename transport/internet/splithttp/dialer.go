@@ -433,7 +433,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		xmuxClient.AddRunning()
 	}
 	if xmuxClient2 != nil && xmuxClient2 != xmuxClient {
-		xmuxClient2.DoneRunning()
+		xmuxClient2.AddRunning()
 	}
 	var closed atomic.Int32
 
