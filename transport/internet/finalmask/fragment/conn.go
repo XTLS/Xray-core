@@ -154,7 +154,9 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 			return from, err
 		}
 		delayMin, delayMax := c.delayForSegment(int(splitNum) - 1)
-		time.Sleep(time.Duration(crypto.RandBetween(delayMin, delayMax)) * time.Millisecond)
+		if delayMax > 0 {
+			time.Sleep(time.Duration(crypto.RandBetween(delayMin, delayMax)) * time.Millisecond)
+		}
 		if from >= len(p) {
 			return from, nil
 		}
