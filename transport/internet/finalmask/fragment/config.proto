@@ -9,10 +9,6 @@ option java_multiple_files = true;
 message Config {
   int64 packets_from = 1;
   int64 packets_to = 2;
-  int64 length_min = 3;
-  int64 length_max = 4;
-  int64 delay_min = 5;
-  int64 delay_max = 6;
   int64 max_split_min = 7;
   int64 max_split_max = 8;
   repeated int64 lengths_min = 9;

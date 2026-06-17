@@ -1451,6 +1451,10 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 		return nil, errors.New("either length or lengths must be set")
 	}
 
+	if config.LengthsMin[len(config.LengthsMin)-1] == 0 {
+		return nil, errors.New("last lengths entry min can't be 0")
+	}
+
 	if len(c.Delays) > 0 {
 		for _, r := range c.Delays {
 			config.DelaysMin = append(config.DelaysMin, int64(r.From))
