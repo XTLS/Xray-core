@@ -146,6 +146,45 @@ func GeneraticUClient(c net.Conn, config *tls.Config) *utls.UConn {
 	return utls.UClient(c, copyConfig(config), utls.HelloChrome_Auto)
 }
 
+// Adapt a crypto/tls GetClientCertificate callback to the utls signature.
+func uGetClientCertificate(originFunc func(*tls.CertificateRequestInfo) (*tls.Certificate, error)) func(*utls.CertificateRequestInfo) (*utls.Certificate, error) {
+	if originFunc == nil {
+		return nil
+	}
+	return func(info *utls.CertificateRequestInfo) (*utls.Certificate, error) {
+		schemes := make([]tls.SignatureScheme, len(info.SignatureSchemes))
+		for i, s := range info.SignatureSchemes {
+			schemes[i] = tls.SignatureScheme(s)
+		}
+		cert, err := originFunc(&tls.CertificateRequestInfo{
+			AcceptableCAs:    info.AcceptableCAs,
+			SignatureSchemes: schemes,
+			Version:          info.Version,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if cert == nil {
+			return &utls.Certificate{}, nil
+		}
+		var uSchemes []utls.SignatureScheme
+		if cert.SupportedSignatureAlgorithms != nil {
+			uSchemes = make([]utls.SignatureScheme, len(cert.SupportedSignatureAlgorithms))
+			for i, s := range cert.SupportedSignatureAlgorithms {
+				uSchemes[i] = utls.SignatureScheme(s)
+			}
+		}
+		return &utls.Certificate{
+			Certificate:                  cert.Certificate,
+			PrivateKey:                   cert.PrivateKey,
+			SupportedSignatureAlgorithms: uSchemes,
+			OCSPStaple:                   cert.OCSPStaple,
+			SignedCertificateTimestamps:  cert.SignedCertificateTimestamps,
+			Leaf:                         cert.Leaf,
+		}, nil
+	}
+}
+
 func copyConfig(c *tls.Config) *utls.Config {
 	config := &utls.Config{
 		Rand:                           c.Rand,
@@ -156,6 +195,7 @@ func copyConfig(c *tls.Config) *utls.Config {
 		KeyLogWriter:                   c.KeyLogWriter,
 		EncryptedClientHelloConfigList: c.EncryptedClientHelloConfigList,
 		NextProtos:                     c.NextProtos,
+		GetClientCertificate:           uGetClientCertificate(c.GetClientCertificate),
 	}
 	return config
 }

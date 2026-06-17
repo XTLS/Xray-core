@@ -82,6 +82,12 @@ func KeyUsage(usage x509.KeyUsage) Option {
 	}
 }
 
+func ExtKeyUsage(usage []x509.ExtKeyUsage) Option {
+	return func(c *x509.Certificate) {
+		c.ExtKeyUsage = usage
+	}
+}
+
 func Organization(org string) Option {
 	return func(c *x509.Certificate) {
 		c.Subject.Organization = []string{org}

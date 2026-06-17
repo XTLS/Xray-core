@@ -126,6 +126,243 @@ func TestSimpleTLSConnection(t *testing.T) {
 	}
 }
 
+func TestMTLSConnection(t *testing.T) {
+	tcpServer := tcp.Server{
+		MsgProcessor: xor,
+	}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	serverCert, serverCertHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+
+	// CA that issues client certificates; the server trusts it to verify client certs.
+	// ExtKeyUsage must allow ClientAuth on the CA too, otherwise the chain fails the
+	// server's ClientAuth key-usage check.
+	clientCA, _ := cert.MustGenerate(nil, cert.Authority(true),
+		cert.KeyUsage(x509.KeyUsageCertSign|x509.KeyUsageDigitalSignature),
+		cert.ExtKeyUsage([]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}))
+	clientCACertPEM, _ := clientCA.ToPEM()
+
+	// Client certificate signed by the CA. It must carry ClientAuth ext key usage,
+	// otherwise crypto/tls rejects it during client-cert verification.
+	clientCert, _ := cert.MustGenerate(clientCA, cert.CommonName("client"),
+		cert.ExtKeyUsage([]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}))
+	clientCertPEM, clientKeyPEM := clientCert.ToPEM()
+
+	userID := protocol.NewID(uuid.New())
+	serverPort := tcp.PickPort()
+	serverConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					StreamSettings: &internet.StreamConfig{
+						SecurityType: serial.GetMessageType(&tls.Config{}),
+						SecuritySettings: []*serial.TypedMessage{
+							serial.ToTypedMessage(&tls.Config{
+								Certificate: []*tls.Certificate{
+									tls.ParseCertificate(serverCert),
+									{
+										Certificate: clientCACertPEM,
+										Usage:       tls.Certificate_MTLS_CLIENT_CA,
+									},
+								},
+								ClientAuth: "requireandverifyclientcert",
+							}),
+						},
+					},
+				}),
+				ProxySettings: serial.ToTypedMessage(&inbound.Config{
+					User: []*protocol.User{
+						{
+							Account: serial.ToTypedMessage(&vmess.Account{
+								Id: userID.String(),
+							}),
+						},
+					},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
+			},
+		},
+	}
+
+	clientPort := tcp.PickPort()
+	clientConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
+					AllowedNetworks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&outbound.Config{
+					Receiver: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User: &protocol.User{
+							Account: serial.ToTypedMessage(&vmess.Account{
+								Id: userID.String(),
+							}),
+						},
+					},
+				}),
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
+					StreamSettings: &internet.StreamConfig{
+						SecurityType: serial.GetMessageType(&tls.Config{}),
+						SecuritySettings: []*serial.TypedMessage{
+							serial.ToTypedMessage(&tls.Config{
+								PinnedPeerCertSha256: [][]byte{serverCertHash[:]},
+								Certificate: []*tls.Certificate{
+									{
+										Certificate: clientCertPEM,
+										Key:         clientKeyPEM,
+										Usage:       tls.Certificate_MTLS_CLIENT_CERT,
+									},
+								},
+							}),
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	common.Must(err)
+	defer CloseAllServers(servers)
+
+	if err := testTCPConn(clientPort, 1024, time.Second*20)(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMTLSConnectionMissingClientCert(t *testing.T) {
+	tcpServer := tcp.Server{
+		MsgProcessor: xor,
+	}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	serverCert, serverCertHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+
+	clientCA, _ := cert.MustGenerate(nil, cert.Authority(true),
+		cert.KeyUsage(x509.KeyUsageCertSign|x509.KeyUsageDigitalSignature))
+	clientCACertPEM, _ := clientCA.ToPEM()
+
+	userID := protocol.NewID(uuid.New())
+	serverPort := tcp.PickPort()
+	serverConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					StreamSettings: &internet.StreamConfig{
+						SecurityType: serial.GetMessageType(&tls.Config{}),
+						SecuritySettings: []*serial.TypedMessage{
+							serial.ToTypedMessage(&tls.Config{
+								Certificate: []*tls.Certificate{
+									tls.ParseCertificate(serverCert),
+									{
+										Certificate: clientCACertPEM,
+										Usage:       tls.Certificate_MTLS_CLIENT_CA,
+									},
+								},
+								ClientAuth: "requireandverifyclientcert",
+							}),
+						},
+					},
+				}),
+				ProxySettings: serial.ToTypedMessage(&inbound.Config{
+					User: []*protocol.User{
+						{
+							Account: serial.ToTypedMessage(&vmess.Account{
+								Id: userID.String(),
+							}),
+						},
+					},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
+			},
+		},
+	}
+
+	clientPort := tcp.PickPort()
+	clientConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
+					AllowedNetworks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&outbound.Config{
+					Receiver: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User: &protocol.User{
+							Account: serial.ToTypedMessage(&vmess.Account{
+								Id: userID.String(),
+							}),
+						},
+					},
+				}),
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
+					StreamSettings: &internet.StreamConfig{
+						SecurityType: serial.GetMessageType(&tls.Config{}),
+						SecuritySettings: []*serial.TypedMessage{
+							serial.ToTypedMessage(&tls.Config{
+								// No MTLS_CLIENT_CERT: the client presents nothing,
+								// so the server must reject the handshake.
+								PinnedPeerCertSha256: [][]byte{serverCertHash[:]},
+							}),
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	common.Must(err)
+	defer CloseAllServers(servers)
+
+	if err := testTCPConn(clientPort, 1024, time.Second*20)(); err == nil {
+		t.Fatal("expected handshake failure when the client presents no certificate")
+	}
+}
+
 func TestAutoIssuingCertificate(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		// Not supported on Windows yet.
