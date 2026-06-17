@@ -1409,12 +1409,12 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 }
 
 type FragmentMask struct {
-	Packets  string     `json:"packets"`
-	Length   Int32Range `json:"length"`
-	Delay    Int32Range `json:"delay"`
-	Lengths  []string   `json:"lengths"`
-	Delays   []string   `json:"delays"`
-	MaxSplit Int32Range `json:"maxSplit"`
+	Packets  string       `json:"packets"`
+	Length   Int32Range   `json:"length"`
+	Delay    Int32Range   `json:"delay"`
+	Lengths  []Int32Range `json:"lengths"`
+	Delays   []Int32Range `json:"delays"`
+	MaxSplit Int32Range   `json:"maxSplit"`
 }
 
 func (c *FragmentMask) Build() (proto.Message, error) {
@@ -1448,25 +1448,17 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 	config.DelayMin = int64(c.Delay.From)
 	config.DelayMax = int64(c.Delay.To)
 
-	for _, s := range c.Lengths {
-		from, to, err := ParseRangeString(s)
-		if err != nil {
-			return nil, errors.New("Invalid lengths entry: ", s).Base(err)
-		}
-		if from == 0 {
+	for _, r := range c.Lengths {
+		if r.From == 0 {
 			return nil, errors.New("lengths entry min can't be 0")
 		}
-		config.LengthsMin = append(config.LengthsMin, int64(from))
-		config.LengthsMax = append(config.LengthsMax, int64(to))
+		config.LengthsMin = append(config.LengthsMin, int64(r.From))
+		config.LengthsMax = append(config.LengthsMax, int64(r.To))
 	}
 
-	for _, s := range c.Delays {
-		from, to, err := ParseRangeString(s)
-		if err != nil {
-			return nil, errors.New("Invalid delays entry: ", s).Base(err)
-		}
-		config.DelaysMin = append(config.DelaysMin, int64(from))
-		config.DelaysMax = append(config.DelaysMax, int64(to))
+	for _, r := range c.Delays {
+		config.DelaysMin = append(config.DelaysMin, int64(r.From))
+		config.DelaysMax = append(config.DelaysMax, int64(r.To))
 	}
 
 	config.MaxSplitMin = int64(c.MaxSplit.From)
