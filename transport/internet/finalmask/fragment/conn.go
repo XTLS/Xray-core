@@ -46,21 +46,19 @@ func (c *fragmentConn) Splice() bool {
 // lengthForSegment returns the length range (min, max) for the given segment index (0-based).
 // Clamps to the last entry when the index exceeds the list length.
 func (c *fragmentConn) lengthForSegment(segIdx int) (int64, int64) {
-	idx := segIdx
-	if idx >= len(c.config.LengthsMin) {
-		idx = len(c.config.LengthsMin) - 1
+	if segIdx >= len(c.config.LengthsMin) {
+		segIdx = len(c.config.LengthsMin) - 1
 	}
-	return c.config.LengthsMin[idx], c.config.LengthsMax[idx]
+	return c.config.LengthsMin[segIdx], c.config.LengthsMax[segIdx]
 }
 
 // delayForSegment returns the delay range (min, max) for the given segment index (0-based).
 // Clamps to the last entry when the index exceeds the list length.
 func (c *fragmentConn) delayForSegment(segIdx int) (int64, int64) {
-	idx := segIdx
-	if idx >= len(c.config.DelaysMin) {
-		idx = len(c.config.DelaysMin) - 1
+	if segIdx >= len(c.config.DelaysMin) {
+		segIdx = len(c.config.DelaysMin) - 1
 	}
-	return c.config.DelaysMin[idx], c.config.DelaysMax[idx]
+	return c.config.DelaysMin[segIdx], c.config.DelaysMax[segIdx]
 }
 
 // allDelaysZero returns true if all configured delay max values are zero (or no delays configured).
