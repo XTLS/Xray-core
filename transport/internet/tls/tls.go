@@ -157,6 +157,23 @@ func copyConfig(c *tls.Config) *utls.Config {
 		EncryptedClientHelloConfigList: c.EncryptedClientHelloConfigList,
 		NextProtos:                     c.NextProtos,
 	}
+	// Carry client certificates into the uTLS config so mutual TLS works on the
+	// uTLS (fingerprinted) path. Without this, certificates set on the
+	// crypto/tls config are dropped and a server requiring a client certificate
+	// rejects the handshake.
+	for _, cert := range c.Certificates {
+		config.Certificates = append(config.Certificates, utls.Certificate{
+			Certificate: cert.Certificate,
+			PrivateKey:  cert.PrivateKey,
+			Leaf:        cert.Leaf,
+		})
+	}
+	if len(config.Certificates) > 0 {
+		certs := config.Certificates
+		config.GetClientCertificate = func(*utls.CertificateRequestInfo) (*utls.Certificate, error) {
+			return &certs[0], nil
+		}
+	}
 	return config
 }
 

@@ -411,6 +411,24 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		config.GetCertificate = getNewGetCertificateFunc(c.BuildCertificates(), c.RejectUnknownSni)
 	}
 
+	// Present a client certificate for mutual TLS on outbound connections.
+	// Configured certificates are otherwise wired only into GetCertificate (the
+	// server-side selection callback), so an Xray client never offers a
+	// certificate when a server requests one. Set both Certificates (so the
+	// standard tls.Client path works and copyConfig can carry them to the
+	// uTLS/fingerprinted path) and GetClientCertificate. Client-only; harmless
+	// server-side, where GetCertificate takes precedence.
+	if built := c.BuildCertificates(); len(built) > 0 {
+		clientCerts := make([]tls.Certificate, 0, len(built))
+		for _, bc := range built {
+			clientCerts = append(clientCerts, *bc)
+		}
+		config.Certificates = clientCerts
+		config.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &clientCerts[0], nil
+		}
+	}
+
 	if sn := c.parseServerName(); len(sn) > 0 {
 		config.ServerName = sn
 	}
