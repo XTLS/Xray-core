@@ -1788,12 +1788,15 @@ func (c *MkcpLegacy) Build() (proto.Message, error) {
 }
 
 type Salamander struct {
-	Password   string      `json:"password"`
-	PacketSize *Int32Range `json:"packetSize"`
+	Password   string     `json:"password"`
+	PacketSize Int32Range `json:"packetSize"`
 }
 
 func (c *Salamander) Build() (proto.Message, error) {
-	if c.PacketSize != nil {
+	if c.PacketSize.To > 0 {
+		if c.PacketSize.From <= 0 || c.PacketSize.To > 2048 {
+			return nil, errors.New("gecko: invalid min/max packet size")
+		}
 		return &salamander.GeckoConfig{
 			Password:      c.Password,
 			MinPacketSize: c.PacketSize.From,
