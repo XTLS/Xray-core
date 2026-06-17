@@ -603,6 +603,10 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 		certificate.Usage = tls.Certificate_AUTHORITY_VERIFY
 	case "issue":
 		certificate.Usage = tls.Certificate_AUTHORITY_ISSUE
+	case "client-cert":
+		certificate.Usage = tls.Certificate_MTLS_CLIENT_CERT
+	case "client-ca":
+		certificate.Usage = tls.Certificate_MTLS_CLIENT_CA
 	default:
 		certificate.Usage = tls.Certificate_ENCIPHERMENT
 	}
@@ -653,6 +657,7 @@ type TLSConfig struct {
 	ECHServerKeys           string           `json:"echServerKeys"`
 	ECHConfigList           string           `json:"echConfigList"`
 	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
+	ClientAuth              string           `json:"clientAuth"`
 }
 
 // Build implements Buildable.
@@ -741,6 +746,7 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		config.EchSocketSettings = ss
 	}
 
+	config.ClientAuth = c.ClientAuth
 	return config, nil
 }
 

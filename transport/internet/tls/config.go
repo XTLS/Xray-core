@@ -87,6 +87,27 @@ func (c *Config) getCustomCA() []*Certificate {
 	return certs
 }
 
+func (c *Config) getClientCert() []*Certificate {
+	certs := make([]*Certificate, 0, len(c.Certificate))
+	for _, certificate := range c.Certificate {
+		if certificate.Usage == Certificate_MTLS_CLIENT_CERT {
+			certs = append(certs, certificate)
+			setupHotReload(certificate)
+		}
+	}
+	return certs
+}
+
+func (c *Config) getClientCA() []*Certificate {
+	certs := make([]*Certificate, 0, len(c.Certificate))
+	for _, certificate := range c.Certificate {
+		if certificate.Usage == Certificate_MTLS_CLIENT_CA {
+			certs = append(certs, certificate)
+		}
+	}
+	return certs
+}
+
 func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	var access sync.RWMutex
 
@@ -234,6 +255,19 @@ func (c *Config) getCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, e
 	return defaultCert, nil
 }
 
+func (c *Config) getClientCertificate(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	for _, cert := range c.Certificate {
+		parsed := cert.getX509KeyPair()
+		if cert.Usage != Certificate_MTLS_CLIENT_CERT || parsed == nil {
+			continue
+		}
+		if err := cri.SupportsCertificate(parsed); err == nil {
+			return parsed, nil
+		}
+	}
+	return nil, errNoCertificates
+}
+
 func (c *Config) parseServerName() string {
 	if IsFromMitm(c.ServerName) {
 		return ""
@@ -376,6 +410,18 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		}
 		config.GetCertificate = c.getCertificate
 	}
+	if len(c.getClientCert()) > 0 {
+		config.GetClientCertificate = c.getClientCertificate
+	}
+	if clientCA := c.getClientCA(); len(clientCA) > 0 {
+		clientCAPool := x509.NewCertPool()
+		for _, cert := range clientCA {
+			if !clientCAPool.AppendCertsFromPEM(cert.Certificate) {
+				errors.LogError(context.Background(), errors.New("failed to append client CA certificate"))
+			}
+		}
+		config.ClientCAs = clientCAPool
+	}
 
 	if sn := c.parseServerName(); len(sn) > 0 {
 		config.ServerName = sn
@@ -438,6 +484,11 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		}
 	}
 
+	config.ClientAuth = ParseClientAuth(c.ClientAuth)
+	if config.ClientAuth >= tls.VerifyClientCertIfGiven && config.ClientCAs == nil {
+		errors.LogWarning(context.Background(), "clientAuth is set to ", c.ClientAuth, " but no client CA is provided")
+	}
+
 	return config
 }
 
@@ -483,17 +534,17 @@ func ConfigFromStreamSettings(settings *internet.MemoryStreamConfig) *Config {
 	return config
 }
 
-func ParseCurveName(curveNames []string) []tls.CurveID {
-	curveMap := map[string]tls.CurveID{
-		"curvep256":          tls.CurveP256,
-		"curvep384":          tls.CurveP384,
-		"curvep521":          tls.CurveP521,
-		"x25519":             tls.X25519,
-		"x25519mlkem768":     tls.X25519MLKEM768,
-		"secp256r1mlkem768":  tls.SecP256r1MLKEM768,
-		"secp384r1mlkem1024": tls.SecP384r1MLKEM1024,
-	}
+var curveMap = map[string]tls.CurveID{
+	"curvep256":          tls.CurveP256,
+	"curvep384":          tls.CurveP384,
+	"curvep521":          tls.CurveP521,
+	"x25519":             tls.X25519,
+	"x25519mlkem768":     tls.X25519MLKEM768,
+	"secp256r1mlkem768":  tls.SecP256r1MLKEM768,
+	"secp384r1mlkem1024": tls.SecP384r1MLKEM1024,
+}
 
+func ParseCurveName(curveNames []string) []tls.CurveID {
 	var curveIDs []tls.CurveID
 	for _, name := range curveNames {
 		if curveID, ok := curveMap[strings.ToLower(name)]; ok {
@@ -503,6 +554,25 @@ func ParseCurveName(curveNames []string) []tls.CurveID {
 		}
 	}
 	return curveIDs
+}
+
+var clientAuthMap = map[string]tls.ClientAuthType{
+	"noclientcert":               tls.NoClientCert,
+	"requestclientcert":          tls.RequestClientCert,
+	"requireanyclientcert":       tls.RequireAnyClientCert,
+	"verifyclientcertifgiven":    tls.VerifyClientCertIfGiven,
+	"requireandverifyclientcert": tls.RequireAndVerifyClientCert,
+}
+
+func ParseClientAuth(clientAuth string) tls.ClientAuthType {
+	if clientAuth == "" {
+		return tls.NoClientCert
+	}
+	if clientAuthType, ok := clientAuthMap[strings.ToLower(clientAuth)]; ok {
+		return clientAuthType
+	}
+	errors.LogWarning(context.Background(), "unsupported clientAuth: "+clientAuth)
+	return tls.NoClientCert
 }
 
 func IsFromMitm(str string) bool {

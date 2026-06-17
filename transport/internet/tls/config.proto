@@ -19,6 +19,8 @@ message Certificate {
     ENCIPHERMENT = 0;
     AUTHORITY_VERIFY = 1;
     AUTHORITY_ISSUE = 2;
+    MTLS_CLIENT_CERT = 3;
+    MTLS_CLIENT_CA = 4;
   }
 
   Usage usage = 3;
@@ -91,4 +93,6 @@ message Config {
   SocketConfig ech_socket_settings = 21;
 
   repeated bytes pinned_peer_cert_sha256 = 22;
+
+  string client_auth = 23;
 }
