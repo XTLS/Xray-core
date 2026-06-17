@@ -1444,11 +1444,9 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 			config.LengthsMin = append(config.LengthsMin, int64(r.From))
 			config.LengthsMax = append(config.LengthsMax, int64(r.To))
 		}
-	} else if c.Length.To > 0 {
+	} else {
 		config.LengthsMin = append(config.LengthsMin, int64(c.Length.From))
 		config.LengthsMax = append(config.LengthsMax, int64(c.Length.To))
-	} else {
-		return nil, errors.New("either length or lengths must be set")
 	}
 
 	if config.LengthsMin[len(config.LengthsMin)-1] == 0 {

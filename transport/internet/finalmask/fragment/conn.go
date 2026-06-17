@@ -93,8 +93,7 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 		for from := 0; ; {
 			lengthMin, lengthMax := c.lengthForSegment(int(splitNum))
 			to := from + int(crypto.RandBetween(lengthMin, lengthMax))
-			splitNum++
-			if to > len(data) || (maxSplit > 0 && splitNum >= maxSplit) {
+			if to > len(data) || (maxSplit > 0 && splitNum+1 >= maxSplit) {
 				to = len(data)
 			}
 			l := to - from
@@ -109,7 +108,7 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 			if allZero {
 				hello = append(hello, buff[:5+l]...)
 			} else {
-				delayMin, delayMax := c.delayForSegment(int(splitNum) - 1)
+				delayMin, delayMax := c.delayForSegment(int(splitNum))
 				_, err := c.Conn.Write(buff[:5+l])
 				if delayMax > 0 {
 					time.Sleep(time.Duration(crypto.RandBetween(delayMin, delayMax)) * time.Millisecond)
@@ -118,6 +117,7 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 					return 0, err
 				}
 			}
+			splitNum++
 			if from == len(data) {
 				if len(hello) > 0 {
 					_, err := c.Conn.Write(hello)
@@ -144,8 +144,7 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 	for from := 0; ; {
 		lengthMin, lengthMax := c.lengthForSegment(int(splitNum))
 		to := from + int(crypto.RandBetween(lengthMin, lengthMax))
-		splitNum++
-		if to > len(p) || (maxSplit > 0 && splitNum >= maxSplit) {
+		if to > len(p) || (maxSplit > 0 && splitNum+1 >= maxSplit) {
 			to = len(p)
 		}
 		n, err := c.Conn.Write(p[from:to])
@@ -153,10 +152,11 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 		if err != nil {
 			return from, err
 		}
-		delayMin, delayMax := c.delayForSegment(int(splitNum) - 1)
+		delayMin, delayMax := c.delayForSegment(int(splitNum))
 		if delayMax > 0 {
 			time.Sleep(time.Duration(crypto.RandBetween(delayMin, delayMax)) * time.Millisecond)
 		}
+		splitNum++
 		if from >= len(p) {
 			return from, nil
 		}
