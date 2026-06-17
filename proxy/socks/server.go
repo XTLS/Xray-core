@@ -229,10 +229,13 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 		}
 		changeRemote.Do(func() {
 			if inbound != nil {
+				newInbound := *inbound
 				// change source to real remote UDP address
-				inbound.Source = net.DestinationFromAddr(conn.RemoteAddr())
-				inbound.Local = net.DestinationFromAddr(conn.LocalAddr())
-				errors.LogInfo(ctx, "client UDP connection from ", inbound.Source)
+				newInbound.Source = net.DestinationFromAddr(conn.RemoteAddr())
+				newInbound.Local = net.DestinationFromAddr(conn.LocalAddr())
+				inbound = &newInbound
+				ctx = session.ContextWithInbound(ctx, &newInbound)
+				errors.LogInfo(ctx, "client UDP connection from ", newInbound.Source)
 			}
 		})
 
