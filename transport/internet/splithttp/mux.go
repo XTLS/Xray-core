@@ -30,6 +30,7 @@ func (c *XmuxClient) AddRunning() {
 }
 
 func (c *XmuxClient) DoneRunning() {
+	c.Running.Add(-1)
 	c.maybeClose()
 }
 
