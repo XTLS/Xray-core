@@ -31,6 +31,10 @@ type Config struct {
 	DelayMax      int64                  `protobuf:"varint,6,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
 	MaxSplitMin   int64                  `protobuf:"varint,7,opt,name=max_split_min,json=maxSplitMin,proto3" json:"max_split_min,omitempty"`
 	MaxSplitMax   int64                  `protobuf:"varint,8,opt,name=max_split_max,json=maxSplitMax,proto3" json:"max_split_max,omitempty"`
+	LengthsMin    []int64                `protobuf:"varint,9,rep,packed,name=lengths_min,json=lengthsMin,proto3" json:"lengths_min,omitempty"`
+	LengthsMax    []int64                `protobuf:"varint,10,rep,packed,name=lengths_max,json=lengthsMax,proto3" json:"lengths_max,omitempty"`
+	DelaysMin     []int64                `protobuf:"varint,11,rep,packed,name=delays_min,json=delaysMin,proto3" json:"delays_min,omitempty"`
+	DelaysMax     []int64                `protobuf:"varint,12,rep,packed,name=delays_max,json=delaysMax,proto3" json:"delays_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -119,6 +123,34 @@ func (x *Config) GetMaxSplitMax() int64 {
 		return x.MaxSplitMax
 	}
 	return 0
+}
+
+func (x *Config) GetLengthsMin() []int64 {
+	if x != nil {
+		return x.LengthsMin
+	}
+	return nil
+}
+
+func (x *Config) GetLengthsMax() []int64 {
+	if x != nil {
+		return x.LengthsMax
+	}
+	return nil
+}
+
+func (x *Config) GetDelaysMin() []int64 {
+	if x != nil {
+		return x.DelaysMin
+	}
+	return nil
+}
+
+func (x *Config) GetDelaysMax() []int64 {
+	if x != nil {
+		return x.DelaysMax
+	}
+	return nil
 }
 
 var File_transport_internet_finalmask_fragment_config_proto protoreflect.FileDescriptor

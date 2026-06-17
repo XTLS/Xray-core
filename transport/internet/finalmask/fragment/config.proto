@@ -15,4 +15,8 @@ message Config {
   int64 delay_max = 6;
   int64 max_split_min = 7;
   int64 max_split_max = 8;
+  repeated int64 lengths_min = 9;
+  repeated int64 lengths_max = 10;
+  repeated int64 delays_min = 11;
+  repeated int64 delays_max = 12;
 }
