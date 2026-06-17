@@ -102,7 +102,7 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 			buff[3] = byte(l >> 8)
 			buff[4] = byte(l)
 			delayMin, delayMax := c.delayForSegment(int(splitNum) - 1)
-			if delayMax == 0 && c.config.DelayMax == 0 && len(c.config.DelaysMin) == 0 {
+			if delayMax == 0 {
 				hello = append(hello, buff[:5+l]...)
 			} else {
 				_, err := c.Conn.Write(buff[:5+l])

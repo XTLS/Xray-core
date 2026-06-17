@@ -1442,7 +1442,7 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 	config.LengthMin = int64(c.Length.From)
 	config.LengthMax = int64(c.Length.To)
 	if config.LengthMin == 0 && len(c.Lengths) == 0 {
-		return nil, errors.New("LengthMin can't be 0")
+		return nil, errors.New("either length or lengths must be set")
 	}
 
 	config.DelayMin = int64(c.Delay.From)
