@@ -11,7 +11,6 @@ import (
 	"os"
 	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -2140,14 +2139,14 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	}
 
 	if c.FinalMask != nil {
-		for _, mask := range slices.Backward(c.FinalMask.Tcp) {
+		for _, mask := range c.FinalMask.Tcp {
 			u, err := mask.Build(true)
 			if err != nil {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
 			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(u))
 		}
-		for _, mask := range slices.Backward(c.FinalMask.Udp) {
+		for _, mask := range c.FinalMask.Udp {
 			u, err := mask.Build(false)
 			if err != nil {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
