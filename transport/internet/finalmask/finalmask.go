@@ -139,7 +139,7 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 		for i := range c.conns {
 			n, _, err = c.conns[i].ReadFrom(buf)
 			if err != nil {
-				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", n, " index ", i)
+				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", n)
 				break
 			}
 			buf = buf[c.sizes[i] : n+c.sizes[i]]
