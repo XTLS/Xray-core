@@ -61,14 +61,9 @@ func (c *fragmentConn) delayForSegment(segIdx int) (int64, int64) {
 	return c.config.DelaysMin[segIdx], c.config.DelaysMax[segIdx]
 }
 
-// allDelaysZero returns true if all configured delay max values are zero (or no delays configured).
-func (c *fragmentConn) allDelaysZero() bool {
-	for _, d := range c.config.DelaysMax {
-		if d != 0 {
-			return false
-		}
-	}
-	return true
+// mergeTlsHelloSegments returns true only when delays has exactly one zero entry.
+func (c *fragmentConn) mergeTlsHelloSegments() bool {
+	return len(c.config.DelaysMax) == 1 && c.config.DelaysMax[0] == 0
 }
 
 func (c *fragmentConn) Write(p []byte) (n int, err error) {
@@ -85,7 +80,7 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 		data := p[5:recordLen]
 		buff := make([]byte, 2048)
 		var hello []byte
-		allZero := c.allDelaysZero()
+		mergeHello := c.mergeTlsHelloSegments()
 		maxSplit := crypto.RandBetween(c.config.MaxSplitMin, c.config.MaxSplitMax)
 		var splitNum int64
 		for from := 0; ; {
@@ -103,7 +98,7 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 			from = to
 			buff[3] = byte(l >> 8)
 			buff[4] = byte(l)
-			if allZero {
+			if mergeHello {
 				hello = append(hello, buff[:5+l]...)
 			} else {
 				delayMin, delayMax := c.delayForSegment(int(splitNum))
