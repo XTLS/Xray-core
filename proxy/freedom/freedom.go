@@ -62,7 +62,7 @@ func init() {
 	defaultBlockPrivateRule = &FinalRule{
 		action:  RuleAction_Block,
 		network: allNetworks,
-		ip:      &geodata.PrebuildPrivateIPMatcher{},
+		ip:      geodata.NewPrivateIPMatcher(),
 	}
 
 	defaultBlockAllRule = &FinalRule{

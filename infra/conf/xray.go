@@ -241,7 +241,7 @@ type OutboundDetourConfig struct {
 	TargetStrategy string           `json:"targetStrategy"`
 }
 
-var privateIPMatcher = geodata.PrebuildPrivateIPMatcher{}
+var privateIPMatcher = geodata.NewPrivateIPMatcher()
 
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 	if c.StreamSetting == nil || c.ProxySettings == nil || c.StreamSetting.SocketSettings == nil {

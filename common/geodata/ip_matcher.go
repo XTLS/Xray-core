@@ -36,84 +36,60 @@ type IPMatcher interface {
 	SetReverse(reverse bool)
 }
 
-type PrebuildPrivateIPMatcher struct {
-	reverse bool
-}
-
-func (m *PrebuildPrivateIPMatcher) Match(ip net.IP) bool {
-	ip4 := ip.To4()
-	ip16 := ip.To16()
-	if ip4 == nil && ip16 == nil {
-		return false
-	}
-	private := ip.IsPrivate() || ip.IsLoopback() || ip.IsMulticast() || ip.IsLinkLocalUnicast()
-	if !private {
-		if ip4 != nil {
-			private = ip4[0] == 0 ||
-				// 100.64.0.0/10
-				(ip4[0] == 100 && ip4[1]&0xc0 == 64) ||
-				// 192.0.0/2.0/24
-				(ip4[0] == 192 && ((ip4[1] == 0 && ip4[2] == 0) || (ip4[1] == 0 && ip4[2] == 2) || (ip4[1] == 88 && ip4[2] == 99))) ||
-				// 198.18.0.0/15
-				(ip4[0] == 198 && (ip4[1] == 18 || ip4[1] == 19 || (ip4[1] == 51 && ip4[2] == 100))) ||
-				// 203.0.113.0/24
-				(ip4[0] == 203 && ip4[1] == 0 && ip4[2] == 113) ||
-				ip4[0] >= 224
-		} else if ip16 != nil {
-			private = ip.IsUnspecified()
-		}
-	}
-	return private != m.reverse
-}
-
-func (m *PrebuildPrivateIPMatcher) AnyMatch(ips []net.IP) bool {
-	for _, ip := range ips {
-		if m.Match(ip) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *PrebuildPrivateIPMatcher) Matches(ips []net.IP) bool {
-	if len(ips) == 0 {
-		return false
-	}
-	for _, ip := range ips {
-		if !m.Match(ip) {
-			return false
-		}
-	}
-	return true
-}
-
-func (m *PrebuildPrivateIPMatcher) FilterIPs(ips []net.IP) (matched []net.IP, unmatched []net.IP) {
-	matched = make([]net.IP, 0, len(ips))
-	unmatched = make([]net.IP, 0, len(ips))
-	for _, ip := range ips {
-		if len(ip) == 0 {
-			continue
-		}
-		if m.Match(ip) {
-			matched = append(matched, ip)
-		} else {
-			unmatched = append(unmatched, ip)
-		}
-	}
-	return
-}
-
-func (m *PrebuildPrivateIPMatcher) ToggleReverse() {
-	m.reverse = !m.reverse
-}
-
-func (m *PrebuildPrivateIPMatcher) SetReverse(reverse bool) {
-	m.reverse = reverse
-}
-
 type IPSet struct {
 	ipv4, ipv6 *netipx.IPSet
 	max4, max6 uint8
+}
+
+// privateCIDRStrings defines the CIDRs used for geoip:private matching.
+// These cover all IANA special-purpose addresses: private, loopback, multicast,
+// link-local, unspecified, CGNAT, TEST-NET, benchmark, and 6to4 relay.
+var privateCIDRStrings = []string{
+	"0.0.0.0/8",
+	"10.0.0.0/8",
+	"100.64.0.0/10",
+	"127.0.0.0/8",
+	"169.254.0.0/16",
+	"172.16.0.0/12",
+	"192.0.0.0/24",
+	"192.0.2.0/24",
+	"192.88.99.0/24",
+	"192.168.0.0/16",
+	"198.18.0.0/15",
+	"198.51.100.0/24",
+	"203.0.113.0/24",
+	"224.0.0.0/3",
+	"::1/128",
+	"::/128",
+	"fc00::/7",
+	"fe80::/10",
+	"ff00::/8",
+}
+
+var (
+	privateIPSetCache *IPSet
+	privateIPSetOnce  sync.Once
+)
+
+func getPrivateIPSet() *IPSet {
+	privateIPSetOnce.Do(func() {
+		cidrs := make([]*CIDR, 0, len(privateCIDRStrings))
+		for _, s := range privateCIDRStrings {
+			cidr, err := parseCIDR(s)
+			if err != nil {
+				continue
+			}
+			cidrs = append(cidrs, cidr)
+		}
+		privateIPSetCache, _ = newIPSetFactory().CreateFromCIDRs(cidrs)
+	})
+	return privateIPSetCache
+}
+
+// NewPrivateIPMatcher returns a HeuristicIPMatcher prebuilt with all IANA
+// private/special-use IP ranges. It does not require geoip.dat.
+func NewPrivateIPMatcher() *HeuristicIPMatcher {
+	return &HeuristicIPMatcher{ipset: getPrivateIPSet()}
 }
 
 type HeuristicIPMatcher struct {
@@ -1053,7 +1029,7 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 		}
 	}
 
-	var subs []IPMatcher
+	subs := make([]*HeuristicIPMatcher, 0, 4)
 
 	if len(posCustom) > 0 {
 		ipset, err := f.CreateFromCIDRs(posCustom)
@@ -1073,7 +1049,7 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 
 	posGeoip = slices.DeleteFunc(posGeoip, func(rule *GeoIPRule) bool {
 		if isPrivateGeoIPCode(rule.Code) {
-			subs = append(subs, &PrebuildPrivateIPMatcher{})
+			subs = append(subs, NewPrivateIPMatcher())
 			return true
 		}
 		return false
@@ -1088,7 +1064,9 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 
 	negGeoip = slices.DeleteFunc(negGeoip, func(rule *GeoIPRule) bool {
 		if isPrivateGeoIPCode(rule.Code) {
-			subs = append(subs, &PrebuildPrivateIPMatcher{reverse: true})
+			m := NewPrivateIPMatcher()
+			m.SetReverse(true)
+			subs = append(subs, m)
 			return true
 		}
 		return false
@@ -1107,7 +1085,7 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 	case 1:
 		return subs[0], nil
 	default:
-		return &GeneralMultiIPMatcher{matchers: subs}, nil
+		return &HeuristicMultiIPMatcher{matchers: subs}, nil
 	}
 }
 

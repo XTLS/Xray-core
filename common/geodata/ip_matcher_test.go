@@ -97,8 +97,8 @@ func TestIPMatcher(t *testing.T) {
 	}
 }
 
-func TestPrebuildPrivateIPMatcher(t *testing.T) {
-	matcher := &PrebuildPrivateIPMatcher{}
+func TestNewPrivateIPMatcher(t *testing.T) {
+	matcher := NewPrivateIPMatcher()
 	for _, ip := range []string{
 		"0.1.2.3",
 		"10.1.2.3",
@@ -132,7 +132,7 @@ func TestPrebuildPrivateIPMatcher(t *testing.T) {
 	}
 }
 
-func TestGeoIPPrivateUsesPrebuildMatcher(t *testing.T) {
+func TestGeoIPPrivateUsesBuiltinMatcher(t *testing.T) {
 	matcher := buildIPMatcher("geoip:private")
 	if !matcher.Match(xnet.ParseAddress("100.64.0.1").IP()) {
 		t.Fatal("expected geoip:private to match without loading geoip.dat")
