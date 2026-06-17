@@ -47,6 +47,9 @@ func (c *Config) getCertPool() (*x509.CertPool, error) {
 		return nil, errors.New("system root").AtWarning().Base(err)
 	}
 	for _, cert := range c.Certificate {
+		if cert.Usage != Certificate_AUTHORITY_VERIFY {
+			continue
+		}
 		if !pool.AppendCertsFromPEM(cert.Certificate) {
 			return nil, errors.New("append cert to root").AtWarning().Base(err)
 		}

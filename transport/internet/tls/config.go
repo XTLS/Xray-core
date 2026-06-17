@@ -38,6 +38,9 @@ func ParseCertificate(c *cert.Certificate) *Certificate {
 func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 	root := x509.NewCertPool()
 	for _, cert := range c.Certificate {
+		if cert.Usage != Certificate_AUTHORITY_VERIFY {
+			continue
+		}
 		if !root.AppendCertsFromPEM(cert.Certificate) {
 			return nil, errors.New("failed to append cert").AtWarning()
 		}
