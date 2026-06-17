@@ -1439,26 +1439,26 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 		}
 	}
 
-	config.LengthMin = int64(c.Length.From)
-	config.LengthMax = int64(c.Length.To)
-	if config.LengthMin == 0 && len(c.Lengths) == 0 {
+	if len(c.Lengths) > 0 {
+		for _, r := range c.Lengths {
+			config.LengthsMin = append(config.LengthsMin, int64(r.From))
+			config.LengthsMax = append(config.LengthsMax, int64(r.To))
+		}
+	} else if c.Length.To > 0 {
+		config.LengthsMin = append(config.LengthsMin, int64(c.Length.From))
+		config.LengthsMax = append(config.LengthsMax, int64(c.Length.To))
+	} else {
 		return nil, errors.New("either length or lengths must be set")
 	}
 
-	config.DelayMin = int64(c.Delay.From)
-	config.DelayMax = int64(c.Delay.To)
-
-	for _, r := range c.Lengths {
-		if r.From == 0 {
-			return nil, errors.New("lengths entry min can't be 0")
+	if len(c.Delays) > 0 {
+		for _, r := range c.Delays {
+			config.DelaysMin = append(config.DelaysMin, int64(r.From))
+			config.DelaysMax = append(config.DelaysMax, int64(r.To))
 		}
-		config.LengthsMin = append(config.LengthsMin, int64(r.From))
-		config.LengthsMax = append(config.LengthsMax, int64(r.To))
-	}
-
-	for _, r := range c.Delays {
-		config.DelaysMin = append(config.DelaysMin, int64(r.From))
-		config.DelaysMax = append(config.DelaysMax, int64(r.To))
+	} else if c.Delay.To > 0 {
+		config.DelaysMin = append(config.DelaysMin, int64(c.Delay.From))
+		config.DelaysMax = append(config.DelaysMax, int64(c.Delay.To))
 	}
 
 	config.MaxSplitMin = int64(c.MaxSplit.From)
