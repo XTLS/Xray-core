@@ -1460,7 +1460,7 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 			config.DelaysMin = append(config.DelaysMin, int64(r.From))
 			config.DelaysMax = append(config.DelaysMax, int64(r.To))
 		}
-	} else if c.Delay.To > 0 {
+	} else {
 		config.DelaysMin = append(config.DelaysMin, int64(c.Delay.From))
 		config.DelaysMax = append(config.DelaysMax, int64(c.Delay.To))
 	}
