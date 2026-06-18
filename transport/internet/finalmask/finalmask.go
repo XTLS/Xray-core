@@ -3,6 +3,7 @@ package finalmask
 import (
 	"context"
 	"net"
+	"slices"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -28,7 +29,7 @@ func NewUdpmaskManager(udpmasks []Udpmask) *UdpmaskManager {
 func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
 	var sizes []int
 	var conns []net.PacketConn
-	for i, mask := range m.udpmasks {
+	for i, mask := range slices.Backward(m.udpmasks) {
 		if _, ok := mask.(headerConn); ok {
 			conn, err := mask.WrapPacketConnClient(nil, i, len(m.udpmasks)-1)
 			if err != nil {
@@ -61,7 +62,7 @@ func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketCon
 func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
 	var sizes []int
 	var conns []net.PacketConn
-	for i, mask := range m.udpmasks {
+	for i, mask := range slices.Backward(m.udpmasks) {
 		if _, ok := mask.(headerConn); ok {
 			conn, err := mask.WrapPacketConnServer(nil, i, len(m.udpmasks)-1)
 			if err != nil {
@@ -124,7 +125,7 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 		if err != nil {
 			return n, addr, err
 		}
-		b = b[:n]
+		buf := b[:n]
 
 		sum := 0
 		for _, size := range c.sizes {
@@ -132,24 +133,24 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 		}
 
 		if n < sum {
-			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", len(b))
+			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", n)
 			continue
 		}
 
 		for i := range c.conns {
-			n, _, err = c.conns[i].ReadFrom(b)
+			n, _, err = c.conns[i].ReadFrom(buf)
 			if err != nil {
-				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", len(b))
+				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", n)
 				break
 			}
-			b = b[c.sizes[i] : n+c.sizes[i]]
+			buf = buf[c.sizes[i] : n+c.sizes[i]]
 		}
 
 		if err != nil {
 			continue
 		}
 
-		return copy(p, b), addr, nil
+		return copy(p, buf), addr, nil
 	}
 }
 
@@ -212,7 +213,7 @@ func NewTcpmaskManager(tcpmasks []Tcpmask) *TcpmaskManager {
 
 func (m *TcpmaskManager) WrapConnClient(raw net.Conn) (net.Conn, error) {
 	var err error
-	for _, mask := range m.tcpmasks {
+	for _, mask := range slices.Backward(m.tcpmasks) {
 		raw, err = mask.WrapConnClient(raw)
 		if err != nil {
 			return nil, err
@@ -223,7 +224,7 @@ func (m *TcpmaskManager) WrapConnClient(raw net.Conn) (net.Conn, error) {
 
 func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 	var err error
-	for _, mask := range m.tcpmasks {
+	for _, mask := range slices.Backward(m.tcpmasks) {
 		raw, err = mask.WrapConnServer(raw)
 		if err != nil {
 			return nil, err

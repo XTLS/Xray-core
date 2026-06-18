@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -37,8 +38,9 @@ func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
 	}
 
 	config.Endpoint = c.Endpoint
-	// default 0
-	config.KeepAlive = c.KeepAlive
+	if c.KeepAlive != 0 {
+		config.KeepAlive = strconv.FormatUint(uint64(c.KeepAlive), 10)
+	}
 	if c.AllowedIPs == nil {
 		config.AllowedIps = []string{"0.0.0.0/0", "::0/0"}
 	} else {
@@ -56,7 +58,6 @@ type WireGuardConfig struct {
 	Address        []string               `json:"address"`
 	Peers          []*WireGuardPeerConfig `json:"peers"`
 	MTU            int32                  `json:"mtu"`
-	NumWorkers     int32                  `json:"workers"`
 	Reserved       []byte                 `json:"reserved"`
 	DomainStrategy string                 `json:"domainStrategy"`
 }
@@ -93,9 +94,6 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	} else {
 		config.Mtu = c.MTU
 	}
-	// these a fallback code exists in wireguard-go code,
-	// we don't need to process fallback manually
-	config.NumWorkers = c.NumWorkers
 
 	if len(c.Reserved) != 0 && len(c.Reserved) != 3 {
 		return nil, errors.New(`"reserved" should be empty or 3 bytes`)

@@ -10,7 +10,7 @@ message PeerConfig {
   string public_key = 1;
   string pre_shared_key = 2;
   string endpoint = 3;
-  uint32 keep_alive = 4;
+  string keep_alive = 4;
   repeated string allowed_ips = 5;
 }
 
@@ -26,7 +26,7 @@ message DeviceConfig {
   repeated string endpoint = 2;
   repeated PeerConfig peers = 3;
   int32 mtu = 4;
-  int32 num_workers = 5;
+
   bytes reserved = 6;
   DomainStrategy domain_strategy = 7;
   bool is_client = 8;
