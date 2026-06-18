@@ -70,13 +70,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	if h.socketSettings != nil {
 		trustedXFF = h.socketSettings.TrustedXForwardedFor
 	}
-	forwardedAddr := http_proto.ParseTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
-	if forwardedAddr != nil && forwardedAddr.Family().IsIP() {
-		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddr.IP(),
-			Port: int(0),
-		}
-	}
+	remoteAddr = http_proto.ApplyTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
 
 	h.ln.addConn(NewConnection(conn, remoteAddr, extraReader, h.ln.config.HeartbeatPeriod))
 }

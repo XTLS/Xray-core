@@ -85,13 +85,7 @@ func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
 	if s.socketSettings != nil {
 		trustedXFF = s.socketSettings.TrustedXForwardedFor
 	}
-	forwardedAddr := http_proto.ParseTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
-	if forwardedAddr != nil && forwardedAddr.Family().IsIP() {
-		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddr.IP(),
-			Port: int(0),
-		}
-	}
+	remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 
 	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }

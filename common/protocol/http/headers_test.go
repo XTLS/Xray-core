@@ -12,15 +12,15 @@ import (
 	. "github.com/xtls/xray-core/common/protocol/http"
 )
 
-func TestParseTrustedXForwardedFor(t *testing.T) {
+func TestApplyTrustedXForwardedFor(t *testing.T) {
 	remoteAddr := &gonet.TCPAddr{IP: gonet.ParseIP("127.0.0.1"), Port: 12345}
 
 	t.Run("ignore X-Forwarded-For without trusted header", func(t *testing.T) {
 		header := http.Header{}
 		header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
 
-		if addr := ParseTrustedXForwardedFor(header, nil, remoteAddr); addr != nil {
-			t.Fatalf("unexpected trusted X-Forwarded-For: %v", addr)
+		if addr := ApplyTrustedXForwardedFor(header, nil, remoteAddr); addr != remoteAddr {
+			t.Fatalf("unexpected remote address: %v", addr)
 		}
 	})
 
@@ -29,9 +29,19 @@ func TestParseTrustedXForwardedFor(t *testing.T) {
 		header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
 		header.Add("X-Trusted-CDN", "")
 
-		addr := ParseTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, remoteAddr)
-		if addr != net.ParseAddress("129.78.138.66") {
-			t.Fatalf("unexpected trusted X-Forwarded-For: %v", addr)
+		addr := ApplyTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, remoteAddr)
+		if addr.String() != "129.78.138.66:0" {
+			t.Fatalf("unexpected remote address: %v", addr)
+		}
+	})
+
+	t.Run("ignore non-IP X-Forwarded-For", func(t *testing.T) {
+		header := http.Header{}
+		header.Add("X-Forwarded-For", "example.com")
+		header.Add("X-Trusted-CDN", "")
+
+		if addr := ApplyTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, remoteAddr); addr != remoteAddr {
+			t.Fatalf("unexpected remote address: %v", addr)
 		}
 	})
 }

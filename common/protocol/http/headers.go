@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	gonet "net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,18 +10,24 @@ import (
 	"github.com/xtls/xray-core/common/net"
 )
 
-// ParseTrustedXForwardedFor parses forwarding headers only when a configured trusted header is present.
-func ParseTrustedXForwardedFor(header http.Header, trusted []string, remoteAddr gonet.Addr) net.Address {
+// ApplyTrustedXForwardedFor returns remoteAddr overridden by X-Forwarded-For only when a configured trusted header is present.
+func ApplyTrustedXForwardedFor(header http.Header, trusted []string, remoteAddr net.Addr) net.Addr {
 	value := header.Get("X-Forwarded-For")
 	if value == "" {
-		return nil
+		return remoteAddr
 	}
 	for _, t := range trusted {
 		if len(header.Values(t)) > 0 {
 			if idx := strings.IndexByte(value, ','); idx >= 0 {
 				value = value[:idx]
 			}
-			return net.ParseAddress(value)
+			if addr := net.ParseAddress(value); addr.Family().IsIP() {
+				return &net.TCPAddr{
+					IP:   addr.IP(),
+					Port: 0,
+				}
+			}
+			return remoteAddr
 		}
 	}
 	if len(trusted) == 0 {
@@ -30,7 +35,7 @@ func ParseTrustedXForwardedFor(header http.Header, trusted []string, remoteAddr 
 	} else {
 		errors.LogError(context.Background(), `ignored potentially forged "X-Forwarded-For" from `, remoteAddr, `: `, value)
 	}
-	return nil
+	return remoteAddr
 }
 
 // RemoveHopByHopHeaders removes hop by hop headers in http header list.
