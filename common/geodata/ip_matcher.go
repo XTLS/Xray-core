@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/utils"
@@ -41,10 +42,10 @@ type IPSet struct {
 	max4, max6 uint8
 }
 
-// privateCIDRStrings defines the CIDRs used for geoip:private matching.
+// PrivateCIDRStrings defines the CIDRs used for geoip:private matching.
 // These cover all IANA special-purpose addresses: private, loopback, multicast,
 // link-local, unspecified, CGNAT, TEST-NET, benchmark, and 6to4 relay.
-var privateCIDRStrings = []string{
+var PrivateCIDRStrings = []string{
 	"0.0.0.0/8",
 	"10.0.0.0/8",
 	"100.64.0.0/10",
@@ -66,30 +67,14 @@ var privateCIDRStrings = []string{
 	"ff00::/8",
 }
 
-var (
-	privateIPSetCache *IPSet
-	privateIPSetOnce  sync.Once
-)
-
-func getPrivateIPSet() *IPSet {
-	privateIPSetOnce.Do(func() {
-		cidrs := make([]*CIDR, 0, len(privateCIDRStrings))
-		for _, s := range privateCIDRStrings {
-			cidr, err := parseCIDR(s)
-			if err != nil {
-				continue
-			}
-			cidrs = append(cidrs, cidr)
-		}
-		privateIPSetCache, _ = newIPSetFactory().CreateFromCIDRs(cidrs)
-	})
-	return privateIPSetCache
-}
-
-// NewPrivateIPMatcher returns a HeuristicIPMatcher prebuilt with all IANA
+// NewPrivateIPMatcher returns an IPMatcher prebuilt with all IANA
 // private/special-use IP ranges. It does not require geoip.dat.
-func NewPrivateIPMatcher() *HeuristicIPMatcher {
-	return &HeuristicIPMatcher{ipset: getPrivateIPSet()}
+func NewPrivateIPMatcher() IPMatcher {
+	rules, err := ParseIPRules(PrivateCIDRStrings)
+	common.Must(err)
+	m, err := IPReg.BuildIPMatcher(rules)
+	common.Must(err)
+	return m
 }
 
 type HeuristicIPMatcher struct {
@@ -1047,13 +1032,6 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: true})
 	}
 
-	posGeoip = slices.DeleteFunc(posGeoip, func(rule *GeoIPRule) bool {
-		if isPrivateGeoIPCode(rule.Code) {
-			subs = append(subs, NewPrivateIPMatcher())
-			return true
-		}
-		return false
-	})
 	if len(posGeoip) > 0 {
 		ipset, err := f.GetOrCreateFromGeoIPRules(posGeoip)
 		if err != nil {
@@ -1062,15 +1040,6 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 		subs = append(subs, &HeuristicIPMatcher{ipset: ipset, reverse: false})
 	}
 
-	negGeoip = slices.DeleteFunc(negGeoip, func(rule *GeoIPRule) bool {
-		if isPrivateGeoIPCode(rule.Code) {
-			m := NewPrivateIPMatcher()
-			m.SetReverse(true)
-			subs = append(subs, m)
-			return true
-		}
-		return false
-	})
 	if len(negGeoip) > 0 {
 		ipset, err := f.GetOrCreateFromGeoIPRules(negGeoip)
 		if err != nil {
