@@ -174,10 +174,10 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	if h.socketSettings != nil {
 		trustedXFF = h.socketSettings.TrustedXForwardedFor
 	}
-	forwardedAddrs := http_proto.ParseTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
-	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
+	forwardedAddr := http_proto.ParseTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
+	if forwardedAddr != nil && forwardedAddr.Family().IsIP() {
 		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddrs[0].IP(),
+			IP:   forwardedAddr.IP(),
 			Port: 0,
 		}
 	}

@@ -7,21 +7,20 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	. "github.com/xtls/xray-core/common/protocol/http"
 )
 
 func TestParseTrustedXForwardedFor(t *testing.T) {
-	clientAddr := &gonet.TCPAddr{IP: gonet.ParseIP("127.0.0.1"), Port: 12345}
+	remoteAddr := &gonet.TCPAddr{IP: gonet.ParseIP("127.0.0.1"), Port: 12345}
 
 	t.Run("ignore X-Forwarded-For without trusted header", func(t *testing.T) {
 		header := http.Header{}
 		header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
 
-		if addrs := ParseTrustedXForwardedFor(header, nil, clientAddr); addrs != nil {
-			t.Fatalf("unexpected trusted X-Forwarded-For: %v", addrs)
+		if addr := ParseTrustedXForwardedFor(header, nil, remoteAddr); addr != nil {
+			t.Fatalf("unexpected trusted X-Forwarded-For: %v", addr)
 		}
 	})
 
@@ -30,32 +29,9 @@ func TestParseTrustedXForwardedFor(t *testing.T) {
 		header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
 		header.Add("X-Trusted-CDN", "")
 
-		addrs := ParseTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, clientAddr)
-		if r := cmp.Diff(addrs, []net.Address{net.ParseAddress("129.78.138.66"), net.ParseAddress("129.78.64.103")}); r != "" {
-			t.Error(r)
-		}
-	})
-
-	t.Run("prefer X-Real-IP over X-Forwarded-For", func(t *testing.T) {
-		header := http.Header{}
-		header.Add("X-Real-IP", "10.0.0.1")
-		header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
-		header.Add("X-Trusted-CDN", "")
-
-		addrs := ParseTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, clientAddr)
-		if r := cmp.Diff(addrs, []net.Address{net.ParseAddress("10.0.0.1")}); r != "" {
-			t.Error(r)
-		}
-	})
-
-	t.Run("do not parse X-Real-IP as a list", func(t *testing.T) {
-		header := http.Header{}
-		header.Add("X-Real-IP", "8.8.8.8, 9.9.9.9")
-		header.Add("X-Trusted-CDN", "")
-
-		addrs := ParseTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, clientAddr)
-		if r := cmp.Diff(addrs, []net.Address{net.ParseAddress("8.8.8.8, 9.9.9.9")}); r != "" {
-			t.Error(r)
+		addr := ParseTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, remoteAddr)
+		if addr != net.ParseAddress("129.78.138.66") {
+			t.Fatalf("unexpected trusted X-Forwarded-For: %v", addr)
 		}
 	})
 }

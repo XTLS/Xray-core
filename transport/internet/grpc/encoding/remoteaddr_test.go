@@ -17,17 +17,6 @@ func TestRemoteAddrFromContext(t *testing.T) {
 		expectedRemoteAddress string
 	}{
 		{
-			name:                  "ignore X-Real-IP without trusted header",
-			metadata:              metadata.Pairs("X-Real-IP", "1.1.1.1"),
-			expectedRemoteAddress: "127.0.0.1:12345",
-		},
-		{
-			name:                  "trust X-Real-IP when configured",
-			metadata:              metadata.Pairs("X-Real-IP", "1.1.1.1"),
-			trustedXForwardedFor:  []string{"X-Real-IP"},
-			expectedRemoteAddress: "1.1.1.1:0",
-		},
-		{
 			name:                  "trust X-Forwarded-For when configured",
 			metadata:              metadata.Pairs("X-Forwarded-For", "2.2.2.2, 3.3.3.3"),
 			trustedXForwardedFor:  []string{"X-Forwarded-For"},
@@ -42,18 +31,6 @@ func TestRemoteAddrFromContext(t *testing.T) {
 		{
 			name:                  "ignore X-Forwarded-For without trusted marker",
 			metadata:              metadata.Pairs("X-Forwarded-For", "5.5.5.5"),
-			trustedXForwardedFor:  []string{"X-Trusted-CDN"},
-			expectedRemoteAddress: "127.0.0.1:12345",
-		},
-		{
-			name:                  "prefer X-Real-IP over X-Forwarded-For",
-			metadata:              metadata.Pairs("X-Real-IP", "6.6.6.6", "X-Forwarded-For", "7.7.7.7", "X-Trusted-CDN", "1"),
-			trustedXForwardedFor:  []string{"X-Trusted-CDN"},
-			expectedRemoteAddress: "6.6.6.6:0",
-		},
-		{
-			name:                  "do not parse X-Real-IP as a list",
-			metadata:              metadata.Pairs("X-Real-IP", "8.8.8.8, 9.9.9.9", "X-Trusted-CDN", "1"),
 			trustedXForwardedFor:  []string{"X-Trusted-CDN"},
 			expectedRemoteAddress: "127.0.0.1:12345",
 		},

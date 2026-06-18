@@ -11,38 +11,24 @@ import (
 	"github.com/xtls/xray-core/common/net"
 )
 
-func parseXForwardedFor(xff string) []net.Address {
-	list := strings.Split(xff, ",")
-	addrs := make([]net.Address, 0, len(list))
-	for _, proxy := range list {
-		addrs = append(addrs, net.ParseAddress(proxy))
-	}
-	return addrs
-}
-
 // ParseTrustedXForwardedFor parses forwarding headers only when a configured trusted header is present.
-func ParseTrustedXForwardedFor(header http.Header, trusted []string, clientAddr gonet.Addr) []net.Address {
-	key := "X-Real-IP"
-	value := header.Get(key)
-	if value == "" {
-		key = "X-Forwarded-For"
-		value = header.Get(key)
-	}
+func ParseTrustedXForwardedFor(header http.Header, trusted []string, remoteAddr gonet.Addr) net.Address {
+	value := header.Get("X-Forwarded-For")
 	if value == "" {
 		return nil
 	}
 	for _, t := range trusted {
 		if len(header.Values(t)) > 0 {
-			if key == "X-Real-IP" {
-				return []net.Address{net.ParseAddress(value)}
+			if idx := strings.IndexByte(value, ','); idx >= 0 {
+				value = value[:idx]
 			}
-			return parseXForwardedFor(value)
+			return net.ParseAddress(value)
 		}
 	}
 	if len(trusted) == 0 {
-		errors.LogWarning(context.Background(), `received "`, key, `" from `, clientAddr, ` but "sockopt.trustedXForwardedFor" is not configured; ignoring it and using the real remote address`)
+		errors.LogWarning(context.Background(), `received "X-Forwarded-For" from `, remoteAddr, ` but "sockopt.trustedXForwardedFor" is not configured; ignoring it and using the real remote address`)
 	} else {
-		errors.LogError(context.Background(), `ignored potentially forged "`, key, `" from `, clientAddr, `: `, value)
+		errors.LogError(context.Background(), `ignored potentially forged "X-Forwarded-For" from `, remoteAddr, `: `, value)
 	}
 	return nil
 }
