@@ -8,12 +8,13 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/common/uuid"
 )
 
 type IPRegistry struct {
 	mu       sync.Mutex
 	factory  *IPSetFactory
-	matchers *utils.WeakCacheList[DynamicIPMatcher]
+	matchers *utils.WeakCacheMap[uuid.UUID, DynamicIPMatcher]
 }
 
 func (r *IPRegistry) BuildIPMatcher(rules []*IPRule) (IPMatcher, error) {
@@ -26,7 +27,7 @@ func (r *IPRegistry) BuildIPMatcher(rules []*IPRule) (IPMatcher, error) {
 	}
 
 	d := NewDynamicIPMatcher(rules, m)
-	r.matchers.Add(d)
+	r.matchers.Store(uuid.New(), d)
 	return d, nil
 }
 
@@ -34,7 +35,11 @@ func (r *IPRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	matchers := r.matchers.Values()
+	var matchers []*DynamicIPMatcher
+	r.matchers.Range(func(_ uuid.UUID, matcher *DynamicIPMatcher) bool {
+		matchers = append(matchers, matcher)
+		return true
+	})
 	errors.LogInfo(context.Background(), "reloading GeoIP data for ", len(matchers), " IP matcher(s)")
 
 	factory := newIPSetFactory()
@@ -62,7 +67,7 @@ func (r *IPRegistry) Reload() error {
 func newIPRegistry() *IPRegistry {
 	return &IPRegistry{
 		factory:  newIPSetFactory(),
-		matchers: utils.NewWeakCacheList[DynamicIPMatcher](),
+		matchers: utils.NewWeakCacheMap[uuid.UUID, DynamicIPMatcher](),
 	}
 }
 

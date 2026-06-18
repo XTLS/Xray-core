@@ -7,12 +7,13 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/common/uuid"
 )
 
 type DomainRegistry struct {
 	mu       sync.Mutex
 	factory  DomainMatcherFactory
-	matchers *utils.WeakCacheList[DynamicDomainMatcher]
+	matchers *utils.WeakCacheMap[uuid.UUID, DynamicDomainMatcher]
 }
 
 func (r *DomainRegistry) BuildDomainMatcher(rules []*DomainRule) (DomainMatcher, error) {
@@ -25,7 +26,7 @@ func (r *DomainRegistry) BuildDomainMatcher(rules []*DomainRule) (DomainMatcher,
 	}
 
 	d := NewDynamicDomainMatcher(rules, m)
-	r.matchers.Add(d)
+	r.matchers.Store(uuid.New(), d)
 	return d, nil
 }
 
@@ -33,7 +34,11 @@ func (r *DomainRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	matchers := r.matchers.Values()
+	var matchers []*DynamicDomainMatcher
+	r.matchers.Range(func(_ uuid.UUID, matcher *DynamicDomainMatcher) bool {
+		matchers = append(matchers, matcher)
+		return true
+	})
 	errors.LogInfo(context.Background(), "reloading GeoSite data for ", len(matchers), " domain matcher(s)")
 
 	factory := newDomainMatcherFactory()
@@ -61,7 +66,7 @@ func (r *DomainRegistry) Reload() error {
 func newDomainRegistry() *DomainRegistry {
 	return &DomainRegistry{
 		factory:  newDomainMatcherFactory(),
-		matchers: utils.NewWeakCacheList[DynamicDomainMatcher](),
+		matchers: utils.NewWeakCacheMap[uuid.UUID, DynamicDomainMatcher](),
 	}
 }
 
