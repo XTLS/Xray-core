@@ -19,12 +19,27 @@ func (r *IPRegistry) BuildIPMatcher(rules []*IPRule) (IPMatcher, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	m, err := buildOptimizedIPMatcher(r.ipsetFactory, rules)
+	expanded := make([]*IPRule, 0, len(rules))
+	for _, rule := range rules {
+		if geoip, ok := rule.Value.(*IPRule_Geoip); ok && isPrivateGeoIPCode(geoip.Geoip.Code) {
+			for _, cidrStr := range PrivateCIDRStrings {
+				cidrRule, err := parseCustomIPRule(cidrStr, geoip.Geoip.ReverseMatch)
+				if err != nil {
+					return nil, err
+				}
+				expanded = append(expanded, &IPRule{Value: cidrRule})
+			}
+		} else {
+			expanded = append(expanded, rule)
+		}
+	}
+
+	m, err := buildOptimizedIPMatcher(r.ipsetFactory, expanded)
 	if err != nil {
 		return nil, err
 	}
 
-	d := NewDynamicIPMatcher(rules, m)
+	d := NewDynamicIPMatcher(expanded, m)
 	r.matchers = append(r.matchers, d)
 	return d, nil
 }

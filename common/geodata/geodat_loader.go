@@ -14,6 +14,9 @@ import (
 )
 
 func checkFile(file, code string) error {
+	if isPrivateGeoIPCode(code) {
+		return nil
+	}
 	r, err := filesystem.OpenAsset(file)
 	if err != nil {
 		return errors.New("failed to open ", file).Base(err)
