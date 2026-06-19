@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -32,6 +33,8 @@ type Handler struct {
 	dispatcher      routing.Dispatcher
 	tag             string
 	sniffingRequest session.SniffingRequest
+	uplinkCounter   stats.Counter
+	downlinkCounter stats.Counter
 }
 
 // ConnectionHandler interface with the only method that stack is going to push new connections to
@@ -58,6 +61,23 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
 	t.policyManager = pm
 	t.dispatcher = dispatcher
+
+	if len(t.tag) > 0 && pm.ForSystem().Stats.InboundUplink {
+		statsManager := core.MustFromContext(ctx).GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + t.tag + ">>>traffic>>>uplink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			t.uplinkCounter = c
+		}
+	}
+	if len(t.tag) > 0 && pm.ForSystem().Stats.InboundDownlink {
+		statsManager := core.MustFromContext(ctx).GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + t.tag + ">>>traffic>>>downlink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			t.downlinkCounter = c
+		}
+	}
 
 	return nil
 }
@@ -135,15 +155,22 @@ func (t *Handler) Start() error {
 
 // HandleConnection pass the connection coming from the ip stack to the routing dispatcher
 func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
-	// when handling is done with any outcome, always signal back to the incoming connection
-	// to close, send completion packets back to the network, and cleanup
-	defer conn.Close()
-
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
 	ctx = c.ContextWithID(ctx, session.NewID())
 
 	source := net.DestinationFromAddr(conn.RemoteAddr())
+	if t.uplinkCounter != nil || t.downlinkCounter != nil {
+		conn = &stat.CounterConnection{
+			Connection:   conn,
+			ReadCounter:  t.uplinkCounter,
+			WriteCounter: t.downlinkCounter,
+		}
+	}
+	// when handling is done with any outcome, always signal back to the incoming connection
+	// to close, send completion packets back to the network, and cleanup
+	defer conn.Close()
+
 	inbound := session.Inbound{
 		Name:          "tun",
 		Tag:           t.tag,
