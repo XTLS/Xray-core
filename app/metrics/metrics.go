@@ -24,7 +24,6 @@ import (
 type MetricsHandler struct {
 	ohm          outbound.Manager
 	statsManager feature_stats.Manager
-	observatory  extension.Observatory
 	ctx          context.Context
 	tag          string
 	listen       string
@@ -65,6 +64,13 @@ func (p *MetricsHandler) Start() error {
 		go p.serve(TCPlistener, handler)
 	}
 
+	if p.tag == "" {
+		if p.tcpListener == nil {
+			return errors.New("metrics must have a tag or listen address")
+		}
+		return nil
+	}
+
 	listener := &OutboundListener{
 		buffer: make(chan xnet.Conn, 4),
 		done:   done.New(),
@@ -100,7 +106,7 @@ func (p *MetricsHandler) Close() error {
 		errs = append(errs, p.listener.Close())
 		p.listener = nil
 	}
-	if p.ohm != nil {
+	if p.ohm != nil && p.tag != "" {
 		if err := p.ohm.RemoveHandler(context.Background(), p.tag); err != nil {
 			errors.LogInfo(context.Background(), "failed to remove metrics handler")
 		}
@@ -196,17 +202,13 @@ func (p *MetricsHandler) stats() map[string]map[string]map[string]int64 {
 }
 
 func (p *MetricsHandler) observatoryStatus() interface{} {
-	if p.observatory == nil {
-		common.Must(core.RequireFeatures(p.ctx, func(observatory extension.Observatory) error {
-			p.observatory = observatory
-			return nil
-		}))
-		if p.observatory == nil {
-			return nil
-		}
+	feature := core.MustFromContext(p.ctx).GetFeature(extension.ObservatoryType())
+	if feature == nil {
+		return nil
 	}
+	observatoryFeature := feature.(extension.Observatory)
 	resp := map[string]*observatory.OutboundStatus{}
-	if o, err := p.observatory.GetObservation(context.Background()); err != nil {
+	if o, err := observatoryFeature.GetObservation(context.Background()); err != nil {
 		return err
 	} else {
 		for _, x := range o.(*observatory.ObservationResult).GetStatus() {

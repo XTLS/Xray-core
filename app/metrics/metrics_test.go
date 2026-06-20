@@ -1,7 +1,9 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
+	stdnet "net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	appstats "github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/core"
+	feature_outbound "github.com/xtls/xray-core/features/outbound"
 )
 
 func TestMetricsCanRestartInSameProcess(t *testing.T) {
@@ -40,10 +43,40 @@ func TestMetricsCanRunMultipleInstancesInSameProcess(t *testing.T) {
 	readMetricsVars(t, server2)
 }
 
+func TestMetricsListenOnlyWithoutTagDoesNotRegisterOutbound(t *testing.T) {
+	listen := pickMetricsListenAddress(t)
+	server := startMetricsTestServerWithMetricsConfig(t, &Config{
+		Listen: listen,
+	})
+	t.Cleanup(func() {
+		_ = server.Close()
+	})
+
+	response, err := http.Get("http://" + listen + "/debug/vars")
+	if err != nil {
+		t.Fatalf("failed to read listen-only metrics: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("unexpected listen-only metrics status: %d", response.StatusCode)
+	}
+
+	outboundManager := server.GetFeature(feature_outbound.ManagerType()).(feature_outbound.Manager)
+	if handlers := outboundManager.ListHandlers(context.Background()); len(handlers) != 0 {
+		t.Fatalf("listen-only metrics registered outbound handlers: got %d, want 0", len(handlers))
+	}
+}
+
 func startMetricsTestServer(t *testing.T) *core.Instance {
+	return startMetricsTestServerWithMetricsConfig(t, &Config{
+		Tag: "metrics_out",
+	})
+}
+
+func startMetricsTestServerWithMetricsConfig(t *testing.T, metricsConfig *Config) *core.Instance {
 	t.Helper()
 
-	server, err := core.New(metricsTestConfig())
+	server, err := core.New(metricsTestConfig(metricsConfig))
 	if err != nil {
 		t.Fatalf("failed to create metrics server: %v", err)
 	}
@@ -54,18 +87,27 @@ func startMetricsTestServer(t *testing.T) *core.Instance {
 	return server
 }
 
-func metricsTestConfig() *core.Config {
+func metricsTestConfig(metricsConfig *Config) *core.Config {
 	return &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dispatcher.Config{}),
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 			serial.ToTypedMessage(&appstats.Config{}),
-			serial.ToTypedMessage(&Config{
-				Tag: "metrics_out",
-			}),
+			serial.ToTypedMessage(metricsConfig),
 		},
 	}
+}
+
+func pickMetricsListenAddress(t *testing.T) string {
+	t.Helper()
+
+	listener, err := stdnet.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to pick metrics listen address: %v", err)
+	}
+	defer listener.Close()
+	return listener.Addr().String()
 }
 
 func readMetricsVars(t *testing.T, server *core.Instance) {
