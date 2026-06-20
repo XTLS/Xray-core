@@ -55,12 +55,6 @@ type udpHopConn struct {
 }
 
 func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
-	if len(c.Ports) == 0 {
-		return nil, errors.New("empty ports")
-	}
-	if c.IntervalMin < 5 || c.IntervalMax < 5 {
-		return nil, errors.New("invalid interval")
-	}
 	ips := make([]netip.Prefix, 0, len(c.IPs))
 	for _, ip := range c.IPs {
 		prefix, err := netip.ParsePrefix(ip)
@@ -74,6 +68,12 @@ func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 			continue
 		}
 		return nil, errors.New("invalid ips")
+	}
+	if len(c.Ports) == 0 {
+		return nil, errors.New("empty ports")
+	}
+	if c.IntervalMin < 5 || c.IntervalMax < 5 {
+		return nil, errors.New("invalid interval")
 	}
 	conn := &udpHopConn{
 		conn:    raw,
