@@ -253,10 +253,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
 			}
 
-			if (c.FinalMask.QuicParams.UdpHop.Interval.From != 0 && c.FinalMask.QuicParams.UdpHop.Interval.From < 5) || (c.FinalMask.QuicParams.UdpHop.Interval.To != 0 && c.FinalMask.QuicParams.UdpHop.Interval.To < 5) {
-				return nil, errors.New("Interval must be at least 5")
-			}
-
 			if c.FinalMask.QuicParams.InitStreamReceiveWindow > 0 && c.FinalMask.QuicParams.InitStreamReceiveWindow < 16384 {
 				return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
 			}
@@ -290,22 +286,17 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				BrutalUp:                      up,
 				BrutalDown:                    down,
 				BrutalDisableLossCompensation: c.FinalMask.QuicParams.BrutalDisableLossCompensation,
-				UdpHop: &internet.UdpHop{
-					Ports:       c.FinalMask.QuicParams.UdpHop.PortList.Build().Ports(),
-					IntervalMin: int64(c.FinalMask.QuicParams.UdpHop.Interval.From),
-					IntervalMax: int64(c.FinalMask.QuicParams.UdpHop.Interval.To),
-				},
-				InitStreamReceiveWindow: c.FinalMask.QuicParams.InitStreamReceiveWindow,
-				MaxStreamReceiveWindow:  c.FinalMask.QuicParams.MaxStreamReceiveWindow,
-				InitConnReceiveWindow:   c.FinalMask.QuicParams.InitConnectionReceiveWindow,
-				MaxConnReceiveWindow:    c.FinalMask.QuicParams.MaxConnectionReceiveWindow,
-				MaxIdleTimeout:          c.FinalMask.QuicParams.MaxIdleTimeout,
-				KeepAlivePeriod:         c.FinalMask.QuicParams.KeepAlivePeriod,
-				DisablePathMtuDiscovery: c.FinalMask.QuicParams.DisablePathMTUDiscovery,
-				DisableChromeParrot:     c.FinalMask.QuicParams.DisableChromeParrot,
-				DisableGSO:              c.FinalMask.QuicParams.DisableGSO,
-				MaxIncomingStreams:      c.FinalMask.QuicParams.MaxIncomingStreams,
-				DisableStatelessReset:   c.FinalMask.QuicParams.DisableStatelessReset,
+				InitStreamReceiveWindow:       c.FinalMask.QuicParams.InitStreamReceiveWindow,
+				MaxStreamReceiveWindow:        c.FinalMask.QuicParams.MaxStreamReceiveWindow,
+				InitConnReceiveWindow:         c.FinalMask.QuicParams.InitConnectionReceiveWindow,
+				MaxConnReceiveWindow:          c.FinalMask.QuicParams.MaxConnectionReceiveWindow,
+				MaxIdleTimeout:                c.FinalMask.QuicParams.MaxIdleTimeout,
+				KeepAlivePeriod:               c.FinalMask.QuicParams.KeepAlivePeriod,
+				DisablePathMtuDiscovery:       c.FinalMask.QuicParams.DisablePathMTUDiscovery,
+				DisableChromeParrot:           c.FinalMask.QuicParams.DisableChromeParrot,
+				DisableGSO:                    c.FinalMask.QuicParams.DisableGSO,
+				MaxIncomingStreams:            c.FinalMask.QuicParams.MaxIncomingStreams,
+				DisableStatelessReset:         c.FinalMask.QuicParams.DisableStatelessReset,
 			}
 		}
 	}
