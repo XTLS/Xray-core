@@ -176,12 +176,14 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 		}
 	}
 exit:
-	select {
-	case packet := <-c.readCh:
-		if packet.p != nil {
-			pool.Put(packet.p[:cap(packet.p)])
+	if c.closed() {
+		select {
+		case packet := <-c.readCh:
+			if packet.p != nil {
+				pool.Put(packet.p[:cap(packet.p)])
+			}
+		default:
 		}
-	default:
 	}
 }
 
