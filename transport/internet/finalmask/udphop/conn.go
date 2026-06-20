@@ -107,6 +107,9 @@ func (c *udpHopConn) nextInterval() time.Duration {
 }
 
 func (c *udpHopConn) hop() {
+	if c.closed() {
+		return
+	}
 	var addr *net.UDPAddr
 	switch {
 	case len(c.ips) > 0:
