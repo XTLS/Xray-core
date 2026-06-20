@@ -51,6 +51,7 @@ type udpHopConn struct {
 	addr    *net.UDPAddr
 	readCh  chan packet
 	closeCh chan struct{}
+	wg      sync.WaitGroup
 	mu      sync.Mutex
 }
 
@@ -141,10 +142,13 @@ func (c *udpHopConn) hop() {
 	c.pre = c.cur
 	c.cur = pkt
 	c.addr = addr
+	c.wg.Add(1)
 	go c.recv(pkt)
 }
 
 func (c *udpHopConn) recv(conn net.PacketConn) {
+	defer c.wg.Done()
+
 	for {
 		if c.closed() {
 			break
@@ -203,16 +207,15 @@ func (c *udpHopConn) hopLoop() {
 }
 
 func (c *udpHopConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	select {
-	case packet := <-c.readCh:
+	packet, ok := <-c.readCh
+	if ok {
 		if packet.p != nil {
 			n = copy(p, packet.p)
 			pool.Put(packet.p[:cap(packet.p)])
 		}
 		return n, packet.addr, packet.err
-	case <-c.closeCh:
-		return 0, nil, io.EOF
 	}
+	return 0, nil, io.EOF
 }
 
 func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -256,6 +259,8 @@ func (c *udpHopConn) Close() error {
 		_ = c.cur.Close()
 	}
 	_ = c.conn.Close()
+	c.wg.Wait()
+	close(c.readCh)
 	return nil
 }
 

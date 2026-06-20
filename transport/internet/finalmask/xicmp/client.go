@@ -46,6 +46,7 @@ type xicmpConnClient struct {
 	seq      int
 	readCh   chan packet
 	closeCh  chan struct{}
+	wg       sync.WaitGroup
 	mu       sync.Mutex
 }
 
@@ -84,6 +85,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		closeCh:  make(chan struct{}),
 	}
 
+	conn.wg.Add(2)
 	go conn.recv4()
 	go conn.recv6()
 
@@ -104,8 +106,9 @@ func (c *xicmpConnClient) closed() bool {
 }
 
 func (c *xicmpConnClient) recv4() {
-	var b [finalmask.UDPSize]byte
+	defer c.wg.Done()
 
+	var b [finalmask.UDPSize]byte
 	for {
 		if c.closed() {
 			break
@@ -182,8 +185,9 @@ exit:
 }
 
 func (c *xicmpConnClient) recv6() {
-	var b [finalmask.UDPSize]byte
+	defer c.wg.Done()
 
+	var b [finalmask.UDPSize]byte
 	for {
 		if c.closed() {
 			break
@@ -260,16 +264,15 @@ exit:
 }
 
 func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	select {
-	case packet := <-c.readCh:
+	packet, ok := <-c.readCh
+	if ok {
 		if packet.p != nil {
 			n = copy(p, packet.p)
 			pool.Put(packet.p)
 		}
 		return n, packet.addr, packet.err
-	case <-c.closeCh:
-		return 0, nil, io.EOF
 	}
+	return 0, nil, io.EOF
 }
 
 func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -327,6 +330,8 @@ func (c *xicmpConnClient) Close() error {
 	_ = c.icmp4.Close()
 	_ = c.icmp6.Close()
 	_ = c.conn.Close()
+	c.wg.Wait()
+	close(c.readCh)
 	return nil
 }
 
