@@ -8,12 +8,14 @@ import (
 	mrand "math/rand"
 	gonet "net"
 	"net/netip"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
@@ -120,22 +122,30 @@ func (c *udpHopConn) hop() {
 	default:
 		return
 	}
+	var pkt net.PacketConn
 	raw, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.sockopt)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "hop err")
 		return
 	}
-	cur := raw.(*internet.PacketConnWrapper).PacketConn
-	cur.SetDeadline(c.deadline)
-	cur.SetReadDeadline(c.readDeadline)
-	cur.SetWriteDeadline(c.writeDeadline)
+	switch c := raw.(type) {
+	case *internet.PacketConnWrapper:
+		pkt = c.PacketConn
+	case *cnc.Connection:
+		pkt = &internet.FakePacketConn{Conn: c}
+	default:
+		panic(reflect.TypeOf(c))
+	}
+	pkt.SetDeadline(c.deadline)
+	pkt.SetReadDeadline(c.readDeadline)
+	pkt.SetWriteDeadline(c.writeDeadline)
 	if c.pre != nil {
 		_ = c.pre.Close()
 	}
 	c.pre = c.cur
-	c.cur = cur
+	c.cur = pkt
 	c.addr = addr
-	go c.recv(cur)
+	go c.recv(pkt)
 }
 
 func (c *udpHopConn) recv(conn net.PacketConn) {
