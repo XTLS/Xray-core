@@ -167,7 +167,7 @@ func (c *xicmpConnClient) recv4() {
 			addr: addr,
 		}:
 		case <-c.closedCh:
-			pool.Put(p)
+			pool.Put(p[:cap(p)])
 			return
 		}
 	}
@@ -237,7 +237,7 @@ func (c *xicmpConnClient) recv6() {
 			addr: addr,
 		}:
 		case <-c.closedCh:
-			pool.Put(p)
+			pool.Put(p[:cap(p)])
 			return
 		}
 	}
@@ -248,7 +248,7 @@ func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	case packet := <-c.readCh:
 		if packet.p != nil {
 			n = copy(p, packet.p)
-			pool.Put(packet.p)
+			pool.Put(packet.p[:cap(packet.p)])
 		}
 		return n, packet.addr, packet.err
 	case <-c.closedCh:
@@ -279,8 +279,8 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		addr = &net.IPAddr{IP: ip}
 	}
 
-	b := pool.Get().([]byte)[:finalmask.UDPSize]
-	defer pool.Put(b)
+	b := pool.Get().([]byte)
+	defer pool.Put(b[:cap(b)])
 
 	copy(b[8:], c.clientID[:])
 	copy(b[16:], p)

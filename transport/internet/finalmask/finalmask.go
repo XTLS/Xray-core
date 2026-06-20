@@ -10,8 +10,6 @@ import (
 )
 
 type Udpmask interface {
-	UDP()
-
 	WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
 	WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
 }
@@ -195,8 +193,6 @@ func (c *headerManagerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) 
 }
 
 type Tcpmask interface {
-	TCP()
-
 	WrapConnClient(net.Conn) (net.Conn, error)
 	WrapConnServer(net.Conn) (net.Conn, error)
 }
