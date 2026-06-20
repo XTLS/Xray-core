@@ -87,7 +87,6 @@ func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		readCh:  make(chan packet),
 		closeCh: make(chan struct{}),
 	}
-	go conn.hopLoop()
 	return conn, nil
 }
 
@@ -232,6 +231,7 @@ func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		if c.cur == nil {
 			return 0, nil
 		}
+		go c.hopLoop()
 	}
 
 	_, err = c.cur.WriteTo(p, c.addr)
