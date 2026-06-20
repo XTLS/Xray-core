@@ -45,7 +45,7 @@ type xicmpConnClient struct {
 	id       int
 	seq      int
 	readCh   chan packet
-	closedCh chan struct{}
+	closeCh  chan struct{}
 	mu       sync.Mutex
 }
 
@@ -81,7 +81,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		id:       mathrand.Intn(65536),
 		seq:      1,
 		readCh:   make(chan packet),
-		closedCh: make(chan struct{}),
+		closeCh:  make(chan struct{}),
 	}
 
 	go conn.recv4()
@@ -96,7 +96,7 @@ func (c *xicmpConnClient) ring(a, b uint16) uint16 {
 
 func (c *xicmpConnClient) closed() bool {
 	select {
-	case <-c.closedCh:
+	case <-c.closeCh:
 		return true
 	default:
 		return false
@@ -108,7 +108,7 @@ func (c *xicmpConnClient) recv4() {
 
 	for {
 		if c.closed() {
-			return
+			break
 		}
 
 		n, addr, err := c.icmp4.ReadFrom(b[:])
@@ -119,8 +119,8 @@ func (c *xicmpConnClient) recv4() {
 				case c.readCh <- packet{
 					err: err,
 				}:
-				case <-c.closedCh:
-					return
+				case <-c.closeCh:
+					goto exit
 				}
 			}
 			continue
@@ -166,10 +166,18 @@ func (c *xicmpConnClient) recv4() {
 			p:    p,
 			addr: addr,
 		}:
-		case <-c.closedCh:
+		case <-c.closeCh:
 			pool.Put(p)
-			return
+			goto exit
 		}
+	}
+exit:
+	select {
+	case packet := <-c.readCh:
+		if packet.p != nil {
+			pool.Put(packet.p)
+		}
+	default:
 	}
 }
 
@@ -189,8 +197,8 @@ func (c *xicmpConnClient) recv6() {
 				case c.readCh <- packet{
 					err: err,
 				}:
-				case <-c.closedCh:
-					return
+				case <-c.closeCh:
+					goto exit
 				}
 			}
 			continue
@@ -236,10 +244,18 @@ func (c *xicmpConnClient) recv6() {
 			p:    p,
 			addr: addr,
 		}:
-		case <-c.closedCh:
+		case <-c.closeCh:
 			pool.Put(p)
-			return
+			goto exit
 		}
+	}
+exit:
+	select {
+	case packet := <-c.readCh:
+		if packet.p != nil {
+			pool.Put(packet.p)
+		}
+	default:
 	}
 }
 
@@ -251,7 +267,7 @@ func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			pool.Put(packet.p)
 		}
 		return n, packet.addr, packet.err
-	case <-c.closedCh:
+	case <-c.closeCh:
 		return 0, nil, io.EOF
 	}
 }
@@ -307,7 +323,7 @@ func (c *xicmpConnClient) Close() error {
 	if c.closed() {
 		return nil
 	}
-	close(c.closedCh)
+	close(c.closeCh)
 	_ = c.icmp4.Close()
 	_ = c.icmp6.Close()
 	_ = c.conn.Close()

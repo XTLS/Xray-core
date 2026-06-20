@@ -148,21 +148,21 @@ func (c *udpHopConn) hop() {
 func (c *udpHopConn) recv(conn net.PacketConn) {
 	for {
 		if c.closed() {
-			return
+			break
 		}
 		p := pool.Get().([]byte)
 		n, addr, err := conn.ReadFrom(p)
 		if err != nil {
 			pool.Put(p[:cap(p)])
 			if goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, gonet.ErrClosed) {
-				return
+				break
 			}
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
 				select {
 				case c.readCh <- packet{err: err}:
 				case <-c.closeCh:
-					return
+					goto exit
 				}
 			}
 			errors.LogErrorInner(context.Background(), err, "recv err")
@@ -172,8 +172,16 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 		case c.readCh <- packet{p: p[:n], addr: addr}:
 		case <-c.closeCh:
 			pool.Put(p[:cap(p)])
-			return
+			goto exit
 		}
+	}
+exit:
+	select {
+	case packet := <-c.readCh:
+		if packet.p != nil {
+			pool.Put(packet.p[:cap(packet.p)])
+		}
+	default:
 	}
 }
 
