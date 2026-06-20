@@ -487,7 +487,6 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if quicParams == nil {
 			quicParams = &internet.QuicParams{
 				BbrProfile: string(bbr.ProfileStandard),
-				UdpHop:     &internet.UdpHop{},
 			}
 		}
 

@@ -57,17 +57,10 @@ type KCPConfig struct {
 	DownCap          *uint32 `json:"downlinkCapacity"`
 	CwndMultiplier   *uint32 `json:"cwndMultiplier"`
 	MaxSendingWindow *uint32 `json:"maxSendingWindow"`
-
-	HeaderConfig json.RawMessage `json:"header"`
-	Seed         *string         `json:"seed"`
 }
 
 // Build implements Buildable.
 func (c *KCPConfig) Build() (proto.Message, error) {
-	if c.HeaderConfig != nil || c.Seed != nil {
-		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
-	}
-
 	config := common.Must2(internet.CreateTransportConfig(kcp.ProtocolName)).(*kcp.Config)
 
 	if c.Mtu != nil {
@@ -525,11 +518,6 @@ func (b Bandwidth) Bps() (uint64, error) {
 	return uint64(val*float64(mul)) / 8, nil
 }
 
-type UdpHop struct {
-	PortList PortList   `json:"ports"`
-	Interval Int32Range `json:"interval"`
-}
-
 type Masquerade struct {
 	Type string `json:"type"`
 
@@ -545,14 +533,8 @@ type Masquerade struct {
 }
 
 type HysteriaConfig struct {
-	Version int32  `json:"version"`
-	Auth    string `json:"auth"`
-
-	Congestion *string    `json:"congestion"`
-	Up         *Bandwidth `json:"up"`
-	Down       *Bandwidth `json:"down"`
-	UdpHop     *UdpHop    `json:"udphop"`
-
+	Version        int32      `json:"version"`
+	Auth           string     `json:"auth"`
 	UdpIdleTimeout int64      `json:"udpIdleTimeout"`
 	Masquerade     Masquerade `json:"masquerade"`
 }
@@ -560,10 +542,6 @@ type HysteriaConfig struct {
 func (c *HysteriaConfig) Build() (proto.Message, error) {
 	if c.Version != 2 {
 		return nil, errors.New("version != 2")
-	}
-
-	if c.Congestion != nil || c.Up != nil || c.Down != nil || c.UdpHop != nil {
-		errors.LogWarning(context.Background(), "congestion & up & down & udphop move to finalmask/quicParams")
 	}
 
 	if c.UdpIdleTimeout != 0 && (c.UdpIdleTimeout < 2 || c.UdpIdleTimeout > 600) {
@@ -653,20 +631,20 @@ func (c *TLSCertConfig) Build() (*tls.Certificate, error) {
 }
 
 type QuicParamsConfig struct {
-	Congestion                  string    `json:"congestion"`
-	Debug                       bool      `json:"debug"`
-	BbrProfile                  string    `json:"bbrProfile"`
-	BrutalUp                    Bandwidth `json:"brutalUp"`
-	BrutalDown                  Bandwidth `json:"brutalDown"`
-	UdpHop                      UdpHop    `json:"udpHop"`
-	InitStreamReceiveWindow     uint64    `json:"initStreamReceiveWindow"`
-	MaxStreamReceiveWindow      uint64    `json:"maxStreamReceiveWindow"`
-	InitConnectionReceiveWindow uint64    `json:"initConnectionReceiveWindow"`
-	MaxConnectionReceiveWindow  uint64    `json:"maxConnectionReceiveWindow"`
-	MaxIdleTimeout              int64     `json:"maxIdleTimeout"`
-	KeepAlivePeriod             int64     `json:"keepAlivePeriod"`
-	DisablePathMTUDiscovery     bool      `json:"disablePathMTUDiscovery"`
-	MaxIncomingStreams          int64     `json:"maxIncomingStreams"`
+	Congestion string    `json:"congestion"`
+	Debug      bool      `json:"debug"`
+	BbrProfile string    `json:"bbrProfile"`
+	BrutalUp   Bandwidth `json:"brutalUp"`
+	BrutalDown Bandwidth `json:"brutalDown"`
+
+	InitStreamReceiveWindow     uint64 `json:"initStreamReceiveWindow"`
+	MaxStreamReceiveWindow      uint64 `json:"maxStreamReceiveWindow"`
+	InitConnectionReceiveWindow uint64 `json:"initConnectionReceiveWindow"`
+	MaxConnectionReceiveWindow  uint64 `json:"maxConnectionReceiveWindow"`
+	MaxIdleTimeout              int64  `json:"maxIdleTimeout"`
+	KeepAlivePeriod             int64  `json:"keepAlivePeriod"`
+	DisablePathMTUDiscovery     bool   `json:"disablePathMTUDiscovery"`
+	MaxIncomingStreams          int64  `json:"maxIncomingStreams"`
 }
 
 type TLSConfig struct {
@@ -2226,10 +2204,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
 			}
 
-			if (c.FinalMask.QuicParams.UdpHop.Interval.From != 0 && c.FinalMask.QuicParams.UdpHop.Interval.From < 5) || (c.FinalMask.QuicParams.UdpHop.Interval.To != 0 && c.FinalMask.QuicParams.UdpHop.Interval.To < 5) {
-				return nil, errors.New("Interval must be at least 5")
-			}
-
 			if c.FinalMask.QuicParams.InitStreamReceiveWindow > 0 && c.FinalMask.QuicParams.InitStreamReceiveWindow < 16384 {
 				return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
 			}
@@ -2262,11 +2236,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				BbrProfile: profile,
 				BrutalUp:   up,
 				BrutalDown: down,
-				UdpHop: &internet.UdpHop{
-					Ports:       c.FinalMask.QuicParams.UdpHop.PortList.Build().Ports(),
-					IntervalMin: int64(c.FinalMask.QuicParams.UdpHop.Interval.From),
-					IntervalMax: int64(c.FinalMask.QuicParams.UdpHop.Interval.To),
-				},
+
 				InitStreamReceiveWindow: c.FinalMask.QuicParams.InitStreamReceiveWindow,
 				MaxStreamReceiveWindow:  c.FinalMask.QuicParams.MaxStreamReceiveWindow,
 				InitConnReceiveWindow:   c.FinalMask.QuicParams.InitConnectionReceiveWindow,
