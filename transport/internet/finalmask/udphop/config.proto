@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package xray.transport.internet.finalmask.udphop;
+option csharp_namespace = "Xray.Transport.Internet.Finalmask.Udphop";
+option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/udphop";
+option java_package = "com.xray.transport.internet.finalmask.udphop";
+option java_multiple_files = true;
+
+import "transport/internet/config.proto";
+
+message Config {
+  xray.transport.internet.SocketConfig sockopt = 1;
+  repeated string IPs = 2;
+  repeated uint32 ports = 3;
+  int64 interval_min = 4;
+  int64 interval_max = 5;
+}
+
