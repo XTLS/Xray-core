@@ -4,8 +4,6 @@ import (
 	"net"
 )
 
-func (c *Config) UDP() {}
-
 func (c *Config) HeaderConn() {}
 
 func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {

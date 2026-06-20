@@ -4,9 +4,6 @@ import (
 	"net"
 )
 
-func (c *Config) UDP() {
-}
-
 func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
 	// _, ok1 := raw.(*internet.FakePacketConn)
 	// _, ok2 := raw.(*udphop.UdpHopPacketConn)
