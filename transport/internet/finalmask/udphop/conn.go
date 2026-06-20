@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
@@ -38,8 +39,8 @@ type udpHopConn struct {
 
 	ips         []netip.Prefix
 	ports       []uint32
-	intervalMin time.Duration
-	intervalMax time.Duration
+	intervalMin int64
+	intervalMax int64
 
 	deadline      time.Time
 	readDeadline  time.Time
@@ -80,8 +81,8 @@ func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		ips:         ips,
 		ports:       c.Ports,
-		intervalMin: time.Duration(c.IntervalMin),
-		intervalMax: time.Duration(c.IntervalMax),
+		intervalMin: c.IntervalMin,
+		intervalMax: c.IntervalMax,
 
 		readCh:  make(chan packet),
 		closeCh: make(chan struct{}),
@@ -97,13 +98,6 @@ func (c *udpHopConn) closed() bool {
 	default:
 		return false
 	}
-}
-
-func (c *udpHopConn) nextInterval() time.Duration {
-	if c.intervalMin == c.intervalMax {
-		return c.intervalMin
-	}
-	return c.intervalMin + time.Duration(mrand.Int63n(int64(c.intervalMax-c.intervalMin)+1))
 }
 
 func (c *udpHopConn) hop() {
@@ -184,12 +178,12 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 }
 
 func (c *udpHopConn) hopLoop() {
-	ticker := time.NewTicker(c.nextInterval())
+	ticker := time.NewTicker(time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			ticker.Reset(c.nextInterval())
+			ticker.Reset(time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
 			c.mu.Lock()
 			c.hop()
 			c.mu.Unlock()
@@ -230,7 +224,12 @@ func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		}
 	}
 
-	return c.cur.WriteTo(p, c.addr)
+	_, err = c.cur.WriteTo(p, c.addr)
+	if err != nil {
+		errors.LogErrorInner(context.Background(), err, "send err")
+		return 0, nil
+	}
+	return len(p), nil
 }
 
 func (c *udpHopConn) Close() error {
