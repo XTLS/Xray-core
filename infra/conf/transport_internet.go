@@ -31,6 +31,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
+	"github.com/xtls/xray-core/transport/internet/finalmask/udphop"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
@@ -1238,6 +1239,7 @@ var (
 		"xdns":          func() interface{} { return new(Xdns) },
 		"xicmp":         func() interface{} { return new(Xicmp) },
 		"realm":         func() interface{} { return new(Realm) },
+		"udphop":        func() interface{} { return new(UDPHop) },
 	}, "type", "settings")
 )
 
@@ -1961,6 +1963,32 @@ func (c *Realm) Build() (proto.Message, error) {
 		ID:          id,
 		StunServers: stunServers,
 		TlsConfig:   tlsConfig,
+	}, nil
+}
+
+type UDPHop struct {
+	Sockopt  *SocketConfig `json:"sockopt"`
+	IPs      []string      `json:"ips"`
+	Ports    PortList      `json:"ports"`
+	Interval Int32Range    `json:"interval"`
+}
+
+func (c *UDPHop) Build() (proto.Message, error) {
+	var sockopt *internet.SocketConfig
+	if c.Sockopt != nil {
+		var err error
+		sockopt, err = c.Sockopt.Build()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &udphop.Config{
+		Sockopt:     sockopt,
+		IPs:         c.IPs,
+		Ports:       c.Ports.Build().Ports(),
+		IntervalMin: int64(c.Interval.From),
+		IntervalMax: int64(c.Interval.To),
 	}, nil
 }
 
