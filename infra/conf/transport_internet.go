@@ -1983,6 +1983,24 @@ func (c *UDPHop) Build() (proto.Message, error) {
 		}
 	}
 
+	for _, ip := range c.IPs {
+		_, err := netip.ParsePrefix(ip)
+		if err == nil {
+			continue
+		}
+		_, err = netip.ParseAddr(ip)
+		if err == nil {
+			continue
+		}
+		return nil, errors.New("invalid ips")
+	}
+	if len(c.Ports.Build().Ports()) == 0 {
+		return nil, errors.New("empty ports")
+	}
+	if c.Interval.From < 5 || c.Interval.To < 5 {
+		return nil, errors.New("invalid interval")
+	}
+
 	return &udphop.Config{
 		Sockopt:     sockopt,
 		IPs:         c.IPs,
