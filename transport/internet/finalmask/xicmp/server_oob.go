@@ -39,16 +39,16 @@ type record struct {
 }
 
 type xicmpConnServer struct {
-	conn     net.PacketConn
-	icmp4    *icmp.PacketConn
-	icmp6    *icmp.PacketConn
-	ipv4PC   *ipv4.PacketConn
-	ipv6PC   *ipv6.PacketConn
-	ips      map[netip.Addr]struct{}
-	rec      map[string]record
-	readCh   chan packet
-	closedCh chan struct{}
-	mu       sync.Mutex
+	conn    net.PacketConn
+	icmp4   *icmp.PacketConn
+	icmp6   *icmp.PacketConn
+	ipv4PC  *ipv4.PacketConn
+	ipv6PC  *ipv6.PacketConn
+	ips     map[netip.Addr]struct{}
+	rec     map[string]record
+	readCh  chan packet
+	closeCh chan struct{}
+	mu      sync.Mutex
 }
 
 func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
@@ -67,15 +67,15 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	conn := &xicmpConnServer{
-		conn:     raw,
-		icmp4:    icmp4,
-		icmp6:    icmp6,
-		ipv4PC:   icmp4.IPv4PacketConn(),
-		ipv6PC:   icmp6.IPv6PacketConn(),
-		ips:      ips,
-		rec:      make(map[string]record),
-		readCh:   make(chan packet),
-		closedCh: make(chan struct{}),
+		conn:    raw,
+		icmp4:   icmp4,
+		icmp6:   icmp6,
+		ipv4PC:  icmp4.IPv4PacketConn(),
+		ipv6PC:  icmp6.IPv6PacketConn(),
+		ips:     ips,
+		rec:     make(map[string]record),
+		readCh:  make(chan packet),
+		closeCh: make(chan struct{}),
 	}
 
 	common.Must(conn.ipv4PC.SetControlMessage(ipv4.FlagDst, true))
@@ -90,7 +90,7 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 func (c *xicmpConnServer) closed() bool {
 	select {
-	case <-c.closedCh:
+	case <-c.closeCh:
 		return true
 	default:
 		return false
@@ -111,7 +111,7 @@ func (c *xicmpConnServer) clean() {
 				}
 			}
 			c.mu.Unlock()
-		case <-c.closedCh:
+		case <-c.closeCh:
 			return
 		}
 	}
@@ -133,7 +133,7 @@ func (c *xicmpConnServer) recv4() {
 				case c.readCh <- packet{
 					err: err,
 				}:
-				case <-c.closedCh:
+				case <-c.closeCh:
 					goto exit
 				}
 			}
@@ -189,7 +189,7 @@ func (c *xicmpConnServer) recv4() {
 			p:    p,
 			addr: cAddr,
 		}:
-		case <-c.closedCh:
+		case <-c.closeCh:
 			pool.Put(p)
 			goto exit
 		}
@@ -220,7 +220,7 @@ func (c *xicmpConnServer) recv6() {
 				case c.readCh <- packet{
 					err: err,
 				}:
-				case <-c.closedCh:
+				case <-c.closeCh:
 					goto exit
 				}
 			}
@@ -276,7 +276,7 @@ func (c *xicmpConnServer) recv6() {
 			p:    p,
 			addr: cAddr,
 		}:
-		case <-c.closedCh:
+		case <-c.closeCh:
 			pool.Put(p)
 			goto exit
 		}
@@ -299,7 +299,7 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 			pool.Put(packet.p)
 		}
 		return n, packet.addr, packet.err
-	case <-c.closedCh:
+	case <-c.closeCh:
 		return 0, nil, io.EOF
 	}
 }
@@ -350,7 +350,7 @@ func (c *xicmpConnServer) Close() error {
 	if c.closed() {
 		return nil
 	}
-	close(c.closedCh)
+	close(c.closeCh)
 	_ = c.icmp4.Close()
 	_ = c.icmp6.Close()
 	_ = c.conn.Close()
