@@ -188,12 +188,12 @@ exit:
 }
 
 func (c *udpHopConn) hopLoop() {
-	ticker := time.NewTicker(time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
+	ticker := time.NewTicker(time.Second * time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			ticker.Reset(time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
+			ticker.Reset(time.Second * time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
 			c.mu.Lock()
 			c.hop()
 			c.mu.Unlock()
