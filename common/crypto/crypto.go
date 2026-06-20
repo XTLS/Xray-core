@@ -10,7 +10,7 @@ import (
 
 // [,)
 func RandBetween(from int64, to int64) int64 {
-	if from == to {
+	if d := from - to; d == 0 || d == -1 || d == 1 {
 		return from
 	}
 	if from > to {
