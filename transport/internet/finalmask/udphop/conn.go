@@ -151,7 +151,7 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 
 	for {
 		if c.closed() {
-			break
+			return
 		}
 		p := pool.Get().([]byte)
 		n, addr, err := conn.ReadFrom(p)
@@ -165,7 +165,7 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 				select {
 				case c.readCh <- packet{err: err}:
 				case <-c.closeCh:
-					goto exit
+					return
 				}
 			}
 			errors.LogErrorInner(context.Background(), err, "recv err")
@@ -175,17 +175,7 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 		case c.readCh <- packet{p: p[:n], addr: addr}:
 		case <-c.closeCh:
 			pool.Put(p[:cap(p)])
-			goto exit
-		}
-	}
-exit:
-	if c.closed() {
-		select {
-		case packet := <-c.readCh:
-			if packet.p != nil {
-				pool.Put(packet.p[:cap(packet.p)])
-			}
-		default:
+			return
 		}
 	}
 }
@@ -255,6 +245,13 @@ func (c *udpHopConn) Close() error {
 	}
 	_ = c.conn.Close()
 	c.wg.Wait()
+	select {
+	case p := <-c.readCh:
+		if p.p != nil {
+			pool.Put(p.p[:cap(p.p)])
+		}
+	default:
+	}
 	close(c.readCh)
 	return nil
 }

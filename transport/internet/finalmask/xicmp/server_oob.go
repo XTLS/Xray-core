@@ -125,7 +125,7 @@ func (c *xicmpConnServer) recv4() {
 	var b [finalmask.UDPSize]byte
 	for {
 		if c.closed() {
-			break
+			return
 		}
 
 		n, cm, addr, err := c.ipv4PC.ReadFrom(b[:])
@@ -137,7 +137,7 @@ func (c *xicmpConnServer) recv4() {
 					err: err,
 				}:
 				case <-c.closeCh:
-					goto exit
+					return
 				}
 			}
 			continue
@@ -194,16 +194,8 @@ func (c *xicmpConnServer) recv4() {
 		}:
 		case <-c.closeCh:
 			pool.Put(p)
-			goto exit
+			return
 		}
-	}
-exit:
-	select {
-	case packet := <-c.readCh:
-		if packet.p != nil {
-			pool.Put(packet.p)
-		}
-	default:
 	}
 }
 
@@ -213,7 +205,7 @@ func (c *xicmpConnServer) recv6() {
 	var b [finalmask.UDPSize]byte
 	for {
 		if c.closed() {
-			break
+			return
 		}
 
 		n, cm, addr, err := c.ipv6PC.ReadFrom(b[:])
@@ -225,7 +217,7 @@ func (c *xicmpConnServer) recv6() {
 					err: err,
 				}:
 				case <-c.closeCh:
-					goto exit
+					return
 				}
 			}
 			continue
@@ -282,16 +274,8 @@ func (c *xicmpConnServer) recv6() {
 		}:
 		case <-c.closeCh:
 			pool.Put(p)
-			goto exit
+			return
 		}
-	}
-exit:
-	select {
-	case packet := <-c.readCh:
-		if packet.p != nil {
-			pool.Put(packet.p)
-		}
-	default:
 	}
 }
 
@@ -358,6 +342,13 @@ func (c *xicmpConnServer) Close() error {
 	_ = c.icmp6.Close()
 	_ = c.conn.Close()
 	c.wg.Wait()
+	select {
+	case p := <-c.readCh:
+		if p.p != nil {
+			pool.Put(p.p)
+		}
+	default:
+	}
 	close(c.readCh)
 	return nil
 }
