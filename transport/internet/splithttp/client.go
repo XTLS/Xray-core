@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"sync"
+	"time"
 
 	"github.com/apernet/quic-go/http3"
 	"github.com/xtls/xray-core/common"
@@ -34,6 +35,8 @@ type DefaultDialerClient struct {
 	client          *http.Client
 	closed          bool
 	httpVersion     string
+	packetUpMu      sync.Mutex
+	lastPacketUp    time.Time
 	// pool of net.Conn, created using dialUploadConn
 	uploadRawPool  *sync.Pool
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
@@ -106,6 +109,7 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	c.transportConfig.FillPacketRequest(req, sessionId, seqStr, payload)
 
 	if c.httpVersion != "1.1" {
+		c.closeIdleConnectionsIfPacketUpStale(time.Now())
 		resp, err := c.client.Do(req)
 		if err != nil {
 			c.closed = true
@@ -175,6 +179,18 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	}
 
 	return nil
+}
+
+const packetUpIdleConnectionStaleDuration = 30 * time.Second
+
+func (c *DefaultDialerClient) closeIdleConnectionsIfPacketUpStale(now time.Time) {
+	c.packetUpMu.Lock()
+	defer c.packetUpMu.Unlock()
+
+	if !c.lastPacketUp.IsZero() && now.Sub(c.lastPacketUp) > packetUpIdleConnectionStaleDuration {
+		c.client.CloseIdleConnections()
+	}
+	c.lastPacketUp = now
 }
 
 // HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
