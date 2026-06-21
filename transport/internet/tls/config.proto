@@ -38,10 +38,8 @@ message Certificate {
 
   bool build_chain = 8;
 
-  // Abuse proto data for storage hotreload data
-  bytes parsed_cache = 9;
-  bytes ocsp_data = 10;
-  int64 last_reload = 11;
+  // Abused proto data to storage some runtime data
+  bytes extra_data = 9;
 }
 
 message Config {

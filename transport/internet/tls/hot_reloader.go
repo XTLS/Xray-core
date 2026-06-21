@@ -42,14 +42,15 @@ func handleHotReload() {
 }
 
 func updateCert(_ uintptr, entry *Certificate) bool {
+	extraData := entry.extraData()
 	reloadInterval := int64(entry.OcspStapling)
 	if reloadInterval <= 0 {
 		reloadInterval = 3600
 	}
-	if entry.LastReload+reloadInterval >= time.Now().Unix() {
+	if extraData.lastReload+reloadInterval >= time.Now().Unix() {
 		return true
 	} else {
-		entry.LastReload = time.Now().Unix()
+		extraData.lastReload = time.Now().Unix()
 	}
 	if entry.CertificatePath != "" && entry.KeyPath != "" {
 		newCert, err := filesystem.ReadCert(entry.CertificatePath)
@@ -75,8 +76,8 @@ func updateCert(_ uintptr, entry *Certificate) bool {
 		}
 		if newOCSPData, err := ocsp.GetOCSPForCert(keyPair.Certificate); err != nil {
 			errors.LogWarningInner(context.Background(), err, "ignoring invalid OCSP")
-		} else if !slices.Equal(newOCSPData, entry.OcspData) {
-			entry.OcspData = newOCSPData
+		} else if OCSPData := extraData.ocspData.Load(); OCSPData == nil || !slices.Equal(newOCSPData, *OCSPData) {
+			extraData.ocspData.Store(&newOCSPData)
 		}
 		entry.parseX509KeyPair()
 	}

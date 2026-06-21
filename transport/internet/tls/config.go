@@ -182,8 +182,27 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 	}
 }
 
-// atomic.Pointer must be exactly one pointer word
-var _ [unsafe.Sizeof(unsafe.Pointer(nil))]byte = [unsafe.Sizeof(atomic.Pointer[tls.Certificate]{})]byte{}
+type extraProtoCertData struct {
+	parsed     atomic.Pointer[tls.Certificate]
+	ocspData   atomic.Pointer[[]byte]
+	lastReload int64
+}
+
+// atomic.Pointer must be exactly one pointer word for the ParsedCache overlay below.
+var _ [unsafe.Sizeof(unsafe.Pointer(nil))]byte = [unsafe.Sizeof(atomic.Pointer[extraProtoCertData]{})]byte{}
+
+func (c *Certificate) extraData() *extraProtoCertData {
+	// wtf is this
+	slot := (*atomic.Pointer[extraProtoCertData])(unsafe.Pointer(&c.ExtraData))
+	if s := slot.Load(); s != nil {
+		return s
+	}
+	s := &extraProtoCertData{}
+	if slot.CompareAndSwap(nil, s) {
+		return s
+	}
+	return slot.Load()
+}
 
 func (c *Certificate) parseX509KeyPair() *tls.Certificate {
 	keyPair, err := tls.X509KeyPair(c.Certificate, c.Key)
@@ -196,16 +215,16 @@ func (c *Certificate) parseX509KeyPair() *tls.Certificate {
 		errors.LogWarningInner(context.Background(), err, "ignoring invalid certificate")
 		return nil
 	}
-	if len(c.OcspData) > 0 {
-		keyPair.OCSPStaple = c.OcspData
+	st := c.extraData()
+	if OCSPData := st.ocspData.Load(); OCSPData != nil {
+		keyPair.OCSPStaple = *OCSPData
 	}
-	// wtf is this
-	(*atomic.Pointer[tls.Certificate])(unsafe.Pointer(&c.ParsedCache)).Store(&keyPair)
+	st.parsed.Store(&keyPair)
 	return &keyPair
 }
 
 func (c *Certificate) getX509KeyPair() *tls.Certificate {
-	if keyPair := (*atomic.Pointer[tls.Certificate])(unsafe.Pointer(&c.ParsedCache)).Load(); keyPair != nil {
+	if keyPair := c.extraData().parsed.Load(); keyPair != nil {
 		return keyPair
 	}
 	return c.parseX509KeyPair()
