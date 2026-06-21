@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/utils"
@@ -40,41 +39,6 @@ type IPMatcher interface {
 type IPSet struct {
 	ipv4, ipv6 *netipx.IPSet
 	max4, max6 uint8
-}
-
-// PrivateCIDRStrings defines the CIDRs used for geoip:private matching.
-// These cover all IANA special-purpose addresses: private, loopback, multicast,
-// link-local, unspecified, CGNAT, TEST-NET, benchmark, and 6to4 relay.
-var PrivateCIDRStrings = []string{
-	"0.0.0.0/8",
-	"10.0.0.0/8",
-	"100.64.0.0/10",
-	"127.0.0.0/8",
-	"169.254.0.0/16",
-	"172.16.0.0/12",
-	"192.0.0.0/24",
-	"192.0.2.0/24",
-	"192.88.99.0/24",
-	"192.168.0.0/16",
-	"198.18.0.0/15",
-	"198.51.100.0/24",
-	"203.0.113.0/24",
-	"224.0.0.0/3",
-	"::1/128",
-	"::/128",
-	"fc00::/7",
-	"fe80::/10",
-	"ff00::/8",
-}
-
-// NewPrivateIPMatcher returns an IPMatcher prebuilt with all IANA
-// private/special-use IP ranges. It does not require geoip.dat.
-func NewPrivateIPMatcher() IPMatcher {
-	rules, err := ParseIPRules(PrivateCIDRStrings)
-	common.Must(err)
-	m, err := IPReg.BuildIPMatcher(rules)
-	common.Must(err)
-	return m
 }
 
 type HeuristicIPMatcher struct {
@@ -982,10 +946,6 @@ func (f *IPSetFactory) createFrom(yield func(func(*CIDR)) error) (*IPSet, error)
 	}
 
 	return &IPSet{ipv4: ipv4, ipv6: ipv6, max4: uint8(max4), max6: uint8(max6)}, nil
-}
-
-func isPrivateGeoIPCode(code string) bool {
-	return strings.EqualFold(code, "PRIVATE")
 }
 
 func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error) {
