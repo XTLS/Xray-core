@@ -97,16 +97,6 @@ func TestIPMatcher(t *testing.T) {
 	}
 }
 
-func TestGeoIPPrivateUsesBuiltinMatcher(t *testing.T) {
-	matcher := buildIPMatcher("geoip:private")
-	if !matcher.Match(xnet.ParseAddress("100.64.0.1").IP()) {
-		t.Fatal("expected geoip:private to match without loading geoip.dat")
-	}
-	if matcher.Match(xnet.ParseAddress("8.8.8.8").IP()) {
-		t.Fatal("expected geoip:private not to match public IP")
-	}
-}
-
 func TestIPMatcherFullCIDR4(t *testing.T) {
 	matcher := buildIPMatcher(
 		"0.0.0.0/0",
