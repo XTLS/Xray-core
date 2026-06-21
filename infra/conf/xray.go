@@ -241,8 +241,6 @@ type OutboundDetourConfig struct {
 	TargetStrategy string           `json:"targetStrategy"`
 }
 
-var privateIPMatcher = geodata.NewPrivateIPMatcher()
-
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 	if c.StreamSetting == nil || c.ProxySettings == nil || c.StreamSetting.SocketSettings == nil {
 		return nil
@@ -257,7 +255,7 @@ func isInternalOrInvalidAddress(address *Address) bool {
 	if address == nil || address.Address == nil || !address.Family().IsIP() {
 		return true
 	}
-	return privateIPMatcher.Match(address.IP())
+	return geodata.PrivateIPMatcher.Match(address.IP())
 }
 
 func (c *OutboundDetourConfig) checkOutboundTLSConflict(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
