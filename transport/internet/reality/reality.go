@@ -119,12 +119,16 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	uConn := &UConn{
 		Config: config,
 	}
+	keyLogWriter := KeyLogWriterFromConfig(config)
+	if keyLogWriter != nil {
+		defer keyLogWriter.Close()
+	}
 	utlsConfig := &utls.Config{
 		VerifyPeerCertificate:  uConn.VerifyPeerCertificate,
 		ServerName:             config.ServerName,
 		InsecureSkipVerify:     true,
 		SessionTicketsDisabled: true,
-		KeyLogWriter:           KeyLogWriterFromConfig(config),
+		KeyLogWriter:           keyLogWriter,
 	}
 	if utlsConfig.ServerName == "" {
 		utlsConfig.ServerName = dest.Address.String()

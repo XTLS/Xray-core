@@ -58,7 +58,7 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 	return config
 }
 
-func KeyLogWriterFromConfig(c *Config) io.Writer {
+func KeyLogWriterFromConfig(c *Config) io.WriteCloser {
 	if len(c.MasterKeyLog) <= 0 || c.MasterKeyLog == "none" {
 		return nil
 	}
@@ -66,6 +66,7 @@ func KeyLogWriterFromConfig(c *Config) io.Writer {
 	writer, err := os.OpenFile(c.MasterKeyLog, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o644)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "failed to open ", c.MasterKeyLog, " as master key log")
+		return nil
 	}
 
 	return writer
