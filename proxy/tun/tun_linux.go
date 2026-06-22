@@ -4,8 +4,11 @@ package tun
 
 import (
 	"net"
+	"strconv"
 
 	"github.com/vishvananda/netlink"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -18,6 +21,7 @@ type LinuxTun struct {
 	tunFd   int
 	tunLink netlink.Link
 	options *Config
+	ownsTun bool
 }
 
 // LinuxTun implements Tun
@@ -25,12 +29,24 @@ var _ Tun = (*LinuxTun)(nil)
 
 // NewTun builds new tun interface handler (linux specific)
 func NewTun(options *Config) (Tun, error) {
-	tunFd, err := open(options.Name)
+	tunFd, tunLink, fdProvided, err := openFromEnv(options.Name)
+	if err != nil {
+		return nil, err
+	}
+	if fdProvided {
+		return &LinuxTun{
+			tunFd:   tunFd,
+			tunLink: tunLink,
+			options: options,
+		}, nil
+	}
+
+	tunFd, err = open(options.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	tunLink, err := setup(options.Name, int(options.MTU))
+	tunLink, err = setup(options.Name, int(options.MTU))
 	if err != nil {
 		_ = unix.Close(tunFd)
 		return nil, err
@@ -40,9 +56,57 @@ func NewTun(options *Config) (Tun, error) {
 		tunFd:   tunFd,
 		tunLink: tunLink,
 		options: options,
+		ownsTun: true,
 	}
 
 	return linuxTun, nil
+}
+
+func openFromEnv(expectedName string) (int, netlink.Link, bool, error) {
+	fdStr := platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "" })
+	if fdStr == "" {
+		return -1, nil, false, nil
+	}
+
+	fd, err := strconv.Atoi(fdStr)
+	if err != nil {
+		return -1, nil, true, errors.New("invalid ", platform.TunFdKey).Base(err)
+	}
+	if fd < 3 {
+		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor must be >= 3")
+	}
+
+	ifr, err := unix.NewIfreq("")
+	if err != nil {
+		return -1, nil, true, err
+	}
+	if err = unix.IoctlIfreq(fd, unix.TUNGETIFF, ifr); err != nil {
+		return -1, nil, true, err
+	}
+
+	flags := ifr.Uint16()
+	if flags&unix.IFF_TUN == 0 {
+		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor is not a TUN device")
+	}
+	if flags&unix.IFF_NO_PI == 0 {
+		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device must use IFF_NO_PI")
+	}
+
+	actualName := ifr.Name()
+	if expectedName != "" && actualName != expectedName {
+		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device name ", actualName, " does not match configured name ", expectedName)
+	}
+
+	tunLink, err := netlink.LinkByName(actualName)
+	if err != nil {
+		return -1, nil, true, err
+	}
+
+	if err = unix.SetNonblock(fd, true); err != nil {
+		return -1, nil, true, err
+	}
+
+	return fd, tunLink, true, nil
 }
 
 // open the file that implements tun interface in the OS
@@ -93,6 +157,10 @@ func setup(name string, MTU int) (netlink.Link, error) {
 
 // Start is called by handler to bring tun interface to life
 func (t *LinuxTun) Start() error {
+	if !t.ownsTun {
+		return nil
+	}
+
 	err := netlink.LinkSetUp(t.tunLink)
 	if err != nil {
 		return err
@@ -103,7 +171,9 @@ func (t *LinuxTun) Start() error {
 
 // Close is called to shut down the tun interface
 func (t *LinuxTun) Close() error {
-	_ = netlink.LinkSetDown(t.tunLink)
+	if t.ownsTun {
+		_ = netlink.LinkSetDown(t.tunLink)
+	}
 	_ = unix.Close(t.tunFd)
 
 	return nil
