@@ -1,0 +1,24 @@
+# Carrier image for the patched Xray (WireGuard UserManager).
+#
+# This image's only payload is the `xray` binary. It is NOT a standalone VPN
+# service on its own in this stack — PasarGuard node runs xray as a local child
+# process. The image is handy for distribution / `docker create && docker cp`,
+# or as a build stage the node image can COPY the binary from.
+FROM golang:1.26.2-alpine AS builder
+RUN apk add --no-cache git
+WORKDIR /src
+COPY . ./
+# Cache the module/build cache and retry: Go proxy fetches occasionally EOF.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    for i in 1 2 3 4 5; do \
+        CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/xray ./main && exit 0; \
+        echo "xray build attempt $i failed, retrying..."; sleep 5; \
+    done; exit 1
+
+FROM alpine:latest
+LABEL org.opencontainers.image.title="xray-core (wireguard usermanager patch)"
+RUN apk add --no-cache ca-certificates \
+    && mkdir -p /usr/local/share/xray
+COPY --from=builder /out/xray /usr/local/bin/xray
+ENTRYPOINT ["/usr/local/bin/xray"]
