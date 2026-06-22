@@ -6,12 +6,14 @@ import (
 	"net/netip"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
@@ -24,6 +26,13 @@ import (
 	"golang.zx2c4.com/wireguard/tun"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
+
+// wgIpcSetter abstracts the IPC surface of *device.Device used by the
+// UserManager methods. The interface makes the peer management logic
+// independently testable without a live WireGuard device.
+type wgIpcSetter interface {
+	IpcSet(string) error
+}
 
 type Server struct {
 	conf          *DeviceConfig
@@ -42,6 +51,16 @@ type Server struct {
 	stack *stack.Stack
 	dev   *device.Device
 	mu    sync.Mutex
+
+	// UserManager state: peers indexed by email and by tunnel IP.
+	peers     sync.Map    // email (or public key) → *protocol.MemoryUser
+	peersByIP sync.Map    // netip.Addr → *protocol.MemoryUser
+	peerCount atomic.Int64
+
+	// ipcOverride is non-nil only in tests. When set it is used instead of
+	// s.dev for IpcSet calls, allowing UserManager logic to be tested without
+	// a live WireGuard device.
+	ipcOverride wgIpcSetter
 }
 
 func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
@@ -101,7 +120,7 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		return nil, err
 	}
 
-	return &Server{
+	s := &Server{
 		conf:          conf,
 		ctx:           core.ToBackgroundDetachedContext(ctx),
 		policyManager: p,
@@ -116,7 +135,32 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 
 		tun:   tun,
 		stack: stack,
-	}, nil
+	}
+
+	// Seed peer maps from the static config so that GetUser / GetUsers work
+	// for peers configured at startup, not only for dynamically added ones.
+	for _, peer := range conf.Peers {
+		if peer.PublicKey == "" {
+			continue
+		}
+		mu := &protocol.MemoryUser{
+			Email: peer.PublicKey,
+			Account: &MemoryAccount{
+				PublicKey:    peer.PublicKey,
+				PreSharedKey: peer.PreSharedKey,
+				AllowedIPs:   peer.AllowedIps,
+			},
+		}
+		s.peers.Store(peer.PublicKey, mu)
+		s.peerCount.Add(1)
+		for _, cidr := range peer.AllowedIps {
+			if addr, err := parseFirstAddr(cidr); err == nil {
+				s.peersByIP.Store(addr, mu)
+			}
+		}
+	}
+
+	return s, nil
 }
 
 // Network implements proxy.Inbound.Network.
@@ -235,6 +279,15 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 		Source:        source,
 	}
 
+	// Tag the session with the peer's user identity when the tunnel source IP
+	// maps to a known peer. This makes the user visible in access logs and
+	// enables per-user traffic accounting via the stats manager.
+	if addrPort, err := netip.ParseAddrPort(conn.RemoteAddr().String()); err == nil {
+		if v, ok := s.peersByIP.Load(addrPort.Addr()); ok {
+			inbound.User = v.(*protocol.MemoryUser)
+		}
+	}
+
 	ctx = session.ContextWithInbound(ctx, &inbound)
 	ctx = session.ContextWithContent(ctx, &session.Content{
 		SniffingRequest: s.sniffingRequest,
@@ -256,4 +309,98 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	if err := s.dispatcher.DispatchLink(ctx, dest, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 	}
+}
+
+// ipc returns the wgIpcSetter used by AddUser / RemoveUser.
+// In production this is s.dev (set after Start). Tests inject via ipcOverride.
+// Callers must NOT hold s.mu.
+func (s *Server) ipc() (wgIpcSetter, error) {
+	if s.ipcOverride != nil {
+		return s.ipcOverride, nil
+	}
+	s.mu.Lock()
+	dev := s.dev
+	s.mu.Unlock()
+	if dev == nil {
+		return nil, errors.New("wireguard server is not running")
+	}
+	return dev, nil
+}
+
+// AddUser implements proxy.UserManager.
+// The peer is installed into the running WireGuard device via IPC and
+// tracked in the in-memory maps so that subsequent API calls and log
+// annotations see it immediately.
+func (s *Server) AddUser(_ context.Context, u *protocol.MemoryUser) error {
+	account, ok := u.Account.(*MemoryAccount)
+	if !ok {
+		return errors.New("not a WireGuard account")
+	}
+	ipc, err := s.ipc()
+	if err != nil {
+		return err
+	}
+	if err := ipc.IpcSet(buildPeerIPC(account)); err != nil {
+		return err
+	}
+	email := u.Email
+	if email == "" {
+		email = account.PublicKey
+	}
+	u.Email = email
+	if _, loaded := s.peers.LoadOrStore(email, u); loaded {
+		return errors.New("peer ", email, " already exists")
+	}
+	s.peerCount.Add(1)
+	for _, cidr := range account.AllowedIPs {
+		if addr, err := parseFirstAddr(cidr); err == nil {
+			s.peersByIP.Store(addr, u)
+		}
+	}
+	return nil
+}
+
+// RemoveUser implements proxy.UserManager.
+func (s *Server) RemoveUser(_ context.Context, email string) error {
+	v, ok := s.peers.LoadAndDelete(email)
+	if !ok {
+		return errors.New("peer ", email, " not found")
+	}
+	s.peerCount.Add(-1)
+	mu := v.(*protocol.MemoryUser)
+	account := mu.Account.(*MemoryAccount)
+	for _, cidr := range account.AllowedIPs {
+		if addr, err := parseFirstAddr(cidr); err == nil {
+			s.peersByIP.Delete(addr)
+		}
+	}
+	ipc, err := s.ipc()
+	if err != nil {
+		return err
+	}
+	return ipc.IpcSet(buildRemovePeerIPC(account.PublicKey))
+}
+
+// GetUser implements proxy.UserManager.
+func (s *Server) GetUser(_ context.Context, email string) *protocol.MemoryUser {
+	v, ok := s.peers.Load(email)
+	if !ok {
+		return nil
+	}
+	return v.(*protocol.MemoryUser)
+}
+
+// GetUsers implements proxy.UserManager.
+func (s *Server) GetUsers(_ context.Context) []*protocol.MemoryUser {
+	var out []*protocol.MemoryUser
+	s.peers.Range(func(_, v any) bool {
+		out = append(out, v.(*protocol.MemoryUser))
+		return true
+	})
+	return out
+}
+
+// GetUsersCount implements proxy.UserManager.
+func (s *Server) GetUsersCount(_ context.Context) int64 {
+	return s.peerCount.Load()
 }
