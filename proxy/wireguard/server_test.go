@@ -73,14 +73,15 @@ func memUser(email, pubkey, psk string, ips ...string) *protocol.MemoryUser {
 type wrongAccount struct{}
 
 func (wrongAccount) Equals(protocol.Account) bool { return false }
-func (wrongAccount) ToProto() proto.Message        { return nil }
+func (wrongAccount) ToProto() proto.Message       { return nil }
 
 // ---------------------------------------------------------------------------
 // Static peer seeding
 // ---------------------------------------------------------------------------
 
 func TestStaticPeersSeededAtStartup(t *testing.T) {
-	s := newTestServer(&mockIpc{},
+	s := newTestServer(
+		&mockIpc{},
 		&PeerConfig{PublicKey: "pk1", AllowedIps: []string{"10.0.0.2/32"}},
 		&PeerConfig{PublicKey: "pk2", AllowedIps: []string{"10.0.0.3/32"}},
 	)

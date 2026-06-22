@@ -55,7 +55,10 @@ func TestBuildRemovePeerIPC(t *testing.T) {
 }
 
 func TestParseFirstAddr(t *testing.T) {
-	for _, tc := range []struct{ in, want string; wantErr bool }{
+	for _, tc := range []struct {
+		in, want string
+		wantErr  bool
+	}{
 		{"10.0.0.2/32", "10.0.0.2", false},
 		{"10.0.0.5", "10.0.0.5", false},
 		{"fd00::1/128", "fd00::1", false},

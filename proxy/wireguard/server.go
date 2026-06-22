@@ -53,8 +53,8 @@ type Server struct {
 	mu    sync.Mutex
 
 	// UserManager state: peers indexed by email and by tunnel IP.
-	peers     sync.Map    // email (or public key) → *protocol.MemoryUser
-	peersByIP sync.Map    // netip.Addr → *protocol.MemoryUser
+	peers     sync.Map // email (or public key) → *protocol.MemoryUser
+	peersByIP sync.Map // netip.Addr → *protocol.MemoryUser
 	peerCount atomic.Int64
 
 	// ipcOverride is non-nil only in tests. When set it is used instead of
