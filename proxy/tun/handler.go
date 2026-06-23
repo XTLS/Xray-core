@@ -155,11 +155,22 @@ func (t *Handler) Start() error {
 
 // HandleConnection pass the connection coming from the ip stack to the routing dispatcher
 func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
+	// when handling is done with any outcome, always signal back to the incoming connection
+	// to close, send completion packets back to the network, and cleanup
+	defer conn.Close()
+
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
 	ctx = c.ContextWithID(ctx, session.NewID())
 
-	source := net.DestinationFromAddr(conn.RemoteAddr())
+	// if the connection is already closed, conn.RemoteAddr() will be nil
+	// due to gvisor weird behavior
+	remote := conn.RemoteAddr()
+	if remote == nil {
+		errors.LogInfo(t.ctx, "dropped quickly closed connection")
+		return
+	}
+	source := net.DestinationFromAddr(remote)
 	if t.uplinkCounter != nil || t.downlinkCounter != nil {
 		conn = &stat.CounterConnection{
 			Connection:   conn,
@@ -167,9 +178,6 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 			WriteCounter: t.downlinkCounter,
 		}
 	}
-	// when handling is done with any outcome, always signal back to the incoming connection
-	// to close, send completion packets back to the network, and cleanup
-	defer conn.Close()
 
 	inbound := session.Inbound{
 		Name:          "tun",

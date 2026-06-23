@@ -198,9 +198,14 @@ func parseResponse(payload []byte) (*IPRecord, error) {
 	ipRecord := &IPRecord{
 		ReqID:     h.ID,
 		RCode:     h.RCode,
-		Expire:    now.Add(time.Second * dns_feature.DefaultTTL),
 		RawHeader: &h,
 	}
+	defer func() {
+		// set to default TTL if no valid TTL is found
+		if ipRecord.Expire.IsZero() {
+			ipRecord.Expire = now.Add(time.Second * dns_feature.DefaultTTL)
+		}
+	}()
 
 L:
 	for {
@@ -217,7 +222,7 @@ L:
 			ttl = 1
 		}
 		expire := now.Add(time.Duration(ttl) * time.Second)
-		if ipRecord.Expire.After(expire) {
+		if ipRecord.Expire.IsZero() || ipRecord.Expire.After(expire) {
 			ipRecord.Expire = expire
 		}
 
