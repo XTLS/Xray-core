@@ -3,7 +3,6 @@
 package tun
 
 import (
-	"errors"
 	"net"
 	"strconv"
 
