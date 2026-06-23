@@ -143,7 +143,14 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	defer cancel()
 	ctx = c.ContextWithID(ctx, session.NewID())
 
-	source := net.DestinationFromAddr(conn.RemoteAddr())
+	// if the connection is already closed, conn.RemoteAddr() will be nil
+	// due to gvisor weird behavior
+	remote := conn.RemoteAddr()
+	if remote == nil {
+		errors.LogInfo(t.ctx, "dropped quickly closed connection")
+		return
+	}
+	source := net.DestinationFromAddr(remote)
 	inbound := session.Inbound{
 		Name:          "tun",
 		Tag:           t.tag,
