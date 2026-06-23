@@ -27,13 +27,6 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
-// wgIpcSetter abstracts the IPC surface of *device.Device used by the
-// UserManager methods. The interface makes the peer management logic
-// independently testable without a live WireGuard device.
-type wgIpcSetter interface {
-	IpcSet(string) error
-}
-
 type Server struct {
 	conf          *DeviceConfig
 	ctx           context.Context
@@ -52,15 +45,9 @@ type Server struct {
 	dev   *device.Device
 	mu    sync.Mutex
 
-	// UserManager state: peers indexed by email and by tunnel IP.
-	peers     sync.Map // email (or public key) → *protocol.MemoryUser
-	peersByIP sync.Map // netip.Addr → *protocol.MemoryUser
+	peers     sync.Map
+	peersByIP sync.Map
 	peerCount atomic.Int64
-
-	// ipcOverride is non-nil only in tests. When set it is used instead of
-	// s.dev for IpcSet calls, allowing UserManager logic to be tested without
-	// a live WireGuard device.
-	ipcOverride wgIpcSetter
 }
 
 func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
@@ -311,13 +298,9 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	}
 }
 
-// ipc returns the wgIpcSetter used by AddUser / RemoveUser.
-// In production this is s.dev (set after Start). Tests inject via ipcOverride.
+// device returns the running *device.Device used by AddUser / RemoveUser.
 // Callers must NOT hold s.mu.
-func (s *Server) ipc() (wgIpcSetter, error) {
-	if s.ipcOverride != nil {
-		return s.ipcOverride, nil
-	}
+func (s *Server) device() (*device.Device, error) {
 	s.mu.Lock()
 	dev := s.dev
 	s.mu.Unlock()
@@ -336,11 +319,11 @@ func (s *Server) AddUser(_ context.Context, u *protocol.MemoryUser) error {
 	if !ok {
 		return errors.New("not a WireGuard account")
 	}
-	ipc, err := s.ipc()
+	dev, err := s.device()
 	if err != nil {
 		return err
 	}
-	if err := ipc.IpcSet(buildPeerIPC(account)); err != nil {
+	if err := dev.IpcSet(buildPeerIPC(account)); err != nil {
 		return err
 	}
 	email := u.Email
@@ -374,11 +357,11 @@ func (s *Server) RemoveUser(_ context.Context, email string) error {
 			s.peersByIP.Delete(addr)
 		}
 	}
-	ipc, err := s.ipc()
+	dev, err := s.device()
 	if err != nil {
 		return err
 	}
-	return ipc.IpcSet(buildRemovePeerIPC(account.PublicKey))
+	return dev.IpcSet(buildRemovePeerIPC(account.PublicKey))
 }
 
 // GetUser implements proxy.UserManager.
