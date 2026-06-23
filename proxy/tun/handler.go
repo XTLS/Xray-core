@@ -147,7 +147,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	// due to gvisor weird behavior
 	remote := conn.RemoteAddr()
 	if remote == nil {
-		errors.LogInfo(t.ctx, "dropped quick close connection")
+		errors.LogInfo(t.ctx, "dropped quickly closed connection")
 		return
 	}
 	source := net.DestinationFromAddr(remote)
