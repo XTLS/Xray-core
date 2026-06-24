@@ -172,7 +172,7 @@ func (s *Server) RemoveUser(ctx context.Context, email string) error {
 	}
 	if user := s.GetUser(ctx, email); user != nil {
 		peer := user.Account.(*MemoryAccount)
-		err := s.dev.IpcSet("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n" + "remove=true\n")
+		err := s.dev.IpcSet("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\nremove=true\n")
 		if err != nil {
 			return err
 		}
