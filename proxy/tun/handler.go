@@ -6,6 +6,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -17,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -175,9 +177,33 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	})
 	errors.LogInfo(ctx, "processing from ", source, " to ", destination)
 
+	// stats
+	v := core.MustFromContext(ctx)
+	p := v.GetFeature(policy.ManagerType()).(policy.Manager)
+
+	var reader buf.Reader = &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)}
+	var writter buf.Writer = buf.NewWriter(conn)
+
+	if len(inbound.Tag) > 0 && p.ForSystem().Stats.InboundUplink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + inbound.Tag + ">>>traffic>>>uplink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			writter = &dispatcher.SizeStatWriter{Counter: c, Writer: writter}
+		}
+	}
+	if len(inbound.Tag) > 0 && p.ForSystem().Stats.InboundDownlink {
+		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + inbound.Tag + ">>>traffic>>>downlink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			reader = &dispatcher.SizeStatReader{Counter: c, Reader: reader}
+		}
+	}
+
 	link := &transport.Link{
-		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
-		Writer: buf.NewWriter(conn),
+		Reader: reader,
+		Writer: writter,
 	}
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))

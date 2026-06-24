@@ -23,3 +23,24 @@ func (w *SizeStatWriter) Close() error {
 func (w *SizeStatWriter) Interrupt() {
 	common.Interrupt(w.Writer)
 }
+
+type SizeStatReader struct {
+	Counter stats.Counter
+	Reader  buf.Reader
+}
+
+func (r *SizeStatReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	buf, err := r.Reader.ReadMultiBuffer()
+	if err == nil {
+		r.Counter.Add(int64(buf.Len()))
+	}
+	return buf, err
+}
+
+func (r *SizeStatReader) Close() error {
+	return common.Close(r.Reader)
+}
+
+func (r *SizeStatReader) Interrupt() {
+	common.Interrupt(r.Reader)
+}
