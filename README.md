@@ -73,8 +73,8 @@
   - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool), [VPainLess](https://github.com/vpainless/vpainless)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
+  - [Magic_V2Ray](https://github.com/vincentng295/Magic_V2Ray)
   - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
-  - [Magic V2Ray](https://github.com/vincentng295/magic_v2ray)
 - Homebrew
   - `brew install xray`
 
