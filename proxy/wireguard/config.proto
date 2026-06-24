@@ -6,6 +6,8 @@ option go_package = "github.com/xtls/xray-core/proxy/wireguard";
 option java_package = "com.xray.proxy.wireguard";
 option java_multiple_files = true;
 
+import "common/protocol/user.proto";
+
 message PeerConfig {
   string public_key = 1;
   string pre_shared_key = 2;
@@ -25,6 +27,7 @@ message DeviceConfig {
   string secret_key = 1;
   repeated string endpoint = 2;
   repeated PeerConfig peers = 3;
+  repeated xray.common.protocol.User users = 5;
   int32 mtu = 4;
 
   bytes reserved = 6;

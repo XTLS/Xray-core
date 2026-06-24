@@ -2,11 +2,12 @@ package wireguard
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/netip"
+	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
@@ -22,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"golang.org/x/crypto/curve25519"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -45,9 +47,9 @@ type Server struct {
 	dev   *device.Device
 	mu    sync.Mutex
 
-	peers     sync.Map
-	peersByIP sync.Map
-	peerCount atomic.Int64
+	pub    [32]byte
+	users  *sync.Map
+	emails *sync.Map
 }
 
 func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
@@ -78,15 +80,6 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		}
 	}
 
-	if len(conf.Peers) == 0 {
-		return nil, errors.New("empty peers")
-	}
-	for _, peer := range conf.Peers {
-		if peer.PublicKey == "" {
-			return nil, errors.New("peer without publickey")
-		}
-	}
-
 	localAddresses := make([]netip.Addr, 0, len(conf.Endpoint))
 	for _, localaddress := range conf.Endpoint {
 		addr, err := netip.ParseAddr(localaddress)
@@ -107,7 +100,25 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		return nil, err
 	}
 
-	s := &Server{
+	pri, err := ParseKey(conf.SecretKey)
+	if err != nil {
+		return nil, err
+	}
+	var pub [32]byte
+	curve25519.ScalarBaseMult(&pub, pri)
+
+	users := &sync.Map{}
+	emails := &sync.Map{}
+	for _, u := range conf.Users {
+		user, err := u.ToMemoryUser()
+		if err != nil {
+			return nil, err
+		}
+		users.Store(user.Account.(*MemoryAccount).Pub, user)
+		emails.Store(user.Email, user)
+	}
+
+	return &Server{
 		conf:          conf,
 		ctx:           core.ToBackgroundDetachedContext(ctx),
 		policyManager: p,
@@ -122,32 +133,83 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 
 		tun:   tun,
 		stack: stack,
-	}
 
-	// Seed peer maps from the static config so that GetUser / GetUsers work
-	// for peers configured at startup, not only for dynamically added ones.
-	for _, peer := range conf.Peers {
-		if peer.PublicKey == "" {
-			continue
-		}
-		mu := &protocol.MemoryUser{
-			Email: peer.PublicKey,
-			Account: &MemoryAccount{
-				PublicKey:    peer.PublicKey,
-				PreSharedKey: peer.PreSharedKey,
-				AllowedIPs:   peer.AllowedIps,
-			},
-		}
-		s.peers.Store(peer.PublicKey, mu)
-		s.peerCount.Add(1)
-		for _, cidr := range peer.AllowedIps {
-			if addr, err := parseFirstAddr(cidr); err == nil {
-				s.peersByIP.Store(addr, mu)
-			}
-		}
-	}
+		pub:    pub,
+		users:  users,
+		emails: emails,
+	}, nil
+}
 
-	return s, nil
+func (s *Server) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dev == nil {
+		return errors.New("too early")
+	}
+	peer := user.Account.(*MemoryAccount)
+	if peer.Pub == s.pub {
+		return errors.New("invalid public key")
+	}
+	var sb strings.Builder
+	sb.WriteString("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n")
+	sb.WriteString("replace_allowed_ips=true")
+	for _, ip := range peer.AllowedIPs {
+		sb.WriteString("allowed_ip=" + ip.String() + "\n")
+	}
+	if peer.PreSharedKey != "" {
+		sb.WriteString("preshared_key=" + peer.PreSharedKey + "\n")
+	}
+	if peer.KeepAlive != "" {
+		sb.WriteString("persistent_keepalive_interval=" + peer.KeepAlive + "\n")
+	}
+	err := s.dev.IpcSet(sb.String())
+	if err != nil {
+		return err
+	}
+	s.users.Store(peer.Pub, user)
+	s.emails.Store(user.Email, user)
+	return nil
+}
+
+func (s *Server) RemoveUser(ctx context.Context, email string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dev == nil {
+		return errors.New("too early")
+	}
+	if value, ok := s.emails.Load(email); ok {
+		peer := value.(*protocol.MemoryUser).Account.(*MemoryAccount)
+		err := s.dev.IpcSet("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n" + "remove=true\n")
+		if err != nil {
+			return err
+		}
+		s.emails.Delete(email)
+		s.users.Delete(peer.Pub)
+	}
+	return nil
+}
+
+func (s *Server) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
+	if value, ok := s.emails.Load(email); ok {
+		return value.(*protocol.MemoryUser)
+	}
+	return nil
+}
+
+func (s *Server) GetUsers(ctx context.Context) (users []*protocol.MemoryUser) {
+	s.users.Range(func(key, value interface{}) bool {
+		users = append(users, value.(*protocol.MemoryUser))
+		return true
+	})
+	return
+}
+
+func (s *Server) GetUsersCount(context.Context) (count int64) {
+	s.users.Range(func(key, value interface{}) bool {
+		count++
+		return true
+	})
+	return
 }
 
 // Network implements proxy.Inbound.Network.
@@ -227,18 +289,20 @@ func (s *Server) Start() error {
 	dev := device.NewDevice(s.tun, bind, logger)
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + s.conf.SecretKey + "\n")
-	for _, peer := range s.conf.Peers {
-		cfg.WriteString("public_key=" + peer.PublicKey + "\n")
+	s.users.Range(func(key, value any) bool {
+		peer := value.(*protocol.MemoryUser).Account.(*MemoryAccount)
+		cfg.WriteString("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n")
+		for _, ip := range peer.AllowedIPs {
+			cfg.WriteString("allowed_ip=" + ip.String() + "\n")
+		}
 		if peer.PreSharedKey != "" {
 			cfg.WriteString("preshared_key=" + peer.PreSharedKey + "\n")
-		}
-		for _, ip := range peer.AllowedIps {
-			cfg.WriteString("allowed_ip=" + ip + "\n")
 		}
 		if peer.KeepAlive != "" {
 			cfg.WriteString("persistent_keepalive_interval=" + peer.KeepAlive + "\n")
 		}
-	}
+		return true
+	})
 	err := dev.IpcSet(cfg.String())
 	if err != nil {
 		return err
@@ -258,21 +322,47 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	defer cancel()
 	ctx = c.ContextWithID(ctx, session.NewID())
 
+	remote := conn.RemoteAddr()
+	if remote == nil {
+		errors.LogError(context.Background(), "nil remote")
+		return
+	}
+
+	var addr netip.Addr
+	switch v := remote.(type) {
+	case *net.TCPAddr:
+		addr, _ = netip.AddrFromSlice(v.IP)
+	case *net.UDPAddr:
+		addr, _ = netip.AddrFromSlice(v.IP)
+	default:
+		errors.LogError(context.Background(), "invalid addr type ", reflect.TypeOf(v))
+		return
+	}
+
+	var user *protocol.MemoryUser
+	s.users.Range(func(key, value any) bool {
+		peer := value.(*protocol.MemoryUser).Account.(*MemoryAccount)
+		for _, ip := range peer.AllowedIPs {
+			if ip.Contains(addr) {
+				user = value.(*protocol.MemoryUser)
+				return false
+			}
+		}
+		return true
+	})
+
+	if user == nil {
+		errors.LogError(context.Background(), "nil user for ", remote)
+		return
+	}
+
 	source := net.DestinationFromAddr(conn.RemoteAddr())
 	inbound := session.Inbound{
 		Name:          "wireguard",
 		Tag:           s.tag,
 		CanSpliceCopy: 3,
 		Source:        source,
-	}
-
-	// Tag the session with the peer's user identity when the tunnel source IP
-	// maps to a known peer. This makes the user visible in access logs and
-	// enables per-user traffic accounting via the stats manager.
-	if addrPort, err := netip.ParseAddrPort(conn.RemoteAddr().String()); err == nil {
-		if v, ok := s.peersByIP.Load(addrPort.Addr()); ok {
-			inbound.User = v.(*protocol.MemoryUser)
-		}
+		User:          user,
 	}
 
 	ctx = session.ContextWithInbound(ctx, &inbound)
@@ -298,92 +388,13 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	}
 }
 
-// device returns the running *device.Device used by AddUser / RemoveUser.
-// Callers must NOT hold s.mu.
-func (s *Server) device() (*device.Device, error) {
-	s.mu.Lock()
-	dev := s.dev
-	s.mu.Unlock()
-	if dev == nil {
-		return nil, errors.New("wireguard server is not running")
-	}
-	return dev, nil
-}
-
-// AddUser implements proxy.UserManager.
-// The peer is installed into the running WireGuard device via IPC and
-// tracked in the in-memory maps so that subsequent API calls and log
-// annotations see it immediately.
-func (s *Server) AddUser(_ context.Context, u *protocol.MemoryUser) error {
-	account, ok := u.Account.(*MemoryAccount)
-	if !ok {
-		return errors.New("not a WireGuard account")
-	}
-	dev, err := s.device()
+func ParseKey(str string) (*[32]byte, error) {
+	slice, err := hex.DecodeString(str)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := dev.IpcSet(buildPeerIPC(account)); err != nil {
-		return err
+	if len(slice) != 32 {
+		return nil, errors.New("invalid length")
 	}
-	email := u.Email
-	if email == "" {
-		email = account.PublicKey
-	}
-	u.Email = email
-	if _, loaded := s.peers.LoadOrStore(email, u); loaded {
-		return errors.New("peer ", email, " already exists")
-	}
-	s.peerCount.Add(1)
-	for _, cidr := range account.AllowedIPs {
-		if addr, err := parseFirstAddr(cidr); err == nil {
-			s.peersByIP.Store(addr, u)
-		}
-	}
-	return nil
-}
-
-// RemoveUser implements proxy.UserManager.
-func (s *Server) RemoveUser(_ context.Context, email string) error {
-	v, ok := s.peers.LoadAndDelete(email)
-	if !ok {
-		return errors.New("peer ", email, " not found")
-	}
-	s.peerCount.Add(-1)
-	mu := v.(*protocol.MemoryUser)
-	account := mu.Account.(*MemoryAccount)
-	for _, cidr := range account.AllowedIPs {
-		if addr, err := parseFirstAddr(cidr); err == nil {
-			s.peersByIP.Delete(addr)
-		}
-	}
-	dev, err := s.device()
-	if err != nil {
-		return err
-	}
-	return dev.IpcSet(buildRemovePeerIPC(account.PublicKey))
-}
-
-// GetUser implements proxy.UserManager.
-func (s *Server) GetUser(_ context.Context, email string) *protocol.MemoryUser {
-	v, ok := s.peers.Load(email)
-	if !ok {
-		return nil
-	}
-	return v.(*protocol.MemoryUser)
-}
-
-// GetUsers implements proxy.UserManager.
-func (s *Server) GetUsers(_ context.Context) []*protocol.MemoryUser {
-	var out []*protocol.MemoryUser
-	s.peers.Range(func(_, v any) bool {
-		out = append(out, v.(*protocol.MemoryUser))
-		return true
-	})
-	return out
-}
-
-// GetUsersCount implements proxy.UserManager.
-func (s *Server) GetUsersCount(_ context.Context) int64 {
-	return s.peerCount.Load()
+	return (*[32]byte)(slice), nil
 }
