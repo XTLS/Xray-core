@@ -152,7 +152,7 @@ func (s *Server) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
 	}
 	var sb strings.Builder
 	sb.WriteString("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n")
-	sb.WriteString("replace_allowed_ips=true")
+	sb.WriteString("replace_allowed_ips=true\n")
 	for _, ip := range peer.AllowedIPs {
 		sb.WriteString("allowed_ip=" + ip.String() + "\n")
 	}
