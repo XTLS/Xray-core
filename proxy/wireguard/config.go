@@ -15,8 +15,8 @@ func (p *PeerConfig) AsAccount() (protocol.Account, error) {
 	}
 
 	allowedIPs := make([]netip.Prefix, 0, len(p.AllowedIps))
-	for _, ip := range p.AllowedIps {
-		p, err := netip.ParsePrefix(ip)
+	for i := range p.AllowedIps {
+		p, err := netip.ParsePrefix(p.AllowedIps[i])
 		if err != nil {
 			return nil, err
 		}
@@ -47,8 +47,8 @@ func (a *MemoryAccount) Equals(other protocol.Account) bool {
 
 func (a *MemoryAccount) ToProto() proto.Message {
 	allowedIPs := make([]string, 0, len(a.AllowedIPs))
-	for _, ip := range a.AllowedIPs {
-		allowedIPs = append(allowedIPs, ip.String())
+	for i := range a.AllowedIPs {
+		allowedIPs = append(allowedIPs, a.AllowedIPs[i].String())
 	}
 
 	return &PeerConfig{

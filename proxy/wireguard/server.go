@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
@@ -47,9 +48,8 @@ type Server struct {
 	dev   *device.Device
 	mu    sync.Mutex
 
-	pub    [32]byte
-	users  *sync.Map
-	emails *sync.Map
+	pub   [32]byte
+	users *sync.Map
 }
 
 func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
@@ -100,22 +100,17 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		return nil, err
 	}
 
-	pri, err := ParseKey(conf.SecretKey)
-	if err != nil {
-		return nil, err
-	}
+	pri := common.Must2(ParseKey(conf.SecretKey))
 	var pub [32]byte
 	curve25519.ScalarBaseMult(&pub, pri)
 
 	users := &sync.Map{}
-	emails := &sync.Map{}
 	for _, u := range conf.Users {
 		user, err := u.ToMemoryUser()
 		if err != nil {
 			return nil, err
 		}
 		users.Store(user.Account.(*MemoryAccount).Pub, user)
-		emails.Store(user.Email, user)
 	}
 
 	return &Server{
@@ -134,9 +129,8 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		tun:   tun,
 		stack: stack,
 
-		pub:    pub,
-		users:  users,
-		emails: emails,
+		pub:   pub,
+		users: users,
 	}, nil
 }
 
@@ -153,8 +147,8 @@ func (s *Server) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
 	var sb strings.Builder
 	sb.WriteString("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n")
 	sb.WriteString("replace_allowed_ips=true\n")
-	for _, ip := range peer.AllowedIPs {
-		sb.WriteString("allowed_ip=" + ip.String() + "\n")
+	for i := range peer.AllowedIPs {
+		sb.WriteString("allowed_ip=" + peer.AllowedIPs[i].String() + "\n")
 	}
 	if peer.PreSharedKey != "" {
 		sb.WriteString("preshared_key=" + peer.PreSharedKey + "\n")
@@ -167,7 +161,6 @@ func (s *Server) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
 		return err
 	}
 	s.users.Store(peer.Pub, user)
-	s.emails.Store(user.Email, user)
 	return nil
 }
 
@@ -177,23 +170,40 @@ func (s *Server) RemoveUser(ctx context.Context, email string) error {
 	if s.dev == nil {
 		return errors.New("too early")
 	}
-	if value, ok := s.emails.Load(email); ok {
-		peer := value.(*protocol.MemoryUser).Account.(*MemoryAccount)
+	if user := s.GetUser(ctx, email); user != nil {
+		peer := user.Account.(*MemoryAccount)
 		err := s.dev.IpcSet("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n" + "remove=true\n")
 		if err != nil {
 			return err
 		}
-		s.emails.Delete(email)
 		s.users.Delete(peer.Pub)
 	}
 	return nil
 }
 
-func (s *Server) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
-	if value, ok := s.emails.Load(email); ok {
-		return value.(*protocol.MemoryUser)
-	}
-	return nil
+func (s *Server) GetUser(ctx context.Context, email string) (user *protocol.MemoryUser) {
+	s.users.Range(func(key, value any) bool {
+		if value.(*protocol.MemoryUser).Email == email {
+			user = value.(*protocol.MemoryUser)
+			return false
+		}
+		return true
+	})
+	return
+}
+
+func (s *Server) GetUserByAddr(ctx context.Context, addr netip.Addr) (user *protocol.MemoryUser) {
+	s.users.Range(func(key, value any) bool {
+		peer := value.(*protocol.MemoryUser).Account.(*MemoryAccount)
+		for i := range peer.AllowedIPs {
+			if peer.AllowedIPs[i].Contains(addr) {
+				user = value.(*protocol.MemoryUser)
+				return false
+			}
+		}
+		return true
+	})
+	return
 }
 
 func (s *Server) GetUsers(ctx context.Context) (users []*protocol.MemoryUser) {
@@ -292,8 +302,8 @@ func (s *Server) Start() error {
 	s.users.Range(func(key, value any) bool {
 		peer := value.(*protocol.MemoryUser).Account.(*MemoryAccount)
 		cfg.WriteString("public_key=" + hex.EncodeToString(peer.Pub[:]) + "\n")
-		for _, ip := range peer.AllowedIPs {
-			cfg.WriteString("allowed_ip=" + ip.String() + "\n")
+		for i := range peer.AllowedIPs {
+			cfg.WriteString("allowed_ip=" + peer.AllowedIPs[i].String() + "\n")
 		}
 		if peer.PreSharedKey != "" {
 			cfg.WriteString("preshared_key=" + peer.PreSharedKey + "\n")
@@ -339,18 +349,7 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 		return
 	}
 
-	var user *protocol.MemoryUser
-	s.users.Range(func(key, value any) bool {
-		peer := value.(*protocol.MemoryUser).Account.(*MemoryAccount)
-		for _, ip := range peer.AllowedIPs {
-			if ip.Contains(addr) {
-				user = value.(*protocol.MemoryUser)
-				return false
-			}
-		}
-		return true
-	})
-
+	user := s.GetUserByAddr(context.TODO(), addr)
 	if user == nil {
 		errors.LogError(context.Background(), "nil user for ", remote)
 		return
@@ -394,7 +393,7 @@ func ParseKey(str string) (*[32]byte, error) {
 		return nil, err
 	}
 	if len(slice) != 32 {
-		return nil, errors.New("invalid length")
+		return nil, errors.New("len(slice) != 32")
 	}
 	return (*[32]byte)(slice), nil
 }
