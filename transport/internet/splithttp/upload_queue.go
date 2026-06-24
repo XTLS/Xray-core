@@ -6,10 +6,11 @@ package splithttp
 import (
 	"container/heap"
 	"io"
-	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/signal/done"
 )
 
 type Packet struct {
@@ -25,8 +26,9 @@ type uploadQueue struct {
 	writeCloseMutex sync.Mutex
 	heap            uploadHeap
 	nextSeq         uint64
-	closed          bool
 	maxPackets      int
+	closeOnce       atomic.Bool
+	closed          *done.Instance
 }
 
 func NewUploadQueue(maxPackets int) *uploadQueue {
@@ -34,51 +36,53 @@ func NewUploadQueue(maxPackets int) *uploadQueue {
 		pushedPackets: make(chan Packet, maxPackets),
 		heap:          uploadHeap{},
 		nextSeq:       0,
-		closed:        false,
+		closed:        done.New(),
 		maxPackets:    maxPackets,
 	}
 }
 
 func (h *uploadQueue) Push(p Packet) error {
 	h.writeCloseMutex.Lock()
+	defer h.writeCloseMutex.Unlock()
 
-	if h.closed {
-		h.writeCloseMutex.Unlock() // Modified
+	if h.closed.Done() {
 		return errors.New("packet queue closed")
 	}
 	if h.nomore {
-		h.writeCloseMutex.Unlock() // Modified
 		return errors.New("h.reader already exists")
 	}
 	if p.Reader != nil {
 		h.nomore = true
 	}
-	h.writeCloseMutex.Unlock() // Modified: Release lock before blocking on channel write
-
-	h.pushedPackets <- p
-	return nil
+	select {
+	case h.pushedPackets <- p:
+		return nil
+	case <-h.closed.Wait():
+		return errors.New("packet queue closed")
+	}
 }
 
 func (h *uploadQueue) Close() error {
+	if !h.closeOnce.CompareAndSwap(false, true) {
+		return nil
+	}
+	// must be called outside of lock to release Push() functions which might holding the lock
+	h.closed.Close()
 	h.writeCloseMutex.Lock()
 	defer h.writeCloseMutex.Unlock()
 
-	if !h.closed {
-		h.closed = true
-		runtime.Gosched() // hope Read() gets the packet
-	f:
-		for {
-			select {
-			case p := <-h.pushedPackets:
-				if p.Reader != nil {
-					h.reader = p.Reader
-				}
-			default:
-				break f
+	for shouldContinue := true; shouldContinue; {
+		select {
+		case p := <-h.pushedPackets:
+			if p.Reader != nil {
+				h.reader = p.Reader
 			}
+		default:
+			shouldContinue = false
 		}
-		close(h.pushedPackets)
 	}
+	close(h.pushedPackets)
+
 	if h.reader != nil {
 		return h.reader.Close()
 	}
@@ -90,7 +94,7 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 		return h.reader.Read(b)
 	}
 
-	if h.closed {
+	if h.closed.Done() {
 		return 0, io.EOF
 	}
 
