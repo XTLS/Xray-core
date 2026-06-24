@@ -35,6 +35,7 @@ type udpSessionManagerServer struct {
 	mutex          sync.RWMutex
 
 	user *protocol.MemoryUser
+	auth string
 }
 
 func (m *udpSessionManagerServer) close(udpConn *InterUdpConn) {
@@ -125,6 +126,7 @@ func (m *udpSessionManagerServer) feed(id uint32, d []byte) {
 			last: time.Now(),
 
 			user: m.user,
+			auth: m.auth,
 		}
 		udpConn.closeFunc = func() {
 			m.mutex.Lock()
@@ -151,9 +153,10 @@ type httpHandler struct {
 	validator   *account.Validator
 	masqHandler http.Handler
 
-	auth  bool
-	mutex sync.Mutex
-	user  *protocol.MemoryUser
+	auth      bool
+	mutex     sync.Mutex
+	user      *protocol.MemoryUser
+	authValue string
 }
 
 func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -183,6 +186,7 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if user != nil || ok {
 			h.auth = true
 			h.user = user
+			h.authValue = auth
 
 			switch h.quicParams.Congestion {
 			case "reno":
@@ -214,6 +218,7 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					udpIdleTimeout: time.Duration(h.config.UdpIdleTimeout) * time.Second,
 
 					user: h.user,
+					auth: h.authValue,
 				}
 				go udpSM.clean()
 				go udpSM.run()
@@ -247,6 +252,7 @@ func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, 
 			remote: h.conn.RemoteAddr(),
 
 			user: h.user,
+			auth: h.authValue,
 		})
 		return true, nil
 	default:

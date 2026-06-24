@@ -82,19 +82,30 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "hysteria"
 	inbound.CanSpliceCopy = 3
+	iConn := stat.TryUnwrapStatsConn(conn)
 
 	var useremail string
 	var userlevel uint32
 	type User interface{ User() *protocol.MemoryUser }
-	if v, ok := conn.(User); ok {
+	type Auth interface{ Auth() string }
+	if v, ok := iConn.(User); ok {
 		inbound.User = v.User()
 		if inbound.User != nil {
 			useremail = inbound.User.Email
 			userlevel = inbound.User.Level
+			auth := ""
+			if v, ok := iConn.(Auth); ok {
+				auth = v.Auth()
+			}
+			if hysteriaAccount, ok := inbound.User.Account.(*account.MemoryAccount); ok {
+				if auth == "" {
+					auth = hysteriaAccount.Auth
+				}
+				inbound.VlessRoute = account.VlessRouteFromAuth(auth)
+			}
 		}
 	}
 
-	iConn := stat.TryUnwrapStatsConn(conn)
 	if _, ok := iConn.(*hysteria.InterUdpConn); ok {
 		r := io.Reader(conn)
 		b := make([]byte, MaxUDPSize)

@@ -4,7 +4,9 @@ import (
 	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/uuid"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -37,6 +39,32 @@ type Validator struct {
 	users  map[string]*protocol.MemoryUser
 
 	mutex sync.Mutex
+}
+
+func vlessRouteAuthKey(auth string) ([16]byte, bool) {
+	var key [16]byte
+	if len(auth) != 32 && len(auth) != 36 {
+		return key, false
+	}
+	id, err := uuid.ParseString(auth)
+	if err != nil {
+		return key, false
+	}
+	copy(key[:], id.Bytes())
+	key[6] = 0
+	key[7] = 0
+	return key, true
+}
+
+func VlessRouteFromAuth(auth string) net.Port {
+	if len(auth) != 32 && len(auth) != 36 {
+		return 0
+	}
+	id, err := uuid.ParseString(auth)
+	if err != nil {
+		return 0
+	}
+	return net.PortFromBytes(id.Bytes()[6:8])
 }
 
 func NewValidator() *Validator {
@@ -87,7 +115,21 @@ func (v *Validator) Get(auth string) *protocol.MemoryUser {
 	v.mutex.Lock()
 	defer v.mutex.Unlock()
 
-	return v.users[auth]
+	if user := v.users[auth]; user != nil {
+		return user
+	}
+
+	key, ok := vlessRouteAuthKey(auth)
+	if !ok {
+		return nil
+	}
+	for storedAuth, user := range v.users {
+		storedKey, ok := vlessRouteAuthKey(storedAuth)
+		if ok && storedKey == key {
+			return user
+		}
+	}
+	return nil
 }
 
 func (v *Validator) GetByEmail(email string) *protocol.MemoryUser {

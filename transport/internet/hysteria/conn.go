@@ -21,10 +21,15 @@ type interConn struct {
 	mutex  sync.Mutex
 
 	user *protocol.MemoryUser
+	auth string
 }
 
 func (i *interConn) User() *protocol.MemoryUser {
 	return i.user
+}
+
+func (i *interConn) Auth() string {
+	return i.auth
 }
 
 func (i *interConn) Read(b []byte) (int, error) {
@@ -91,10 +96,15 @@ type InterUdpConn struct {
 	mutex sync.Mutex
 
 	user *protocol.MemoryUser
+	auth string
 }
 
 func (i *InterUdpConn) User() *protocol.MemoryUser {
 	return i.user
+}
+
+func (i *InterUdpConn) Auth() string {
+	return i.auth
 }
 
 func (i *InterUdpConn) SetLast() {
