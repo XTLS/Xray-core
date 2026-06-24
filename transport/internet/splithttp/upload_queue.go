@@ -41,17 +41,20 @@ func NewUploadQueue(maxPackets int) *uploadQueue {
 
 func (h *uploadQueue) Push(p Packet) error {
 	h.writeCloseMutex.Lock()
-	defer h.writeCloseMutex.Unlock()
 
 	if h.closed {
+		h.writeCloseMutex.Unlock() // Modified
 		return errors.New("packet queue closed")
 	}
 	if h.nomore {
+		h.writeCloseMutex.Unlock() // Modified
 		return errors.New("h.reader already exists")
 	}
 	if p.Reader != nil {
 		h.nomore = true
 	}
+	h.writeCloseMutex.Unlock() // Modified: Release lock before blocking on channel write
+
 	h.pushedPackets <- p
 	return nil
 }
