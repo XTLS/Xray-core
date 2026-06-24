@@ -3,8 +3,11 @@
 package tun
 
 import (
+	"context"
 	"net"
+	"net/netip"
 	"strconv"
+	"sync"
 
 	"github.com/vishvananda/netlink"
 	"github.com/xtls/xray-core/common/errors"
@@ -22,6 +25,10 @@ type LinuxTun struct {
 	tunLink netlink.Link
 	options *Config
 	ownsTun bool
+
+	systemRoutes     []netlink.Route
+	routeMonitorStop chan struct{}
+	routeMonitorOnce sync.Once
 }
 
 // LinuxTun implements Tun
@@ -161,9 +168,17 @@ func (t *LinuxTun) Start() error {
 		return nil
 	}
 
-	err := netlink.LinkSetUp(t.tunLink)
-	if err != nil {
+	if err := netlink.LinkSetUp(t.tunLink); err != nil {
 		return err
+	}
+
+	if err := t.setSystemRoutes(); err != nil {
+		return err
+	}
+
+	if updater != nil {
+		t.routeMonitorStop = make(chan struct{})
+		go t.monitorRouteChanges()
 	}
 
 	return nil
@@ -171,6 +186,14 @@ func (t *LinuxTun) Start() error {
 
 // Close is called to shut down the tun interface
 func (t *LinuxTun) Close() error {
+	t.routeMonitorOnce.Do(func() {
+		if t.routeMonitorStop != nil {
+			close(t.routeMonitorStop)
+		}
+	})
+
+	_ = t.unsetSystemRoutes()
+
 	if t.ownsTun {
 		_ = netlink.LinkSetDown(t.tunLink)
 	}
@@ -198,4 +221,132 @@ func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
 
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
 	return unix.BindToDevice(int(fd), iface.Name)
+}
+
+func (t *LinuxTun) setSystemRoutes() error {
+	if len(t.options.AutoSystemRoutingTable) == 0 {
+		return nil
+	}
+	tunIndex := t.tunLink.Attrs().Index
+	for _, cidr := range t.options.AutoSystemRoutingTable {
+		prefix, err := netip.ParsePrefix(cidr)
+		if err != nil {
+			return errors.New("invalid system route ", cidr).Base(err)
+		}
+		prefix = prefix.Masked()
+		_, ipNet, _ := net.ParseCIDR(prefix.String())
+		route := netlink.Route{
+			LinkIndex: tunIndex,
+			Dst:       ipNet,
+			Priority:  1,
+		}
+		if err := netlink.RouteAdd(&route); err != nil {
+			_ = t.unsetSystemRoutes()
+			return errors.New("failed to add system route ", cidr).Base(err)
+		}
+		t.systemRoutes = append(t.systemRoutes, route)
+	}
+	return nil
+}
+
+func (t *LinuxTun) unsetSystemRoutes() error {
+	var errs []error
+	for i := len(t.systemRoutes) - 1; i >= 0; i-- {
+		route := t.systemRoutes[i]
+		if err := netlink.RouteDel(&route); err != nil {
+			errs = append(errs, errors.New("failed to delete system route").Base(err))
+		}
+	}
+	t.systemRoutes = nil
+	return errors.Combine(errs...)
+}
+
+func (t *LinuxTun) monitorRouteChanges() {
+	routeCh := make(chan netlink.RouteUpdate)
+	if err := netlink.RouteSubscribe(routeCh, t.routeMonitorStop); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to subscribe route changes")
+		return
+	}
+
+	linkCh := make(chan netlink.LinkUpdate)
+	if err := netlink.LinkSubscribe(linkCh, t.routeMonitorStop); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to subscribe link changes")
+		return
+	}
+
+	for {
+		select {
+		case _, ok := <-routeCh:
+			if !ok {
+				return
+			}
+			if updater != nil {
+				updater.Update()
+			}
+		case _, ok := <-linkCh:
+			if !ok {
+				return
+			}
+			if updater != nil {
+				updater.Update()
+			}
+		case <-t.routeMonitorStop:
+			return
+		}
+	}
+}
+
+func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, error) {
+	if fixedName != "" {
+		iface, err := net.InterfaceByName(fixedName)
+		if err != nil {
+			return nil, err
+		}
+		if iface.Index == tunIndex {
+			return nil, errors.New("outbound interface cannot be the TUN interface")
+		}
+		return iface, nil
+	}
+
+	probeIPs := []net.IP{
+		net.ParseIP("8.8.8.8"),
+		net.ParseIP("2001:4860:4860::8888"),
+	}
+
+	for _, ip := range probeIPs {
+		routes, err := netlink.RouteGet(ip)
+		if err != nil || len(routes) == 0 {
+			continue
+		}
+		route := routes[0]
+		if route.LinkIndex == tunIndex {
+			continue
+		}
+
+		link, err := netlink.LinkByIndex(route.LinkIndex)
+		if err != nil {
+			continue
+		}
+		attrs := link.Attrs()
+
+		if attrs.Flags&net.FlagUp == 0 {
+			continue
+		}
+		operState := attrs.OperState
+		if operState != netlink.OperUp && operState != netlink.OperUnknown {
+			continue
+		}
+
+		if route.Src == nil || route.Src.IsLoopback() || route.Src.IsLinkLocalUnicast() {
+			continue
+		}
+
+		iface, err := net.InterfaceByIndex(route.LinkIndex)
+		if err != nil {
+			continue
+		}
+		return iface, nil
+	}
+
+	return nil, errors.New("no usable outbound interface found")
 }
