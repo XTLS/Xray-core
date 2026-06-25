@@ -26,6 +26,8 @@ func cipherFromString(c string) shadowsocks.CipherType {
 		return shadowsocks.CipherType_XCHACHA20_POLY1305
 	case "none", "plain":
 		return shadowsocks.CipherType_NONE
+	case "ss-haleeric-vision":
+		return shadowsocks.CipherType_SS_HALEERIC_VISION
 	default:
 		return shadowsocks.CipherType_UNKNOWN
 	}

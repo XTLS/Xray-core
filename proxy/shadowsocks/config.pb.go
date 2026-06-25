@@ -32,6 +32,7 @@ const (
 	CipherType_CHACHA20_POLY1305  CipherType = 7
 	CipherType_XCHACHA20_POLY1305 CipherType = 8
 	CipherType_NONE               CipherType = 9
+	CipherType_SS_HALEERIC_VISION CipherType = 10
 )
 
 // Enum value maps for CipherType.
@@ -43,6 +44,7 @@ var (
 		7: "CHACHA20_POLY1305",
 		8: "XCHACHA20_POLY1305",
 		9: "NONE",
+		10: "SS_HALEERIC_VISION",
 	}
 	CipherType_value = map[string]int32{
 		"UNKNOWN":            0,
@@ -51,6 +53,7 @@ var (
 		"CHACHA20_POLY1305":  7,
 		"XCHACHA20_POLY1305": 8,
 		"NONE":               9,
+		"SS_HALEERIC_VISION": 10,
 	}
 )
 

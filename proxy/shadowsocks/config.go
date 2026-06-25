@@ -87,6 +87,8 @@ func (a *Account) getCipher() (Cipher, error) {
 		}, nil
 	case CipherType_NONE:
 		return NoneCipher{}, nil
+	case CipherType_SS_HALEERIC_VISION:
+		return NewTableCipher(a.Password), nil
 	default:
 		return nil, errors.New("Unsupported cipher.")
 	}
