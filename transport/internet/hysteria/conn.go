@@ -22,15 +22,10 @@ type interConn struct {
 
 	client bool
 	user   *protocol.MemoryUser
-	auth   string
 }
 
 func (c *interConn) User() *protocol.MemoryUser {
 	return c.user
-}
-
-func (c *interConn) Auth() string {
-	return c.auth
 }
 
 func (c *interConn) Read(b []byte) (int, error) {
@@ -87,15 +82,10 @@ type InterConn struct {
 	write func(p []byte) error
 	close func()
 	user  *protocol.MemoryUser
-	auth  string
 }
 
 func (i *InterConn) User() *protocol.MemoryUser {
 	return i.user
-}
-
-func (i *InterConn) Auth() string {
-	return i.auth
 }
 
 func (c *InterConn) Time() time.Time {
@@ -171,7 +161,6 @@ type udpSessionManager struct {
 	addConn        internet.ConnHandler
 	udpIdleTimeout time.Duration
 	user           *protocol.MemoryUser
-	auth           string
 }
 
 func (m *udpSessionManager) close(udpConn *InterConn) {
@@ -298,7 +287,6 @@ func (m *udpSessionManager) feed(id uint32, d []byte) {
 			m.Unlock()
 		}
 		udpConn.user = m.user
-		udpConn.auth = m.auth
 		m.m[id] = udpConn
 		m.addConn(udpConn)
 	}

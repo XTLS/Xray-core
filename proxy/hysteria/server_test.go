@@ -77,15 +77,10 @@ func (*testPolicyManager) ForSystem() policy.System {
 
 type testUserConn struct {
 	user *protocol.MemoryUser
-	auth string
 }
 
 func (c *testUserConn) User() *protocol.MemoryUser {
 	return c.user
-}
-
-func (c *testUserConn) Auth() string {
-	return c.auth
 }
 
 func (*testUserConn) Read([]byte) (int, error) {
@@ -121,12 +116,11 @@ func (*testUserConn) SetWriteDeadline(time.Time) error {
 }
 
 func TestServerProcessSetsHysteriaRouteFromAuth(t *testing.T) {
-	const serverAuth = "00000000-0000-1234-8000-000000000000"
 	const clientAuth = "00000000-0000-0001-8000-000000000000"
 
 	inbound := &session.Inbound{}
 	user := &protocol.MemoryUser{
-		Account: &account.MemoryAccount{Auth: serverAuth},
+		Account: &account.MemoryAccount{Auth: clientAuth},
 		Level:   1,
 		Email:   "user@example.com",
 	}
@@ -134,7 +128,7 @@ func TestServerProcessSetsHysteriaRouteFromAuth(t *testing.T) {
 		policyManager: &testPolicyManager{},
 	}
 
-	err := server.Process(session.ContextWithInbound(context.Background(), inbound), net.Network_TCP, &testUserConn{user: user, auth: clientAuth}, nil)
+	err := server.Process(session.ContextWithInbound(context.Background(), inbound), net.Network_TCP, &testUserConn{user: user}, nil)
 	if err == nil {
 		t.Fatal("Process unexpectedly succeeded with an empty test connection")
 	}

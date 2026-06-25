@@ -36,9 +36,8 @@ type httpHandler struct {
 	addConn     internet.ConnHandler
 	conn        *quic.Conn
 
-	auth      bool
-	user      *protocol.MemoryUser
-	authValue string
+	auth bool
+	user *protocol.MemoryUser
 }
 
 func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
@@ -68,7 +67,6 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 		if user != nil || ok {
 			h.auth = true
 			h.user = user
-			h.authValue = auth
 
 			conn := h.conn
 			quicParams := h.quicParams
@@ -96,7 +94,6 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 					addConn:        h.addConn,
 					udpIdleTimeout: time.Duration(h.config.UdpIdleTimeout) * time.Second,
 					user:           h.user,
-					auth:           h.authValue,
 				}
 				go udpSM.clean()
 				go udpSM.run()
@@ -136,7 +133,6 @@ func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, 
 			remote: h.conn.RemoteAddr(),
 
 			user: h.user,
-			auth: h.authValue,
 		})
 		return true, nil
 	default:

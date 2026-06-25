@@ -92,18 +92,10 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	iConn := stat.TryUnwrapStatsConn(conn)
 
 	type User interface{ User() *protocol.MemoryUser }
-	type Auth interface{ Auth() string }
 	if v, ok := iConn.(User); ok && v.User() != nil {
 		inbound.User = v.User()
-		auth := ""
-		if v, ok := iConn.(Auth); ok {
-			auth = v.Auth()
-		}
 		if hysteriaAccount, ok := inbound.User.Account.(*account.MemoryAccount); ok {
-			if auth == "" {
-				auth = hysteriaAccount.Auth
-			}
-			inbound.HysteriaRoute = account.HysteriaRouteFromAuth(auth)
+			inbound.HysteriaRoute = account.HysteriaRouteFromAuth(hysteriaAccount.Auth)
 		}
 	}
 

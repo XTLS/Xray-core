@@ -67,6 +67,12 @@ func HysteriaRouteFromAuth(auth string) net.Port {
 	return net.PortFromBytes(id.Bytes()[6:8])
 }
 
+func userWithAuth(user *protocol.MemoryUser, auth string) *protocol.MemoryUser {
+	clone := *user
+	clone.Account = &MemoryAccount{Auth: auth}
+	return &clone
+}
+
 func NewValidator() *Validator {
 	return &Validator{
 		emails: make(map[string]struct{}),
@@ -126,7 +132,7 @@ func (v *Validator) Get(auth string) *protocol.MemoryUser {
 	for storedAuth, user := range v.users {
 		storedKey, ok := hysteriaRouteAuthKey(storedAuth)
 		if ok && storedKey == key {
-			return user
+			return userWithAuth(user, auth)
 		}
 	}
 	return nil
