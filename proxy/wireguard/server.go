@@ -351,11 +351,11 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 
 	user := s.GetUserByAddr(context.TODO(), addr)
 	if user == nil {
-		errors.LogError(context.Background(), "nil user for ", remote)
+		errors.LogError(context.Background(), "nil user form ", remote, " to ", dest)
 		return
 	}
 
-	source := net.DestinationFromAddr(conn.RemoteAddr())
+	source := net.DestinationFromAddr(remote)
 	inbound := session.Inbound{
 		Name:          "wireguard",
 		Tag:           s.tag,
