@@ -40,6 +40,10 @@ func (c routingContext) GetVlessRoute() net.Port {
 	return net.Port(c.RoutingContext.GetVlessRoute())
 }
 
+func (c routingContext) GetHysteriaRoute() net.Port {
+	return net.Port(c.RoutingContext.GetHysteriaRoute())
+}
+
 func (c routingContext) GetRuleTag() string {
 	return ""
 }

@@ -75,6 +75,7 @@ const (
 	MatcherAsType_Source
 	MatcherAsType_Target
 	MatcherAsType_VlessRoute // for port
+	MatcherAsType_HysteriaRoute
 )
 
 type IPMatcher struct {
@@ -132,6 +133,8 @@ func (v *PortMatcher) Apply(ctx routing.Context) bool {
 		return v.port.Contains(ctx.GetTargetPort())
 	case MatcherAsType_VlessRoute:
 		return v.port.Contains(ctx.GetVlessRoute())
+	case MatcherAsType_HysteriaRoute:
+		return v.port.Contains(ctx.GetHysteriaRoute())
 	default:
 		panic("unk asType")
 	}

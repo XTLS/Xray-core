@@ -103,7 +103,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			if auth == "" {
 				auth = hysteriaAccount.Auth
 			}
-			inbound.VlessRoute = account.VlessRouteFromAuth(auth)
+			inbound.HysteriaRoute = account.HysteriaRouteFromAuth(auth)
 		}
 	}
 

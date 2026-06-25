@@ -28,6 +28,7 @@ message RoutingContext {
   repeated bytes LocalIPs = 13;
   uint32 LocalPort = 14;
   uint32 VlessRoute = 15;
+  uint32 HysteriaRoute = 16;
 }
 
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if

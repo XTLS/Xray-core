@@ -103,12 +103,13 @@ type RoutingRule struct {
 	// List of IPs for local IP address matching.
 	LocalIp []*geodata.IPRule `protobuf:"bytes,17,rep,name=local_ip,json=localIp,proto3" json:"local_ip,omitempty"`
 	// List of ports for local port matching.
-	LocalPortList  *net.PortList  `protobuf:"bytes,18,opt,name=local_port_list,json=localPortList,proto3" json:"local_port_list,omitempty"`
-	VlessRouteList *net.PortList  `protobuf:"bytes,20,opt,name=vless_route_list,json=vlessRouteList,proto3" json:"vless_route_list,omitempty"`
-	Process        []string       `protobuf:"bytes,21,rep,name=process,proto3" json:"process,omitempty"`
-	Webhook        *WebhookConfig `protobuf:"bytes,22,opt,name=webhook,proto3" json:"webhook,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	LocalPortList     *net.PortList  `protobuf:"bytes,18,opt,name=local_port_list,json=localPortList,proto3" json:"local_port_list,omitempty"`
+	VlessRouteList    *net.PortList  `protobuf:"bytes,20,opt,name=vless_route_list,json=vlessRouteList,proto3" json:"vless_route_list,omitempty"`
+	Process           []string       `protobuf:"bytes,21,rep,name=process,proto3" json:"process,omitempty"`
+	Webhook           *WebhookConfig `protobuf:"bytes,22,opt,name=webhook,proto3" json:"webhook,omitempty"`
+	HysteriaRouteList *net.PortList  `protobuf:"bytes,23,opt,name=hysteria_route_list,json=hysteriaRouteList,proto3" json:"hysteria_route_list,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *RoutingRule) Reset() {
@@ -274,6 +275,13 @@ func (x *RoutingRule) GetProcess() []string {
 func (x *RoutingRule) GetWebhook() *WebhookConfig {
 	if x != nil {
 		return x.Webhook
+	}
+	return nil
+}
+
+func (x *RoutingRule) GetHysteriaRouteList() *net.PortList {
+	if x != nil {
+		return x.HysteriaRouteList
 	}
 	return nil
 }
@@ -637,7 +645,7 @@ var File_app_router_config_proto protoreflect.FileDescriptor
 
 const file_app_router_config_proto_rawDesc = "" +
 	"\n" +
-	"\x17app/router/config.proto\x12\x0fxray.app.router\x1a!common/serial/typed_message.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\"\xc1\a\n" +
+	"\x17app/router/config.proto\x12\x0fxray.app.router\x1a!common/serial/typed_message.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\"\x8c\b\n" +
 	"\vRoutingRule\x12\x12\n" +
 	"\x03tag\x18\x01 \x01(\tH\x00R\x03tag\x12%\n" +
 	"\rbalancing_tag\x18\f \x01(\tH\x00R\fbalancingTag\x12\x19\n" +
@@ -661,7 +669,8 @@ const file_app_router_config_proto_rawDesc = "" +
 	"\x0flocal_port_list\x18\x12 \x01(\v2\x19.xray.common.net.PortListR\rlocalPortList\x12C\n" +
 	"\x10vless_route_list\x18\x14 \x01(\v2\x19.xray.common.net.PortListR\x0evlessRouteList\x12\x18\n" +
 	"\aprocess\x18\x15 \x03(\tR\aprocess\x128\n" +
-	"\awebhook\x18\x16 \x01(\v2\x1e.xray.app.router.WebhookConfigR\awebhook\x1a=\n" +
+	"\awebhook\x18\x16 \x01(\v2\x1e.xray.app.router.WebhookConfigR\awebhook\x12I\n" +
+	"\x13hysteria_route_list\x18\x17 \x01(\v2\x19.xray.common.net.PortListR\x11hysteriaRouteList\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\f\n" +
@@ -743,17 +752,18 @@ var file_app_router_config_proto_depIdxs = []int32{
 	11, // 8: xray.app.router.RoutingRule.local_port_list:type_name -> xray.common.net.PortList
 	11, // 9: xray.app.router.RoutingRule.vless_route_list:type_name -> xray.common.net.PortList
 	2,  // 10: xray.app.router.RoutingRule.webhook:type_name -> xray.app.router.WebhookConfig
-	8,  // 11: xray.app.router.WebhookConfig.headers:type_name -> xray.app.router.WebhookConfig.HeadersEntry
-	13, // 12: xray.app.router.BalancingRule.strategy_settings:type_name -> xray.common.serial.TypedMessage
-	4,  // 13: xray.app.router.StrategyLeastLoadConfig.costs:type_name -> xray.app.router.StrategyWeight
-	0,  // 14: xray.app.router.Config.domain_strategy:type_name -> xray.app.router.Config.DomainStrategy
-	1,  // 15: xray.app.router.Config.rule:type_name -> xray.app.router.RoutingRule
-	3,  // 16: xray.app.router.Config.balancing_rule:type_name -> xray.app.router.BalancingRule
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	11, // 11: xray.app.router.RoutingRule.hysteria_route_list:type_name -> xray.common.net.PortList
+	8,  // 12: xray.app.router.WebhookConfig.headers:type_name -> xray.app.router.WebhookConfig.HeadersEntry
+	13, // 13: xray.app.router.BalancingRule.strategy_settings:type_name -> xray.common.serial.TypedMessage
+	4,  // 14: xray.app.router.StrategyLeastLoadConfig.costs:type_name -> xray.app.router.StrategyWeight
+	0,  // 15: xray.app.router.Config.domain_strategy:type_name -> xray.app.router.Config.DomainStrategy
+	1,  // 16: xray.app.router.Config.rule:type_name -> xray.app.router.RoutingRule
+	3,  // 17: xray.app.router.Config.balancing_rule:type_name -> xray.app.router.BalancingRule
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_app_router_config_proto_init() }

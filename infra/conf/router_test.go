@@ -236,3 +236,33 @@ func TestRouterConfig(t *testing.T) {
 		},
 	})
 }
+
+func TestRouterConfigHysteriaRoute(t *testing.T) {
+	config := new(RouterConfig)
+	err := json.Unmarshal([]byte(`{
+		"rules": [
+			{
+				"hysteriaRoute": "1-2",
+				"outboundTag": "hysteria"
+			},
+			{
+				"vlessRoute": "3",
+				"outboundTag": "vless"
+			}
+		]
+	}`), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	built, err := config.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := built.Rule[0].GetHysteriaRouteList().Range[0]; got.From != 1 || got.To != 2 {
+		t.Fatalf("hysteriaRoute = %d-%d, want 1-2", got.From, got.To)
+	}
+	if got := built.Rule[1].GetVlessRouteList().Range[0]; got.From != 3 || got.To != 3 {
+		t.Fatalf("vlessRoute = %d-%d, want 3-3", got.From, got.To)
+	}
+}

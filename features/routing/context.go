@@ -44,6 +44,9 @@ type Context interface {
 	// GetVlessRoute returns the user-sent VLESS UUID's 7th<<8 | 8th bytes, if exists.
 	GetVlessRoute() net.Port
 
+	// GetHysteriaRoute returns the user-sent Hysteria UUID auth's 7th<<8 | 8th bytes, if exists.
+	GetHysteriaRoute() net.Port
+
 	// GetAttributes returns extra attributes from the conneciont content.
 	GetAttributes() map[string]string
 

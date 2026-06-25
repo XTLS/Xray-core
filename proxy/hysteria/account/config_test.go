@@ -6,7 +6,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 )
 
-func TestValidatorGetAcceptsVlessRouteAuthVariant(t *testing.T) {
+func TestValidatorGetAcceptsHysteriaRouteAuthVariant(t *testing.T) {
 	user := &protocol.MemoryUser{
 		Email:   "user@example.com",
 		Account: &MemoryAccount{Auth: "00000000-0000-1234-8000-000000000000"},
@@ -17,7 +17,7 @@ func TestValidatorGetAcceptsVlessRouteAuthVariant(t *testing.T) {
 	}
 
 	if got := validator.Get("00000000-0000-0001-8000-000000000000"); got != user {
-		t.Fatal("validator did not accept UUID auth variant with a different VLESS route")
+		t.Fatal("validator did not accept UUID auth variant with a different Hysteria route")
 	}
 	if got := validator.Get("00000000-0000-0001-9000-000000000000"); got != nil {
 		t.Fatalf("validator accepted auth with non-route bytes changed: %v", got)

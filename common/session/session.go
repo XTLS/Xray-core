@@ -49,6 +49,8 @@ type Inbound struct {
 	User *protocol.MemoryUser
 	// VlessRoute is the user-sent VLESS UUID's 7th<<8 | 8th bytes.
 	VlessRoute net.Port
+	// HysteriaRoute is the user-sent Hysteria UUID auth's 7th<<8 | 8th bytes.
+	HysteriaRoute net.Port
 	// Used by splice copy. Conn is actually internet.Connection. May be nil.
 	Conn net.Conn
 	// Used by splice copy. Timer of the inbound buf copier. May be nil.
