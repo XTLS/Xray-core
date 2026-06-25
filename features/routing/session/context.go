@@ -135,14 +135,6 @@ func (ctx *Context) GetVlessRoute() net.Port {
 	return ctx.Inbound.VlessRoute
 }
 
-// GetHysteriaRoute implements routing.Context.
-func (ctx *Context) GetHysteriaRoute() net.Port {
-	if ctx.Inbound == nil {
-		return 0
-	}
-	return ctx.Inbound.HysteriaRoute
-}
-
 // GetAttributes implements routing.Context.
 func (ctx *Context) GetAttributes() map[string]string {
 	if ctx.Content == nil {

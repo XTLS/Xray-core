@@ -41,7 +41,7 @@ type Validator struct {
 	mutex sync.Mutex
 }
 
-func hysteriaRouteAuthKey(auth string) ([16]byte, bool) {
+func vlessRouteAuthKey(auth string) ([16]byte, bool) {
 	var key [16]byte
 	if len(auth) != 32 && len(auth) != 36 {
 		return key, false
@@ -56,7 +56,7 @@ func hysteriaRouteAuthKey(auth string) ([16]byte, bool) {
 	return key, true
 }
 
-func HysteriaRouteFromAuth(auth string) net.Port {
+func VlessRouteFromAuth(auth string) net.Port {
 	if len(auth) != 32 && len(auth) != 36 {
 		return 0
 	}
@@ -125,12 +125,12 @@ func (v *Validator) Get(auth string) *protocol.MemoryUser {
 		return user
 	}
 
-	key, ok := hysteriaRouteAuthKey(auth)
+	key, ok := vlessRouteAuthKey(auth)
 	if !ok {
 		return nil
 	}
 	for storedAuth, user := range v.users {
-		storedKey, ok := hysteriaRouteAuthKey(storedAuth)
+		storedKey, ok := vlessRouteAuthKey(storedAuth)
 		if ok && storedKey == key {
 			return userWithAuth(user, auth)
 		}

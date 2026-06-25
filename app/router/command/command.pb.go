@@ -43,7 +43,6 @@ type RoutingContext struct {
 	LocalIPs          [][]byte               `protobuf:"bytes,13,rep,name=LocalIPs,proto3" json:"LocalIPs,omitempty"`
 	LocalPort         uint32                 `protobuf:"varint,14,opt,name=LocalPort,proto3" json:"LocalPort,omitempty"`
 	VlessRoute        uint32                 `protobuf:"varint,15,opt,name=VlessRoute,proto3" json:"VlessRoute,omitempty"`
-	HysteriaRoute     uint32                 `protobuf:"varint,16,opt,name=HysteriaRoute,proto3" json:"HysteriaRoute,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -179,13 +178,6 @@ func (x *RoutingContext) GetLocalPort() uint32 {
 func (x *RoutingContext) GetVlessRoute() uint32 {
 	if x != nil {
 		return x.VlessRoute
-	}
-	return 0
-}
-
-func (x *RoutingContext) GetHysteriaRoute() uint32 {
-	if x != nil {
-		return x.HysteriaRoute
 	}
 	return 0
 }
@@ -975,7 +967,7 @@ var File_app_router_command_command_proto protoreflect.FileDescriptor
 
 const file_app_router_command_command_proto_rawDesc = "" +
 	"\n" +
-	" app/router/command/command.proto\x12\x17xray.app.router.command\x1a\x18common/net/network.proto\x1a!common/serial/typed_message.proto\"\x9c\x05\n" +
+	" app/router/command/command.proto\x12\x17xray.app.router.command\x1a\x18common/net/network.proto\x1a!common/serial/typed_message.proto\"\xf6\x04\n" +
 	"\x0eRoutingContext\x12\x1e\n" +
 	"\n" +
 	"InboundTag\x18\x01 \x01(\tR\n" +
@@ -1002,8 +994,7 @@ const file_app_router_command_command_proto_rawDesc = "" +
 	"\tLocalPort\x18\x0e \x01(\rR\tLocalPort\x12\x1e\n" +
 	"\n" +
 	"VlessRoute\x18\x0f \x01(\rR\n" +
-	"VlessRoute\x12$\n" +
-	"\rHysteriaRoute\x18\x10 \x01(\rR\rHysteriaRoute\x1a=\n" +
+	"VlessRoute\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"F\n" +

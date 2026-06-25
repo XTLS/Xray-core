@@ -189,40 +189,6 @@ func TestRoutingRule(t *testing.T) {
 		},
 		{
 			rule: &RoutingRule{
-				VlessRouteList: &net.PortList{
-					Range: []*net.PortRange{{From: 1, To: 1}},
-				},
-			},
-			test: []ruleTest{
-				{
-					input:  withInbound(&session.Inbound{VlessRoute: 1}),
-					output: true,
-				},
-				{
-					input:  withInbound(&session.Inbound{HysteriaRoute: 1}),
-					output: false,
-				},
-			},
-		},
-		{
-			rule: &RoutingRule{
-				HysteriaRouteList: &net.PortList{
-					Range: []*net.PortRange{{From: 1, To: 1}},
-				},
-			},
-			test: []ruleTest{
-				{
-					input:  withInbound(&session.Inbound{HysteriaRoute: 1}),
-					output: true,
-				},
-				{
-					input:  withInbound(&session.Inbound{VlessRoute: 1}),
-					output: false,
-				},
-			},
-		},
-		{
-			rule: &RoutingRule{
 				InboundTag: []string{"test", "test1"},
 			},
 			test: []ruleTest{

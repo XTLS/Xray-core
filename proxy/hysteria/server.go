@@ -95,7 +95,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	if v, ok := iConn.(User); ok && v.User() != nil {
 		inbound.User = v.User()
 		if hysteriaAccount, ok := inbound.User.Account.(*account.MemoryAccount); ok {
-			inbound.HysteriaRoute = account.HysteriaRouteFromAuth(hysteriaAccount.Auth)
+			inbound.VlessRoute = account.VlessRouteFromAuth(hysteriaAccount.Auth)
 		}
 	}
 

@@ -6,7 +6,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 )
 
-func TestValidatorGetAcceptsHysteriaRouteAuthVariant(t *testing.T) {
+func TestValidatorGetAcceptsVlessRouteAuthVariant(t *testing.T) {
 	const serverAuth = "00000000-0000-1234-8000-000000000000"
 	const clientAuth = "00000000-0000-0001-8000-000000000000"
 
@@ -22,7 +22,7 @@ func TestValidatorGetAcceptsHysteriaRouteAuthVariant(t *testing.T) {
 
 	got := validator.Get(clientAuth)
 	if got == nil {
-		t.Fatal("validator did not accept UUID auth variant with a different Hysteria route")
+		t.Fatal("validator did not accept UUID auth variant with a different VLESS route")
 	}
 	if got == user {
 		t.Fatal("validator returned stored user instead of a copy with the client auth")

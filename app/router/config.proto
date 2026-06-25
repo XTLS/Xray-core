@@ -56,7 +56,6 @@ message RoutingRule {
 
   repeated string process = 21;
   WebhookConfig webhook = 22;
-  xray.common.net.PortList hysteria_route_list = 23;
 }
 
 message WebhookConfig {

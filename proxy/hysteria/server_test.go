@@ -14,7 +14,7 @@ import (
 	"github.com/xtls/xray-core/proxy/hysteria/account"
 )
 
-func TestHysteriaRouteFromAuth(t *testing.T) {
+func TestVlessRouteFromAuth(t *testing.T) {
 	const routeID = net.Port(0x1234)
 
 	tests := []struct {
@@ -46,8 +46,8 @@ func TestHysteriaRouteFromAuth(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if got := account.HysteriaRouteFromAuth(test.auth); got != test.want {
-				t.Fatalf("HysteriaRouteFromAuth(%q) = %d, want %d", test.auth, got, test.want)
+			if got := account.VlessRouteFromAuth(test.auth); got != test.want {
+				t.Fatalf("VlessRouteFromAuth(%q) = %d, want %d", test.auth, got, test.want)
 			}
 		})
 	}
@@ -115,7 +115,7 @@ func (*testUserConn) SetWriteDeadline(time.Time) error {
 	return nil
 }
 
-func TestServerProcessSetsHysteriaRouteFromAuth(t *testing.T) {
+func TestServerProcessSetsVlessRouteFromAuth(t *testing.T) {
 	const clientAuth = "00000000-0000-0001-8000-000000000000"
 
 	inbound := &session.Inbound{}
@@ -135,10 +135,7 @@ func TestServerProcessSetsHysteriaRouteFromAuth(t *testing.T) {
 	if inbound.User != user {
 		t.Fatal("server did not use the authenticated Hysteria user from the connection")
 	}
-	if inbound.HysteriaRoute != 1 {
-		t.Fatalf("inbound.HysteriaRoute = %d, want %d", inbound.HysteriaRoute, net.Port(1))
-	}
-	if inbound.VlessRoute != 0 {
-		t.Fatalf("inbound.VlessRoute = %d, want 0", inbound.VlessRoute)
+	if inbound.VlessRoute != 1 {
+		t.Fatalf("inbound.VlessRoute = %d, want %d", inbound.VlessRoute, net.Port(1))
 	}
 }

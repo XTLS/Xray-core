@@ -132,24 +132,23 @@ type WebhookRuleConfig struct {
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain        *StringList        `json:"domain"`
-		Domains       *StringList        `json:"domains"`
-		IP            *StringList        `json:"ip"`
-		Port          *PortList          `json:"port"`
-		Network       *NetworkList       `json:"network"`
-		SourceIP      *StringList        `json:"sourceIP"`
-		Source        *StringList        `json:"source"`
-		SourcePort    *PortList          `json:"sourcePort"`
-		User          *StringList        `json:"user"`
-		VlessRoute    *PortList          `json:"vlessRoute"`
-		HysteriaRoute *PortList          `json:"hysteriaRoute"`
-		InboundTag    *StringList        `json:"inboundTag"`
-		Protocols     *StringList        `json:"protocol"`
-		Attributes    map[string]string  `json:"attrs"`
-		LocalIP       *StringList        `json:"localIP"`
-		LocalPort     *PortList          `json:"localPort"`
-		Process       *StringList        `json:"process"`
-		Webhook       *WebhookRuleConfig `json:"webhook"`
+		Domain     *StringList        `json:"domain"`
+		Domains    *StringList        `json:"domains"`
+		IP         *StringList        `json:"ip"`
+		Port       *PortList          `json:"port"`
+		Network    *NetworkList       `json:"network"`
+		SourceIP   *StringList        `json:"sourceIP"`
+		Source     *StringList        `json:"source"`
+		SourcePort *PortList          `json:"sourcePort"`
+		User       *StringList        `json:"user"`
+		VlessRoute *PortList          `json:"vlessRoute"`
+		InboundTag *StringList        `json:"inboundTag"`
+		Protocols  *StringList        `json:"protocol"`
+		Attributes map[string]string  `json:"attrs"`
+		LocalIP    *StringList        `json:"localIP"`
+		LocalPort  *PortList          `json:"localPort"`
+		Process    *StringList        `json:"process"`
+		Webhook    *WebhookRuleConfig `json:"webhook"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
@@ -240,10 +239,6 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.VlessRoute != nil {
 		rule.VlessRouteList = rawFieldRule.VlessRoute.Build()
-	}
-
-	if rawFieldRule.HysteriaRoute != nil {
-		rule.HysteriaRouteList = rawFieldRule.HysteriaRoute.Build()
 	}
 
 	if rawFieldRule.InboundTag != nil {

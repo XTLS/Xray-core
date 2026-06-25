@@ -61,10 +61,6 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(NewPortMatcher(rr.VlessRouteList, MatcherAsType_VlessRoute))
 	}
 
-	if rr.HysteriaRouteList != nil {
-		conds.Add(NewPortMatcher(rr.HysteriaRouteList, MatcherAsType_HysteriaRoute))
-	}
-
 	if len(rr.UserEmail) > 0 {
 		conds.Add(NewUserMatcher(rr.UserEmail))
 	}
