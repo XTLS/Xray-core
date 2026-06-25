@@ -38,8 +38,7 @@ func NewUploadQueue(maxPackets int) *uploadQueue {
 }
 
 func (h *uploadQueue) Push(p Packet) error {
-	if p.Reader != nil && !h.reader.CompareAndSwap(nil, p.Reader) {
-		p.Reader.Close()
+	if h.reader.Load() != nil || (p.Reader != nil && !h.reader.CompareAndSwap(nil, p.Reader)) {
 		return errors.New("h.reader already exists")
 	}
 	select {
@@ -55,16 +54,7 @@ func (h *uploadQueue) Close() error {
 	if reader := h.reader.Load(); reader != nil {
 		return reader.Close()
 	}
-	for {
-		select {
-		case p := <-h.pushedPackets:
-			if p.Reader != nil { // unlikely
-				p.Reader.Close()
-			}
-		default:
-			return nil
-		}
-	}
+	return nil
 }
 
 func (h *uploadQueue) Read(b []byte) (int, error) {
