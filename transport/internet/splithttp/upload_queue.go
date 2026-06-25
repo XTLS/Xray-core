@@ -43,6 +43,9 @@ func (h *uploadQueue) Push(p Packet) error {
 	}
 	select {
 	case h.pushedPackets <- p: // no panic
+		if h.closed.Done() {
+			return errors.New("packet queue closed")
+		}
 		return nil
 	case <-h.closed.Wait():
 		return errors.New("packet queue closed")
