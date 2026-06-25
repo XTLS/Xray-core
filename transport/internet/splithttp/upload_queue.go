@@ -69,7 +69,7 @@ func (h *uploadQueue) Close() error {
 
 func (h *uploadQueue) Read(b []byte) (int, error) {
 	if reader := h.reader.Load(); reader != nil {
-		return (*reader).Read(b)
+		return reader.Read(b)
 	}
 
 	if h.closed.Done() {
