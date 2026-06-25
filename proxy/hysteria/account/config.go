@@ -60,8 +60,8 @@ func (v *Validator) DelByEmail(email string) error {
 }
 
 func (v *Validator) Get(auth string) *protocol.MemoryUser {
-	if user, ok := v.users.Load(auth); ok {
-		return user.(*protocol.MemoryUser)
+	if value, ok := v.users.Load(auth); ok {
+		return value.(*protocol.MemoryUser)
 	}
 	return nil
 }
