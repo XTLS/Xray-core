@@ -167,8 +167,9 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 				case <-c.closeCh:
 					return
 				}
+			} else {
+				errors.LogErrorInner(context.Background(), err, "recv err")
 			}
-			errors.LogErrorInner(context.Background(), err, "recv err")
 			continue
 		}
 		select {
@@ -227,7 +228,12 @@ func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		go c.hopLoop()
 	}
 
-	return c.cur.WriteTo(p, c.addr)
+	_, err = c.cur.WriteTo(p, c.addr)
+	if err != nil {
+		errors.LogErrorInner(context.Background(), err, "send err")
+		return 0, err
+	}
+	return len(p), nil
 }
 
 func (c *udpHopConn) Close() error {

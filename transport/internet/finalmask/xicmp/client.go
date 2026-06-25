@@ -125,6 +125,8 @@ func (c *xicmpConnClient) recv4() {
 				case <-c.closeCh:
 					return
 				}
+			} else {
+				errors.LogErrorInner(context.Background(), err, "recv4 err")
 			}
 			continue
 		}
@@ -196,6 +198,8 @@ func (c *xicmpConnClient) recv6() {
 				case <-c.closeCh:
 					return
 				}
+			} else {
+				errors.LogErrorInner(context.Background(), err, "recv6 err")
 			}
 			continue
 		}
@@ -297,10 +301,9 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}
 
 	if err != nil {
-		errors.LogErrorInner(context.Background(), err, "xicmp write")
+		errors.LogErrorInner(context.Background(), err, "send err")
 		return 0, err
 	}
-
 	return len(p), nil
 }
 
