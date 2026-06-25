@@ -6,7 +6,6 @@ package splithttp
 import (
 	"container/heap"
 	"io"
-	"sync"
 	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -14,21 +13,18 @@ import (
 )
 
 type Packet struct {
-	Reader  io.ReadCloser
+	Reader  *httpServerConn
 	Payload []byte
 	Seq     uint64
 }
 
 type uploadQueue struct {
-	reader          io.ReadCloser
-	nomore          bool
-	pushedPackets   chan Packet
-	writeCloseMutex sync.Mutex
-	heap            uploadHeap
-	nextSeq         uint64
-	maxPackets      int
-	closeOnce       atomic.Bool
-	closed          *done.Instance
+	reader        atomic.Pointer[httpServerConn]
+	pushedPackets chan Packet
+	heap          uploadHeap
+	nextSeq       uint64
+	maxPackets    int
+	closed        *done.Instance
 }
 
 func NewUploadQueue(maxPackets int) *uploadQueue {
@@ -42,20 +38,12 @@ func NewUploadQueue(maxPackets int) *uploadQueue {
 }
 
 func (h *uploadQueue) Push(p Packet) error {
-	h.writeCloseMutex.Lock()
-	defer h.writeCloseMutex.Unlock()
-
-	if h.closed.Done() {
-		return errors.New("packet queue closed")
-	}
-	if h.nomore {
+	if p.Reader != nil && !h.reader.CompareAndSwap(nil, p.Reader) {
+		p.Reader.Close()
 		return errors.New("h.reader already exists")
 	}
-	if p.Reader != nil {
-		h.nomore = true
-	}
 	select {
-	case h.pushedPackets <- p:
+	case h.pushedPackets <- p: // no panic
 		return nil
 	case <-h.closed.Wait():
 		return errors.New("packet queue closed")
@@ -63,35 +51,25 @@ func (h *uploadQueue) Push(p Packet) error {
 }
 
 func (h *uploadQueue) Close() error {
-	if !h.closeOnce.CompareAndSwap(false, true) {
-		return nil
-	}
-	// must be called outside of lock to release Push() functions which might holding the lock
 	h.closed.Close()
-	h.writeCloseMutex.Lock()
-	defer h.writeCloseMutex.Unlock()
-
-	for shouldContinue := true; shouldContinue; {
+	if reader := h.reader.Load(); reader != nil {
+		return reader.Close()
+	}
+	for {
 		select {
 		case p := <-h.pushedPackets:
-			if p.Reader != nil {
-				h.reader = p.Reader
+			if p.Reader != nil { // unlikely
+				p.Reader.Close()
 			}
 		default:
-			shouldContinue = false
+			return nil
 		}
 	}
-	close(h.pushedPackets)
-
-	if h.reader != nil {
-		return h.reader.Close()
-	}
-	return nil
 }
 
 func (h *uploadQueue) Read(b []byte) (int, error) {
-	if h.reader != nil {
-		return h.reader.Read(b)
+	if reader := h.reader.Load(); reader != nil {
+		return (*reader).Read(b)
 	}
 
 	if h.closed.Done() {
@@ -99,15 +77,15 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 	}
 
 	if len(h.heap) == 0 {
-		packet, more := <-h.pushedPackets
-		if !more {
+		select {
+		case p := <-h.pushedPackets:
+			if p.Reader != nil {
+				return p.Reader.Read(b)
+			}
+			heap.Push(&h.heap, p)
+		case <-h.closed.Wait():
 			return 0, io.EOF
 		}
-		if packet.Reader != nil {
-			h.reader = packet.Reader
-			return h.reader.Read(b)
-		}
-		heap.Push(&h.heap, packet)
 	}
 
 	for len(h.heap) > 0 {
@@ -138,11 +116,12 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 				return 0, errors.New("packet queue is too large")
 			}
 			heap.Push(&h.heap, packet)
-			packet2, more := <-h.pushedPackets
-			if !more {
+			select {
+			case p := <-h.pushedPackets:
+				heap.Push(&h.heap, p)
+			case <-h.closed.Wait():
 				return 0, io.EOF
 			}
-			heap.Push(&h.heap, packet2)
 		}
 	}
 
