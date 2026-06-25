@@ -167,9 +167,8 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 				case <-c.closeCh:
 					return
 				}
-			} else {
-				errors.LogErrorInner(context.Background(), err, "recv err")
 			}
+			errors.LogErrorInner(context.Background(), err, "recv err")
 			continue
 		}
 		select {

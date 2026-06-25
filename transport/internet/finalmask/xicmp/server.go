@@ -130,9 +130,8 @@ func (c *xicmpConnServer) recv4() {
 				case <-c.closeCh:
 					return
 				}
-			} else {
-				errors.LogErrorInner(context.Background(), err, "recv4 err")
 			}
+			errors.LogErrorInner(context.Background(), err, "recv4 err")
 			continue
 		}
 
@@ -211,9 +210,8 @@ func (c *xicmpConnServer) recv6() {
 				case <-c.closeCh:
 					return
 				}
-			} else {
-				errors.LogErrorInner(context.Background(), err, "recv6 err")
 			}
+			errors.LogErrorInner(context.Background(), err, "recv6 err")
 			continue
 		}
 
