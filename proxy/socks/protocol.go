@@ -214,7 +214,9 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 			expectedRemote.IP = writer.RemoteAddr().(*net.TCPAddr).IP // unix?
 		} else {
 			expectedRemote.IP = request.Address.IP()
-			expectedRemote.Port = int(request.Port) // 0 is allowed
+		}
+		if request.Port != 0 {
+			expectedRemote.Port = int(request.Port)
 		}
 		tempUDPConn = NewTempUDPConn(udpHub, writer, expectedRemote)
 	}

@@ -37,15 +37,9 @@ func (c *TempUDPConn) Read(b []byte) (n int, err error) {
 		remote := remote.(*net.UDPAddr)
 		expected := c.ExpectedRemote.Load()
 		if remote.IP.Equal(expected.IP) {
-			if remote.Port == expected.Port {
-				c.Timer.Update()
-				return
-			}
-			if expected.Port == 0 {
-				c.ExpectedRemote.Store(remote)
-				c.Timer.Update()
-				return
-			}
+			c.ExpectedRemote.Store(remote)
+			c.Timer.Update()
+			return
 		}
 	}
 }
