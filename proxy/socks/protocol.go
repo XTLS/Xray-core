@@ -215,6 +215,9 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 		} else {
 			expectedRemote.IP = request.Address.IP()
 		}
+		if request.Port != 0 {
+			expectedRemote.Port = int(request.Port)
+		}
 		tempUDPConn = NewTempUDPConn(udpHub, writer, expectedRemote)
 	}
 	if err := writeSocks5Response(writer, statusSuccess, responseAddress, responsePort); err != nil {
