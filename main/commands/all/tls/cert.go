@@ -108,13 +108,7 @@ func printJSON(certificate *cert.Certificate) {
 }
 
 func writeFile(content []byte, name string) error {
-	f, err := os.Create(name)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	return common.Error2(f.Write(content))
+	return os.WriteFile(name, content, 0600)
 }
 
 func printFile(certificate *cert.Certificate, name string) error {
