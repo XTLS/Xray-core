@@ -49,9 +49,6 @@ func init() {
 }
 
 func GetGlobalID(ctx context.Context) (globalID [8]byte) {
-	if cone := ctx.Value("cone"); cone == nil || !cone.(bool) { // cone is nil only in some unit tests
-		return
-	}
 	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.Network == net.Network_UDP &&
 		(inbound.Name == "dokodemo-door" || inbound.Name == "socks" || inbound.Name == "shadowsocks" || inbound.Name == "tun") {
 		h := blake3.New(8, BaseKey)
