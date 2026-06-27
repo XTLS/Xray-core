@@ -1,4 +1,6 @@
 name: Build and Release for Windows 7
+# The furthest build might happen in August 2028 before a newer version of Go 1 releases.
+# Multiple factors may affect this procedure.
 
 on:
   workflow_dispatch:
