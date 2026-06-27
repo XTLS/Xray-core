@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/proxy/wireguard"
 	"google.golang.org/protobuf/proto"
 )
@@ -17,9 +20,12 @@ type WireGuardPeerConfig struct {
 	Endpoint     string   `json:"endpoint"`
 	KeepAlive    uint32   `json:"keepAlive"`
 	AllowedIPs   []string `json:"allowedIPs,omitempty"`
+
+	Level uint32 `json:"level"`
+	Email string `json:"email"`
 }
 
-func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
+func (c *WireGuardPeerConfig) Build() (*wireguard.PeerConfig, error) {
 	var err error
 	config := new(wireguard.PeerConfig)
 
@@ -78,14 +84,32 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 		config.Endpoint = c.Address
 	}
 
-	if c.Peers != nil {
+	if c.IsClient {
 		config.Peers = make([]*wireguard.PeerConfig, len(c.Peers))
 		for i, p := range c.Peers {
 			msg, err := p.Build()
 			if err != nil {
 				return nil, err
 			}
-			config.Peers[i] = msg.(*wireguard.PeerConfig)
+			config.Peers[i] = msg
+		}
+	} else {
+		config.Users = make([]*protocol.User, len(c.Peers))
+		processUser := func(idx int) error {
+			p := c.Peers[idx]
+			m, err := p.Build()
+			if err != nil {
+				return err
+			}
+			config.Users[idx] = &protocol.User{
+				Email:   p.Email,
+				Level:   p.Level,
+				Account: serial.ToTypedMessage(m),
+			}
+			return nil
+		}
+		if err := task.ParallelForN(len(c.Peers), processUser); err != nil {
+			return nil, err
 		}
 	}
 

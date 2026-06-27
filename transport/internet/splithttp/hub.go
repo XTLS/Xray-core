@@ -584,9 +584,7 @@ func (ln *Listener) Addr() net.Addr {
 // Close implements net.Listener.Close().
 func (ln *Listener) Close() error {
 	if ln.h3server != nil {
-		if err := ln.h3server.Close(); err != nil {
-			return err
-		}
+		return ln.h3server.Close()
 	} else if ln.listener != nil {
 		return ln.listener.Close()
 	}
