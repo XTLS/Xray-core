@@ -15,7 +15,7 @@ import (
 )
 
 func newLinkPair() (*transport.Link, *transport.Link) {
-	opt := pipe.WithoutSizeLimit()
+	opt := pipe.WithSizeLimit(512 * 1024)
 	uplinkReader, uplinkWriter := pipe.New(opt)
 	downlinkReader, downlinkWriter := pipe.New(opt)
 

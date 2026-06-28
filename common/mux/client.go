@@ -170,7 +170,7 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 
 type ClientStrategy struct {
 	MaxConcurrency uint32
-	MaxConnection  uint32
+	MaxReuseTimes  uint32
 }
 
 type ClientWorker struct {
@@ -179,6 +179,7 @@ type ClientWorker struct {
 	done           *done.Instance
 	timer          *time.Ticker
 	strategy       ClientStrategy
+	timeCretaed    time.Time
 }
 
 var (
@@ -194,6 +195,7 @@ func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, er
 		done:           done.New(),
 		timer:          time.NewTicker(time.Second * 16),
 		strategy:       s,
+		timeCretaed:    time.Now(),
 	}
 
 	go c.fetchOutput()
@@ -288,7 +290,7 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 
 func (m *ClientWorker) IsClosing() bool {
 	sm := m.sessionManager
-	if m.strategy.MaxConnection > 0 && sm.Count() >= int(m.strategy.MaxConnection) {
+	if m.strategy.MaxReuseTimes > 0 && sm.Count() >= int(m.strategy.MaxReuseTimes) {
 		return true
 	}
 	return false
@@ -318,6 +320,7 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 	if s == nil {
 		return false
 	}
+	errors.LogInfo(ctx, "Allocated mux.cool sub connection ID: ", s.ID, "/", m.strategy.MaxReuseTimes, " living: ", m.ActiveConnections(), "/", m.strategy.MaxConcurrency, " age: ", time.Since(m.timeCretaed).Truncate(time.Second))
 	s.input = link.Reader
 	s.output = link.Writer
 	go fetchInput(ctx, s, m.link.Writer)
@@ -332,14 +335,14 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 
 func (m *ClientWorker) handleStatueKeepAlive(meta *FrameMetadata, reader *buf.BufferedReader) error {
 	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
+		return CopyChunk(reader, buf.Discard)
 	}
 	return nil
 }
 
 func (m *ClientWorker) handleStatusNew(meta *FrameMetadata, reader *buf.BufferedReader) error {
 	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
+		return CopyChunk(reader, buf.Discard)
 	}
 	return nil
 }
@@ -355,7 +358,19 @@ func (m *ClientWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 		closingWriter := NewResponseWriter(meta.SessionID, m.link.Writer, protocol.TransferTypeStream)
 		closingWriter.Close()
 
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
+		return CopyChunk(reader, buf.Discard)
+	}
+
+	if s.transferType == protocol.TransferTypeStream {
+		err := CopyChunk(reader, s.output)
+		if err != nil && buf.IsWriteError(err) {
+			errors.LogInfoInner(context.Background(), err, "failed to write to downstream. closing session ", s.ID)
+			s.Close(false)
+			// down stream can have a write err but don't return the err to terminate the whole mux connection
+			// because it's still available for other sessions
+			return nil
+		}
+		return err
 	}
 
 	rr := s.NewReader(reader, &meta.Target)
@@ -374,7 +389,7 @@ func (m *ClientWorker) handleStatusEnd(meta *FrameMetadata, reader *buf.Buffered
 		s.Close(false)
 	}
 	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
+		return CopyChunk(reader, buf.Discard)
 	}
 	return nil
 }
