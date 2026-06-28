@@ -88,7 +88,7 @@ func (v *Validator) Get(auth string) *protocol.MemoryUser {
 	return nil
 }
 
-func (v *Validator) GetByID(id [16]byte) (user *protocol.MemoryUser) {
+func (v *Validator) GetByID(id uuid.UUID) (user *protocol.MemoryUser) {
 	id[6] = 0
 	id[7] = 0
 	if value, ok := v.ids.Load(id); ok {
