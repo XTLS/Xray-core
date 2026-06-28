@@ -82,9 +82,12 @@ func (v *Validator) Get(auth string) (user *protocol.MemoryUser) {
 			VR := net.PortFromBytes(id[6:8])
 			if user.Account.(*MemoryAccount).VR != VR {
 				user = &protocol.MemoryUser{
-					Email:   user.Email,
-					Level:   user.Level,
-					Account: &MemoryAccount{VR: VR},
+					Email: user.Email,
+					Level: user.Level,
+					Account: &MemoryAccount{
+						Auth: auth,
+						VR:   VR,
+					},
 				}
 			}
 		}
