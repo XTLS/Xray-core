@@ -11,13 +11,8 @@ import (
 )
 
 func (a *Account) AsAccount() (protocol.Account, error) {
-	var VR net.Port
-	if id, err := uuid.ParseString(a.Auth); err == nil {
-		VR = net.PortFromBytes(id[6:8])
-	}
 	return &MemoryAccount{
 		Auth: a.Auth,
-		VR:   VR,
 	}, nil
 }
 
@@ -41,26 +36,62 @@ func (a *MemoryAccount) ToProto() proto.Message {
 
 type Validator struct {
 	users sync.Map
+	ids   sync.Map
+	mu    sync.Mutex
 }
 
 func NewValidator() *Validator {
 	return &Validator{}
 }
 
-func (v *Validator) Add(user *protocol.MemoryUser) error {
+func (v *Validator) Add(user *protocol.MemoryUser) (err error) {
+	v.mu.Lock()
 	v.users.Store(user.Account.(*MemoryAccount).Auth, user)
-	return nil
+	if id, err := uuid.ParseString(user.Account.(*MemoryAccount).Auth); err == nil {
+		id[6] = 0
+		id[7] = 0
+		v.ids.Store(id, user)
+	}
+	v.mu.Unlock()
+	return
 }
 
-func (v *Validator) DelByEmail(email string) error {
+func (v *Validator) DelByEmail(email string) (err error) {
+	v.mu.Lock()
 	if user := v.GetByEmail(email); user != nil {
-		v.users.Delete(user.Account.(*MemoryAccount).Auth)
+		auth := user.Account.(*MemoryAccount).Auth
+		v.users.Delete(auth)
+		if id, err := uuid.ParseString(auth); err == nil {
+			id[6] = 0
+			id[7] = 0
+			v.ids.Delete(id)
+		}
+	}
+	v.mu.Unlock()
+	return
+}
+
+func (v *Validator) Get(auth string) *protocol.MemoryUser {
+	if id, err := uuid.ParseString(auth); err == nil {
+		if user := v.GetByID(id); user != nil {
+			return &protocol.MemoryUser{
+				Email:   user.Email,
+				Level:   user.Level,
+				Account: &MemoryAccount{VR: net.PortFromBytes(id[6:8])},
+			}
+		}
+		return nil
+	}
+	if value, ok := v.users.Load(auth); ok {
+		return value.(*protocol.MemoryUser)
 	}
 	return nil
 }
 
-func (v *Validator) Get(auth string) *protocol.MemoryUser {
-	if value, ok := v.users.Load(auth); ok {
+func (v *Validator) GetByID(id [16]byte) (user *protocol.MemoryUser) {
+	id[6] = 0
+	id[7] = 0
+	if value, ok := v.ids.Load(id); ok {
 		return value.(*protocol.MemoryUser)
 	}
 	return nil
