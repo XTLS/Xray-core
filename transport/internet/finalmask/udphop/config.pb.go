@@ -25,10 +25,11 @@ const (
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Sockopt       *internet.SocketConfig `protobuf:"bytes,1,opt,name=sockopt,proto3" json:"sockopt,omitempty"`
-	IPs           []string               `protobuf:"bytes,2,rep,name=IPs,proto3" json:"IPs,omitempty"`
-	Ports         []uint32               `protobuf:"varint,3,rep,packed,name=ports,proto3" json:"ports,omitempty"`
-	IntervalMin   int64                  `protobuf:"varint,4,opt,name=interval_min,json=intervalMin,proto3" json:"interval_min,omitempty"`
-	IntervalMax   int64                  `protobuf:"varint,5,opt,name=interval_max,json=intervalMax,proto3" json:"interval_max,omitempty"`
+	OverwriteOnly bool                   `protobuf:"varint,2,opt,name=overwrite_only,json=overwriteOnly,proto3" json:"overwrite_only,omitempty"`
+	IPs           []string               `protobuf:"bytes,3,rep,name=IPs,proto3" json:"IPs,omitempty"`
+	Ports         []uint32               `protobuf:"varint,4,rep,packed,name=ports,proto3" json:"ports,omitempty"`
+	IntervalMin   int64                  `protobuf:"varint,5,opt,name=interval_min,json=intervalMin,proto3" json:"interval_min,omitempty"`
+	IntervalMax   int64                  `protobuf:"varint,6,opt,name=interval_max,json=intervalMax,proto3" json:"interval_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -70,6 +71,13 @@ func (x *Config) GetSockopt() *internet.SocketConfig {
 	return nil
 }
 
+func (x *Config) GetOverwriteOnly() bool {
+	if x != nil {
+		return x.OverwriteOnly
+	}
+	return false
+}
+
 func (x *Config) GetIPs() []string {
 	if x != nil {
 		return x.IPs
@@ -102,13 +110,14 @@ var File_transport_internet_finalmask_udphop_config_proto protoreflect.FileDescr
 
 const file_transport_internet_finalmask_udphop_config_proto_rawDesc = "" +
 	"\n" +
-	"0transport/internet/finalmask/udphop/config.proto\x12(xray.transport.internet.finalmask.udphop\x1a\x1ftransport/internet/config.proto\"\xb7\x01\n" +
+	"0transport/internet/finalmask/udphop/config.proto\x12(xray.transport.internet.finalmask.udphop\x1a\x1ftransport/internet/config.proto\"\xde\x01\n" +
 	"\x06Config\x12?\n" +
-	"\asockopt\x18\x01 \x01(\v2%.xray.transport.internet.SocketConfigR\asockopt\x12\x10\n" +
-	"\x03IPs\x18\x02 \x03(\tR\x03IPs\x12\x14\n" +
-	"\x05ports\x18\x03 \x03(\rR\x05ports\x12!\n" +
-	"\finterval_min\x18\x04 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x05 \x01(\x03R\vintervalMaxB\x9a\x01\n" +
+	"\asockopt\x18\x01 \x01(\v2%.xray.transport.internet.SocketConfigR\asockopt\x12%\n" +
+	"\x0eoverwrite_only\x18\x02 \x01(\bR\roverwriteOnly\x12\x10\n" +
+	"\x03IPs\x18\x03 \x03(\tR\x03IPs\x12\x14\n" +
+	"\x05ports\x18\x04 \x03(\rR\x05ports\x12!\n" +
+	"\finterval_min\x18\x05 \x01(\x03R\vintervalMin\x12!\n" +
+	"\finterval_max\x18\x06 \x01(\x03R\vintervalMaxB\x9a\x01\n" +
 	",com.xray.transport.internet.finalmask.udphopP\x01Z=github.com/xtls/xray-core/transport/internet/finalmask/udphop\xaa\x02(Xray.Transport.Internet.Finalmask.Udphopb\x06proto3"
 
 var (
