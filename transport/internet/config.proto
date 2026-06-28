@@ -64,18 +64,12 @@ message StreamConfig {
   SocketConfig socket_settings = 6;
 }
 
-message UdpHop {
-  repeated uint32 ports = 1;
-  int64 interval_min = 2;
-  int64 interval_max = 3;
-}
-
 message QuicParams {
   string congestion = 1;
   string bbr_profile = 2;
   uint64 brutal_up = 3;
   uint64 brutal_down = 4;
-  UdpHop udp_hop = 5;
+
   uint64 init_stream_receive_window = 6;
   uint64 max_stream_receive_window = 7;
   uint64 init_conn_receive_window = 8;
