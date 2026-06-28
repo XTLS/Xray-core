@@ -1967,10 +1967,11 @@ func (c *Realm) Build() (proto.Message, error) {
 }
 
 type UDPHop struct {
-	Sockopt  *SocketConfig `json:"sockopt"`
-	IPs      []string      `json:"ips"`
-	Ports    PortList      `json:"ports"`
-	Interval Int32Range    `json:"interval"`
+	Sockopt       *SocketConfig `json:"sockopt"`
+	OverwriteOnly bool          `json:"overwriteOnly"`
+	IPs           []string      `json:"ips"`
+	Ports         PortList      `json:"ports"`
+	Interval      Int32Range    `json:"interval"`
 }
 
 func (c *UDPHop) Build() (proto.Message, error) {
@@ -2002,11 +2003,12 @@ func (c *UDPHop) Build() (proto.Message, error) {
 	}
 
 	return &udphop.Config{
-		Sockopt:     sockopt,
-		IPs:         c.IPs,
-		Ports:       c.Ports.Build().Ports(),
-		IntervalMin: int64(c.Interval.From),
-		IntervalMax: int64(c.Interval.To),
+		Sockopt:       sockopt,
+		OverwriteOnly: c.OverwriteOnly,
+		IPs:           c.IPs,
+		Ports:         c.Ports.Build().Ports(),
+		IntervalMin:   int64(c.Interval.From),
+		IntervalMax:   int64(c.Interval.To),
 	}, nil
 }
 
