@@ -34,8 +34,9 @@ type packet struct {
 }
 
 type udpHopConn struct {
-	conn    net.PacketConn
-	sockopt *internet.SocketConfig
+	conn          net.PacketConn
+	sockopt       *internet.SocketConfig
+	overwriteOnly bool
 
 	ips         []netip.Prefix
 	ports       []uint32
@@ -77,8 +78,9 @@ func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		return nil, errors.New("invalid interval")
 	}
 	conn := &udpHopConn{
-		conn:    raw,
-		sockopt: c.Sockopt,
+		conn:          raw,
+		sockopt:       c.Sockopt,
+		overwriteOnly: c.OverwriteOnly,
 
 		ips:         ips,
 		ports:       c.Ports,
@@ -212,6 +214,23 @@ func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.overwriteOnly {
+		if c.addr == nil {
+			if len(c.ips) > 0 {
+				addr = &net.UDPAddr{
+					IP:   randPrefix(c.ips[mrand.Intn(len(c.ips))]),
+					Port: int(c.ports[mrand.Intn(len(c.ports))]),
+				}
+			} else {
+				addr = &net.UDPAddr{
+					IP:   addr.(*net.UDPAddr).IP,
+					Port: int(c.ports[mrand.Intn(len(c.ports))]),
+				}
+			}
+		}
+		return c.conn.WriteTo(p, c.addr)
+	}
+
 	if c.addr == nil {
 		c.addr = &net.UDPAddr{
 			IP:   addr.(*net.UDPAddr).IP,
@@ -227,12 +246,7 @@ func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		go c.hopLoop()
 	}
 
-	_, err = c.cur.WriteTo(p, c.addr)
-	if err != nil {
-		errors.LogErrorInner(context.Background(), err, "send err")
-		return 0, err
-	}
-	return len(p), nil
+	return c.cur.WriteTo(p, c.addr)
 }
 
 func (c *udpHopConn) Close() error {
