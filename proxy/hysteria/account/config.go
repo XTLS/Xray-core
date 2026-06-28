@@ -5,14 +5,19 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/uuid"
 
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 )
 
 func (a *Account) AsAccount() (protocol.Account, error) {
+	var VR net.Port
+	if id, err := uuid.Parse(a.Auth); err == nil {
+		VR = net.PortFromBytes(id[6:8])
+	}
 	return &MemoryAccount{
 		Auth: a.Auth,
+		VR:   VR,
 	}, nil
 }
 
@@ -47,7 +52,7 @@ func NewValidator() *Validator {
 func (v *Validator) Add(user *protocol.MemoryUser) (err error) {
 	v.mu.Lock()
 	v.users.Store(user.Account.(*MemoryAccount).Auth, user)
-	if id, err := uuid.ParseString(user.Account.(*MemoryAccount).Auth); err == nil {
+	if id, err := uuid.Parse(user.Account.(*MemoryAccount).Auth); err == nil {
 		id[6] = 0
 		id[7] = 0
 		v.ids.Store(id, user)
@@ -61,7 +66,7 @@ func (v *Validator) DelByEmail(email string) (err error) {
 	if user := v.GetByEmail(email); user != nil {
 		auth := user.Account.(*MemoryAccount).Auth
 		v.users.Delete(auth)
-		if id, err := uuid.ParseString(auth); err == nil {
+		if id, err := uuid.Parse(auth); err == nil {
 			id[6] = 0
 			id[7] = 0
 			v.ids.Delete(id)
@@ -72,13 +77,17 @@ func (v *Validator) DelByEmail(email string) (err error) {
 }
 
 func (v *Validator) Get(auth string) *protocol.MemoryUser {
-	if id, err := uuid.ParseString(auth); err == nil {
+	if id, err := uuid.Parse(auth); err == nil {
 		if user := v.GetByID(id); user != nil {
-			return &protocol.MemoryUser{
-				Email:   user.Email,
-				Level:   user.Level,
-				Account: &MemoryAccount{VR: net.PortFromBytes(id[6:8])},
+			VR := net.PortFromBytes(id[6:8])
+			if user.Account.(*MemoryAccount).VR != VR {
+				user = &protocol.MemoryUser{
+					Email:   user.Email,
+					Level:   user.Level,
+					Account: &MemoryAccount{VR: VR},
+				}
 			}
+			return user
 		}
 		return nil
 	}
