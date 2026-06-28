@@ -217,12 +217,12 @@ func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.overwriteOnly {
 		if c.addr == nil {
 			if len(c.ips) > 0 {
-				addr = &net.UDPAddr{
+				c.addr = &net.UDPAddr{
 					IP:   randPrefix(c.ips[mrand.Intn(len(c.ips))]),
 					Port: int(c.ports[mrand.Intn(len(c.ports))]),
 				}
 			} else {
-				addr = &net.UDPAddr{
+				c.addr = &net.UDPAddr{
 					IP:   addr.(*net.UDPAddr).IP,
 					Port: int(c.ports[mrand.Intn(len(c.ports))]),
 				}
