@@ -256,7 +256,7 @@ func (t *LinuxTun) unsetInterfaceAddresses() error {
 	for i := len(t.interfaceAddresses) - 1; i >= 0; i-- {
 		address := t.interfaceAddresses[i]
 		if err := netlink.AddrDel(t.tunLink, &address); err != nil {
-			errs = append(errs, errors.New("failed to delete interface address").Base(err))
+			errs = append(errs, errors.New("failed to delete interface address ", address.String()).Base(err))
 		}
 	}
 	t.interfaceAddresses = nil
