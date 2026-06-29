@@ -14,11 +14,11 @@ Plainly enabling it in the config probably will result nothing, or lock your rou
 
 ## DETAILS
 
-Current implementation does not contain options to configure network level addresses, routing or rules.
-Enabling the feature will result only tun interface up, and that's it. \
-This is explicit decision, significantly simplifying implementation, and allowing any number of custom configurations, consumers could come up with. Network interface is OS level entity, and OS is what should manage it. \
-Working configuration, is tun enabled in Xray config with specific name (e.g. xray0), and OS level configuration to manage "xray0" interface, applying routing and rules on interface up.
-This way consistency of system level routing and rules is ensured from single place of responsibility - the OS itself. \
+By default, enabling the feature will only bring the tun interface up. \
+When configured explicitly, Windows and Linux can also apply interface addresses from `gateway` and on-link routes from `autoSystemRoutingTable`.
+Linux does not configure system DNS from the `dns` field; system DNS remains managed by the OS or distribution-specific network services. \
+For more advanced routing policies or rules, OS level configuration can still manage the named interface (e.g. xray0) when it appears.
+This keeps complex system level routing and rules in a single place of responsibility - the OS itself. \
 Examples of how to achieve this on a simple Linux system (Ubuntu with systemd-networkd) can be found at the end of this README.
 
 Due to this inbound not actually being a proxy, the configuration ignore required listen and port options, and never listen on any port. \
