@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 )
 
@@ -17,10 +18,27 @@ type XmuxConn interface {
 
 type XmuxClient struct {
 	XmuxConn     XmuxConn
-	OpenUsage    atomic.Int32
+	Running      atomic.Int32
 	leftUsage    int32
 	LeftRequests atomic.Int32
 	UnreusableAt time.Time
+	NotUsed      atomic.Bool
+}
+
+func (c *XmuxClient) AddRunning() {
+	c.Running.Add(1)
+}
+
+func (c *XmuxClient) DoneRunning() {
+	c.Running.Add(-1)
+	c.maybeClose()
+}
+
+// close the XmuxConn if it is not used and has no running requests
+func (c *XmuxClient) maybeClose() {
+	if c.NotUsed.Load() && c.Running.Load() <= 0 {
+		common.Close(c.XmuxConn)
+	}
 }
 
 type XmuxManager struct {
@@ -68,10 +86,12 @@ func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when l
 			xmuxClient.LeftRequests.Load() <= 0 ||
 			(xmuxClient.UnreusableAt != time.Time{} && time.Now().After(xmuxClient.UnreusableAt)) {
 			errors.LogDebug(ctx, "XMUX: removing xmuxClient, IsClosed() = ", xmuxClient.XmuxConn.IsClosed(),
-				", OpenUsage = ", xmuxClient.OpenUsage.Load(),
+				", Running = ", xmuxClient.Running.Load(),
 				", leftUsage = ", xmuxClient.leftUsage,
 				", LeftRequests = ", xmuxClient.LeftRequests.Load(),
 				", UnreusableAt = ", xmuxClient.UnreusableAt)
+			xmuxClient.NotUsed.Store(true)
+			xmuxClient.maybeClose()
 			m.xmuxClients = append(m.xmuxClients[:i], m.xmuxClients[i+1:]...)
 		} else {
 			i++
@@ -91,7 +111,7 @@ func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when l
 	xmuxClients := make([]*XmuxClient, 0)
 	if m.concurrency > 0 {
 		for _, xmuxClient := range m.xmuxClients {
-			if xmuxClient.OpenUsage.Load() < m.concurrency {
+			if xmuxClient.Running.Load() < m.concurrency {
 				xmuxClients = append(xmuxClients, xmuxClient)
 			}
 		}

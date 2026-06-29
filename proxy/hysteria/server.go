@@ -59,12 +59,12 @@ func (s *Server) HysteriaInboundValidator() *account.Validator {
 	return s.validator
 }
 
-func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
-	return s.validator.Add(u)
+func (s *Server) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
+	return s.validator.Add(user)
 }
 
-func (s *Server) RemoveUser(ctx context.Context, e string) error {
-	return s.validator.Del(e)
+func (s *Server) RemoveUser(ctx context.Context, email string) error {
+	return s.validator.DelByEmail(email)
 }
 
 func (s *Server) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
@@ -91,9 +91,12 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 	iConn := stat.TryUnwrapStatsConn(conn)
 
-	type User interface{ User() *protocol.MemoryUser }
-	if v, ok := iConn.(User); ok && v.User() != nil {
-		inbound.User = v.User()
+	if v, ok := iConn.(interface{ User() *protocol.MemoryUser }); ok {
+		user := v.User()
+		if user != nil {
+			inbound.User = user
+			inbound.VlessRoute = user.Account.(*account.MemoryAccount).VR
+		}
 	}
 
 	if _, ok := iConn.(*hysteria.InterConn); ok {
