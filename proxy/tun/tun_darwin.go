@@ -149,6 +149,14 @@ func (t *DarwinTun) monitorRouteChanges() {
 	}
 }
 
+func (t *DarwinTun) Read(buf []byte) (int, error) {
+	return 0, errors.New("system stack not supported on this platform")
+}
+
+func (t *DarwinTun) Write(buf []byte) (int, error) {
+	return 0, errors.New("system stack not supported on this platform")
+}
+
 func (t *DarwinTun) Name() (string, error) {
 	return unix.GetsockoptString(t.tunFd, sysprotoControl, UTUN_OPT_IFNAME)
 }

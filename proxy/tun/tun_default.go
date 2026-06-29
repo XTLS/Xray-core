@@ -35,6 +35,14 @@ func (t *DefaultTun) Index() (int, error) {
 	return 0, errors.New("Tun is not supported on your platform")
 }
 
+func (t *DefaultTun) Read(buf []byte) (int, error) {
+	return 0, errors.New("Tun is not supported on your platform")
+}
+
+func (t *DefaultTun) Write(buf []byte) (int, error) {
+	return 0, errors.New("Tun is not supported on your platform")
+}
+
 func (t *DefaultTun) newEndpoint() (stack.LinkEndpoint, error) {
 	return nil, errors.New("Tun is not supported on your platform")
 }

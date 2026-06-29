@@ -50,6 +50,14 @@ func (t *FreeBSDTun) Close() error {
 	return t.device.Close()
 }
 
+func (t *FreeBSDTun) Read(buf []byte) (int, error) {
+	return 0, errors.New("system stack not supported on this platform")
+}
+
+func (t *FreeBSDTun) Write(buf []byte) (int, error) {
+	return 0, errors.New("system stack not supported on this platform")
+}
+
 func (t *FreeBSDTun) Name() (string, error) {
 	return t.device.Name()
 }

@@ -206,6 +206,14 @@ func (t *WindowsTun) Close() error {
 	return nil
 }
 
+func (t *WindowsTun) Read(buf []byte) (int, error) {
+	return 0, go_errors.New("system stack not supported on this platform")
+}
+
+func (t *WindowsTun) Write(buf []byte) (int, error) {
+	return 0, go_errors.New("system stack not supported on this platform")
+}
+
 func (t *WindowsTun) Name() (string, error) {
 	row, err := t.luid.Interface()
 	if err != nil {

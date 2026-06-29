@@ -47,6 +47,14 @@ func (t *AndroidTun) Close() error {
 	return nil
 }
 
+func (t *AndroidTun) Read(buf []byte) (int, error) {
+	return unix.Read(t.tunFd, buf)
+}
+
+func (t *AndroidTun) Write(buf []byte) (int, error) {
+	return unix.Write(t.tunFd, buf)
+}
+
 func (t *AndroidTun) Name() (string, error) {
 	ifr, err := unix.NewIfreq("")
 	if err != nil {

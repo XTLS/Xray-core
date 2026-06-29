@@ -206,6 +206,14 @@ func (t *LinuxTun) Name() (string, error) {
 	return t.tunLink.Attrs().Name, nil
 }
 
+func (t *LinuxTun) Read(buf []byte) (int, error) {
+	return unix.Read(t.tunFd, buf)
+}
+
+func (t *LinuxTun) Write(buf []byte) (int, error) {
+	return unix.Write(t.tunFd, buf)
+}
+
 func (t *LinuxTun) Index() (int, error) {
 	return t.tunLink.Attrs().Index, nil
 }
