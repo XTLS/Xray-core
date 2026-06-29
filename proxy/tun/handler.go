@@ -2,9 +2,13 @@ package tun
 
 import (
 	"context"
+	"io"
+	stdnet "net"
 	"net/netip"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -47,6 +51,9 @@ var _ ConnectionHandler = (*Handler)(nil)
 
 // Handler implements common.Runnable
 var _ common.Runnable = (*Handler)(nil)
+
+// Handler implements StackHandler
+var _ StackHandler = (*Handler)(nil)
 
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
@@ -211,6 +218,84 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 	}
 }
+
+// PrepareConnection implements StackHandler
+func (t *Handler) PrepareConnection(_ string, _, dst net.Destination) error {
+	_, err := t.dispatcher.Dispatch(t.ctx, dst)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// HandleTCP implements StackHandler
+func (t *Handler) HandleTCP(_ context.Context, conn net.Conn, _ net.Destination, dst net.Destination) error {
+	t.HandleConnection(conn, dst)
+	return nil
+}
+
+// HandleUDP implements StackHandler
+func (t *Handler) HandleUDP(_ context.Context, data []byte, src, dst net.Destination, writeBack func([]byte) error) error {
+	conn := &udpPacketConn{
+		data:      data,
+		writeBack: writeBack,
+		src:       src,
+		dst:       dst,
+	}
+	t.HandleConnection(conn, dst)
+	return nil
+}
+
+// udpPacketConn wraps a single UDP datagram as a net.Conn
+type udpPacketConn struct {
+	data      []byte
+	writeBack func([]byte) error
+	src       net.Destination
+	dst       net.Destination
+	readOnce  bool
+	mu        sync.Mutex
+	closed    bool
+}
+
+func (c *udpPacketConn) Read(b []byte) (int, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return 0, io.EOF
+	}
+	if c.readOnce {
+		c.mu.Unlock()
+		return 0, io.EOF
+	}
+	c.readOnce = true
+	data := c.data
+	c.mu.Unlock()
+	n := copy(b, data)
+	if n < len(data) {
+		return n, io.ErrShortBuffer
+	}
+	return n, nil
+}
+
+func (c *udpPacketConn) Write(b []byte) (int, error) {
+	if err := c.writeBack(b); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+func (c *udpPacketConn) Close() error {
+	c.mu.Lock()
+	c.closed = true
+	c.mu.Unlock()
+	return nil
+}
+
+func (c *udpPacketConn) LocalAddr() stdnet.Addr  { return c.dst.RawNetAddr() }
+func (c *udpPacketConn) RemoteAddr() stdnet.Addr { return c.src.RawNetAddr() }
+func (c *udpPacketConn) SetDeadline(time.Time) error      { return nil }
+func (c *udpPacketConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *udpPacketConn) SetWriteDeadline(time.Time) error { return nil }
 
 // Close implements common.Closable.
 func (t *Handler) Close() error {

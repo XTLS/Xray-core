@@ -103,6 +103,10 @@ func (d *testDispatcher) DispatchLink(ctx context.Context, dest xnet.Destination
 	return link.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(d.writePayload)})
 }
 
+func TestHandlerImplementsStackHandler(t *testing.T) {
+	var _ StackHandler = (*Handler)(nil)
+}
+
 func TestHandlerCountsTunConnectionTraffic(t *testing.T) {
 	uplinkCounter := new(testCounter)
 	downlinkCounter := new(testCounter)
