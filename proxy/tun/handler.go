@@ -129,11 +129,26 @@ func (t *Handler) Start() error {
 
 	errors.LogInfo(t.ctx, tunName, " created")
 
-	tunStackOptions := StackOptions{
-		Tun:         tunInterface,
-		IdleTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+	var tunStack Stack
+	switch t.config.GetStack() {
+	case "system":
+		prefix4, _ := t.parseAddress(0)
+		prefix6, _ := t.parseAddress(1)
+		tunStack, err = NewSystem(SystemStackOptions{
+			Context:    t.ctx,
+			Tun:        tunInterface,
+			Handler:    t,
+			MTU:        int(t.config.GetMTU()),
+			IPv4Prefix: prefix4,
+			IPv6Prefix: prefix6,
+			UDPTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+		})
+	default:
+		tunStack, err = NewStack(t.ctx, StackOptions{
+			Tun:         tunInterface,
+			IdleTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+		}, t)
 	}
-	tunStack, err := NewStack(t.ctx, tunStackOptions, t)
 	if err != nil {
 		_ = tunInterface.Close()
 		return err
@@ -296,6 +311,14 @@ func (c *udpPacketConn) RemoteAddr() stdnet.Addr { return c.src.RawNetAddr() }
 func (c *udpPacketConn) SetDeadline(time.Time) error      { return nil }
 func (c *udpPacketConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *udpPacketConn) SetWriteDeadline(time.Time) error { return nil }
+
+func (t *Handler) parseAddress(index int) (netip.Prefix, error) {
+	addrs := t.config.GetAddress()
+	if index < len(addrs) {
+		return netip.ParsePrefix(addrs[index])
+	}
+	return netip.Prefix{}, nil
+}
 
 // Close implements common.Closable.
 func (t *Handler) Close() error {
