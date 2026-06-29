@@ -36,7 +36,7 @@ The -confdir=dir flag sets a dir with multiple json config
 The -format=json flag sets the format of config files.
 Default "auto".
 
-The -env=key=value flag sets an environment variable before loading
+The --env=key=value flag sets an environment variable before loading
 config. It may be specified multiple times and applies to run, -test
 and -dump.
 

@@ -42,8 +42,17 @@ func TestApplyRunEnvVars(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			originalValue, originalExists := os.LookupEnv(test.key)
 			t.Cleanup(func() {
-				os.Unsetenv(test.key)
+				if originalExists {
+					if err := os.Setenv(test.key, originalValue); err != nil {
+						t.Errorf("failed to restore environment variable %q: %v", test.key, err)
+					}
+					return
+				}
+				if err := os.Unsetenv(test.key); err != nil {
+					t.Errorf("failed to unset environment variable %q: %v", test.key, err)
+				}
 			})
 
 			if err := applyRunEnvVars(test.args); err != nil {
