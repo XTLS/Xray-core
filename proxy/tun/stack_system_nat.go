@@ -1,6 +1,8 @@
 package tun
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"net/netip"
 	"sync"
@@ -28,11 +30,20 @@ type TCPNAT struct {
 }
 
 func NewTCPNAT() *TCPNAT {
-	return &TCPNAT{
+	n := &TCPNAT{
 		byConn:    make(map[uint16]tcpNATEntry),
 		bySrcDst:  make(map[natKey]uint16),
 		nextPort:  natPortMin,
 		freePorts: make([]uint16, 0),
+	}
+	n.randomizePort()
+	return n
+}
+
+func (n *TCPNAT) randomizePort() {
+	var buf [2]byte
+	if _, err := rand.Read(buf[:]); err == nil {
+		n.nextPort = natPortMin + binary.BigEndian.Uint16(buf[:])%32768
 	}
 }
 
@@ -92,11 +103,20 @@ type UDPNAT struct {
 }
 
 func NewUDPNAT() *UDPNAT {
-	return &UDPNAT{
+	n := &UDPNAT{
 		entries:   make(map[natKey]uint16),
 		byPort:    make(map[uint16]udpNATEntry),
 		nextPort:  natPortMin,
 		freePorts: make([]uint16, 0),
+	}
+	n.randomizePort()
+	return n
+}
+
+func (n *UDPNAT) randomizePort() {
+	var buf [2]byte
+	if _, err := rand.Read(buf[:]); err == nil {
+		n.nextPort = natPortMin + binary.BigEndian.Uint16(buf[:])%32768
 	}
 }
 
@@ -149,7 +169,8 @@ func (n *TCPNAT) allocatePort() (uint16, error) {
 		return port, nil
 	}
 
-	for range 3 {
+	start := n.nextPort
+	for {
 		port := n.nextPort
 		n.nextPort++
 		if n.nextPort < natPortMin {
@@ -159,9 +180,11 @@ func (n *TCPNAT) allocatePort() (uint16, error) {
 		if _, exists := n.byConn[port]; !exists {
 			return port, nil
 		}
-	}
 
-	return 0, ErrNATPortExhausted
+		if n.nextPort == start {
+			return 0, ErrNATPortExhausted
+		}
+	}
 }
 
 func (n *UDPNAT) allocatePort() (uint16, error) {
@@ -171,7 +194,8 @@ func (n *UDPNAT) allocatePort() (uint16, error) {
 		return port, nil
 	}
 
-	for range 3 {
+	start := n.nextPort
+	for {
 		port := n.nextPort
 		n.nextPort++
 		if n.nextPort < natPortMin {
@@ -181,9 +205,11 @@ func (n *UDPNAT) allocatePort() (uint16, error) {
 		if _, exists := n.byPort[port]; !exists {
 			return port, nil
 		}
-	}
 
-	return 0, ErrNATPortExhausted
+		if n.nextPort == start {
+			return 0, ErrNATPortExhausted
+		}
+	}
 }
 
 

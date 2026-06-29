@@ -130,19 +130,54 @@ func (t *Handler) Start() error {
 	errors.LogInfo(t.ctx, tunName, " created")
 
 	var tunStack Stack
+	var sysStack *SystemStack
 	switch t.config.GetStack() {
 	case "system":
 		prefix4, _ := t.parseAddress(0)
 		prefix6, _ := t.parseAddress(1)
+
+		loopbackAddrs := []netip.Addr{netip.MustParseAddr("127.0.0.1"), netip.MustParseAddr("::1")}
+		tunAddrs := []netip.Addr{}
+		if prefix4.Addr().IsValid() {
+			tunAddrs = append(tunAddrs, prefix4.Addr())
+		}
+		if prefix6.Addr().IsValid() {
+			tunAddrs = append(tunAddrs, prefix6.Addr())
+		}
+
+		var dnsAddr netip.Addr
+		if len(t.config.GetDnsAddress()) > 0 {
+			if a, err := netip.ParseAddr(t.config.GetDnsAddress()[0]); err == nil {
+				dnsAddr = a
+			}
+		}
+
+		var hijacker *DNSHijacker
+		if t.config.GetDnsMode() != "" {
+			opts := DNSHijackOptions{
+				Mode:              t.config.GetDnsMode(),
+				DNSAddresses:      []netip.Addr{dnsAddr},
+				LoopbackAddresses: loopbackAddrs,
+				TUNAddresses:      tunAddrs,
+				Writer:            nil,
+			}
+			hijacker = NewDNSHijacker(opts)
+		}
+
 		tunStack, err = NewSystem(SystemStackOptions{
-			Context:    t.ctx,
-			Tun:        tunInterface,
-			Handler:    t,
-			MTU:        int(t.config.GetMTU()),
-			IPv4Prefix: prefix4,
-			IPv6Prefix: prefix6,
-			UDPTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+			Context:     t.ctx,
+			Tun:         tunInterface,
+			Handler:     t,
+			MTU:         int(t.config.GetMTU()),
+			IPv4Prefix:  prefix4,
+			IPv6Prefix:  prefix6,
+			UDPTimeout:  t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+			DNSHijacker: hijacker,
+			StrictRoute: t.config.GetStrictRoute(),
 		})
+		if err == nil {
+			sysStack = tunStack.(*SystemStack)
+		}
 	default:
 		tunStack, err = NewStack(t.ctx, StackOptions{
 			Tun:         tunInterface,
@@ -166,6 +201,10 @@ func (t *Handler) Start() error {
 		_ = tunStack.Close()
 		_ = tunInterface.Close()
 		return err
+	}
+
+	if sysStack != nil {
+		sysStack.StartTunLoop()
 	}
 
 	t.stack = tunStack
@@ -232,15 +271,6 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	if err := t.dispatcher.DispatchLink(ctx, destination, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))
 	}
-}
-
-// PrepareConnection implements StackHandler
-func (t *Handler) PrepareConnection(_ string, _, dst net.Destination) error {
-	_, err := t.dispatcher.Dispatch(t.ctx, dst)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 // HandleTCP implements StackHandler

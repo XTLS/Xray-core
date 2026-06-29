@@ -131,8 +131,6 @@ func TestBuildICMPv6Checksum(t *testing.T) {
 	for i := 0; i < 16; i += 2 {
 		sum += uint32(dst16[i])<<8 | uint32(dst16[i+1])
 	}
-	_ = src16
-	_ = dst16
 	sum += uint32(len(pkt[40:]))
 	sum += 58
 	for i := 40; i < len(pkt); i += 2 {

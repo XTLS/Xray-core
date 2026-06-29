@@ -99,9 +99,9 @@ func (h *DNSHijacker) Process(packet []byte) (bool, error) {
 		return false, nil
 	}
 
-	return h.handleDNSQuery(packet, srcIP, srcPort, dstIP, dstPort, packet[payloadOffset+8:])
+	return h.handleDNSQuery(srcIP, srcPort, dstIP, dstPort, packet[payloadOffset+8:])
 }
 
-func (h *DNSHijacker) handleDNSQuery(origPacket []byte, srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16, query []byte) (bool, error) {
+func (h *DNSHijacker) handleDNSQuery(srcIP netip.Addr, srcPort uint16, dstIP netip.Addr, dstPort uint16, query []byte) (bool, error) {
 	return true, nil
 }

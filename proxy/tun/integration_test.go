@@ -12,5 +12,11 @@ func TestTUN_SystemStack_Integration(t *testing.T) {
 		t.Skip("requires root for TUN")
 	}
 
-	_ = NewSystem(SystemStackOptions{})
+	s, err := NewSystem(SystemStackOptions{})
+	if err != nil {
+		t.Fatalf("NewSystem failed: %v", err)
+	}
+	if s == nil {
+		t.Fatal("NewSystem returned nil")
+	}
 }

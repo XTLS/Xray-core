@@ -21,10 +21,15 @@ type SystemStack struct {
 	tunAddr6    netip.Addr
 	natAddr4    netip.Addr
 	natAddr6    netip.Addr
+	dstAddr4    netip.Addr
+	dstAddr6    netip.Addr
 	tcpNAT      *TCPNAT
 	udpNAT      *UDPNAT
 	udpTimeout  time.Duration
 	icmpTimeout time.Duration
+	strictRoute bool
+
+	dnsHijacker *DNSHijacker
 
 	tcpListener4 net.Listener
 	tcpListener6 net.Listener
@@ -40,6 +45,9 @@ type SystemStackOptions struct {
 	IPv4Prefix netip.Prefix
 	IPv6Prefix netip.Prefix
 	UDPTimeout time.Duration
+
+	DNSHijacker *DNSHijacker
+	StrictRoute bool
 }
 
 func NewSystem(opts SystemStackOptions) (*SystemStack, error) {
@@ -52,15 +60,19 @@ func NewSystem(opts SystemStackOptions) (*SystemStack, error) {
 		icmpTimeout: 30 * time.Second,
 		tcpNAT:      NewTCPNAT(),
 		udpNAT:      NewUDPNAT(),
+		dnsHijacker: opts.DNSHijacker,
+		strictRoute: opts.StrictRoute,
 	}
 
 	if opts.IPv4Prefix.Addr().IsValid() {
 		s.tunAddr4 = opts.IPv4Prefix.Addr()
 		s.natAddr4 = s.tunAddr4.Next()
+		s.dstAddr4 = s.tunAddr4
 	}
 	if opts.IPv6Prefix.Addr().IsValid() {
 		s.tunAddr6 = opts.IPv6Prefix.Addr()
 		s.natAddr6 = s.tunAddr6.Next()
+		s.dstAddr6 = s.tunAddr6
 	}
 
 	return s, nil
@@ -99,12 +111,24 @@ func (s *SystemStack) Start() error {
 		go s.acceptTCP(s.tcpListener6, false)
 	}
 
-	go s.tunLoop()
 	return nil
 }
 
+// StartTunLoop begins reading from the TUN device.
+// Must be called after the TUN interface is fully configured (IP addresses assigned).
+func (s *SystemStack) StartTunLoop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.running.Load() {
+		return
+	}
+	go s.tunLoop()
+}
+
 func (s *SystemStack) Close() error {
+	s.mu.Lock()
 	s.running.Store(false)
+	s.mu.Unlock()
 
 	if s.tcpListener4 != nil {
 		s.tcpListener4.Close()
@@ -120,10 +144,21 @@ func (s *SystemStack) acceptTCP(l net.Listener, isIPv4 bool) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
+			if isTemporary(err) {
+				continue
+			}
 			return
 		}
 		go s.handleAcceptedTCP(conn, isIPv4)
 	}
+}
+
+func isTemporary(err error) bool {
+	type temporary interface {
+		Temporary() bool
+	}
+	t, ok := err.(temporary)
+	return ok && t.Temporary()
 }
 
 func (s *SystemStack) handleAcceptedTCP(conn net.Conn, isIPv4 bool) {
@@ -139,7 +174,8 @@ func (s *SystemStack) handleAcceptedTCP(conn net.Conn, isIPv4 bool) {
 	src := xnet.TCPDestination(xnet.IPAddress(backSrc.Addr().AsSlice()), xnet.Port(backSrc.Port()))
 	dst := xnet.TCPDestination(xnet.IPAddress(backDst.Addr().AsSlice()), xnet.Port(backDst.Port()))
 
-	_ = s.handler.HandleTCP(s.ctx, conn, src, dst)
+	s.handler.HandleTCP(s.ctx, conn, src, dst)
+	s.tcpNAT.Delete(localPort)
 }
 
 func (s *SystemStack) tunLoop() {
@@ -169,17 +205,21 @@ func (s *SystemStack) processIPv4(pkt []byte) {
 	if len(pkt) < 20 {
 		return
 	}
+	ihl := int(pkt[0]&0x0F) * 4
+	if ihl < 20 || ihl > len(pkt) {
+		return
+	}
 	srcIP := netip.AddrFrom4([4]byte{pkt[12], pkt[13], pkt[14], pkt[15]})
 	dstIP := netip.AddrFrom4([4]byte{pkt[16], pkt[17], pkt[18], pkt[19]})
 	proto := pkt[9]
 
 	switch proto {
 	case 6:
-		s.handleTCPPacket(pkt, srcIP, dstIP)
+		s.handleTCPPacket(pkt, srcIP, dstIP, ihl)
 	case 17:
-		s.handleUDPPacket(pkt, srcIP, dstIP, false)
+		s.handleUDPPacket(pkt, srcIP, dstIP, false, ihl)
 	case 1:
-		s.handleICMPPacket(pkt, srcIP, dstIP, false)
+		s.handleICMPPacket(pkt, srcIP, dstIP, false, ihl)
 	}
 }
 
@@ -193,20 +233,20 @@ func (s *SystemStack) processIPv6(pkt []byte) {
 
 	switch proto {
 	case 6:
-		s.handleTCPPacket(pkt, srcIP, dstIP)
+		s.handleTCPPacket(pkt, srcIP, dstIP, 40)
 	case 17:
-		s.handleUDPPacket(pkt, srcIP, dstIP, true)
+		s.handleUDPPacket(pkt, srcIP, dstIP, true, 40)
 	case 58:
-		s.handleICMPPacket(pkt, srcIP, dstIP, true)
+		s.handleICMPPacket(pkt, srcIP, dstIP, true, 40)
 	}
 }
 
-func (s *SystemStack) handleTCPPacket(pkt []byte, srcIP, dstIP netip.Addr) {
-	if len(pkt) < 40 {
+func (s *SystemStack) handleTCPPacket(pkt []byte, srcIP, dstIP netip.Addr, ipHdrLen int) {
+	if len(pkt) < ipHdrLen+20 {
 		return
 	}
-	srcPort := uint16(pkt[20])<<8 | uint16(pkt[21])
-	dstPort := uint16(pkt[22])<<8 | uint16(pkt[23])
+	srcPort := uint16(pkt[ipHdrLen])<<8 | uint16(pkt[ipHdrLen+1])
+	dstPort := uint16(pkt[ipHdrLen+2])<<8 | uint16(pkt[ipHdrLen+3])
 
 	src := netip.AddrPortFrom(srcIP, srcPort)
 	dst := netip.AddrPortFrom(dstIP, dstPort)
@@ -217,36 +257,55 @@ func (s *SystemStack) handleTCPPacket(pkt []byte, srcIP, dstIP netip.Addr) {
 	}
 }
 
-func (s *SystemStack) handleUDPPacket(pkt []byte, srcIP, dstIP netip.Addr, isIPv6 bool) {
-	if len(pkt) < 28 {
+func (s *SystemStack) handleUDPPacket(pkt []byte, srcIP, dstIP netip.Addr, isIPv6 bool, ipHdrLen int) {
+	if len(pkt) < ipHdrLen+8 {
 		return
 	}
-	srcPort := uint16(pkt[20])<<8 | uint16(pkt[21])
-	dstPort := uint16(pkt[22])<<8 | uint16(pkt[23])
-	udpLen := int(uint16(pkt[24])<<8 | uint16(pkt[25]))
+	srcPort := uint16(pkt[ipHdrLen])<<8 | uint16(pkt[ipHdrLen+1])
+	dstPort := uint16(pkt[ipHdrLen+2])<<8 | uint16(pkt[ipHdrLen+3])
+	udpLen := int(uint16(pkt[ipHdrLen+4])<<8 | uint16(pkt[ipHdrLen+5]))
 
-	if len(pkt) < 20+udpLen {
+	if len(pkt) < ipHdrLen+udpLen {
 		return
 	}
 
 	src := netip.AddrPortFrom(srcIP, srcPort)
 	dst := netip.AddrPortFrom(dstIP, dstPort)
-	payload := pkt[28 : 20+udpLen]
+	payload := pkt[ipHdrLen+8 : ipHdrLen+udpLen]
+
+	if s.dnsHijacker != nil {
+		consumed, _ := s.dnsHijacker.Process(pkt)
+		if consumed {
+			return
+		}
+	}
+
+	_, err := s.udpNAT.LookupOrAllocate(src, dst)
+	if err != nil && s.strictRoute {
+		if isIPv6 {
+			icmpPkt := BuildICMPv6Unreachable(srcIP, dstIP, pkt)
+			s.tun.Write(icmpPkt)
+		} else {
+			icmpPkt := BuildICMPv4Unreachable(srcIP, dstIP, pkt)
+			s.tun.Write(icmpPkt)
+		}
+		return
+	}
 
 	writeBack := func(data []byte) error {
 		return s.writeUDPResponse(data, dst, src, isIPv6)
 	}
 
-	_ = s.handler.HandleUDP(s.ctx, payload,
+	s.handler.HandleUDP(s.ctx, payload,
 		xnet.UDPDestination(xnet.IPAddress(srcIP.AsSlice()), xnet.Port(srcPort)),
 		xnet.UDPDestination(xnet.IPAddress(dstIP.AsSlice()), xnet.Port(dstPort)),
 		writeBack)
 }
 
-func (s *SystemStack) handleICMPPacket(pkt []byte, srcIP, dstIP netip.Addr, isIPv6 bool) {
+func (s *SystemStack) handleICMPPacket(pkt []byte, srcIP, dstIP netip.Addr, isIPv6 bool, ipHdrLen int) {
 }
 
-func (s *SystemStack) writeUDPResponse(data []byte, src, dst netip.AddrPort, isIPv6 bool) error {
+func (s *SystemStack) writeUDPResponse(data []byte, respSrc, respDst netip.AddrPort, isIPv6 bool) error {
 	udpLen := 8 + len(data)
 	var totalLen int
 	var pkt []byte
@@ -258,10 +317,10 @@ func (s *SystemStack) writeUDPResponse(data []byte, src, dst netip.AddrPort, isI
 		binary.BigEndian.PutUint16(pkt[4:6], uint16(udpLen))
 		pkt[6] = 17
 		pkt[7] = 64
-		src16 := src.Addr().As16()
-		dst16 := dst.Addr().As16()
-		copy(pkt[8:24], src16[:])
-		copy(pkt[24:40], dst16[:])
+		rSrc16 := respSrc.Addr().As16()
+		rDst16 := respDst.Addr().As16()
+		copy(pkt[8:24], rSrc16[:])
+		copy(pkt[24:40], rDst16[:])
 	} else {
 		totalLen = 20 + udpLen
 		pkt = make([]byte, totalLen)
@@ -269,15 +328,15 @@ func (s *SystemStack) writeUDPResponse(data []byte, src, dst netip.AddrPort, isI
 		binary.BigEndian.PutUint16(pkt[2:4], uint16(totalLen))
 		pkt[8] = 64
 		pkt[9] = 17
-		src4 := src.Addr().As4()
-		dst4 := dst.Addr().As4()
-		copy(pkt[12:16], src4[:])
-		copy(pkt[16:20], dst4[:])
+		rSrc4 := respSrc.Addr().As4()
+		rDst4 := respDst.Addr().As4()
+		copy(pkt[12:16], rSrc4[:])
+		copy(pkt[16:20], rDst4[:])
 	}
 
 	udpHdr := pkt[totalLen-udpLen:]
-	binary.BigEndian.PutUint16(udpHdr[0:2], src.Port())
-	binary.BigEndian.PutUint16(udpHdr[2:4], dst.Port())
+	binary.BigEndian.PutUint16(udpHdr[0:2], respSrc.Port())
+	binary.BigEndian.PutUint16(udpHdr[2:4], respDst.Port())
 	binary.BigEndian.PutUint16(udpHdr[4:6], uint16(udpLen))
 	copy(udpHdr[8:], data)
 
