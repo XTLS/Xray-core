@@ -37,11 +37,90 @@ Here is simple Xray config snippet to enable the inbound:
   ],
 ```
 
+## CONFIGURATION
+
+The TUN inbound supports the following configuration fields:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | string | `"xray0"` | TUN interface name |
+| `mtu` | number | `1500` | MTU of the TUN interface |
+| `gateway` | string[] | — | Gateway addresses for the TUN interface |
+| `dns` | string[] | — | DNS server addresses |
+| `userLevel` | number | — | User level for policy |
+| `autoSystemRoutingTable` | string[] | — | CIDR routes to add to system routing table |
+| `autoOutboundsInterface` | string | — | Automatically detect and bind outbound interface |
+| `stack` | string | `"gvisor"` | IP stack implementation: `"gvisor"` (default), `"system"` (Linux only) |
+| `address` | string[] | — | TUN interface addresses (CIDR), e.g. `["10.0.0.1/30", "fd00::1/126"]` |
+| `dnsMode` | string | `"hijack"` | DNS handling mode: `"hijack"`, `"native"`, `"disabled"` |
+| `dnsAddress` | string[] | — | DNS server addresses visible on the TUN side |
+| `strictRoute` | bool | `false` | Enable strict routing mode |
+
+### Example Configuration
+
+```json
+{
+  "inbounds": [
+    {
+      "port": 0,
+      "protocol": "tun",
+      "settings": {
+        "name": "xray0",
+        "MTU": 1492,
+        "stack": "system",
+        "address": ["10.0.0.1/30", "fd00::1/126"],
+        "dns_mode": "hijack",
+        "dns_address": ["10.0.0.1"],
+        "strict_route": true
+      }
+    }
+  ]
+}
+```
+
+## STACKS
+
+Two IP stack implementations are available:
+
+### gVisor Stack (default)
+The default stack uses the gVisor TCP/IP stack, a user-space network stack that runs in the same process as Xray. It works on all platforms (Linux, Windows, macOS, FreeBSD, Android, iOS).
+
+### System Stack (Linux only)
+The system stack uses the Linux kernel's TCP/IP stack by:
+- Opening kernel TCP listeners on the NAT address (next IP after the TUN address)
+- Performing NAT translation for each new connection
+- Forwarding UDP packets through Xray's dispatcher
+- Generating ICMP unreachable messages for unreachable UDP destinations
+
+Advantages:
+- Better TCP performance (kernel handles congestion control, TSO, etc.)
+- Full network stack features (TCP options, SACK, etc.)
+- Compatible with Linux network tools
+
+Requirements:
+- Linux only (kernel TCP listeners)
+- Requires iptables/nftables TPROXY rules for full TCP interception
+
+## DNS MODES
+
+Three DNS handling modes are available:
+
+### `"hijack"` (default)
+DNS queries (UDP port 53) to the TUN DNS address or loopback addresses are intercepted and resolved through Xray's DNS client. This ensures DNS resolution is proxied alongside traffic.
+
+### `"native"`
+DNS queries are not intercepted. The system resolves DNS normally. Responses will flow through the TUN interface naturally.
+
+### `"disabled"`
+DNS queries to the TUN interface are not processed by the DNS hijacker.
+
 ## SUPPORTED FEATURES
 
 - IPv4 and IPv6
 - TCP and UDP
-- ICMP Echo (ping)
+- ICMP Echo (ping) (gVisor stack)
+- DNS hijacking (hijack mode)
+- ICMP Destination Unreachable generation (system stack)
 
 ## LIMITATION
 
