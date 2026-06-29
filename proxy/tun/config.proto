@@ -14,4 +14,11 @@ message Config {
   uint32 user_level = 5;
   repeated string auto_system_routing_table = 6;
   string auto_outbounds_interface = 7;
+
+  // System stack options
+  string stack = 10;
+  repeated string address = 11;
+  string dns_mode = 12;
+  repeated string dns_address = 13;
+  bool strict_route = 14;
 }

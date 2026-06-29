@@ -13,6 +13,11 @@ type TunConfig struct {
 	UserLevel              uint32   `json:"userLevel"`
 	AutoSystemRoutingTable []string `json:"autoSystemRoutingTable"`
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
+	Stack                  string   `json:"stack"`
+	Address                []string `json:"address"`
+	DNSMode                string   `json:"dnsMode"`
+	DNSAddress             []string `json:"dnsAddress"`
+	StrictRoute            bool     `json:"strictRoute"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -23,6 +28,11 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		DNS:                    v.DNS,
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
+		Stack:                  v.Stack,
+		Address:                v.Address,
+		DnsMode:                v.DNSMode,
+		DnsAddress:             v.DNSAddress,
+		StrictRoute:            v.StrictRoute,
 	}
 	if v.AutoOutboundsInterface != nil {
 		config.AutoOutboundsInterface = *v.AutoOutboundsInterface
@@ -36,6 +46,12 @@ func (v *TunConfig) Build() (proto.Message, error) {
 	}
 	if config.MTU == 0 {
 		config.MTU = 1500
+	}
+	if config.Stack == "" {
+		config.Stack = "gvisor"
+	}
+	if config.DnsMode == "" {
+		config.DnsMode = "hijack"
 	}
 	return config, nil
 }
