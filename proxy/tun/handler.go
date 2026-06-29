@@ -336,8 +336,8 @@ func (c *udpPacketConn) Close() error {
 	return nil
 }
 
-func (c *udpPacketConn) LocalAddr() stdnet.Addr  { return c.dst.RawNetAddr() }
-func (c *udpPacketConn) RemoteAddr() stdnet.Addr { return c.src.RawNetAddr() }
+func (c *udpPacketConn) LocalAddr() stdnet.Addr           { return c.dst.RawNetAddr() }
+func (c *udpPacketConn) RemoteAddr() stdnet.Addr          { return c.src.RawNetAddr() }
 func (c *udpPacketConn) SetDeadline(time.Time) error      { return nil }
 func (c *udpPacketConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *udpPacketConn) SetWriteDeadline(time.Time) error { return nil }

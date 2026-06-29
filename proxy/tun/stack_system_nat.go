@@ -211,5 +211,3 @@ func (n *UDPNAT) allocatePort() (uint16, error) {
 		}
 	}
 }
-
-
