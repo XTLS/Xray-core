@@ -26,9 +26,10 @@ type LinuxTun struct {
 	options *Config
 	ownsTun bool
 
-	systemRoutes     []netlink.Route
-	routeMonitorStop chan struct{}
-	routeMonitorOnce sync.Once
+	interfaceAddresses []netlink.Addr
+	systemRoutes       []netlink.Route
+	routeMonitorStop   chan struct{}
+	routeMonitorOnce   sync.Once
 }
 
 // LinuxTun implements Tun
@@ -172,7 +173,14 @@ func (t *LinuxTun) Start() error {
 		return err
 	}
 
+	if err := t.setInterfaceAddresses(); err != nil {
+		_ = netlink.LinkSetDown(t.tunLink)
+		return err
+	}
+
 	if err := t.setSystemRoutes(); err != nil {
+		_ = t.unsetInterfaceAddresses()
+		_ = netlink.LinkSetDown(t.tunLink)
 		return err
 	}
 
@@ -193,6 +201,7 @@ func (t *LinuxTun) Close() error {
 	})
 
 	_ = t.unsetSystemRoutes()
+	_ = t.unsetInterfaceAddresses()
 
 	if t.ownsTun {
 		_ = netlink.LinkSetDown(t.tunLink)
@@ -221,6 +230,37 @@ func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
 
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
 	return unix.BindToDevice(int(fd), iface.Name)
+}
+
+func (t *LinuxTun) setInterfaceAddresses() error {
+	if len(t.options.Gateway) == 0 {
+		return nil
+	}
+	for _, address := range t.options.Gateway {
+		addr, err := netlink.ParseAddr(address)
+		if err != nil {
+			_ = t.unsetInterfaceAddresses()
+			return errors.New("invalid interface address ", address).Base(err)
+		}
+		if err := netlink.AddrAdd(t.tunLink, addr); err != nil {
+			_ = t.unsetInterfaceAddresses()
+			return errors.New("failed to add interface address ", address).Base(err)
+		}
+		t.interfaceAddresses = append(t.interfaceAddresses, *addr)
+	}
+	return nil
+}
+
+func (t *LinuxTun) unsetInterfaceAddresses() error {
+	var errs []error
+	for i := len(t.interfaceAddresses) - 1; i >= 0; i-- {
+		address := t.interfaceAddresses[i]
+		if err := netlink.AddrDel(t.tunLink, &address); err != nil {
+			errs = append(errs, errors.New("failed to delete interface address").Base(err))
+		}
+	}
+	t.interfaceAddresses = nil
+	return errors.Combine(errs...)
 }
 
 func (t *LinuxTun) setSystemRoutes() error {
