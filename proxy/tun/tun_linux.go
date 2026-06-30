@@ -303,7 +303,7 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 			return nil, err
 		}
 		if iface.Index == tunIndex {
-			return nil, errors.New("出站接口不能是 TUN 接口")
+			return nil, errors.New("outbound interface cannot be the TUN interface")
 		}
 		return iface, nil
 	}
@@ -318,7 +318,7 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 		}
 	}
 
-	return nil, errors.New("没有找到可用的出站接口")
+	return nil, errors.New("no usable outbound interface found")
 }
 
 func findDefaultInterface(family int, tunIndex int) (*net.Interface, error) {
@@ -359,7 +359,7 @@ func findDefaultInterface(family int, tunIndex int) (*net.Interface, error) {
 	}
 
 	if selected == nil {
-		return nil, errors.New("没有找到物理默认路由")
+		return nil, errors.New("physical default route not found")
 	}
 
 	return selected, nil
