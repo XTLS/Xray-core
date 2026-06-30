@@ -12,8 +12,9 @@ import (
 
 type DNSOutboundRuleConfig struct {
 	Action string      `json:"action"`
-	QType  *PortList   `json:"qtype"`
+	QType  *PortList   `json:"qType"`
 	Domain *StringList `json:"domain"`
+	RCode  uint32      `json:"rCode"`
 }
 
 func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
@@ -24,8 +25,8 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Action = dns.RuleAction_Direct
 	case "drop":
 		rule.Action = dns.RuleAction_Drop
-	case "reject":
-		rule.Action = dns.RuleAction_Reject
+	case "return":
+		rule.Action = dns.RuleAction_Return
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
 	default:
@@ -34,14 +35,8 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 
 	if c.QType != nil {
 		for _, r := range c.QType.Range {
-			if r.From > r.To {
-				return nil, errors.New("invalid qtype range: ", r.String())
-			}
-			if r.To > 65535 {
-				return nil, errors.New("dns rule qtype out of range: ", r.String())
-			}
-			for qtype := r.From; qtype <= r.To; qtype++ {
-				rule.Qtype = append(rule.Qtype, int32(qtype))
+			for qType := r.From; qType <= r.To; qType++ {
+				rule.QType = append(rule.QType, int32(qType))
 			}
 		}
 	}
@@ -54,29 +49,46 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Domain = rules
 	}
 
+	if c.RCode > 65535 {
+		return nil, errors.New("rCode out of range: ", c.RCode)
+	}
+	rule.RCode = c.RCode
+
 	return rule, nil
 }
 
 type DNSOutboundConfig struct {
-	Network    Network                  `json:"network"`
-	Address    *Address                 `json:"address"`
-	Port       uint16                   `json:"port"`
-	UserLevel  uint32                   `json:"userLevel"`
-	Rules      []*DNSOutboundRuleConfig `json:"rules"`
-	NonIPQuery *string                  `json:"nonIPQuery"` // todo: remove legacy
-	BlockTypes *[]int32                 `json:"blockTypes"` // todo: remove legacy
+	RewriteNetwork Network                  `json:"rewriteNetwork"`
+	RewriteAddress *Address                 `json:"rewriteAddress"`
+	RewritePort    uint16                   `json:"rewritePort"`
+	Network        Network                  `json:"network"`
+	Address        *Address                 `json:"address"`
+	Port           uint16                   `json:"port"`
+	UserLevel      uint32                   `json:"userLevel"`
+	Rules          []*DNSOutboundRuleConfig `json:"rules"`
+	NonIPQuery     *string                  `json:"nonIPQuery"` // todo: remove legacy
+	BlockTypes     *[]int32                 `json:"blockTypes"` // todo: remove legacy
 }
 
 func (c *DNSOutboundConfig) Build() (proto.Message, error) {
+	if len(c.Network) > 0 {
+		c.RewriteNetwork = c.Network
+	}
+	if c.Address != nil {
+		c.RewriteAddress = c.Address
+	}
+	if c.Port != 0 {
+		c.RewritePort = c.Port
+	}
 	config := &dns.Config{
-		Server: &net.Endpoint{
-			Network: c.Network.Build(),
-			Port:    uint32(c.Port),
+		RewriteServer: &net.Endpoint{
+			Network: c.RewriteNetwork.Build(),
+			Port:    uint32(c.RewritePort),
 		},
 		UserLevel: c.UserLevel,
 	}
-	if c.Address != nil {
-		config.Server.Address = c.Address.Build()
+	if c.RewriteAddress != nil {
+		config.RewriteServer.Address = c.RewriteAddress.Build()
 	}
 
 	// todo: remove legacy
@@ -84,7 +96,7 @@ func (c *DNSOutboundConfig) Build() (proto.Message, error) {
 		if c.Rules != nil {
 			return nil, errors.New("legacy nonIPQuery and blockTypes cannot be mixed with rules")
 		}
-		errors.PrintDeprecatedFeatureWarning(`"nonIPQuery" and "blockTypes" in DNS outbound`, `"rules"`)
+		errors.PrintDeprecatedFeatureWarning(`"nonIPQuery" and "blockTypes"`, `"rules"`)
 		rules, err := c.buildLegacyDNSPolicy()
 		if err != nil {
 			return nil, err
@@ -121,28 +133,30 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 	if c.BlockTypes != nil && len(*c.BlockTypes) > 0 {
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Reject
+			rule.Action = dns.RuleAction_Return
+			rule.RCode = 5
 		}
-		for _, qtype := range *c.BlockTypes {
-			if qtype < 0 || qtype > 65535 {
-				return nil, errors.New("legacy blockTypes qtype out of range: ", qtype)
+		for _, qType := range *c.BlockTypes {
+			if qType < 0 || qType > 65535 {
+				return nil, errors.New("legacy blockTypes qType out of range: ", qType)
 			}
-			rule.Qtype = append(rule.Qtype, qtype)
+			rule.QType = append(rule.QType, qType)
 		}
 		rules = append(rules, rule)
 	}
 
 	{
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Hijack}
-		rule.Qtype = append(rule.Qtype, 1)
-		rule.Qtype = append(rule.Qtype, 28)
+		rule.QType = append(rule.QType, 1)
+		rule.QType = append(rule.QType, 28)
 		rules = append(rules, rule)
 	}
 
 	{
-		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Reject}
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Return}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Reject
+			rule.Action = dns.RuleAction_Return
+			rule.RCode = 5
 		} else if mode == "drop" {
 			rule.Action = dns.RuleAction_Drop
 		} else if mode == "skip" {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/utils"
 
 	"go4.org/netipx"
 )
@@ -806,7 +807,7 @@ func (mm *HeuristicMultiIPMatcher) SetReverse(reverse bool) {
 
 type IPSetFactory struct {
 	sync.Mutex
-	shared map[string]*IPSet // TODO: cleanup
+	shared *utils.WeakCacheMap[string, IPSet]
 }
 
 func (f *IPSetFactory) GetOrCreateFromGeoIPRules(rules []*GeoIPRule) (*IPSet, error) {
@@ -815,7 +816,7 @@ func (f *IPSetFactory) GetOrCreateFromGeoIPRules(rules []*GeoIPRule) (*IPSet, er
 	f.Lock()
 	defer f.Unlock()
 
-	if ipset := f.shared[key]; ipset != nil {
+	if ipset, ok := f.shared.Load(key); ok {
 		errors.LogDebug(context.Background(), "geodata geoip matcher cache HIT ", key)
 		return ipset, nil
 	}
@@ -835,7 +836,7 @@ func (f *IPSetFactory) GetOrCreateFromGeoIPRules(rules []*GeoIPRule) (*IPSet, er
 		return nil
 	})
 	if err == nil {
-		f.shared[key] = ipset
+		f.shared.Store(key, ipset)
 	}
 	return ipset, err
 }
@@ -1018,5 +1019,5 @@ func buildOptimizedIPMatcher(f *IPSetFactory, rules []*IPRule) (IPMatcher, error
 }
 
 func newIPSetFactory() *IPSetFactory {
-	return &IPSetFactory{shared: make(map[string]*IPSet)}
+	return &IPSetFactory{shared: utils.NewWeakCacheMap[string, IPSet]()}
 }

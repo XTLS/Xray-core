@@ -4,6 +4,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/proxy/hysteria"
 	"github.com/xtls/xray-core/proxy/hysteria/account"
 	"google.golang.org/protobuf/proto"
@@ -21,7 +22,6 @@ func (c *HysteriaClientConfig) Build() (proto.Message, error) {
 	}
 
 	config := &hysteria.ClientConfig{}
-	config.Version = c.Version
 	config.Server = &protocol.ServerEndpoint{
 		Address: c.Address.Build(),
 		Port:    uint32(c.Port),
@@ -38,22 +38,36 @@ type HysteriaUserConfig struct {
 
 type HysteriaServerConfig struct {
 	Version int32                 `json:"version"`
-	Users   []*HysteriaUserConfig `json:"clients"`
+	Users   []*HysteriaUserConfig `json:"users"`
+	Clients []*HysteriaUserConfig `json:"clients"`
 }
 
 func (c *HysteriaServerConfig) Build() (proto.Message, error) {
+	if c.Version != 2 {
+		return nil, errors.New("version != 2")
+	}
+
 	config := new(hysteria.ServerConfig)
 
-	if c.Users != nil {
-		for _, user := range c.Users {
-			account := &account.Account{
+	if c.Clients != nil {
+		c.Users = c.Clients
+	}
+	if len(c.Users) > 0 {
+		config.Users = make([]*protocol.User, len(c.Users))
+		processUser := func(idx int) error {
+			user := c.Users[idx]
+			acc := &account.Account{
 				Auth: user.Auth,
 			}
-			config.Users = append(config.Users, &protocol.User{
+			config.Users[idx] = &protocol.User{
 				Email:   user.Email,
 				Level:   user.Level,
-				Account: serial.ToTypedMessage(account),
-			})
+				Account: serial.ToTypedMessage(acc),
+			}
+			return nil
+		}
+		if err := task.ParallelForN(len(c.Users), processUser); err != nil {
+			return nil, err
 		}
 	}
 

@@ -743,7 +743,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 	for {
 		inbound := session.InboundFromContext(ctx)
 		outbounds := session.OutboundsFromContext(ctx)
-		var splice = inbound.CanSpliceCopy == 1
+		splice := inbound.CanSpliceCopy == 1
 		for _, ob := range outbounds {
 			if ob.CanSpliceCopy != 1 {
 				splice = false

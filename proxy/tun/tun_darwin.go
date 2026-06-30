@@ -3,16 +3,20 @@
 package tun
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/netip"
 	"os"
 	"strconv"
+	"sync"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
+	xerrors "github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
+	"golang.org/x/net/route"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/buffer"
 	"gvisor.dev/gvisor/pkg/tcpip"
@@ -42,10 +46,16 @@ type DarwinTun struct {
 	options *Config
 	tunFd   int
 	ownsFd  bool // true for macOS (we created the fd), false for iOS (fd from system)
+
+	routeMonitor     *os.File
+	routeMonitorOnce sync.Once
+	systemRoutes     []netip.Prefix
 }
 
-var _ Tun = (*DarwinTun)(nil)
-var _ GVisorDevice = (*DarwinTun)(nil)
+var (
+	_ Tun          = (*DarwinTun)(nil)
+	_ GVisorDevice = (*DarwinTun)(nil)
+)
 
 func NewTun(options *Config) (Tun, error) {
 	// Check if fd is provided via environment (iOS mode)
@@ -90,15 +100,53 @@ func NewTun(options *Config) (Tun, error) {
 }
 
 func (t *DarwinTun) Start() error {
+	if !t.ownsFd {
+		return nil
+	}
+
+	if err := t.setSystemRoutes(); err != nil {
+		return err
+	}
+
+	if updater != nil {
+		fd, err := unix.Socket(unix.AF_ROUTE, unix.SOCK_RAW, 0)
+		if err != nil {
+			_ = t.unsetSystemRoutes()
+			return err
+		}
+		t.routeMonitor = os.NewFile(uintptr(fd), "xray-route-monitor")
+		go t.monitorRouteChanges()
+	}
 	return nil
 }
 
 func (t *DarwinTun) Close() error {
+	t.routeMonitorOnce.Do(func() {
+		if t.routeMonitor != nil {
+			_ = t.routeMonitor.Close()
+		}
+	})
+	routeErr := t.unsetSystemRoutes()
 	if t.ownsFd {
-		return t.tunFile.Close()
+		return xerrors.Combine(routeErr, t.tunFile.Close())
 	}
 	// iOS: don't close the fd, it's owned by NetworkExtension
-	return nil
+	return routeErr
+}
+
+func (t *DarwinTun) monitorRouteChanges() {
+	buffer := make([]byte, 64*1024)
+	for {
+		if _, err := t.routeMonitor.Read(buffer); err != nil {
+			if !errors.Is(err, os.ErrClosed) {
+				xerrors.LogInfoInner(context.Background(), err, "[tun] failed to monitor route changes")
+			}
+			return
+		}
+		if updater != nil {
+			updater.Update()
+		}
+	}
 }
 
 func (t *DarwinTun) Name() (string, error) {
@@ -385,4 +433,228 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 	}
 
 	return errors.Join(err1, err2)
+}
+
+func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, error) {
+	if fixedName != "" {
+		iface, err := net.InterfaceByName(fixedName)
+		if err != nil {
+			return nil, err
+		}
+		if iface.Index == tunIndex {
+			return nil, errors.New("outbound interface cannot be the TUN interface")
+		}
+		return iface, nil
+	}
+
+	rib, err := route.FetchRIB(unix.AF_UNSPEC, route.RIBTypeRoute, 0)
+	if err != nil {
+		return nil, err
+	}
+	messages, err := route.ParseRIB(route.RIBTypeRoute, rib)
+	if err != nil {
+		return nil, err
+	}
+
+	var ipv6Index int
+	for _, message := range messages {
+		routeMessage, ok := message.(*route.RouteMessage)
+		if !ok || routeMessage.Index == tunIndex {
+			continue
+		}
+		if routeMessage.Flags&unix.RTF_UP == 0 || routeMessage.Flags&unix.RTF_GATEWAY == 0 {
+			continue
+		}
+
+		family, ok := defaultRouteFamily(routeMessage)
+		if !ok {
+			continue
+		}
+		if family == unix.AF_INET {
+			return usableDarwinInterface(routeMessage.Index)
+		}
+		if family == unix.AF_INET6 && ipv6Index == 0 {
+			ipv6Index = routeMessage.Index
+		}
+	}
+
+	if ipv6Index != 0 {
+		return usableDarwinInterface(ipv6Index)
+	}
+	return nil, errors.New("default route not found")
+}
+
+func defaultRouteFamily(message *route.RouteMessage) (int, bool) {
+	if len(message.Addrs) <= unix.RTAX_NETMASK {
+		return 0, false
+	}
+
+	switch destination := message.Addrs[unix.RTAX_DST].(type) {
+	case *route.Inet4Addr:
+		mask, ok := message.Addrs[unix.RTAX_NETMASK].(*route.Inet4Addr)
+		if !ok || destination.IP != netip.IPv4Unspecified().As4() {
+			return 0, false
+		}
+		ones, bits := net.IPMask(mask.IP[:]).Size()
+		return unix.AF_INET, ones == 0 && bits == 32
+	case *route.Inet6Addr:
+		mask, ok := message.Addrs[unix.RTAX_NETMASK].(*route.Inet6Addr)
+		if !ok || destination.IP != netip.IPv6Unspecified().As16() {
+			return 0, false
+		}
+		ones, bits := net.IPMask(mask.IP[:]).Size()
+		return unix.AF_INET6, ones == 0 && bits == 128
+	default:
+		return 0, false
+	}
+}
+
+func usableDarwinInterface(index int) (*net.Interface, error) {
+	iface, err := net.InterfaceByIndex(index)
+	if err != nil {
+		return nil, err
+	}
+	if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+		return nil, errors.New("default route interface is not usable")
+	}
+	return iface, nil
+}
+
+func (t *DarwinTun) setSystemRoutes() error {
+	routes, err := buildDarwinSystemRoutes(t.options.AutoSystemRoutingTable)
+	if err != nil {
+		return err
+	}
+	if len(routes) == 0 {
+		return nil
+	}
+
+	tunIndex, err := t.Index()
+	if err != nil {
+		return err
+	}
+	for _, destination := range routes {
+		if err := execDarwinRoute(unix.RTM_ADD, tunIndex, destination); err != nil {
+			_ = t.unsetSystemRoutes()
+			return xerrors.New("failed to add system route ", destination).Base(err)
+		}
+		t.systemRoutes = append(t.systemRoutes, destination)
+	}
+	return nil
+}
+
+func (t *DarwinTun) unsetSystemRoutes() error {
+	var errs []error
+	tunIndex, indexErr := t.Index()
+	if indexErr != nil && len(t.systemRoutes) > 0 {
+		errs = append(errs, indexErr)
+	}
+	for i := len(t.systemRoutes) - 1; i >= 0; i-- {
+		destination := t.systemRoutes[i]
+		if err := execDarwinRoute(unix.RTM_DELETE, tunIndex, destination); err != nil && !errors.Is(err, unix.ESRCH) {
+			errs = append(errs, xerrors.New("failed to delete system route ", destination).Base(err))
+		}
+	}
+	t.systemRoutes = nil
+	return xerrors.Combine(errs...)
+}
+
+func buildDarwinSystemRoutes(configured []string) ([]netip.Prefix, error) {
+	routes := make([]netip.Prefix, 0, len(configured))
+	seen := make(map[netip.Prefix]struct{})
+
+	appendRoute := func(prefix netip.Prefix) {
+		prefix = prefix.Masked()
+		if _, found := seen[prefix]; found {
+			return
+		}
+		seen[prefix] = struct{}{}
+		routes = append(routes, prefix)
+	}
+
+	for _, value := range configured {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			return nil, xerrors.New("invalid system route ", value).Base(err)
+		}
+		prefix = prefix.Masked()
+		if prefix.Bits() == 0 {
+			for _, protected := range darwinProtectedDefaultRoutes(prefix.Addr().Is4()) {
+				appendRoute(protected)
+			}
+			continue
+		}
+		appendRoute(prefix)
+	}
+
+	return routes, nil
+}
+
+func darwinProtectedDefaultRoutes(ipv4 bool) []netip.Prefix {
+	routes := make([]netip.Prefix, 0, 8)
+	for i := 0; i < 8; i++ {
+		if ipv4 {
+			var address [4]byte
+			address[0] = 1 << i
+			routes = append(routes, netip.PrefixFrom(netip.AddrFrom4(address), 8-i))
+		} else {
+			var address [16]byte
+			address[0] = 1 << i
+			routes = append(routes, netip.PrefixFrom(netip.AddrFrom16(address), 8-i))
+		}
+	}
+	return routes
+}
+
+func execDarwinRoute(messageType int, interfaceIndex int, destination netip.Prefix) error {
+	message := route.RouteMessage{
+		Type:    messageType,
+		Version: unix.RTM_VERSION,
+		Flags:   unix.RTF_STATIC | unix.RTF_GATEWAY,
+		Seq:     1,
+	}
+	if messageType == unix.RTM_ADD {
+		message.Flags |= unix.RTF_UP
+	}
+
+	if destination.Addr().Is4() {
+		gatewayPrefix := netip.MustParsePrefix(gateway)
+		message.Addrs = []route.Addr{
+			unix.RTAX_DST:     &route.Inet4Addr{IP: destination.Addr().As4()},
+			unix.RTAX_NETMASK: &route.Inet4Addr{IP: prefixMask4(destination.Bits())},
+			unix.RTAX_GATEWAY: &route.Inet4Addr{IP: gatewayPrefix.Addr().As4()},
+		}
+	} else {
+		message.Flags &^= unix.RTF_GATEWAY
+		message.Index = interfaceIndex
+		message.Addrs = []route.Addr{
+			unix.RTAX_DST:     &route.Inet6Addr{IP: destination.Addr().As16()},
+			unix.RTAX_NETMASK: &route.Inet6Addr{IP: prefixMask6(destination.Bits())},
+			unix.RTAX_GATEWAY: &route.LinkAddr{Index: interfaceIndex},
+		}
+	}
+
+	request, err := message.Marshal()
+	if err != nil {
+		return err
+	}
+	fd, err := unix.Socket(unix.AF_ROUTE, unix.SOCK_RAW, 0)
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	_, err = unix.Write(fd, request)
+	return err
+}
+
+func prefixMask4(bits int) [4]byte {
+	var mask [4]byte
+	copy(mask[:], net.CIDRMask(bits, 32))
+	return mask
+}
+
+func prefixMask6(bits int) [16]byte {
+	var mask [16]byte
+	copy(mask[:], net.CIDRMask(bits, 128))
+	return mask
 }

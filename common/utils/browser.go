@@ -4,10 +4,10 @@ import (
 	"hash/fnv"
 	"math"
 	"math/rand"
-	"strconv"
-	"time"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/klauspost/cpuid/v2"
 )
@@ -18,6 +18,7 @@ func GetRandomizer() *rand.Rand {
 	fnvHash.Write([]byte(strconv.Itoa(cpuid.CPU.Family) + strconv.Itoa(cpuid.CPU.Model) + strconv.Itoa(cpuid.CPU.PhysicalCores) + strconv.Itoa(cpuid.CPU.LogicalCores) + strconv.Itoa(cpuid.CPU.CacheLine) + strconv.Itoa(cpuid.CPU.ThreadsPerCore)))
 	return rand.New(rand.NewSource(int64(fnvHash.Sum64())))
 }
+
 var globalRng *rand.Rand = GetRandomizer()
 
 // The Chrome version generator will suffer from deviation of a normal distribution.
@@ -26,83 +27,114 @@ func ChromeVersion() int {
 	var startVersion int = 144
 	var timeStart int64 = time.Date(2026, 1, 13, 0, 0, 0, 0, time.UTC).Unix() / 86400
 	var timeCurrent int64 = time.Now().Unix() / 86400
-	var timeDiff int = int((timeCurrent - timeStart - 35)) - int(math.Floor(math.Pow(globalRng.Float64(), 2) * 105))
+	var timeDiff int = int((timeCurrent - timeStart - 35)) - int(math.Floor(math.Pow(globalRng.Float64(), 2)*105))
 	return startVersion + (timeDiff / 35) // It's 31.15 currently.
 }
 
-var safariMinorMap [25]int = [25]int{0, 0, 0, 1, 1,
+var safariMinorMap [25]int = [25]int{
+	0, 0, 0, 1, 1,
 	1, 2, 2, 2, 2, 3, 3, 3, 4, 4,
-	4, 5, 5, 5, 5, 5, 6, 6, 6, 6}
+	4, 5, 5, 5, 5, 5, 6, 6, 6, 6,
+}
 
 // The following version generators use deterministic generators, but with the distribution scaled by a curve.
 func CurlVersion() string {
 	// curl 8.0.0 was released on 20/03/2023.
 	var timeCurrent int64 = time.Now().Unix() / 86400
 	var timeStart int64 = time.Date(2023, 3, 20, 0, 0, 0, 0, time.UTC).Unix() / 86400
-	var timeDiff int = int((timeCurrent - timeStart - 60)) - int(math.Floor(math.Pow(globalRng.Float64(), 2) * 165))
+	var timeDiff int = int((timeCurrent - timeStart - 60)) - int(math.Floor(math.Pow(globalRng.Float64(), 2)*165))
 	var minorValue int = int(timeDiff / 57) // The release cadence is actually 56.67 days.
 	return "8." + strconv.Itoa(minorValue) + ".0"
 }
+
 func FirefoxVersion() int {
 	// Firefox 128 ESR was released on 09/07/2023.
 	var timeCurrent int64 = time.Now().Unix() / 86400
 	var timeStart int64 = time.Date(2024, 7, 29, 0, 0, 0, 0, time.UTC).Unix() / 86400
-	var timeDiff = timeCurrent - timeStart - 25 - int64(math.Floor(math.Pow(globalRng.Float64(), 2) * 50))
-	return int(timeDiff / 30) + 128
+	timeDiff := timeCurrent - timeStart - 25 - int64(math.Floor(math.Pow(globalRng.Float64(), 2)*50))
+	return int(timeDiff/30) + 128
 }
+
 func SafariVersion() string {
 	var anchoredTime time.Time = time.Now()
 	var releaseYear int = anchoredTime.Year()
 	var splitPoint time.Time = time.Date(releaseYear, 9, 23, 0, 0, 0, 0, time.UTC)
-	var delayedDays = int(math.Floor(math.Pow(globalRng.Float64(), 3) * 75))
+	delayedDays := int(math.Floor(math.Pow(globalRng.Float64(), 3) * 75))
 	splitPoint = splitPoint.AddDate(0, 0, delayedDays)
-	if (anchoredTime.Compare(splitPoint) < 0) {
-		releaseYear --
+	if anchoredTime.Compare(splitPoint) < 0 {
+		releaseYear--
 		splitPoint = time.Date(releaseYear, 9, 23, 0, 0, 0, 0, time.UTC)
 		splitPoint = splitPoint.AddDate(0, 0, delayedDays)
 	}
-	var minorVersion = safariMinorMap[(anchoredTime.Unix() - splitPoint.Unix()) / 1296000]
-	return strconv.Itoa(releaseYear - 1999) + "." + strconv.Itoa(minorVersion)
+	minorVersion := safariMinorMap[(anchoredTime.Unix()-splitPoint.Unix())/1296000]
+	return strconv.Itoa(releaseYear-1999) + "." + strconv.Itoa(minorVersion)
 }
 
 // The full Chromium brand GREASE implementation
-var clientHintGreaseNA = []string{" ", "(", ":", "-", ".", "/", ")", ";", "=", "?", "_"}
-var clientHintVersionNA = []string{"8", "99", "24"}
-var clientHintShuffle3 = [][3]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
-var clientHintShuffle4 = [][4]int{
-	{0, 1, 2, 3}, {0, 1, 3, 2}, {0, 2, 1, 3}, {0, 2, 3, 1}, {0, 3, 1, 2}, {0, 3, 2, 1},
-	{1, 0, 2, 3}, {1, 0, 3, 2}, {1, 2, 0, 3}, {1, 2, 3, 0}, {1, 3, 0, 2}, {1, 3, 2, 0},
-	{2, 0, 1, 3}, {2, 0, 3, 1}, {2, 1, 0, 3}, {2, 1, 3, 0}, {2, 3, 0, 1}, {2, 3, 1, 0},
-	{3, 0, 1, 2}, {3, 0, 2, 1}, {3, 1, 0, 2}, {3, 1, 2, 0}, {3, 2, 0, 1}, {3, 2, 1, 0}}
+var (
+	clientHintGreaseNA  = []string{" ", "(", ":", "-", ".", "/", ")", ";", "=", "?", "_"}
+	clientHintVersionNA = []string{"8", "99", "24"}
+	clientHintShuffle3  = [][3]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
+	clientHintShuffle4  = [][4]int{
+		{0, 1, 2, 3},
+		{0, 1, 3, 2},
+		{0, 2, 1, 3},
+		{0, 2, 3, 1},
+		{0, 3, 1, 2},
+		{0, 3, 2, 1},
+		{1, 0, 2, 3},
+		{1, 0, 3, 2},
+		{1, 2, 0, 3},
+		{1, 2, 3, 0},
+		{1, 3, 0, 2},
+		{1, 3, 2, 0},
+		{2, 0, 1, 3},
+		{2, 0, 3, 1},
+		{2, 1, 0, 3},
+		{2, 1, 3, 0},
+		{2, 3, 0, 1},
+		{2, 3, 1, 0},
+		{3, 0, 1, 2},
+		{3, 0, 2, 1},
+		{3, 1, 0, 2},
+		{3, 1, 2, 0},
+		{3, 2, 0, 1},
+		{3, 2, 1, 0},
+	}
+)
+
 func getGreasedChInvalidBrand(seed int) string {
-	return "\"Not" + clientHintGreaseNA[seed % len(clientHintGreaseNA)] + "A" + clientHintGreaseNA[(seed + 1) % len(clientHintGreaseNA)] + "Brand\";v=\"" + clientHintVersionNA[seed % len(clientHintVersionNA)] + "\"";
+	return "\"Not" + clientHintGreaseNA[seed%len(clientHintGreaseNA)] + "A" + clientHintGreaseNA[(seed+1)%len(clientHintGreaseNA)] + "Brand\";v=\"" + clientHintVersionNA[seed%len(clientHintVersionNA)] + "\""
 }
+
 func getGreasedChOrder(brandLength int, seed int) []int {
 	switch brandLength {
-		case 1:
-			return []int{0}
-		case 2:
-			return []int{seed % brandLength, (seed + 1) % brandLength}
-		case 3:
-			return clientHintShuffle3[seed % len(clientHintShuffle3)][:]
-		default:
-			return clientHintShuffle4[seed % len(clientHintShuffle4)][:]
+	case 1:
+		return []int{0}
+	case 2:
+		return []int{seed % brandLength, (seed + 1) % brandLength}
+	case 3:
+		return clientHintShuffle3[seed%len(clientHintShuffle3)][:]
+	default:
+		return clientHintShuffle4[seed%len(clientHintShuffle4)][:]
 	}
 	//return []int{}
 }
+
 func getUngreasedChUa(majorVersion int, forkName string) []string {
 	// Set the capacity to 4, the maximum allowed brand size, so Go will never allocate memory twice
 	baseChUa := make([]string, 0, 4)
 	baseChUa = append(baseChUa, getGreasedChInvalidBrand(majorVersion),
-	"\"Chromium\";v=\"" + strconv.Itoa(majorVersion) + "\"")
+		"\"Chromium\";v=\""+strconv.Itoa(majorVersion)+"\"")
 	switch forkName {
 	case "chrome":
-		baseChUa = append(baseChUa, "\"Google Chrome\";v=\"" + strconv.Itoa(majorVersion) + "\"")
+		baseChUa = append(baseChUa, "\"Google Chrome\";v=\""+strconv.Itoa(majorVersion)+"\"")
 	case "edge":
-		baseChUa = append(baseChUa, "\"Microsoft Edge\";v=\"" + strconv.Itoa(majorVersion) + "\"")
+		baseChUa = append(baseChUa, "\"Microsoft Edge\";v=\""+strconv.Itoa(majorVersion)+"\"")
 	}
 	return baseChUa
 }
+
 func getGreasedChUa(majorVersion int, forkName string) string {
 	ungreasedCh := getUngreasedChUa(majorVersion, forkName)
 	shuffleMap := getGreasedChOrder(len(ungreasedCh), majorVersion)
@@ -114,16 +146,18 @@ func getGreasedChUa(majorVersion int, forkName string) string {
 }
 
 // The code below provides a coherent default browser user agent string based on a CPU-seeded PRNG.
-var CurlUA = "curl/" + CurlVersion()
-var AnchoredFirefoxVersion = strconv.Itoa(FirefoxVersion())
-var FirefoxUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:" + AnchoredFirefoxVersion + ".0) Gecko/20100101 Firefox/" + AnchoredFirefoxVersion + ".0"
-var SafariUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/" + SafariVersion() + " Safari/605.1.15"
-// Chromium browsers.
-var AnchoredChromeVersion = ChromeVersion()
-var ChromeUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
-var ChromeUACH = getGreasedChUa(AnchoredChromeVersion, "chrome")
-var MSEdgeUA = ChromeUA + "Edg/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0"
-var MSEdgeUACH = getGreasedChUa(AnchoredChromeVersion, "edge")
+var (
+	CurlUA                 = "curl/" + CurlVersion()
+	AnchoredFirefoxVersion = strconv.Itoa(FirefoxVersion())
+	FirefoxUA              = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:" + AnchoredFirefoxVersion + ".0) Gecko/20100101 Firefox/" + AnchoredFirefoxVersion + ".0"
+	SafariUA               = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/" + SafariVersion() + " Safari/605.1.15"
+	// Chromium browsers.
+	AnchoredChromeVersion = ChromeVersion()
+	ChromeUA              = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0 Safari/537.36"
+	ChromeUACH            = getGreasedChUa(AnchoredChromeVersion, "chrome")
+	MSEdgeUA              = ChromeUA + "Edg/" + strconv.Itoa(AnchoredChromeVersion) + ".0.0.0"
+	MSEdgeUACH            = getGreasedChUa(AnchoredChromeVersion, "edge")
+)
 
 func applyMasqueradedHeaders(header http.Header, browser string, variant string) {
 	// Browser-specific.

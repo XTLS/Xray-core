@@ -7,6 +7,7 @@
 package loopback
 
 import (
+	proxyman "github.com/xtls/xray-core/app/proxyman"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -22,8 +23,9 @@ const (
 )
 
 type Config struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InboundTag    string                 `protobuf:"bytes,1,opt,name=inbound_tag,json=inboundTag,proto3" json:"inbound_tag,omitempty"`
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	InboundTag    string                   `protobuf:"bytes,1,opt,name=inbound_tag,json=inboundTag,proto3" json:"inbound_tag,omitempty"`
+	Sniffing      *proxyman.SniffingConfig `protobuf:"bytes,2,opt,name=sniffing,proto3" json:"sniffing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -65,14 +67,22 @@ func (x *Config) GetInboundTag() string {
 	return ""
 }
 
+func (x *Config) GetSniffing() *proxyman.SniffingConfig {
+	if x != nil {
+		return x.Sniffing
+	}
+	return nil
+}
+
 var File_proxy_loopback_config_proto protoreflect.FileDescriptor
 
 const file_proxy_loopback_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproxy/loopback/config.proto\x12\x13xray.proxy.loopback\")\n" +
+	"\x1bproxy/loopback/config.proto\x12\x13xray.proxy.loopback\x1a\x19app/proxyman/config.proto\"h\n" +
 	"\x06Config\x12\x1f\n" +
 	"\vinbound_tag\x18\x01 \x01(\tR\n" +
-	"inboundTagB[\n" +
+	"inboundTag\x12=\n" +
+	"\bsniffing\x18\x02 \x01(\v2!.xray.app.proxyman.SniffingConfigR\bsniffingB[\n" +
 	"\x17com.xray.proxy.loopbackP\x01Z(github.com/xtls/xray-core/proxy/loopback\xaa\x02\x13Xray.Proxy.Loopbackb\x06proto3"
 
 var (
@@ -89,14 +99,16 @@ func file_proxy_loopback_config_proto_rawDescGZIP() []byte {
 
 var file_proxy_loopback_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_proxy_loopback_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.proxy.loopback.Config
+	(*Config)(nil),                  // 0: xray.proxy.loopback.Config
+	(*proxyman.SniffingConfig)(nil), // 1: xray.app.proxyman.SniffingConfig
 }
 var file_proxy_loopback_config_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: xray.proxy.loopback.Config.sniffing:type_name -> xray.app.proxyman.SniffingConfig
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_proxy_loopback_config_proto_init() }

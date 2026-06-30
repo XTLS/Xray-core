@@ -114,9 +114,9 @@ func TestUDPDNSTunnel(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  net.NewIPOrDomain(net.LocalHostIP),
-					Port:     uint32(port),
-					Networks: []net.Network{net.Network_UDP},
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
+					AllowedNetworks: []net.Network{net.Network_UDP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -233,9 +233,9 @@ func TestTCPDNSTunnel(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  net.NewIPOrDomain(net.LocalHostIP),
-					Port:     uint32(port),
-					Networks: []net.Network{net.Network_TCP},
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
+					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -319,9 +319,9 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  net.NewIPOrDomain(net.LocalHostIP),
-					Port:     uint32(port),
-					Networks: []net.Network{net.Network_TCP},
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
+					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -332,7 +332,7 @@ func TestUDP2TCPDNSTunnel(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
-					Server: &net.Endpoint{
+					RewriteServer: &net.Endpoint{
 						Network: net.Network_TCP,
 					},
 				}),
@@ -409,9 +409,9 @@ func TestDNSRules(t *testing.T) {
 		Inbound: []*core.InboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  net.NewIPOrDomain(net.LocalHostIP),
-					Port:     uint32(port),
-					Networks: []net.Network{net.Network_UDP},
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
+					AllowedNetworks: []net.Network{net.Network_UDP},
 				}),
 				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
@@ -424,7 +424,7 @@ func TestDNSRules(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
 					Rule: []*dns_proxy.DNSRuleConfig{
 						{
-							Qtype: []int32{int32(dns.TypeA)},
+							QType: []int32{int32(dns.TypeA)},
 							Domain: []*geodata.DomainRule{
 								{
 									Value: &geodata.DomainRule_Custom{
@@ -438,7 +438,7 @@ func TestDNSRules(t *testing.T) {
 							Action: dns_proxy.RuleAction_Direct,
 						},
 						{
-							Qtype: []int32{int32(dns.TypeA)},
+							QType: []int32{int32(dns.TypeA)},
 							Domain: []*geodata.DomainRule{
 								{
 									Value: &geodata.DomainRule_Custom{
@@ -449,7 +449,8 @@ func TestDNSRules(t *testing.T) {
 									},
 								},
 							},
-							Action: dns_proxy.RuleAction_Reject,
+							Action: dns_proxy.RuleAction_Return,
+							RCode:  5,
 						},
 					},
 				}),

@@ -58,7 +58,7 @@ func init() {
 		c := config.(*Config)
 
 		validator := new(vless.MemoryValidator)
-		for _, user := range c.Clients {
+		for _, user := range c.Users {
 			u, err := user.ToMemoryUser()
 			if err != nil {
 				return nil, errors.New("failed to get VLESS user").Base(err).AtError()
@@ -633,9 +633,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, nil, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
 	}
 
-	if err := dispatch.DispatchLink(ctx, request.Destination(), &transport.Link{
-		Reader: clientReader,
-		Writer: clientWriter},
+	if err := dispatch.DispatchLink(
+		ctx, request.Destination(), &transport.Link{
+			Reader: clientReader,
+			Writer: clientWriter,
+		},
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}

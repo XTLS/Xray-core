@@ -57,16 +57,23 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	if err != nil {
 		return nil, err
 	}
-
-	// Set tag and sniffing config in context before creating proxy
-	// This allows proxies like TUN to access these settings
-	ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: tag})
-	if receiverConfig.SniffingSettings != nil {
-		ctx = session.ContextWithContent(ctx, &session.Content{
-			SniffingRequest: sniffingRequest,
-		})
+	src := net.TCPDestination(net.AnyIP, 0)
+	if receiverConfig.Listen != nil {
+		src.Address = receiverConfig.Listen.AsAddress()
 	}
-	rawProxy, err := common.CreateObject(ctx, proxyConfig)
+	if receiverConfig.PortList != nil && len(receiverConfig.PortList.Range) > 0 {
+		src.Port = net.Port(receiverConfig.PortList.Range[0].From)
+	}
+	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
+	if err != nil {
+		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
+	}
+
+	newCtx := session.ContextWithInbound(ctx, &session.Inbound{Tag: tag, Source: src})
+	newCtx = session.ContextWithContent(newCtx, &session.Content{SniffingRequest: sniffingRequest})
+	newCtx = session.ContextWithStreamSettings(newCtx, mss)
+
+	rawProxy, err := common.CreateObject(newCtx, proxyConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -90,11 +97,6 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	address := receiverConfig.Listen.AsAddress()
 	if address == nil {
 		address = net.AnyIP
-	}
-
-	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
-	if err != nil {
-		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
 	}
 
 	if receiverConfig.ReceiveOriginalDestination {
@@ -170,6 +172,12 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 
 // Start implements common.Runnable.
 func (h *AlwaysOnInboundHandler) Start() error {
+	// for inbound without worker (TUN)
+	if run, ok := h.proxy.(common.Runnable); ok {
+		if err := run.Start(); err != nil {
+			return errors.New("failed to start proxy").Base(err)
+		}
+	}
 	for _, worker := range h.workers {
 		if err := worker.Start(); err != nil {
 			return err

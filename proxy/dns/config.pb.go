@@ -28,7 +28,7 @@ type RuleAction int32
 const (
 	RuleAction_Direct RuleAction = 0
 	RuleAction_Drop   RuleAction = 1
-	RuleAction_Reject RuleAction = 2
+	RuleAction_Return RuleAction = 2
 	RuleAction_Hijack RuleAction = 3
 )
 
@@ -37,13 +37,13 @@ var (
 	RuleAction_name = map[int32]string{
 		0: "Direct",
 		1: "Drop",
-		2: "Reject",
+		2: "Return",
 		3: "Hijack",
 	}
 	RuleAction_value = map[string]int32{
 		"Direct": 0,
 		"Drop":   1,
-		"Reject": 2,
+		"Return": 2,
 		"Hijack": 3,
 	}
 )
@@ -78,8 +78,9 @@ func (RuleAction) EnumDescriptor() ([]byte, []int) {
 type DNSRuleConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Action        RuleAction             `protobuf:"varint,1,opt,name=action,proto3,enum=xray.proxy.dns.RuleAction" json:"action,omitempty"`
-	Qtype         []int32                `protobuf:"varint,2,rep,packed,name=qtype,proto3" json:"qtype,omitempty"`
+	QType         []int32                `protobuf:"varint,2,rep,packed,name=q_type,json=qType,proto3" json:"q_type,omitempty"`
 	Domain        []*geodata.DomainRule  `protobuf:"bytes,3,rep,name=domain,proto3" json:"domain,omitempty"`
+	RCode         uint32                 `protobuf:"varint,4,opt,name=r_code,json=rCode,proto3" json:"r_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -121,9 +122,9 @@ func (x *DNSRuleConfig) GetAction() RuleAction {
 	return RuleAction_Direct
 }
 
-func (x *DNSRuleConfig) GetQtype() []int32 {
+func (x *DNSRuleConfig) GetQType() []int32 {
 	if x != nil {
-		return x.Qtype
+		return x.QType
 	}
 	return nil
 }
@@ -135,11 +136,18 @@ func (x *DNSRuleConfig) GetDomain() []*geodata.DomainRule {
 	return nil
 }
 
+func (x *DNSRuleConfig) GetRCode() uint32 {
+	if x != nil {
+		return x.RCode
+	}
+	return 0
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	UserLevel     uint32                 `protobuf:"varint,1,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
 	Rule          []*DNSRuleConfig       `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
-	Server        *net.Endpoint          `protobuf:"bytes,3,opt,name=server,proto3" json:"server,omitempty"`
+	RewriteServer *net.Endpoint          `protobuf:"bytes,3,opt,name=rewrite_server,json=rewriteServer,proto3" json:"rewrite_server,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -188,9 +196,9 @@ func (x *Config) GetRule() []*DNSRuleConfig {
 	return nil
 }
 
-func (x *Config) GetServer() *net.Endpoint {
+func (x *Config) GetRewriteServer() *net.Endpoint {
 	if x != nil {
-		return x.Server
+		return x.RewriteServer
 	}
 	return nil
 }
@@ -199,23 +207,24 @@ var File_proxy_dns_config_proto protoreflect.FileDescriptor
 
 const file_proxy_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\x92\x01\n" +
+	"\x16proxy/dns/config.proto\x12\x0exray.proxy.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xaa\x01\n" +
 	"\rDNSRuleConfig\x122\n" +
-	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x14\n" +
-	"\x05qtype\x18\x02 \x03(\x05R\x05qtype\x127\n" +
-	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\"\x8d\x01\n" +
+	"\x06action\x18\x01 \x01(\x0e2\x1a.xray.proxy.dns.RuleActionR\x06action\x12\x15\n" +
+	"\x06q_type\x18\x02 \x03(\x05R\x05qType\x127\n" +
+	"\x06domain\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x15\n" +
+	"\x06r_code\x18\x04 \x01(\rR\x05rCode\"\x9c\x01\n" +
 	"\x06Config\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x01 \x01(\rR\tuserLevel\x121\n" +
-	"\x04rule\x18\x02 \x03(\v2\x1d.xray.proxy.dns.DNSRuleConfigR\x04rule\x121\n" +
-	"\x06server\x18\x03 \x01(\v2\x19.xray.common.net.EndpointR\x06server*:\n" +
+	"\x04rule\x18\x02 \x03(\v2\x1d.xray.proxy.dns.DNSRuleConfigR\x04rule\x12@\n" +
+	"\x0erewrite_server\x18\x03 \x01(\v2\x19.xray.common.net.EndpointR\rrewriteServer*:\n" +
 	"\n" +
 	"RuleAction\x12\n" +
 	"\n" +
 	"\x06Direct\x10\x00\x12\b\n" +
 	"\x04Drop\x10\x01\x12\n" +
 	"\n" +
-	"\x06Reject\x10\x02\x12\n" +
+	"\x06Return\x10\x02\x12\n" +
 	"\n" +
 	"\x06Hijack\x10\x03BL\n" +
 	"\x12com.xray.proxy.dnsP\x01Z#github.com/xtls/xray-core/proxy/dns\xaa\x02\x0eXray.Proxy.Dnsb\x06proto3"
@@ -245,7 +254,7 @@ var file_proxy_dns_config_proto_depIdxs = []int32{
 	0, // 0: xray.proxy.dns.DNSRuleConfig.action:type_name -> xray.proxy.dns.RuleAction
 	3, // 1: xray.proxy.dns.DNSRuleConfig.domain:type_name -> xray.common.geodata.DomainRule
 	1, // 2: xray.proxy.dns.Config.rule:type_name -> xray.proxy.dns.DNSRuleConfig
-	4, // 3: xray.proxy.dns.Config.server:type_name -> xray.common.net.Endpoint
+	4, // 3: xray.proxy.dns.Config.rewrite_server:type_name -> xray.common.net.Endpoint
 	4, // [4:4] is the sub-list for method output_type
 	4, // [4:4] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name

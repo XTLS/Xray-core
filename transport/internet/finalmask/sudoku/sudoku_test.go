@@ -267,7 +267,7 @@ func runVLESSRealityCase(t *testing.T, bin string, mode trafficMode, payloadSize
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&vin.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -279,7 +279,7 @@ func runVLESSRealityCase(t *testing.T, bin string, mode trafficMode, payloadSize
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				IpsBlocked: &freedom.IPRules{},
+				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
@@ -292,9 +292,9 @@ func runVLESSRealityCase(t *testing.T, bin string, mode trafficMode, payloadSize
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  xnet.NewIPOrDomain(backend.Address()),
-					Port:     uint32(backend.Port()),
-					Networks: []xnet.Network{xnet.Network_TCP},
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
+					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
 		},
@@ -372,7 +372,6 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 							{
 								ProtocolName: "hysteria",
 								Settings: serial.ToTypedMessage(&hytransport.Config{
-									Version:        2,
 									Auth:           auth,
 									UdpIdleTimeout: 60,
 								}),
@@ -399,7 +398,7 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				IpsBlocked: &freedom.IPRules{},
+				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
@@ -412,16 +411,15 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  xnet.NewIPOrDomain(backend.Address()),
-					Port:     uint32(backend.Port()),
-					Networks: []xnet.Network{xnet.Network_TCP},
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
+					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&hyproxy.ClientConfig{
-					Version: 2,
 					Server: &protocol.ServerEndpoint{
 						Address: xnet.NewIPOrDomain(xnet.LocalHostIP),
 						Port:    uint32(relayPort),
@@ -437,7 +435,6 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 							{
 								ProtocolName: "hysteria",
 								Settings: serial.ToTypedMessage(&hytransport.Config{
-									Version:        2,
 									Auth:           auth,
 									UdpIdleTimeout: 60,
 								}),
@@ -501,7 +498,7 @@ func runVLesseEncCase(t *testing.T, bin string, mode trafficMode, payloadSize in
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&vin.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -517,7 +514,7 @@ func runVLesseEncCase(t *testing.T, bin string, mode trafficMode, payloadSize in
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				IpsBlocked: &freedom.IPRules{},
+				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
@@ -530,9 +527,9 @@ func runVLesseEncCase(t *testing.T, bin string, mode trafficMode, payloadSize in
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  xnet.NewIPOrDomain(backend.Address()),
-					Port:     uint32(backend.Port()),
-					Networks: []xnet.Network{xnet.Network_TCP},
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
+					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
 		},
@@ -605,7 +602,7 @@ func runVLESSXHTTPCase(t *testing.T, bin string, mode trafficMode, payloadSize i
 					},
 				}),
 				ProxySettings: serial.ToTypedMessage(&vin.Config{
-					Clients: []*protocol.User{
+					Users: []*protocol.User{
 						{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -617,7 +614,7 @@ func runVLESSXHTTPCase(t *testing.T, bin string, mode trafficMode, payloadSize i
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				IpsBlocked: &freedom.IPRules{},
+				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
@@ -630,9 +627,9 @@ func runVLESSXHTTPCase(t *testing.T, bin string, mode trafficMode, payloadSize i
 					Listen:   xnet.NewIPOrDomain(xnet.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					Address:  xnet.NewIPOrDomain(backend.Address()),
-					Port:     uint32(backend.Port()),
-					Networks: []xnet.Network{xnet.Network_TCP},
+					RewriteAddress:  xnet.NewIPOrDomain(backend.Address()),
+					RewritePort:     uint32(backend.Port()),
+					AllowedNetworks: []xnet.Network{xnet.Network_TCP},
 				}),
 			},
 		},
@@ -934,7 +931,8 @@ func cloneConfig(cfg *Config) *Config {
 }
 
 func defaultApps(cfg *core.Config) *core.Config {
-	cfg.App = append(cfg.App,
+	cfg.App = append(
+		cfg.App,
 		serial.ToTypedMessage(&log.Config{
 			ErrorLogLevel: clog.Severity_Warning,
 			ErrorLogType:  log.LogType_Console,

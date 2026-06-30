@@ -18,7 +18,6 @@ type LocalNameServer struct {
 
 // QueryIP implements Server.
 func (s *LocalNameServer) QueryIP(ctx context.Context, domain string, option dns.IPOption) (ips []net.IP, ttl uint32, err error) {
-
 	start := time.Now()
 	ips, ttl, err = s.client.LookupIP(domain, option)
 

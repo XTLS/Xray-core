@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
@@ -134,7 +135,7 @@ func NewClient(
 			}
 		}
 
-		var timeoutMs = 4000 * time.Millisecond
+		timeoutMs := 4000 * time.Millisecond
 		if ns.TimeoutMs > 0 {
 			timeoutMs = time.Duration(ns.TimeoutMs) * time.Millisecond
 		}
@@ -166,7 +167,7 @@ func (c *Client) Name() string {
 // QueryIP sends DNS query to the name server with the client's IP.
 func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
 	if c.checkSystem {
-		supportIPv4, supportIPv6 := checkRoutes()
+		supportIPv4, supportIPv6 := utils.CheckRoutes()
 		option.IPv4Enable = option.IPv4Enable && supportIPv4
 		option.IPv6Enable = option.IPv6Enable && supportIPv6
 	} else {

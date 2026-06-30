@@ -8,6 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata/strmatcher"
+	"github.com/xtls/xray-core/common/utils"
 )
 
 type DomainMatcher interface {
@@ -25,7 +26,7 @@ type DomainMatcherFactory interface {
 
 type MphDomainMatcherFactory struct {
 	sync.Mutex
-	shared map[string]strmatcher.MatcherGroup // TODO: cleanup
+	shared *utils.WeakCacheMap[string, strmatcher.MphValueMatcher]
 }
 
 func buildDomainRulesKey(rules []*DomainRule) string {
@@ -65,7 +66,7 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 	if key != "" {
 		f.Lock()
 		defer f.Unlock()
-		if g := f.shared[key]; g != nil {
+		if g, ok := f.shared.Load(key); ok {
 			errors.LogDebug(context.Background(), "geodata mph domain matcher cache HIT for ", len(rules), " rules")
 			return g, nil
 		}
@@ -102,14 +103,14 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 		return nil, err
 	}
 	if key != "" {
-		f.shared[key] = g
+		f.shared.Store(key, g)
 	}
 	return g, nil
 }
 
 type CompactDomainMatcherFactory struct {
 	sync.Mutex
-	shared map[string]strmatcher.MatcherSet // TODO: cleanup
+	shared *utils.WeakCacheMap[string, strmatcher.LinearAnyMatcher]
 }
 
 func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmatcher.MatcherSet, error) {
@@ -118,7 +119,7 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmat
 	f.Lock()
 	defer f.Unlock()
 
-	if s := f.shared[key]; s != nil {
+	if s, ok := f.shared.Load(key); ok {
 		errors.LogDebug(context.Background(), "geodata geosite matcher cache HIT ", key)
 		return s, nil
 	}
@@ -138,7 +139,7 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmat
 		}
 		s.Add(m)
 	}
-	f.shared[key] = s
+	f.shared.Store(key, s)
 	return s, err
 }
 
@@ -219,7 +220,7 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 	case Domain_Regex:
 		return strmatcher.Regex.New(d.Value)
 	case Domain_Domain:
-		return strmatcher.Domain.New(d.Value)
+		return strmatcher.Domain.New(strings.ToLower(d.Value))
 	case Domain_Full:
 		return strmatcher.Full.New(strings.ToLower(d.Value))
 	default:
@@ -230,8 +231,8 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 func newDomainMatcherFactory() DomainMatcherFactory {
 	switch runtime.GOOS {
 	case "ios", "android":
-		return &CompactDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherSet)}
+		return &CompactDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.LinearAnyMatcher]()}
 	default:
-		return &MphDomainMatcherFactory{shared: make(map[string]strmatcher.MatcherGroup)}
+		return &MphDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.MphValueMatcher]()}
 	}
 }

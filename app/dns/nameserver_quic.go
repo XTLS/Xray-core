@@ -78,7 +78,19 @@ func (s *QUICNameServer) getCacheController() *CacheController { return s.cacheC
 func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.Name(), " querying: ", fqdn)
 
-	reqs := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	if err != nil {
+		errors.LogErrorInner(ctx, err, "failed to build dns query for ", fqdn)
+		if noResponseErrCh != nil {
+			if option.IPv4Enable {
+				noResponseErrCh <- err
+			}
+			if option.IPv6Enable {
+				noResponseErrCh <- err
+			}
+		}
+		return
+	}
 
 	var deadline time.Time
 	if d, ok := ctx.Deadline(); ok {

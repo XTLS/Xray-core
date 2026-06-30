@@ -20,15 +20,17 @@ import (
 var webpage []byte
 
 type task struct {
-	Method string `json:"method"`
-	URL    string `json:"url"`
-	Extra  any    `json:"extra,omitempty"`
-	StreamResponse bool `json:"streamResponse"`
+	Method         string `json:"method"`
+	URL            string `json:"url"`
+	Extra          any    `json:"extra,omitempty"`
+	StreamResponse bool   `json:"streamResponse"`
 }
 
-var conns chan *websocket.Conn
-var server *http.Server
-var mu sync.Mutex
+var (
+	conns  chan *websocket.Conn
+	server *http.Server
+	mu     sync.Mutex
+)
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   0,
@@ -51,9 +53,9 @@ func Reload() {
 	if HasBrowserDialer() {
 		for len(conns) > 0 {
 			select {
-				case c := <-conns:
-					c.Close()
-				default:
+			case c := <-conns:
+				c.Close()
+			default:
 			}
 		}
 		conns = nil
@@ -75,7 +77,7 @@ func Reload() {
 						}
 					}
 				} else {
-					w.Header().Set("Access-Control-Allow-Origin", "*");
+					w.Header().Set("Access-Control-Allow-Origin", "*")
 					w.Write(webpage)
 				}
 			}),
@@ -94,15 +96,13 @@ type webSocketExtra struct {
 
 func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
 	task := task{
-		Method: "WS",
-		URL:    uri,
+		Method:         "WS",
+		URL:            uri,
 		StreamResponse: true,
 	}
 
-	if ed != nil {
-		task.Extra = webSocketExtra{
-			Protocol: base64.RawURLEncoding.EncodeToString(ed),
-		}
+	task.Extra = webSocketExtra{
+		Protocol: base64.RawURLEncoding.EncodeToString(ed),
 	}
 
 	return dialTask(task)
@@ -144,9 +144,9 @@ func httpExtraFromHeadersAndCookies(headers http.Header, cookies []*http.Cookie)
 
 func DialGet(uri string, headers http.Header, cookies []*http.Cookie) (*websocket.Conn, error) {
 	task := task{
-		Method: "GET",
-		URL:    uri,
-		Extra:  httpExtraFromHeadersAndCookies(headers, cookies),
+		Method:         "GET",
+		URL:            uri,
+		Extra:          httpExtraFromHeadersAndCookies(headers, cookies),
 		StreamResponse: true,
 	}
 
@@ -159,9 +159,9 @@ func DialPacket(method string, uri string, headers http.Header, cookies []*http.
 
 func dialWithBody(method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
 	task := task{
-		Method: method,
-		URL:    uri,
-		Extra:  httpExtraFromHeadersAndCookies(headers, cookies),
+		Method:         method,
+		URL:            uri,
+		Extra:          httpExtraFromHeadersAndCookies(headers, cookies),
 		StreamResponse: false,
 	}
 
@@ -222,4 +222,3 @@ func CheckOK(conn *websocket.Conn) error {
 func init() {
 	Reload()
 }
-

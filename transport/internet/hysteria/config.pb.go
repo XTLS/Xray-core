@@ -23,7 +23,6 @@ const (
 
 type Config struct {
 	state                protoimpl.MessageState `protogen:"open.v1"`
-	Version              int32                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	Auth                 string                 `protobuf:"bytes,2,opt,name=auth,proto3" json:"auth,omitempty"`
 	UdpIdleTimeout       int64                  `protobuf:"varint,3,opt,name=udp_idle_timeout,json=udpIdleTimeout,proto3" json:"udp_idle_timeout,omitempty"`
 	MasqType             string                 `protobuf:"bytes,4,opt,name=masq_type,json=masqType,proto3" json:"masq_type,omitempty"`
@@ -66,13 +65,6 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_hysteria_config_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *Config) GetVersion() int32 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
 }
 
 func (x *Config) GetAuth() string {
@@ -149,9 +141,8 @@ var File_transport_internet_hysteria_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\n" +
-	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\xa3\x04\n" +
-	"\x06Config\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x05R\aversion\x12\x12\n" +
+	"(transport/internet/hysteria/config.proto\x12 xray.transport.internet.hysteria\"\x8f\x04\n" +
+	"\x06Config\x12\x12\n" +
 	"\x04auth\x18\x02 \x01(\tR\x04auth\x12(\n" +
 	"\x10udp_idle_timeout\x18\x03 \x01(\x03R\x0eudpIdleTimeout\x12\x1b\n" +
 	"\tmasq_type\x18\x04 \x01(\tR\bmasqType\x12\x1b\n" +
@@ -166,7 +157,7 @@ const file_transport_internet_hysteria_config_proto_rawDesc = "" +
 	"\x17masq_string_status_code\x18\v \x01(\x05R\x14masqStringStatusCode\x1aD\n" +
 	"\x16MasqStringHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x82\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02B\x82\x01\n" +
 	"$com.xray.transport.internet.hysteriaP\x01Z5github.com/xtls/xray-core/transport/internet/hysteria\xaa\x02 Xray.Transport.Internet.Hysteriab\x06proto3"
 
 var (

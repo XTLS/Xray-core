@@ -801,7 +801,8 @@ func (b *bandwidthSampler) onPacketAcknowledged(ackTime monotime.Time, packetNum
 	if sentPacketPointer.sentTime.After(sentPacketPointer.lastAckedPacketSentTime) {
 		sendRate = BandwidthFromDelta(
 			sentPacketPointer.sendTimeState.totalBytesSent-sentPacketPointer.totalBytesSentAtLastAckedPacket,
-			sentPacketPointer.sentTime.Sub(sentPacketPointer.lastAckedPacketSentTime))
+			sentPacketPointer.sentTime.Sub(sentPacketPointer.lastAckedPacketSentTime),
+		)
 	}
 
 	var a0 ackPoint
@@ -848,7 +849,8 @@ func (b *bandwidthSampler) onAckEventEnd(
 		b.lastSentPacket,
 		b.lastAckedPacket,
 		b.lastAckedPacketAckTime,
-		newlyAckedBytes)
+		newlyAckedBytes,
+	)
 	// If |extra_acked| is zero, i.e. this ack event marks the start of a new ack
 	// aggregation epoch, save LessRecentPoint, which is the last ack point of the
 	// previous epoch, as a A0 candidate.

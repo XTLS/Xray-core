@@ -9,8 +9,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
-type DefaultTun struct {
-}
+type DefaultTun struct{}
 
 // DefaultTun implements Tun
 var _ Tun = (*DefaultTun)(nil)
@@ -42,4 +41,18 @@ func (t *DefaultTun) newEndpoint() (stack.LinkEndpoint, error) {
 
 func setinterface(string, string, uintptr, *net.Interface) error {
 	return errors.New("Tun is not supported on your platform")
+}
+
+func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, error) {
+	if fixedName == "" {
+		return nil, errors.New("automatic outbound interface selection is not supported on this platform")
+	}
+	iface, err := net.InterfaceByName(fixedName)
+	if err != nil {
+		return nil, err
+	}
+	if iface.Index == tunIndex {
+		return nil, errors.New("outbound interface cannot be the TUN interface")
+	}
+	return iface, nil
 }

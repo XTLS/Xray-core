@@ -229,7 +229,7 @@ func TestSniffQUICComplex(t *testing.T) {
 				t.Errorf("SniffQUIC() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if (errors.Is(err, protocol.ErrProtoNeedMoreData)) != tt.needsMoreData {
+			if errors.Is(err, protocol.ErrProtoNeedMoreData) != tt.needsMoreData {
 				t.Errorf("SniffQUIC() error = %v, expectsNoClue %v", err, tt.needsMoreData)
 				return
 			}

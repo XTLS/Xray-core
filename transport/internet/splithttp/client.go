@@ -9,6 +9,7 @@ import (
 	"net/http/httptrace"
 	"sync"
 
+	"github.com/apernet/quic-go/http3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -59,7 +60,11 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	if body != nil {
 		method = c.transportConfig.GetNormalizedUplinkHTTPMethod() // stream-up/one
 	}
-	req, _ := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	if err != nil {
+		errors.LogInfoInner(ctx, err, "failed to create HTTP request for "+url)
+		return nil, nil, nil, err
+	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
 	wrc = &WaitReadCloser{Wait: make(chan struct{})}
@@ -71,6 +76,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 				errors.LogInfoInner(ctx, err, "failed to "+method+" "+url)
 			}
 			gotConn.Close()
+			common.Close(body)
 			wrc.Close()
 			return
 		}
@@ -80,6 +86,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 		if resp.StatusCode != 200 || uploadOnly { // stream-up
 			io.Copy(io.Discard, resp.Body)
 			resp.Body.Close() // if it is called immediately, the upload will be interrupted also
+			common.Close(body)
 			wrc.Close()
 			return
 		}
@@ -167,6 +174,15 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		c.uploadRawPool.Put(uploadConn)
 	}
 
+	return nil
+}
+
+// HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
+func (c *DefaultDialerClient) Close() error {
+	transport := c.client.Transport
+	if h3Transport, ok := transport.(*http3.Transport); ok {
+		h3Transport.Close()
+	}
 	return nil
 }
 
