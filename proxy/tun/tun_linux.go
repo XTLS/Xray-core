@@ -303,41 +303,42 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 			return nil, err
 		}
 		if iface.Index == tunIndex {
-			return nil, errors.New("outbound interface cannot be the TUN interface")
+			return nil, errors.New("出站接口不能是 TUN 接口")
 		}
 		return iface, nil
 	}
 
-	probeIPs := []net.IP{
-		net.ParseIP("8.8.8.8"),
-		net.ParseIP("2001:4860:4860::8888"),
+	for _, family := range []int{
+		netlink.FAMILY_V4,
+		netlink.FAMILY_V6,
+	} {
+		iface, err := findDefaultInterface(family, tunIndex)
+		if err == nil {
+			return iface, nil
+		}
 	}
 
-	for _, ip := range probeIPs {
-		routes, err := netlink.RouteGet(ip)
-		if err != nil || len(routes) == 0 {
-			continue
-		}
-		route := routes[0]
-		if route.LinkIndex == tunIndex {
-			continue
+	return nil, errors.New("没有找到可用的出站接口")
+}
+
+func findDefaultInterface(family int, tunIndex int) (*net.Interface, error) {
+	routes, err := netlink.RouteList(nil, family)
+	if err != nil {
+		return nil, err
+	}
+
+	var selected *net.Interface
+	selectedMetric := -1
+
+	for _, route := range routes {
+		if route.Dst != nil {
+			ones, _ := route.Dst.Mask.Size()
+			if ones != 0 {
+				continue
+			}
 		}
 
-		link, err := netlink.LinkByIndex(route.LinkIndex)
-		if err != nil {
-			continue
-		}
-		attrs := link.Attrs()
-
-		if attrs.Flags&net.FlagUp == 0 {
-			continue
-		}
-		operState := attrs.OperState
-		if operState != netlink.OperUp && operState != netlink.OperUnknown {
-			continue
-		}
-
-		if route.Src == nil || route.Src.IsLoopback() || route.Src.IsLinkLocalUnicast() {
+		if route.LinkIndex == 0 || route.LinkIndex == tunIndex {
 			continue
 		}
 
@@ -345,8 +346,21 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 		if err != nil {
 			continue
 		}
-		return iface, nil
+
+		if iface.Flags&net.FlagUp == 0 ||
+			iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		if selected == nil || route.Priority < selectedMetric {
+			selected = iface
+			selectedMetric = route.Priority
+		}
 	}
 
-	return nil, errors.New("no usable outbound interface found")
+	if selected == nil {
+		return nil, errors.New("没有找到物理默认路由")
+	}
+
+	return selected, nil
 }
