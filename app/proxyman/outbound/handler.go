@@ -28,8 +28,19 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"github.com/xtls/xray-core/transport/pipe"
+	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/proto"
 )
+
+// isHTTP2StreamReset reports whether err is (or wraps) an HTTP/2 stream reset,
+// e.g. "stream error: stream ID N; INTERNAL_ERROR; received from peer". Such a
+// reset means the HTTP/2 stream carrying this tunnel was torn down, i.e. a
+// normal connection teardown like io.EOF / io.ErrClosedPipe / context.Canceled,
+// not an outbound failure worth logging.
+func isHTTP2StreamReset(err error) bool {
+	var se http2.StreamError
+	return goerrors.As(err, &se)
+}
 
 func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter) {
 	var uplinkCounter stats.Counter
@@ -244,7 +255,7 @@ out:
 	var errC error
 	if err != nil {
 		errC = errors.Cause(err)
-		if goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled) {
+		if goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled) || isHTTP2StreamReset(errC) {
 			err = nil
 		}
 	}
