@@ -383,6 +383,28 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			conn.reader = currentSession.uploadQueue
 		}
 
+		if h.config.DownlinkKeepAliveEnabled() {
+			dw := newDownlinkWriter(httpSC)
+			conn.writer = dw
+			scStreamDownServerSecs := h.config.ScStreamDownServerSecs
+			go func() {
+				for {
+					interval := time.Duration(max(1, scStreamDownServerSecs.rand())) * time.Second
+					select {
+					case <-request.Context().Done():
+						return
+					case <-httpSC.Wait():
+						return
+					case <-time.After(interval):
+					}
+					padding := bytes.Repeat([]byte{'X'}, int(h.config.GetNormalizedXPaddingBytes().rand()))
+					if err := dw.keepAlive(interval, padding); err != nil {
+						return
+					}
+				}
+			}()
+		}
+
 		h.ln.addConn(stat.Connection(&conn))
 
 		// "A ResponseWriter may not be used after [Handler.ServeHTTP] has returned."

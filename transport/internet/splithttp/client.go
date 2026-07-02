@@ -90,7 +90,11 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			wrc.Close()
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+		var respReader io.ReadCloser = resp.Body
+		if c.transportConfig.DownlinkKeepAliveEnabled() {
+			respReader = newDownlinkReader(resp.Body)
+		}
+		wrc.(*WaitReadCloser).Set(respReader)
 	}()
 
 	<-gotConn.Wait()

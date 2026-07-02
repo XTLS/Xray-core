@@ -174,6 +174,13 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() *RangeConfig {
 	return c.ScStreamUpServerSecs
 }
 
+// DownlinkKeepAliveEnabled reports whether the opt-in downlink wrapping format
+// (and its keepalive) is enabled. When disabled (the default), the download
+// stream is a raw byte stream, byte-for-byte identical to previous versions.
+func (c *Config) DownlinkKeepAliveEnabled() bool {
+	return c.ScStreamDownServerSecs != nil && c.ScStreamDownServerSecs.To > 0
+}
+
 func (c *Config) GetNormalizedUplinkChunkSize() *RangeConfig {
 	if c.UplinkChunkSize == nil || c.UplinkChunkSize.To == 0 {
 		switch c.UplinkDataPlacement {

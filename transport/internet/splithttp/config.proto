@@ -52,4 +52,5 @@ message Config {
   int32 serverMaxHeaderBytes = 27;
   string sessionIDTable = 28;
   RangeConfig sessionIDLength = 29;
+  RangeConfig scStreamDownServerSecs = 30;
 }
