@@ -81,20 +81,13 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("user account is not valid")
 	}
 
-	var newCtx context.Context
-	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
-		newCtx, newCancel = context.WithCancel(context.Background())
+		ctx = context.WithoutCancel(ctx)
 	}
 
 	sessionPolicy := c.policyManager.ForLevel(user.Level)
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, func() {
-		cancel()
-		if newCancel != nil {
-			newCancel()
-		}
-	}, sessionPolicy.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 
 	postRequest := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
@@ -148,10 +141,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			reader = buf.NewReader(conn)
 		}
 		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
-	}
-
-	if newCtx != nil {
-		ctx = newCtx
 	}
 
 	responseDoneAndCloseWriter := task.OnSuccess(getResponse, task.Close(link.Writer))

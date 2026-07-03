@@ -127,19 +127,12 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		p = c.policyManager.ForLevel(user.Level)
 	}
 
-	var newCtx context.Context
-	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
-		newCtx, newCancel = context.WithCancel(context.Background())
+		ctx = context.WithoutCancel(ctx)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, func() {
-		cancel()
-		if newCancel != nil {
-			newCancel()
-		}
-	}, p.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, cancel, p.Timeouts.ConnectionIdle)
 
 	requestFunc := func() error {
 		defer timer.SetTimeout(p.Timeouts.DownlinkOnly)
@@ -149,10 +142,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		ob.CanSpliceCopy = 1
 		defer timer.SetTimeout(p.Timeouts.UplinkOnly)
 		return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
-	}
-
-	if newCtx != nil {
-		ctx = newCtx
 	}
 
 	responseDonePost := task.OnSuccess(responseFunc, task.Close(link.Writer))
