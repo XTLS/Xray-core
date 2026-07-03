@@ -1,4 +1,4 @@
-//go:build linux && !android && ！ios && !openharmony
+//go:build linux && !android && !openharmony
 
 package tun
 
