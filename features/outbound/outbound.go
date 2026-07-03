@@ -24,6 +24,13 @@ type HandlerSelector interface {
 	Select([]string) []string
 }
 
+// ProbeURLProvider is an optional interface for outbound handlers that have a
+// per-outbound health-check URL. Observatories use it to override their global
+// probe URL / destination for the specific outbound.
+type ProbeURLProvider interface {
+	ProbeURL() string
+}
+
 // Manager is a feature that manages outbound.Handlers.
 //
 // xray:api:stable

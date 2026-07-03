@@ -356,3 +356,29 @@ func TestConfig_Override(t *testing.T) {
 		})
 	}
 }
+
+func TestOutboundDetourConfig_ProbeURL(t *testing.T) {
+	c := &OutboundDetourConfig{}
+	common.Must(json.Unmarshal([]byte(`{
+		"protocol": "freedom",
+		"tag": "node-a",
+		"probeUrl": "https://node-a.internal/client/ping"
+	}`), c))
+
+	handler, err := c.Build()
+	common.Must(err)
+
+	if handler.ProbeUrl != "https://node-a.internal/client/ping" {
+		t.Errorf("OutboundHandlerConfig.ProbeUrl = %q, want %q", handler.ProbeUrl, "https://node-a.internal/client/ping")
+	}
+
+	// Round-trip through the wire format: a stale generated descriptor would
+	// silently drop the field here even though direct struct access above works.
+	wire, err := proto.Marshal(handler)
+	common.Must(err)
+	roundTripped := &core.OutboundHandlerConfig{}
+	common.Must(proto.Unmarshal(wire, roundTripped))
+	if roundTripped.ProbeUrl != handler.ProbeUrl {
+		t.Errorf("ProbeUrl did not survive proto wire round-trip: got %q, want %q", roundTripped.ProbeUrl, handler.ProbeUrl)
+	}
+}

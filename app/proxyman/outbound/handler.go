@@ -69,6 +69,7 @@ type Handler struct {
 	udp443          string
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
+	probeURL        string
 }
 
 // NewHandler creates a new Handler based on the given configuration.
@@ -80,6 +81,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		outboundManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
+		probeURL:        config.ProbeUrl,
 	}
 
 	if config.SenderSettings != nil {
@@ -175,6 +177,11 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 // Tag implements outbound.Handler.
 func (h *Handler) Tag() string {
 	return h.tag
+}
+
+// ProbeURL implements outbound.ProbeURLProvider.
+func (h *Handler) ProbeURL() string {
+	return h.probeURL
 }
 
 // Dispatch implements proxy.Outbound.Dispatch.

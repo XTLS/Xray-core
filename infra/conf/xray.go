@@ -218,6 +218,7 @@ type OutboundDetourConfig struct {
 	ProxySettings  *ProxyConfig     `json:"proxySettings"`
 	MuxSettings    *MuxConfig       `json:"mux"`
 	TargetStrategy string           `json:"targetStrategy"`
+	ProbeURL       string           `json:"probeUrl,omitempty"`
 }
 
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
@@ -332,6 +333,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		SenderSettings: serial.ToTypedMessage(senderSettings),
 		Tag:            c.Tag,
 		ProxySettings:  serial.ToTypedMessage(ts),
+		ProbeUrl:       c.ProbeURL,
 	}, nil
 }
 

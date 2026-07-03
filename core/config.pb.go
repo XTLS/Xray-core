@@ -178,7 +178,10 @@ type OutboundHandlerConfig struct {
 	// If not zero, this outbound will be expired in seconds. Not used for now.
 	Expire int64 `protobuf:"varint,4,opt,name=expire,proto3" json:"expire,omitempty"`
 	// Comment of this outbound handler. Not used for now.
-	Comment       string `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
+	Comment string `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
+	// URL used by observatories to health-check this outbound.
+	// Overrides the observatory's global probe URL / destination for this outbound only.
+	ProbeUrl      string `protobuf:"bytes,6,opt,name=probe_url,json=probeUrl,proto3" json:"probe_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -248,6 +251,13 @@ func (x *OutboundHandlerConfig) GetComment() string {
 	return ""
 }
 
+func (x *OutboundHandlerConfig) GetProbeUrl() string {
+	if x != nil {
+		return x.ProbeUrl
+	}
+	return ""
+}
+
 var File_core_config_proto protoreflect.FileDescriptor
 
 const file_core_config_proto_rawDesc = "" +
@@ -261,13 +271,14 @@ const file_core_config_proto_rawDesc = "" +
 	"\x14InboundHandlerConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12M\n" +
 	"\x11receiver_settings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\x10receiverSettings\x12G\n" +
-	"\x0eproxy_settings\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\rproxySettings\"\xef\x01\n" +
+	"\x0eproxy_settings\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\rproxySettings\"\x8c\x02\n" +
 	"\x15OutboundHandlerConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12I\n" +
 	"\x0fsender_settings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\x0esenderSettings\x12G\n" +
 	"\x0eproxy_settings\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\rproxySettings\x12\x16\n" +
 	"\x06expire\x18\x04 \x01(\x03R\x06expire\x12\x18\n" +
-	"\acomment\x18\x05 \x01(\tR\acommentB=\n" +
+	"\acomment\x18\x05 \x01(\tR\acomment\x12\x1b\n" +
+	"\tprobe_url\x18\x06 \x01(\tR\bprobeUrlB=\n" +
 	"\rcom.xray.coreP\x01Z\x1egithub.com/xtls/xray-core/core\xaa\x02\tXray.Coreb\x06proto3"
 
 var (

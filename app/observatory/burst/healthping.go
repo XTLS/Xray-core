@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 )
 
@@ -28,6 +29,7 @@ type HealthPing struct {
 	ctx           context.Context
 	cancelCtx     context.CancelFunc
 	cancelPending atomic.Pointer[context.CancelFunc]
+	ohm           outbound.Manager
 	dispatcher    routing.Dispatcher
 	access        sync.Mutex
 	ticker        *time.Ticker
@@ -37,7 +39,7 @@ type HealthPing struct {
 }
 
 // NewHealthPing creates a new HealthPing with settings
-func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *HealthPingConfig) *HealthPing {
+func NewHealthPing(ctx context.Context, ohm outbound.Manager, dispatcher routing.Dispatcher, config *HealthPingConfig) *HealthPing {
 	settings := &HealthPingSettings{}
 	if config != nil {
 
@@ -81,6 +83,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	return &HealthPing{
 		ctx:        ctx,
 		cancelCtx:  cancel,
+		ohm:        ohm,
 		dispatcher: dispatcher,
 		Settings:   settings,
 		Results:    nil,
@@ -171,10 +174,18 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 	timers := make([]*time.Timer, 0, count)
 	for _, tag := range tags {
 		handler := tag
+		dest := h.Settings.Destination
+		if h.ohm != nil {
+			if ob := h.ohm.GetHandler(handler); ob != nil {
+				if p, ok := ob.(outbound.ProbeURLProvider); ok && p.ProbeURL() != "" {
+					dest = p.ProbeURL()
+				}
+			}
+		}
 		client := newPingClient(
 			h.ctx,
 			h.dispatcher,
-			h.Settings.Destination,
+			dest,
 			h.Settings.Timeout,
 			handler,
 		)

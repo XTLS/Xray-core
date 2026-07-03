@@ -99,7 +99,7 @@ func New(ctx context.Context, config *Config) (*Observer, error) {
 	if err != nil {
 		return nil, errors.New("Cannot get depended features").Base(err)
 	}
-	hp := NewHealthPing(ctx, dispatcher, config.PingConfig)
+	hp := NewHealthPing(ctx, outboundManager, dispatcher, config.PingConfig)
 	return &Observer{
 		config: config,
 		ctx:    ctx,

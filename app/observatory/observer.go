@@ -127,7 +127,7 @@ func (o *Observer) clearRemovedOutbounds(outbounds []string) {
 	o.status = pruned
 }
 
-func (o *Observer) probe(outbound string) ProbeResult {
+func (o *Observer) probe(tag string) ProbeResult {
 	errorCollectorForRequest := newErrorCollector()
 
 	httpTransport := http.Transport{
@@ -143,7 +143,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 					return errors.New("cannot understand address").Base(err)
 				}
 				trackedCtx := session.TrackedConnectionError(o.ctx, errorCollectorForRequest)
-				conn, err := tagged.Dialer(trackedCtx, o.dispatcher, dest, outbound)
+				conn, err := tagged.Dialer(trackedCtx, o.dispatcher, dest, tag)
 				if err != nil {
 					return errors.New("cannot dial remote address ", dest).Base(err)
 				}
@@ -165,13 +165,19 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		Jar:     nil,
 		Timeout: time.Second * 5,
 	}
+	probeURL := "https://www.google.com/generate_204"
+	if o.config.ProbeUrl != "" {
+		probeURL = o.config.ProbeUrl
+	}
+	if h := o.ohm.GetHandler(tag); h != nil {
+		if p, ok := h.(outbound.ProbeURLProvider); ok && p.ProbeURL() != "" {
+			probeURL = p.ProbeURL()
+		}
+	}
+
 	var GETTime time.Duration
 	err := task.Run(o.ctx, func() error {
 		startTime := time.Now()
-		probeURL := "https://www.google.com/generate_204"
-		if o.config.ProbeUrl != "" {
-			probeURL = o.config.ProbeUrl
-		}
 		req, _ := http.NewRequest(http.MethodGet, probeURL, nil)
 		utils.TryDefaultHeadersWith(req.Header, "nav")
 		response, err := httpClient.Do(req)
@@ -186,11 +192,11 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		return nil
 	})
 	if err != nil {
-		errorMessage := "the outbound " + outbound + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
+		errorMessage := "the outbound " + tag + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
 		errors.LogInfoInner(o.ctx, errorCollectorForRequest.UnderlyingError(), errorMessage)
 		return ProbeResult{Alive: false, LastErrorReason: errorMessage}
 	}
-	errors.LogInfo(o.ctx, "the outbound ", outbound, " is alive:", GETTime.Seconds())
+	errors.LogInfo(o.ctx, "the outbound ", tag, " is alive:", GETTime.Seconds())
 	return ProbeResult{Alive: true, Delay: GETTime.Milliseconds()}
 }
 

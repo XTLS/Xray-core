@@ -54,4 +54,7 @@ message OutboundHandlerConfig {
   int64 expire = 4;
   // Comment of this outbound handler. Not used for now.
   string comment = 5;
+  // URL used by observatories to health-check this outbound.
+  // Overrides the observatory's global probe URL / destination for this outbound only.
+  string probe_url = 6;
 }
