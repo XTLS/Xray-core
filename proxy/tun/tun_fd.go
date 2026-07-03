@@ -1,4 +1,4 @@
-//go:build android
+//go:build android || ios || openharmony
 
 package tun
 
