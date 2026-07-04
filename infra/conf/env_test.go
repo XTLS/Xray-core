@@ -248,11 +248,12 @@ func TestRootEnvEmptyValueDoesNotUnset(t *testing.T) {
 }
 
 func TestRootEnvInvalidXUDPBaseKeyReturnsConfigError(t *testing.T) {
-	restoreEnvKeys(t, platform.XUDPBaseKey)
+	restoreEnvKeys(t, platform.AssetLocation, platform.XUDPBaseKey)
 
 	_, err := (&Config{
 		Env: &EnvConfig{
-			XUDPBaseKey: envString("invalid"),
+			AssetLocation: envString("should-not-leak"),
+			XUDPBaseKey:   envString("invalid"),
 		},
 	}).Build()
 	if err == nil {
@@ -260,5 +261,42 @@ func TestRootEnvInvalidXUDPBaseKeyReturnsConfigError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), platform.XUDPBaseKey) {
 		t.Fatalf("Build() error = %v, want %s", err, platform.XUDPBaseKey)
+	}
+	for _, key := range []string{platform.AssetLocation, platform.XUDPBaseKey} {
+		if _, found := os.LookupEnv(key); found {
+			t.Fatalf("failed root env should roll back %q", key)
+		}
+	}
+	if err := platform.ReloadEnvSettings(); err != nil {
+		t.Fatalf("ReloadEnvSettings() after rollback = %v", err)
+	}
+}
+
+func TestRootEnvBuildFailureRollsBack(t *testing.T) {
+	restoreEnvKeys(t, platform.XUDPLog)
+	_ = os.Unsetenv(platform.XUDPLog)
+	if err := platform.ReloadEnvSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if xudp.Show.Load() {
+		t.Fatal("xudp log should start disabled")
+	}
+
+	_, err := (&Config{
+		Env: &EnvConfig{
+			XUDPLog: envString("true"),
+		},
+		Transport: map[string]json.RawMessage{
+			"tcp": nil,
+		},
+	}).Build()
+	if err == nil {
+		t.Fatal("Build() error = nil, want transport config error")
+	}
+	if _, found := os.LookupEnv(platform.XUDPLog); found {
+		t.Fatalf("failed build should roll back %q", platform.XUDPLog)
+	}
+	if xudp.Show.Load() {
+		t.Fatal("failed build should roll back xudp log state")
 	}
 }

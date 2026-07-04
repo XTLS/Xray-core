@@ -3,6 +3,7 @@ package conf
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"path/filepath"
 	"strings"
 
@@ -565,16 +566,25 @@ func (c *Config) Override(o *Config, fn string) {
 }
 
 // Build implements Buildable.
-func (c *Config) Build() (*core.Config, error) {
-	if err := platform.ApplyConfigEnvSettings(c.Env.Settings()); err != nil {
+func (c *Config) Build() (config *core.Config, err error) {
+	rollbackEnv, err := platform.ApplyConfigEnvSettings(c.Env.Settings())
+	if err != nil {
 		return nil, errors.New("failed to apply environment configuration").Base(err)
 	}
+	defer func() {
+		if err == nil || rollbackEnv == nil {
+			return
+		}
+		if rollbackErr := rollbackEnv(); rollbackErr != nil {
+			err = errors.New("failed to rollback environment configuration").Base(stderrors.Join(err, rollbackErr))
+		}
+	}()
 
 	if err := PostProcessConfigureFile(c); err != nil {
 		return nil, errors.New("failed to post-process configuration file").Base(err)
 	}
 
-	config := &core.Config{
+	config = &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dispatcher.Config{}),
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),
