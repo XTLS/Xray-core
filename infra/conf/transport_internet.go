@@ -3,6 +3,7 @@ package conf
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"math"
@@ -22,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/brutal"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -1245,6 +1247,7 @@ var (
 	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"force-brutal":  func() interface{} { return new(Brutal) },
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
@@ -1261,6 +1264,34 @@ var (
 		"realm":         func() interface{} { return new(Realm) },
 	}, "type", "settings")
 )
+
+type Brutal struct {
+	Rate uint64 `json:"rate"`
+	Cwnd uint32 `json:"cwnd"`
+}
+
+func (c *Brutal) Build() (proto.Message, error) {
+	rate := c.Rate
+	cwnd := c.Cwnd
+	if rate == 0 {
+		rate = 125000
+	}
+	if cwnd == 0 {
+		cwnd = 20
+	}
+	if rate < 62500 {
+		return nil, errors.New("invalid rate ", rate)
+	}
+	if cwnd < 5 || cwnd > 80 {
+		return nil, errors.New("invalid cwnd ", cwnd)
+	}
+	params := make([]byte, 16)
+	binary.NativeEndian.PutUint64(params, rate)
+	binary.NativeEndian.PutUint32(params[8:], cwnd)
+	return &brutal.Config{
+		Params: params,
+	}, nil
+}
 
 type TCPItem struct {
 	Delay     Int32Range       `json:"delay"`
