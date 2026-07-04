@@ -1,0 +1,19 @@
+{
+  "log": { "loglevel": "info" },
+  "inbounds": [
+    {
+      "tag": "olcrtc-in",
+      "protocol": "olcrtc",
+      "settings": {
+        "provider": "jitsi",
+        "transport": "datachannel",
+        "roomId": "https://meet.small-dm.ru/REPLACE_WITH_SHARED_ROOM",
+        "key": "REPLACE_WITH_64_HEX_CHARS",
+        "dnsServer": "8.8.8.8:53"
+      }
+    }
+  ],
+  "outbounds": [
+    { "tag": "direct", "protocol": "freedom" }
+  ]
+}

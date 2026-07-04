@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/inbound"
+	"github.com/xtls/xray-core/proxy"
 )
 
 // Manager manages all inbound handlers.
@@ -166,6 +167,12 @@ func NewHandler(ctx context.Context, config *core.InboundHandlerConfig) (inbound
 	receiverSettings, ok := rawReceiverSettings.(*proxyman.ReceiverConfig)
 	if !ok {
 		return nil, errors.New("not a ReceiverConfig").AtError()
+	}
+
+	// Self-driven inbounds (e.g. olcrtc) dial out to their own carrier and have
+	// no listening socket, so they bypass the always-on/dynamic worker path.
+	if proxy.IsSelfDrivenInbound(proxySettings) {
+		return NewSelfDrivenInboundHandler(ctx, tag, receiverSettings, proxySettings)
 	}
 
 	streamSettings := receiverSettings.StreamSettings

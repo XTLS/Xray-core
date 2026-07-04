@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package xray.proxy.olcrtc;
+option csharp_namespace = "Xray.Proxy.Olcrtc";
+option go_package = "github.com/xtls/xray-core/proxy/olcrtc";
+option java_package = "com.xray.proxy.olcrtc";
+option java_multiple_files = true;
+
+// ClientConfig configures an olcrtc outbound (the tunnel client). It brings up
+// a WebRTC carrier to a room and multiplexes each outbound connection as a
+// stream over it. See github.com/openlibrecommunity/olcrtc for field semantics.
+message ClientConfig {
+  string provider = 1;   // jitsi | telemost | wbstream | none
+  string transport = 2;  // datachannel | vp8channel | seichannel | videochannel
+  string room_id = 3;
+  string key = 4;        // 64 hex chars (32-byte shared key)
+  string dns_server = 5; // resolver for reaching the SFU, e.g. 8.8.8.8:53
+  string auth_token = 6; // optional provider account token
+
+  // Direct engine mode (provider == "none").
+  string engine = 7; // livekit | goolom | jitsi
+  string url = 8;
+  string token = 9;
+
+  // vp8channel tuning.
+  int32 vp8_fps = 10;
+  int32 vp8_batch_size = 11;
+
+  // seichannel tuning.
+  int32 sei_fps = 12;
+  int32 sei_batch_size = 13;
+  int32 sei_fragment_size = 14;
+  int32 sei_ack_timeout_ms = 15;
+
+  // videochannel tuning.
+  int32 video_width = 16;
+  int32 video_height = 17;
+  int32 video_fps = 18;
+  string video_bitrate = 19;
+  string video_hw = 20;
+  int32 video_qr_size = 21;
+  string video_qr_recovery = 22;
+  string video_codec = 23;
+  int32 video_tile_module = 24;
+  int32 video_tile_rs = 25;
+
+  // Liveness / lifecycle tuning (Go duration strings; empty = defaults).
+  string liveness_interval = 26;
+  string liveness_timeout = 27;
+  int32 liveness_failures = 28;
+  string max_session_duration = 29;
+
+  // Client identity forwarded to the server auth hook.
+  string device_id = 30;
+  string device_id_path = 31;
+}
+
+// ServerConfig configures an olcrtc inbound (the tunnel server). It joins the
+// same room, accepts tunnel streams and dispatches their targets through Xray's
+// router. It shares ClientConfig's field shape; device fields are ignored.
+message ServerConfig {
+  string provider = 1;
+  string transport = 2;
+  string room_id = 3;
+  string key = 4;
+  string dns_server = 5;
+  string auth_token = 6;
+
+  string engine = 7;
+  string url = 8;
+  string token = 9;
+
+  int32 vp8_fps = 10;
+  int32 vp8_batch_size = 11;
+
+  int32 sei_fps = 12;
+  int32 sei_batch_size = 13;
+  int32 sei_fragment_size = 14;
+  int32 sei_ack_timeout_ms = 15;
+
+  int32 video_width = 16;
+  int32 video_height = 17;
+  int32 video_fps = 18;
+  string video_bitrate = 19;
+  string video_hw = 20;
+  int32 video_qr_size = 21;
+  string video_qr_recovery = 22;
+  string video_codec = 23;
+  int32 video_tile_module = 24;
+  int32 video_tile_rs = 25;
+
+  string liveness_interval = 26;
+  string liveness_timeout = 27;
+  int32 liveness_failures = 28;
+  string max_session_duration = 29;
+}

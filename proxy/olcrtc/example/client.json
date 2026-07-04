@@ -1,0 +1,36 @@
+{
+  "log": { "loglevel": "info" },
+  "inbounds": [
+    {
+      "tag": "socks-in",
+      "listen": "127.0.0.1",
+      "port": 1080,
+      "protocol": "socks",
+      "settings": { "udp": false },
+      "sniffing": { "enabled": true, "destOverride": ["http", "tls"] }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "olcrtc-out",
+      "protocol": "olcrtc",
+      "settings": {
+        "provider": "jitsi",
+        "transport": "datachannel",
+        "roomId": "https://meet.small-dm.ru/REPLACE_WITH_SHARED_ROOM",
+        "key": "REPLACE_WITH_64_HEX_CHARS",
+        "dnsServer": "8.8.8.8:53"
+      }
+    },
+    { "tag": "direct", "protocol": "freedom" }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "ip": ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}

@@ -31,6 +31,7 @@ var (
 		"wireguard":     func() interface{} { return &WireGuardConfig{IsClient: false} },
 		"hysteria":      func() interface{} { return new(HysteriaServerConfig) },
 		"tun":           func() interface{} { return new(TunConfig) },
+		"olcrtc":        func() interface{} { return new(OLCRTCServerConfig) },
 	}, "protocol", "settings")
 
 	outboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -48,6 +49,7 @@ var (
 		"hysteria":    func() interface{} { return new(HysteriaClientConfig) },
 		"dns":         func() interface{} { return new(DNSOutboundConfig) },
 		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
+		"olcrtc":      func() interface{} { return new(OLCRTCClientConfig) },
 	}, "protocol", "settings")
 )
 
@@ -136,9 +138,11 @@ type InboundDetourConfig struct {
 func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	receiverSettings := &proxyman.ReceiverConfig{}
 
-	// TUN inbound doesn't need port configuration as it uses network interface instead
-	if strings.ToLower(c.Protocol) == "tun" {
-		// Skip port validation for TUN
+	// TUN inbound doesn't need port configuration as it uses network interface instead.
+	// olcrtc is a self-driven inbound that dials out to an SFU carrier and has no
+	// listening socket, so it also needs no port.
+	if p := strings.ToLower(c.Protocol); p == "tun" || p == "olcrtc" {
+		// Skip port validation
 	} else if c.ListenOn == nil {
 		// Listen on anyip, must set PortList
 		if c.PortList == nil {
