@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"strings"
@@ -36,6 +37,117 @@ func restoreEnvKeys(t *testing.T, keys ...string) {
 
 func envString(value string) *string {
 	return &value
+}
+
+func allConfigEnvKeys() []string {
+	return []string{
+		platform.AssetLocation,
+		platform.CertLocation,
+		platform.UseReadV,
+		platform.UseFreedomSplice,
+		platform.UseVmessPadding,
+		platform.UseCone,
+		platform.BufferSize,
+		platform.BrowserDialerAddress,
+		platform.XUDPLog,
+		platform.XUDPBaseKey,
+		platform.TunFdKey,
+	}
+}
+
+func testBaseKey() string {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	return base64.RawURLEncoding.EncodeToString(key)
+}
+
+func TestEnvConfigSettingsIncludesAllConfigKeys(t *testing.T) {
+	config := &EnvConfig{
+		AssetLocation:    envString("asset"),
+		CertLocation:     envString("cert"),
+		UseReadV:         envString("enable"),
+		UseFreedomSplice: envString("enable"),
+		UseVmessPadding:  envString("true"),
+		UseCone:          envString("true"),
+		BufferSize:       envString("0"),
+		BrowserDialer:    envString("127.0.0.1:0"),
+		XUDPLog:          envString("true"),
+		XUDPBaseKey:      envString(testBaseKey()),
+		TunFd:            envString("123"),
+	}
+
+	got := map[string]string{}
+	for _, setting := range config.Settings() {
+		got[setting.Key] = setting.Value
+	}
+
+	want := map[string]string{
+		platform.AssetLocation:        "asset",
+		platform.CertLocation:         "cert",
+		platform.UseReadV:             "enable",
+		platform.UseFreedomSplice:     "enable",
+		platform.UseVmessPadding:      "true",
+		platform.UseCone:              "true",
+		platform.BufferSize:           "0",
+		platform.BrowserDialerAddress: "127.0.0.1:0",
+		platform.XUDPLog:              "true",
+		platform.XUDPBaseKey:          testBaseKey(),
+		platform.TunFdKey:             "123",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("settings count = %d, want %d: %#v", len(got), len(want), got)
+	}
+	for key, value := range want {
+		if got[key] != value {
+			t.Fatalf("settings[%q] = %q, want %q", key, got[key], value)
+		}
+	}
+}
+
+func TestRootEnvAppliesAllSupportedKeys(t *testing.T) {
+	keys := allConfigEnvKeys()
+	restoreEnvKeys(t, keys...)
+
+	want := map[string]string{
+		platform.AssetLocation:        "asset",
+		platform.CertLocation:         "cert",
+		platform.UseReadV:             "enable",
+		platform.UseFreedomSplice:     "enable",
+		platform.UseVmessPadding:      "true",
+		platform.UseCone:              "true",
+		platform.BufferSize:           "0",
+		platform.BrowserDialerAddress: "127.0.0.1:0",
+		platform.XUDPLog:              "true",
+		platform.XUDPBaseKey:          testBaseKey(),
+		platform.TunFdKey:             "123",
+	}
+
+	_, err := (&Config{
+		Env: &EnvConfig{
+			AssetLocation:    envString(want[platform.AssetLocation]),
+			CertLocation:     envString(want[platform.CertLocation]),
+			UseReadV:         envString(want[platform.UseReadV]),
+			UseFreedomSplice: envString(want[platform.UseFreedomSplice]),
+			UseVmessPadding:  envString(want[platform.UseVmessPadding]),
+			UseCone:          envString(want[platform.UseCone]),
+			BufferSize:       envString(want[platform.BufferSize]),
+			BrowserDialer:    envString(want[platform.BrowserDialerAddress]),
+			XUDPLog:          envString(want[platform.XUDPLog]),
+			XUDPBaseKey:      envString(want[platform.XUDPBaseKey]),
+			TunFd:            envString(want[platform.TunFdKey]),
+		},
+	}).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, key := range keys {
+		if got := os.Getenv(key); got != want[key] {
+			t.Fatalf("env %q = %q, want %q", key, got, want[key])
+		}
+	}
 }
 
 func TestRootEnvOverridesExternalReloadableEnv(t *testing.T) {
