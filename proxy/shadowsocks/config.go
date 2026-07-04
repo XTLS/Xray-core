@@ -85,8 +85,6 @@ func (a *Account) getCipher() (Cipher, error) {
 			IVBytes:         32,
 			AEADAuthCreator: createXChaCha20Poly1305,
 		}, nil
-	case CipherType_NONE:
-		return nil, errors.New("None cipher is no longer supported. Alternatively, use the socks5 protocol.")
 	default:
 		return nil, errors.New("Unsupported cipher.")
 	}

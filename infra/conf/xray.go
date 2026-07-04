@@ -230,64 +230,30 @@ func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 	return nil
 }
 
-func isInternalOrInvalidAddress(address *Address) bool {
+func isPublicIP(address *Address) bool {
 	if address == nil || address.Address == nil || !address.Family().IsIP() {
-		return true
+		return false
 	}
-	return geodata.PrivateIPMatcher.Match(address.IP())
+	return !geodata.PrivateIPMatcher.Match(address.IP())
 }
 
-func (c *OutboundDetourConfig) checkOutboundTLSConflict(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
+func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
 	if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.GetSecurityType() != "" {
 		return nil
 	}
-	// VMess
-	if vmCfg, ok := rawConfig.(*VMessOutboundConfig); ok {
-		return c.checkVMessTLSConflict(vmCfg)
-	}
 
-	// VLESS should always with encryption
 	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
-		if !isInternalOrInvalidAddress(vlessCfg.Address) {
-			// When the encryption present, GetSecurityType() => should not be empty
-			return errors.New("vless without TLS or other encryption is prohibited")
+		if isPublicIP(vlessCfg.Address) {
+			return errors.New("vless without TLS or other encryption is prohibited when the server address is a public IP")
 		}
 	}
 
-	// Trojan，unlikely
 	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
-		if !isInternalOrInvalidAddress(tjCfg.Address) {
-			return errors.New("trojan without TLS is prohibited")
+		if isPublicIP(tjCfg.Address) {
+			return errors.New("trojan without TLS is prohibited when the server address is a public IP")
 		}
 	}
 
-	// Hysteria, unlikely
-	// if _, ok := rawConfig.(*HysteriaClientConfig); ok {
-	// 	return errors.New("hysteria2 without TLS is prohibited")
-	// }
-
-	return nil
-}
-
-func (c *OutboundDetourConfig) checkVMessTLSConflict(vmCfg *VMessOutboundConfig) error {
-	sec := ""
-	if vmCfg.Address != nil {
-		sec = vmCfg.Security
-	} else if len(vmCfg.Receivers) > 0 {
-		rec := vmCfg.Receivers[0]
-		if len(rec.Users) > 0 {
-			acct := new(VMessAccount)
-			if err := json.Unmarshal(rec.Users[0], acct); err == nil {
-				sec = strings.ToLower(acct.Security)
-			}
-		}
-	}
-
-	if sec == "none" || sec == "auto" || sec == "" || sec == "zero" {
-		if !isInternalOrInvalidAddress(vmCfg.Address) {
-			return errors.New("vmess with 'none' or 'zero' security is conflicted without TLS in streamSettings, alternatively, you can use the socks5 protocol.")
-		}
-	}
 	return nil
 }
 
@@ -384,7 +350,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
-	if err := c.checkOutboundTLSConflict(rawConfig, senderSettings); err != nil {
+	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
 		return nil, err
 	}
 	ts, err := rawConfig.(Buildable).Build()
