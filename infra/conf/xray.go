@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
@@ -347,6 +348,7 @@ type Config struct {
 	// left for returning error
 	Transport map[string]json.RawMessage `json:"transport"`
 
+	Env              map[string]string       `json:"env"`
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
 	DNSConfig        *DNSConfig              `json:"dns"`
@@ -401,6 +403,14 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	if o.Transport != nil {
 		c.Transport = o.Transport
+	}
+	if o.Env != nil {
+		if c.Env == nil {
+			c.Env = map[string]string{}
+		}
+		for key, value := range o.Env {
+			c.Env[key] = value
+		}
 	}
 	if o.Policy != nil {
 		c.Policy = o.Policy
@@ -477,6 +487,10 @@ func (c *Config) Override(o *Config, fn string) {
 
 // Build implements Buildable.
 func (c *Config) Build() (*core.Config, error) {
+	if err := platform.ApplyConfigEnvSettings(c.Env); err != nil {
+		return nil, errors.New("failed to apply environment configuration").Base(err)
+	}
+
 	if err := PostProcessConfigureFile(c); err != nil {
 		return nil, errors.New("failed to post-process configuration file").Base(err)
 	}

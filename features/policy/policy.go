@@ -3,6 +3,7 @@ package policy
 import (
 	"context"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/platform"
@@ -82,32 +83,41 @@ func ManagerType() interface{} {
 	return (*Manager)(nil)
 }
 
-var defaultBufferSize int32
+var defaultBufferSize atomic.Int32
 
-func init() {
+func reloadEnvSettings() error {
+	defaultBufferSize.Store(readDefaultBufferSize())
+	return nil
+}
+
+func readDefaultBufferSize() int32 {
 	const defaultValue = -17
 	size := platform.NewEnvFlag(platform.BufferSize).GetValueAsInt(defaultValue)
 
 	switch size {
 	case 0:
-		defaultBufferSize = -1 // For pipe to use unlimited size
+		return -1 // For pipe to use unlimited size
 	case defaultValue: // Env flag not defined. Use default values per CPU-arch.
 		switch runtime.GOARCH {
 		case "arm", "mips", "mipsle":
-			defaultBufferSize = 0
+			return 0
 		case "arm64", "mips64", "mips64le":
-			defaultBufferSize = 4 * 1024 // 4k cache for low-end devices
+			return 4 * 1024 // 4k cache for low-end devices
 		default:
-			defaultBufferSize = 512 * 1024
+			return 512 * 1024
 		}
 	default:
-		defaultBufferSize = int32(size) * 1024 * 1024
+		return int32(size) * 1024 * 1024
 	}
+}
+
+func init() {
+	platform.RegisterEnvReload(reloadEnvSettings)
 }
 
 func defaultBufferPolicy() Buffer {
 	return Buffer{
-		PerConnection: defaultBufferSize,
+		PerConnection: defaultBufferSize.Load(),
 	}
 }
 

@@ -41,7 +41,7 @@ func init() {
 				}
 				return cf.Build()
 			case io.Reader:
-				if serial.UseStrictJSON {
+				if serial.IsStrictJSONEnabled() {
 					cfg, err := serial.DecodeJSONConfigStrict(v)
 					if err != nil {
 						return nil, err

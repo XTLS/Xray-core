@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/cmdarg"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/main/confloader"
 	"google.golang.org/protobuf/proto"
 )
@@ -107,6 +108,10 @@ func GetFormat(filename string) string {
 }
 
 func LoadConfig(formatName string, input interface{}) (*Config, error) {
+	if err := platform.ReloadEnvSettings(); err != nil {
+		return nil, errors.New("failed to reload environment settings").Base(err)
+	}
+
 	switch v := input.(type) {
 	case cmdarg.Arg:
 		files := make([]*ConfigSource, len(v))

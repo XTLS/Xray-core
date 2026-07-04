@@ -36,14 +36,13 @@ The -confdir=dir flag sets a dir with multiple json config
 The -format=json flag sets the format of config files.
 Default "auto".
 
-The --env=key=value flag sets an environment variable before loading
-config. It may be specified multiple times and applies to run, -test
-and -dump.
+The --env=key=value flag sets a pre-load environment variable before
+loading config. It may be specified multiple times and applies to run,
+-test and -dump.
 
-Note: --env is applied after Go package initialization. It only affects
-environment variables read after the run command starts, such as config,
-asset, cert and TUN file descriptor locations. It does not affect options
-that were already read and cached during package initialization.
+Note: xray.json.strict, xray.location.config and xray.location.confdir
+must be provided through --env or process environment. Runtime reloadable
+environment settings should be declared in the config root env object.
 
 The -test flag tells Xray to test config files only,
 without launching the server.
@@ -80,6 +79,10 @@ var (
 
 func executeRun(cmd *base.Command, args []string) {
 	if err := applyRunEnvVars(runEnvVars); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if err := platform.ReloadEnvSettings(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}

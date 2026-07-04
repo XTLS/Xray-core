@@ -3,6 +3,7 @@ package serial
 import (
 	"context"
 	"io"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
@@ -12,14 +13,23 @@ import (
 	"github.com/xtls/xray-core/main/confloader"
 )
 
-// UseStrictJSON, when true, makes JSON config decoders skip the custom
+// IsStrictJSONEnabled, when true, makes JSON config decoders skip the custom
 // comment-stripping reader and parse input as strict RFC 8259 JSON.
 //
 // Enabled by setting the env variable xray.json.strict=true (or its normalized
 // form XRAY_JSON_STRICT=true). Default false preserves backward-compatible
 // behavior for human-edited configs that may contain comments or other
 // JSON5/JSONC syntax.
-var UseStrictJSON = platform.NewEnvFlag(platform.UseStrictJSON).GetValue(func() string { return "" }) == "true"
+var useStrictJSON atomic.Bool
+
+func IsStrictJSONEnabled() bool {
+	return useStrictJSON.Load()
+}
+
+func reloadEnvSettings() error {
+	useStrictJSON.Store(platform.NewEnvFlag(platform.UseStrictJSON).GetValue(func() string { return "" }) == "true")
+	return nil
+}
 
 func MergeConfigFromFiles(files []*core.ConfigSource) (string, error) {
 	c, err := mergeConfigs(files)
@@ -42,7 +52,7 @@ func mergeConfigs(files []*core.ConfigSource) (*conf.Config, error) {
 			return nil, errors.New("failed to read config: ", file).Base(err)
 		}
 		decoder := ReaderDecoderByFormat[file.Format]
-		if file.Format == "json" && UseStrictJSON {
+		if file.Format == "json" && IsStrictJSONEnabled() {
 			decoder = DecodeJSONConfigStrict
 		}
 		c, err := decoder(r)
@@ -71,6 +81,8 @@ type readerDecoder func(io.Reader) (*conf.Config, error)
 var ReaderDecoderByFormat = make(map[string]readerDecoder)
 
 func init() {
+	platform.RegisterEnvReload(reloadEnvSettings)
+
 	ReaderDecoderByFormat["json"] = DecodeJSONConfig
 	ReaderDecoderByFormat["yaml"] = DecodeYAMLConfig
 	ReaderDecoderByFormat["toml"] = DecodeTOMLConfig
