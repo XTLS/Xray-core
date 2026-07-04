@@ -40,6 +40,11 @@ The --env=key=value flag sets an environment variable before loading
 config. It may be specified multiple times and applies to run, -test
 and -dump.
 
+Note: --env is applied after Go package initialization. It only affects
+environment variables read after the run command starts, such as config,
+asset, cert and TUN file descriptor locations. It does not affect options
+that were already read and cached during package initialization.
+
 The -test flag tells Xray to test config files only,
 without launching the server.
 
