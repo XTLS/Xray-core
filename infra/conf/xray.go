@@ -230,11 +230,15 @@ func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 	return nil
 }
 
-func isPublicIP(address *Address) bool {
-	if address == nil || address.Address == nil || !address.Family().IsIP() {
+func requiresTransportSecurity(address *Address) bool {
+	if address == nil || address.Address == nil {
 		return false
 	}
-	return !geodata.PrivateIPMatcher.Match(address.IP())
+	if address.Family().IsIP() {
+		return !geodata.GetPrivateIPMatcher().Match(address.IP())
+	}
+	domain := strings.TrimSuffix(strings.ToLower(address.Domain()), ".")
+	return !geodata.GetPrivateDomainMatcher().MatchAny(domain)
 }
 
 func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
@@ -243,14 +247,14 @@ func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *pr
 	}
 
 	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
-		if isPublicIP(vlessCfg.Address) {
-			return errors.New("vless without TLS or other encryption is prohibited when the server address is a public IP")
+		if requiresTransportSecurity(vlessCfg.Address) {
+			return errors.New("vless without TLS or other encryption is prohibited unless the server address is a private IP or domain")
 		}
 	}
 
 	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
-		if isPublicIP(tjCfg.Address) {
-			return errors.New("trojan without TLS is prohibited when the server address is a public IP")
+		if requiresTransportSecurity(tjCfg.Address) {
+			return errors.New("trojan without TLS is prohibited unless the server address is a private IP or domain")
 		}
 	}
 
