@@ -23,7 +23,7 @@ import (
 )
 
 var cmdRun = &base.Command{
-	UsageLine: "{{.Exec}} run [-c config.json] [-confdir dir] [--env key=value]",
+	UsageLine: "{{.Exec}} run [-c config.json] [-confdir dir]",
 	Short:     "Run Xray with config, the default command",
 	Long: `
 Run Xray with config, the default command.
@@ -36,13 +36,9 @@ The -confdir=dir flag sets a dir with multiple json config
 The -format=json flag sets the format of config files.
 Default "auto".
 
-The --env=key=value flag sets a pre-load environment variable before
-loading config. It may be specified multiple times and applies to run,
--test and -dump.
-
 Note: xray.json.strict, xray.location.config and xray.location.confdir
-must be provided through --env or process environment. Runtime reloadable
-environment settings should be declared in the config root env object.
+must be provided through process environment. Runtime reloadable environment
+settings should be declared in the config root env object.
 
 The -test flag tells Xray to test config files only,
 without launching the server.
@@ -58,7 +54,6 @@ func init() {
 
 var (
 	configFiles cmdarg.Arg // "Config file for Xray.", the option is customed type, parse in main
-	runEnvVars  cmdarg.Arg
 	configDir   string
 	dump        = cmdRun.Flag.Bool("dump", false, "Dump merged config only, without launching Xray server.")
 	test        = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
@@ -70,7 +65,6 @@ var (
 	_ = func() bool {
 		cmdRun.Flag.Var(&configFiles, "config", "Config path for Xray.")
 		cmdRun.Flag.Var(&configFiles, "c", "Short alias of -config")
-		cmdRun.Flag.Var(&runEnvVars, "env", "Set environment variable before loading config. Can be specified multiple times.")
 		cmdRun.Flag.StringVar(&configDir, "confdir", "", "A dir with multiple json config")
 
 		return true
@@ -78,10 +72,6 @@ var (
 )
 
 func executeRun(cmd *base.Command, args []string) {
-	if err := applyRunEnvVars(runEnvVars); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
 	if err := platform.ReloadEnvSettings(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
@@ -121,19 +111,6 @@ func executeRun(cmd *base.Command, args []string) {
 		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
 		<-osSignals
 	}
-}
-
-func applyRunEnvVars(values cmdarg.Arg) error {
-	for _, raw := range values {
-		key, value, ok := strings.Cut(raw, "=")
-		if !ok || key == "" {
-			return fmt.Errorf("invalid --env value %q, want KEY=VALUE", raw)
-		}
-		if err := os.Setenv(key, value); err != nil {
-			return fmt.Errorf("invalid --env value %q: %w", raw, err)
-		}
-	}
-	return nil
 }
 
 func dumpConfig() int {

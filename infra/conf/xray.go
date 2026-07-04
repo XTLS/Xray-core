@@ -343,12 +343,93 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 	return &stats.Config{}, nil
 }
 
+type EnvConfig struct {
+	AssetLocation    *string `json:"xray.location.asset"`
+	CertLocation     *string `json:"xray.location.cert"`
+	UseReadV         *string `json:"xray.buf.readv"`
+	UseFreedomSplice *string `json:"xray.buf.splice"`
+	UseVmessPadding  *string `json:"xray.vmess.padding"`
+	UseCone          *string `json:"xray.cone.disabled"`
+	BufferSize       *string `json:"xray.ray.buffer.size"`
+	BrowserDialer    *string `json:"xray.browser.dialer"`
+	XUDPLog          *string `json:"xray.xudp.show"`
+	XUDPBaseKey      *string `json:"xray.xudp.basekey"`
+	TunFd            *string `json:"xray.tun.fd"`
+}
+
+func (c *EnvConfig) Override(o *EnvConfig) {
+	if o == nil {
+		return
+	}
+	if o.AssetLocation != nil {
+		c.AssetLocation = o.AssetLocation
+	}
+	if o.CertLocation != nil {
+		c.CertLocation = o.CertLocation
+	}
+	if o.UseReadV != nil {
+		c.UseReadV = o.UseReadV
+	}
+	if o.UseFreedomSplice != nil {
+		c.UseFreedomSplice = o.UseFreedomSplice
+	}
+	if o.UseVmessPadding != nil {
+		c.UseVmessPadding = o.UseVmessPadding
+	}
+	if o.UseCone != nil {
+		c.UseCone = o.UseCone
+	}
+	if o.BufferSize != nil {
+		c.BufferSize = o.BufferSize
+	}
+	if o.BrowserDialer != nil {
+		c.BrowserDialer = o.BrowserDialer
+	}
+	if o.XUDPLog != nil {
+		c.XUDPLog = o.XUDPLog
+	}
+	if o.XUDPBaseKey != nil {
+		c.XUDPBaseKey = o.XUDPBaseKey
+	}
+	if o.TunFd != nil {
+		c.TunFd = o.TunFd
+	}
+}
+
+func (c *EnvConfig) Settings() []platform.EnvSetting {
+	if c == nil {
+		return nil
+	}
+	settings := make([]platform.EnvSetting, 0, 11)
+	appendEnvSetting := func(key string, value *string) {
+		if value == nil {
+			return
+		}
+		settings = append(settings, platform.EnvSetting{
+			Key:   key,
+			Value: *value,
+		})
+	}
+	appendEnvSetting(platform.AssetLocation, c.AssetLocation)
+	appendEnvSetting(platform.CertLocation, c.CertLocation)
+	appendEnvSetting(platform.UseReadV, c.UseReadV)
+	appendEnvSetting(platform.UseFreedomSplice, c.UseFreedomSplice)
+	appendEnvSetting(platform.UseVmessPadding, c.UseVmessPadding)
+	appendEnvSetting(platform.UseCone, c.UseCone)
+	appendEnvSetting(platform.BufferSize, c.BufferSize)
+	appendEnvSetting(platform.BrowserDialerAddress, c.BrowserDialer)
+	appendEnvSetting(platform.XUDPLog, c.XUDPLog)
+	appendEnvSetting(platform.XUDPBaseKey, c.XUDPBaseKey)
+	appendEnvSetting(platform.TunFdKey, c.TunFd)
+	return settings
+}
+
 type Config struct {
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
 	Transport map[string]json.RawMessage `json:"transport"`
 
-	Env              map[string]string       `json:"env"`
+	Env              *EnvConfig              `json:"env"`
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
 	DNSConfig        *DNSConfig              `json:"dns"`
@@ -406,11 +487,9 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	if o.Env != nil {
 		if c.Env == nil {
-			c.Env = map[string]string{}
+			c.Env = &EnvConfig{}
 		}
-		for key, value := range o.Env {
-			c.Env[key] = value
-		}
+		c.Env.Override(o.Env)
 	}
 	if o.Policy != nil {
 		c.Policy = o.Policy
@@ -487,7 +566,7 @@ func (c *Config) Override(o *Config, fn string) {
 
 // Build implements Buildable.
 func (c *Config) Build() (*core.Config, error) {
-	if err := platform.ApplyConfigEnvSettings(c.Env); err != nil {
+	if err := platform.ApplyConfigEnvSettings(c.Env.Settings()); err != nil {
 		return nil, errors.New("failed to apply environment configuration").Base(err)
 	}
 

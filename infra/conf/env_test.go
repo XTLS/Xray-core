@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -33,6 +34,10 @@ func restoreEnvKeys(t *testing.T, keys ...string) {
 	})
 }
 
+func envString(value string) *string {
+	return &value
+}
+
 func TestRootEnvOverridesExternalReloadableEnv(t *testing.T) {
 	restoreEnvKeys(t, platform.XUDPLog)
 	_ = os.Setenv(platform.XUDPLog, "false")
@@ -44,8 +49,8 @@ func TestRootEnvOverridesExternalReloadableEnv(t *testing.T) {
 	}
 
 	_, err := (&Config{
-		Env: map[string]string{
-			platform.XUDPLog: "true",
+		Env: &EnvConfig{
+			XUDPLog: envString("true"),
 		},
 	}).Build()
 	if err != nil {
@@ -58,16 +63,23 @@ func TestRootEnvOverridesExternalReloadableEnv(t *testing.T) {
 
 func TestRootEnvIgnoresPreloadAndUnknownKeys(t *testing.T) {
 	const unknownKey = "XRAY_TEST_UNKNOWN_ROOT_ENV"
-	restoreEnvKeys(t, platform.UseStrictJSON, platform.ConfigLocation, platform.ConfdirLocation, unknownKey)
+	restoreEnvKeys(t, platform.UseStrictJSON, platform.ConfigLocation, platform.ConfdirLocation, platform.XUDPLog, unknownKey)
 
-	_, err := (&Config{
-		Env: map[string]string{
-			platform.UseStrictJSON:   "true",
-			platform.ConfigLocation:  "/tmp/root-env-config",
-			platform.ConfdirLocation: "/tmp/root-env-confdir",
-			unknownKey:               "unknown-value",
-		},
-	}).Build()
+	var config Config
+	err := json.Unmarshal([]byte(`{
+		"env": {
+			"xray.json.strict": "true",
+			"xray.location.config": "/tmp/root-env-config",
+			"xray.location.confdir": "/tmp/root-env-confdir",
+			"xray.xudp.show": "true",
+			"XRAY_TEST_UNKNOWN_ROOT_ENV": "unknown-value"
+		}
+	}`), &config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = config.Build()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,21 +93,21 @@ func TestRootEnvIgnoresPreloadAndUnknownKeys(t *testing.T) {
 
 func TestRootEnvMergeOverride(t *testing.T) {
 	config := &Config{
-		Env: map[string]string{
-			platform.AssetLocation: "first-asset",
-			platform.XUDPLog:       "false",
+		Env: &EnvConfig{
+			AssetLocation: envString("first-asset"),
+			XUDPLog:       envString("false"),
 		},
 	}
 	config.Override(&Config{
-		Env: map[string]string{
-			platform.XUDPLog: "true",
+		Env: &EnvConfig{
+			XUDPLog: envString("true"),
 		},
 	}, "tail.json")
 
-	if got := config.Env[platform.AssetLocation]; got != "first-asset" {
+	if got := *config.Env.AssetLocation; got != "first-asset" {
 		t.Fatalf("asset env = %q", got)
 	}
-	if got := config.Env[platform.XUDPLog]; got != "true" {
+	if got := *config.Env.XUDPLog; got != "true" {
 		t.Fatalf("xudp log env = %q", got)
 	}
 }
@@ -111,8 +123,8 @@ func TestRootEnvEmptyValueDoesNotUnset(t *testing.T) {
 	}
 
 	_, err := (&Config{
-		Env: map[string]string{
-			platform.XUDPLog: "",
+		Env: &EnvConfig{
+			XUDPLog: envString(""),
 		},
 	}).Build()
 	if err != nil {
@@ -127,8 +139,8 @@ func TestRootEnvInvalidXUDPBaseKeyReturnsConfigError(t *testing.T) {
 	restoreEnvKeys(t, platform.XUDPBaseKey)
 
 	_, err := (&Config{
-		Env: map[string]string{
-			platform.XUDPBaseKey: "invalid",
+		Env: &EnvConfig{
+			XUDPBaseKey: envString("invalid"),
 		},
 	}).Build()
 	if err == nil {

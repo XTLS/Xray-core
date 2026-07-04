@@ -40,6 +40,11 @@ func ReloadEnvSettings() error {
 	return errors.Join(errs...)
 }
 
+type EnvSetting struct {
+	Key   string
+	Value string
+}
+
 var configEnvKeys = map[string]struct{}{
 	AssetLocation:        {},
 	CertLocation:         {},
@@ -58,15 +63,15 @@ var configEnvKeys = map[string]struct{}{
 // declared inside an already parsed Xray config. Pre-load keys such as
 // xray.json.strict, xray.location.config and xray.location.confdir are
 // intentionally excluded.
-func ApplyConfigEnvSettings(values map[string]string) error {
-	for key, value := range values {
-		if value == "" {
+func ApplyConfigEnvSettings(settings []EnvSetting) error {
+	for _, setting := range settings {
+		if setting.Value == "" {
 			continue
 		}
-		if _, ok := configEnvKeys[key]; !ok {
+		if _, ok := configEnvKeys[setting.Key]; !ok {
 			continue
 		}
-		if err := os.Setenv(key, value); err != nil {
+		if err := os.Setenv(setting.Key, setting.Value); err != nil {
 			return err
 		}
 	}
