@@ -77,12 +77,10 @@ type simpleConn struct {
 }
 
 func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
-	conn := &simpleConn{
+	return &simpleConn{
 		PacketConn: raw,
 		aead:       &simple{},
-	}
-
-	return conn, nil
+	}, nil
 }
 
 func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
@@ -96,14 +94,12 @@ func (c *simpleConn) Size() int {
 func (c *simpleConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	_, err = c.aead.Open(p[:0], nil, p, nil)
 	if err != nil {
-		return 0, addr, errors.New("aead open").Base(err)
+		return 0, nil, err
 	}
-
-	return len(p) - c.aead.Overhead(), addr, nil
+	return len(p) - c.aead.Overhead(), nil, nil
 }
 
 func (c *simpleConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	_ = c.aead.Seal(p[:0], nil, p[c.aead.Overhead():], nil)
-
 	return len(p), nil
 }

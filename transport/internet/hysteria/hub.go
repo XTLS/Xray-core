@@ -58,7 +58,7 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 
 		var user *protocol.MemoryUser
 		var ok bool
-		if h.validator != nil && h.validator.GetCount() > 0 {
+		if h.validator != nil && h.validator.NotEmpty() {
 			user = h.validator.Get(auth)
 		} else if h.config.Auth != "" {
 			ok = auth == h.config.Auth
@@ -309,7 +309,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 
 	tr := &quic.Transport{Conn: pktConn}
 
-	listener, err := tr.Listen(tlsConfig.GetTLSConfig(), quicConfig)
+	listener, err := tr.Listen(tlsConfig.GetTLSConfig(tls.WithNextProto("h3")), quicConfig)
 	if err != nil {
 		_ = tr.Close()
 		_ = pktConn.Close()

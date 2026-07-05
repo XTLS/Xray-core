@@ -21,8 +21,10 @@ func init() {
 	cmdX25519.Run = executeX25519 // break init loop
 }
 
-var input_stdEncoding = cmdX25519.Flag.Bool("std-encoding", false, "")
-var input_x25519 = cmdX25519.Flag.String("i", "", "")
+var (
+	input_stdEncoding = cmdX25519.Flag.Bool("std-encoding", false, "")
+	input_x25519      = cmdX25519.Flag.String("i", "", "")
+)
 
 func executeX25519(cmd *base.Command, args []string) {
 	Curve25519Genkey(false, *input_x25519)

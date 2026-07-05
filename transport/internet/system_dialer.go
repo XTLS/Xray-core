@@ -12,9 +12,11 @@ import (
 	"github.com/xtls/xray-core/features/outbound"
 )
 
-var Controllers []func(network, address string, c syscall.RawConn) error
-var ControllersLock sync.Mutex
-var effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
+var (
+	Controllers           []func(network, address string, c syscall.RawConn) error
+	ControllersLock       sync.Mutex
+	effectiveSystemDialer SystemDialer = &DefaultSystemDialer{}
+)
 
 type SystemDialer interface {
 	Dial(ctx context.Context, source net.Address, destination net.Destination, sockopt *SocketConfig) (net.Conn, error)

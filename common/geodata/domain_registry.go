@@ -6,12 +6,14 @@ import (
 	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/common/uuid"
 )
 
 type DomainRegistry struct {
 	mu       sync.Mutex
 	factory  DomainMatcherFactory
-	matchers []*DynamicDomainMatcher
+	matchers *utils.WeakCacheMap[uuid.UUID, DynamicDomainMatcher]
 }
 
 func (r *DomainRegistry) BuildDomainMatcher(rules []*DomainRule) (DomainMatcher, error) {
@@ -24,7 +26,7 @@ func (r *DomainRegistry) BuildDomainMatcher(rules []*DomainRule) (DomainMatcher,
 	}
 
 	d := NewDynamicDomainMatcher(rules, m)
-	r.matchers = append(r.matchers, d)
+	r.matchers.Store(uuid.New(), d)
 	return d, nil
 }
 
@@ -32,15 +34,20 @@ func (r *DomainRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	errors.LogInfo(context.Background(), "reloading GeoSite data for ", len(r.matchers), " domain matcher(s)")
+	var matchers []*DynamicDomainMatcher
+	r.matchers.Range(func(_ uuid.UUID, matcher *DynamicDomainMatcher) bool {
+		matchers = append(matchers, matcher)
+		return true
+	})
+	errors.LogInfo(context.Background(), "reloading GeoSite data for ", len(matchers), " domain matcher(s)")
 
 	factory := newDomainMatcherFactory()
 	type reloadEntry struct {
 		dynamic *DynamicDomainMatcher
 		matcher DomainMatcher
 	}
-	reloaded := make([]reloadEntry, len(r.matchers))
-	for i, d := range r.matchers {
+	reloaded := make([]reloadEntry, len(matchers))
+	for i, d := range matchers {
 		m, err := factory.BuildMatcher(d.rules)
 		if err != nil {
 			errors.LogErrorInner(context.Background(), err, "failed to reload GeoSite data for domain matcher ", i)
@@ -52,13 +59,14 @@ func (r *DomainRegistry) Reload() error {
 		entry.dynamic.Reload(entry.matcher)
 	}
 	r.factory = factory
-	errors.LogInfo(context.Background(), "reloaded GeoSite data for ", len(r.matchers), " domain matcher(s)")
+	errors.LogInfo(context.Background(), "reloaded GeoSite data for ", len(matchers), " domain matcher(s)")
 	return nil
 }
 
 func newDomainRegistry() *DomainRegistry {
 	return &DomainRegistry{
-		factory: newDomainMatcherFactory(),
+		factory:  newDomainMatcherFactory(),
+		matchers: utils.NewWeakCacheMap[uuid.UUID, DynamicDomainMatcher](),
 	}
 }
 

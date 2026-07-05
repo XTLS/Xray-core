@@ -372,7 +372,6 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 							{
 								ProtocolName: "hysteria",
 								Settings: serial.ToTypedMessage(&hytransport.Config{
-									Version:        2,
 									Auth:           auth,
 									UdpIdleTimeout: 60,
 								}),
@@ -421,7 +420,6 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&hyproxy.ClientConfig{
-					Version: 2,
 					Server: &protocol.ServerEndpoint{
 						Address: xnet.NewIPOrDomain(xnet.LocalHostIP),
 						Port:    uint32(relayPort),
@@ -437,7 +435,6 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 							{
 								ProtocolName: "hysteria",
 								Settings: serial.ToTypedMessage(&hytransport.Config{
-									Version:        2,
 									Auth:           auth,
 									UdpIdleTimeout: 60,
 								}),
@@ -934,7 +931,8 @@ func cloneConfig(cfg *Config) *Config {
 }
 
 func defaultApps(cfg *core.Config) *core.Config {
-	cfg.App = append(cfg.App,
+	cfg.App = append(
+		cfg.App,
 		serial.ToTypedMessage(&log.Config{
 			ErrorLogLevel: clog.Severity_Warning,
 			ErrorLogType:  log.LogType_Console,

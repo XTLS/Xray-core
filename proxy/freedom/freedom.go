@@ -30,10 +30,12 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
-var useSplice bool
-var allNetworks [8]bool
-var defaultBlockPrivateRule *FinalRule
-var defaultBlockAllRule *FinalRule
+var (
+	useSplice               bool
+	allNetworks             [8]bool
+	defaultBlockPrivateRule *FinalRule
+	defaultBlockAllRule     *FinalRule
+)
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
@@ -677,7 +679,7 @@ type NoisePacketWriter struct {
 func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if w.firstWrite {
 		w.firstWrite = false
-		//Do not send Noise for dns requests(just to be safe)
+		// Do not send Noise for dns requests(just to be safe)
 		if w.UDPOverride.Port == 53 {
 			return w.Writer.WriteMultiBuffer(mb)
 		}
@@ -700,11 +702,11 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			default:
 				panic("unreachable, applyTo is ip/ipv4/ipv6")
 			}
-			//User input string or base64 encoded string or hex string
+			// User input string or base64 encoded string or hex string
 			if n.Packet != nil {
 				noise = n.Packet
 			} else {
-				//Random noise
+				// Random noise
 				noise, err = GenerateRandomBytes(crypto.RandBetween(int64(n.LengthMin),
 					int64(n.LengthMax)))
 			}

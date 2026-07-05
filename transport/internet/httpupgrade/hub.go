@@ -80,24 +80,12 @@ func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
 		return nil, err
 	}
 
-	var forwardedAddrs []net.Address
-	if s.socketSettings != nil && len(s.socketSettings.TrustedXForwardedFor) > 0 {
-		for _, key := range s.socketSettings.TrustedXForwardedFor {
-			if len(req.Header.Values(key)) > 0 {
-				forwardedAddrs = http_proto.ParseXForwardedFor(req.Header)
-				break
-			}
-		}
-	} else {
-		forwardedAddrs = http_proto.ParseXForwardedFor(req.Header)
-	}
 	remoteAddr := conn.RemoteAddr()
-	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
-		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddrs[0].IP(),
-			Port: int(0),
-		}
+	var trustedXFF []string
+	if s.socketSettings != nil {
+		trustedXFF = s.socketSettings.TrustedXForwardedFor
 	}
+	remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 
 	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }

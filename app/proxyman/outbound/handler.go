@@ -6,7 +6,6 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
-	"os"
 
 	"github.com/xtls/xray-core/common/dice"
 
@@ -104,7 +103,9 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 
 	ctx = session.ContextWithFullHandler(ctx, h)
 
-	rawProxyHandler, err := common.CreateObject(ctx, proxyConfig)
+	newCtx := session.ContextWithStreamSettings(ctx, h.streamSettings)
+
+	rawProxyHandler, err := common.CreateObject(newCtx, proxyConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -284,10 +285,6 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 		h.SetOutboundGateway(ctx, ob)
 	}
 
-	if conn, err := h.getUoTConnection(ctx, dest); err != os.ErrInvalid {
-		return conn, err
-	}
-
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	conn = h.getStatCouterConnection(conn)
 	outbounds := session.OutboundsFromContext(ctx)
@@ -367,7 +364,6 @@ func (h *Handler) ProxySettings() *serial.TypedMessage {
 }
 
 func ParseRandomIP(addr net.Address, prefix string) net.Address {
-
 	_, ipnet, _ := net.ParseCIDR(addr.IP().String() + "/" + prefix)
 
 	ones, bits := ipnet.Mask.Size()

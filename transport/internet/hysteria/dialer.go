@@ -126,6 +126,8 @@ func (c *client) dial(ctx context.Context) error {
 		switch c := conn.(type) {
 		case *internet.PacketConnWrapper:
 			pktConn = c.PacketConn
+		case *cnc.Connection:
+			pktConn = &internet.FakePacketConn{Conn: c}
 		default:
 			panic(reflect.TypeOf(c))
 		}
@@ -135,36 +137,30 @@ func (c *client) dial(ctx context.Context) error {
 
 	var pktConn net.PacketConn
 	var udpAddr *net.UDPAddr
+	var index int
+
 	if len(quicParams.UdpHop.Ports) > 0 {
-		index := rand.Intn(len(quicParams.UdpHop.Ports))
+		index = rand.Intn(len(quicParams.UdpHop.Ports))
 		c.dest.Port = net.Port(quicParams.UdpHop.Ports[index])
-		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
-		if err != nil {
-			return errors.New("failed to dial to dest").Base(err)
-		}
-		switch c := conn.(type) {
-		case *internet.PacketConnWrapper:
-			pktConn = c.PacketConn
-			udpAddr = conn.RemoteAddr().(*net.UDPAddr)
-		default:
-			panic(reflect.TypeOf(c))
-		}
+	}
+
+	raw, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
+	if err != nil {
+		return errors.New("failed to dial to dest").Base(err)
+	}
+	switch c := raw.(type) {
+	case *internet.PacketConnWrapper:
+		pktConn = c.PacketConn
+		udpAddr = raw.RemoteAddr().(*net.UDPAddr)
+	case *cnc.Connection:
+		pktConn = &internet.FakePacketConn{Conn: c}
+		udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
+	default:
+		panic(reflect.TypeOf(c))
+	}
+
+	if len(quicParams.UdpHop.Ports) > 0 {
 		pktConn = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer, pktConn, index)
-	} else {
-		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
-		if err != nil {
-			return errors.New("failed to dial to dest").Base(err)
-		}
-		switch c := conn.(type) {
-		case *internet.PacketConnWrapper:
-			pktConn = c.PacketConn
-			udpAddr = c.RemoteAddr().(*net.UDPAddr)
-		case *cnc.Connection:
-			pktConn = &internet.FakePacketConn{Conn: c}
-			udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
-		default:
-			panic(reflect.TypeOf(c))
-		}
 	}
 
 	if c.udpmaskManager != nil {
@@ -317,8 +313,10 @@ func (m *clientManager) clean() {
 	}
 }
 
-var manager *clientManager
-var initmanager sync.Once
+var (
+	manager     *clientManager
+	initmanager sync.Once
+)
 
 func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)

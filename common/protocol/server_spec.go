@@ -5,8 +5,8 @@ import (
 )
 
 type ServerSpec struct {
-	Destination  net.Destination
-	User         *MemoryUser
+	Destination net.Destination
+	User        *MemoryUser
 }
 
 func NewServerSpec(dest net.Destination, user *MemoryUser) *ServerSpec {

@@ -27,7 +27,6 @@ func TestMashalAccount(t *testing.T) {
 
 	j, ok := MarshalToJson(user, false)
 	if !ok || strings.Contains(j, "_TypedMessage_") {
-
 		t.Error("marshal account failed")
 	}
 
@@ -79,13 +78,12 @@ func TestMashalStruct(t *testing.T) {
 
 	v := (*f2.Arr)[0]["foo"]["hello"]
 
-	if f1.N != f2.N || *(f1.Np) != *(f2.Np) || f1.S != f2.S || v != "world" {
+	if f1.N != f2.N || *f1.Np != *f2.Np || f1.S != f2.S || v != "world" {
 		t.Error("f1 not equal to f2")
 	}
 }
 
 func TestMarshalConfigJson(t *testing.T) {
-
 	buf := bytes.NewBufferString(getConfig())
 	config, err := iserial.DecodeJSONConfig(buf)
 	if err != nil {

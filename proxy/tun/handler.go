@@ -2,6 +2,8 @@ package tun
 
 import (
 	"context"
+	"net/netip"
+	"strings"
 	"syscall"
 
 	"github.com/xtls/xray-core/common"
@@ -15,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -30,6 +33,8 @@ type Handler struct {
 	dispatcher      routing.Dispatcher
 	tag             string
 	sniffingRequest session.SniffingRequest
+	uplinkCounter   stats.Counter
+	downlinkCounter stats.Counter
 }
 
 // ConnectionHandler interface with the only method that stack is going to push new connections to
@@ -40,10 +45,11 @@ type ConnectionHandler interface {
 // Handler implements ConnectionHandler
 var _ ConnectionHandler = (*Handler)(nil)
 
+// Handler implements common.Runnable
+var _ common.Runnable = (*Handler)(nil)
+
 // Init the Handler instance with necessary parameters
 func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routing.Dispatcher) error {
-	var err error
-
 	// Retrieve tag and sniffing config from context (set by AlwaysOnInboundHandler)
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		t.tag = inbound.Tag
@@ -56,6 +62,27 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	t.policyManager = pm
 	t.dispatcher = dispatcher
 
+	if len(t.tag) > 0 && pm.ForSystem().Stats.InboundUplink {
+		statsManager := core.MustFromContext(ctx).GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + t.tag + ">>>traffic>>>uplink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			t.uplinkCounter = c
+		}
+	}
+	if len(t.tag) > 0 && pm.ForSystem().Stats.InboundDownlink {
+		statsManager := core.MustFromContext(ctx).GetFeature(stats.ManagerType()).(stats.Manager)
+		name := "inbound>>>" + t.tag + ">>>traffic>>>downlink"
+		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		if c != nil {
+			t.downlinkCounter = c
+		}
+	}
+
+	return nil
+}
+
+func (t *Handler) Start() error {
 	tunName := t.config.Name
 	tunInterface, err := NewTun(t.config)
 	if err != nil {
@@ -80,6 +107,11 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 				return nil
 			}
 			return c.Control(func(fd uintptr) {
+				addrPort, _ := netip.ParseAddrPort(address)
+				// skip loopback
+				if addrPort.Addr().IsLoopback() || strings.HasPrefix(strings.ToLower(address), "localhost:") {
+					return
+				}
 				err := setinterface(network, address, fd, iface)
 				if err != nil {
 					errors.LogInfoInner(context.Background(), err, "[tun] falied to set interface")
@@ -92,7 +124,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 
 	tunStackOptions := StackOptions{
 		Tun:         tunInterface,
-		IdleTimeout: pm.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+		IdleTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
 	}
 	tunStack, err := NewStack(t.ctx, tunStackOptions, t)
 	if err != nil {
@@ -131,7 +163,22 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 	defer cancel()
 	ctx = c.ContextWithID(ctx, session.NewID())
 
-	source := net.DestinationFromAddr(conn.RemoteAddr())
+	// if the connection is already closed, conn.RemoteAddr() will be nil
+	// due to gvisor weird behavior
+	remote := conn.RemoteAddr()
+	if remote == nil {
+		errors.LogInfo(t.ctx, "dropped quickly closed connection")
+		return
+	}
+	source := net.DestinationFromAddr(remote)
+	if t.uplinkCounter != nil || t.downlinkCounter != nil {
+		conn = &stat.CounterConnection{
+			Connection:   conn,
+			ReadCounter:  t.uplinkCounter,
+			WriteCounter: t.downlinkCounter,
+		}
+	}
+
 	inbound := session.Inbound{
 		Name:          "tun",
 		Tag:           t.tag,
@@ -167,7 +214,7 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 
 // Close implements common.Closable.
 func (t *Handler) Close() error {
-	return errors.Combine(t.stack.Close(), t.tun.Close())
+	return errors.Combine(common.CloseIfExists(t.stack), common.CloseIfExists(t.tun))
 }
 
 // Network implements proxy.Inbound

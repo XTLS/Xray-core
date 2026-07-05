@@ -2,7 +2,6 @@ package finalmask_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -10,17 +9,11 @@ import (
 	"testing"
 	"time"
 
-	singM "github.com/sagernet/sing/common/metadata"
-	singN "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/dns"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/srtp"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/utp"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/wechat"
-	"github.com/xtls/xray-core/transport/internet/finalmask/header/wireguard"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
+	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
@@ -127,36 +120,19 @@ func (c *scriptedPacketConn) SetDeadline(t time.Time) error {
 	c.deadline.Store(t.UnixNano())
 	return nil
 }
+
 func (c *scriptedPacketConn) SetReadDeadline(t time.Time) error {
 	c.deadline.Store(t.UnixNano())
 	return nil
 }
+
 func (c *scriptedPacketConn) SetWriteDeadline(t time.Time) error {
 	c.deadline.Store(t.UnixNano())
 	return nil
 }
 
-type captureUDPHandler struct {
-	gotMetadata chan singM.Metadata
-}
-
-func (h *captureUDPHandler) NewConnection(_ context.Context, _ net.Conn, _ singM.Metadata) error {
-	return nil
-}
-
-func (h *captureUDPHandler) NewPacketConnection(_ context.Context, _ singN.PacketConn, metadata singM.Metadata) error {
-	select {
-	case h.gotMetadata <- metadata:
-	default:
-	}
-	return nil
-}
-
-func (h *captureUDPHandler) NewError(_ context.Context, _ error) {}
-
-func newStandaloneEchoUDPConfig() *custom.UDPConfig {
-	return &custom.UDPConfig{
-		Mode: "standalone",
+func newStandaloneEchoUDPConfig() *custom.UDPStandaloneConfig {
+	return &custom.UDPStandaloneConfig{
 		Client: []*custom.UDPItem{
 			{Packet: []byte{0xAA}},
 			{Rand: 2, Save: "txid"},
@@ -168,9 +144,8 @@ func newStandaloneEchoUDPConfig() *custom.UDPConfig {
 	}
 }
 
-func newStandaloneStunLikeUDPConfig() *custom.UDPConfig {
-	return &custom.UDPConfig{
-		Mode: "standalone",
+func newStandaloneStunLikeUDPConfig() *custom.UDPStandaloneConfig {
+	return &custom.UDPStandaloneConfig{
 		Client: []*custom.UDPItem{
 			{Packet: []byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}},
 			{Rand: 12, RandMin: 0x2A, RandMax: 0x2A, Save: "txid"},
@@ -185,9 +160,8 @@ func newStandaloneStunLikeUDPConfig() *custom.UDPConfig {
 	}
 }
 
-func newStandaloneStunLikeUDPServerConfig() *custom.UDPConfig {
-	return &custom.UDPConfig{
-		Mode: "standalone",
+func newStandaloneStunLikeUDPServerConfig() *custom.UDPStandaloneConfig {
+	return &custom.UDPStandaloneConfig{
 		Client: []*custom.UDPItem{
 			{Packet: []byte{0x00, 0x01, 0x00, 0x00, 0x21, 0x12, 0xA4, 0x42}},
 			{Rand: 12, RandMin: 0x2A, RandMax: 0x2A, Save: "txid"},
@@ -236,7 +210,7 @@ func newStandaloneStunLikeUDPServerConfig() *custom.UDPConfig {
 	}
 }
 
-func newUDPClientServerPair(t *testing.T, cfg *custom.UDPConfig) (net.PacketConn, net.PacketConn, net.PacketConn, net.PacketConn) {
+func newUDPClientServerPair(t *testing.T, cfg *custom.UDPStandaloneConfig) (net.PacketConn, net.PacketConn, net.PacketConn, net.PacketConn) {
 	t.Helper()
 
 	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -279,27 +253,32 @@ func TestPacketConnReadWrite(t *testing.T) {
 		},
 		{
 			name:   "dns",
-			mask:   &dns.Config{Domain: "www.baidu.com"},
+			mask:   &header.Config{ID: 0, Domain: "www.baidu.com"},
+			layers: 2,
+		},
+		{
+			name:   "dtls",
+			mask:   &header.Config{ID: 1},
 			layers: 2,
 		},
 		{
 			name:   "srtp",
-			mask:   &srtp.Config{},
+			mask:   &header.Config{ID: 2},
 			layers: 2,
 		},
 		{
 			name:   "utp",
-			mask:   &utp.Config{},
+			mask:   &header.Config{ID: 3},
 			layers: 2,
 		},
 		{
 			name:   "wechat",
-			mask:   &wechat.Config{},
+			mask:   &header.Config{ID: 4},
 			layers: 2,
 		},
 		{
 			name:   "wireguard",
-			mask:   &wireguard.Config{},
+			mask:   &header.Config{ID: 5},
 			layers: 2,
 		},
 		{
@@ -462,50 +441,6 @@ func TestUDPcustomStaticHeaderWireShape(t *testing.T) {
 	}
 	if !bytes.Equal(buf[4:n], payload) {
 		t.Fatalf("unexpected payload: %q", buf[4:n])
-	}
-}
-
-func TestUDPcustomServerRejectsMismatchedStaticHeader(t *testing.T) {
-	cfg := &custom.UDPConfig{
-		Client: []*custom.UDPItem{
-			{Packet: []byte{0x01, 0x02}},
-		},
-		Server: []*custom.UDPItem{
-			{Packet: []byte{0x03}},
-		},
-	}
-	maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{cfg})
-
-	clientRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clientRaw.Close()
-
-	serverRaw, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer serverRaw.Close()
-
-	server, err := maskManager.WrapPacketConnServer(serverRaw)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_ = server.SetDeadline(time.Now().Add(200 * time.Millisecond))
-
-	if _, err := clientRaw.WriteTo([]byte{0x09, 0x09, 'b', 'a', 'd'}, server.LocalAddr()); err != nil {
-		t.Fatal(err)
-	}
-
-	buf := make([]byte, 128)
-	n, _, err := server.ReadFrom(buf)
-	if n != 0 {
-		t.Fatalf("expected no payload on mismatched header, got %d bytes", n)
-	}
-	if err != nil {
-		t.Fatalf("expected mismatch to be dropped without surfaced error, got %v", err)
 	}
 }
 

@@ -224,9 +224,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-var (
-	enablePadding = false
-)
+var enablePadding = false
 
 func shouldEnablePadding(s protocol.SecurityType) bool {
 	return enablePadding || s == protocol.SecurityType_AES128_GCM || s == protocol.SecurityType_CHACHA20_POLY1305 || s == protocol.SecurityType_AUTO

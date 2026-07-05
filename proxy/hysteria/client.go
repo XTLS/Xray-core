@@ -29,6 +29,13 @@ type Client struct {
 }
 
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
+	v := core.MustFromContext(ctx)
+	p := v.GetFeature(policy.ManagerType()).(policy.Manager)
+
+	streamSettings := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
+	if _, ok := streamSettings.ProtocolSettings.(*hysteria.Config); !ok {
+		return nil, errors.New("not hysteria transport")
+	}
 	if config.Server == nil {
 		return nil, errors.New(`no target server found`)
 	}
@@ -37,12 +44,10 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
-	v := core.MustFromContext(ctx)
-	client := &Client{
+	return &Client{
 		server:        server,
-		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-	}
-	return client, nil
+		policyManager: p,
+	}, nil
 }
 
 func (c *Client) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
