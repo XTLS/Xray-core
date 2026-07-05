@@ -300,6 +300,13 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
 
+	if _, ok := ts.(*freedom.Config); ok &&
+		senderSettings.StreamSettings != nil &&
+		senderSettings.StreamSettings.SocketSettings != nil &&
+		senderSettings.StreamSettings.SocketSettings.AddressPortStrategy != internet.AddressPortStrategy_None {
+		return nil, errors.New(`freedom outbound does not support "sockopt.addressPortStrategy"`)
+	}
+
 	if fc, ok := ts.(*freedom.Config); ok && fc.DomainStrategy != internet.DomainStrategy_AS_IS {
 		errors.PrintDeprecatedFeatureWarning("freedom.domainStrategy", "sockopt.domainStrategy or targetStrategy")
 		if senderSettings.StreamSettings == nil {
