@@ -41,8 +41,8 @@ func init() {
 		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithResolveStrategy); ok {
 			h.resolveStrategy = handler.ResolveStrategy()
 		}
-		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithProxySettings); ok {
-			h.usesProxySettings = handler.UsesProxySettings()
+		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithDialerProxy); ok {
+			h.usesDialerProxy = handler.UsesDialerProxy()
 		}
 		if err := core.RequireFeatures(ctx, func(pm policy.Manager) error {
 			return h.Init(config.(*Config), pm)
@@ -98,8 +98,8 @@ type handlerWithResolveStrategy interface {
 	ResolveStrategy() internet.DomainStrategy
 }
 
-type handlerWithProxySettings interface {
-	UsesProxySettings() bool
+type handlerWithDialerProxy interface {
+	UsesDialerProxy() bool
 }
 
 type FinalRule struct {
@@ -112,11 +112,11 @@ type FinalRule struct {
 
 // Handler handles Freedom connections.
 type Handler struct {
-	policyManager     policy.Manager
-	config            *Config
-	finalRules        []*FinalRule
-	resolveStrategy   internet.DomainStrategy
-	usesProxySettings bool
+	policyManager   policy.Manager
+	config          *Config
+	finalRules      []*FinalRule
+	resolveStrategy internet.DomainStrategy
+	usesDialerProxy bool
 }
 
 func buildFinalRule(config *FinalRuleConfig) (*FinalRule, error) {
@@ -361,7 +361,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return h.blackhole(ctx, input, output, blockedRule, blockedDest)
 	}
 	if destination.Address.Family().IsDomain() && (defaultRule != nil || len(h.finalRules) > 0) {
-		if h.usesProxySettings {
+		if h.usesDialerProxy {
 			errors.LogInfo(ctx, "skipping final rule check for proxied remote endpoint, original target: ", destination)
 		} else {
 			// SRV/TXT, lookup failed
