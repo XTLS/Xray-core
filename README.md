@@ -146,8 +146,6 @@
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
-- HarmonyOS
-  - [Hey](https://github.com/popsiclelmlm/Hey)
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
