@@ -44,6 +44,7 @@ func (p TransportProtocol) Build() (string, error) {
 type StreamConfig struct {
 	Address             *Address           `json:"address"`
 	Port                uint16             `json:"port"`
+	Method              *TransportProtocol `json:"method"`
 	Network             *TransportProtocol `json:"network"`
 	Security            string             `json:"security"`
 	FinalMask           *FinalMask         `json:"finalmask"`
@@ -69,6 +70,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 	}
 	if c.Address != nil {
 		config.Address = c.Address.Build()
+	}
+	if c.Method != nil {
+		c.Network = c.Method
 	}
 	if c.Network != nil {
 		protocol, err := c.Network.Build()
