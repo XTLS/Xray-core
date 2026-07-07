@@ -24,11 +24,11 @@ import (
 )
 
 const (
-	utunControlName = "com.apple.net.utun_control"
-	sysprotoControl = 2
-	gateway         = "169.254.10.1/30"
-	utunHeaderSize  = 4
-	UTUN_OPT_IFNAME = 2
+	utunControlName      = "com.apple.net.utun_control"
+	sysprotoControl      = 2
+	defaultDarwinGateway = "169.254.10.1/30"
+	utunHeaderSize       = 4
+	UTUN_OPT_IFNAME      = 2
 )
 
 const (
@@ -50,6 +50,7 @@ type DarwinTun struct {
 	routeMonitor     *os.File
 	routeMonitorOnce sync.Once
 	systemRoutes     []netip.Prefix
+	gateway          netip.Prefix
 }
 
 var (
@@ -85,7 +86,13 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
-	err = setup(options.Name, options.MTU)
+	gateway, err := selectDarwinGateway(options.Gateway)
+	if err != nil {
+		_ = tunFile.Close()
+		return nil, err
+	}
+
+	err = setup(options.Name, options.MTU, gateway)
 	if err != nil {
 		_ = tunFile.Close()
 		return nil, err
@@ -96,6 +103,7 @@ func NewTun(options *Config) (Tun, error) {
 		options: options,
 		tunFd:   int(tunFile.Fd()),
 		ownsFd:  true,
+		gateway: gateway,
 	}, nil
 }
 
@@ -281,22 +289,54 @@ func open(name string) (*os.File, error) {
 }
 
 // setup the interface by name
-func setup(name string, MTU uint32) error {
+func setup(name string, MTU uint32, gateway netip.Prefix) error {
 	if err := setMTU(name, MTU); err != nil {
 		return err
 	}
 
 	/*
 	 * Darwin routing require tunnel type interface to have local and remote address, to be routable.
-	 * To simplify inevitable task, assign the interface static ip address, which in current implementation
-	 * is just some random ip from link-local pool, allowing to not bother about existing routing intersection.
+	 * To simplify inevitable task, assign the interface static ip address.
 	 */
-	syntheticIP, _ := netip.ParsePrefix(gateway)
-	if err := setIPAddress(name, syntheticIP); err != nil {
+	if err := setIPAddress(name, gateway); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func selectDarwinGateway(configured []string) (netip.Prefix, error) {
+	if len(configured) == 0 {
+		return netip.ParsePrefix(defaultDarwinGateway)
+	}
+
+	for _, value := range configured {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			return netip.Prefix{}, xerrors.New("invalid macOS gateway ", value).Base(err)
+		}
+		if !prefix.Addr().Is4() {
+			continue
+		}
+		local, ok := nextDarwinLocalIPv4(prefix)
+		if !ok || !prefix.Contains(local) {
+			return netip.Prefix{}, xerrors.New("macOS gateway ", value, " must contain at least one usable local IPv4 address after the gateway address")
+		}
+		return prefix, nil
+	}
+
+	return netip.Prefix{}, xerrors.New("macOS gateway requires at least one IPv4 prefix")
+}
+
+func nextDarwinLocalIPv4(gateway netip.Prefix) (netip.Addr, bool) {
+	local4 := gateway.Addr().As4()
+	for i := len(local4) - 1; i >= 0; i-- {
+		local4[i]++
+		if local4[i] != 0 {
+			return netip.AddrFrom4(local4), true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 // setMTU sets MTU on the interface by given name
@@ -344,8 +384,11 @@ func setIPAddress(name string, gateway netip.Prefix) error {
 	defer unix.Close(socket4)
 
 	// assume local ip address is next one from the remote address
-	local4 := gateway.Addr().As4()
-	local4[3]++
+	local, ok := nextDarwinLocalIPv4(gateway)
+	if !ok || !gateway.Contains(local) {
+		return xerrors.New("macOS gateway ", gateway.String(), " must contain at least one usable local IPv4 address after the gateway address")
+	}
+	local4 := local.As4()
 
 	// fill the configuration for ipv4
 	ifReq4 := ifAliasReq4{
@@ -534,7 +577,7 @@ func (t *DarwinTun) setSystemRoutes() error {
 		return err
 	}
 	for _, destination := range routes {
-		if err := execDarwinRoute(unix.RTM_ADD, tunIndex, destination); err != nil {
+		if err := execDarwinRoute(unix.RTM_ADD, tunIndex, destination, t.gateway); err != nil {
 			_ = t.unsetSystemRoutes()
 			return xerrors.New("failed to add system route ", destination).Base(err)
 		}
@@ -551,7 +594,7 @@ func (t *DarwinTun) unsetSystemRoutes() error {
 	}
 	for i := len(t.systemRoutes) - 1; i >= 0; i-- {
 		destination := t.systemRoutes[i]
-		if err := execDarwinRoute(unix.RTM_DELETE, tunIndex, destination); err != nil && !errors.Is(err, unix.ESRCH) {
+		if err := execDarwinRoute(unix.RTM_DELETE, tunIndex, destination, t.gateway); err != nil && !errors.Is(err, unix.ESRCH) {
 			errs = append(errs, xerrors.New("failed to delete system route ", destination).Base(err))
 		}
 	}
@@ -606,7 +649,7 @@ func darwinProtectedDefaultRoutes(ipv4 bool) []netip.Prefix {
 	return routes
 }
 
-func execDarwinRoute(messageType int, interfaceIndex int, destination netip.Prefix) error {
+func execDarwinRoute(messageType int, interfaceIndex int, destination netip.Prefix, gateway netip.Prefix) error {
 	message := route.RouteMessage{
 		Type:    messageType,
 		Version: unix.RTM_VERSION,
@@ -618,11 +661,10 @@ func execDarwinRoute(messageType int, interfaceIndex int, destination netip.Pref
 	}
 
 	if destination.Addr().Is4() {
-		gatewayPrefix := netip.MustParsePrefix(gateway)
 		message.Addrs = []route.Addr{
 			unix.RTAX_DST:     &route.Inet4Addr{IP: destination.Addr().As4()},
 			unix.RTAX_NETMASK: &route.Inet4Addr{IP: prefixMask4(destination.Bits())},
-			unix.RTAX_GATEWAY: &route.Inet4Addr{IP: gatewayPrefix.Addr().As4()},
+			unix.RTAX_GATEWAY: &route.Inet4Addr{IP: gateway.Addr().As4()},
 		}
 	} else {
 		message.Flags &^= unix.RTF_GATEWAY
