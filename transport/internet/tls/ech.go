@@ -258,6 +258,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		if err != nil {
 			return nil, 0, errors.New("failed to parse udp dns server ", server, " for ECH: ", err)
 		}
+		// default port 53 if not specified
 		if udpServerURL.Port() == "" {
 			udpServerURL.Host = udpServerURL.Host + ":53"
 		}
