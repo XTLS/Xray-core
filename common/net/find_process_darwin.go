@@ -137,6 +137,7 @@ func darwinProcessSocketMatchLevel(pid int32, network string, srcAddr netip.Addr
 	}
 
 	bestLevel := darwinSocketNoMatch
+	info := make([]byte, darwinSocketFDInfoSize)
 	for fd := 0; fd+darwinProcFDInfoSize <= len(fds); fd += darwinProcFDInfoSize {
 		fdNumber := int32(darwinReadNativeUint32(fds[fd : fd+4]))
 		fdType := darwinReadNativeUint32(fds[fd+4 : fd+8])
@@ -144,7 +145,6 @@ func darwinProcessSocketMatchLevel(pid int32, network string, srcAddr netip.Addr
 			continue
 		}
 
-		info := make([]byte, darwinSocketFDInfoSize)
 		n, err := darwinProcPIDFDInfo(pid, fdNumber, darwinProcPIDFDSocketInfo, info)
 		if err != nil || n < darwinSocketInfoInSockOff+darwinInSockInfoSize {
 			continue
@@ -211,7 +211,7 @@ func darwinSocketInfoMatchLevel(info []byte, network string, srcAddr netip.Addr,
 	if !darwinPortMatches(localPort, srcPort) {
 		return darwinSocketNoMatch
 	}
-	localAddrMatches := darwinAddrMatches(info[darwinInSockInfoLAddrOff:darwinInSockInfoLAddrOff+16], srcAddr)
+	localAddrMatches := darwinAddrMatchesOrUnspecified(info[darwinInSockInfoLAddrOff:darwinInSockInfoLAddrOff+16], srcAddr)
 
 	foreignAddrRaw := info[darwinInSockInfoFAddrOff : darwinInSockInfoFAddrOff+16]
 	foreignPort := int32(darwinReadNativeUint32(info[darwinInSockInfoFPortOff : darwinInSockInfoFPortOff+4]))
@@ -257,8 +257,27 @@ func darwinAddrMatches(raw []byte, addr netip.Addr) bool {
 	return bytes.Equal(raw, ip[:])
 }
 
+func darwinAddrMatchesOrUnspecified(raw []byte, addr netip.Addr) bool {
+	if darwinAddrMatches(raw, addr) {
+		return true
+	}
+	if addr.Is4() {
+		return darwinBytesAreZero(raw[12:16])
+	}
+	return darwinBytesAreZero(raw)
+}
+
 func darwinEndpointIsZero(rawAddr []byte, port int32) bool {
-	return uint32(port) == 0 && bytes.Equal(rawAddr, make([]byte, 16))
+	return uint32(port) == 0 && darwinBytesAreZero(rawAddr)
+}
+
+func darwinBytesAreZero(raw []byte) bool {
+	for _, value := range raw {
+		if value != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func darwinReadNativeUint32(b []byte) uint32 {

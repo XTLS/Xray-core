@@ -193,6 +193,7 @@ func TestDarwinSocketInfoMatchLevelFallbacks(t *testing.T) {
 	dst := netip.MustParseAddr("203.0.113.10")
 	otherLocal := netip.MustParseAddr("192.168.1.10")
 	otherRemote := netip.MustParseAddr("198.51.100.10")
+	unspecifiedLocal := netip.MustParseAddr("0.0.0.0")
 
 	tests := []struct {
 		name      string
@@ -206,6 +207,20 @@ func TestDarwinSocketInfoMatchLevelFallbacks(t *testing.T) {
 			local:     src,
 			remote:    dst,
 			hasDst:    true,
+			wantLevel: darwinSocketExactMatch,
+		},
+		{
+			name:      "unspecified local with matching remote",
+			local:     unspecifiedLocal,
+			remote:    dst,
+			hasDst:    true,
+			wantLevel: darwinSocketExactMatch,
+		},
+		{
+			name:      "unspecified local without destination",
+			local:     unspecifiedLocal,
+			remote:    otherRemote,
+			hasDst:    false,
 			wantLevel: darwinSocketExactMatch,
 		},
 		{
