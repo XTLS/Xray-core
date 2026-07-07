@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
+	// "github.com/xtls/xray-core/common"
+	// "github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 )
@@ -23,30 +23,30 @@ func MarshalCommand(command interface{}, writer io.Writer) error {
 		return ErrUnknownCommand
 	}
 
-	var cmdID byte
-	var factory CommandFactory
+	// var cmdID byte
+	// var factory CommandFactory
 	switch command.(type) {
 	default:
 		return ErrUnknownCommand
 	}
 
-	buffer := buf.New()
-	defer buffer.Release()
+	// buffer := buf.New()
+	// defer buffer.Release()
 
-	err := factory.Marshal(command, buffer)
-	if err != nil {
-		return err
-	}
+	// err := factory.Marshal(command, buffer)
+	// if err != nil {
+	// 	return err
+	// }
 
-	auth := Authenticate(buffer.Bytes())
-	length := buffer.Len() + 4
-	if length > 255 {
-		return ErrCommandTooLarge
-	}
+	// auth := Authenticate(buffer.Bytes())
+	// length := buffer.Len() + 4
+	// if length > 255 {
+	// 	return ErrCommandTooLarge
+	// }
 
-	common.Must2(writer.Write([]byte{cmdID, byte(length), byte(auth >> 24), byte(auth >> 16), byte(auth >> 8), byte(auth)}))
-	common.Must2(writer.Write(buffer.Bytes()))
-	return nil
+	// common.Must2(writer.Write([]byte{cmdID, byte(length), byte(auth >> 24), byte(auth >> 16), byte(auth >> 8), byte(auth)}))
+	// common.Must2(writer.Write(buffer.Bytes()))
+	// return nil
 }
 
 func UnmarshalCommand(cmdID byte, data []byte) (protocol.ResponseCommand, error) {
@@ -59,12 +59,12 @@ func UnmarshalCommand(cmdID byte, data []byte) (protocol.ResponseCommand, error)
 		return nil, ErrInvalidAuth
 	}
 
-	var factory CommandFactory
+	// var factory CommandFactory
 	switch cmdID {
 	default:
 		return nil, ErrUnknownCommand
 	}
-	return factory.Unmarshal(data[4:])
+	// return factory.Unmarshal(data[4:])
 }
 
 type CommandFactory interface {

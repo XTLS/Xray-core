@@ -15,7 +15,15 @@ type BufferToBytesWriter struct {
 	io.Writer
 
 	counter stats.Counter
+	// cache 已废弃，原用于存放临时 slice。改为全局 sync.Pool 后不再使用，保留以维持结构大小兼容。
 	cache   [][]byte
+}
+
+var bytesSlicePool = sync.Pool{
+	New: func() any {
+		s := make([][]byte, 0, 64)
+		return &s
+	},
 }
 
 // WriteMultiBuffer implements Writer. This method takes ownership of the given buffer.
@@ -31,19 +39,18 @@ func (w *BufferToBytesWriter) WriteMultiBuffer(mb MultiBuffer) error {
 		return WriteAllBytes(w.Writer, mb[0].Bytes(), w.counter)
 	}
 
-	if cap(w.cache) < len(mb) {
-		w.cache = make([][]byte, 0, len(mb))
-	}
-
-	bs := w.cache
+	sPtr := bytesSlicePool.Get().(*[][]byte)
+	bs := (*sPtr)[:0]
 	for _, b := range mb {
 		bs = append(bs, b.Bytes())
 	}
 
 	defer func() {
 		for idx := range bs {
-			bs[idx] = nil
+			bs[idx] = nil // 避免内存泄漏
 		}
+		*sPtr = bs
+		bytesSlicePool.Put(sPtr)
 	}()
 
 	nb := net.Buffers(bs)

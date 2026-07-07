@@ -264,29 +264,29 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			fallthrough // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
 			var t reflect.Type
-			var p uintptr
+			var ptr unsafe.Pointer
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
 				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
 					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
 				}
 				t = reflect.TypeOf(commonConn).Elem()
-				p = uintptr(unsafe.Pointer(commonConn))
+				ptr = unsafe.Pointer(commonConn)
 			} else if tlsConn, ok := iConn.(*tls.Conn); ok {
 				t = reflect.TypeOf(tlsConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(tlsConn.Conn))
+				ptr = unsafe.Pointer(tlsConn.Conn)
 			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
 				t = reflect.TypeOf(utlsConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(utlsConn.Conn))
+				ptr = unsafe.Pointer(utlsConn.Conn)
 			} else if realityConn, ok := iConn.(*reality.UConn); ok {
 				t = reflect.TypeOf(realityConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(realityConn.Conn))
+				ptr = unsafe.Pointer(realityConn.Conn)
 			} else {
 				return errors.New("XTLS only supports TLS and REALITY directly for now.").AtWarning()
 			}
 			i, _ := t.FieldByName("input")
 			r, _ := t.FieldByName("rawInput")
-			input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
-			rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+			input = (*bytes.Reader)(unsafe.Pointer(uintptr(ptr) + i.Offset))
+			rawInput = (*bytes.Buffer)(unsafe.Pointer(uintptr(ptr) + r.Offset))
 		default:
 			panic("unknown VLESS request command")
 		}

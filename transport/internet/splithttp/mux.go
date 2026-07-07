@@ -41,15 +41,24 @@ func (c *XmuxClient) maybeClose() {
 	}
 }
 
+// XmuxManager 管理一组可复用的 XMUX 连接，实现连接复用和并发控制。
 type XmuxManager struct {
-	xmuxConfig  XmuxConfig
+	// 【指针语义【修复说明】XmuxConfig 是 protobuf 生成的结构体，内嵌了
+	// protoimpl.MessageState，而 MessageState 包含 sync.Mutex。
+	// 若以值类型存储，将 sync.Mutex 拷贝入结构体，违反 go vet 规则并导致潜在的数据竞争。
+	// 修复：改为 *XmuxConfig 指针，不对含锁内容进行实体拷贝。
+	xmuxConfig  *XmuxConfig
 	concurrency int32
 	connections int32
 	newConnFunc func() XmuxConn
 	xmuxClients []*XmuxClient
 }
 
-func NewXmuxManager(xmuxConfig XmuxConfig, newConnFunc func() XmuxConn) *XmuxManager {
+// NewXmuxManager 创建一个新的 XmuxManager。
+//
+// 参数 xmuxConfig 使用指针传递以避免对含有 sync.Mutex 的 protobuf
+// 结构体进行值拷贝，这是 go vet 要求的最佳实践。
+func NewXmuxManager(xmuxConfig *XmuxConfig, newConnFunc func() XmuxConn) *XmuxManager {
 	return &XmuxManager{
 		xmuxConfig:  xmuxConfig,
 		concurrency: xmuxConfig.GetNormalizedMaxConcurrency().rand(),

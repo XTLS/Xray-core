@@ -66,9 +66,11 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 	if !found {
 		transportConfig := streamSettings.ProtocolSettings.(*Config)
-		var xmuxConfig XmuxConfig
+		var xmuxConfig *XmuxConfig
 		if transportConfig.Xmux != nil {
-			xmuxConfig = *transportConfig.Xmux
+			xmuxConfig = transportConfig.Xmux
+		} else {
+			xmuxConfig = &XmuxConfig{}
 		}
 
 		xmuxManager = NewXmuxManager(xmuxConfig, func() XmuxConn {

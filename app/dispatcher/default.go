@@ -263,10 +263,15 @@ func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResu
 	return false
 }
 
-// Dispatch implements routing.Dispatcher.
+// Dispatch 实现 routing.Dispatcher。
+// 创建一对双向通信的 transport.Link（入站和出站）并启动流量处理 goroutine。
+//
+// 【安全修复】原实现在目标地址无效时直接 panic，这在高并发场景下会导致整个进程崩溃。
+// 修复方案：改为返回 error，并由调用方决定如何处理这个异常情况。
 func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destination) (*transport.Link, error) {
 	if !destination.IsValid() {
-		panic("Dispatcher: Invalid destination.")
+		// 【修复】原代码为 panic，已改为返回 error 以避免进程崩溃。
+		return nil, errors.New("Dispatcher: Invalid destination.")
 	}
 	outbounds := session.OutboundsFromContext(ctx)
 	if len(outbounds) == 0 {

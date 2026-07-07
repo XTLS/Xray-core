@@ -18,7 +18,7 @@ func TestMaxConnections(t *testing.T) {
 		MaxConnections: &RangeConfig{From: 4, To: 4},
 	}
 
-	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
+	xmuxManager := NewXmuxManager(&xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 
@@ -37,7 +37,7 @@ func TestCMaxReuseTimes(t *testing.T) {
 		CMaxReuseTimes: &RangeConfig{From: 2, To: 2},
 	}
 
-	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
+	xmuxManager := NewXmuxManager(&xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 
@@ -56,7 +56,7 @@ func TestMaxConcurrency(t *testing.T) {
 		MaxConcurrency: &RangeConfig{From: 2, To: 2},
 	}
 
-	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
+	xmuxManager := NewXmuxManager(&xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 
@@ -75,7 +75,7 @@ func TestMaxConcurrency(t *testing.T) {
 func TestDefault(t *testing.T) {
 	xmuxConfig := XmuxConfig{}
 
-	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
+	xmuxManager := NewXmuxManager(&xmuxConfig, func() XmuxConn {
 		return &fakeRoundTripper{}
 	})
 

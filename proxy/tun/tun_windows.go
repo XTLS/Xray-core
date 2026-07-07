@@ -375,7 +375,18 @@ func scoreWindowsInterface(iface *net.Interface, addrs []net.Addr) int {
 	}
 
 	for _, addr := range addrs {
-		if strings.HasPrefix(addr.String(), "192.168.") {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		
+		// 【修复】原先仅硬编码识别 192.168. 网段，
+		// 导致在使用 10.x.x.x 或 172.16.x.x 局域网的设备上无法正确识别首选出口网卡。
+		// 改用原生的 IsPrivate() 涵盖所有 RFC1918 私有地址。
+		if ip != nil && ip.IsPrivate() {
 			score++
 			break
 		}
