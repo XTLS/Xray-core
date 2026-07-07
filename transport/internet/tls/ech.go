@@ -55,14 +55,16 @@ func ApplyECH(c *Config, config *tls.Config) error {
 			}
 			config.EncryptedClientHelloConfigList = ECHConfig
 		}()
+		// query config from dns
 		if strings.Contains(c.EchConfigList, "://") {
-			// query config from dns
 			// parse ECH DNS server in format of "example.com+https://1.1.1.1/dns-query"
 			parts := strings.SplitN(c.EchConfigList, "+", 2)
-			DNSServer = parts[0]
 			if len(parts) == 2 {
 				nameToQuery = parts[0]
 				DNSServer = parts[1]
+			} else {
+				// normal format
+				DNSServer = parts[0]
 			}
 			if nameToQuery == "" {
 				return errors.New("Using DNS for ECH Config needs serverName or use Server format example.com+https://1.1.1.1/dns-query")
@@ -252,17 +254,16 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		}
 		dnsResolve = respBody
 	} else if strings.HasPrefix(server, "udp://") { // for classic udp dns server
-		udpServerAddr := server[len("udp://"):]
-		// default port 53 if not specified
-		if _, _, err := net.SplitHostPort(udpServerAddr); err != nil {
-			if (strings.HasPrefix(udpServerAddr, "[") && strings.HasSuffix(udpServerAddr, "]")) ||
-				!strings.Contains(udpServerAddr, ":") {
-				udpServerAddr = udpServerAddr + ":53"
-			}
-		}
-		dest, err := net.ParseDestination("udp" + ":" + udpServerAddr)
+		udpServerURL, err := url.Parse(server)
 		if err != nil {
-			return nil, 0, errors.New("failed to parse udp dns server ", udpServerAddr, " for ECH: ", err)
+			return nil, 0, errors.New("failed to parse udp dns server ", server, " for ECH: ", err)
+		}
+		if udpServerURL.Port() == "" {
+			udpServerURL.Host = udpServerURL.Host + ":53"
+		}
+		dest, err := net.ParseDestination("udp" + ":" + udpServerURL.Host)
+		if err != nil {
+			return nil, 0, errors.New("failed to parse udp dns server ", udpServerURL.Host, " for ECH: ", err)
 		}
 		dnsTimeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
