@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/client"
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/control"
 	enginebuiltin "github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/engine/builtin"
+	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/handshake"
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/logger"
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/names"
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/runtime"
@@ -209,6 +210,12 @@ type Config struct {
 	DeviceID     string
 	DeviceIDPath string
 	Claims       map[string]any
+
+	// AuthHook, when set, authorizes each inbound handshake. It receives the
+	// client-supplied device token and claims and returns an opaque sessionID
+	// (or an error to reject). Embedded server callers use it to validate
+	// per-user credentials; nil admits every client with a random sessionID.
+	AuthHook handshake.AuthFunc
 }
 
 // RegisterDefaults registers built-in carriers and transports.

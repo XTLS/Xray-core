@@ -107,5 +107,6 @@ func ServerConfig(cfg Config, dial server.DialFunc) (server.Config, error) {
 		Liveness:         liveness,
 		Traffic:          traffic,
 		DialHook:         dial,
+		AuthHook:         cfg.AuthHook,
 	}, nil
 }

@@ -12,12 +12,20 @@ import (
 
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/app/session"
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/client"
+	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/handshake"
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/internal/server"
 )
 
 // DialFunc is the server-side egress hook. It is called with each tunnel
-// stream's CONNECT target and must return a net.Conn to pipe against the stream.
+// stream's CONNECT target and the authenticated sessionID, and must return a
+// net.Conn to pipe against the stream.
 type DialFunc = server.DialFunc
+
+// AuthFunc authenticates an inbound handshake. It receives the client-supplied
+// device token and free-form claims, and returns an opaque sessionID to
+// associate with the connection, or an error to reject it. The error message is
+// forwarded to the client as the reject reason, so it must not leak secrets.
+type AuthFunc = handshake.AuthFunc
 
 // VP8Options tunes the vp8channel transport.
 type VP8Options struct {
@@ -89,6 +97,12 @@ type Config struct {
 	DeviceID     string
 	DeviceIDPath string
 	Claims       map[string]any
+
+	// AuthHook is a server-only per-connection authenticator. When set on the
+	// inbound side it validates each client's handshake (device token + claims)
+	// and returns the sessionID to associate with the connection. Nil admits
+	// every client that holds the shared room key with a random sessionID.
+	AuthHook AuthFunc
 }
 
 func (c Config) toSession() session.Config {
@@ -109,6 +123,7 @@ func (c Config) toSession() session.Config {
 		DeviceID:           c.DeviceID,
 		DeviceIDPath:       c.DeviceIDPath,
 		Claims:             c.Claims,
+		AuthHook:           c.AuthHook,
 	}
 	if c.VP8 != nil {
 		sc.VP8 = session.VP8Config{FPS: c.VP8.FPS, BatchSize: c.VP8.BatchSize}

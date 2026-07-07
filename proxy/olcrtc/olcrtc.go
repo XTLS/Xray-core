@@ -23,6 +23,15 @@ import (
 	"github.com/xtls/xray-core/proxy/olcrtc/olcrtclib/bridge"
 )
 
+// Compile-time guarantees that the inbound Server satisfies the interfaces the
+// handler manager and command service rely on: it is self-driven, exposes a
+// (stub) proxy.Inbound so GetInbound works, and manages users.
+var (
+	_ proxy.SelfDrivenInbound = (*Server)(nil)
+	_ proxy.Inbound           = (*Server)(nil)
+	_ proxy.UserManager       = (*Server)(nil)
+)
+
 func init() {
 	// Outbound (client).
 	common.Must(common.RegisterConfig((*ClientConfig)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {

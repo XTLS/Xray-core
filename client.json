@@ -4,7 +4,7 @@
     {
       "tag": "socks-in",
       "listen": "127.0.0.1",
-      "port": 1080,
+      "port": 1081,
       "protocol": "socks",
       "settings": { "udp": false },
       "sniffing": { "enabled": true, "destOverride": ["http", "tls"] }
@@ -15,12 +15,12 @@
       "tag": "olcrtc-out",
       "protocol": "olcrtc",
       "settings": {
-        "provider": "jitsi",
-        "transport": "datachannel",
-        "roomId": "https://meet.small-dm.ru/",
+        "provider": "wbstream",
+        "transport": "vp8channel",
+        "roomId": "test_qsr7sv9p",
         "key": "bb6e7f9254053f5de1442edc55934d4872eb8ad287230df2f29c1d766dd4b07c",
         "dnsServer": "8.8.8.8:53",
-        "deviceId": "alice@myapp"
+        "vp8": { "fps": 30, "batchSize": 64 }
       }
     },
     { "tag": "direct", "protocol": "freedom" }

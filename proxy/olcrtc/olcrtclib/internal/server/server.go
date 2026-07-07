@@ -55,11 +55,13 @@ type SessionCloseFunc func(sessionID, reason string)
 type TrafficFunc func(sessionID, addr string, bytesIn, bytesOut uint64)
 
 // DialFunc establishes the egress connection for a tunnel stream. It receives
-// the target host and port from the client's CONNECT request and returns a
+// the target host and port from the client's CONNECT request plus the
+// authenticated sessionID (as returned by the handshake AuthHook) and returns a
 // net.Conn that the server pipes against the stream. When set on Config.DialHook
 // it fully replaces the built-in TCP/SOCKS dialer, letting a host application
-// route egress through its own stack (e.g. Xray's router/dispatcher).
-type DialFunc func(ctx context.Context, addr string, port int) (net.Conn, error)
+// route egress through its own stack (e.g. Xray's router/dispatcher) and attach
+// the per-session user identity to the dispatched connection.
+type DialFunc func(ctx context.Context, addr string, port int, sessionID string) (net.Conn, error)
 
 // HealthFunc is called when the server control health snapshot changes.
 type HealthFunc func(control.Status)
@@ -1356,7 +1358,7 @@ func (s *Server) dispatch(stream *smux.Stream, req ConnectRequest, sessionID str
 	logger.Infof("sid=%d connect %s", stream.ID(), addr)
 
 	dialStart := time.Now()
-	conn, err := s.dial(req)
+	conn, err := s.dial(req, sessionID)
 	dialElapsed := time.Since(dialStart)
 
 	if err != nil {
@@ -1393,13 +1395,13 @@ func (s *Server) dispatch(stream *smux.Stream, req ConnectRequest, sessionID str
 	}
 }
 
-func (s *Server) dial(req ConnectRequest) (net.Conn, error) {
+func (s *Server) dial(req ConnectRequest, sessionID string) (net.Conn, error) {
 	if s.dialHook != nil {
 		ctx := s.baseCtx
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		conn, err := s.dialHook(ctx, req.Addr, req.Port)
+		conn, err := s.dialHook(ctx, req.Addr, req.Port, sessionID)
 		if err != nil {
 			return nil, fmt.Errorf("dial hook failed: %w", err)
 		}

@@ -66,3 +66,5 @@ ehthumbs.db
 # Other common ignores
 *.bak
 *.tmp
+xray-android-amd64
+xray-android-arm64

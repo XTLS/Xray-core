@@ -182,6 +182,10 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		if p.Stats.UserOnline {
 			trackOnlineIP(ctx, d.stats, user.Email, sessionInbound.Source.Address.String())
 		}
+
+		// Per-user aggregate speed limit. Keyed by email here at the dispatcher,
+		// it applies across every protocol and all of the user's devices.
+		inboundLink.Writer, outboundLink.Writer = rateLimitLink(ctx, user.Email, user.Level, inboundLink.Writer, outboundLink.Writer)
 	}
 
 	return inboundLink, outboundLink

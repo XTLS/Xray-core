@@ -101,6 +101,17 @@ func (h *SelfDrivenInboundHandler) Close() error {
 	return nil
 }
 
+// GetInbound implements proxy.GetInbound. It exposes the underlying self-driven
+// proxy so the command service (HandlerService.AlterInbound) can reach a
+// proxy.UserManager for dynamic add/remove-user. Returns nil when the proxy does
+// not also implement proxy.Inbound.
+func (h *SelfDrivenInboundHandler) GetInbound() proxy.Inbound {
+	if in, ok := h.proxy.(proxy.Inbound); ok {
+		return in
+	}
+	return nil
+}
+
 // Tag implements inbound.Handler.
 func (h *SelfDrivenInboundHandler) Tag() string { return h.tag }
 
