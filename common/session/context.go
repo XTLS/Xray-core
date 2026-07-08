@@ -10,6 +10,9 @@ import (
 	"github.com/xtls/xray-core/features/routing"
 )
 
+//go:linkname IndependentCancelCtx context.newCancelCtx
+func IndependentCancelCtx(parent context.Context) context.Context
+
 const (
 	inboundSessionKey         ctx.SessionKey = 1
 	outboundSessionKey        ctx.SessionKey = 2
