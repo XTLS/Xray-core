@@ -131,6 +131,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	behaviorSeed := crc64.Checksum(hashkdf.Sum(nil), crc64.MakeTable(crc64.ISO))
 
+	if session.TimeoutOnlyFromContext(ctx) {
+		ctx = context.WithoutCancel(ctx)
+	}
+
 	session := encoding.NewClientSession(ctx, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 

@@ -122,7 +122,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 
 			gctx = c.ContextWithID(gctx, c.IDFromContext(ctx))
 			gctx = session.ContextWithOutbounds(gctx, session.OutboundsFromContext(ctx))
-			gctx = context.WithoutCancel(gctx)
+			gctx = session.ContextWithTimeoutOnly(gctx, true)
 
 			c, err := internet.DialSystem(gctx, net.TCPDestination(address, port), sockopt)
 			if err == nil {

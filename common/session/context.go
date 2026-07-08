@@ -11,18 +11,20 @@ import (
 )
 
 const (
-	inboundSessionKey ctx.SessionKey = iota
-	outboundSessionKey
-	contentSessionKey
-	isReverseMuxKey           // is reverse mux
-	sockoptSessionKey         // used by dokodemo to only receive sockopt.Mark
-	trackedConnectionErrorKey // used by observer to get outbound error
-	dispatcherKey             // used by ss2022 inbounds to get dispatcher
-	allowedNetworkKey         // muxcool server control incoming request tcp/udp
-	fullHandlerKey            // outbound gets full handler
-	mitmAlpn11Key             // used by TLS dialer
-	mitmServerNameKey         // used by TLS dialer
-	streamSettingsKey
+	inboundSessionKey         ctx.SessionKey = 1
+	outboundSessionKey        ctx.SessionKey = 2
+	contentSessionKey         ctx.SessionKey = 3
+	isReverseMuxKey           ctx.SessionKey = 4  // is reverse mux
+	sockoptSessionKey         ctx.SessionKey = 5  // used by dokodemo to only receive sockopt.Mark
+	trackedConnectionErrorKey ctx.SessionKey = 6  // used by observer to get outbound error
+	dispatcherKey             ctx.SessionKey = 7  // used by ss2022 inbounds to get dispatcher
+	timeoutOnlyKey            ctx.SessionKey = 8  // mux context's child contexts to only cancel when its own traffic times out
+	allowedNetworkKey         ctx.SessionKey = 9  // muxcool server control incoming request tcp/udp
+	fullHandlerKey            ctx.SessionKey = 10 // outbound gets full handler
+	mitmAlpn11Key             ctx.SessionKey = 11 // used by TLS dialer
+	mitmServerNameKey         ctx.SessionKey = 12 // used by TLS dialer
+
+	streamSettingsKey ctx.SessionKey = 13
 )
 
 func ContextWithInbound(ctx context.Context, inbound *Inbound) context.Context {
@@ -133,6 +135,17 @@ func DispatcherFromContext(ctx context.Context) routing.Dispatcher {
 		return dispatcher
 	}
 	return nil
+}
+
+func ContextWithTimeoutOnly(ctx context.Context, only bool) context.Context {
+	return context.WithValue(ctx, timeoutOnlyKey, only)
+}
+
+func TimeoutOnlyFromContext(ctx context.Context) bool {
+	if val, ok := ctx.Value(timeoutOnlyKey).(bool); ok {
+		return val
+	}
+	return false
 }
 
 func ContextWithAllowedNetwork(ctx context.Context, network net.Network) context.Context {

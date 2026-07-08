@@ -165,6 +165,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return errors.New("invalid target ", ob.Target)
 	}
 
+	if session.TimeoutOnlyFromContext(ctx) {
+		ctx = context.WithoutCancel(ctx)
+	}
+
 	sessionPolicy := h.policyManager.ForLevel(0)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)

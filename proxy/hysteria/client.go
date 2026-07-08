@@ -67,6 +67,10 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	defer conn.Close()
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", target.Network, ":", c.server.Destination.NetAddr())
 
+	if session.TimeoutOnlyFromContext(ctx) {
+		ctx = context.WithoutCancel(ctx)
+	}
+
 	sessionPolicy := c.policyManager.ForLevel(0)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)

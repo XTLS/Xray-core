@@ -227,7 +227,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 			errors.LogInfoInner(ctx, err, "XUDP hit ", meta.GlobalID)
 		}
 		if mb != nil {
-			ctx = context.WithoutCancel(ctx)
+			ctx = session.ContextWithTimeoutOnly(ctx, true)
 			// Actually, it won't return an error in Xray-core's implementations.
 			link, err := w.dispatcher.Dispatch(ctx, meta.Target)
 			if err != nil {
