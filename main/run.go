@@ -72,11 +72,6 @@ var (
 )
 
 func executeRun(cmd *base.Command, args []string) {
-	if err := platform.ReloadEnvSettings(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-
 	if *dump {
 		clog.ReplaceWithSeverityLogger(clog.Severity_Warning)
 		errCode := dumpConfig()

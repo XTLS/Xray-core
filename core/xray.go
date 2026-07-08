@@ -165,9 +165,6 @@ func OptionalFeatures(ctx context.Context, callback interface{}) error {
 // The instance is not started at this point.
 // To ensure Xray instance works properly, the config must contain one Dispatcher, one InboundHandlerManager and one OutboundHandlerManager. Other features are optional.
 func New(config *Config) (*Instance, error) {
-	if err := platform.ReloadEnvSettings(); err != nil {
-		return nil, errors.New("failed to reload environment settings").Base(err)
-	}
 	server := &Instance{ctx: context.Background()}
 
 	done, err := initInstanceWithConfig(config, server)
@@ -179,9 +176,6 @@ func New(config *Config) (*Instance, error) {
 }
 
 func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
-	if err := platform.ReloadEnvSettings(); err != nil {
-		return nil, errors.New("failed to reload environment settings").Base(err)
-	}
 	server := &Instance{ctx: ctx}
 
 	done, err := initInstanceWithConfig(config, server)
@@ -193,6 +187,9 @@ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
 }
 
 func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
+	if err := platform.ReloadEnvSettings(); err != nil {
+		return true, errors.New("failed to reload environment settings").Base(err)
+	}
 	server.ctx = context.WithValue(server.ctx, "cone",
 		platform.NewEnvFlag(platform.UseCone).GetValue(func() string { return "" }) != "true")
 

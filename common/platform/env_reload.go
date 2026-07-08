@@ -88,9 +88,6 @@ func ApplyConfigEnvSettings(settings []EnvSetting) (func() error, error) {
 			return nil, errors.Join(err, rollbackConfigEnvSettings(originals))
 		}
 	}
-	if err := ReloadEnvSettings(); err != nil {
-		return nil, errors.Join(err, rollbackConfigEnvSettings(originals))
-	}
 	if len(originals) == 0 {
 		return nil, nil
 	}
@@ -111,9 +108,6 @@ func rollbackConfigEnvSettings(originals map[string]envValue) error {
 		if err != nil {
 			errs = append(errs, err)
 		}
-	}
-	if err := ReloadEnvSettings(); err != nil {
-		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }
