@@ -117,10 +117,6 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		errors.LogInfoInner(ctx, err, "failed to clear deadline after handshake")
 	}
 
-	if session.TimeoutOnlyFromContext(ctx) {
-		ctx = context.WithoutCancel(ctx)
-	}
-
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, p.Timeouts.ConnectionIdle)
 

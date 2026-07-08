@@ -83,10 +83,6 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		return errors.New("failed to connect to server").Base(err)
 	}
 
-	if session.TimeoutOnlyFromContext(ctx) {
-		ctx = context.WithoutCancel(ctx)
-	}
-
 	if network == net.Network_TCP {
 		serverConn := o.method.DialEarlyConn(connection, singbridge.ToSocksaddr(destination))
 		var handshake bool

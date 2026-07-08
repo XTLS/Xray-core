@@ -294,10 +294,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		ob.CanSpliceCopy = 3
 	}
 
-	if session.TimeoutOnlyFromContext(ctx) {
-		ctx = context.WithoutCancel(ctx)
-	}
-
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)

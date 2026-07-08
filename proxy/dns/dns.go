@@ -214,10 +214,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 		}
 	}
 
-	if session.TimeoutOnlyFromContext(ctx) {
-		ctx = context.WithoutCancel(ctx)
-	}
-
 	ctx, cancel := context.WithCancel(ctx)
 	terminate := func() {
 		cancel()
