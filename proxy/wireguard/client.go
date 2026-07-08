@@ -165,13 +165,24 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return errors.New("invalid target ", ob.Target)
 	}
 
+	var newCtx context.Context
+	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
-		ctx = context.WithoutCancel(ctx)
+		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
 	sessionPolicy := h.policyManager.ForLevel(0)
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, func() {
+		cancel()
+		if newCancel != nil {
+			newCancel()
+		}
+	}, sessionPolicy.Timeouts.ConnectionIdle)
+
+	if newCtx != nil {
+		ctx = newCtx
+	}
 
 	var reader buf.Reader
 	var writer buf.Writer

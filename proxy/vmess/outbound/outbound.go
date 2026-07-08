@@ -131,15 +131,22 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	behaviorSeed := crc64.Checksum(hashkdf.Sum(nil), crc64.MakeTable(crc64.ISO))
 
+	var newCtx context.Context
+	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
-		ctx = context.WithoutCancel(ctx)
+		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
 	session := encoding.NewClientSession(ctx, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, func() {
+		cancel()
+		if newCancel != nil {
+			newCancel()
+		}
+	}, sessionPolicy.Timeouts.ConnectionIdle)
 
 	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
 		request.Command = protocol.RequestCommandMux
@@ -203,6 +210,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		return buf.Copy(bodyReader, output, buf.UpdateActivity(timer))
+	}
+
+	if newCtx != nil {
+		ctx = newCtx
 	}
 
 	responseDonePost := task.OnSuccess(responseDone, task.Close(output))
