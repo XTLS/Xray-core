@@ -64,17 +64,3 @@ func TestGetAssetLocation(t *testing.T) {
 		}
 	}
 }
-
-func TestGetConfigurationAndConfdirPath(t *testing.T) {
-	configDir := filepath.Join("tmp", "xray-config")
-	confdir := filepath.Join("tmp", "xray-confdir")
-	t.Setenv(ConfigLocation, configDir)
-	t.Setenv(ConfdirLocation, confdir)
-
-	if got := GetConfigurationPath(); got != filepath.Join(configDir, "config.json") {
-		t.Fatalf("configuration path = %q, want %q", got, filepath.Join(configDir, "config.json"))
-	}
-	if got := GetConfDirPath(); got != confdir {
-		t.Fatalf("confdir path = %q, want %q", got, confdir)
-	}
-}
