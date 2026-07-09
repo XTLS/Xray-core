@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -44,11 +45,11 @@ func (s *server) Handle(conn net.Conn) {
 
 // upgrade execute a fake websocket upgrade process and return the available connection
 func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
-	// Don't let a connection that never finishes its handshake hold a
-	// goroutine and an fd forever. Same limit as the websocket listener's
-	// ReadHeaderTimeout.
+	// timeout and header limit are the same as websocket
 	conn.SetReadDeadline(time.Now().Add(time.Second * 4))
-	connReader := bufio.NewReader(conn)
+	defer conn.SetReadDeadline(time.Time{})
+	connReader := bufio.NewReader(io.LimitReader(conn, 12288))
+
 	req, err := http.ReadRequest(connReader)
 	if err != nil {
 		return nil, err
@@ -92,7 +93,6 @@ func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
 	}
 	remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 
-	conn.SetReadDeadline(time.Time{})
 	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }
 
@@ -100,11 +100,6 @@ func (s *server) keepAccepting() {
 	for {
 		conn, err := s.innnerListener.Accept()
 		if err != nil {
-			// Exiting on a transient error such as EMFILE would leave the
-			// listening socket open but never accepted again: the backlog
-			// fills up and every new connection to this inbound times out
-			// until the process is restarted. Only stop when the listener
-			// is closed, like the TCP listener does.
 			errStr := err.Error()
 			if strings.Contains(errStr, "closed") {
 				break
