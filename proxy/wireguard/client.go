@@ -145,10 +145,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}
 
-	if err := h.dev.Up(); err != nil {
-		return err
-	}
-
 	var addr netip.Addr
 	if ob.Target.Address.Family().IsDomain() {
 		ip, err := h.resolveRemote(ob.Target.Address.String())
@@ -258,8 +254,11 @@ func (h *Handler) Close() (err error) {
 func (h *Handler) init(ctx context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.tun == nil {
+		return errors.New("closed")
+	}
 	if h.dev != nil {
-		return nil
+		return h.dev.Up()
 	}
 	resolveFunc := h.resolveLocal
 	listenFunc := func() (net.PacketConn, error) {
