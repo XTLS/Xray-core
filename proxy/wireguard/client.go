@@ -139,10 +139,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "wireguard"
 	ob.CanSpliceCopy = 3
 
-	if h.dev == nil {
-		if err := h.init(ctx); err != nil {
-			return err
-		}
+	if err := h.init(ctx); err != nil {
+		return err
 	}
 
 	var addr netip.Addr
