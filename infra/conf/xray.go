@@ -110,7 +110,7 @@ func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
 	switch m.XudpProxyUDP443 {
 	case "":
 		m.XudpProxyUDP443 = "reject"
-	case "reject", "allow", "skip":
+	case "reject", "allow", "skip", "drop":
 	default:
 		return nil, errors.New(`unknown "xudpProxyUDP443": `, m.XudpProxyUDP443)
 	}

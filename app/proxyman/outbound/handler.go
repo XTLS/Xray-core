@@ -6,6 +6,7 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
+	"time"
 
 	"github.com/xtls/xray-core/common/dice"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
@@ -222,6 +224,19 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			switch h.udp443 {
 			case "reject":
 				test(errors.New("XUDP rejected UDP/443 traffic").AtInfo())
+				return
+			case "drop":
+				errors.LogInfo(ctx, "XUDP dropped UDP/443 traffic")
+				ctx, cancel := context.WithCancel(ctx)
+				timer := signal.CancelAfterInactivity(ctx, func() {
+					cancel()
+				}, time.Duration(30+dice.Roll(61))*time.Second)
+				go func() {
+					buf.Copy(link.Reader, buf.Discard, buf.UpdateActivity(timer))
+					<-ctx.Done()
+					common.Interrupt(link.Writer)
+					common.Interrupt(link.Reader)
+				}()
 				return
 			case "skip":
 				goto out
