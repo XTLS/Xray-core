@@ -2,6 +2,7 @@ package loopback
 
 import (
 	"context"
+	"slices"
 
 	proxyman "github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -19,6 +20,21 @@ type Loopback struct {
 	dispatcherInstance routing.Dispatcher
 }
 
+type loopbackInboundTagHistoryKey struct{}
+
+func hasLoopbackInboundTag(ctx context.Context, tag string) bool {
+	tags, _ := ctx.Value(loopbackInboundTagHistoryKey{}).([]string)
+	return slices.Contains(tags, tag)
+}
+
+func contextWithLoopbackInboundTag(ctx context.Context, tag string) context.Context {
+	tags, _ := ctx.Value(loopbackInboundTagHistoryKey{}).([]string)
+	nextTags := make([]string, 0, len(tags)+1)
+	nextTags = append(nextTags, tags...)
+	nextTags = append(nextTags, tag)
+	return context.WithValue(ctx, loopbackInboundTagHistoryKey{}, nextTags)
+}
+
 func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet.Dialer) error {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
@@ -27,6 +43,11 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 	}
 	ob.Name = "loopback"
 	destination := ob.Target
+
+	if hasLoopbackInboundTag(ctx, l.inboundTag) {
+		return errors.New("loopback connection detected for inbound tag: ", l.inboundTag)
+	}
+	ctx = contextWithLoopbackInboundTag(ctx, l.inboundTag)
 
 	errors.LogInfo(ctx, "opening connection to ", destination)
 	content := new(session.Content)
