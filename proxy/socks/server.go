@@ -29,7 +29,6 @@ import (
 type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
-	cone          bool
 	httpServer    *http.Server
 }
 
@@ -39,7 +38,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		cone:          ctx.Value("cone").(bool),
 	}
 	httpConfig := &http.ServerConfig{
 		UserLevel: config.UserLevel,
@@ -267,7 +265,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 
 			payload.UDP = &destination
 
-			if !s.cone || dest == nil {
+			if dest == nil {
 				dest = &destination
 			}
 
