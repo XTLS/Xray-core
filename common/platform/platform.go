@@ -27,6 +27,20 @@ const (
 	TunFdKey = "xray.tun.fd"
 )
 
+var configEnvKeys = map[string]string{
+	NormalizeEnvName(AssetLocation):        AssetLocation,
+	NormalizeEnvName(CertLocation):         CertLocation,
+	NormalizeEnvName(UseReadV):             UseReadV,
+	NormalizeEnvName(UseFreedomSplice):     UseFreedomSplice,
+	NormalizeEnvName(UseVmessPadding):      UseVmessPadding,
+	NormalizeEnvName(UseCone):              UseCone,
+	NormalizeEnvName(BufferSize):           BufferSize,
+	NormalizeEnvName(BrowserDialerAddress): BrowserDialerAddress,
+	NormalizeEnvName(XUDPLog):              XUDPLog,
+	NormalizeEnvName(XUDPBaseKey):          XUDPBaseKey,
+	NormalizeEnvName(TunFdKey):             TunFdKey,
+}
+
 type EnvFlag struct {
 	Name    string
 	AltName string
@@ -70,6 +84,15 @@ func (f EnvFlag) GetValueAsInt(defaultValue int) int {
 
 func NormalizeEnvName(name string) string {
 	return strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(name)), ".", "_")
+}
+
+// CanonicalConfigEnvKey returns the canonical dotted key for an environment
+// setting that may be declared inside an already parsed Xray config. Pre-load
+// keys such as xray.json.strict, xray.location.config and xray.location.confdir
+// are intentionally excluded.
+func CanonicalConfigEnvKey(key string) (string, bool) {
+	canonicalKey, ok := configEnvKeys[NormalizeEnvName(key)]
+	return canonicalKey, ok
 }
 
 func getExecutableDir() string {

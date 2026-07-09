@@ -50,31 +50,14 @@ type envValue struct {
 	exists bool
 }
 
-var configEnvKeys = map[string]struct{}{
-	AssetLocation:        {},
-	CertLocation:         {},
-	UseReadV:             {},
-	UseFreedomSplice:     {},
-	UseVmessPadding:      {},
-	UseCone:              {},
-	BufferSize:           {},
-	BrowserDialerAddress: {},
-	XUDPLog:              {},
-	XUDPBaseKey:          {},
-	TunFdKey:             {},
-}
-
 // ApplyConfigEnvSettings applies the subset of environment settings that may be
 // declared inside an already parsed Xray config. Pre-load keys such as
 // xray.json.strict, xray.location.config and xray.location.confdir are
-// intentionally excluded.
+// intentionally excluded by the config parser before settings reach this point.
 func ApplyConfigEnvSettings(settings []EnvSetting) (func() error, error) {
 	originals := map[string]envValue{}
 	for _, setting := range settings {
 		if setting.Value == "" {
-			continue
-		}
-		if _, ok := configEnvKeys[setting.Key]; !ok {
 			continue
 		}
 		if _, ok := originals[setting.Key]; !ok {

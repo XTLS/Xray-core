@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dispatcher"
@@ -345,83 +346,76 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 }
 
 type EnvConfig struct {
-	AssetLocation    *string `json:"xray.location.asset"`
-	CertLocation     *string `json:"xray.location.cert"`
-	UseReadV         *string `json:"xray.buf.readv"`
-	UseFreedomSplice *string `json:"xray.buf.splice"`
-	UseVmessPadding  *string `json:"xray.vmess.padding"`
-	UseCone          *string `json:"xray.cone.disabled"`
-	BufferSize       *string `json:"xray.ray.buffer.size"`
-	BrowserDialer    *string `json:"xray.browser.dialer"`
-	XUDPLog          *string `json:"xray.xudp.show"`
-	XUDPBaseKey      *string `json:"xray.xudp.basekey"`
-	TunFd            *string `json:"xray.tun.fd"`
+	settings map[string]string
+}
+
+// UnmarshalJSON accepts both dotted env keys, such as "xray.location.asset",
+// and normalized env keys, such as "XRAY_LOCATION_ASSET". Unknown keys are
+// ignored so config files cannot set arbitrary process environment variables.
+func (c *EnvConfig) UnmarshalJSON(data []byte) error {
+	var raw map[string]*string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	c.settings = nil
+	keys := make([]string, 0, len(raw))
+	for key := range raw {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		envValue := raw[key]
+		if envValue == nil {
+			continue
+		}
+		canonicalKey, ok := platform.CanonicalConfigEnvKey(key)
+		if !ok {
+			continue
+		}
+		c.set(canonicalKey, *envValue)
+	}
+	return nil
+}
+
+func (c EnvConfig) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.settings)
+}
+
+func (c *EnvConfig) set(key string, value string) {
+	if c.settings == nil {
+		c.settings = make(map[string]string)
+	}
+	c.settings[key] = value
 }
 
 func (c *EnvConfig) Override(o *EnvConfig) {
 	if o == nil {
 		return
 	}
-	if o.AssetLocation != nil {
-		c.AssetLocation = o.AssetLocation
-	}
-	if o.CertLocation != nil {
-		c.CertLocation = o.CertLocation
-	}
-	if o.UseReadV != nil {
-		c.UseReadV = o.UseReadV
-	}
-	if o.UseFreedomSplice != nil {
-		c.UseFreedomSplice = o.UseFreedomSplice
-	}
-	if o.UseVmessPadding != nil {
-		c.UseVmessPadding = o.UseVmessPadding
-	}
-	if o.UseCone != nil {
-		c.UseCone = o.UseCone
-	}
-	if o.BufferSize != nil {
-		c.BufferSize = o.BufferSize
-	}
-	if o.BrowserDialer != nil {
-		c.BrowserDialer = o.BrowserDialer
-	}
-	if o.XUDPLog != nil {
-		c.XUDPLog = o.XUDPLog
-	}
-	if o.XUDPBaseKey != nil {
-		c.XUDPBaseKey = o.XUDPBaseKey
-	}
-	if o.TunFd != nil {
-		c.TunFd = o.TunFd
+	for key, value := range o.settings {
+		c.set(key, value)
 	}
 }
 
 func (c *EnvConfig) Settings() []platform.EnvSetting {
-	if c == nil {
+	if c == nil || len(c.settings) == 0 {
 		return nil
 	}
-	settings := make([]platform.EnvSetting, 0, 11)
-	appendEnvSetting := func(key string, value *string) {
-		if value == nil {
-			return
-		}
+
+	keys := make([]string, 0, len(c.settings))
+	for key := range c.settings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	settings := make([]platform.EnvSetting, 0, len(c.settings))
+	for _, key := range keys {
 		settings = append(settings, platform.EnvSetting{
 			Key:   key,
-			Value: *value,
+			Value: c.settings[key],
 		})
 	}
-	appendEnvSetting(platform.AssetLocation, c.AssetLocation)
-	appendEnvSetting(platform.CertLocation, c.CertLocation)
-	appendEnvSetting(platform.UseReadV, c.UseReadV)
-	appendEnvSetting(platform.UseFreedomSplice, c.UseFreedomSplice)
-	appendEnvSetting(platform.UseVmessPadding, c.UseVmessPadding)
-	appendEnvSetting(platform.UseCone, c.UseCone)
-	appendEnvSetting(platform.BufferSize, c.BufferSize)
-	appendEnvSetting(platform.BrowserDialerAddress, c.BrowserDialer)
-	appendEnvSetting(platform.XUDPLog, c.XUDPLog)
-	appendEnvSetting(platform.XUDPBaseKey, c.XUDPBaseKey)
-	appendEnvSetting(platform.TunFdKey, c.TunFd)
 	return settings
 }
 
