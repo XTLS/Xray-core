@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -43,6 +44,10 @@ func (s *server) Handle(conn net.Conn) {
 
 // upgrade execute a fake websocket upgrade process and return the available connection
 func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
+	// Don't let a connection that never finishes its handshake hold a
+	// goroutine and an fd forever. Same limit as the websocket listener's
+	// ReadHeaderTimeout.
+	conn.SetReadDeadline(time.Now().Add(time.Second * 4))
 	connReader := bufio.NewReader(conn)
 	req, err := http.ReadRequest(connReader)
 	if err != nil {
@@ -87,6 +92,7 @@ func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
 	}
 	remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 
+	conn.SetReadDeadline(time.Time{})
 	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }
 
@@ -94,7 +100,20 @@ func (s *server) keepAccepting() {
 	for {
 		conn, err := s.innnerListener.Accept()
 		if err != nil {
-			return
+			// Exiting on a transient error such as EMFILE would leave the
+			// listening socket open but never accepted again: the backlog
+			// fills up and every new connection to this inbound times out
+			// until the process is restarted. Only stop when the listener
+			// is closed, like the TCP listener does.
+			errStr := err.Error()
+			if strings.Contains(errStr, "closed") {
+				break
+			}
+			errors.LogWarningInner(context.Background(), err, "failed to accept raw connections")
+			if strings.Contains(errStr, "too many") {
+				time.Sleep(time.Millisecond * 500)
+			}
+			continue
 		}
 		go s.Handle(conn)
 	}
