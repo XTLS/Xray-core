@@ -139,13 +139,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "wireguard"
 	ob.CanSpliceCopy = 3
 
-	if h.dev == nil {
-		if err := h.init(ctx); err != nil {
-			return err
-		}
-	}
-
-	if err := h.dev.Up(); err != nil {
+	if err := h.init(ctx); err != nil {
 		return err
 	}
 
@@ -258,8 +252,11 @@ func (h *Handler) Close() (err error) {
 func (h *Handler) init(ctx context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.tun == nil {
+		return errors.New("closed")
+	}
 	if h.dev != nil {
-		return nil
+		return h.dev.Up()
 	}
 	resolveFunc := h.resolveLocal
 	listenFunc := func() (net.PacketConn, error) {
