@@ -1,5 +1,5 @@
 // Minecraft protocol
-package minecraft
+package xmc
 
 import (
 	"bytes"

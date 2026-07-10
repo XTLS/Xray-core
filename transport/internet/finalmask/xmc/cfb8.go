@@ -1,4 +1,4 @@
-package minecraft
+package xmc
 
 // Copied from https://github.com/Tnze/go-mc/blob/539b4a3a7f030332eb58b8a946116ae7907630d2/net/CFB8/cfb8.go
 

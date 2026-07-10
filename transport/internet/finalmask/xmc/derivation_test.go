@@ -1,4 +1,4 @@
-package minecraft
+package xmc
 
 import (
 	"crypto/sha256"

@@ -1,5 +1,5 @@
 // Minecraft stream cipher
-package minecraft
+package xmc
 
 import (
 	"crypto/aes"

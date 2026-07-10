@@ -15,7 +15,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
-	"github.com/xtls/xray-core/transport/internet/finalmask/minecraft"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
@@ -25,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
+	"github.com/xtls/xray-core/transport/internet/finalmask/xmc"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"google.golang.org/protobuf/proto"
 )
@@ -70,7 +70,7 @@ var (
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
-		"xmc":           func() interface{} { return new(Minecraft) },
+		"xmc":           func() interface{} { return new(XMC) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -719,13 +719,13 @@ func (c *Xdns) Build() (proto.Message, error) {
 	}, nil
 }
 
-type Minecraft struct {
+type XMC struct {
 	Hostname  string   `json:"hostname"`
 	Usernames []string `json:"usernames"`
 	Password  string   `json:"password"`
 }
 
-func (c *Minecraft) Build() (proto.Message, error) {
+func (c *XMC) Build() (proto.Message, error) {
 	if len(c.Usernames) == 0 {
 		c.Usernames = []string{"Dream"}
 	}
@@ -734,7 +734,7 @@ func (c *Minecraft) Build() (proto.Message, error) {
 		return nil, fmt.Errorf("empty password")
 	}
 
-	rsaPrivateKey, err := minecraft.DeriveRSAKey(c.Password)
+	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
 	if err != nil {
 		return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
 	}
@@ -744,7 +744,7 @@ func (c *Minecraft) Build() (proto.Message, error) {
 		return nil, fmt.Errorf("marshal minecraft rsa public key: %w", err)
 	}
 
-	return &minecraft.Config{
+	return &xmc.Config{
 		Password:      c.Password,
 		Usernames:     c.Usernames,
 		Hostname:      c.Hostname,
