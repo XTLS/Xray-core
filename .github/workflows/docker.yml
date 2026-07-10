@@ -75,13 +75,13 @@ jobs:
           echo "Latest: '$LATEST'."
           echo "LATEST=$LATEST" >>${GITHUB_ENV}
 
-          BETA=false
+          PRERELEASE=false
           if [[ "${{ github.event_name }}" == "release" && "${{ github.event.release.prerelease }}" == "true" ]]; then
-            BETA=true
+            PRERELEASE=true
           fi
 
-          echo "Beta: '$BETA'."
-          echo "BETA=$BETA" >>${GITHUB_ENV}
+          echo "Pre-release: '$PRERELEASE'."
+          echo "PRERELEASE=$PRERELEASE" >>${GITHUB_ENV}
 
       - name: Checkout code
         uses: actions/checkout@v7
@@ -143,10 +143,10 @@ jobs:
             ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           fi
 
-          if [[ "${{ env.BETA }}" == "true" ]]; then
-            echo "Adding 'beta' tag to manifest: '${{ env.FULL_IMAGE_NAME }}:beta'."
+          if [[ "${{ env.PRERELEASE }}" == "true" ]]; then
+            echo "Adding 'pre-release' tag to manifest: '${{ env.FULL_IMAGE_NAME }}:pre-release'."
             docker buildx imagetools create \
-            --tag ${{ env.FULL_IMAGE_NAME }}:beta \
+            --tag ${{ env.FULL_IMAGE_NAME }}:pre-release \
             ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           fi
 
@@ -158,6 +158,6 @@ jobs:
             docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:latest
           fi
 
-          if [[ "${{ env.BETA }}" == "true" ]]; then
-            docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:beta
+          if [[ "${{ env.PRERELEASE }}" == "true" ]]; then
+            docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:pre-release
           fi
