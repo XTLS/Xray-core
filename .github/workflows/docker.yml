@@ -20,6 +20,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
 jobs:
   build-and-push:
     if: (github.event.action != 'published') || (github.event.action == 'published' && github.event.release.prerelease == true)
