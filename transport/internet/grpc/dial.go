@@ -136,10 +136,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 				}
 
 				if tlsConfig != nil {
-					config := tlsConfig.GetTLSConfig()
-					if config.ServerName == "" && address.Family().IsDomain() {
-						config.ServerName = address.Domain()
-					}
+					config := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
 					if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 						return tls.UClient(c, config, fingerprint), nil
 					} else { // Fallback to normal gRPC TLS

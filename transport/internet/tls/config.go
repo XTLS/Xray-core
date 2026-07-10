@@ -331,6 +331,9 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 	}
 
 	if verifyResult == foundCA { // if found CA, we need to verify here
+		if len(r.Config.ServerName) == 0 {
+			return errors.New("Pinning CA needs a valid ServerName")
+		}
 		opts := x509.VerifyOptions{
 			Roots:         CAs,
 			CurrentTime:   time.Now(),
