@@ -170,4 +170,5 @@ jobs:
         with:
           package: ${{ env.PACKAGE_NAME }}
           delete-untagged: true
+          older-than: 1 day
           dry-run: true
