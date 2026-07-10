@@ -37,8 +37,10 @@ jobs:
         env:
           IMAGE_NAME: "${{ github.repository }}"
         run: |
-          echo "IMAGE_NAME=${IMAGE_NAME,,}" >>${GITHUB_ENV}
-          echo "FULL_IMAGE_NAME=ghcr.io/${IMAGE_NAME,,}" >>${GITHUB_ENV}
+          LOWER=${IMAGE_NAME,,}
+          echo "IMAGE_NAME=${LOWER}" >>${GITHUB_ENV}
+          echo "FULL_IMAGE_NAME=ghcr.io/${LOWER}" >>${GITHUB_ENV}
+          echo "PACKAGE_NAME=${LOWER##*/}" >>${GITHUB_ENV}
 
       - name: Validate and extract tag
         run: |
@@ -161,3 +163,11 @@ jobs:
           if [[ "${{ env.PRERELEASE }}" == "true" ]]; then
             docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:pre-release
           fi
+
+      - name: Delete orphaned (untagged) manifests
+        if: github.event_name == 'push'
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: ${{ env.PACKAGE_NAME }}
+          delete-untagged: true
+          dry-run: true
