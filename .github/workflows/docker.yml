@@ -64,6 +64,14 @@ jobs:
           echo "Latest: '$LATEST'."
           echo "LATEST=$LATEST" >>${GITHUB_ENV}
 
+          EDGE=false
+          if [[ "${{ github.event_name }}" == "release" && "${{ github.event.release.prerelease }}" == "true" ]]; then
+            EDGE=true
+          fi
+
+          echo "Edge: '$EDGE'."
+          echo "EDGE=$EDGE" >>${GITHUB_ENV}
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -124,10 +132,21 @@ jobs:
             ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           fi
 
+          if [[ "${{ env.EDGE }}" == "true" ]]; then
+            echo "Adding 'edge' tag to manifest: '${{ env.FULL_IMAGE_NAME }}:edge'."
+            docker buildx imagetools create \
+            --tag ${{ env.FULL_IMAGE_NAME }}:edge \
+            ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          fi
+
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
           if [[ "${{ env.LATEST }}" == "true" ]]; then
             docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:latest
+          fi
+
+          if [[ "${{ env.EDGE }}" == "true" ]]; then
+            docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:edge
           fi
