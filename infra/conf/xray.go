@@ -3,6 +3,7 @@ package conf
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -379,11 +380,20 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 	return &stats.Config{}, nil
 }
 
+type EnvConfig map[string]string
+
+func (c EnvConfig) Override(o EnvConfig) {
+	for key, value := range o {
+		c[key] = value
+	}
+}
+
 type Config struct {
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
 	Transport map[string]json.RawMessage `json:"transport"`
 
+	Env              EnvConfig               `json:"env"`
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
 	DNSConfig        *DNSConfig              `json:"dns"`
@@ -438,6 +448,12 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	if o.Transport != nil {
 		c.Transport = o.Transport
+	}
+	if o.Env != nil {
+		if c.Env == nil {
+			c.Env = EnvConfig{}
+		}
+		c.Env.Override(o.Env)
 	}
 	if o.Policy != nil {
 		c.Policy = o.Policy
@@ -514,6 +530,12 @@ func (c *Config) Override(o *Config, fn string) {
 
 // Build implements Buildable.
 func (c *Config) Build() (*core.Config, error) {
+	for key, value := range c.Env {
+		if err := os.Setenv(key, value); err != nil {
+			return nil, errors.New("failed to apply environment configuration").Base(err)
+		}
+	}
+
 	if err := PostProcessConfigureFile(c); err != nil {
 		return nil, errors.New("failed to post-process configuration file").Base(err)
 	}
