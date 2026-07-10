@@ -450,9 +450,13 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		for _, s := range tls.CipherSuites() {
 			id[s.Name] = s.ID
 		}
+		for _, s := range tls.InsecureCipherSuites() {
+			id[s.Name] = s.ID
+		}
 		for n := range strings.SplitSeq(c.CipherSuites, ":") {
-			if id[n] != 0 {
-				config.CipherSuites = append(config.CipherSuites, id[n])
+			n = strings.TrimSpace(n)
+			if v, ok := id[n]; ok {
+				config.CipherSuites = append(config.CipherSuites, v)
 			}
 		}
 	}
