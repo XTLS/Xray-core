@@ -40,7 +40,9 @@ func (m *Manager) RegisterCounter(name string) (stats.Counter, error) {
 	defer m.access.Unlock()
 
 	if _, found := m.counters[name]; found {
-		return nil, errors.New("Counter ", name, " already registered.")
+		return nil, errors.New(
+			"Counter ", name, " already registered.",
+		).Base(stats.ErrAlreadyRegistered)
 	}
 	errors.LogDebug(context.Background(), "create new counter ", name)
 	c := new(Counter)
@@ -89,7 +91,9 @@ func (m *Manager) RegisterOnlineMap(name string) (stats.OnlineMap, error) {
 	defer m.access.Unlock()
 
 	if _, found := m.onlineMaps[name]; found {
-		return nil, errors.New("OnlineMap ", name, " already registered.")
+		return nil, errors.New(
+			"OnlineMap ", name, " already registered.",
+		).Base(stats.ErrAlreadyRegistered)
 	}
 	errors.LogDebug(context.Background(), "create new OnlineMap ", name)
 	om := NewOnlineMap()
@@ -138,14 +142,19 @@ func (m *Manager) RegisterChannel(name string) (stats.Channel, error) {
 	defer m.access.Unlock()
 
 	if _, found := m.channels[name]; found {
-		return nil, errors.New("Channel ", name, " already registered.")
+		return nil, errors.New(
+			"Channel ", name, " already registered.",
+		).Base(stats.ErrAlreadyRegistered)
 	}
 	errors.LogDebug(context.Background(), "create new channel ", name)
 	c := NewChannel(&ChannelConfig{BufferSize: 64, Blocking: false})
-	m.channels[name] = c
 	if m.running {
-		return c, c.Start()
+		if err := c.Start(); err != nil {
+			return nil, err
+		}
 	}
+
+	m.channels[name] = c
 	return c, nil
 }
 

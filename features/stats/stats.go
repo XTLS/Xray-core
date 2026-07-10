@@ -8,6 +8,8 @@ import (
 	"github.com/xtls/xray-core/features"
 )
 
+var ErrAlreadyRegistered = errors.New("already registered")
+
 // Counter is the interface for stats counters.
 //
 // xray:api:stable
@@ -112,32 +114,68 @@ type Manager interface {
 
 // GetOrRegisterCounter tries to get the StatCounter first. If not exist, it then tries to create a new counter.
 func GetOrRegisterCounter(m Manager, name string) (Counter, error) {
-	counter := m.GetCounter(name)
-	if counter != nil {
-		return counter, nil
-	}
+	for {
+		counter := m.GetCounter(name)
+		if counter != nil {
+			return counter, nil
+		}
 
-	return m.RegisterCounter(name)
+		counter, err := m.RegisterCounter(name)
+		if err == nil {
+			return counter, nil
+		}
+
+		if !errors.AllEqual(ErrAlreadyRegistered, err) {
+			return counter, err
+		}
+
+		// Get here because another goroutine registered it between Get and Register.
+		// Let's retry.
+	}
 }
 
 // GetOrRegisterOnlineMap tries to get the OnlineMap first. If not exist, it then tries to create a new OnlineMap.
 func GetOrRegisterOnlineMap(m Manager, name string) (OnlineMap, error) {
-	onlineMap := m.GetOnlineMap(name)
-	if onlineMap != nil {
-		return onlineMap, nil
-	}
+	for {
+		onlineMap := m.GetOnlineMap(name)
+		if onlineMap != nil {
+			return onlineMap, nil
+		}
 
-	return m.RegisterOnlineMap(name)
+		onlineMap, err := m.RegisterOnlineMap(name)
+		if err == nil {
+			return onlineMap, nil
+		}
+
+		if !errors.AllEqual(ErrAlreadyRegistered, err) {
+			return onlineMap, err
+		}
+
+		// Get here because another goroutine registered it between Get and Register.
+		// Let's retry.
+	}
 }
 
 // GetOrRegisterChannel tries to get the StatChannel first. If not exist, it then tries to create a new channel.
 func GetOrRegisterChannel(m Manager, name string) (Channel, error) {
-	channel := m.GetChannel(name)
-	if channel != nil {
-		return channel, nil
-	}
+	for {
+		channel := m.GetChannel(name)
+		if channel != nil {
+			return channel, nil
+		}
 
-	return m.RegisterChannel(name)
+		channel, err := m.RegisterChannel(name)
+		if err == nil {
+			return channel, nil
+		}
+
+		if !errors.AllEqual(ErrAlreadyRegistered, err) {
+			return channel, err
+		}
+
+		// Get here because another goroutine registered it between Get and Register.
+		// Let's retry.
+	}
 }
 
 // ManagerType returns the type of Manager interface. Can be used to implement common.HasType.
