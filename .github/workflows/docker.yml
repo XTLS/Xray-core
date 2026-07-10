@@ -44,7 +44,7 @@ jobs:
         run: |
           SOURCE_TAG="${{ github.event.inputs.tag }}"
           if [[ "${{ github.event_name }}" == "push" ]]; then
-            SOURCE_TAG="alpha"
+            SOURCE_TAG="last-commit"
           fi
           if [[ -z "$SOURCE_TAG" ]]; then
             SOURCE_TAG="${{ github.ref_name }}"
