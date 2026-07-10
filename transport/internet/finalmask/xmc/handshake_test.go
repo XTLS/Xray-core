@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"crypto/x509"
 	"net"
+	"sync"
 	"testing"
-	"time"
 )
 
 func deriveTestRSAKey(t *testing.T, password string) ([]byte, []byte) {
@@ -105,9 +105,12 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 	serverPassword := "server-secret-456"
 	usernames := []string{"test_user"}
 	serverPrivateKey, serverPublicKey := deriveTestRSAKey(t, serverPassword)
-	_, clientPublicKey := deriveTestRSAKey(t, clientPassword)
 
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		rawConn, err := ln.Accept()
 		if err != nil {
 			return
@@ -136,20 +139,19 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, usernames, clientPassword, clientPublicKey, "localhost")
+	client, err := newClientConn(clientRaw, usernames, clientPassword, serverPublicKey, "localhost")
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
 
-	// Wait briefly or just perform write/read
-	_ = clientRaw.SetDeadline(time.Now().Add(100 * time.Millisecond))
-
-	_, err = client.Write([]byte("hello server"))
-	if err == nil {
-		// Try to read too
-		buf := make([]byte, 1024)
-		_, _ = client.Read(buf)
+	err = client.handshake()
+	if err != nil {
+		t.Fatalf("client handshake err: %v", err)
 	}
+
+	_, _ = client.Write([]byte{0x1, 0x2, 0x3, 0x4})
+
+	wg.Wait()
 
 	// Check if we lost connection or received error
 	t.Log("Handshake mismatch tested")
