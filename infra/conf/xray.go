@@ -3,9 +3,8 @@ package conf
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
+	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/xtls/xray-core/app/dispatcher"
@@ -14,7 +13,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
@@ -345,78 +343,12 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 	return &stats.Config{}, nil
 }
 
-type EnvConfig struct {
-	settings map[string]string
-}
+type EnvConfig map[string]string
 
-// UnmarshalJSON accepts both dotted env keys, such as "xray.location.asset",
-// and normalized env keys, such as "XRAY_LOCATION_ASSET". Unknown keys are
-// ignored so config files cannot set arbitrary process environment variables.
-func (c *EnvConfig) UnmarshalJSON(data []byte) error {
-	var raw map[string]*string
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+func (c EnvConfig) Override(o EnvConfig) {
+	for key, value := range o {
+		c[key] = value
 	}
-
-	c.settings = nil
-	keys := make([]string, 0, len(raw))
-	for key := range raw {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		envValue := raw[key]
-		if envValue == nil {
-			continue
-		}
-		canonicalKey, ok := platform.CanonicalConfigEnvKey(key)
-		if !ok {
-			continue
-		}
-		c.set(canonicalKey, *envValue)
-	}
-	return nil
-}
-
-func (c EnvConfig) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.settings)
-}
-
-func (c *EnvConfig) set(key string, value string) {
-	if c.settings == nil {
-		c.settings = make(map[string]string)
-	}
-	c.settings[key] = value
-}
-
-func (c *EnvConfig) Override(o *EnvConfig) {
-	if o == nil {
-		return
-	}
-	for key, value := range o.settings {
-		c.set(key, value)
-	}
-}
-
-func (c *EnvConfig) Settings() []platform.EnvSetting {
-	if c == nil || len(c.settings) == 0 {
-		return nil
-	}
-
-	keys := make([]string, 0, len(c.settings))
-	for key := range c.settings {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	settings := make([]platform.EnvSetting, 0, len(c.settings))
-	for _, key := range keys {
-		settings = append(settings, platform.EnvSetting{
-			Key:   key,
-			Value: c.settings[key],
-		})
-	}
-	return settings
 }
 
 type Config struct {
@@ -424,7 +356,7 @@ type Config struct {
 	// left for returning error
 	Transport map[string]json.RawMessage `json:"transport"`
 
-	Env              *EnvConfig              `json:"env"`
+	Env              EnvConfig               `json:"env"`
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
 	DNSConfig        *DNSConfig              `json:"dns"`
@@ -482,7 +414,7 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	if o.Env != nil {
 		if c.Env == nil {
-			c.Env = &EnvConfig{}
+			c.Env = EnvConfig{}
 		}
 		c.Env.Override(o.Env)
 	}
@@ -560,25 +492,18 @@ func (c *Config) Override(o *Config, fn string) {
 }
 
 // Build implements Buildable.
-func (c *Config) Build() (config *core.Config, err error) {
-	rollbackEnv, err := platform.ApplyConfigEnvSettings(c.Env.Settings())
-	if err != nil {
-		return nil, errors.New("failed to apply environment configuration").Base(err)
+func (c *Config) Build() (*core.Config, error) {
+	for key, value := range c.Env {
+		if err := os.Setenv(key, value); err != nil {
+			return nil, errors.New("failed to apply environment configuration").Base(err)
+		}
 	}
-	defer func() {
-		if err == nil || rollbackEnv == nil {
-			return
-		}
-		if rollbackErr := rollbackEnv(); rollbackErr != nil {
-			err = errors.New("failed to rollback environment configuration").Base(stderrors.Join(err, rollbackErr))
-		}
-	}()
 
 	if err := PostProcessConfigureFile(c); err != nil {
 		return nil, errors.New("failed to post-process configuration file").Base(err)
 	}
 
-	config = &core.Config{
+	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dispatcher.Config{}),
 			serial.ToTypedMessage(&proxyman.InboundConfig{}),

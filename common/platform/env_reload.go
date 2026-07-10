@@ -2,7 +2,6 @@ package platform
 
 import (
 	"errors"
-	"os"
 	"sync"
 )
 
@@ -34,61 +33,6 @@ func ReloadEnvSettings() error {
 	var errs []error
 	for _, handler := range handlers {
 		if err := handler(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
-type EnvSetting struct {
-	Key   string
-	Value string
-}
-
-type envValue struct {
-	value  string
-	exists bool
-}
-
-// ApplyConfigEnvSettings applies the subset of environment settings that may be
-// declared inside an already parsed Xray config. Pre-load keys such as
-// xray.json.strict, xray.location.config and xray.location.confdir are
-// intentionally excluded by the config parser before settings reach this point.
-func ApplyConfigEnvSettings(settings []EnvSetting) (func() error, error) {
-	originals := map[string]envValue{}
-	for _, setting := range settings {
-		if setting.Value == "" {
-			continue
-		}
-		if _, ok := originals[setting.Key]; !ok {
-			value, exists := os.LookupEnv(setting.Key)
-			originals[setting.Key] = envValue{
-				value:  value,
-				exists: exists,
-			}
-		}
-		if err := os.Setenv(setting.Key, setting.Value); err != nil {
-			return nil, errors.Join(err, rollbackConfigEnvSettings(originals))
-		}
-	}
-	if len(originals) == 0 {
-		return nil, nil
-	}
-	return func() error {
-		return rollbackConfigEnvSettings(originals)
-	}, nil
-}
-
-func rollbackConfigEnvSettings(originals map[string]envValue) error {
-	var errs []error
-	for key, original := range originals {
-		var err error
-		if original.exists {
-			err = os.Setenv(key, original.value)
-		} else {
-			err = os.Unsetenv(key)
-		}
-		if err != nil {
 			errs = append(errs, err)
 		}
 	}

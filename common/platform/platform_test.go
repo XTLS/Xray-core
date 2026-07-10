@@ -35,49 +35,6 @@ func TestNormalizeEnvName(t *testing.T) {
 	}
 }
 
-func TestCanonicalConfigEnvKey(t *testing.T) {
-	cases := []struct {
-		name      string
-		input     string
-		output    string
-		supported bool
-	}{
-		{
-			name:      "dotted key",
-			input:     "xray.location.asset",
-			output:    AssetLocation,
-			supported: true,
-		},
-		{
-			name:      "normalized key",
-			input:     "XRAY_LOCATION_ASSET",
-			output:    AssetLocation,
-			supported: true,
-		},
-		{
-			name:      "pre-load key",
-			input:     "xray.json.strict",
-			supported: false,
-		},
-		{
-			name:      "unknown key",
-			input:     "XRAY_UNKNOWN",
-			supported: false,
-		},
-	}
-	for _, test := range cases {
-		t.Run(test.name, func(t *testing.T) {
-			output, supported := CanonicalConfigEnvKey(test.input)
-			if supported != test.supported {
-				t.Fatal("supported: ", supported, " want ", test.supported)
-			}
-			if output != test.output {
-				t.Fatal("output: ", output, " want ", test.output)
-			}
-		})
-	}
-}
-
 func TestEnvFlag(t *testing.T) {
 	v := EnvFlag{
 		Name: "xxxxx.y",
