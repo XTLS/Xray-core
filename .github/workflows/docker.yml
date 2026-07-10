@@ -1,6 +1,10 @@
 name: Build and Push Docker Image
 
 on:
+  push:
+    branches:
+      - main
+
   release:
     types:
       - published
@@ -35,6 +39,9 @@ jobs:
       - name: Validate and extract tag
         run: |
           SOURCE_TAG="${{ github.event.inputs.tag }}"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            SOURCE_TAG="sha-${GITHUB_SHA:0:7}"
+          fi
           if [[ -z "$SOURCE_TAG" ]]; then
             SOURCE_TAG="${{ github.ref_name }}"
           fi
@@ -71,6 +78,14 @@ jobs:
 
           echo "Beta: '$BETA'."
           echo "BETA=$BETA" >>${GITHUB_ENV}
+
+          ALPHA=false
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            ALPHA=true
+          fi
+
+          echo "Alpha: '$ALPHA'."
+          echo "ALPHA=$ALPHA" >>${GITHUB_ENV}
 
       - name: Checkout code
         uses: actions/checkout@v7
@@ -139,6 +154,13 @@ jobs:
             ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           fi
 
+          if [[ "${{ env.ALPHA }}" == "true" ]]; then
+            echo "Adding 'alpha' tag to manifest: '${{ env.FULL_IMAGE_NAME }}:alpha'."
+            docker buildx imagetools create \
+            --tag ${{ env.FULL_IMAGE_NAME }}:alpha \
+            ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          fi
+
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
@@ -149,4 +171,8 @@ jobs:
 
           if [[ "${{ env.BETA }}" == "true" ]]; then
             docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:beta
+          fi
+
+          if [[ "${{ env.ALPHA }}" == "true" ]]; then
+            docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:alpha
           fi
