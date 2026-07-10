@@ -1,6 +1,12 @@
 package conf
 
 import (
+	"crypto/rand"
+	"fmt"
+	"math/big"
+	"net"
+	"strconv"
+
 	"github.com/xtls/xray-core/proxy/tun"
 	"google.golang.org/protobuf/proto"
 )
@@ -32,10 +38,68 @@ func (v *TunConfig) Build() (proto.Message, error) {
 	}
 
 	if config.Name == "" {
-		config.Name = "xray0"
+		name, err := GetAvailableTunName()
+		if err != nil {
+			return nil, err
+		}
+		config.Name = name
 	}
 	if config.MTU == 0 {
 		config.MTU = 1500
 	}
 	return config, nil
+}
+
+const (
+	tunNamePrefix = "utun"
+	minTunIndex   = 10
+	maxTunIndex   = 1024
+)
+
+func GetAvailableTunName() (string, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", fmt.Errorf("fail to get system interface information: %w", err)
+	}
+
+	usedNames := make(map[string]struct{}, len(interfaces))
+	for _, iface := range interfaces {
+		usedNames[iface.Name] = struct{}{}
+	}
+
+	startIndex, err := randomInt(minTunIndex, maxTunIndex)
+	if err != nil {
+		return "", fmt.Errorf("fail to generate valid tun name: %w", err)
+	}
+
+	rangeSize := maxTunIndex - minTunIndex + 1
+
+	for offset := 0; offset < rangeSize; offset++ {
+		index := minTunIndex + (startIndex-minTunIndex+offset)%rangeSize
+		name := tunNamePrefix + strconv.Itoa(index)
+
+		if _, exists := usedNames[name]; !exists {
+			return name, nil
+		}
+	}
+
+	return "", fmt.Errorf(
+		"no available TUN interface name in range %s%d-%s%d",
+		tunNamePrefix,
+		minTunIndex,
+		tunNamePrefix,
+		maxTunIndex,
+	)
+}
+
+func randomInt(min, max int) (int, error) {
+	value, err := rand.Int(
+		rand.Reader,
+		big.NewInt(int64(max-min+1)),
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	return min + int(value.Int64()), nil
 }
