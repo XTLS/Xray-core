@@ -1,10 +1,6 @@
 name: Build and Push Docker Image
 
 on:
-#  push:
-#    branches:
-#      - main
-#
   release:
     types:
       - published
@@ -19,10 +15,6 @@ on:
         description: "Set to latest"
         type: boolean
         default: false
-#
-#concurrency:
-#  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref || github.run_id }}
-#  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   build-and-push:
@@ -37,17 +29,12 @@ jobs:
         env:
           IMAGE_NAME: "${{ github.repository }}"
         run: |
-          LOWER=${IMAGE_NAME,,}
-          echo "IMAGE_NAME=${LOWER}" >>${GITHUB_ENV}
-          echo "FULL_IMAGE_NAME=ghcr.io/${LOWER}" >>${GITHUB_ENV}
-          echo "PACKAGE_NAME=${LOWER##*/}" >>${GITHUB_ENV}
+          echo "IMAGE_NAME=${IMAGE_NAME,,}" >>${GITHUB_ENV}
+          echo "FULL_IMAGE_NAME=ghcr.io/${IMAGE_NAME,,}" >>${GITHUB_ENV}
 
       - name: Validate and extract tag
         run: |
           SOURCE_TAG="${{ github.event.inputs.tag }}"
-          #if [[ "${{ github.event_name }}" == "push" ]]; then
-          #  SOURCE_TAG="last-commit"
-          #fi
           if [[ -z "$SOURCE_TAG" ]]; then
             SOURCE_TAG="${{ github.ref_name }}"
           fi
@@ -163,12 +150,3 @@ jobs:
           if [[ "${{ env.PRERELEASE }}" == "true" ]]; then
             docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:pre-release
           fi
-
-#      - name: Delete orphaned (untagged) manifests
-#        if: github.event_name == 'push'
-#        uses: dataaxiom/ghcr-cleanup-action@v1
-#        with:
-#          package: ${{ env.PACKAGE_NAME }}
-#          delete-untagged: true
-#          older-than: 1 day
-#          dry-run: true
