@@ -1,9 +1,11 @@
 package conf
 
 import (
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"net/url"
 	"regexp"
@@ -22,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
+	"github.com/xtls/xray-core/transport/internet/finalmask/xmc"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"google.golang.org/protobuf/proto"
 )
@@ -67,6 +70,7 @@ var (
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
+		"xmc":           func() interface{} { return new(XMC) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -712,6 +716,40 @@ func (c *Xdns) Build() (proto.Message, error) {
 	return &xdns.Config{
 		Domains:   c.Domains,
 		Resolvers: c.Resolvers,
+	}, nil
+}
+
+type XMC struct {
+	Hostname  string   `json:"hostname"`
+	Usernames []string `json:"usernames"`
+	Password  string   `json:"password"`
+}
+
+func (c *XMC) Build() (proto.Message, error) {
+	if len(c.Usernames) == 0 {
+		c.Usernames = []string{"Dream"}
+	}
+
+	if c.Password == "" {
+		return nil, fmt.Errorf("empty password")
+	}
+
+	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
+	if err != nil {
+		return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
+	}
+
+	rsaPublicKey, err := x509.MarshalPKIXPublicKey(&rsaPrivateKey.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal minecraft rsa public key: %w", err)
+	}
+
+	return &xmc.Config{
+		Password:      c.Password,
+		Usernames:     c.Usernames,
+		Hostname:      c.Hostname,
+		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
+		RsaPublicKey:  rsaPublicKey,
 	}, nil
 }
 
