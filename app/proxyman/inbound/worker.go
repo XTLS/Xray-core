@@ -149,20 +149,10 @@ func (w *tcpWorker) Start() error {
 }
 
 func (w *tcpWorker) Close() error {
-	var errs []interface{}
-	if w.hub != nil {
-		if err := common.Close(w.hub); err != nil {
-			errs = append(errs, err)
-		}
-		if err := common.Close(w.proxy); err != nil {
-			errs = append(errs, err)
-		}
+	if w.hub == nil {
+		return nil
 	}
-	if len(errs) > 0 {
-		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
-	}
-
-	return nil
+	return common.Close(w.hub)
 }
 
 func (w *tcpWorker) Port() net.Port {
@@ -448,10 +438,6 @@ func (w *udpWorker) Close() error {
 		}
 	}
 
-	if err := common.Close(w.proxy); err != nil {
-		errs = append(errs, err)
-	}
-
 	if len(errs) > 0 {
 		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
 	}
@@ -535,20 +521,10 @@ func (w *dsWorker) Start() error {
 }
 
 func (w *dsWorker) Close() error {
-	var errs []interface{}
-	if w.hub != nil {
-		if err := common.Close(w.hub); err != nil {
-			errs = append(errs, err)
-		}
-		if err := common.Close(w.proxy); err != nil {
-			errs = append(errs, err)
-		}
+	if w.hub == nil {
+		return nil
 	}
-	if len(errs) > 0 {
-		return errors.New("failed to close all resources").Base(errors.New(serial.Concat(errs...)))
-	}
-
-	return nil
+	return common.Close(w.hub)
 }
 
 func IsLocal(ip net.IP) bool {
