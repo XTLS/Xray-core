@@ -2,6 +2,10 @@ package core
 
 import (
 	"context"
+
+	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/transport/internet"
 )
 
 // XrayKey is the key type of Instance in Context, exported for test.
@@ -40,6 +44,17 @@ func toContext(ctx context.Context, v *Instance) context.Context {
 	if FromContext(ctx) != v {
 		ctx = context.WithValue(ctx, xrayKey, v)
 	}
+	ctx = internet.ContextWithSystemDialerDependenciesProvider(ctx, func() (dns.Client, outbound.Manager) {
+		var dnsClient dns.Client
+		if feature := v.GetFeature(dns.ClientType()); feature != nil {
+			dnsClient, _ = feature.(dns.Client)
+		}
+		var outboundManager outbound.Manager
+		if feature := v.GetFeature(outbound.ManagerType()); feature != nil {
+			outboundManager, _ = feature.(outbound.Manager)
+		}
+		return dnsClient, outboundManager
+	})
 	return ctx
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/dice"
@@ -80,11 +81,57 @@ func DestIpAddress() net.IP {
 }
 
 var (
-	dnsClient dns.Client
-	obm       outbound.Manager
+	defaultSystemDialerDependencies     systemDialerDependencies
+	defaultSystemDialerDependenciesLock sync.RWMutex
 )
 
-func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+type systemDialerDependencies struct {
+	dnsClient       dns.Client
+	outboundManager outbound.Manager
+}
+
+type systemDialerDependenciesContextKey struct{}
+
+type systemDialerDependenciesProvider func() systemDialerDependencies
+
+// ContextWithSystemDialerDependencies binds instance-owned dialer dependencies
+// to ctx. It is an internal API used by core to keep concurrent instances from
+// overwriting each other's DNS client and outbound manager.
+func ContextWithSystemDialerDependencies(ctx context.Context, dc dns.Client, om outbound.Manager) context.Context {
+	return context.WithValue(ctx, systemDialerDependenciesContextKey{}, systemDialerDependencies{
+		dnsClient:       dc,
+		outboundManager: om,
+	})
+}
+
+// ContextWithSystemDialerDependenciesProvider binds a lazy dependency provider
+// to ctx. It is an internal API used while a core instance is still being built.
+func ContextWithSystemDialerDependenciesProvider(ctx context.Context, provider func() (dns.Client, outbound.Manager)) context.Context {
+	return context.WithValue(ctx, systemDialerDependenciesContextKey{}, systemDialerDependenciesProvider(func() systemDialerDependencies {
+		dc, om := provider()
+		return systemDialerDependencies{dnsClient: dc, outboundManager: om}
+	}))
+}
+
+func systemDialerDependenciesFromContext(ctx context.Context) systemDialerDependencies {
+	if ctx != nil {
+		switch dependencies := ctx.Value(systemDialerDependenciesContextKey{}).(type) {
+		case systemDialerDependencies:
+			return dependencies
+		case systemDialerDependenciesProvider:
+			return dependencies()
+		}
+	}
+
+	defaultSystemDialerDependenciesLock.RLock()
+	defer defaultSystemDialerDependenciesLock.RUnlock()
+	return defaultSystemDialerDependencies
+}
+
+// LookupForIPWithContext resolves a domain with the DNS client owned by the
+// Xray instance in ctx.
+func LookupForIPWithContext(ctx context.Context, domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+	dnsClient := systemDialerDependenciesFromContext(ctx).dnsClient
 	if dnsClient == nil {
 		return nil, errors.New("DNS client not initialized").AtError()
 	}
@@ -106,6 +153,12 @@ func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) 
 		return nil, dns.ErrEmptyResponse
 	}
 	return ips, err
+}
+
+// LookupForIP resolves a domain with the process-wide fallback DNS client.
+// Instance code should use LookupForIPWithContext instead.
+func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+	return LookupForIPWithContext(context.Background(), domain, strategy, localAddr)
 }
 
 func redirect(ctx context.Context, dst net.Destination, obt string, h outbound.Handler) net.Conn {
@@ -253,7 +306,7 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		if outboundName == "freedom" && dest.Network == net.Network_UDP && origTargetAddr != nil && src == nil {
 			finalStrategy = finalStrategy.GetDynamicStrategy(origTargetAddr.Family())
 		}
-		ips, err := LookupForIP(dest.Address.Domain(), finalStrategy, src)
+		ips, err := LookupForIPWithContext(ctx, dest.Address.Domain(), finalStrategy, src)
 		if err != nil {
 			errors.LogErrorInner(ctx, err, "failed to resolve ip")
 			if sockopt.DomainStrategy.ForceIP() {
@@ -268,6 +321,7 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 	}
 
 	if len(sockopt.DialerProxy) > 0 {
+		obm := systemDialerDependenciesFromContext(ctx).outboundManager
 		if obm == nil {
 			return nil, errors.New("there is no outbound manager for dialerProxy").AtError()
 		}
@@ -282,6 +336,10 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 }
 
 func InitSystemDialer(dc dns.Client, om outbound.Manager) {
-	dnsClient = dc
-	obm = om
+	defaultSystemDialerDependenciesLock.Lock()
+	defaultSystemDialerDependencies = systemDialerDependencies{
+		dnsClient:       dc,
+		outboundManager: om,
+	}
+	defaultSystemDialerDependenciesLock.Unlock()
 }
