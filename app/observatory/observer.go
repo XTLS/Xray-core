@@ -31,6 +31,7 @@ type Observer struct {
 
 	statusLock sync.Mutex
 	status     []*OutboundStatus
+	updates    extension.ObservatoryUpdateDispatcher
 
 	finished *done.Instance
 
@@ -38,8 +39,38 @@ type Observer struct {
 	dispatcher routing.Dispatcher
 }
 
+const probeRequestTimeout = 5 * time.Second
+
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
-	return &ObservationResult{Status: o.status}, nil
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+	status := make([]*OutboundStatus, 0, len(o.status))
+	for _, item := range o.status {
+		status = append(status, proto.Clone(item).(*OutboundStatus))
+	}
+	return &ObservationResult{Status: status}, nil
+}
+
+func (o *Observer) SubscribeObservationUpdates(listener func()) func() {
+	return o.updates.SubscribeObservationUpdates(listener)
+}
+
+func (o *Observer) ObservationProbeDeadline() time.Duration {
+	if o.config == nil || o.config.EnableConcurrency {
+		return probeRequestTimeout
+	}
+
+	interval := 10 * time.Second
+	if o.config.ProbeInterval != 0 {
+		interval = time.Duration(o.config.ProbeInterval)
+	}
+	count := 1
+	if selector, ok := o.ohm.(outbound.HandlerSelector); ok {
+		if selected := selector.Select(o.config.SubjectSelector); len(selected) > 0 {
+			count = len(selected)
+		}
+	}
+	return time.Duration(count)*probeRequestTimeout + time.Duration(count-1)*interval
 }
 
 func (o *Observer) Type() interface{} {
@@ -114,10 +145,11 @@ func (o *Observer) background() {
 
 func (o *Observer) clearRemovedOutbounds(outbounds []string) {
 	o.statusLock.Lock()
-	defer o.statusLock.Unlock()
 	if len(o.status) == 0 {
+		o.statusLock.Unlock()
 		return
 	}
+	oldCount := len(o.status)
 	var pruned []*OutboundStatus
 	for _, status := range o.status {
 		if slices.Contains(outbounds, status.OutboundTag) {
@@ -125,6 +157,10 @@ func (o *Observer) clearRemovedOutbounds(outbounds []string) {
 		}
 	}
 	o.status = pruned
+	o.statusLock.Unlock()
+	if len(pruned) != oldCount {
+		o.updates.NotifyObservationUpdate()
+	}
 }
 
 func (o *Observer) probe(outbound string) ProbeResult {
@@ -155,7 +191,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 			}
 			return connection, nil
 		},
-		TLSHandshakeTimeout: time.Second * 5,
+		TLSHandshakeTimeout: probeRequestTimeout,
 	}
 	httpClient := &http.Client{
 		Transport: &httpTransport,
@@ -163,7 +199,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 			return http.ErrUseLastResponse
 		},
 		Jar:     nil,
-		Timeout: time.Second * 5,
+		Timeout: probeRequestTimeout,
 	}
 	var GETTime time.Duration
 	err := task.Run(o.ctx, func() error {
@@ -196,7 +232,6 @@ func (o *Observer) probe(outbound string) ProbeResult {
 
 func (o *Observer) updateStatusForResult(outbound string, result *ProbeResult) {
 	o.statusLock.Lock()
-	defer o.statusLock.Unlock()
 	var status *OutboundStatus
 	if location := o.findStatusLocationLockHolderOnly(outbound); location != -1 {
 		status = o.status[location]
@@ -216,6 +251,8 @@ func (o *Observer) updateStatusForResult(outbound string, result *ProbeResult) {
 		status.LastErrorReason = result.LastErrorReason
 		status.Delay = 99999999
 	}
+	o.statusLock.Unlock()
+	o.updates.NotifyObservationUpdate()
 }
 
 func (o *Observer) findStatusLocationLockHolderOnly(outbound string) int {
