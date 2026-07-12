@@ -3,17 +3,18 @@
 package tun
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/binary"
 	go_errors "errors"
 	"net"
 	"net/netip"
-	"sort"
-	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/proxy/tun/firewall"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
@@ -31,13 +32,14 @@ func procyield(cycles uint32)
 type WindowsTun struct {
 	sync.RWMutex
 
-	options        *Config
-	adapter        *wintun.Adapter
-	session        wintun.Session
-	readWait       windows.Handle
-	luid           winipcfg.LUID
-	changeCallback winipcfg.ChangeCallback
-	closed         bool
+	options  *Config
+	adapter  *wintun.Adapter
+	session  wintun.Session
+	readWait windows.Handle
+	luid     winipcfg.LUID
+	cbr      winipcfg.ChangeCallback
+	cbi      winipcfg.ChangeCallback
+	closed   bool
 }
 
 // WindowsTun implements Tun
@@ -62,6 +64,8 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
+	firewall.EnableFirewall(adapter.LUID())
+
 	tun := &WindowsTun{
 		options:  options,
 		adapter:  adapter,
@@ -85,8 +89,30 @@ func open(name string) (*wintun.Adapter, error) {
 	return nil, err
 }
 
-func (t *WindowsTun) Start() error {
-	var has4, has6 bool
+func (t *WindowsTun) Start() (err error) {
+	if updater != nil {
+		t.cbr, err = winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
+			updater.Update()
+		})
+		if err != nil {
+			return err
+		}
+		t.cbi, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
+			updater.Update()
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	addresses := make([]netip.Prefix, 0, len(t.options.Gateway))
+	for _, address := range t.options.Gateway {
+		addresses = append(addresses, netip.MustParsePrefix(address))
+	}
+	dns := make([]netip.Addr, 0, len(t.options.DNS))
+	for _, ip := range t.options.DNS {
+		dns = append(dns, netip.MustParseAddr(ip))
+	}
 	allowedIPs := make([]netip.Prefix, 0, len(t.options.AutoSystemRoutingTable))
 	for _, route := range t.options.AutoSystemRoutingTable {
 		allowedIPs = append(allowedIPs, netip.MustParsePrefix(route))
@@ -98,10 +124,8 @@ func (t *WindowsTun) Start() error {
 			Metric:      0,
 		}
 		if ip.Addr().Is4() {
-			has4 = true
 			route.NextHop = netip.IPv4Unspecified()
 		} else {
-			has6 = true
 			route.NextHop = netip.IPv6Unspecified()
 		}
 		routesMap[route] = struct{}{}
@@ -111,81 +135,63 @@ func (t *WindowsTun) Start() error {
 		r := route
 		routesData = append(routesData, &r)
 	}
-	err := t.luid.SetRoutes(routesData)
+
+	var retryTimes int
+	var lastErr error
+startOver:
+	if retryTimes > 0 {
+		if retryTimes > 15 {
+			return windows.ERROR_NOT_FOUND
+		}
+		errors.LogErrorInner(context.Background(), lastErr, "Interface configuration failed, retrying attempt ", retryTimes, "/15")
+		time.Sleep(time.Second)
+	}
+	retryTimes++
+	for _, family := range []winipcfg.AddressFamily{windows.AF_INET, windows.AF_INET6} {
+		ipif, err := t.luid.IPInterface(family)
+		if err != nil {
+			return err
+		}
+		ipif.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
+		ipif.DadTransmits = 0
+		ipif.ManagedAddressConfigurationSupported = false
+		ipif.OtherStatefulConfigurationSupported = false
+		ipif.NLMTU = t.options.MTU
+		ipif.UseAutomaticMetric = false
+		ipif.Metric = 0
+		err = ipif.Set()
+		if err != nil {
+			lastErr = errors.New("unable to set metric and MTU").Base(err)
+			if err == windows.ERROR_NOT_FOUND {
+				goto startOver
+			}
+			return lastErr
+		}
+		err = t.luid.SetDNS(family, dns, nil)
+		if err != nil {
+			lastErr = errors.New("unable to set DNS").Base(err)
+			if err == windows.ERROR_NOT_FOUND {
+				goto startOver
+			}
+			return lastErr
+		}
+	}
+	err = t.luid.SetRoutes(routesData)
 	if err != nil {
-		return errors.New("unable to set routes").Base(err)
+		lastErr = errors.New("unable to set routes").Base(err)
+		if err == windows.ERROR_NOT_FOUND {
+			goto startOver
+		}
+		return lastErr
 	}
-
-	if len(t.options.Gateway) > 0 {
-		addresses := make([]netip.Prefix, 0, len(t.options.Gateway))
-		for _, address := range t.options.Gateway {
-			addresses = append(addresses, netip.MustParsePrefix(address))
+	err = t.luid.SetIPAddresses(addresses)
+	if err != nil {
+		lastErr = errors.New("unable to set ips").Base(err)
+		if err == windows.ERROR_NOT_FOUND {
+			goto startOver
 		}
-		err := t.luid.SetIPAddresses(addresses)
-		if err != nil {
-			return errors.New("unable to set ips").Base(err)
-		}
+		return lastErr
 	}
-
-	if has4 {
-		ipif, err := t.luid.IPInterface(windows.AF_INET)
-		if err != nil {
-			return err
-		}
-		ipif.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
-		ipif.DadTransmits = 0
-		ipif.ManagedAddressConfigurationSupported = false
-		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU
-		ipif.UseAutomaticMetric = false
-		ipif.Metric = 0
-		err = ipif.Set()
-		if err != nil {
-			return err
-		}
-	}
-	if has6 {
-		ipif, err := t.luid.IPInterface(windows.AF_INET6)
-		if err != nil {
-			return err
-		}
-		ipif.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
-		ipif.DadTransmits = 0
-		ipif.ManagedAddressConfigurationSupported = false
-		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU
-		ipif.UseAutomaticMetric = false
-		ipif.Metric = 0
-		err = ipif.Set()
-		if err != nil {
-			return err
-		}
-	}
-
-	if len(t.options.DNS) > 0 {
-		dns := make([]netip.Addr, 0, len(t.options.DNS))
-		for _, ip := range t.options.DNS {
-			dns = append(dns, netip.MustParseAddr(ip))
-		}
-		err := t.luid.SetDNS(windows.AF_INET, dns, nil)
-		if err != nil {
-			return err
-		}
-		err = t.luid.SetDNS(windows.AF_INET6, dns, nil)
-		if err != nil {
-			return err
-		}
-	}
-
-	if updater != nil {
-		t.changeCallback, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
-			updater.Update()
-		})
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -197,12 +203,27 @@ func (t *WindowsTun) Close() error {
 	}
 	t.closed = true
 
-	if t.changeCallback != nil {
-		t.changeCallback.Unregister()
+	firewall.DisableFirewall()
+	if t.cbr != nil {
+		t.cbr.Unregister()
 	}
-	t.session.End()
-	_ = t.adapter.Close()
-
+	if t.cbi != nil {
+		t.cbi.Unregister()
+	}
+	if t.luid != 0 {
+		t.luid.FlushRoutes(windows.AF_INET)
+		t.luid.FlushIPAddresses(windows.AF_INET)
+		t.luid.FlushDNS(windows.AF_INET)
+		t.luid.FlushRoutes(windows.AF_INET6)
+		t.luid.FlushIPAddresses(windows.AF_INET6)
+		t.luid.FlushDNS(windows.AF_INET6)
+	}
+	if t.session != (wintun.Session{}) {
+		t.session.End()
+	}
+	if t.adapter != nil {
+		t.adapter.Close()
+	}
 	return nil
 }
 
@@ -311,75 +332,37 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 }
 
 func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, error) {
-	interfaces, err := net.Interfaces()
+	if fixedName != "" {
+		return net.InterfaceByName(fixedName)
+	}
+
+	r, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
 	if err != nil {
 		return nil, err
 	}
+	lowestMetric := ^uint32(0)
+	index := uint32(0)
+	for i := range r {
+		if r[i].DestinationPrefix.PrefixLength != 0 || r[i].InterfaceIndex == uint32(tunIndex) {
+			continue
+		}
+		ifrow, err := r[i].InterfaceLUID.Interface()
+		if err != nil || ifrow.OperStatus != winipcfg.IfOperStatusUp {
+			continue
+		}
 
-	if fixedName != "" {
-		for _, iface := range interfaces {
-			if iface.Index != tunIndex && iface.Name == fixedName {
-				return &iface, nil
+		iface, err := r[i].InterfaceLUID.IPInterface(windows.AF_INET)
+		if err != nil {
+			iface, err = r[i].InterfaceLUID.IPInterface(windows.AF_INET6)
+			if err != nil {
+				continue
 			}
 		}
-		return nil, nil
-	}
 
-	var candidates []struct {
-		index int
-		score int
-	}
-	for i, iface := range interfaces {
-		if iface.Index == tunIndex {
-			continue
-		}
-		if strings.Contains(iface.Name, "vEthernet") {
-			continue
-		}
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		if iface.Flags&net.FlagLoopback != 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil || len(addrs) == 0 {
-			continue
-		}
-		candidates = append(candidates, struct {
-			index int
-			score int
-		}{i, scoreWindowsInterface(&iface, addrs)})
-	}
-
-	sort.Slice(candidates, func(i, j int) bool {
-		if candidates[i].score != candidates[j].score {
-			return candidates[i].score > candidates[j].score
-		}
-		return interfaces[candidates[i].index].Name < interfaces[candidates[j].index].Name
-	})
-	if len(candidates) == 0 {
-		return nil, nil
-	}
-
-	iface := interfaces[candidates[0].index]
-	return &iface, nil
-}
-
-func scoreWindowsInterface(iface *net.Interface, addrs []net.Addr) int {
-	score := 0
-
-	name := strings.ToLower(iface.Name)
-	if strings.Contains(name, "wlan") || strings.Contains(name, "wi-fi") {
-		score += 2
-	}
-
-	for _, addr := range addrs {
-		if strings.HasPrefix(addr.String(), "192.168.") {
-			score++
-			break
+		if r[i].Metric+iface.Metric < lowestMetric {
+			lowestMetric = r[i].Metric + iface.Metric
+			index = r[i].InterfaceIndex
 		}
 	}
-
-	return score
+	return net.InterfaceByIndex(int(index))
 }
