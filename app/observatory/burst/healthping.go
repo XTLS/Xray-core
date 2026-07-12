@@ -34,6 +34,7 @@ type HealthPing struct {
 
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
+	onUpdate func()
 }
 
 // NewHealthPing creates a new HealthPing with settings
@@ -233,7 +234,6 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 // PutResult put a ping rtt to results
 func (h *HealthPing) PutResult(tag string, rtt time.Duration) {
 	h.access.Lock()
-	defer h.access.Unlock()
 	if h.Results == nil {
 		h.Results = make(map[string]*HealthPingRTTS)
 	}
@@ -248,13 +248,17 @@ func (h *HealthPing) PutResult(tag string, rtt time.Duration) {
 		h.Results[tag] = r
 	}
 	r.Put(rtt)
+	h.access.Unlock()
+	if h.onUpdate != nil {
+		h.onUpdate()
+	}
 }
 
 // Cleanup removes results of removed handlers,
 // tags should be all valid tags of the Balancer now
 func (h *HealthPing) Cleanup(tags []string) {
 	h.access.Lock()
-	defer h.access.Unlock()
+	changed := false
 	for tag := range h.Results {
 		found := false
 		for _, v := range tags {
@@ -265,7 +269,12 @@ func (h *HealthPing) Cleanup(tags []string) {
 		}
 		if !found {
 			delete(h.Results, tag)
+			changed = true
 		}
+	}
+	h.access.Unlock()
+	if changed && h.onUpdate != nil {
+		h.onUpdate()
 	}
 }
 

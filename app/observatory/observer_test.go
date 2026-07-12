@@ -1,6 +1,34 @@
 package observatory
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+func TestConcurrentObserverReportsInitialProbeDeadline(t *testing.T) {
+	observer := &Observer{config: &Config{EnableConcurrency: true}}
+	if got, want := observer.ObservationProbeDeadline(), 5*time.Second; got != want {
+		t.Fatalf("probe deadline = %v, want %v", got, want)
+	}
+}
+
+func TestObserverNotifiesAfterStatusUpdate(t *testing.T) {
+	observer := &Observer{}
+	updates := 0
+	observer.SubscribeObservationUpdates(func() {
+		updates++
+		if _, err := observer.GetObservation(context.Background()); err != nil {
+			t.Errorf("GetObservation returned an error: %v", err)
+		}
+	})
+
+	observer.updateStatusForResult("proxy-a", &ProbeResult{Alive: true, Delay: 42})
+
+	if updates != 1 {
+		t.Fatalf("updates = %d, want 1", updates)
+	}
+}
 
 func TestObserverUpdateStatusPrunesStaleOutbounds(t *testing.T) {
 	observer := &Observer{

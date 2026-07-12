@@ -3,6 +3,7 @@ package burst
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
@@ -21,6 +22,7 @@ type Observer struct {
 
 	statusLock sync.Mutex
 	hp         *HealthPing
+	updates    extension.ObservatoryUpdateDispatcher
 
 	finished *done.Instance
 
@@ -29,6 +31,21 @@ type Observer struct {
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 	return &observatory.ObservationResult{Status: o.createResult()}, nil
+}
+
+func (o *Observer) SubscribeObservationUpdates(listener func()) func() {
+	return o.updates.SubscribeObservationUpdates(listener)
+}
+
+func (o *Observer) ObservationProbeDeadline() time.Duration {
+	if o.hp == nil || o.hp.Settings == nil || o.hp.Settings.Timeout <= 0 {
+		return 0
+	}
+	deadline := o.hp.Settings.Timeout
+	if o.hp.Settings.Connectivity != "" {
+		deadline += o.hp.Settings.Timeout
+	}
+	return deadline
 }
 
 func (o *Observer) Check(tag []string) {
@@ -100,12 +117,14 @@ func New(ctx context.Context, config *Config) (*Observer, error) {
 		return nil, errors.New("Cannot get depended features").Base(err)
 	}
 	hp := NewHealthPing(ctx, dispatcher, config.PingConfig)
-	return &Observer{
+	observer := &Observer{
 		config: config,
 		ctx:    ctx,
 		ohm:    outboundManager,
 		hp:     hp,
-	}, nil
+	}
+	hp.onUpdate = observer.updates.NotifyObservationUpdate
+	return observer, nil
 }
 
 func init() {
