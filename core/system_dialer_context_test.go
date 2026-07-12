@@ -68,3 +68,28 @@ func TestSystemDialerDependenciesAreInstanceScoped(t *testing.T) {
 		t.Fatal("closed test instance DNS client unexpectedly remained usable")
 	}
 }
+
+func TestCoreInitializesLegacySystemDialerFallback(t *testing.T) {
+	internet.InitSystemDialer(nil, nil)
+	t.Cleanup(func() {
+		internet.InitSystemDialer(nil, nil)
+	})
+
+	instance, err := New(&Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := instance.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+
+	ips, err := internet.LookupForIP("localhost", internet.DomainStrategy_USE_IP, nil)
+	if err != nil {
+		t.Fatalf("legacy system dialer lookup was not initialized by core construction: %v", err)
+	}
+	if len(ips) == 0 {
+		t.Fatal("legacy system dialer lookup returned no addresses")
+	}
+}
