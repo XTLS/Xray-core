@@ -1350,18 +1350,18 @@ func blockDNSUDPALL(session uintptr, baseObjects *baseObjects, weight uint8) err
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
 			name:  "Block DNS UDP outbound (IPv4)",
 		},
-		{
-			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
-			name:  "Block DNS UDP inbound (IPv4)",
-		},
+		// {
+		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+		// 	name:  "Block DNS UDP inbound (IPv4)",
+		// },
 		{
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V6,
 			name:  "Block DNS UDP outbound (IPv6)",
 		},
-		{
-			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
-			name:  "Block DNS UDP inbound (IPv6)",
-		},
+		// {
+		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
+		// 	name:  "Block DNS UDP inbound (IPv6)",
+		// },
 	}
 
 	for _, item := range layers {
@@ -1421,18 +1421,18 @@ func blockDNSTCPALL(session uintptr, baseObjects *baseObjects, weight uint8) err
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
 			name:  "Block DNS TCP outbound (IPv4)",
 		},
-		{
-			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
-			name:  "Block DNS TCP inbound (IPv4)",
-		},
+		// {
+		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+		// 	name:  "Block DNS TCP inbound (IPv4)",
+		// },
 		{
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V6,
 			name:  "Block DNS TCP outbound (IPv6)",
 		},
-		{
-			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
-			name:  "Block DNS TCP inbound (IPv6)",
-		},
+		// {
+		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
+		// 	name:  "Block DNS TCP inbound (IPv6)",
+		// },
 	}
 
 	for _, item := range layers {
