@@ -12,7 +12,7 @@ import (
 
 var cmdAddRules = &base.Command{
 	CustomFlags: true,
-	UsageLine:   "{{.Exec}} api adrules [--server=127.0.0.1:8080] <c1.json> [c2.json]...",
+	UsageLine:   "{{.Exec}} api adrules [--server=127.0.0.1:8080] [-i index] <config.json>",
 	Short:       "Add routing rules",
 	Long: `
 Add routing rules to Xray.
@@ -30,23 +30,40 @@ Arguments:
 	-append
 		Append to the existing configuration instead of replacing it. Default false
 
+	-i, -index <index>
+		Insert all rules from one config file before the rule at this zero-based index.
+		An index equal to the current rule count appends the rules.
+		This option is mutually exclusive with -append and accepts only one config file.
+
 Example:
 
-	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 c1.json c2.json
+	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -i 2 rules.json
 `,
 	Run: executeAddRules,
 }
 
 func executeAddRules(cmd *base.Command, args []string) {
 	var shouldAppend bool
+	insertIndex := -1
 	setSharedFlags(cmd)
 	cmd.Flag.BoolVar(&shouldAppend, "append", false, "")
+	cmd.Flag.IntVar(&insertIndex, "i", -1, "")
+	cmd.Flag.IntVar(&insertIndex, "index", -1, "")
 	cmd.Flag.Parse(args)
+	if insertIndex < -1 {
+		base.Fatalf("index must be zero or greater")
+	}
+	if insertIndex >= 0 && shouldAppend {
+		base.Fatalf("-i/-index and -append cannot be used together")
+	}
 
 	unnamedArgs := cmd.Flag.Args()
 	if len(unnamedArgs) == 0 {
 		fmt.Println("reading from stdin:")
 		unnamedArgs = []string{"stdin:"}
+	}
+	if insertIndex >= 0 && len(unnamedArgs) != 1 {
+		base.Fatalf("indexed insertion accepts exactly one config file")
 	}
 	conn, ctx, close := dialAPIServer()
 	defer close()
@@ -87,6 +104,10 @@ func executeAddRules(cmd *base.Command, args []string) {
 		ra := &routerService.AddRuleRequest{
 			Config:       tmsg,
 			ShouldAppend: shouldAppend,
+		}
+		if insertIndex >= 0 {
+			index := uint32(insertIndex)
+			ra.Index = &index
 		}
 		resp, err := client.AddRule(ctx, ra)
 		if err != nil {

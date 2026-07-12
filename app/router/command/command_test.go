@@ -14,11 +14,13 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
+	cserial "github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/testing/mocks"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestServiceSubscribeRoutingStats(t *testing.T) {
@@ -430,5 +432,147 @@ func TestServiceTestRoute(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestServiceListRuleReturnsCompleteRuleConfigurations(t *testing.T) {
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	rules := []*router.RoutingRule{
+		{
+			RuleTag:    "direct-example",
+			InboundTag: []string{"socks-in"},
+			Protocol:   []string{"http", "tls"},
+			Domain: []*geodata.DomainRule{{
+				Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{
+					Type:  geodata.Domain_Full,
+					Value: "example.com",
+				}},
+			}},
+			Attributes: map[string]string{"source": "api"},
+			TargetTag:  &router.RoutingRule_Tag{Tag: "direct"},
+		},
+		{
+			RuleTag:   "balanced-media",
+			Networks:  []net.Network{net.Network_TCP},
+			TargetTag: &router.RoutingRule_BalancingTag{BalancingTag: "media-pool"},
+		},
+	}
+
+	r := new(router.Router)
+	common.Must(r.Init(context.Background(), &router.Config{
+		Rule: rules,
+		BalancingRule: []*router.BalancingRule{{
+			Tag:              "media-pool",
+			OutboundSelector: []string{"media-"},
+			Strategy:         "random",
+		}},
+	}, mocks.NewDNSClient(mockCtl), mocks.NewOutboundManager(mockCtl), nil))
+
+	server := NewRoutingServer(r, nil)
+	response, err := server.ListRule(context.Background(), &ListRuleRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Rules) != len(rules) {
+		t.Fatalf("got %d rules, want %d", len(response.Rules), len(rules))
+	}
+	for index, item := range response.Rules {
+		if item.GetIndex() != uint32(index) {
+			t.Errorf("rule %d has index %d", index, item.GetIndex())
+		}
+		if !proto.Equal(rules[index], item.Rule) {
+			t.Errorf("rule %d differs: got %v, want %v", index, item.Rule, rules[index])
+		}
+	}
+
+	response.Rules[0].Rule.RuleTag = "mutated-by-client"
+	secondResponse, err := server.ListRule(context.Background(), &ListRuleRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := secondResponse.Rules[0].Rule.RuleTag; got != "direct-example" {
+		t.Fatalf("router rule snapshot was mutated through API response: %q", got)
+	}
+}
+
+func TestServiceAddRuleAtIndex(t *testing.T) {
+	mockCtl := gomock.NewController(t)
+	defer mockCtl.Finish()
+
+	r := new(router.Router)
+	common.Must(r.Init(context.Background(), &router.Config{Rule: []*router.RoutingRule{
+		{RuleTag: "first", InboundTag: []string{"first-in"}, TargetTag: &router.RoutingRule_Tag{Tag: "direct"}},
+		{RuleTag: "last", InboundTag: []string{"last-in"}, TargetTag: &router.RoutingRule_Tag{Tag: "block"}},
+	}}, mocks.NewDNSClient(mockCtl), mocks.NewOutboundManager(mockCtl), nil))
+
+	server := NewRoutingServer(r, nil)
+	index := uint32(1)
+	_, err := server.AddRule(context.Background(), &AddRuleRequest{
+		Config: cserial.ToTypedMessage(&router.Config{Rule: []*router.RoutingRule{
+			{RuleTag: "inserted-a", InboundTag: []string{"a-in"}, TargetTag: &router.RoutingRule_Tag{Tag: "proxy-a"}},
+			{RuleTag: "inserted-b", InboundTag: []string{"b-in"}, TargetTag: &router.RoutingRule_Tag{Tag: "proxy-b"}},
+		}}),
+		Index: &index,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := server.ListRule(context.Background(), &ListRuleRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTags := []string{"first", "inserted-a", "inserted-b", "last"}
+	if len(response.Rules) != len(wantTags) {
+		t.Fatalf("got %d rules, want %d", len(response.Rules), len(wantTags))
+	}
+	for i, wantTag := range wantTags {
+		if got := response.Rules[i].Rule.GetRuleTag(); got != wantTag {
+			t.Errorf("rule %d has tag %q, want %q", i, got, wantTag)
+		}
+		if got := response.Rules[i].GetIndex(); got != uint32(i) {
+			t.Errorf("rule %d has index %d", i, got)
+		}
+	}
+
+	outOfRange := uint32(5)
+	_, err = server.AddRule(context.Background(), &AddRuleRequest{
+		Config: cserial.ToTypedMessage(&router.Config{Rule: []*router.RoutingRule{
+			{RuleTag: "must-not-be-added", InboundTag: []string{"never-in"}, TargetTag: &router.RoutingRule_Tag{Tag: "direct"}},
+		}}),
+		Index: &outOfRange,
+	})
+	if err == nil {
+		t.Fatal("expected out-of-range insertion to fail")
+	}
+	if got := len(r.ListRuleConfigs()); got != len(wantTags) {
+		t.Fatalf("failed insertion changed rule count to %d", got)
+	}
+
+	removeIndex := uint32(1)
+	_, err = server.RemoveRule(context.Background(), &RemoveRuleRequest{Index: &removeIndex})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err = server.ListRule(context.Background(), &ListRuleRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantTags = []string{"first", "inserted-b", "last"}
+	for i, wantTag := range wantTags {
+		if got := response.Rules[i].Rule.GetRuleTag(); got != wantTag {
+			t.Errorf("rule %d has tag %q after removal, want %q", i, got, wantTag)
+		}
+	}
+
+	removeOutOfRange := uint32(len(wantTags))
+	_, err = server.RemoveRule(context.Background(), &RemoveRuleRequest{Index: &removeOutOfRange})
+	if err == nil {
+		t.Fatal("expected out-of-range removal to fail")
+	}
+	if got := len(r.ListRuleConfigs()); got != len(wantTags) {
+		t.Fatalf("failed removal changed rule count to %d", got)
 	}
 }

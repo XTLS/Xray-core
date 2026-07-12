@@ -15,8 +15,10 @@ type Router interface {
 	// PickRoute returns a route decision based on the given routing context.
 	PickRoute(ctx Context) (Route, error)
 	AddRule(config *serial.TypedMessage, shouldAppend bool) error
+	AddRuleAt(config *serial.TypedMessage, index uint32) error
 	RemoveRule(tag string) error
-	ListRule() []Route
+	RemoveRuleAt(index uint32) error
+	ListRuleConfigs() []*serial.TypedMessage
 }
 
 // Route is the routing result of Router feature.
@@ -61,13 +63,23 @@ func (DefaultRouter) AddRule(config *serial.TypedMessage, shouldAppend bool) err
 	return common.ErrNoClue
 }
 
+// AddRuleAt implements Router.
+func (DefaultRouter) AddRuleAt(config *serial.TypedMessage, index uint32) error {
+	return common.ErrNoClue
+}
+
 // RemoveRule implements Router.
 func (DefaultRouter) RemoveRule(tag string) error {
 	return common.ErrNoClue
 }
 
-// ListRule implements Router.
-func (DefaultRouter) ListRule() []Route {
+// RemoveRuleAt implements Router.
+func (DefaultRouter) RemoveRuleAt(index uint32) error {
+	return common.ErrNoClue
+}
+
+// ListRuleConfigs implements Router.
+func (DefaultRouter) ListRuleConfigs() []*serial.TypedMessage {
 	return nil
 }
 

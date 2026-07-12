@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
@@ -54,31 +55,43 @@ func (s *routingServer) OverrideBalancerTarget(ctx context.Context, request *Ove
 }
 
 func (s *routingServer) AddRule(ctx context.Context, request *AddRuleRequest) (*AddRuleResponse, error) {
-	if bo, ok := s.router.(routing.Router); ok {
-		return &AddRuleResponse{}, bo.AddRule(request.Config, request.ShouldAppend)
+	if request.Index != nil {
+		if request.ShouldAppend {
+			return nil, errors.New("index and shouldAppend cannot be used together")
+		}
+		return &AddRuleResponse{}, s.router.AddRuleAt(request.Config, request.GetIndex())
 	}
-	return nil, errors.New("unsupported router implementation")
+	return &AddRuleResponse{}, s.router.AddRule(request.Config, request.ShouldAppend)
 }
 
 func (s *routingServer) RemoveRule(ctx context.Context, request *RemoveRuleRequest) (*RemoveRuleResponse, error) {
-	if bo, ok := s.router.(routing.Router); ok {
-		return &RemoveRuleResponse{}, bo.RemoveRule(request.RuleTag)
+	if request.Index != nil {
+		if request.RuleTag != "" {
+			return nil, errors.New("index and ruleTag cannot be used together")
+		}
+		return &RemoveRuleResponse{}, s.router.RemoveRuleAt(request.GetIndex())
 	}
-	return nil, errors.New("unsupported router implementation")
+	return &RemoveRuleResponse{}, s.router.RemoveRule(request.RuleTag)
 }
 
 func (s *routingServer) ListRule(ctx context.Context, request *ListRuleRequest) (*ListRuleResponse, error) {
-	if bo, ok := s.router.(routing.Router); ok {
-		response := &ListRuleResponse{}
-		for _, v := range bo.ListRule() {
-			response.Rules = append(response.Rules, &ListRuleItem{
-				Tag:     v.GetOutboundTag(),
-				RuleTag: v.GetRuleTag(),
-			})
+	response := &ListRuleResponse{}
+	for index, typedRule := range s.router.ListRuleConfigs() {
+		instance, err := typedRule.GetInstance()
+		if err != nil {
+			return nil, errors.New("failed to decode routing rule configuration").Base(err)
 		}
-		return response, nil
+		rule, ok := instance.(*router.RoutingRule)
+		if !ok {
+			return nil, errors.New("unexpected routing rule configuration type")
+		}
+		ruleIndex := uint32(index)
+		response.Rules = append(response.Rules, &ListRuleItem{
+			Index: &ruleIndex,
+			Rule:  rule,
+		})
 	}
-	return nil, errors.New("unsupported router implementation")
+	return response, nil
 }
 
 // NewRoutingServer creates a statistics service with statistics manager.
