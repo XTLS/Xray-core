@@ -1,37 +1,9 @@
 package api
 
 import (
-	"fmt"
-	"strconv"
-
 	routerService "github.com/xtls/xray-core/app/router/command"
 	"github.com/xtls/xray-core/main/commands/base"
 )
-
-type singleIndexFlag struct {
-	value int
-	set   bool
-}
-
-func (f *singleIndexFlag) String() string {
-	return strconv.Itoa(f.value)
-}
-
-func (f *singleIndexFlag) Set(value string) error {
-	if f.set {
-		return fmt.Errorf("-i/-index may only be specified once")
-	}
-	index, err := strconv.Atoi(value)
-	if err != nil {
-		return fmt.Errorf("invalid index %q: %w", value, err)
-	}
-	if index < 0 {
-		return fmt.Errorf("index must be zero or greater")
-	}
-	f.value = index
-	f.set = true
-	return nil
-}
 
 var cmdRemoveRules = &base.Command{
 	CustomFlags: true,
@@ -61,16 +33,15 @@ Example:
 }
 
 func executeRemoveRules(cmd *base.Command, args []string) {
-	indexFlag := &singleIndexFlag{value: -1}
+	indexFlag := &singleIndexFlag{}
 	setSharedFlags(cmd)
 	cmd.Flag.Var(indexFlag, "i", "")
 	cmd.Flag.Var(indexFlag, "index", "")
 	if err := cmd.Flag.Parse(args); err != nil {
 		base.Fatalf("failed to parse arguments: %s", err)
 	}
-	removeIndex := indexFlag.value
 	ruleTags := cmd.Flag.Args()
-	if removeIndex >= 0 && len(ruleTags) > 0 {
+	if indexFlag.set && len(ruleTags) > 0 {
 		base.Fatalf("-i/-index and ruleTag arguments cannot be used together")
 	}
 	conn, ctx, close := dialAPIServer()
@@ -78,8 +49,8 @@ func executeRemoveRules(cmd *base.Command, args []string) {
 
 	client := routerService.NewRoutingServiceClient(conn)
 
-	if removeIndex >= 0 {
-		index := uint32(removeIndex)
+	if indexFlag.set {
+		index := uint32(indexFlag.value)
 		resp, err := client.RemoveRule(ctx, &routerService.RemoveRuleRequest{Index: &index})
 		if err != nil {
 			base.Fatalf("failed to perform RemoveRule: %s", err)

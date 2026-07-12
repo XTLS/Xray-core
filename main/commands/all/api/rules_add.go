@@ -44,16 +44,15 @@ Example:
 
 func executeAddRules(cmd *base.Command, args []string) {
 	var shouldAppend bool
-	insertIndex := -1
+	indexFlag := &singleIndexFlag{}
 	setSharedFlags(cmd)
 	cmd.Flag.BoolVar(&shouldAppend, "append", false, "")
-	cmd.Flag.IntVar(&insertIndex, "i", -1, "")
-	cmd.Flag.IntVar(&insertIndex, "index", -1, "")
-	cmd.Flag.Parse(args)
-	if insertIndex < -1 {
-		base.Fatalf("index must be zero or greater")
+	cmd.Flag.Var(indexFlag, "i", "")
+	cmd.Flag.Var(indexFlag, "index", "")
+	if err := cmd.Flag.Parse(args); err != nil {
+		base.Fatalf("failed to parse arguments: %s", err)
 	}
-	if insertIndex >= 0 && shouldAppend {
+	if indexFlag.set && shouldAppend {
 		base.Fatalf("-i/-index and -append cannot be used together")
 	}
 
@@ -62,7 +61,7 @@ func executeAddRules(cmd *base.Command, args []string) {
 		fmt.Println("reading from stdin:")
 		unnamedArgs = []string{"stdin:"}
 	}
-	if insertIndex >= 0 && len(unnamedArgs) != 1 {
+	if indexFlag.set && len(unnamedArgs) != 1 {
 		base.Fatalf("indexed insertion accepts exactly one config file")
 	}
 	conn, ctx, close := dialAPIServer()
@@ -105,8 +104,8 @@ func executeAddRules(cmd *base.Command, args []string) {
 			Config:       tmsg,
 			ShouldAppend: shouldAppend,
 		}
-		if insertIndex >= 0 {
-			index := uint32(insertIndex)
+		if indexFlag.set {
+			index := uint32(indexFlag.value)
 			ra.Index = &index
 		}
 		resp, err := client.AddRule(ctx, ra)
