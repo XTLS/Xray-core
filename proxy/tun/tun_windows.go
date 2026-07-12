@@ -64,7 +64,12 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
-	firewall.EnableFirewall(adapter.LUID())
+	err = firewall.EnableFirewall(adapter.LUID())
+	if err != nil {
+		session.End()
+		_ = adapter.Close()
+		return nil, err
+	}
 
 	tun := &WindowsTun{
 		options:  options,
@@ -90,6 +95,12 @@ func open(name string) (*wintun.Adapter, error) {
 }
 
 func (t *WindowsTun) Start() (err error) {
+	defer func() {
+		if err != nil {
+			_ = t.Close()
+		}
+	}()
+
 	if updater != nil {
 		t.cbr, err = winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
 			updater.Update()
