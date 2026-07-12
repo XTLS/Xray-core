@@ -31,7 +31,7 @@ func permitTunInterface(session uintptr, baseObjects *baseObjects, weight uint8,
 		matchType: cFWP_MATCH_EQUAL,
 		conditionValue: wtFwpConditionValue0{
 			_type: cFWP_UINT64,
-			value: (uintptr)(unsafe.Pointer(&ifLUID)),
+			value: uintptr(unsafe.Pointer(&ifLUID)),
 		},
 	}
 
