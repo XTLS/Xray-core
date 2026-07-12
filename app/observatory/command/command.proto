@@ -16,8 +16,7 @@ message GetOutboundStatusResponse {
 }
 
 service ObservatoryService {
-  rpc GetOutboundStatus(GetOutboundStatusRequest)
-      returns (GetOutboundStatusResponse) {}
+  rpc GetOutboundStatus(GetOutboundStatusRequest) returns (GetOutboundStatusResponse) {}
 }
 
 
