@@ -11,6 +11,7 @@ type Observatory interface {
 	features.Feature
 
 	GetObservation(ctx context.Context) (proto.Message, error)
+	CheckObservation(ctx context.Context, tags []string) (proto.Message, error)
 }
 
 type BurstObservatory interface {

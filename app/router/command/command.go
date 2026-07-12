@@ -44,6 +44,11 @@ func (s *routingServer) GetBalancerInfo(ctx context.Context, request *GetBalance
 			}
 		}
 	}
+	candidates, err := s.router.GetBalancerCandidates(request.GetTag())
+	if err != nil {
+		return nil, err
+	}
+	ret.Balancer.Candidates = &PrincipleTargetInfo{Tag: candidates}
 	return &ret, nil
 }
 

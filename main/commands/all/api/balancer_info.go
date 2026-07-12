@@ -78,6 +78,12 @@ func showBalancerInfo(b *routerService.BalancerMsg) {
 			writeRow(sb, tableIndent, i+1, []string{o}, nil)
 		}
 	}
+	sb.WriteString("  - Candidates:\n")
+	if b.Candidates != nil {
+		for i, candidate := range b.Candidates.Tag {
+			writeRow(sb, tableIndent, i+1, []string{candidate}, nil)
+		}
+	}
 	os.Stdout.WriteString(sb.String())
 }
 

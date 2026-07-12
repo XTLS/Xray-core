@@ -76,6 +76,7 @@ message OverrideInfo {
 message BalancerMsg {
   OverrideInfo override = 5;
   PrincipleTargetInfo principle_target = 6;
+  PrincipleTargetInfo candidates = 7;
 }
 
 message GetBalancerInfoRequest {

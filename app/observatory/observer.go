@@ -39,7 +39,79 @@ type Observer struct {
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
-	return &ObservationResult{Status: o.status}, nil
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+	return proto.Clone(&ObservationResult{Status: o.status}), nil
+}
+
+func (o *Observer) selectOutbounds(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		hs, ok := o.ohm.(outbound.HandlerSelector)
+		if !ok {
+			return nil, errors.New("outbound.Manager is not a HandlerSelector")
+		}
+		tags = hs.Select(o.config.SubjectSelector)
+	}
+
+	unique := make(map[string]struct{}, len(tags))
+	selected := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if tag == "" {
+			return nil, errors.New("outbound tag cannot be empty")
+		}
+		if o.ohm.GetHandler(tag) == nil {
+			return nil, errors.New("outbound not found: ", tag)
+		}
+		if _, found := unique[tag]; found {
+			continue
+		}
+		unique[tag] = struct{}{}
+		selected = append(selected, tag)
+	}
+	sort.Strings(selected)
+	return selected, nil
+}
+
+func (o *Observer) CheckObservation(ctx context.Context, tags []string) (proto.Message, error) {
+	outbounds, err := o.selectOutbounds(tags)
+	if err != nil {
+		return nil, err
+	}
+
+	// The RPC context does not carry the Xray instance stored in o.ctx. Tagged
+	// dialing requires that value, so keep o.ctx as the value-bearing parent and
+	// only propagate cancellation from the caller.
+	probeCtx, cancel := context.WithCancel(o.ctx)
+	stopCancellation := context.AfterFunc(ctx, cancel)
+	defer func() {
+		stopCancellation()
+		cancel()
+	}()
+
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	for _, outboundTag := range outbounds {
+		wg.Add(1)
+		go func(tag string) {
+			defer wg.Done()
+			result, err := o.probe(probeCtx, tag)
+			if err != nil {
+				return
+			}
+			o.updateStatusForResult(tag, &result)
+		}(outboundTag)
+	}
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return o.GetObservation(ctx)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (o *Observer) Type() interface{} {
@@ -81,8 +153,10 @@ func (o *Observer) background() {
 		if !o.config.EnableConcurrency {
 			sort.Strings(outbounds)
 			for _, v := range outbounds {
-				result := o.probe(v)
-				o.updateStatusForResult(v, &result)
+				result, err := o.probe(o.ctx, v)
+				if err == nil {
+					o.updateStatusForResult(v, &result)
+				}
 				if o.finished.Done() {
 					return
 				}
@@ -95,8 +169,10 @@ func (o *Observer) background() {
 
 		for _, v := range outbounds {
 			go func(v string) {
-				result := o.probe(v)
-				o.updateStatusForResult(v, &result)
+				result, err := o.probe(o.ctx, v)
+				if err == nil {
+					o.updateStatusForResult(v, &result)
+				}
 				ch <- struct{}{}
 			}(v)
 		}
@@ -127,7 +203,7 @@ func (o *Observer) clearRemovedOutbounds(outbounds []string) {
 	o.status = pruned
 }
 
-func (o *Observer) probe(outbound string) ProbeResult {
+func (o *Observer) probe(ctx context.Context, outbound string) (ProbeResult, error) {
 	errorCollectorForRequest := newErrorCollector()
 
 	httpTransport := http.Transport{
@@ -142,7 +218,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 				if err != nil {
 					return errors.New("cannot understand address").Base(err)
 				}
-				trackedCtx := session.TrackedConnectionError(o.ctx, errorCollectorForRequest)
+				trackedCtx := session.TrackedConnectionError(ctx, errorCollectorForRequest)
 				conn, err := tagged.Dialer(trackedCtx, o.dispatcher, dest, outbound)
 				if err != nil {
 					return errors.New("cannot dial remote address ", dest).Base(err)
@@ -166,13 +242,13 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		Timeout: time.Second * 5,
 	}
 	var GETTime time.Duration
-	err := task.Run(o.ctx, func() error {
+	err := task.Run(ctx, func() error {
 		startTime := time.Now()
 		probeURL := "https://www.google.com/generate_204"
 		if o.config.ProbeUrl != "" {
 			probeURL = o.config.ProbeUrl
 		}
-		req, _ := http.NewRequest(http.MethodGet, probeURL, nil)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
 		utils.TryDefaultHeadersWith(req.Header, "nav")
 		response, err := httpClient.Do(req)
 		if err != nil {
@@ -186,12 +262,15 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		return nil
 	})
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ProbeResult{}, ctxErr
+		}
 		errorMessage := "the outbound " + outbound + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
 		errors.LogInfoInner(o.ctx, errorCollectorForRequest.UnderlyingError(), errorMessage)
-		return ProbeResult{Alive: false, LastErrorReason: errorMessage}
+		return ProbeResult{Alive: false, LastErrorReason: errorMessage}, nil
 	}
 	errors.LogInfo(o.ctx, "the outbound ", outbound, " is alive:", GETTime.Seconds())
-	return ProbeResult{Alive: true, Delay: GETTime.Milliseconds()}
+	return ProbeResult{Alive: true, Delay: GETTime.Milliseconds()}, nil
 }
 
 func (o *Observer) updateStatusForResult(outbound string, result *ProbeResult) {

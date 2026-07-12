@@ -1,6 +1,24 @@
 package observatory
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"testing"
+)
+
+func TestProbeCancellationIsNotReportedAsOutboundFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	observer := &Observer{config: &Config{}}
+	result, err := observer.probe(ctx, "test")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("got error %v, want context.Canceled", err)
+	}
+	if result.Alive || result.LastErrorReason != "" {
+		t.Fatalf("canceled probe returned an outbound failure result: %+v", result)
+	}
+}
 
 func TestObserverUpdateStatusPrunesStaleOutbounds(t *testing.T) {
 	observer := &Observer{

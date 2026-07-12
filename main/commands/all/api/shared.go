@@ -31,10 +31,14 @@ var (
 )
 
 func setSharedFlags(cmd *base.Command) {
+	setSharedFlagsWithTimeout(cmd, 3)
+}
+
+func setSharedFlagsWithTimeout(cmd *base.Command, timeout int) {
 	cmd.Flag.StringVar(&apiServerAddrPtr, "s", "127.0.0.1:8080", "")
 	cmd.Flag.StringVar(&apiServerAddrPtr, "server", "127.0.0.1:8080", "")
-	cmd.Flag.IntVar(&apiTimeout, "t", 3, "")
-	cmd.Flag.IntVar(&apiTimeout, "timeout", 3, "")
+	cmd.Flag.IntVar(&apiTimeout, "t", timeout, "")
+	cmd.Flag.IntVar(&apiTimeout, "timeout", timeout, "")
 	cmd.Flag.BoolVar(&apiJSON, "json", false, "")
 }
 

@@ -19,6 +19,7 @@ type Router interface {
 	RemoveRule(tag string) error
 	RemoveRuleAt(index uint32) error
 	ListRuleConfigs() []*serial.TypedMessage
+	GetBalancerCandidates(tag string) ([]string, error)
 }
 
 // Route is the routing result of Router feature.
@@ -81,6 +82,11 @@ func (DefaultRouter) RemoveRuleAt(index uint32) error {
 // ListRuleConfigs implements Router.
 func (DefaultRouter) ListRuleConfigs() []*serial.TypedMessage {
 	return nil
+}
+
+// GetBalancerCandidates implements Router.
+func (DefaultRouter) GetBalancerCandidates(tag string) ([]string, error) {
+	return nil, common.ErrNoClue
 }
 
 // Start implements common.Runnable.

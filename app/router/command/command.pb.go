@@ -404,6 +404,7 @@ type BalancerMsg struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Override        *OverrideInfo          `protobuf:"bytes,5,opt,name=override,proto3" json:"override,omitempty"`
 	PrincipleTarget *PrincipleTargetInfo   `protobuf:"bytes,6,opt,name=principle_target,json=principleTarget,proto3" json:"principle_target,omitempty"`
+	Candidates      *PrincipleTargetInfo   `protobuf:"bytes,7,opt,name=candidates,proto3" json:"candidates,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -448,6 +449,13 @@ func (x *BalancerMsg) GetOverride() *OverrideInfo {
 func (x *BalancerMsg) GetPrincipleTarget() *PrincipleTargetInfo {
 	if x != nil {
 		return x.PrincipleTarget
+	}
+	return nil
+}
+
+func (x *BalancerMsg) GetCandidates() *PrincipleTargetInfo {
+	if x != nil {
+		return x.Candidates
 	}
 	return nil
 }
@@ -1029,10 +1037,13 @@ const file_app_router_command_command_proto_rawDesc = "" +
 	"\x13PrincipleTargetInfo\x12\x10\n" +
 	"\x03tag\x18\x01 \x03(\tR\x03tag\"&\n" +
 	"\fOverrideInfo\x12\x16\n" +
-	"\x06target\x18\x02 \x01(\tR\x06target\"\xa9\x01\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\"\xf7\x01\n" +
 	"\vBalancerMsg\x12A\n" +
 	"\boverride\x18\x05 \x01(\v2%.xray.app.router.command.OverrideInfoR\boverride\x12W\n" +
-	"\x10principle_target\x18\x06 \x01(\v2,.xray.app.router.command.PrincipleTargetInfoR\x0fprincipleTarget\"*\n" +
+	"\x10principle_target\x18\x06 \x01(\v2,.xray.app.router.command.PrincipleTargetInfoR\x0fprincipleTarget\x12L\n" +
+	"\n" +
+	"candidates\x18\a \x01(\v2,.xray.app.router.command.PrincipleTargetInfoR\n" +
+	"candidates\"*\n" +
 	"\x16GetBalancerInfoRequest\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\"[\n" +
 	"\x17GetBalancerInfoResponse\x12@\n" +
@@ -1114,29 +1125,30 @@ var file_app_router_command_command_proto_depIdxs = []int32{
 	0,  // 2: xray.app.router.command.TestRouteRequest.RoutingContext:type_name -> xray.app.router.command.RoutingContext
 	4,  // 3: xray.app.router.command.BalancerMsg.override:type_name -> xray.app.router.command.OverrideInfo
 	3,  // 4: xray.app.router.command.BalancerMsg.principle_target:type_name -> xray.app.router.command.PrincipleTargetInfo
-	5,  // 5: xray.app.router.command.GetBalancerInfoResponse.balancer:type_name -> xray.app.router.command.BalancerMsg
-	20, // 6: xray.app.router.command.AddRuleRequest.config:type_name -> xray.common.serial.TypedMessage
-	21, // 7: xray.app.router.command.ListRuleItem.rule:type_name -> xray.app.router.RoutingRule
-	15, // 8: xray.app.router.command.ListRuleResponse.rules:type_name -> xray.app.router.command.ListRuleItem
-	1,  // 9: xray.app.router.command.RoutingService.SubscribeRoutingStats:input_type -> xray.app.router.command.SubscribeRoutingStatsRequest
-	2,  // 10: xray.app.router.command.RoutingService.TestRoute:input_type -> xray.app.router.command.TestRouteRequest
-	6,  // 11: xray.app.router.command.RoutingService.GetBalancerInfo:input_type -> xray.app.router.command.GetBalancerInfoRequest
-	8,  // 12: xray.app.router.command.RoutingService.OverrideBalancerTarget:input_type -> xray.app.router.command.OverrideBalancerTargetRequest
-	10, // 13: xray.app.router.command.RoutingService.AddRule:input_type -> xray.app.router.command.AddRuleRequest
-	12, // 14: xray.app.router.command.RoutingService.RemoveRule:input_type -> xray.app.router.command.RemoveRuleRequest
-	14, // 15: xray.app.router.command.RoutingService.ListRule:input_type -> xray.app.router.command.ListRuleRequest
-	0,  // 16: xray.app.router.command.RoutingService.SubscribeRoutingStats:output_type -> xray.app.router.command.RoutingContext
-	0,  // 17: xray.app.router.command.RoutingService.TestRoute:output_type -> xray.app.router.command.RoutingContext
-	7,  // 18: xray.app.router.command.RoutingService.GetBalancerInfo:output_type -> xray.app.router.command.GetBalancerInfoResponse
-	9,  // 19: xray.app.router.command.RoutingService.OverrideBalancerTarget:output_type -> xray.app.router.command.OverrideBalancerTargetResponse
-	11, // 20: xray.app.router.command.RoutingService.AddRule:output_type -> xray.app.router.command.AddRuleResponse
-	13, // 21: xray.app.router.command.RoutingService.RemoveRule:output_type -> xray.app.router.command.RemoveRuleResponse
-	16, // 22: xray.app.router.command.RoutingService.ListRule:output_type -> xray.app.router.command.ListRuleResponse
-	16, // [16:23] is the sub-list for method output_type
-	9,  // [9:16] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	3,  // 5: xray.app.router.command.BalancerMsg.candidates:type_name -> xray.app.router.command.PrincipleTargetInfo
+	5,  // 6: xray.app.router.command.GetBalancerInfoResponse.balancer:type_name -> xray.app.router.command.BalancerMsg
+	20, // 7: xray.app.router.command.AddRuleRequest.config:type_name -> xray.common.serial.TypedMessage
+	21, // 8: xray.app.router.command.ListRuleItem.rule:type_name -> xray.app.router.RoutingRule
+	15, // 9: xray.app.router.command.ListRuleResponse.rules:type_name -> xray.app.router.command.ListRuleItem
+	1,  // 10: xray.app.router.command.RoutingService.SubscribeRoutingStats:input_type -> xray.app.router.command.SubscribeRoutingStatsRequest
+	2,  // 11: xray.app.router.command.RoutingService.TestRoute:input_type -> xray.app.router.command.TestRouteRequest
+	6,  // 12: xray.app.router.command.RoutingService.GetBalancerInfo:input_type -> xray.app.router.command.GetBalancerInfoRequest
+	8,  // 13: xray.app.router.command.RoutingService.OverrideBalancerTarget:input_type -> xray.app.router.command.OverrideBalancerTargetRequest
+	10, // 14: xray.app.router.command.RoutingService.AddRule:input_type -> xray.app.router.command.AddRuleRequest
+	12, // 15: xray.app.router.command.RoutingService.RemoveRule:input_type -> xray.app.router.command.RemoveRuleRequest
+	14, // 16: xray.app.router.command.RoutingService.ListRule:input_type -> xray.app.router.command.ListRuleRequest
+	0,  // 17: xray.app.router.command.RoutingService.SubscribeRoutingStats:output_type -> xray.app.router.command.RoutingContext
+	0,  // 18: xray.app.router.command.RoutingService.TestRoute:output_type -> xray.app.router.command.RoutingContext
+	7,  // 19: xray.app.router.command.RoutingService.GetBalancerInfo:output_type -> xray.app.router.command.GetBalancerInfoResponse
+	9,  // 20: xray.app.router.command.RoutingService.OverrideBalancerTarget:output_type -> xray.app.router.command.OverrideBalancerTargetResponse
+	11, // 21: xray.app.router.command.RoutingService.AddRule:output_type -> xray.app.router.command.AddRuleResponse
+	13, // 22: xray.app.router.command.RoutingService.RemoveRule:output_type -> xray.app.router.command.RemoveRuleResponse
+	16, // 23: xray.app.router.command.RoutingService.ListRule:output_type -> xray.app.router.command.ListRuleResponse
+	17, // [17:24] is the sub-list for method output_type
+	10, // [10:17] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_app_router_command_command_proto_init() }

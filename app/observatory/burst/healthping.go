@@ -146,12 +146,21 @@ func (h *HealthPing) StopScheduler() {
 
 // Check implements the HealthChecker
 func (h *HealthPing) Check(tags []string) error {
+	return h.CheckContext(h.ctx, tags)
+}
+
+func (h *HealthPing) CheckContext(ctx context.Context, tags []string) error {
 	if len(tags) == 0 {
 		return nil
 	}
 	errors.LogInfo(h.ctx, "perform one-time health check for tags ", tags)
-	h.doCheck(h.ctx, tags, 0, 1)
-	return nil
+	probeCtx, cancel := context.WithCancel(h.ctx)
+	stopCancellation := context.AfterFunc(ctx, cancel)
+	defer func() {
+		stopCancellation()
+		cancel()
+	}()
+	return h.doCheck(probeCtx, tags, 0, 1)
 }
 
 type rtt struct {
@@ -162,17 +171,17 @@ type rtt struct {
 // doCheck performs the 'rounds' amount checks in given 'duration'. You should make
 // sure all tags are valid for current balancer
 // cancel ctx will stop all pending checks
-func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.Duration, rounds int) {
+func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.Duration, rounds int) error {
 	count := len(tags) * rounds
 	if count == 0 {
-		return
+		return nil
 	}
 	ch := make(chan *rtt, count)
 	timers := make([]*time.Timer, 0, count)
 	for _, tag := range tags {
 		handler := tag
 		client := newPingClient(
-			h.ctx,
+			ctx,
 			h.dispatcher,
 			h.Settings.Destination,
 			h.Settings.Timeout,
@@ -193,7 +202,7 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 					}
 					return
 				}
-				if !h.checkConnectivity() {
+				if !h.checkConnectivity(ctx) {
 					errors.LogWarning(h.ctx, "network is down")
 					ch <- &rtt{
 						handler: handler,
@@ -225,9 +234,10 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 			for _, timer := range timers {
 				timer.Stop()
 			}
-			return
+			return ctx.Err()
 		}
 	}
+	return nil
 }
 
 // PutResult put a ping rtt to results
@@ -271,11 +281,12 @@ func (h *HealthPing) Cleanup(tags []string) {
 
 // checkConnectivity checks the network connectivity, it returns
 // true if network is good or "connectivity check url" not set
-func (h *HealthPing) checkConnectivity() bool {
+func (h *HealthPing) checkConnectivity(ctx context.Context) bool {
 	if h.Settings.Connectivity == "" {
 		return true
 	}
 	tester := newDirectPingClient(
+		ctx,
 		h.Settings.Connectivity,
 		h.Settings.Timeout,
 	)

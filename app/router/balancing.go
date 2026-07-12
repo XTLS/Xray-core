@@ -149,6 +149,16 @@ func (r *Router) GetPrincipleTarget(tag string) ([]string, error) {
 	return nil, errors.New("cannot find tag")
 }
 
+// GetBalancerCandidates returns all outbounds selected by a balancer before
+// its strategy applies health or load filtering.
+func (r *Router) GetBalancerCandidates(tag string) ([]string, error) {
+	balancer, found := r.balancers[tag]
+	if !found {
+		return nil, errors.New("cannot find tag")
+	}
+	return balancer.SelectOutbounds()
+}
+
 // SetOverrideTarget implements routing.BalancerOverrider
 func (r *Router) SetOverrideTarget(tag, target string) error {
 	if b, ok := r.balancers[tag]; ok {

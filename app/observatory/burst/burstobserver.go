@@ -2,6 +2,7 @@ package burst
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"github.com/xtls/xray-core/app/observatory"
@@ -33,6 +34,45 @@ func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 
 func (o *Observer) Check(tag []string) {
 	o.hp.Check(tag)
+}
+
+func (o *Observer) selectOutbounds(tags []string) ([]string, error) {
+	if len(tags) == 0 {
+		hs, ok := o.ohm.(outbound.HandlerSelector)
+		if !ok {
+			return nil, errors.New("outbound.Manager is not a HandlerSelector")
+		}
+		tags = hs.Select(o.config.SubjectSelector)
+	}
+
+	unique := make(map[string]struct{}, len(tags))
+	selected := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		if tag == "" {
+			return nil, errors.New("outbound tag cannot be empty")
+		}
+		if o.ohm.GetHandler(tag) == nil {
+			return nil, errors.New("outbound not found: ", tag)
+		}
+		if _, found := unique[tag]; found {
+			continue
+		}
+		unique[tag] = struct{}{}
+		selected = append(selected, tag)
+	}
+	sort.Strings(selected)
+	return selected, nil
+}
+
+func (o *Observer) CheckObservation(ctx context.Context, tags []string) (proto.Message, error) {
+	selected, err := o.selectOutbounds(tags)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.hp.CheckContext(ctx, selected); err != nil {
+		return nil, err
+	}
+	return o.GetObservation(ctx)
 }
 
 func (o *Observer) createResult() []*observatory.OutboundStatus {

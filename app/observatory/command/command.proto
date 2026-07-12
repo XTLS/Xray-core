@@ -9,14 +9,26 @@ option java_multiple_files = true;
 import "app/observatory/config.proto";
 
 message GetOutboundStatusRequest {
+  // Empty selects all current observation results.
+  repeated string outbound_tags = 1;
 }
 
 message GetOutboundStatusResponse {
   xray.core.app.observatory.ObservationResult status = 1;
 }
 
+message ProbeOutboundStatusRequest {
+  // Empty actively probes all outbounds selected by the observatory config.
+  repeated string outbound_tags = 1;
+}
+
+message ProbeOutboundStatusResponse {
+  xray.core.app.observatory.ObservationResult status = 1;
+}
+
 service ObservatoryService {
   rpc GetOutboundStatus(GetOutboundStatusRequest) returns (GetOutboundStatusResponse) {}
+  rpc ProbeOutboundStatus(ProbeOutboundStatusRequest) returns (ProbeOutboundStatusResponse) {}
 }
 
 
