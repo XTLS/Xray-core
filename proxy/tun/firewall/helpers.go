@@ -146,3 +146,47 @@ func getCurrentProcessAppID() (*wtFwpByteBlob, error) {
 	}
 	return appID, nil
 }
+
+func getCurrentProcessSecurityDescriptorUser() (*windows.SECURITY_DESCRIPTOR, error) {
+	var processToken windows.Token
+	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &processToken)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	defer processToken.Close()
+	tokenUser, err := processToken.GetTokenUser()
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	sid := tokenUser.User.Sid
+	if sid == nil || !sid.IsValid() {
+		return nil, wrapErr(windows.ERROR_INVALID_SID)
+	}
+
+	access := []windows.EXPLICIT_ACCESS{{
+		AccessPermissions: cFWP_ACTRL_MATCH_FILTER,
+		AccessMode:        windows.GRANT_ACCESS,
+		Trustee: windows.TRUSTEE{
+			TrusteeForm:  windows.TRUSTEE_IS_SID,
+			TrusteeType:  windows.TRUSTEE_IS_USER,
+			TrusteeValue: windows.TrusteeValueFromSID(sid),
+		},
+	}}
+	dacl, err := windows.ACLFromEntries(access, nil)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	sd, err := windows.NewSecurityDescriptor()
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	err = sd.SetDACL(dacl, true, false)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	sd, err = sd.ToSelfRelative()
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	return sd, nil
+}

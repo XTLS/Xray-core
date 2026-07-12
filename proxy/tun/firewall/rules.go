@@ -1227,7 +1227,7 @@ func permitSelfProcess(session uintptr, baseObjects *baseObjects, weight uint8) 
 	}
 	defer fwpmFreeMemory0(unsafe.Pointer(&appID))
 
-	sd, err := getCurrentProcessSecurityDescriptor()
+	sd, err := getCurrentProcessSecurityDescriptorUser()
 	if err != nil {
 		return wrapErr(err)
 	}
