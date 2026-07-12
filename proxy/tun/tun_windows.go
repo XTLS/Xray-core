@@ -95,12 +95,6 @@ func open(name string) (*wintun.Adapter, error) {
 }
 
 func (t *WindowsTun) Start() (err error) {
-	defer func() {
-		if err != nil {
-			_ = t.Close()
-		}
-	}()
-
 	if updater != nil {
 		t.cbr, err = winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
 			updater.Update()
