@@ -186,14 +186,20 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	if len(uniqueTags) == 0 {
 		return nil
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := h.ctx.Err(); err != nil {
 		return err
 	}
 
-	runCtx, cancel := context.WithCancel(ctx)
-	stopHealthPingCancellation := context.AfterFunc(h.ctx, cancel)
+	// The caller controls the lifetime of a batch, but it does not own Xray's
+	// instance context. Keep the health checker's context as the value-bearing
+	// parent required by tagged.Dialer and bridge caller cancellation into it.
+	runCtx, cancel := context.WithCancel(h.ctx)
+	stopCallerCancellation := context.AfterFunc(ctx, cancel)
 	defer func() {
-		stopHealthPingCancellation()
+		stopCallerCancellation()
 		cancel()
 	}()
 
@@ -254,6 +260,9 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 
 	workers.Wait()
 	<-feedDone
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := runCtx.Err(); err != nil {
 		return err
 	}

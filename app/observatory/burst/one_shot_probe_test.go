@@ -223,6 +223,33 @@ func TestOneShotProbeHonorsCancellation(t *testing.T) {
 	}
 }
 
+func TestOneShotProbeRetainsObserverContext(t *testing.T) {
+	type observerContextKey struct{}
+	contextValue := new(int)
+	healthPing := NewHealthPing(
+		context.WithValue(context.Background(), observerContextKey{}, contextValue),
+		nil,
+		nil,
+	)
+	defer healthPing.cancelCtx()
+	healthPing.measure = func(ctx context.Context, _ string) (time.Duration, error) {
+		if got := ctx.Value(observerContextKey{}); got != contextValue {
+			return 0, stderrors.New("observer context value is missing")
+		}
+		return 20 * time.Millisecond, nil
+	}
+
+	if err := healthPing.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	healthPing.access.Lock()
+	defer healthPing.access.Unlock()
+	stats := healthPing.Results["proxy-a"].getStatistics()
+	if stats.All != 1 || stats.Fail != 0 {
+		t.Fatalf("probe statistics = all %d, fail %d; want 1, 0", stats.All, stats.Fail)
+	}
+}
+
 type probeTestHandler struct {
 	outbound.Handler
 	tag string
