@@ -10,6 +10,7 @@ package firewall
 import (
 	"encoding/binary"
 	"errors"
+	"net"
 	"net/netip"
 	"runtime"
 	"unsafe"
@@ -1360,18 +1361,18 @@ func blockDNS_(session uintptr, baseObjects *baseObjects, weight uint8) error {
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
 			name:  "Block DNS outbound (IPv4)",
 		},
-		// {
-		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
-		// 	name:  "Block DNS inbound (IPv4)",
-		// },
+		{
+			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+			name:  "Block DNS inbound (IPv4)",
+		},
 		{
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V6,
 			name:  "Block DNS outbound (IPv6)",
 		},
-		// {
-		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
-		// 	name:  "Block DNS inbound (IPv6)",
-		// },
+		{
+			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
+			name:  "Block DNS inbound (IPv6)",
+		},
 	}
 
 	for _, item := range layers {
@@ -1428,8 +1429,8 @@ func permitDNS(session uintptr, baseObjects *baseObjects, weight uint8, except [
 			continue
 		}
 		addrMask := &wtFwpV4AddrAndMask{
-			addr: binary.BigEndian.Uint32(ip.Addr().AsSlice()),
-			mask: ^uint32(0) << (32 - ip.Bits()),
+			addr: binary.NativeEndian.Uint32(ip.Addr().AsSlice()),
+			mask: binary.NativeEndian.Uint32(net.CIDRMask(ip.Bits(), 32)),
 		}
 		allowConditionsV4 = append(allowConditionsV4, wtFwpmFilterCondition0{
 			fieldKey:  cFWPM_CONDITION_IP_REMOTE_ADDRESS,
