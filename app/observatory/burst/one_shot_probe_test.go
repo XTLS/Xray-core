@@ -14,6 +14,29 @@ import (
 	"github.com/xtls/xray-core/features/outbound"
 )
 
+func requireObservationUpdate(t *testing.T, updates <-chan struct{}) {
+	t.Helper()
+	select {
+	case _, open := <-updates:
+		if !open {
+			t.Fatal("observation update subscription closed unexpectedly")
+		}
+	default:
+		t.Fatal("observer did not publish a result update")
+	}
+}
+
+func requireNoObservationUpdate(t *testing.T, updates <-chan struct{}) {
+	t.Helper()
+	select {
+	case _, open := <-updates:
+		if open {
+			t.Fatal("observer published an unexpected result update")
+		}
+	default:
+	}
+}
+
 func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	tags := []string{"proxy-a", "proxy-b", "proxy-c"}
@@ -29,24 +52,10 @@ func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 
 	var active atomic.Int32
 	var peak atomic.Int32
-	var updates atomic.Int32
-	var expectedSamples atomic.Int32
-	var incompletePublication atomic.Bool
 	var tagAccess sync.Mutex
 	activeTags := make(map[string]int)
 	concurrentSample := false
-	expectedSamples.Store(3)
-	unsubscribe := observer.SubscribeObservationUpdates(func() {
-		healthPing.access.Lock()
-		defer healthPing.access.Unlock()
-		for _, tag := range tags {
-			result := healthPing.Results[tag]
-			if result == nil || result.getStatistics().All != int(expectedSamples.Load()) {
-				incompletePublication.Store(true)
-			}
-		}
-		updates.Add(1)
-	})
+	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
 	healthPing.measure = func(ctx context.Context, tag string) (time.Duration, error) {
 		current := active.Add(1)
@@ -87,12 +96,8 @@ func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 	if concurrentSample {
 		t.Fatal("samples for the same outbound ran concurrently")
 	}
-	if got := updates.Load(); got != 1 {
-		t.Fatalf("result updates = %d, want one atomic publication", got)
-	}
-	if incompletePublication.Load() {
-		t.Fatal("observer was notified before the complete batch was published")
-	}
+	requireObservationUpdate(t, updates)
+	requireNoObservationUpdate(t, updates)
 
 	healthPing.access.Lock()
 	if _, found := healthPing.Results["stale"]; found {
@@ -113,13 +118,11 @@ func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 	healthPing.access.Unlock()
 
 	// A later batch must replace, rather than accumulate with, prior samples.
-	expectedSamples.Store(1)
 	if err := observer.ProbeOutbounds(context.Background(), tags, 1, 1); err != nil {
 		t.Fatal(err)
 	}
-	if got := updates.Load(); got != 2 {
-		t.Fatalf("result updates after replacement = %d, want 2", got)
-	}
+	requireObservationUpdate(t, updates)
+	requireNoObservationUpdate(t, updates)
 	healthPing.access.Lock()
 	defer healthPing.access.Unlock()
 	for _, tag := range tags {
@@ -140,15 +143,14 @@ func TestOneShotProbePublishesEmptySnapshot(t *testing.T) {
 		ohm:    &probeTestManager{handlers: map[string]outbound.Handler{}},
 	}
 	defer observer.Close()
-	var updates atomic.Int32
-	observer.SubscribeObservationUpdates(func() { updates.Add(1) })
+	updates, unsubscribe := observer.SubscribeObservationUpdates()
+	defer unsubscribe()
 
 	if err := observer.ProbeOutbounds(context.Background(), nil, 1, 1); err != nil {
 		t.Fatal(err)
 	}
-	if got := updates.Load(); got != 1 {
-		t.Fatalf("result updates = %d, want one empty-snapshot publication", got)
-	}
+	requireObservationUpdate(t, updates)
+	requireNoObservationUpdate(t, updates)
 	healthPing.access.Lock()
 	defer healthPing.access.Unlock()
 	if len(healthPing.Results) != 0 {
@@ -231,16 +233,14 @@ func TestOneShotProbePreservesSnapshotWhenNetworkIsUnavailable(t *testing.T) {
 	}}
 	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
 	defer observer.Close()
-	var updates atomic.Int32
-	observer.SubscribeObservationUpdates(func() { updates.Add(1) })
+	updates, unsubscribe := observer.SubscribeObservationUpdates()
+	defer unsubscribe()
 
 	err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
 	if !stderrors.Is(err, extension.ErrObservatoryProbeNetworkUnavailable) {
 		t.Fatalf("probe error = %v, want network-unavailable error", err)
 	}
-	if got := updates.Load(); got != 0 {
-		t.Fatalf("result updates = %d, want none for an aborted batch", got)
-	}
+	requireNoObservationUpdate(t, updates)
 	healthPing.access.Lock()
 	defer healthPing.access.Unlock()
 	if healthPing.Results["previous"] != previous || len(healthPing.Results) != 1 {
@@ -248,7 +248,7 @@ func TestOneShotProbePreservesSnapshotWhenNetworkIsUnavailable(t *testing.T) {
 	}
 }
 
-func TestObserverUpdateListenerCanCloseAfterPublication(t *testing.T) {
+func TestObserverSubscriberCanCloseAfterPublication(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	healthPing.measure = func(context.Context, string) (time.Duration, error) {
 		return 20 * time.Millisecond, nil
@@ -257,30 +257,18 @@ func TestObserverUpdateListenerCanCloseAfterPublication(t *testing.T) {
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 	}}
 	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
-	listenerDone := make(chan error, 1)
-	observer.SubscribeObservationUpdates(func() {
-		listenerDone <- observer.Close()
-	})
+	updates, unsubscribe := observer.SubscribeObservationUpdates()
+	defer unsubscribe()
 
-	probeDone := make(chan error, 1)
-	go func() {
-		probeDone <- observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
-	}()
-	select {
-	case err := <-listenerDone:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("update listener deadlocked while closing the observer")
+	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
+		t.Fatal(err)
 	}
-	select {
-	case err := <-probeDone:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("probe did not return after its update listener closed the observer")
+	requireObservationUpdate(t, updates)
+	if err := observer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, open := <-updates; open {
+		t.Fatal("observer close left the update subscription open")
 	}
 }
 
@@ -476,54 +464,8 @@ func TestObserverDropsManualCheckDuringBatch(t *testing.T) {
 	}
 }
 
-func TestObserverRejectsBatchDuringManualCheckPublication(t *testing.T) {
+func TestUnreadObservationUpdatesDoNotBlockProbeCompletion(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
-	healthPing.Settings.Destination = "://invalid-probe-url"
-	manager := &probeTestManager{handlers: map[string]outbound.Handler{
-		"proxy-a": &probeTestHandler{tag: "proxy-a"},
-	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
-	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
-	defer observer.Close()
-
-	listenerStarted := make(chan struct{})
-	releaseListener := make(chan struct{})
-	var listenerOnce sync.Once
-	observer.SubscribeObservationUpdates(func() {
-		listenerOnce.Do(func() { close(listenerStarted) })
-		<-releaseListener
-	})
-	checkDone := make(chan struct{})
-	go func() {
-		observer.Check([]string{"manual"})
-		close(checkDone)
-	}()
-	<-listenerStarted
-
-	probeDone := make(chan error, 1)
-	go func() {
-		probeDone <- observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
-	}()
-	select {
-	case err := <-probeDone:
-		if err == nil || !strings.Contains(err.Error(), "manual outbound check") {
-			t.Fatalf("probe error = %v, want active-manual-check error", err)
-		}
-	case <-time.After(time.Second):
-		close(releaseListener)
-		t.Fatal("batch probe blocked behind a manual check")
-	}
-	close(releaseListener)
-	select {
-	case <-checkDone:
-	case <-time.After(time.Second):
-		t.Fatal("manual check did not finish after listener release")
-	}
-}
-
-func TestObserverRejectsReentrantWorkDuringBatchPublication(t *testing.T) {
-	healthPing := NewHealthPing(context.Background(), nil, nil)
-	healthPing.Settings.Destination = "://invalid-probe-url"
 	healthPing.measure = func(context.Context, string) (time.Duration, error) {
 		return 20 * time.Millisecond, nil
 	}
@@ -533,29 +475,18 @@ func TestObserverRejectsReentrantWorkDuringBatchPublication(t *testing.T) {
 	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
 	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
 	defer observer.Close()
-
-	var updates atomic.Int32
-	nestedProbeError := make(chan error, 1)
-	observer.SubscribeObservationUpdates(func() {
-		if updates.Add(1) != 1 {
-			return
-		}
-		observer.Check([]string{"manual"})
-		nestedProbeError <- observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
-	})
+	updates, unsubscribe := observer.SubscribeObservationUpdates()
+	defer unsubscribe()
 
 	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
 		t.Fatal(err)
 	}
-	if got := updates.Load(); got != 1 {
-		t.Fatalf("publication updates = %d, want exactly one", got)
+	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
+		t.Fatal(err)
 	}
-	if err := <-nestedProbeError; err == nil || !strings.Contains(err.Error(), "being published") {
-		t.Fatalf("nested probe error = %v, want publication-in-progress error", err)
-	}
-	healthPing.access.Lock()
-	defer healthPing.access.Unlock()
-	if _, found := healthPing.Results["manual"]; found {
-		t.Fatal("reentrant manual check mutated the published batch")
-	}
+
+	// Both successful batches complete while the single-slot notification
+	// channel is deliberately left unread. Their signals are coalesced.
+	requireObservationUpdate(t, updates)
+	requireNoObservationUpdate(t, updates)
 }

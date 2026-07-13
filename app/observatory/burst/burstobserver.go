@@ -29,12 +29,11 @@ type Observer struct {
 
 	ohm outbound.Manager
 
-	probeAccess     sync.Mutex
-	probeCancel     context.CancelFunc
-	probeDone       chan struct{}
-	manualChecks    int
-	probePublishing bool
-	closed          bool
+	probeAccess  sync.Mutex
+	probeCancel  context.CancelFunc
+	probeDone    chan struct{}
+	manualChecks int
+	closed       bool
 }
 
 var _ extension.ObservatoryBatchProbe = (*Observer)(nil)
@@ -43,8 +42,8 @@ func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 	return &observatory.ObservationResult{Status: o.createResult()}, nil
 }
 
-func (o *Observer) SubscribeObservationUpdates(listener func()) func() {
-	return o.updates.SubscribeObservationUpdates(listener)
+func (o *Observer) SubscribeObservationUpdates() (<-chan struct{}, func()) {
+	return o.updates.SubscribeObservationUpdates()
 }
 
 func (o *Observer) ObservationProbeDeadline() time.Duration {
@@ -60,7 +59,7 @@ func (o *Observer) ObservationProbeDeadline() time.Duration {
 
 func (o *Observer) Check(tag []string) {
 	o.probeAccess.Lock()
-	if o.closed || o.probeDone != nil || o.probePublishing {
+	if o.closed || o.probeDone != nil {
 		o.probeAccess.Unlock()
 		return
 	}
@@ -187,10 +186,6 @@ func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurr
 		o.probeAccess.Unlock()
 		return errors.New("a manual outbound check is already running")
 	}
-	if o.probePublishing {
-		o.probeAccess.Unlock()
-		return errors.New("outbound probe results are being published")
-	}
 	probeCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	o.probeCancel = cancel
@@ -206,20 +201,9 @@ func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurr
 			o.probeDone = nil
 		}
 		close(done)
-		o.probePublishing = publishUpdate
 		o.probeAccess.Unlock()
-		// Publish only after the probe is no longer marked as running. An
-		// embedder may synchronously close the core from an update listener;
-		// notifying earlier would make Close wait for this same goroutine.
 		if publishUpdate {
-			func() {
-				defer func() {
-					o.probeAccess.Lock()
-					o.probePublishing = false
-					o.probeAccess.Unlock()
-				}()
-				o.updates.NotifyObservationUpdate()
-			}()
+			o.updates.NotifyObservationUpdate()
 		}
 	}()
 
@@ -287,14 +271,15 @@ func (o *Observer) Close() error {
 		<-done
 	}
 
+	var err error
 	if o.finished != nil {
 		o.hp.StopScheduler()
-		return o.finished.Close()
-	}
-	if o.hp != nil {
+		err = o.finished.Close()
+	} else if o.hp != nil {
 		o.hp.cancelCtx()
 	}
-	return nil
+	o.updates.Close()
+	return err
 }
 
 func New(ctx context.Context, config *Config) (*Observer, error) {

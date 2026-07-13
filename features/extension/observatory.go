@@ -42,11 +42,12 @@ type ObservatoryBatchProbe interface {
 	ProbeOutbounds(ctx context.Context, tags []string, maxConcurrency, samples int) error
 }
 
-// ObservatoryUpdateNotifier publishes an event after an observatory result
-// changes. Consumers should query GetObservation or their routing strategy in
-// the callback instead of treating the event itself as a routing decision.
+// ObservatoryUpdateNotifier publishes a coalesced signal after an observatory
+// result changes. Consumers should query GetObservation or their routing
+// strategy after receiving the signal instead of treating it as a routing
+// decision itself.
 type ObservatoryUpdateNotifier interface {
-	SubscribeObservationUpdates(listener func()) (unsubscribe func())
+	SubscribeObservationUpdates() (updates <-chan struct{}, unsubscribe func())
 }
 
 // ObservatoryProbeDeadline reports the longest expected time before a
@@ -61,27 +62,35 @@ type ObservatoryProbeDeadline interface {
 type ObservatoryUpdateDispatcher struct {
 	access    sync.RWMutex
 	nextID    uint64
-	listeners map[uint64]func()
+	listeners map[uint64]chan struct{}
+	closed    bool
 }
 
-func (d *ObservatoryUpdateDispatcher) SubscribeObservationUpdates(listener func()) func() {
-	if listener == nil {
-		return func() {}
-	}
+func (d *ObservatoryUpdateDispatcher) SubscribeObservationUpdates() (<-chan struct{}, func()) {
 	d.access.Lock()
+	if d.closed {
+		updates := make(chan struct{})
+		close(updates)
+		d.access.Unlock()
+		return updates, func() {}
+	}
 	if d.listeners == nil {
-		d.listeners = make(map[uint64]func())
+		d.listeners = make(map[uint64]chan struct{})
 	}
 	id := d.nextID
 	d.nextID++
-	d.listeners[id] = listener
+	updates := make(chan struct{}, 1)
+	d.listeners[id] = updates
 	d.access.Unlock()
 
 	var once sync.Once
-	return func() {
+	return updates, func() {
 		once.Do(func() {
 			d.access.Lock()
-			delete(d.listeners, id)
+			if listener, found := d.listeners[id]; found {
+				delete(d.listeners, id)
+				close(listener)
+			}
 			d.access.Unlock()
 		})
 	}
@@ -89,15 +98,27 @@ func (d *ObservatoryUpdateDispatcher) SubscribeObservationUpdates(listener func(
 
 func (d *ObservatoryUpdateDispatcher) NotifyObservationUpdate() {
 	d.access.RLock()
-	listeners := make([]func(), 0, len(d.listeners))
 	for _, listener := range d.listeners {
-		listeners = append(listeners, listener)
+		select {
+		case listener <- struct{}{}:
+		default:
+		}
 	}
 	d.access.RUnlock()
+}
 
-	for _, listener := range listeners {
-		listener()
+func (d *ObservatoryUpdateDispatcher) Close() {
+	d.access.Lock()
+	if d.closed {
+		d.access.Unlock()
+		return
 	}
+	d.closed = true
+	for id, listener := range d.listeners {
+		delete(d.listeners, id)
+		close(listener)
+	}
+	d.access.Unlock()
 }
 
 func ObservatoryType() interface{} {

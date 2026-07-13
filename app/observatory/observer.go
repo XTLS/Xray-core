@@ -51,8 +51,8 @@ func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 	return &ObservationResult{Status: status}, nil
 }
 
-func (o *Observer) SubscribeObservationUpdates(listener func()) func() {
-	return o.updates.SubscribeObservationUpdates(listener)
+func (o *Observer) SubscribeObservationUpdates() (<-chan struct{}, func()) {
+	return o.updates.SubscribeObservationUpdates()
 }
 
 func (o *Observer) ObservationProbeDeadline() time.Duration {
@@ -86,6 +86,7 @@ func (o *Observer) Start() error {
 }
 
 func (o *Observer) Close() error {
+	o.updates.Close()
 	if o.finished != nil {
 		return o.finished.Close()
 	}
