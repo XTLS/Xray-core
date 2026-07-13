@@ -64,7 +64,7 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
-	err = firewall.EnableFirewall(adapter.LUID())
+	err = firewall.EnableFirewall(adapter.LUID(), options.DNS)
 	if err != nil {
 		session.End()
 		_ = adapter.Close()

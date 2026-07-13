@@ -1,3 +1,5 @@
+//go:build windows
+
 /* SPDX-License-Identifier: MIT
  *
  * Copyright (C) 2019-2026 WireGuard LLC. All Rights Reserved.
@@ -1311,7 +1313,7 @@ func permitSelfProcess(session uintptr, baseObjects *baseObjects, weight uint8) 
 	return nil
 }
 
-func blockDNSUDPALL(session uintptr, baseObjects *baseObjects, weight uint8) error {
+func blockDNS_(session uintptr, baseObjects *baseObjects, weight uint8) error {
 	conditions := []wtFwpmFilterCondition0{
 		{
 			fieldKey:  cFWPM_CONDITION_IP_REMOTE_PORT,
@@ -1327,69 +1329,6 @@ func blockDNSUDPALL(session uintptr, baseObjects *baseObjects, weight uint8) err
 			conditionValue: wtFwpConditionValue0{
 				_type: cFWP_UINT8,
 				value: uintptr(cIPPROTO_UDP),
-			},
-		},
-	}
-
-	filter := wtFwpmFilter0{
-		providerKey:         &baseObjects.provider,
-		subLayerKey:         baseObjects.filters,
-		weight:              filterWeight(weight),
-		numFilterConditions: uint32(len(conditions)),
-		filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&conditions[0])),
-		action: wtFwpmAction0{
-			_type: cFWP_ACTION_BLOCK,
-		},
-	}
-
-	layers := []struct {
-		layer windows.GUID
-		name  string
-	}{
-		{
-			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
-			name:  "Block DNS UDP outbound (IPv4)",
-		},
-		// {
-		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
-		// 	name:  "Block DNS UDP inbound (IPv4)",
-		// },
-		{
-			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V6,
-			name:  "Block DNS UDP outbound (IPv6)",
-		},
-		// {
-		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
-		// 	name:  "Block DNS UDP inbound (IPv6)",
-		// },
-	}
-
-	for _, item := range layers {
-		displayData, err := createWtFwpmDisplayData0(item.name, "")
-		if err != nil {
-			return wrapErr(err)
-		}
-
-		filter.displayData = *displayData
-		filter.layerKey = item.layer
-
-		var filterID uint64
-		if err := fwpmFilterAdd0(session, &filter, 0, &filterID); err != nil {
-			return wrapErr(err)
-		}
-	}
-
-	return nil
-}
-
-func blockDNSTCPALL(session uintptr, baseObjects *baseObjects, weight uint8) error {
-	conditions := []wtFwpmFilterCondition0{
-		{
-			fieldKey:  cFWPM_CONDITION_IP_REMOTE_PORT,
-			matchType: cFWP_MATCH_EQUAL,
-			conditionValue: wtFwpConditionValue0{
-				_type: cFWP_UINT16,
-				value: uintptr(53),
 			},
 		},
 		{
@@ -1419,19 +1358,19 @@ func blockDNSTCPALL(session uintptr, baseObjects *baseObjects, weight uint8) err
 	}{
 		{
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
-			name:  "Block DNS TCP outbound (IPv4)",
+			name:  "Block DNS outbound (IPv4)",
 		},
 		// {
 		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
-		// 	name:  "Block DNS TCP inbound (IPv4)",
+		// 	name:  "Block DNS inbound (IPv4)",
 		// },
 		{
 			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V6,
-			name:  "Block DNS TCP outbound (IPv6)",
+			name:  "Block DNS outbound (IPv6)",
 		},
 		// {
 		// 	layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
-		// 	name:  "Block DNS TCP inbound (IPv6)",
+		// 	name:  "Block DNS inbound (IPv6)",
 		// },
 	}
 
@@ -1449,6 +1388,160 @@ func blockDNSTCPALL(session uintptr, baseObjects *baseObjects, weight uint8) err
 			return wrapErr(err)
 		}
 	}
+
+	return nil
+}
+
+func permitDNS(session uintptr, baseObjects *baseObjects, weight uint8, except []netip.Prefix) error {
+	conditions := []wtFwpmFilterCondition0{
+		{
+			fieldKey:  cFWPM_CONDITION_IP_REMOTE_PORT,
+			matchType: cFWP_MATCH_EQUAL,
+			conditionValue: wtFwpConditionValue0{
+				_type: cFWP_UINT16,
+				value: uintptr(53),
+			},
+		},
+		{
+			fieldKey:  cFWPM_CONDITION_IP_PROTOCOL,
+			matchType: cFWP_MATCH_EQUAL,
+			conditionValue: wtFwpConditionValue0{
+				_type: cFWP_UINT8,
+				value: uintptr(cIPPROTO_UDP),
+			},
+		},
+		{
+			fieldKey:  cFWPM_CONDITION_IP_PROTOCOL,
+			matchType: cFWP_MATCH_EQUAL,
+			conditionValue: wtFwpConditionValue0{
+				_type: cFWP_UINT8,
+				value: uintptr(cIPPROTO_TCP),
+			},
+		},
+	}
+
+	storedPointersV4 := make([]*wtFwpV4AddrAndMask, 0, len(except))
+	allowConditionsV4 := make([]wtFwpmFilterCondition0, 0, len(conditions)+len(except))
+	allowConditionsV4 = append(allowConditionsV4, conditions...)
+	for _, ip := range except {
+		if !ip.Addr().Is4() {
+			continue
+		}
+		addrMask := &wtFwpV4AddrAndMask{
+			addr: binary.BigEndian.Uint32(ip.Addr().AsSlice()),
+			mask: ^uint32(0) << (32 - ip.Bits()),
+		}
+		allowConditionsV4 = append(allowConditionsV4, wtFwpmFilterCondition0{
+			fieldKey:  cFWPM_CONDITION_IP_REMOTE_ADDRESS,
+			matchType: cFWP_MATCH_PREFIX,
+			conditionValue: wtFwpConditionValue0{
+				_type: cFWP_V4_ADDR_MASK,
+				value: uintptr(unsafe.Pointer(addrMask)),
+			},
+		})
+		storedPointersV4 = append(storedPointersV4, addrMask)
+	}
+
+	storedPointersV6 := make([]*wtFwpV6AddrAndMask, 0, len(except))
+	allowConditionsV6 := make([]wtFwpmFilterCondition0, 0, len(conditions)+len(except))
+	allowConditionsV6 = append(allowConditionsV6, conditions...)
+	for _, ip := range except {
+		if !ip.Addr().Is6() {
+			continue
+		}
+		addrMask := &wtFwpV6AddrAndMask{
+			addr:         ip.Addr().As16(),
+			prefixLength: uint8(ip.Bits()),
+		}
+		allowConditionsV6 = append(allowConditionsV6, wtFwpmFilterCondition0{
+			fieldKey:  cFWPM_CONDITION_IP_REMOTE_ADDRESS,
+			matchType: cFWP_MATCH_PREFIX,
+			conditionValue: wtFwpConditionValue0{
+				_type: cFWP_V6_ADDR_MASK,
+				value: uintptr(unsafe.Pointer(addrMask)),
+			},
+		})
+		storedPointersV6 = append(storedPointersV6, addrMask)
+	}
+
+	filter := wtFwpmFilter0{
+		providerKey:         &baseObjects.provider,
+		subLayerKey:         baseObjects.filters,
+		weight:              filterWeight(weight),
+		numFilterConditions: uint32(len(allowConditionsV4)),
+		filterCondition:     (*wtFwpmFilterCondition0)(unsafe.Pointer(&allowConditionsV4[0])),
+		action: wtFwpmAction0{
+			_type: cFWP_ACTION_PERMIT,
+		},
+	}
+
+	layers4 := []struct {
+		layer windows.GUID
+		name  string
+	}{
+		{
+			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V4,
+			name:  "Allow DNS outbound (IPv4)",
+		},
+		{
+			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4,
+			name:  "Allow DNS inbound (IPv4)",
+		},
+	}
+
+	if len(allowConditionsV4) > len(conditions) {
+		for _, item := range layers4 {
+			displayData, err := createWtFwpmDisplayData0(item.name, "")
+			if err != nil {
+				return wrapErr(err)
+			}
+
+			filter.displayData = *displayData
+			filter.layerKey = item.layer
+
+			var filterID uint64
+			if err := fwpmFilterAdd0(session, &filter, 0, &filterID); err != nil {
+				return wrapErr(err)
+			}
+		}
+	}
+
+	filter.numFilterConditions = uint32(len(allowConditionsV6))
+	filter.filterCondition = (*wtFwpmFilterCondition0)(unsafe.Pointer(&allowConditionsV6[0]))
+
+	layers6 := []struct {
+		layer windows.GUID
+		name  string
+	}{
+		{
+			layer: cFWPM_LAYER_ALE_AUTH_CONNECT_V6,
+			name:  "Allow DNS outbound (IPv6)",
+		},
+		{
+			layer: cFWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V6,
+			name:  "Allow DNS inbound (IPv6)",
+		},
+	}
+
+	if len(allowConditionsV6) > len(conditions) {
+		for _, item := range layers6 {
+			displayData, err := createWtFwpmDisplayData0(item.name, "")
+			if err != nil {
+				return wrapErr(err)
+			}
+
+			filter.displayData = *displayData
+			filter.layerKey = item.layer
+
+			var filterID uint64
+			if err := fwpmFilterAdd0(session, &filter, 0, &filterID); err != nil {
+				return wrapErr(err)
+			}
+		}
+	}
+
+	runtime.KeepAlive(storedPointersV4)
+	runtime.KeepAlive(storedPointersV6)
 
 	return nil
 }

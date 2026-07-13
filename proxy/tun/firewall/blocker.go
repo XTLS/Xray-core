@@ -1,3 +1,5 @@
+//go:build windows
+
 /* SPDX-License-Identifier: MIT
  *
  * Copyright (C) 2019-2026 WireGuard LLC. All Rights Reserved.
@@ -7,6 +9,7 @@ package firewall
 
 import (
 	"errors"
+	"net/netip"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -98,7 +101,7 @@ func registerBaseObjects(session uintptr) (*baseObjects, error) {
 	return bo, nil
 }
 
-func EnableFirewall(luid uint64) error {
+func EnableFirewall(luid uint64, dns []string) error {
 	if wfpSession != 0 {
 		return errors.New("The firewall has already been enabled")
 	}
@@ -119,6 +122,13 @@ func EnableFirewall(luid uint64) error {
 			return wrapErr(err)
 		}
 
+		except := make([]netip.Prefix, 0, len(dns))
+		for _, d := range dns {
+			addr := netip.MustParseAddr(d)
+			except = append(except, netip.PrefixFrom(addr, addr.BitLen()))
+		}
+		permitDNS(session, baseObjects, 14, except)
+
 		err = permitLoopback(session, baseObjects, 13)
 		if err != nil {
 			return wrapErr(err)
@@ -129,12 +139,7 @@ func EnableFirewall(luid uint64) error {
 			return wrapErr(err)
 		}
 
-		err = blockDNSUDPALL(session, baseObjects, 0)
-		if err != nil {
-			return wrapErr(err)
-		}
-
-		err = blockDNSTCPALL(session, baseObjects, 0)
+		err = blockDNS_(session, baseObjects, 11)
 		if err != nil {
 			return wrapErr(err)
 		}
