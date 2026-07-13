@@ -369,7 +369,7 @@ func TestOneShotProbeRecordsFailedSamples(t *testing.T) {
 	}
 }
 
-func TestOneShotProbePreservesSnapshotWhenNetworkIsUnavailable(t *testing.T) {
+func TestOneShotProbeRetainsProgressWhenNetworkIsUnavailable(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	healthPing.Settings.Connectivity = "://invalid-connectivity-url"
 	secondStarted := make(chan struct{})
@@ -386,9 +386,6 @@ func TestOneShotProbePreservesSnapshotWhenNetworkIsUnavailable(t *testing.T) {
 			return 0, ctx.Err()
 		}
 	}
-	previous := NewHealthPingResult(1, time.Hour)
-	previous.Put(42 * time.Millisecond)
-	healthPing.Results = map[string]*HealthPingRTTS{"previous": previous}
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 		"proxy-b": &probeTestHandler{tag: "proxy-b"},
@@ -420,15 +417,14 @@ func TestOneShotProbePreservesSnapshotWhenNetworkIsUnavailable(t *testing.T) {
 	if !stderrors.Is(err, extension.ErrObservatoryProbeNetworkUnavailable) {
 		t.Fatalf("probe error = %v, want network-unavailable error", err)
 	}
-	waitForObservationUpdate(t, updates)
-	rolledBack := observationStatuses(t, observer)
-	if len(rolledBack) != 1 || rolledBack["previous"] == nil {
-		t.Fatalf("rolled-back statuses = %v, want previous snapshot", rolledBack)
+	partial := observationStatuses(t, observer)
+	if len(partial) != 1 || partial["proxy-a"] == nil {
+		t.Fatalf("partial statuses = %v, want completed proxy-a result", partial)
 	}
 	healthPing.access.Lock()
 	defer healthPing.access.Unlock()
-	if healthPing.Results["previous"] != previous || len(healthPing.Results) != 1 {
-		t.Fatal("network-unavailable batch replaced the previous complete snapshot")
+	if healthPing.Results["proxy-a"] == nil || len(healthPing.Results) != 1 {
+		t.Fatal("network-unavailable batch discarded its completed measurements")
 	}
 }
 
@@ -459,9 +455,6 @@ func TestObserverSubscriberCanCloseAfterPublication(t *testing.T) {
 func TestOneShotProbeHonorsCancellation(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	defer healthPing.cancelCtx()
-	previous := NewHealthPingResult(1, time.Hour)
-	previous.Put(42 * time.Millisecond)
-	healthPing.Results = map[string]*HealthPingRTTS{"proxy-a": previous}
 	started := make(chan struct{})
 	var startedOnce sync.Once
 	healthPing.measure = func(ctx context.Context, _ string) (time.Duration, error) {
@@ -489,16 +482,13 @@ func TestOneShotProbeHonorsCancellation(t *testing.T) {
 
 	healthPing.access.Lock()
 	defer healthPing.access.Unlock()
-	if healthPing.Results["proxy-a"] != previous {
-		t.Fatal("cancelled probe replaced the previous complete result with a partial batch")
+	if len(healthPing.Results) != 0 {
+		t.Fatal("cancelled probe with no completed measurements exposed stale results")
 	}
 }
 
-func TestOneShotProbeRollsBackProgressAfterCancellation(t *testing.T) {
+func TestOneShotProbeRetainsProgressAfterCancellation(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
-	previous := NewHealthPingResult(1, time.Hour)
-	previous.Put(42 * time.Millisecond)
-	healthPing.Results = map[string]*HealthPingRTTS{"previous": previous}
 	secondStarted := make(chan struct{})
 	healthPing.measure = func(ctx context.Context, tag string) (time.Duration, error) {
 		if tag == "proxy-a" {
@@ -534,10 +524,9 @@ func TestOneShotProbeRollsBackProgressAfterCancellation(t *testing.T) {
 	if err := <-probeDone; !stderrors.Is(err, context.Canceled) {
 		t.Fatalf("probe error = %v, want context cancellation", err)
 	}
-	waitForObservationUpdate(t, updates)
-	rolledBack := observationStatuses(t, observer)
-	if len(rolledBack) != 1 || rolledBack["previous"] == nil {
-		t.Fatalf("rolled-back statuses = %v, want previous snapshot", rolledBack)
+	partial := observationStatuses(t, observer)
+	if len(partial) != 1 || partial["proxy-a"] == nil {
+		t.Fatalf("partial statuses = %v, want completed proxy-a result", partial)
 	}
 }
 

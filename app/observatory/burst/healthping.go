@@ -42,9 +42,8 @@ type HealthPing struct {
 }
 
 type batchProbeResults struct {
-	results   map[string]*HealthPingRTTS
-	samples   int
-	published bool
+	results map[string]*HealthPingRTTS
+	samples int
 }
 
 // NewHealthPing creates a new HealthPing with settings
@@ -168,8 +167,9 @@ func (h *HealthPing) Check(tags []string) error {
 // ProbeOutbounds performs a finite, cancellable probe batch. Every unique tag
 // is sampled the requested number of times, while the worker pool bounds the
 // total number of probes in flight. Completed samples are exposed through the
-// active observation view as they arrive. The active view becomes the stable
-// snapshot only after full success; an aborted batch restores the previous one.
+// active observation view as they arrive. When the batch ends, that view remains
+// available even if the caller cancelled it or the underlying network failed;
+// the returned error tells the embedder that the result set is incomplete.
 func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcurrency, samples int) error {
 	if ctx == nil {
 		return errors.New("outbound probe context is nil")
@@ -215,9 +215,8 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	}()
 
 	batchResults := h.beginProbeResults(samples, len(uniqueTags))
-	commitResults := false
 	defer func() {
-		h.finishProbeResults(batchResults, commitResults)
+		h.finishProbeResults(batchResults)
 	}()
 
 	workerCount := min(maxConcurrency, len(uniqueTags))
@@ -287,7 +286,6 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	if err := runCtx.Err(); err != nil {
 		return err
 	}
-	commitResults = true
 	return nil
 }
 
@@ -336,28 +334,22 @@ func (h *HealthPing) putProbeResult(batch *batchProbeResults, tag string, delay 
 		batch.results[tag] = result
 	}
 	result.Put(delay)
-	batch.published = true
 	h.access.Unlock()
 	h.notifyUpdate()
 }
 
-func (h *HealthPing) finishProbeResults(batch *batchProbeResults, commit bool) {
+func (h *HealthPing) finishProbeResults(batch *batchProbeResults) {
 	h.access.Lock()
 	if h.activeProbe != batch {
 		h.access.Unlock()
 		return
 	}
-	if commit {
-		h.Results = batch.results
-	}
+	// A one-shot observer belongs to a disposable probe process. Preserve the
+	// measurements completed by this run regardless of how it ended; there is
+	// no earlier batch in the process whose results would be more relevant.
+	h.Results = batch.results
 	h.activeProbe = nil
-	published := batch.published
 	h.access.Unlock()
-	if !commit && published {
-		// A subscriber may already have rendered the progressive view. Signal
-		// that it should query again and reveal the previous stable snapshot.
-		h.notifyUpdate()
-	}
 }
 
 func (h *HealthPing) notifyUpdate() {

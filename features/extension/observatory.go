@@ -12,8 +12,8 @@ import (
 
 // ErrObservatoryProbeNetworkUnavailable reports that a one-shot batch could
 // not distinguish outbound health because the underlying network was down.
-// Implementations must not publish an all-failed replacement snapshot for
-// this condition.
+// Implementations may retain measurements completed before this condition but
+// must not synthesize failed results for the unfinished outbounds.
 var ErrObservatoryProbeNetworkUnavailable = errors.New("underlying network is unavailable during observatory probe")
 
 type Observatory interface {
@@ -33,8 +33,9 @@ type BurstObservatory interface {
 // Implementations must honor ctx cancellation and must not exceed
 // maxConcurrency probes in flight. Implementations may expose progressive
 // results through GetObservation and ObservatoryUpdateNotifier while the call
-// is running. After a successful return, GetObservation must expose the entire
-// completed batch; an aborted batch must not remain as the stable snapshot.
+// is running. After any return, GetObservation must retain the samples completed
+// by that call. A nil error means the requested batch is complete; a non-nil
+// error means the exposed result set may be partial.
 type ObservatoryBatchProbe interface {
 	Observatory
 	// ProbeOutboundsDeadline returns the configured worst-case probe time
