@@ -115,3 +115,14 @@ func TestHealthPingResultsCanRemainUnexpired(t *testing.T) {
 		t.Fatalf("non-expiring statistics = %+v, want one successful 42ms sample", actual)
 	}
 }
+
+func TestHealthPingResultsAverageLargeDurations(t *testing.T) {
+	hr := burst.NewHealthPingResult(2, time.Hour)
+	hr.Put(1500 * time.Millisecond)
+	hr.Put(1500 * time.Millisecond)
+
+	actual := hr.Get()
+	if actual.Average != 1500*time.Millisecond {
+		t.Fatalf("average = %v, want 1.5s", actual.Average)
+	}
+}

@@ -111,7 +111,10 @@ func (h *HealthPingRTTS) getStatistics() *HealthPingStats {
 		stats.Min = 0
 		return stats
 	}
-	stats.Average = time.Duration(int(sum) / cnt)
+	// time.Duration is int64 even on 32-bit targets. Keep the accumulated
+	// nanoseconds in that width: converting through int corrupts otherwise
+	// valid multi-second measurements on ARMv7 and other 32-bit platforms.
+	stats.Average = sum / time.Duration(cnt)
 	var std float64
 	if cnt < 2 {
 		// no enough data for standard deviation, we assume it's half of the average rtt
