@@ -2,12 +2,19 @@ package extension
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/features"
 	"google.golang.org/protobuf/proto"
 )
+
+// ErrObservatoryProbeNetworkUnavailable reports that a one-shot batch could
+// not distinguish outbound health because the underlying network was down.
+// Implementations must not publish an all-failed replacement snapshot for
+// this condition.
+var ErrObservatoryProbeNetworkUnavailable = errors.New("underlying network is unavailable during observatory probe")
 
 type Observatory interface {
 	features.Feature

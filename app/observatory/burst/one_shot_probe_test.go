@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
 )
 
@@ -146,6 +147,37 @@ func TestOneShotProbeRecordsFailedSamples(t *testing.T) {
 	stats := healthPing.Results["proxy-a"].getStatistics()
 	if stats.All != 2 || stats.Fail != 2 {
 		t.Fatalf("failed sample statistics = all %d, fail %d; want 2, 2", stats.All, stats.Fail)
+	}
+}
+
+func TestOneShotProbePreservesSnapshotWhenNetworkIsUnavailable(t *testing.T) {
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	healthPing.Settings.Connectivity = "://invalid-connectivity-url"
+	healthPing.measure = func(context.Context, string) (time.Duration, error) {
+		return 0, stderrors.New("unreachable")
+	}
+	previous := NewHealthPingResult(1, time.Hour)
+	previous.Put(42 * time.Millisecond)
+	healthPing.Results = map[string]*HealthPingRTTS{"previous": previous}
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+	}}
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	defer observer.Close()
+	var updates atomic.Int32
+	observer.SubscribeObservationUpdates(func() { updates.Add(1) })
+
+	err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
+	if !stderrors.Is(err, extension.ErrObservatoryProbeNetworkUnavailable) {
+		t.Fatalf("probe error = %v, want network-unavailable error", err)
+	}
+	if got := updates.Load(); got != 0 {
+		t.Fatalf("result updates = %d, want none for an aborted batch", got)
+	}
+	healthPing.access.Lock()
+	defer healthPing.access.Unlock()
+	if healthPing.Results["previous"] != previous || len(healthPing.Results) != 1 {
+		t.Fatal("network-unavailable batch replaced the previous complete snapshot")
 	}
 }
 

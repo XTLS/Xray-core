@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/routing"
 )
 
@@ -211,6 +212,7 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 
 	workerCount := min(maxConcurrency, len(uniqueTags))
 	tasks := make(chan string)
+	var networkUnavailable atomic.Bool
 	var workers sync.WaitGroup
 	workers.Add(workerCount)
 	for range workerCount {
@@ -229,6 +231,9 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 						}
 						if !connectivityOK {
 							errors.LogWarning(h.ctx, "network is down while probing ", tag)
+							networkUnavailable.Store(true)
+							cancel()
+							return
 						} else {
 							errors.LogWarning(h.ctx, fmt.Sprintf(
 								"error ping %s with %s: %s",
@@ -262,6 +267,12 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	<-feedDone
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if err := h.ctx.Err(); err != nil {
+		return err
+	}
+	if networkUnavailable.Load() {
+		return extension.ErrObservatoryProbeNetworkUnavailable
 	}
 	if err := runCtx.Err(); err != nil {
 		return err
