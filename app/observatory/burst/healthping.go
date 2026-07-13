@@ -184,14 +184,15 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 		seen[tag] = struct{}{}
 		uniqueTags = append(uniqueTags, tag)
 	}
-	if len(uniqueTags) == 0 {
-		return nil
-	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := h.ctx.Err(); err != nil {
 		return err
+	}
+	if len(uniqueTags) == 0 {
+		h.replaceResults(make(map[string]*HealthPingRTTS))
+		return nil
 	}
 
 	// The caller controls the lifetime of a batch, but it does not own Xray's

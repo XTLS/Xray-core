@@ -128,6 +128,33 @@ func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 	}
 }
 
+func TestOneShotProbePublishesEmptySnapshot(t *testing.T) {
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	staleResult := NewHealthPingResult(1, time.Hour)
+	staleResult.Put(time.Second)
+	healthPing.Results = map[string]*HealthPingRTTS{"stale": staleResult}
+	observer := &Observer{
+		config: &Config{},
+		hp:     healthPing,
+		ohm:    &probeTestManager{handlers: map[string]outbound.Handler{}},
+	}
+	defer observer.Close()
+	var updates atomic.Int32
+	observer.SubscribeObservationUpdates(func() { updates.Add(1) })
+
+	if err := observer.ProbeOutbounds(context.Background(), nil, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := updates.Load(); got != 1 {
+		t.Fatalf("result updates = %d, want one empty-snapshot publication", got)
+	}
+	healthPing.access.Lock()
+	defer healthPing.access.Unlock()
+	if len(healthPing.Results) != 0 {
+		t.Fatalf("empty batch retained %d stale results", len(healthPing.Results))
+	}
+}
+
 func TestOneShotProbeRecordsFailedSamples(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	healthPing.measure = func(context.Context, string) (time.Duration, error) {
