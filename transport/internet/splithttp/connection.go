@@ -1,9 +1,12 @@
 package splithttp
 
 import (
+	goerrors "errors"
 	"io"
 	"net"
 	"time"
+
+	"golang.org/x/net/http2"
 )
 
 type splitConn struct {
@@ -19,7 +22,20 @@ func (c *splitConn) Write(b []byte) (int, error) {
 }
 
 func (c *splitConn) Read(b []byte) (int, error) {
-	return c.reader.Read(b)
+	n, err := c.reader.Read(b)
+	// A peer-initiated HTTP/2 stream reset (e.g. "stream error: stream ID N;
+	// INTERNAL_ERROR; received from peer") means the remote closed the downlink
+	// carrying this XHTTP session. Surface it as io.EOF so the proxy treats it
+	// as a normal connection teardown rather than logging it as an outbound
+	// failure. Only the HTTP/2 downlink yields http2.StreamError; the HTTP/1.1
+	// and HTTP/3 paths are unaffected.
+	if err != nil {
+		var h2StreamErr http2.StreamError
+		if goerrors.As(err, &h2StreamErr) {
+			err = io.EOF
+		}
+	}
+	return n, err
 }
 
 func (c *splitConn) Close() error {
