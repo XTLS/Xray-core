@@ -347,6 +347,8 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 	}
 	lowestMetric := ^uint32(0)
 	index := uint32(0)
+	lowestMetricWifi := ^uint32(0)
+	indexWifi := uint32(0)
 	for i := range r {
 		if r[i].DestinationPrefix.PrefixLength != 0 || r[i].InterfaceIndex == uint32(tunIndex) {
 			continue
@@ -364,10 +366,20 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 			}
 		}
 
+		if ifrow.Type == windows.IF_TYPE_IEEE80211 {
+			if r[i].Metric+iface.Metric < lowestMetricWifi {
+				lowestMetricWifi = r[i].Metric + iface.Metric
+				indexWifi = r[i].InterfaceIndex
+			}
+			continue
+		}
 		if r[i].Metric+iface.Metric < lowestMetric {
 			lowestMetric = r[i].Metric + iface.Metric
 			index = r[i].InterfaceIndex
 		}
+	}
+	if indexWifi != 0 {
+		index = indexWifi
 	}
 	return net.InterfaceByIndex(int(index))
 }
