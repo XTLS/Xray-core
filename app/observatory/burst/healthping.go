@@ -29,14 +29,22 @@ type HealthPing struct {
 	ctx           context.Context
 	cancelCtx     context.CancelFunc
 	cancelPending atomic.Pointer[context.CancelFunc]
+	batchAccess   sync.Mutex
 	dispatcher    routing.Dispatcher
 	access        sync.Mutex
 	ticker        *time.Ticker
 
-	Settings *HealthPingSettings
-	Results  map[string]*HealthPingRTTS
-	onUpdate func()
-	measure  func(context.Context, string) (time.Duration, error)
+	Settings    *HealthPingSettings
+	Results     map[string]*HealthPingRTTS
+	activeProbe *batchProbeResults
+	onUpdate    func()
+	measure     func(context.Context, string) (time.Duration, error)
+}
+
+type batchProbeResults struct {
+	results   map[string]*HealthPingRTTS
+	samples   int
+	published bool
 }
 
 // NewHealthPing creates a new HealthPing with settings
@@ -159,8 +167,9 @@ func (h *HealthPing) Check(tags []string) error {
 
 // ProbeOutbounds performs a finite, cancellable probe batch. Every unique tag
 // is sampled the requested number of times, while the worker pool bounds the
-// total number of probes in flight. Results are built privately and published
-// as one snapshot, so observers never see a partially completed batch.
+// total number of probes in flight. Completed samples are exposed through the
+// active observation view as they arrive. The active view becomes the stable
+// snapshot only after full success; an aborted batch restores the previous one.
 func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcurrency, samples int) error {
 	if ctx == nil {
 		return errors.New("outbound probe context is nil")
@@ -182,8 +191,13 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	if err := h.ctx.Err(); err != nil {
 		return err
 	}
+	if !h.batchAccess.TryLock() {
+		return errors.New("an outbound health probe batch is already running")
+	}
+	defer h.batchAccess.Unlock()
 	if len(uniqueTags) == 0 {
 		h.replaceResults(make(map[string]*HealthPingRTTS))
+		h.notifyUpdate()
 		return nil
 	}
 	if _, err := batchProbeDeadline(h.Settings, len(uniqueTags), maxConcurrency, samples); err != nil {
@@ -200,13 +214,11 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 		cancel()
 	}()
 
-	batchResults := make(map[string]*HealthPingRTTS, len(uniqueTags))
-	for _, tag := range uniqueTags {
-		// Unlike scheduler-owned samples, a completed one-shot batch is an
-		// immutable snapshot. Keep it valid until the next batch replaces it so
-		// early tags cannot expire while later tags are still being measured.
-		batchResults[tag] = NewHealthPingResult(samples, 0)
-	}
+	batchResults := h.beginProbeResults(samples, len(uniqueTags))
+	commitResults := false
+	defer func() {
+		h.finishProbeResults(batchResults, commitResults)
+	}()
 
 	workerCount := min(maxConcurrency, len(uniqueTags))
 	tasks := make(chan string)
@@ -242,7 +254,7 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 						}
 						delay = rttFailed
 					}
-					batchResults[tag].Put(delay)
+					h.putProbeResult(batchResults, tag, delay)
 				}
 			}
 		}()
@@ -275,7 +287,7 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	if err := runCtx.Err(); err != nil {
 		return err
 	}
-	h.replaceResults(batchResults)
+	commitResults = true
 	return nil
 }
 
@@ -297,6 +309,61 @@ func (h *HealthPing) replaceResults(replacements map[string]*HealthPingRTTS) {
 	h.access.Lock()
 	h.Results = replacements
 	h.access.Unlock()
+}
+
+func (h *HealthPing) beginProbeResults(samples, capacity int) *batchProbeResults {
+	batch := &batchProbeResults{
+		results: make(map[string]*HealthPingRTTS, capacity),
+		samples: samples,
+	}
+	h.access.Lock()
+	h.activeProbe = batch
+	h.access.Unlock()
+	return batch
+}
+
+func (h *HealthPing) putProbeResult(batch *batchProbeResults, tag string, delay time.Duration) {
+	h.access.Lock()
+	if h.activeProbe != batch {
+		h.access.Unlock()
+		return
+	}
+	result := batch.results[tag]
+	if result == nil {
+		// Unlike scheduler-owned samples, a completed one-shot batch is an
+		// immutable snapshot. Keep it valid until a later batch replaces it.
+		result = NewHealthPingResult(batch.samples, 0)
+		batch.results[tag] = result
+	}
+	result.Put(delay)
+	batch.published = true
+	h.access.Unlock()
+	h.notifyUpdate()
+}
+
+func (h *HealthPing) finishProbeResults(batch *batchProbeResults, commit bool) {
+	h.access.Lock()
+	if h.activeProbe != batch {
+		h.access.Unlock()
+		return
+	}
+	if commit {
+		h.Results = batch.results
+	}
+	h.activeProbe = nil
+	published := batch.published
+	h.access.Unlock()
+	if !commit && published {
+		// A subscriber may already have rendered the progressive view. Signal
+		// that it should query again and reveal the previous stable snapshot.
+		h.notifyUpdate()
+	}
+}
+
+func (h *HealthPing) notifyUpdate() {
+	if h.onUpdate != nil {
+		h.onUpdate()
+	}
 }
 
 type rtt struct {
@@ -393,9 +460,7 @@ func (h *HealthPing) PutResult(tag string, rtt time.Duration) {
 	}
 	r.Put(rtt)
 	h.access.Unlock()
-	if h.onUpdate != nil {
-		h.onUpdate()
-	}
+	h.notifyUpdate()
 }
 
 // Cleanup removes results of removed handlers,
@@ -417,8 +482,8 @@ func (h *HealthPing) Cleanup(tags []string) {
 		}
 	}
 	h.access.Unlock()
-	if changed && h.onUpdate != nil {
-		h.onUpdate()
+	if changed {
+		h.notifyUpdate()
 	}
 }
 

@@ -255,21 +255,26 @@ func (o *Observer) createResult() []*observatory.OutboundStatus {
 	var result []*observatory.OutboundStatus
 	o.hp.access.Lock()
 	defer o.hp.access.Unlock()
-	for name, value := range o.hp.Results {
+	results := o.hp.Results
+	if o.hp.activeProbe != nil {
+		results = o.hp.activeProbe.results
+	}
+	for name, value := range results {
+		statistics := value.getStatistics()
 		status := observatory.OutboundStatus{
-			Alive:           value.getStatistics().All != value.getStatistics().Fail,
-			Delay:           value.getStatistics().Average.Milliseconds(),
+			Alive:           statistics.All != statistics.Fail,
+			Delay:           statistics.Average.Milliseconds(),
 			LastErrorReason: "",
 			OutboundTag:     name,
 			LastSeenTime:    0,
 			LastTryTime:     0,
 			HealthPing: &observatory.HealthPingMeasurementResult{
-				All:       int64(value.getStatistics().All),
-				Fail:      int64(value.getStatistics().Fail),
-				Deviation: int64(value.getStatistics().Deviation),
-				Average:   int64(value.getStatistics().Average),
-				Max:       int64(value.getStatistics().Max),
-				Min:       int64(value.getStatistics().Min),
+				All:       int64(statistics.All),
+				Fail:      int64(statistics.Fail),
+				Deviation: int64(statistics.Deviation),
+				Average:   int64(statistics.Average),
+				Max:       int64(statistics.Max),
+				Min:       int64(statistics.Min),
 			},
 		}
 		result = append(result, &status)

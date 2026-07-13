@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	coreobservatory "github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
 )
@@ -36,6 +37,35 @@ func requireNoObservationUpdate(t *testing.T, updates <-chan struct{}) {
 		}
 	default:
 	}
+}
+
+func waitForObservationUpdate(t *testing.T, updates <-chan struct{}) {
+	t.Helper()
+	select {
+	case _, open := <-updates:
+		if !open {
+			t.Fatal("observation update subscription closed unexpectedly")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for an observation update")
+	}
+}
+
+func observationStatuses(t *testing.T, observer *Observer) map[string]*coreobservatory.OutboundStatus {
+	t.Helper()
+	message, err := observer.GetObservation(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, ok := message.(*coreobservatory.ObservationResult)
+	if !ok {
+		t.Fatalf("observation type = %T, want *observatory.ObservationResult", message)
+	}
+	statuses := make(map[string]*coreobservatory.OutboundStatus, len(result.Status))
+	for _, status := range result.Status {
+		statuses[status.OutboundTag] = status
+	}
+	return statuses
 }
 
 func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
@@ -130,6 +160,74 @@ func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 		if got := healthPing.Results[tag].getStatistics().All; got != 1 {
 			t.Fatalf("replacement samples for %q = %d, want 1", tag, got)
 		}
+	}
+}
+
+func TestOneShotProbePublishesProgressiveResults(t *testing.T) {
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	secondStarted := make(chan struct{})
+	releaseSecond := make(chan struct{})
+	healthPing.measure = func(ctx context.Context, tag string) (time.Duration, error) {
+		if tag == "proxy-a" {
+			return 20 * time.Millisecond, nil
+		}
+		close(secondStarted)
+		select {
+		case <-releaseSecond:
+			return 40 * time.Millisecond, nil
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		}
+	}
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+		"proxy-b": &probeTestHandler{tag: "proxy-b"},
+	}}
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	defer observer.Close()
+	updates, unsubscribe := observer.SubscribeObservationUpdates()
+	defer unsubscribe()
+
+	probeDone := make(chan error, 1)
+	go func() {
+		probeDone <- observer.ProbeOutbounds(
+			context.Background(),
+			[]string{"proxy-a", "proxy-b"},
+			1,
+			1,
+		)
+	}()
+	<-secondStarted
+	waitForObservationUpdate(t, updates)
+
+	progress := observationStatuses(t, observer)
+	if len(progress) != 1 || progress["proxy-a"] == nil {
+		t.Fatalf("progressive statuses = %v, want only proxy-a", progress)
+	}
+	if got := progress["proxy-a"].Delay; got != 20 {
+		t.Fatalf("progressive proxy-a delay = %dms, want 20ms", got)
+	}
+	if got := progress["proxy-a"].HealthPing.All; got != 1 {
+		t.Fatalf("progressive proxy-a samples = %d, want 1", got)
+	}
+	select {
+	case err := <-probeDone:
+		t.Fatalf("probe completed before proxy-b was released: %v", err)
+	default:
+	}
+
+	close(releaseSecond)
+	if err := <-probeDone; err != nil {
+		t.Fatal(err)
+	}
+	waitForObservationUpdate(t, updates)
+	complete := observationStatuses(t, observer)
+	if len(complete) != 2 || complete["proxy-a"] == nil || complete["proxy-b"] == nil {
+		t.Fatalf("completed statuses = %v, want proxy-a and proxy-b", complete)
+	}
+	if got := complete["proxy-b"].Delay; got != 40 {
+		t.Fatalf("completed proxy-b delay = %dms, want 40ms", got)
 	}
 }
 
@@ -274,25 +372,59 @@ func TestOneShotProbeRecordsFailedSamples(t *testing.T) {
 func TestOneShotProbePreservesSnapshotWhenNetworkIsUnavailable(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	healthPing.Settings.Connectivity = "://invalid-connectivity-url"
-	healthPing.measure = func(context.Context, string) (time.Duration, error) {
-		return 0, stderrors.New("unreachable")
+	secondStarted := make(chan struct{})
+	releaseSecond := make(chan struct{})
+	healthPing.measure = func(ctx context.Context, tag string) (time.Duration, error) {
+		if tag == "proxy-a" {
+			return 20 * time.Millisecond, nil
+		}
+		close(secondStarted)
+		select {
+		case <-releaseSecond:
+			return 0, stderrors.New("unreachable")
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		}
 	}
 	previous := NewHealthPingResult(1, time.Hour)
 	previous.Put(42 * time.Millisecond)
 	healthPing.Results = map[string]*HealthPingRTTS{"previous": previous}
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+		"proxy-b": &probeTestHandler{tag: "proxy-b"},
 	}}
 	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
 	defer observer.Close()
 	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
 
-	err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
+	probeDone := make(chan error, 1)
+	go func() {
+		probeDone <- observer.ProbeOutbounds(
+			context.Background(),
+			[]string{"proxy-a", "proxy-b"},
+			1,
+			1,
+		)
+	}()
+	<-secondStarted
+	waitForObservationUpdate(t, updates)
+	progress := observationStatuses(t, observer)
+	if len(progress) != 1 || progress["proxy-a"] == nil {
+		t.Fatalf("progressive statuses = %v, want only proxy-a", progress)
+	}
+
+	close(releaseSecond)
+	err := <-probeDone
 	if !stderrors.Is(err, extension.ErrObservatoryProbeNetworkUnavailable) {
 		t.Fatalf("probe error = %v, want network-unavailable error", err)
 	}
-	requireNoObservationUpdate(t, updates)
+	waitForObservationUpdate(t, updates)
+	rolledBack := observationStatuses(t, observer)
+	if len(rolledBack) != 1 || rolledBack["previous"] == nil {
+		t.Fatalf("rolled-back statuses = %v, want previous snapshot", rolledBack)
+	}
 	healthPing.access.Lock()
 	defer healthPing.access.Unlock()
 	if healthPing.Results["previous"] != previous || len(healthPing.Results) != 1 {
@@ -359,6 +491,53 @@ func TestOneShotProbeHonorsCancellation(t *testing.T) {
 	defer healthPing.access.Unlock()
 	if healthPing.Results["proxy-a"] != previous {
 		t.Fatal("cancelled probe replaced the previous complete result with a partial batch")
+	}
+}
+
+func TestOneShotProbeRollsBackProgressAfterCancellation(t *testing.T) {
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	previous := NewHealthPingResult(1, time.Hour)
+	previous.Put(42 * time.Millisecond)
+	healthPing.Results = map[string]*HealthPingRTTS{"previous": previous}
+	secondStarted := make(chan struct{})
+	healthPing.measure = func(ctx context.Context, tag string) (time.Duration, error) {
+		if tag == "proxy-a" {
+			return 20 * time.Millisecond, nil
+		}
+		close(secondStarted)
+		<-ctx.Done()
+		return 0, ctx.Err()
+	}
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+		"proxy-b": &probeTestHandler{tag: "proxy-b"},
+	}}
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	defer observer.Close()
+	updates, unsubscribe := observer.SubscribeObservationUpdates()
+	defer unsubscribe()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	probeDone := make(chan error, 1)
+	go func() {
+		probeDone <- observer.ProbeOutbounds(ctx, []string{"proxy-a", "proxy-b"}, 1, 1)
+	}()
+	<-secondStarted
+	waitForObservationUpdate(t, updates)
+	progress := observationStatuses(t, observer)
+	if len(progress) != 1 || progress["proxy-a"] == nil {
+		t.Fatalf("progressive statuses = %v, want only proxy-a", progress)
+	}
+
+	cancel()
+	if err := <-probeDone; !stderrors.Is(err, context.Canceled) {
+		t.Fatalf("probe error = %v, want context cancellation", err)
+	}
+	waitForObservationUpdate(t, updates)
+	rolledBack := observationStatuses(t, observer)
+	if len(rolledBack) != 1 || rolledBack["previous"] == nil {
+		t.Fatalf("rolled-back statuses = %v, want previous snapshot", rolledBack)
 	}
 }
 

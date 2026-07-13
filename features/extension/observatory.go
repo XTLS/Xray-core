@@ -31,8 +31,10 @@ type BurstObservatory interface {
 // already-created Xray instance. It is intended for embedders that need to
 // compare many outbounds without creating one core instance per outbound.
 // Implementations must honor ctx cancellation and must not exceed
-// maxConcurrency probes in flight. After a successful return, GetObservation
-// must expose the completed batch as one result snapshot.
+// maxConcurrency probes in flight. Implementations may expose progressive
+// results through GetObservation and ObservatoryUpdateNotifier while the call
+// is running. After a successful return, GetObservation must expose the entire
+// completed batch; an aborted batch must not remain as the stable snapshot.
 type ObservatoryBatchProbe interface {
 	Observatory
 	// ProbeOutboundsDeadline returns the configured worst-case probe time
