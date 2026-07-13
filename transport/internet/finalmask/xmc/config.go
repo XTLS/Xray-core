@@ -9,7 +9,7 @@ func (c *Config) TCP() {
 }
 
 func (c *Config) WrapConnClient(conn net.Conn) (net.Conn, error) {
-	cc, err := newClientConn(conn, c.Usernames, c.Password, c.RsaPublicKey, c.Hostname)
+	cc, err := newClientConn(conn, c.Usernames, c.Password, c.RsaPublicKey, c.Hostname, c.Mode)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -18,7 +18,7 @@ func (c *Config) WrapConnClient(conn net.Conn) (net.Conn, error) {
 }
 
 func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
-	cc, err := wrapConnServer(conn, c.Password, c.RsaPrivateKey, c.RsaPublicKey)
+	cc, err := wrapConnServer(conn, c.Password, c.RsaPrivateKey, c.RsaPublicKey, c.Mode)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}

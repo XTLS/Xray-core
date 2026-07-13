@@ -13,4 +13,5 @@ message Config {
     bytes rsa_private_key = 8;
     bytes rsa_public_key = 9;
     string hostname = 10;
+    string mode = 11;
 }

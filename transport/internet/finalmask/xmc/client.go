@@ -3,9 +3,9 @@ package xmc
 import (
 	"bufio"
 	"bytes"
+	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 	"io"
@@ -28,6 +28,8 @@ type clientConn struct {
 	password      string
 	rsaPublicKey  []byte
 	hostname      string
+	mode          string
+	packet        *packetStream
 }
 
 type clientState int
@@ -37,9 +39,18 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, hostname string) (*clientConn, error) {
+func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, hostname, mode string) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
+	}
+	if len(usernames) == 0 {
+		return nil, fmt.Errorf("empty usernames")
+	}
+	if mode == "" {
+		mode = modeRaw
+	}
+	if mode != modeRaw && mode != modePacket {
+		return nil, fmt.Errorf("unsupported mode: %s", mode)
 	}
 
 	return &clientConn{
@@ -52,6 +63,7 @@ func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey
 		password:      password,
 		rsaPublicKey:  rsaPublicKey,
 		hostname:      hostname,
+		mode:          mode,
 	}, nil
 }
 
@@ -100,7 +112,10 @@ func (c *clientConn) handshake() error {
 		offlineUUID UUID
 	)
 
-	randomUsername, _ := rand.Int(rand.Reader, big.NewInt(int64(len(c.usernames))))
+	randomUsername, err := rand.Int(rand.Reader, big.NewInt(int64(len(c.usernames))))
+	if err != nil {
+		return fmt.Errorf("select username: %w", err)
+	}
 	username = c.usernames[randomUsername.Int64()]
 	generateOfflineUUID(&offlineUUID, string(username))
 
@@ -145,7 +160,9 @@ func (c *clientConn) handshake() error {
 	}
 
 	sharedSecret := make([]byte, 16)
-	rand.Read(sharedSecret)
+	if _, err = rand.Read(sharedSecret); err != nil {
+		return fmt.Errorf("generate shared secret: %w", err)
+	}
 
 	encryptedSharedSecret, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPublicKey, sharedSecret)
 	if err != nil {
@@ -181,6 +198,42 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("new crypto writer: %w", err)
 	}
 
+	if c.mode == modePacket {
+		pkt, err = readPacket(c.reader)
+		if err != nil {
+			return fmt.Errorf("read login success: %w", err)
+		}
+		if pkt.packetID == 0x00 {
+			var reason String
+			if readErr := pkt.readFields(&reason); readErr != nil {
+				return fmt.Errorf("authentication rejected")
+			}
+			return fmt.Errorf("authentication rejected: %s", reason)
+		}
+		if pkt.packetID != 0x02 {
+			return fmt.Errorf("bad login success packet id: %d", pkt.packetID)
+		}
+
+		var (
+			loginUUID  UUID
+			loginName  String
+			properties Varint
+		)
+		if err = pkt.readFields(&loginUUID, &loginName, &properties); err != nil {
+			return fmt.Errorf("read login success fields: %w", err)
+		}
+		if properties != 0 {
+			return fmt.Errorf("unsupported login property count: %d", properties)
+		}
+		if err = writePacket(c.writer, 0x03); err != nil {
+			return fmt.Errorf("write login acknowledged: %w", err)
+		}
+
+		c.packet = newPacketStream(c.reader, c.writer, true)
+		c.reader = c.packet
+		c.writer = c.packet
+	}
+
 	c.state = clientStateProxy
 
 	return nil
@@ -205,6 +258,9 @@ func (c *clientConn) Write(b []byte) (int, error) {
 }
 
 func (c *clientConn) Close() error {
+	if c.packet != nil {
+		c.packet.Stop()
+	}
 	return c.c.Close()
 }
 
@@ -229,7 +285,7 @@ func (c *clientConn) SetWriteDeadline(t time.Time) error {
 }
 
 func generateOfflineUUID(uuid *UUID, username string) {
-	h := sha256.Sum256([]byte("OfflinePlayer:" + username))
+	h := md5.Sum([]byte("OfflinePlayer:" + username))
 	copy(uuid[:], h[:16])
 	uuid[6] = (uuid[6] & 0x0f) | 0x30 // UUID version 3
 	uuid[8] = (uuid[8] & 0x3f) | 0x80 // UUID variant

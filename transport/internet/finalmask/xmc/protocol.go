@@ -23,20 +23,28 @@ func readPacket(b io.Reader) (*mcPacket, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read packet length: %w", err)
 	}
+	if packetLength < 1 || packetLength > 1024*32+5 {
+		return nil, fmt.Errorf("read packet: bad length: %d", packetLength)
+	}
 
+	packetData := make([]byte, int(packetLength))
+	if _, err = io.ReadFull(b, packetData); err != nil {
+		return nil, fmt.Errorf("read packet data: %w", err)
+	}
+	body := bytes.NewReader(packetData)
 	var packetID Varint
-	err = packetID.readFrom(b)
+	err = packetID.readFrom(body)
 	if err != nil {
 		return nil, fmt.Errorf("read packet ID: %w", err)
 	}
 
-	dataLength := int(packetLength) - varintSize(packetID)
-	if dataLength < 0 || dataLength > 1024*32 {
+	dataLength := body.Len()
+	if dataLength > 1024*32 {
 		return nil, fmt.Errorf("read packet: bad length: %d", dataLength)
 	}
 
 	data := make([]byte, dataLength)
-	_, err = io.ReadFull(b, data)
+	_, err = io.ReadFull(body, data)
 	if err != nil {
 		return nil, fmt.Errorf("read packet data: %w", err)
 	}
@@ -256,7 +264,7 @@ func (v *Bytes) readFrom(r io.Reader) error {
 	}
 
 	if length < 0 || length >= 1024 {
-		return fmt.Errorf("read bytes: invalid size: %d", err)
+		return fmt.Errorf("read bytes: invalid size: %d", length)
 	}
 
 	buf := make([]byte, length)
@@ -268,6 +276,24 @@ func (v *Bytes) readFrom(r io.Reader) error {
 
 	*v = append([]byte(*v), buf...)
 
+	return nil
+}
+
+type RestBytes []byte
+
+func (v *RestBytes) readFrom(r io.Reader) error {
+	buf, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("read remaining bytes: %w", err)
+	}
+	*v = append((*v)[:0], buf...)
+	return nil
+}
+
+func (v *RestBytes) writeTo(w io.Writer) error {
+	if _, err := w.Write(*v); err != nil {
+		return fmt.Errorf("write remaining bytes: %w", err)
+	}
 	return nil
 }
 
@@ -322,11 +348,26 @@ func writePacket(w io.Writer, packetID int, fields ...field) error {
 
 	buf.Write(dataBuf.Bytes())
 
-	_, err = w.Write(buf.Bytes())
-	if err != nil {
+	if err = writeFull(w, buf.Bytes()); err != nil {
 		return fmt.Errorf("write packet data: %w", err)
 	}
 
+	return nil
+}
+
+func writeFull(w io.Writer, p []byte) error {
+	for len(p) > 0 {
+		n, err := w.Write(p)
+		if n > 0 {
+			p = p[n:]
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+	}
 	return nil
 }
 

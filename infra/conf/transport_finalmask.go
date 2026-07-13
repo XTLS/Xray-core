@@ -723,6 +723,7 @@ type XMC struct {
 	Hostname  string   `json:"hostname"`
 	Usernames []string `json:"usernames"`
 	Password  string   `json:"password"`
+	Mode      string   `json:"mode"`
 }
 
 func (c *XMC) Build() (proto.Message, error) {
@@ -732,6 +733,12 @@ func (c *XMC) Build() (proto.Message, error) {
 
 	if c.Password == "" {
 		return nil, fmt.Errorf("empty password")
+	}
+	if c.Mode == "" {
+		c.Mode = "raw"
+	}
+	if c.Mode != "raw" && c.Mode != "packet" {
+		return nil, fmt.Errorf("unsupported minecraft mode: %s", c.Mode)
 	}
 
 	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
@@ -748,6 +755,7 @@ func (c *XMC) Build() (proto.Message, error) {
 		Password:      c.Password,
 		Usernames:     c.Usernames,
 		Hostname:      c.Hostname,
+		Mode:          c.Mode,
 		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
 		RsaPublicKey:  rsaPublicKey,
 	}, nil

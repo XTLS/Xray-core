@@ -35,6 +35,8 @@ type serverConn struct {
 	password      string
 	rsaPrivateKey *rsa.PrivateKey
 	rsaPublicKey  []byte
+	mode          string
+	packet        *packetStream
 }
 
 func (c *serverConn) handshake() error {
@@ -148,7 +150,9 @@ func (c *serverConn) handshake() error {
 			shouldAuthenticate Varint = Varint(1)
 		)
 
-		rand.Read(verifyToken)
+		if _, err = rand.Read(verifyToken); err != nil {
+			return fmt.Errorf("generate verify token: %w", err)
+		}
 
 		err = writePacket(c.writer, 0x01, &serverId, &publicKey, &verifyToken, &shouldAuthenticate)
 		if err != nil {
@@ -183,6 +187,9 @@ func (c *serverConn) handshake() error {
 		if err != nil {
 			return fmt.Errorf("decrypt shared secret: %w", err)
 		}
+		if len(sharedSecret) != 16 {
+			return fmt.Errorf("bad shared secret length: %d", len(sharedSecret))
+		}
 
 		decryptedVerifyToken, err = rsa.DecryptPKCS1v15(rand.Reader, c.rsaPrivateKey, encryptedVerifyToken)
 		if err != nil {
@@ -209,6 +216,25 @@ func (c *serverConn) handshake() error {
 		if subtle.ConstantTimeCompare(receivedPassword, []byte(c.password)) != 1 {
 			writeDisconnectPacket(c.writer, `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`)
 			return fmt.Errorf("bad password")
+		}
+
+		if c.mode == modePacket {
+			propertyCount := Varint(0)
+			if err = writePacket(c.writer, 0x02, &uuid, &username, &propertyCount); err != nil {
+				return fmt.Errorf("write login success: %w", err)
+			}
+
+			pkt, err = readPacket(c.reader)
+			if err != nil {
+				return fmt.Errorf("read login acknowledged: %w", err)
+			}
+			if pkt.packetID != 0x03 {
+				return fmt.Errorf("bad login acknowledged packet id: %d", pkt.packetID)
+			}
+
+			c.packet = newPacketStream(c.reader, c.writer, false)
+			c.reader = c.packet
+			c.writer = c.packet
 		}
 
 		c.state = serverStateProxy
@@ -239,6 +265,9 @@ func (c *serverConn) Write(b []byte) (int, error) {
 }
 
 func (c *serverConn) Close() error {
+	if c.packet != nil {
+		c.packet.Stop()
+	}
 	return c.c.Close()
 }
 
@@ -262,12 +291,18 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.c.SetWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte) (*serverConn, error) {
+func wrapConnServer(c net.Conn, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, mode string) (*serverConn, error) {
 	if len(rsaPrivateKeyDER) == 0 {
 		return nil, fmt.Errorf("empty rsa private key")
 	}
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
+	}
+	if mode == "" {
+		mode = modeRaw
+	}
+	if mode != modeRaw && mode != modePacket {
+		return nil, fmt.Errorf("unsupported mode: %s", mode)
 	}
 
 	rsaPrivateKey, err := x509.ParsePKCS1PrivateKey(rsaPrivateKeyDER)
@@ -283,6 +318,7 @@ func wrapConnServer(c net.Conn, password string, rsaPrivateKeyDER []byte, rsaPub
 		password:      password,
 		rsaPrivateKey: rsaPrivateKey,
 		rsaPublicKey:  rsaPublicKey,
+		mode:          mode,
 	}
 
 	return s, nil
