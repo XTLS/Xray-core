@@ -173,6 +173,9 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	if err != nil {
 		return err
 	}
+	if err := validateBatchProbeWork(len(uniqueTags), maxConcurrency, samples); err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -182,6 +185,9 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	if len(uniqueTags) == 0 {
 		h.replaceResults(make(map[string]*HealthPingRTTS))
 		return nil
+	}
+	if _, err := batchProbeDeadline(h.Settings, len(uniqueTags), maxConcurrency, samples); err != nil {
+		return err
 	}
 
 	// The caller controls the lifetime of a batch, but it does not own Xray's

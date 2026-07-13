@@ -3,6 +3,7 @@ package burst
 import (
 	"context"
 	stderrors "errors"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -194,6 +195,57 @@ func TestObserverReportsBatchProbeDeadline(t *testing.T) {
 	healthPing.Settings.Timeout = time.Duration(math.MaxInt64/2 + 1)
 	if _, err := observer.ProbeOutboundsDeadline(tags[:2], 1, 1); err == nil {
 		t.Fatal("overflowing batch deadline did not return an error")
+	}
+	var measures atomic.Int32
+	healthPing.measure = func(context.Context, string) (time.Duration, error) {
+		measures.Add(1)
+		return time.Millisecond, nil
+	}
+	if err := observer.ProbeOutbounds(context.Background(), tags[:2], 1, 1); err == nil {
+		t.Fatal("batch with an overflowing deadline started probing")
+	}
+	if got := measures.Load(); got != 0 {
+		t.Fatalf("overflowing batch started %d measurements, want none", got)
+	}
+}
+
+func TestObserverRejectsUnboundedBatchWork(t *testing.T) {
+	workerTags := make([]string, maxBatchProbeWorkers+1)
+	manager := &probeTestManager{handlers: make(map[string]outbound.Handler, len(workerTags))}
+	for i := range workerTags {
+		workerTags[i] = fmt.Sprintf("proxy-%d", i)
+		manager.handlers[workerTags[i]] = &probeTestHandler{tag: workerTags[i]}
+	}
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	defer observer.Close()
+
+	if _, err := observer.ProbeOutboundsDeadline(
+		workerTags[:1],
+		1,
+		maxBatchProbeSamplesPerOutbound+1,
+	); err == nil || !strings.Contains(err.Error(), "sample count exceeds") {
+		t.Fatalf("sample limit error = %v", err)
+	}
+	if _, err := observer.ProbeOutboundsDeadline(
+		workerTags,
+		len(workerTags),
+		1,
+	); err == nil || !strings.Contains(err.Error(), "active-worker limit") {
+		t.Fatalf("worker limit error = %v", err)
+	}
+
+	retainedTags := make([]string, maxBatchProbeRetainedMeasurements/maxBatchProbeSamplesPerOutbound+1)
+	for i := range retainedTags {
+		retainedTags[i] = fmt.Sprintf("retained-%d", i)
+		manager.handlers[retainedTags[i]] = &probeTestHandler{tag: retainedTags[i]}
+	}
+	if _, err := observer.ProbeOutboundsDeadline(
+		retainedTags,
+		1,
+		maxBatchProbeSamplesPerOutbound,
+	); err == nil || !strings.Contains(err.Error(), "retained-measurement limit") {
+		t.Fatalf("retained measurement limit error = %v", err)
 	}
 }
 

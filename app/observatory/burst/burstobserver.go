@@ -38,6 +38,15 @@ type Observer struct {
 
 var _ extension.ObservatoryBatchProbe = (*Observer)(nil)
 
+const (
+	// These are defensive implementation limits, not tuning recommendations.
+	// Batch parameters come from embedders and directly control goroutine count,
+	// request count, and retained result memory.
+	maxBatchProbeWorkers              = 256
+	maxBatchProbeSamplesPerOutbound   = 1024
+	maxBatchProbeRetainedMeasurements = 1 << 20
+)
+
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 	return &observatory.ObservationResult{Status: o.createResult()}, nil
 }
@@ -80,6 +89,23 @@ func validateBatchProbeParameters(maxConcurrency, samples int) error {
 	if samples <= 0 {
 		return errors.New("outbound probe sample count must be positive")
 	}
+	if samples > maxBatchProbeSamplesPerOutbound {
+		return errors.New("outbound probe sample count exceeds limit of ", maxBatchProbeSamplesPerOutbound)
+	}
+	return nil
+}
+
+func validateBatchProbeWork(tagCount, maxConcurrency, samples int) error {
+	if tagCount == 0 {
+		return nil
+	}
+	workers := min(maxConcurrency, tagCount)
+	if workers > maxBatchProbeWorkers {
+		return errors.New("outbound probe concurrency exceeds active-worker limit of ", maxBatchProbeWorkers)
+	}
+	if tagCount > maxBatchProbeRetainedMeasurements/samples {
+		return errors.New("outbound probe batch exceeds retained-measurement limit of ", maxBatchProbeRetainedMeasurements)
+	}
 	return nil
 }
 
@@ -117,12 +143,43 @@ func (o *Observer) prepareBatchProbe(tags []string, maxConcurrency, samples int)
 	if err != nil {
 		return nil, err
 	}
+	if err := validateBatchProbeWork(len(uniqueTags), maxConcurrency, samples); err != nil {
+		return nil, err
+	}
 	for _, tag := range uniqueTags {
 		if o.ohm.GetHandler(tag) == nil {
 			return nil, errors.New("outbound probe handler not found: ", tag)
 		}
 	}
 	return uniqueTags, nil
+}
+
+func batchProbeDeadline(settings *HealthPingSettings, tagCount, maxConcurrency, samples int) (time.Duration, error) {
+	if tagCount == 0 {
+		return 0, nil
+	}
+	if settings == nil || settings.Timeout <= 0 {
+		return 0, errors.New("outbound probe timeout must be positive")
+	}
+
+	perSample := settings.Timeout
+	if settings.Connectivity != "" {
+		if perSample > time.Duration(math.MaxInt64)-perSample {
+			return 0, errors.New("outbound probe deadline exceeds time.Duration")
+		}
+		perSample += perSample
+	}
+	workers := min(maxConcurrency, tagCount)
+	waves := 1 + (tagCount-1)/workers
+	steps := int64(waves)
+	if int64(samples) > math.MaxInt64/steps {
+		return 0, errors.New("outbound probe deadline exceeds time.Duration")
+	}
+	steps *= int64(samples)
+	if int64(perSample) > math.MaxInt64/steps {
+		return 0, errors.New("outbound probe deadline exceeds time.Duration")
+	}
+	return time.Duration(steps * int64(perSample)), nil
 }
 
 // ProbeOutboundsDeadline reports the configured worst-case batch probe budget.
@@ -136,28 +193,7 @@ func (o *Observer) ProbeOutboundsDeadline(tags []string, maxConcurrency, samples
 	if len(uniqueTags) == 0 {
 		return 0, nil
 	}
-	if o.hp.Settings == nil || o.hp.Settings.Timeout <= 0 {
-		return 0, errors.New("outbound probe timeout must be positive")
-	}
-
-	perSample := o.hp.Settings.Timeout
-	if o.hp.Settings.Connectivity != "" {
-		if perSample > time.Duration(math.MaxInt64)-perSample {
-			return 0, errors.New("outbound probe deadline exceeds time.Duration")
-		}
-		perSample += perSample
-	}
-	workers := min(maxConcurrency, len(uniqueTags))
-	waves := 1 + (len(uniqueTags)-1)/workers
-	steps := int64(waves)
-	if int64(samples) > math.MaxInt64/steps {
-		return 0, errors.New("outbound probe deadline exceeds time.Duration")
-	}
-	steps *= int64(samples)
-	if int64(perSample) > math.MaxInt64/steps {
-		return 0, errors.New("outbound probe deadline exceeds time.Duration")
-	}
-	return time.Duration(steps * int64(perSample)), nil
+	return batchProbeDeadline(o.hp.Settings, len(uniqueTags), maxConcurrency, samples)
 }
 
 // ProbeOutbounds runs a one-shot probe batch without starting another Xray
@@ -170,6 +206,9 @@ func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurr
 	}
 	uniqueTags, err := o.prepareBatchProbe(tags, maxConcurrency, samples)
 	if err != nil {
+		return err
+	}
+	if _, err := batchProbeDeadline(o.hp.Settings, len(uniqueTags), maxConcurrency, samples); err != nil {
 		return err
 	}
 
