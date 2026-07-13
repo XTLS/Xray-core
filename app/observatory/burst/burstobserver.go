@@ -28,10 +28,12 @@ type Observer struct {
 
 	ohm outbound.Manager
 
-	probeAccess sync.Mutex
-	probeCancel context.CancelFunc
-	probeDone   chan struct{}
-	closed      bool
+	probeAccess     sync.Mutex
+	probeCancel     context.CancelFunc
+	probeDone       chan struct{}
+	manualChecks    int
+	probePublishing bool
+	closed          bool
 }
 
 var _ extension.ObservatoryBatchProbe = (*Observer)(nil)
@@ -56,6 +58,18 @@ func (o *Observer) ObservationProbeDeadline() time.Duration {
 }
 
 func (o *Observer) Check(tag []string) {
+	o.probeAccess.Lock()
+	if o.closed || o.probeDone != nil || o.probePublishing {
+		o.probeAccess.Unlock()
+		return
+	}
+	o.manualChecks++
+	o.probeAccess.Unlock()
+	defer func() {
+		o.probeAccess.Lock()
+		o.manualChecks--
+		o.probeAccess.Unlock()
+	}()
 	o.hp.Check(tag)
 }
 
@@ -108,6 +122,14 @@ func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurr
 		o.probeAccess.Unlock()
 		return errors.New("an outbound probe batch is already running")
 	}
+	if o.manualChecks != 0 {
+		o.probeAccess.Unlock()
+		return errors.New("a manual outbound check is already running")
+	}
+	if o.probePublishing {
+		o.probeAccess.Unlock()
+		return errors.New("outbound probe results are being published")
+	}
 	probeCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	o.probeCancel = cancel
@@ -123,12 +145,20 @@ func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurr
 			o.probeDone = nil
 		}
 		close(done)
+		o.probePublishing = publishUpdate
 		o.probeAccess.Unlock()
 		// Publish only after the probe is no longer marked as running. An
 		// embedder may synchronously close the core from an update listener;
 		// notifying earlier would make Close wait for this same goroutine.
 		if publishUpdate {
-			o.updates.NotifyObservationUpdate()
+			func() {
+				defer func() {
+					o.probeAccess.Lock()
+					o.probePublishing = false
+					o.probeAccess.Unlock()
+				}()
+				o.updates.NotifyObservationUpdate()
+			}()
 		}
 	}()
 

@@ -396,3 +396,126 @@ func TestObserverRejectsOverlapAndCloseCancelsProbe(t *testing.T) {
 		t.Fatalf("closed observer error = %v", err)
 	}
 }
+
+func TestObserverDropsManualCheckDuringBatch(t *testing.T) {
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	healthPing.Settings.Destination = "://invalid-probe-url"
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var startedOnce sync.Once
+	healthPing.measure = func(ctx context.Context, _ string) (time.Duration, error) {
+		startedOnce.Do(func() { close(started) })
+		select {
+		case <-release:
+			return 20 * time.Millisecond, nil
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		}
+	}
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+	}}
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	defer observer.Close()
+
+	probeDone := make(chan error, 1)
+	go func() {
+		probeDone <- observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
+	}()
+	<-started
+	observer.Check([]string{"manual"})
+	healthPing.access.Lock()
+	_, manualResult := healthPing.Results["manual"]
+	healthPing.access.Unlock()
+	if manualResult {
+		t.Fatal("manual check mutated results while a batch was running")
+	}
+	close(release)
+	if err := <-probeDone; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestObserverRejectsBatchDuringManualCheckPublication(t *testing.T) {
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	healthPing.Settings.Destination = "://invalid-probe-url"
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+	}}
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	defer observer.Close()
+
+	listenerStarted := make(chan struct{})
+	releaseListener := make(chan struct{})
+	var listenerOnce sync.Once
+	observer.SubscribeObservationUpdates(func() {
+		listenerOnce.Do(func() { close(listenerStarted) })
+		<-releaseListener
+	})
+	checkDone := make(chan struct{})
+	go func() {
+		observer.Check([]string{"manual"})
+		close(checkDone)
+	}()
+	<-listenerStarted
+
+	probeDone := make(chan error, 1)
+	go func() {
+		probeDone <- observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
+	}()
+	select {
+	case err := <-probeDone:
+		if err == nil || !strings.Contains(err.Error(), "manual outbound check") {
+			t.Fatalf("probe error = %v, want active-manual-check error", err)
+		}
+	case <-time.After(time.Second):
+		close(releaseListener)
+		t.Fatal("batch probe blocked behind a manual check")
+	}
+	close(releaseListener)
+	select {
+	case <-checkDone:
+	case <-time.After(time.Second):
+		t.Fatal("manual check did not finish after listener release")
+	}
+}
+
+func TestObserverRejectsReentrantWorkDuringBatchPublication(t *testing.T) {
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	healthPing.Settings.Destination = "://invalid-probe-url"
+	healthPing.measure = func(context.Context, string) (time.Duration, error) {
+		return 20 * time.Millisecond, nil
+	}
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+	}}
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	defer observer.Close()
+
+	var updates atomic.Int32
+	nestedProbeError := make(chan error, 1)
+	observer.SubscribeObservationUpdates(func() {
+		if updates.Add(1) != 1 {
+			return
+		}
+		observer.Check([]string{"manual"})
+		nestedProbeError <- observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1)
+	})
+
+	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if got := updates.Load(); got != 1 {
+		t.Fatalf("publication updates = %d, want exactly one", got)
+	}
+	if err := <-nestedProbeError; err == nil || !strings.Contains(err.Error(), "being published") {
+		t.Fatalf("nested probe error = %v, want publication-in-progress error", err)
+	}
+	healthPing.access.Lock()
+	defer healthPing.access.Unlock()
+	if _, found := healthPing.Results["manual"]; found {
+		t.Fatal("reentrant manual check mutated the published batch")
+	}
+}
