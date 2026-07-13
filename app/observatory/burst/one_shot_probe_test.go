@@ -3,6 +3,7 @@ package burst
 import (
 	"context"
 	stderrors "errors"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -152,6 +153,45 @@ func TestOneShotProbePublishesEmptySnapshot(t *testing.T) {
 	defer healthPing.access.Unlock()
 	if len(healthPing.Results) != 0 {
 		t.Fatalf("empty batch retained %d stale results", len(healthPing.Results))
+	}
+}
+
+func TestObserverReportsBatchProbeDeadline(t *testing.T) {
+	tags := []string{"proxy-a", "proxy-b", "proxy-c", "proxy-d", "proxy-e"}
+	manager := &probeTestManager{handlers: make(map[string]outbound.Handler, len(tags))}
+	for _, tag := range tags {
+		manager.handlers[tag] = &probeTestHandler{tag: tag}
+	}
+	healthPing := NewHealthPing(context.Background(), nil, nil)
+	healthPing.Settings.Timeout = 2 * time.Second
+	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	defer observer.Close()
+
+	withDuplicate := append(append([]string{}, tags...), "proxy-a")
+	if got, err := observer.ProbeOutboundsDeadline(withDuplicate, 2, 3); err != nil || got != 18*time.Second {
+		t.Fatalf("batch deadline = %v, %v; want 18s, nil", got, err)
+	}
+	healthPing.Settings.Connectivity = "https://example.com/generate_204"
+	if got, err := observer.ProbeOutboundsDeadline(withDuplicate, 2, 3); err != nil || got != 36*time.Second {
+		t.Fatalf("batch deadline with connectivity = %v, %v; want 36s, nil", got, err)
+	}
+	healthPing.Settings.Connectivity = ""
+	if got, err := observer.ProbeOutboundsDeadline(tags, 10, 3); err != nil || got != 6*time.Second {
+		t.Fatalf("single-wave batch deadline = %v, %v; want 6s, nil", got, err)
+	}
+	if got, err := observer.ProbeOutboundsDeadline(nil, 2, 3); err != nil || got != 0 {
+		t.Fatalf("empty batch deadline = %v, %v; want 0, nil", got, err)
+	}
+	if _, err := observer.ProbeOutboundsDeadline(tags, 0, 1); err == nil {
+		t.Fatal("zero concurrency did not return an error")
+	}
+	if _, err := observer.ProbeOutboundsDeadline(tags, 1, 0); err == nil {
+		t.Fatal("zero samples did not return an error")
+	}
+
+	healthPing.Settings.Timeout = time.Duration(math.MaxInt64/2 + 1)
+	if _, err := observer.ProbeOutboundsDeadline(tags[:2], 1, 1); err == nil {
+		t.Fatal("overflowing batch deadline did not return an error")
 	}
 }
 

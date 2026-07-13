@@ -35,6 +35,10 @@ type BurstObservatory interface {
 // must expose the completed batch as one result snapshot.
 type ObservatoryBatchProbe interface {
 	Observatory
+	// ProbeOutboundsDeadline returns the configured worst-case probe time
+	// budget for the requested batch. Callers may add platform-specific
+	// scheduling and cleanup grace when constructing an external deadline.
+	ProbeOutboundsDeadline(tags []string, maxConcurrency, samples int) (time.Duration, error)
 	ProbeOutbounds(ctx context.Context, tags []string, maxConcurrency, samples int) error
 }
 
@@ -45,10 +49,9 @@ type ObservatoryUpdateNotifier interface {
 	SubscribeObservationUpdates(listener func()) (unsubscribe func())
 }
 
-// ObservatoryProbeDeadline reports the longest expected time before the
-// initial probe cycle can publish an observation. Callers may use it to bound
-// temporary routing state without expiring that state before the observatory
-// has had a chance to produce a result.
+// ObservatoryProbeDeadline reports the longest expected time before a
+// scheduled observer's initial probe cycle can publish an observation. Batch
+// callers must use ObservatoryBatchProbe.ProbeOutboundsDeadline instead.
 type ObservatoryProbeDeadline interface {
 	ObservationProbeDeadline() time.Duration
 }

@@ -165,24 +165,13 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 	if ctx == nil {
 		return errors.New("outbound probe context is nil")
 	}
-	if maxConcurrency <= 0 {
-		return errors.New("outbound probe concurrency must be positive")
-	}
-	if samples <= 0 {
-		return errors.New("outbound probe sample count must be positive")
+	if err := validateBatchProbeParameters(maxConcurrency, samples); err != nil {
+		return err
 	}
 
-	uniqueTags := make([]string, 0, len(tags))
-	seen := make(map[string]struct{}, len(tags))
-	for _, tag := range tags {
-		if tag == "" {
-			return errors.New("outbound probe tag is empty")
-		}
-		if _, found := seen[tag]; found {
-			continue
-		}
-		seen[tag] = struct{}{}
-		uniqueTags = append(uniqueTags, tag)
+	uniqueTags, err := normalizeBatchProbeTags(tags)
+	if err != nil {
+		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
