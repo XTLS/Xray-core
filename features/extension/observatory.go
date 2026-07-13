@@ -20,6 +20,17 @@ type BurstObservatory interface {
 	Check(tag []string)
 }
 
+// ObservatoryBatchProbe runs a finite set of outbound probes through one
+// already-created Xray instance. It is intended for embedders that need to
+// compare many outbounds without creating one core instance per outbound.
+// Implementations must honor ctx cancellation and must not exceed
+// maxConcurrency probes in flight. After a successful return, GetObservation
+// must expose the completed batch as one result snapshot.
+type ObservatoryBatchProbe interface {
+	Observatory
+	ProbeOutbounds(ctx context.Context, tags []string, maxConcurrency, samples int) error
+}
+
 // ObservatoryUpdateNotifier publishes an event after an observatory result
 // changes. Consumers should query GetObservation or their routing strategy in
 // the callback instead of treating the event itself as a routing decision.

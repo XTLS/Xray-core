@@ -27,7 +27,14 @@ type Observer struct {
 	finished *done.Instance
 
 	ohm outbound.Manager
+
+	probeAccess sync.Mutex
+	probeCancel context.CancelFunc
+	probeDone   chan struct{}
+	closed      bool
 }
+
+var _ extension.ObservatoryBatchProbe = (*Observer)(nil)
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 	return &observatory.ObservationResult{Status: o.createResult()}, nil
@@ -50,6 +57,84 @@ func (o *Observer) ObservationProbeDeadline() time.Duration {
 
 func (o *Observer) Check(tag []string) {
 	o.hp.Check(tag)
+}
+
+// ProbeOutbounds runs a one-shot probe batch without starting another Xray
+// instance. Configure this observer without subject selectors when using it as
+// an embedder-controlled probe feature; scheduled and one-shot observation are
+// intentionally kept mutually exclusive so their result sets cannot race.
+func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurrency, samples int) error {
+	if ctx == nil {
+		return errors.New("outbound probe context is nil")
+	}
+	if maxConcurrency <= 0 {
+		return errors.New("outbound probe concurrency must be positive")
+	}
+	if samples <= 0 {
+		return errors.New("outbound probe sample count must be positive")
+	}
+	if o.config != nil && len(o.config.SubjectSelector) != 0 {
+		return errors.New("one-shot outbound probing requires an observer without scheduled selectors")
+	}
+	if o.hp == nil {
+		return errors.New("outbound probe health checker is unavailable")
+	}
+	if o.ohm == nil {
+		return errors.New("outbound manager is unavailable")
+	}
+
+	uniqueTags := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if tag == "" {
+			return errors.New("outbound probe tag is empty")
+		}
+		if _, found := seen[tag]; found {
+			continue
+		}
+		if o.ohm.GetHandler(tag) == nil {
+			return errors.New("outbound probe handler not found: ", tag)
+		}
+		seen[tag] = struct{}{}
+		uniqueTags = append(uniqueTags, tag)
+	}
+
+	o.probeAccess.Lock()
+	if o.closed {
+		o.probeAccess.Unlock()
+		return errors.New("outbound observer is closed")
+	}
+	if o.probeDone != nil {
+		o.probeAccess.Unlock()
+		return errors.New("an outbound probe batch is already running")
+	}
+	probeCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	o.probeCancel = cancel
+	o.probeDone = done
+	o.probeAccess.Unlock()
+
+	publishUpdate := false
+	defer func() {
+		cancel()
+		o.probeAccess.Lock()
+		if o.probeDone == done {
+			o.probeCancel = nil
+			o.probeDone = nil
+		}
+		close(done)
+		o.probeAccess.Unlock()
+		// Publish only after the probe is no longer marked as running. An
+		// embedder may synchronously close the core from an update listener;
+		// notifying earlier would make Close wait for this same goroutine.
+		if publishUpdate {
+			o.updates.NotifyObservationUpdate()
+		}
+	}()
+
+	err := o.hp.ProbeOutbounds(probeCtx, uniqueTags, maxConcurrency, samples)
+	publishUpdate = err == nil
+	return err
 }
 
 func (o *Observer) createResult() []*observatory.OutboundStatus {
@@ -99,9 +184,24 @@ func (o *Observer) Start() error {
 }
 
 func (o *Observer) Close() error {
+	o.probeAccess.Lock()
+	o.closed = true
+	cancel := o.probeCancel
+	done := o.probeDone
+	o.probeAccess.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
+
 	if o.finished != nil {
 		o.hp.StopScheduler()
 		return o.finished.Close()
+	}
+	if o.hp != nil {
+		o.hp.cancelCtx()
 	}
 	return nil
 }

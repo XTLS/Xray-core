@@ -35,6 +35,7 @@ type HealthPing struct {
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
 	onUpdate func()
+	measure  func(context.Context, string) (time.Duration, error)
 }
 
 // NewHealthPing creates a new HealthPing with settings
@@ -155,6 +156,131 @@ func (h *HealthPing) Check(tags []string) error {
 	return nil
 }
 
+// ProbeOutbounds performs a finite, cancellable probe batch. Every unique tag
+// is sampled the requested number of times, while the worker pool bounds the
+// total number of probes in flight. Results are built privately and published
+// as one snapshot, so observers never see a partially completed batch.
+func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcurrency, samples int) error {
+	if ctx == nil {
+		return errors.New("outbound probe context is nil")
+	}
+	if maxConcurrency <= 0 {
+		return errors.New("outbound probe concurrency must be positive")
+	}
+	if samples <= 0 {
+		return errors.New("outbound probe sample count must be positive")
+	}
+
+	uniqueTags := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		if tag == "" {
+			return errors.New("outbound probe tag is empty")
+		}
+		if _, found := seen[tag]; found {
+			continue
+		}
+		seen[tag] = struct{}{}
+		uniqueTags = append(uniqueTags, tag)
+	}
+	if len(uniqueTags) == 0 {
+		return nil
+	}
+	if err := h.ctx.Err(); err != nil {
+		return err
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	stopHealthPingCancellation := context.AfterFunc(h.ctx, cancel)
+	defer func() {
+		stopHealthPingCancellation()
+		cancel()
+	}()
+
+	validity := h.Settings.Interval * time.Duration(samples) * 2
+	batchResults := make(map[string]*HealthPingRTTS, len(uniqueTags))
+	for _, tag := range uniqueTags {
+		batchResults[tag] = NewHealthPingResult(samples, validity)
+	}
+
+	workerCount := min(maxConcurrency, len(uniqueTags))
+	tasks := make(chan string)
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for tag := range tasks {
+				for range samples {
+					delay, err := h.measureOutbound(runCtx, tag)
+					if err != nil {
+						if runCtx.Err() != nil {
+							return
+						}
+						connectivityOK := h.checkConnectivity(runCtx)
+						if runCtx.Err() != nil {
+							return
+						}
+						if !connectivityOK {
+							errors.LogWarning(h.ctx, "network is down while probing ", tag)
+						} else {
+							errors.LogWarning(h.ctx, fmt.Sprintf(
+								"error ping %s with %s: %s",
+								h.Settings.Destination,
+								tag,
+								err,
+							))
+						}
+						delay = rttFailed
+					}
+					batchResults[tag].Put(delay)
+				}
+			}
+		}()
+	}
+
+	feedDone := make(chan struct{})
+	go func() {
+		defer close(feedDone)
+		defer close(tasks)
+		for _, tag := range uniqueTags {
+			select {
+			case tasks <- tag:
+			case <-runCtx.Done():
+				return
+			}
+		}
+	}()
+
+	workers.Wait()
+	<-feedDone
+	if err := runCtx.Err(); err != nil {
+		return err
+	}
+	h.replaceResults(batchResults)
+	return nil
+}
+
+func (h *HealthPing) measureOutbound(ctx context.Context, tag string) (time.Duration, error) {
+	if h.measure != nil {
+		return h.measure(ctx, tag)
+	}
+	client := newPingClient(
+		ctx,
+		h.dispatcher,
+		h.Settings.Destination,
+		h.Settings.Timeout,
+		tag,
+	)
+	return client.MeasureDelayContext(ctx, h.Settings.HttpMethod)
+}
+
+func (h *HealthPing) replaceResults(replacements map[string]*HealthPingRTTS) {
+	h.access.Lock()
+	h.Results = replacements
+	h.access.Unlock()
+}
+
 type rtt struct {
 	handler string
 	value   time.Duration
@@ -194,7 +320,7 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 					}
 					return
 				}
-				if !h.checkConnectivity() {
+				if !h.checkConnectivity(ctx) {
 					errors.LogWarning(h.ctx, "network is down")
 					ch <- &rtt{
 						handler: handler,
@@ -280,7 +406,7 @@ func (h *HealthPing) Cleanup(tags []string) {
 
 // checkConnectivity checks the network connectivity, it returns
 // true if network is good or "connectivity check url" not set
-func (h *HealthPing) checkConnectivity() bool {
+func (h *HealthPing) checkConnectivity(ctx context.Context) bool {
 	if h.Settings.Connectivity == "" {
 		return true
 	}
@@ -288,7 +414,7 @@ func (h *HealthPing) checkConnectivity() bool {
 		h.Settings.Connectivity,
 		h.Settings.Timeout,
 	)
-	if _, err := tester.MeasureDelay(h.Settings.HttpMethod); err != nil {
+	if _, err := tester.MeasureDelayContext(ctx, h.Settings.HttpMethod); err != nil {
 		return false
 	}
 	return true
