@@ -231,7 +231,6 @@ func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurr
 	o.probeDone = done
 	o.probeAccess.Unlock()
 
-	publishUpdate := false
 	defer func() {
 		cancel()
 		o.probeAccess.Lock()
@@ -241,14 +240,9 @@ func (o *Observer) ProbeOutbounds(ctx context.Context, tags []string, maxConcurr
 		}
 		close(done)
 		o.probeAccess.Unlock()
-		if publishUpdate {
-			o.updates.NotifyObservationUpdate()
-		}
 	}()
 
-	err = o.hp.ProbeOutbounds(probeCtx, uniqueTags, maxConcurrency, samples)
-	publishUpdate = err == nil
-	return err
+	return o.hp.probeOutbounds(probeCtx, uniqueTags, maxConcurrency, samples)
 }
 
 func (o *Observer) createResult() []*observatory.OutboundStatus {
@@ -256,9 +250,6 @@ func (o *Observer) createResult() []*observatory.OutboundStatus {
 	o.hp.access.Lock()
 	defer o.hp.access.Unlock()
 	results := o.hp.Results
-	if o.hp.activeProbe != nil {
-		results = o.hp.activeProbe.results
-	}
 	for name, value := range results {
 		statistics := value.getStatistics()
 		status := observatory.OutboundStatus{

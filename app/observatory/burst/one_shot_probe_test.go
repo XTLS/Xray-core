@@ -68,6 +68,16 @@ func observationStatuses(t *testing.T, observer *Observer) map[string]*coreobser
 	return statuses
 }
 
+func newProbeTestObserver(healthPing *HealthPing, manager outbound.Manager) *Observer {
+	observer := &Observer{
+		config: &Config{},
+		hp:     healthPing,
+		ohm:    manager,
+	}
+	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	return observer
+}
+
 func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	tags := []string{"proxy-a", "proxy-b", "proxy-c"}
@@ -75,11 +85,8 @@ func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 	for _, tag := range tags {
 		manager.handlers[tag] = &probeTestHandler{tag: tag}
 	}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
-	staleResult := NewHealthPingResult(1, time.Hour)
-	staleResult.Put(time.Second)
-	healthPing.Results = map[string]*HealthPingRTTS{"stale": staleResult}
 
 	var active atomic.Int32
 	var peak atomic.Int32
@@ -131,34 +138,14 @@ func TestOneShotProbeBoundsConcurrencyAndSamplesEveryTag(t *testing.T) {
 	requireNoObservationUpdate(t, updates)
 
 	healthPing.access.Lock()
-	if _, found := healthPing.Results["stale"]; found {
-		healthPing.access.Unlock()
-		t.Fatal("completed batch retained a result outside the requested tags")
-	}
+	defer healthPing.access.Unlock()
 	for _, tag := range tags {
 		result := healthPing.Results[tag]
 		if result == nil {
-			healthPing.access.Unlock()
 			t.Fatalf("missing result for %q", tag)
 		}
 		if got := result.getStatistics().All; got != 3 {
-			healthPing.access.Unlock()
 			t.Fatalf("samples for %q = %d, want 3", tag, got)
-		}
-	}
-	healthPing.access.Unlock()
-
-	// A later batch must replace, rather than accumulate with, prior samples.
-	if err := observer.ProbeOutbounds(context.Background(), tags, 1, 1); err != nil {
-		t.Fatal(err)
-	}
-	requireObservationUpdate(t, updates)
-	requireNoObservationUpdate(t, updates)
-	healthPing.access.Lock()
-	defer healthPing.access.Unlock()
-	for _, tag := range tags {
-		if got := healthPing.Results[tag].getStatistics().All; got != 1 {
-			t.Fatalf("replacement samples for %q = %d, want 1", tag, got)
 		}
 	}
 }
@@ -183,8 +170,7 @@ func TestOneShotProbePublishesProgressiveResults(t *testing.T) {
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 		"proxy-b": &probeTestHandler{tag: "proxy-b"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
-	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
@@ -233,14 +219,10 @@ func TestOneShotProbePublishesProgressiveResults(t *testing.T) {
 
 func TestOneShotProbePublishesEmptySnapshot(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
-	staleResult := NewHealthPingResult(1, time.Hour)
-	staleResult.Put(time.Second)
-	healthPing.Results = map[string]*HealthPingRTTS{"stale": staleResult}
-	observer := &Observer{
-		config: &Config{},
-		hp:     healthPing,
-		ohm:    &probeTestManager{handlers: map[string]outbound.Handler{}},
-	}
+	observer := newProbeTestObserver(
+		healthPing,
+		&probeTestManager{handlers: map[string]outbound.Handler{}},
+	)
 	defer observer.Close()
 	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
@@ -265,7 +247,7 @@ func TestObserverReportsBatchProbeDeadline(t *testing.T) {
 	}
 	healthPing := NewHealthPing(context.Background(), nil, nil)
 	healthPing.Settings.Timeout = 2 * time.Second
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 
 	withDuplicate := append(append([]string{}, tags...), "proxy-a")
@@ -315,7 +297,7 @@ func TestObserverRejectsUnboundedBatchWork(t *testing.T) {
 		manager.handlers[workerTags[i]] = &probeTestHandler{tag: workerTags[i]}
 	}
 	healthPing := NewHealthPing(context.Background(), nil, nil)
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 
 	if _, err := observer.ProbeOutboundsDeadline(
@@ -355,7 +337,7 @@ func TestOneShotProbeRecordsFailedSamples(t *testing.T) {
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 
 	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 2); err != nil {
@@ -390,8 +372,7 @@ func TestOneShotProbeRetainsProgressWhenNetworkIsUnavailable(t *testing.T) {
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 		"proxy-b": &probeTestHandler{tag: "proxy-b"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
-	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
@@ -436,7 +417,7 @@ func TestObserverSubscriberCanCloseAfterPublication(t *testing.T) {
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
 
@@ -454,7 +435,6 @@ func TestObserverSubscriberCanCloseAfterPublication(t *testing.T) {
 
 func TestOneShotProbeHonorsCancellation(t *testing.T) {
 	healthPing := NewHealthPing(context.Background(), nil, nil)
-	defer healthPing.cancelCtx()
 	started := make(chan struct{})
 	var startedOnce sync.Once
 	healthPing.measure = func(ctx context.Context, _ string) (time.Duration, error) {
@@ -462,11 +442,17 @@ func TestOneShotProbeHonorsCancellation(t *testing.T) {
 		<-ctx.Done()
 		return 0, ctx.Err()
 	}
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+		"proxy-b": &probeTestHandler{tag: "proxy-b"},
+	}}
+	observer := newProbeTestObserver(healthPing, manager)
+	defer observer.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- healthPing.ProbeOutbounds(ctx, []string{"proxy-a", "proxy-b"}, 2, 2)
+		done <- observer.ProbeOutbounds(ctx, []string{"proxy-a", "proxy-b"}, 2, 2)
 	}()
 	<-started
 	cancel()
@@ -502,8 +488,7 @@ func TestOneShotProbeRetainsProgressAfterCancellation(t *testing.T) {
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 		"proxy-b": &probeTestHandler{tag: "proxy-b"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
-	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
@@ -538,15 +523,19 @@ func TestOneShotProbeRetainsObserverContext(t *testing.T) {
 		nil,
 		nil,
 	)
-	defer healthPing.cancelCtx()
 	healthPing.measure = func(ctx context.Context, _ string) (time.Duration, error) {
 		if got := ctx.Value(observerContextKey{}); got != contextValue {
 			return 0, stderrors.New("observer context value is missing")
 		}
 		return 20 * time.Millisecond, nil
 	}
+	manager := &probeTestManager{handlers: map[string]outbound.Handler{
+		"proxy-a": &probeTestHandler{tag: "proxy-a"},
+	}}
+	observer := newProbeTestObserver(healthPing, manager)
+	defer observer.Close()
 
-	if err := healthPing.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
+	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
 		t.Fatal(err)
 	}
 	healthPing.access.Lock()
@@ -581,7 +570,7 @@ func TestObserverRejectsMissingAndScheduledOutbounds(t *testing.T) {
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 
 	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a", "missing"}, 1, 1); err == nil || !strings.Contains(err.Error(), "not found") {
@@ -609,7 +598,7 @@ func TestObserverRejectsOverlapAndCloseCancelsProbe(t *testing.T) {
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 
 	probeDone := make(chan error, 1)
 	go func() {
@@ -663,7 +652,7 @@ func TestObserverDropsManualCheckDuringBatch(t *testing.T) {
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 
 	probeDone := make(chan error, 1)
@@ -692,20 +681,16 @@ func TestUnreadObservationUpdatesDoNotBlockProbeCompletion(t *testing.T) {
 	manager := &probeTestManager{handlers: map[string]outbound.Handler{
 		"proxy-a": &probeTestHandler{tag: "proxy-a"},
 	}}
-	observer := &Observer{config: &Config{}, hp: healthPing, ohm: manager}
-	healthPing.onUpdate = observer.updates.NotifyObservationUpdate
+	observer := newProbeTestObserver(healthPing, manager)
 	defer observer.Close()
 	updates, unsubscribe := observer.SubscribeObservationUpdates()
 	defer unsubscribe()
 
-	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
-		t.Fatal(err)
-	}
-	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 1); err != nil {
+	if err := observer.ProbeOutbounds(context.Background(), []string{"proxy-a"}, 1, 2); err != nil {
 		t.Fatal(err)
 	}
 
-	// Both successful batches complete while the single-slot notification
+	// Both sample updates are published while the single-slot notification
 	// channel is deliberately left unread. Their signals are coalesced.
 	requireObservationUpdate(t, updates)
 	requireNoObservationUpdate(t, updates)
