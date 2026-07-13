@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -43,7 +45,11 @@ func (s *server) Handle(conn net.Conn) {
 
 // upgrade execute a fake websocket upgrade process and return the available connection
 func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
-	connReader := bufio.NewReader(conn)
+	// timeout and header limit are the same as websocket
+	conn.SetReadDeadline(time.Now().Add(time.Second * 4))
+	defer conn.SetReadDeadline(time.Time{})
+	connReader := bufio.NewReader(io.LimitReader(conn, 12288))
+
 	req, err := http.ReadRequest(connReader)
 	if err != nil {
 		return nil, err
@@ -94,7 +100,15 @@ func (s *server) keepAccepting() {
 	for {
 		conn, err := s.innnerListener.Accept()
 		if err != nil {
-			return
+			errStr := err.Error()
+			if strings.Contains(errStr, "closed") {
+				break
+			}
+			errors.LogWarningInner(context.Background(), err, "failed to accept raw connections")
+			if strings.Contains(errStr, "too many") {
+				time.Sleep(time.Millisecond * 500)
+			}
+			continue
 		}
 		go s.Handle(conn)
 	}

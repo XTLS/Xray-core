@@ -36,6 +36,10 @@ The -confdir=dir flag sets a dir with multiple json config
 The -format=json flag sets the format of config files.
 Default "auto".
 
+The config root env object sets process environment variables after all config
+files are parsed. Variables needed to locate or parse config files must be set
+in the process environment before Xray starts.
+
 The -test flag tells Xray to test config files only,
 without launching the server.
 

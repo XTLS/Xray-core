@@ -10,7 +10,9 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 )
 
-const useReadv = false
+func useReadV() bool {
+	return false
+}
 
 func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Counter) Reader {
 	panic("not implemented")

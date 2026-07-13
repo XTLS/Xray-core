@@ -113,6 +113,8 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 					config.MinClientVer[i] = byte(u)
 				}
 			}
+		} else {
+			config.MinClientVer = []byte{26, 3, 27} // change it at your own risk: https://github.com/XTLS/Xray-core/pull/6181#issuecomment-4567373533
 		}
 		if c.MaxClientVer != "" {
 			config.MaxClientVer = make([]byte, 3)
