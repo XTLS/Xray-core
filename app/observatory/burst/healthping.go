@@ -194,10 +194,12 @@ func (h *HealthPing) ProbeOutbounds(ctx context.Context, tags []string, maxConcu
 		cancel()
 	}()
 
-	validity := h.Settings.Interval * time.Duration(samples) * 2
 	batchResults := make(map[string]*HealthPingRTTS, len(uniqueTags))
 	for _, tag := range uniqueTags {
-		batchResults[tag] = NewHealthPingResult(samples, validity)
+		// Unlike scheduler-owned samples, a completed one-shot batch is an
+		// immutable snapshot. Keep it valid until the next batch replaces it so
+		// early tags cannot expire while later tags are still being measured.
+		batchResults[tag] = NewHealthPingResult(samples, 0)
 	}
 
 	workerCount := min(maxConcurrency, len(uniqueTags))

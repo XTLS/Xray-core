@@ -31,7 +31,8 @@ type pingRTT struct {
 	value time.Duration
 }
 
-// NewHealthPingResult returns a *HealthPingResult with specified capacity
+// NewHealthPingResult returns a *HealthPingResult with specified capacity.
+// A non-positive validity keeps samples until the result itself is replaced.
 func NewHealthPingResult(cap int, validity time.Duration) *HealthPingRTTS {
 	return &HealthPingRTTS{cap: cap, validity: validity}
 }
@@ -86,9 +87,10 @@ func (h *HealthPingRTTS) getStatistics() *HealthPingStats {
 	sum := time.Duration(0)
 	cnt := 0
 	validRTTs := make([]time.Duration, 0)
+	now := time.Now()
 	for _, rtt := range h.rtts {
 		switch {
-		case rtt.value == rttUntested || time.Since(rtt.time) > h.validity:
+		case rtt.value == rttUntested || h.isOutdated(rtt, now):
 			continue
 		case rtt.value == rttFailed:
 			stats.Fail++
@@ -128,6 +130,9 @@ func (h *HealthPingRTTS) getStatistics() *HealthPingStats {
 }
 
 func (h *HealthPingRTTS) findOutdated(now time.Time) int {
+	if h.validity <= 0 {
+		return -1
+	}
 	for i := h.cap - 1; i < 2*h.cap; i++ {
 		// from oldest to latest
 		idx := h.calcIndex(i)
@@ -140,4 +145,8 @@ func (h *HealthPingRTTS) findOutdated(now time.Time) int {
 		}
 	}
 	return -1
+}
+
+func (h *HealthPingRTTS) isOutdated(rtt *pingRTT, now time.Time) bool {
+	return h.validity > 0 && now.Sub(rtt.time) > h.validity
 }

@@ -104,3 +104,14 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}
 }
+
+func TestHealthPingResultsCanRemainUnexpired(t *testing.T) {
+	hr := burst.NewHealthPingResult(1, 0)
+	hr.Put(42 * time.Millisecond)
+	time.Sleep(time.Millisecond)
+
+	actual := hr.Get()
+	if actual.All != 1 || actual.Fail != 0 || actual.Average != 42*time.Millisecond {
+		t.Fatalf("non-expiring statistics = %+v, want one successful 42ms sample", actual)
+	}
+}
