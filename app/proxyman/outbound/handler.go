@@ -103,7 +103,10 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 
 	ctx = session.ContextWithFullHandler(ctx, h)
 
-	newCtx := session.ContextWithStreamSettings(ctx, h.streamSettings)
+	newCtx := ctx
+	if h.streamSettings != nil {
+		newCtx = session.ContextWithStreamSettings(newCtx, h.streamSettings)
+	}
 
 	rawProxyHandler, err := common.CreateObject(newCtx, proxyConfig)
 	if err != nil {
@@ -263,20 +266,6 @@ func (h *Handler) DestIpAddress() net.IP {
 	return internet.DestIpAddress()
 }
 
-func (h *Handler) ResolveStrategy() internet.DomainStrategy {
-	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() {
-		return h.senderSettings.TargetStrategy
-	}
-	if h.streamSettings != nil && h.streamSettings.SocketSettings != nil {
-		return h.streamSettings.SocketSettings.DomainStrategy
-	}
-	return internet.DomainStrategy_AS_IS
-}
-
-func (h *Handler) UsesDialerProxy() bool {
-	return h.streamSettings != nil && h.streamSettings.SocketSettings != nil && len(h.streamSettings.SocketSettings.DialerProxy) > 0
-}
-
 // Dial implements internet.Dialer.
 func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
 	if h.senderSettings != nil && h.senderSettings.Via != nil {
@@ -298,7 +287,8 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 }
 
 func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) {
-	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil && !h.UsesDialerProxy() {
+	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil &&
+		(h.streamSettings.SocketSettings == nil || len(h.streamSettings.SocketSettings.DialerProxy) == 0) {
 		var domain string
 		addr := h.senderSettings.Via.AsAddress()
 		domain = h.senderSettings.Via.GetDomain()

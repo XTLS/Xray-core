@@ -40,11 +40,9 @@ var (
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		h := new(Handler)
-		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithResolveStrategy); ok {
-			h.resolveStrategy = handler.ResolveStrategy()
-		}
-		if handler, ok := session.FullHandlerFromContext(ctx).(handlerWithDialerProxy); ok {
-			h.usesDialerProxy = handler.UsesDialerProxy()
+		if streamSettings, ok := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig); ok && streamSettings.SocketSettings != nil {
+			h.resolveStrategy = streamSettings.SocketSettings.DomainStrategy
+			h.usesDialerProxy = len(streamSettings.SocketSettings.DialerProxy) > 0
 		}
 		if err := core.RequireFeatures(ctx, func(pm policy.Manager) error {
 			return h.Init(config.(*Config), pm)
@@ -75,14 +73,6 @@ func init() {
 		action:  RuleAction_Block,
 		network: allNetworks,
 	}
-}
-
-type handlerWithResolveStrategy interface {
-	ResolveStrategy() internet.DomainStrategy
-}
-
-type handlerWithDialerProxy interface {
-	UsesDialerProxy() bool
 }
 
 type FinalRule struct {

@@ -337,50 +337,28 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
 
-	if _, ok := ts.(*freedom.Config); ok &&
-		senderSettings.StreamSettings != nil &&
-		senderSettings.StreamSettings.SocketSettings != nil &&
-		senderSettings.StreamSettings.SocketSettings.AddressPortStrategy != internet.AddressPortStrategy_None {
-		return nil, errors.New(`freedom outbound does not support "sockopt.addressPortStrategy"`)
-	}
+	if fc, ok := ts.(*freedom.Config); ok {
+		if senderSettings.StreamSettings != nil &&
+			senderSettings.StreamSettings.SocketSettings != nil &&
+			senderSettings.StreamSettings.SocketSettings.AddressPortStrategy != internet.AddressPortStrategy_None {
+			return nil, errors.New(`freedom outbound does not support "sockopt.addressPortStrategy"`)
+		}
 
-	if fc, ok := ts.(*freedom.Config); ok && fc.DomainStrategy != internet.DomainStrategy_AS_IS {
-		errors.PrintDeprecatedFeatureWarning("freedom.domainStrategy", "sockopt.domainStrategy or targetStrategy")
-		if senderSettings.StreamSettings == nil {
-			senderSettings.StreamSettings = &internet.StreamConfig{}
+		var strategy internet.DomainStrategy
+		if strategy = senderSettings.TargetStrategy; strategy != internet.DomainStrategy_AS_IS {
+			errors.LogWarning(context.Background(), `The "outbound.targetStrategy" setting is not supported directly by freedom and has been automatically migrated to "sockopt.domainStrategy" with no behavior change.`)
+			senderSettings.TargetStrategy = internet.DomainStrategy_AS_IS
+		} else if strategy = fc.DomainStrategy; strategy != internet.DomainStrategy_AS_IS {
+			errors.LogWarning(context.Background(), `The "freedom.domainStrategy" setting is deprecated and will be removed. For compatibility, its value has been automatically migrated to "sockopt.domainStrategy". Please update your config before removal.`)
 		}
-		if senderSettings.StreamSettings.SocketSettings == nil {
-			senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
-		}
-		senderSettings.StreamSettings.SocketSettings.DomainStrategy = fc.DomainStrategy
-	}
-
-	if fc, ok := rawConfig.(*FreedomConfig); ok && (fc.PrivacyGuard == nil || *fc.PrivacyGuard) {
-		if senderSettings.StreamSettings == nil {
-			senderSettings.StreamSettings = &internet.StreamConfig{}
-		}
-		if senderSettings.StreamSettings.SocketSettings == nil {
-			senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
-		}
-		if fc.PrivacyGuard == nil {
-			if senderSettings.TargetStrategy == internet.DomainStrategy_AS_IS &&
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy == internet.DomainStrategy_AS_IS {
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
+		if strategy != internet.DomainStrategy_AS_IS {
+			if senderSettings.StreamSettings == nil {
+				senderSettings.StreamSettings = &internet.StreamConfig{}
 			}
-		} else if *fc.PrivacyGuard {
-			if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP4 &&
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_USE_IP46 &&
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP4 &&
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_FORCE_IP46 {
-				if senderSettings.StreamSettings.SocketSettings.DomainStrategy != internet.DomainStrategy_AS_IS {
-					errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "sockopt.domainStrategy". Please update your config(s) if this is unintended.`)
-				}
-				senderSettings.StreamSettings.SocketSettings.DomainStrategy = internet.DomainStrategy_USE_IP46
+			if senderSettings.StreamSettings.SocketSettings == nil {
+				senderSettings.StreamSettings.SocketSettings = &internet.SocketConfig{}
 			}
-			if senderSettings.TargetStrategy != internet.DomainStrategy_AS_IS {
-				errors.LogWarning(context.Background(), `The "freedom" outbound "privacyGuard" overrides the existing "targetStrategy". Please update your config(s) if this is unintended.`)
-				senderSettings.TargetStrategy = internet.DomainStrategy_AS_IS
-			}
+			senderSettings.StreamSettings.SocketSettings.DomainStrategy = strategy
 		}
 	}
 
