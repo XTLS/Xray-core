@@ -135,6 +135,11 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 					c = newConn
 				}
 
+				if err := internet.WriteOutboundProxyProtocol(gctx, c, sockopt); err != nil {
+					c.Close()
+					return nil, err
+				}
+
 				if tlsConfig != nil {
 					config := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
 					if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {

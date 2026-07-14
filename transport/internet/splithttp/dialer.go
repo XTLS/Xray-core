@@ -132,6 +132,11 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			conn = newConn
 		}
 
+		if err := internet.WriteOutboundProxyProtocol(ctxInner, conn, streamSettings.SocketSettings); err != nil {
+			conn.Close()
+			return nil, err
+		}
+
 		if realityConfig != nil {
 			return reality.UClient(conn, realityConfig, ctxInner, dest)
 		}

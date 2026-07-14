@@ -358,6 +358,9 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
+	if _, isFreedom := rawConfig.(*FreedomConfig); isFreedom && c.StreamSetting != nil && c.StreamSetting.SocketSettings != nil && c.StreamSetting.SocketSettings.SendProxyProtocol > 0 {
+		return nil, errors.New("sockopt.sendProxyProtocol is not supported for freedom outbound; use freedom settings.proxyProtocol")
+	}
 	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
 		return nil, err
 	}

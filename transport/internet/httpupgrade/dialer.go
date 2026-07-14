@@ -61,6 +61,11 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		pconn = newConn
 	}
 
+	if err := internet.WriteOutboundProxyProtocol(ctx, pconn, streamSettings.SocketSettings); err != nil {
+		pconn.Close()
+		return nil, err
+	}
+
 	var conn net.Conn
 	var requestURL url.URL
 	tConfig := tls.ConfigFromStreamSettings(streamSettings)

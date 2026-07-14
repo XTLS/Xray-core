@@ -33,6 +33,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		conn = newConn
 	}
 
+	if err := internet.WriteOutboundProxyProtocol(ctx, conn, streamSettings.SocketSettings); err != nil {
+		conn.Close()
+		return nil, err
+	}
+
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		mitmServerName := session.MitmServerNameFromContext(ctx)
 		mitmAlpn11 := session.MitmAlpn11FromContext(ctx)

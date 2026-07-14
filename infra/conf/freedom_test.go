@@ -1,6 +1,7 @@
 package conf_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/xtls/xray-core/common/geodata"
@@ -10,6 +11,23 @@ import (
 	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/transport/internet"
 )
+
+func TestFreedomOutboundRejectsSockoptSendProxyProtocol(t *testing.T) {
+	config := &OutboundDetourConfig{
+		Protocol: "freedom",
+		StreamSetting: &StreamConfig{
+			SocketSettings: &SocketConfig{SendProxyProtocol: 1},
+		},
+	}
+
+	_, err := config.Build()
+	if err == nil {
+		t.Fatal("expected config error")
+	}
+	if !strings.Contains(err.Error(), "sockopt.sendProxyProtocol is not supported for freedom outbound") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
 func TestFreedomConfig(t *testing.T) {
 	creator := func() Buildable {

@@ -47,6 +47,7 @@ type SocketConfig struct {
 	TFO                   interface{}            `json:"tcpFastOpen"`
 	TProxy                string                 `json:"tproxy"`
 	AcceptProxyProtocol   bool                   `json:"acceptProxyProtocol"`
+	SendProxyProtocol     uint32                 `json:"sendProxyProtocol"`
 	DomainStrategy        string                 `json:"domainStrategy"`
 	DialerProxy           string                 `json:"dialerProxy"`
 	TCPKeepAliveInterval  int32                  `json:"tcpKeepAliveInterval"`
@@ -134,6 +135,10 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		customSockopts = append(customSockopts, customSockopt)
 	}
 
+	if c.SendProxyProtocol > 2 {
+		return nil, errors.New("invalid PROXY protocol version, sendProxyProtocol only accepts 0, 1, 2")
+	}
+
 	addressPortStrategy := internet.AddressPortStrategy_None
 	switch strings.ToLower(c.AddressPortStrategy) {
 	case "none", "":
@@ -168,6 +173,7 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		Tproxy:               tproxy,
 		DomainStrategy:       dStrategy,
 		AcceptProxyProtocol:  c.AcceptProxyProtocol,
+		SendProxyProtocol:    c.SendProxyProtocol,
 		DialerProxy:          c.DialerProxy,
 		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
 		TcpKeepAliveIdle:     c.TCPKeepAliveIdle,

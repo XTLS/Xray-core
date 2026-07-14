@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
@@ -365,13 +364,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return nil
 	}
 	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
-		version := byte(h.config.ProxyProtocol)
-		srcAddr := inbound.Source.RawNetAddr()
-		dstAddr := conn.RemoteAddr()
-		header := proxyproto.HeaderProxyFromAddrs(version, srcAddr, dstAddr)
-		if _, err = header.WriteTo(conn); err != nil {
+		if err := internet.WriteProxyProtocolHeader(conn, h.config.ProxyProtocol, inbound.Source.RawNetAddr(), conn.RemoteAddr()); err != nil {
 			conn.Close()
-			return errors.New("failed to set PROXY protocol v", version).Base(err)
+			return err
 		}
 	}
 	defer conn.Close()

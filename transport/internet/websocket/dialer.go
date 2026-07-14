@@ -62,6 +62,11 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 				conn = newConn
 			}
 
+			if err := internet.WriteOutboundProxyProtocol(ctx, conn, streamSettings.SocketSettings); err != nil {
+				conn.Close()
+				return nil, err
+			}
+
 			return conn, err
 		},
 		ReadBufferSize:   4 * 1024,
@@ -92,6 +97,11 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 						return nil, errors.New("mask err").Base(err)
 					}
 					pconn = newConn
+				}
+
+				if err := internet.WriteOutboundProxyProtocol(ctx, pconn, streamSettings.SocketSettings); err != nil {
+					pconn.Close()
+					return nil, err
 				}
 
 				// TLS and apply the handshake
