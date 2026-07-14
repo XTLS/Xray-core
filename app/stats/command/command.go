@@ -180,6 +180,16 @@ func (s *statsServer) QueryStats(ctx context.Context, request *QueryStatsRequest
 		return true
 	})
 
+	s.stats.VisitOnlineMaps(func(name string, om feature_stats.OnlineMap) bool {
+		if strings.Contains(name, request.Pattern) {
+			response.Stat = append(response.Stat, &Stat{
+				Name:  name,
+				Value: int64(om.Count()),
+			})
+		}
+		return true
+	})
+
 	return response, nil
 }
 

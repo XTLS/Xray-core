@@ -180,7 +180,7 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		}
 
 		if p.Stats.UserOnline {
-			trackOnlineIP(ctx, d.stats, user.Email, sessionInbound.Source.Address.String())
+			trackOnlineIP(ctx, d.stats, sessionInbound.Tag, user.Email, sessionInbound.Source.Address.String())
 		}
 	}
 
@@ -214,16 +214,19 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 			}
 		}
 		if p.Stats.UserOnline {
-			trackOnlineIP(ctx, statsManager, user.Email, sessionInbound.Source.Address.String())
+			trackOnlineIP(ctx, statsManager, sessionInbound.Tag, user.Email, sessionInbound.Source.Address.String())
 		}
 	}
 
 	return link
 }
 
-func trackOnlineIP(ctx context.Context, sm stats.Manager, email, ip string) {
-	name := "user>>>" + email + ">>>online"
-	if om, _ := sm.GetOrRegisterOnlineMap(name); om != nil {
+func trackOnlineIP(ctx context.Context, sm stats.Manager, inboundTag, email, ip string) {
+	if om, _ := sm.GetOrRegisterOnlineMap("user>>>" + email + ">>>online"); om != nil {
+		om.AddIP(ip)
+		context.AfterFunc(ctx, func() { om.RemoveIP(ip) })
+	}
+	if om, _ := sm.GetOrRegisterOnlineMap("inbound>>>" + inboundTag + ">>>user>>>" + email + ">>>online"); om != nil {
 		om.AddIP(ip)
 		context.AfterFunc(ctx, func() { om.RemoveIP(ip) })
 	}
