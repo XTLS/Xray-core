@@ -278,7 +278,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			if defaultRule != nil || len(h.finalRules) > 0 {
 				if strategy := h.resolveStrategy; strategy.HasStrategy() {
 					ips, err := internet.LookupForIP(destination.Address.Domain(), strategy, outGateway)
-					if err != nil { // SRV/TXT
+					if err != nil { // non-force may still dial with system DNS
 						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
 						if strategy.ForceIP() {
 							return err // retry
@@ -296,7 +296,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					}
 				} else {
 					addrs, err := net.DefaultResolver.LookupIPAddr(ctx, destination.Address.Domain())
-					if err != nil { // SRV/TXT
+					if err != nil { // dialer may retry DNS
 						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
 					}
 					for _, addr := range addrs {
@@ -337,7 +337,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if h.usesDialerProxy {
 			errors.LogInfo(ctx, "skipping final rule check for proxied remote endpoint, original target: ", destination)
 		} else {
-			// SRV/TXT, lookup failed
+			// pre-check may fail or dialer may select another IP
 			remoteDest := net.DestinationFromAddr(conn.RemoteAddr())
 			if rule := h.matchFinalRule(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
 				conn.Close()
@@ -545,7 +545,6 @@ func NewPacketWriter(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverr
 			ResolvedUDPAddr:   resolvedUDPAddr,
 			OutGateway:        outGateway,
 		}
-
 	}
 	return &buf.SequentialWriter{Writer: conn}
 }
