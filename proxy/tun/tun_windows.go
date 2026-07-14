@@ -64,7 +64,7 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
-	err = firewall.EnableFirewall(adapter.LUID(), options.DNS)
+	err = firewall.EnableFirewall(adapter.LUID())
 	if err != nil {
 		session.End()
 		_ = adapter.Close()
@@ -114,9 +114,14 @@ func (t *WindowsTun) Start() (err error) {
 	for _, address := range t.options.Gateway {
 		addresses = append(addresses, netip.MustParsePrefix(address))
 	}
-	dns := make([]netip.Addr, 0, len(t.options.DNS))
+	dns := make(map[winipcfg.AddressFamily][]netip.Addr)
 	for _, ip := range t.options.DNS {
-		dns = append(dns, netip.MustParseAddr(ip))
+		addr := netip.MustParseAddr(ip)
+		if addr.Is4() {
+			dns[windows.AF_INET] = append(dns[windows.AF_INET], addr)
+		} else {
+			dns[windows.AF_INET6] = append(dns[windows.AF_INET6], addr)
+		}
 	}
 	allowedIPs := make([]netip.Prefix, 0, len(t.options.AutoSystemRoutingTable))
 	for _, route := range t.options.AutoSystemRoutingTable {
@@ -172,13 +177,15 @@ startOver:
 			}
 			return lastErr
 		}
-		err = t.luid.SetDNS(family, dns, nil)
-		if err != nil {
-			lastErr = errors.New("unable to set DNS").Base(err)
-			if err == windows.ERROR_NOT_FOUND {
-				goto startOver
+		if dns := dns[family]; dns != nil {
+			err = t.luid.SetDNS(family, dns, nil)
+			if err != nil {
+				lastErr = errors.New("unable to set DNS").Base(err)
+				if err == windows.ERROR_NOT_FOUND {
+					goto startOver
+				}
+				return lastErr
 			}
-			return lastErr
 		}
 	}
 	err = t.luid.SetRoutes(routesData)
