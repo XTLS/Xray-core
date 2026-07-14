@@ -110,32 +110,41 @@ func (t *WindowsTun) Start() (err error) {
 		}
 	}
 
+	var address4, address6 bool
 	addresses := make([]netip.Prefix, 0, len(t.options.Gateway))
-	for _, address := range t.options.Gateway {
-		addresses = append(addresses, netip.MustParsePrefix(address))
+	for _, cidr := range t.options.Gateway {
+		prefix := netip.MustParsePrefix(cidr)
+		if prefix.Addr().Is4() {
+			address4 = true
+		} else {
+			address6 = true
+		}
+		addresses = append(addresses, prefix)
 	}
-	dns := make(map[winipcfg.AddressFamily][]netip.Addr)
+	var dns4, dns6 bool
+	dns := make([]netip.Addr, 0, len(t.options.DNS))
 	for _, ip := range t.options.DNS {
 		addr := netip.MustParseAddr(ip)
 		if addr.Is4() {
-			dns[windows.AF_INET] = append(dns[windows.AF_INET], addr)
+			dns4 = true
 		} else {
-			dns[windows.AF_INET6] = append(dns[windows.AF_INET6], addr)
+			dns6 = true
 		}
+		dns = append(dns, addr)
 	}
-	allowedIPs := make([]netip.Prefix, 0, len(t.options.AutoSystemRoutingTable))
-	for _, route := range t.options.AutoSystemRoutingTable {
-		allowedIPs = append(allowedIPs, netip.MustParsePrefix(route))
-	}
+	var route4, route6 bool
 	routesMap := make(map[winipcfg.RouteData]struct{})
-	for _, ip := range allowedIPs {
+	for _, cidr := range t.options.AutoSystemRoutingTable {
+		prefix := netip.MustParsePrefix(cidr)
 		route := winipcfg.RouteData{
-			Destination: ip.Masked(),
+			Destination: prefix.Masked(),
 			Metric:      0,
 		}
-		if ip.Addr().Is4() {
+		if prefix.Addr().Is4() {
+			route4 = true
 			route.NextHop = netip.IPv4Unspecified()
 		} else {
+			route6 = true
 			route.NextHop = netip.IPv6Unspecified()
 		}
 		routesMap[route] = struct{}{}
@@ -158,6 +167,26 @@ startOver:
 	}
 	retryTimes++
 	for _, family := range []winipcfg.AddressFamily{windows.AF_INET, windows.AF_INET6} {
+		if family == windows.AF_INET && route4 || family == windows.AF_INET6 && route6 {
+			err = t.luid.SetRoutesForFamily(family, routesData)
+			if err != nil {
+				lastErr = errors.New("unable to set routes").Base(err)
+				if err == windows.ERROR_NOT_FOUND {
+					goto startOver
+				}
+				return lastErr
+			}
+		}
+		if family == windows.AF_INET && address4 || family == windows.AF_INET6 && address6 {
+			err = t.luid.SetIPAddressesForFamily(family, addresses)
+			if err != nil {
+				lastErr = errors.New("unable to set ips").Base(err)
+				if err == windows.ERROR_NOT_FOUND {
+					goto startOver
+				}
+				return lastErr
+			}
+		}
 		ipif, err := t.luid.IPInterface(family)
 		if err != nil {
 			return err
@@ -177,7 +206,7 @@ startOver:
 			}
 			return lastErr
 		}
-		if dns := dns[family]; dns != nil {
+		if family == windows.AF_INET && dns4 || family == windows.AF_INET6 && dns6 {
 			err = t.luid.SetDNS(family, dns, nil)
 			if err != nil {
 				lastErr = errors.New("unable to set DNS").Base(err)
@@ -187,22 +216,6 @@ startOver:
 				return lastErr
 			}
 		}
-	}
-	err = t.luid.SetRoutes(routesData)
-	if err != nil {
-		lastErr = errors.New("unable to set routes").Base(err)
-		if err == windows.ERROR_NOT_FOUND {
-			goto startOver
-		}
-		return lastErr
-	}
-	err = t.luid.SetIPAddresses(addresses)
-	if err != nil {
-		lastErr = errors.New("unable to set ips").Base(err)
-		if err == windows.ERROR_NOT_FOUND {
-			goto startOver
-		}
-		return lastErr
 	}
 	return nil
 }
