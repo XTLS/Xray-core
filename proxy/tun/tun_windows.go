@@ -195,9 +195,13 @@ startOver:
 		ipif.DadTransmits = 0
 		ipif.ManagedAddressConfigurationSupported = false
 		ipif.OtherStatefulConfigurationSupported = false
-		ipif.NLMTU = t.options.MTU
-		ipif.UseAutomaticMetric = false
-		ipif.Metric = 0
+		if family == windows.AF_INET && (address4 || route4) || family == windows.AF_INET6 && (address6 || route6) {
+			ipif.NLMTU = t.options.MTU
+		}
+		if family == windows.AF_INET && route4 || family == windows.AF_INET6 && route6 {
+			ipif.UseAutomaticMetric = false
+			ipif.Metric = 0
+		}
 		err = ipif.Set()
 		if err != nil {
 			lastErr = errors.New("unable to set metric and MTU").Base(err)
