@@ -445,13 +445,11 @@ type queryResult struct {
 }
 
 func asyncQueryAll(domain string, option dns.IPOption, clients []*Client, ctx context.Context) chan queryResult {
+	ch := make(chan queryResult, len(clients))
 	if len(clients) == 0 {
-		ch := make(chan queryResult)
 		close(ch)
 		return ch
 	}
-
-	ch := make(chan queryResult, len(clients))
 	for i, client := range clients {
 		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
 			errors.LogDebug(ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
@@ -500,34 +498,6 @@ func makeGroups( /*ctx context.Context,*/ clients []*Client) ([]group, []int) {
 		groupOf[k] = len(groups)
 	}
 	groups = append(groups, group{start: s, end: e})
-
-	// var b strings.Builder
-	// b.WriteString("dns grouping: total clients=")
-	// b.WriteString(strconv.Itoa(n))
-	// b.WriteString(", groups=")
-	// b.WriteString(strconv.Itoa(len(groups)))
-
-	// for gi, g := range groups {
-	// 	b.WriteString("\n  [")
-	// 	b.WriteString(strconv.Itoa(g.start))
-	// 	b.WriteString("..")
-	// 	b.WriteString(strconv.Itoa(g.end))
-	// 	b.WriteString("] gid=")
-	// 	b.WriteString(strconv.Itoa(gi))
-	// 	b.WriteString(" pid=")
-	// 	b.WriteString(strconv.FormatUint(uint64(clients[g.start].policyID), 10))
-	// 	b.WriteString(" members: ")
-
-	// 	for i := g.start; i <= g.end; i++ {
-	// 		if i > g.start {
-	// 			b.WriteString(", ")
-	// 		}
-	// 		b.WriteString(strconv.Itoa(i))
-	// 		b.WriteByte(':')
-	// 		b.WriteString(clients[i].Name())
-	// 	}
-	// }
-	// errors.LogDebug(ctx, b.String())
 
 	return groups, groupOf
 }

@@ -94,7 +94,7 @@ func (h *StaticHosts) lookupInternal(domain string) ([]net.Address, error) {
 	return ips, nil
 }
 
-func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) ([]net.Address, error) {
+func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int, visited map[string]bool) ([]net.Address, error) {
 	domain = strings.ToLower(domain)
 	switch addrs, err := h.lookupInternal(domain); {
 	case err != nil:
@@ -104,9 +104,14 @@ func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int) (
 	case len(addrs) == 0: // Domain recorded, but no valid IP returned
 		return addrs, nil
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Try to unwrap domain
-		errors.LogDebug(context.Background(), "found replaced domain: ", domain, " -> ", addrs[0].Domain(), ". Try to unwrap it")
+		nextDomain := strings.ToLower(addrs[0].Domain())
+		if visited[nextDomain] {
+			return nil, errors.New("cycle detected in static hosts: ", domain, " -> ", nextDomain)
+		}
+		errors.LogDebug(context.Background(), "found replaced domain: ", domain, " -> ", nextDomain, ". Try to unwrap it")
 		if maxDepth > 0 {
-			unwrapped, err := h.lookup(addrs[0].Domain(), option, maxDepth-1)
+			visited[nextDomain] = true
+			unwrapped, err := h.lookup(nextDomain, option, maxDepth-1, visited)
 			if err != nil {
 				return nil, err
 			}
@@ -125,5 +130,5 @@ func (h *StaticHosts) Lookup(domain string, option dns.IPOption) ([]net.Address,
 	if h.matcher == nil {
 		return nil, nil
 	}
-	return h.lookup(domain, option, 5)
+	return h.lookup(domain, option, 5, map[string]bool{})
 }
