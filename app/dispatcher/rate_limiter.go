@@ -12,6 +12,7 @@ import (
 )
 
 const minRateLimitBurstBytes = 64 * 1024
+const maxRateLimitBurstBytes = 64 * 1024
 
 var userRateLimiters sync.Map
 
@@ -38,6 +39,9 @@ func getUserRateLimiter(email, direction string, mbps uint64) *rate.Limiter {
 	burst := int(bytesPerSecond)
 	if burst < minRateLimitBurstBytes {
 		burst = minRateLimitBurstBytes
+	}
+	if burst > maxRateLimitBurstBytes {
+		burst = maxRateLimitBurstBytes
 	}
 
 	limiter := rate.NewLimiter(rate.Limit(bytesPerSecond), burst)

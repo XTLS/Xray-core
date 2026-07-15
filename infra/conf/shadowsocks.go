@@ -30,12 +30,16 @@ func cipherFromString(c string) shadowsocks.CipherType {
 }
 
 type ShadowsocksUserConfig struct {
-	Cipher   string   `json:"method"`
-	Password string   `json:"password"`
-	Level    byte     `json:"level"`
-	Email    string   `json:"email"`
-	Address  *Address `json:"address"`
-	Port     uint16   `json:"port"`
+	Cipher                  string   `json:"method"`
+	Password                string   `json:"password"`
+	Level                   byte     `json:"level"`
+	Email                   string   `json:"email"`
+	Address                 *Address `json:"address"`
+	Port                    uint16   `json:"port"`
+	SpeedLimitUpMbps        uint64   `json:"speedLimitUpMbps"`
+	SpeedLimitDownMbps      uint64   `json:"speedLimitDownMbps"`
+	SpeedLimitUpMbpsSnake   uint64   `json:"speed_limit_up_mbps"`
+	SpeedLimitDownMbpsSnake uint64   `json:"speed_limit_down_mbps"`
 }
 
 type ShadowsocksServerConfig struct {
@@ -79,9 +83,11 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 					return errors.New("unsupported cipher method: ", user.Cipher)
 				}
 				config.Users[idx] = &protocol.User{
-					Email:   user.Email,
-					Level:   uint32(user.Level),
-					Account: serial.ToTypedMessage(account),
+					Email:              user.Email,
+					Level:              uint32(user.Level),
+					SpeedLimitUpMbps:   firstNonZero(user.SpeedLimitUpMbps, user.SpeedLimitUpMbpsSnake),
+					SpeedLimitDownMbps: firstNonZero(user.SpeedLimitDownMbps, user.SpeedLimitDownMbpsSnake),
+					Account:            serial.ToTypedMessage(account),
 				}
 				return nil
 			}
@@ -143,9 +149,11 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 				Key: user.Password,
 			}
 			config.Users[idx] = &protocol.User{
-				Email:   user.Email,
-				Level:   uint32(user.Level),
-				Account: serial.ToTypedMessage(account),
+				Email:              user.Email,
+				Level:              uint32(user.Level),
+				SpeedLimitUpMbps:   firstNonZero(user.SpeedLimitUpMbps, user.SpeedLimitUpMbpsSnake),
+				SpeedLimitDownMbps: firstNonZero(user.SpeedLimitDownMbps, user.SpeedLimitDownMbpsSnake),
+				Account:            serial.ToTypedMessage(account),
 			}
 			return nil
 		}

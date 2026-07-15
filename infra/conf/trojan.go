@@ -104,10 +104,14 @@ type TrojanInboundFallback struct {
 
 // TrojanUserConfig is user configuration
 type TrojanUserConfig struct {
-	Password string `json:"password"`
-	Level    byte   `json:"level"`
-	Email    string `json:"email"`
-	Flow     string `json:"flow"`
+	Password                string `json:"password"`
+	Level                   byte   `json:"level"`
+	Email                   string `json:"email"`
+	Flow                    string `json:"flow"`
+	SpeedLimitUpMbps        uint64 `json:"speedLimitUpMbps"`
+	SpeedLimitDownMbps      uint64 `json:"speedLimitDownMbps"`
+	SpeedLimitUpMbpsSnake   uint64 `json:"speed_limit_up_mbps"`
+	SpeedLimitDownMbpsSnake uint64 `json:"speed_limit_down_mbps"`
 }
 
 // TrojanServerConfig is Inbound configuration
@@ -136,8 +140,10 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 		}
 
 		config.Users[idx] = &protocol.User{
-			Level: uint32(rawUser.Level),
-			Email: rawUser.Email,
+			Level:              uint32(rawUser.Level),
+			Email:              rawUser.Email,
+			SpeedLimitUpMbps:   firstNonZero(rawUser.SpeedLimitUpMbps, rawUser.SpeedLimitUpMbpsSnake),
+			SpeedLimitDownMbps: firstNonZero(rawUser.SpeedLimitDownMbps, rawUser.SpeedLimitDownMbpsSnake),
 			Account: serial.ToTypedMessage(&trojan.Account{
 				Password: rawUser.Password,
 			}),
