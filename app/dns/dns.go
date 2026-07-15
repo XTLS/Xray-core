@@ -389,7 +389,7 @@ func (s *DNS) parallelQuery(domain string, option dns.IPOption) ([]net.IP, uint3
 
 	resultsChan := asyncQueryAll(domain, option, clients, s.ctx)
 
-	groups, groupOf := makeGroups( /*s.ctx,*/ clients)
+	groups, groupOf := makeGroups(clients)
 	results := make([]*queryResult, len(clients))
 	pending := make([]int, len(groups))
 	for gi, g := range groups {
@@ -474,7 +474,7 @@ func asyncQueryAll(domain string, option dns.IPOption, clients []*Client, ctx co
 type group struct{ start, end int }
 
 // merge only adjacent and rule-equivalent Client into a single group
-func makeGroups( /*ctx context.Context,*/ clients []*Client) ([]group, []int) {
+func makeGroups(clients []*Client) ([]group, []int) {
 	n := len(clients)
 	if n == 0 {
 		return nil, nil
