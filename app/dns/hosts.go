@@ -94,7 +94,7 @@ func (h *StaticHosts) lookupInternal(domain string) ([]net.Address, error) {
 	return ips, nil
 }
 
-func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int, visited map[string]bool) ([]net.Address, error) {
+func (h *StaticHosts) lookup(domain string, option dns.IPOption, visited map[string]bool) ([]net.Address, error) {
 	domain = strings.ToLower(domain)
 	switch addrs, err := h.lookupInternal(domain); {
 	case err != nil:
@@ -105,19 +105,23 @@ func (h *StaticHosts) lookup(domain string, option dns.IPOption, maxDepth int, v
 		return addrs, nil
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Try to unwrap domain
 		nextDomain := strings.ToLower(addrs[0].Domain())
+		if visited == nil {
+			visited = make(map[string]bool)
+		}
+		visited[domain] = true
 		if visited[nextDomain] {
-			return nil, errors.New("cycle detected in static hosts: ", domain, " -> ", nextDomain)
+			// Stop unwrapping and let the caller pass the wrapped domain to
+			// the name servers, matching the pre-cycle-detection behavior.
+			errors.LogWarning(context.Background(), "cycle detected in static hosts: ", domain, " -> ", nextDomain, ", passing it to name servers")
+			return addrs, nil
 		}
 		errors.LogDebug(context.Background(), "found replaced domain: ", domain, " -> ", nextDomain, ". Try to unwrap it")
-		if maxDepth > 0 {
-			visited[nextDomain] = true
-			unwrapped, err := h.lookup(nextDomain, option, maxDepth-1, visited)
-			if err != nil {
-				return nil, err
-			}
-			if unwrapped != nil {
-				return unwrapped, nil
-			}
+		unwrapped, err := h.lookup(nextDomain, option, visited)
+		if err != nil {
+			return nil, err
+		}
+		if unwrapped != nil {
+			return unwrapped, nil
 		}
 		return addrs, nil
 	default: // IP record found, return a non-nil IP array
@@ -130,5 +134,5 @@ func (h *StaticHosts) Lookup(domain string, option dns.IPOption) ([]net.Address,
 	if h.matcher == nil {
 		return nil, nil
 	}
-	return h.lookup(domain, option, 5, map[string]bool{})
+	return h.lookup(domain, option, nil)
 }
