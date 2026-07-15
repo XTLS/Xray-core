@@ -242,6 +242,29 @@ func (c *serverConn) Close() error {
 	return c.c.Close()
 }
 
+// closeWriter matches reality.CloseWriteConn's method set (net.Conn is
+// already satisfied above). *net.TCPConn / *net.UnixConn implement this.
+type closeWriter interface {
+	CloseWrite() error
+}
+
+// CloseWrite makes *serverConn satisfy reality.CloseWriteConn, which
+// transport/internet/reality's Server() hard type-asserts the wrapped conn
+// against (github.com/xtls/reality/tls.go: "underlying := raw.(CloseWriteConn)")
+// for its splice-to-real-destination fallback path when a connection past
+// this mask isn't a genuine REALITY client. Half-closing the raw TCP
+// connection is a socket-level operation below XMC's byte-stream cipher —
+// it doesn't need to go through the CFB8 encrypt/decrypt loop, so a direct
+// passthrough to the underlying conn is correct. Without this method,
+// finalmask.tcp:xmc layered under security:reality panics the whole
+// process on the very first connection (confirmed via local repro).
+func (c *serverConn) CloseWrite() error {
+	if cw, ok := c.c.(closeWriter); ok {
+		return cw.CloseWrite()
+	}
+	return c.c.Close()
+}
+
 func (c *serverConn) LocalAddr() net.Addr {
 	return c.c.LocalAddr()
 }
