@@ -227,10 +227,13 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 			errors.LogInfoInner(ctx, err, "XUDP hit ", meta.GlobalID)
 		}
 		if mb != nil {
-			ctx = session.ContextWithTimeoutOnly(ctx, true)
+			ctx = session.ContextWithTimeoutOnly(context.WithoutCancel(ctx), true)
+			ctx, cancel := context.WithCancel(ctx)
+			lifecycle := &xudpLifecycle{cancel: cancel}
 			// Actually, it won't return an error in Xray-core's implementations.
 			link, err := w.dispatcher.Dispatch(ctx, meta.Target)
 			if err != nil {
+				lifecycle.Close()
 				XUDPManager.Lock()
 				delete(XUDPManager.Map, x.GlobalID)
 				XUDPManager.Unlock()
@@ -242,6 +245,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 				input:  link.Reader,
 				output: link.Writer,
 			}
+			x.setLifecycle(lifecycle)
 			errors.LogInfoInner(ctx, err, "XUDP new ", meta.GlobalID)
 		}
 		x.Mux = &Session{
@@ -261,8 +265,10 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		return nil
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	link, err := w.dispatcher.Dispatch(ctx, meta.Target)
 	if err != nil {
+		cancel()
 		if meta.Option.Has(OptionData) {
 			buf.Copy(NewStreamReader(reader), buf.Discard)
 		}
@@ -272,6 +278,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		input:        link.Reader,
 		output:       link.Writer,
 		parent:       w.sessionManager,
+		cancel:       cancel,
 		ID:           meta.SessionID,
 		transferType: protocol.TransferTypeStream,
 	}

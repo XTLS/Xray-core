@@ -158,6 +158,7 @@ type Session struct {
 	input        buf.Reader
 	output       buf.Writer
 	parent       *SessionManager
+	cancel       context.CancelFunc
 	ID           uint16
 	transferType protocol.TransferType
 	closed       bool
@@ -176,6 +177,9 @@ func (s *Session) Close(locked bool) error {
 		return nil
 	}
 	s.closed = true
+	if s.cancel != nil {
+		s.cancel()
+	}
 	if s.done != nil {
 		s.done.Close()
 	}
@@ -216,13 +220,40 @@ const (
 )
 
 type XUDP struct {
-	GlobalID [8]byte
-	Status   uint64
-	Expire   time.Time
-	Mux      *Session
+	GlobalID        [8]byte
+	Status          uint64
+	Expire          time.Time
+	Mux             *Session
+	lifecycleAccess sync.Mutex
+	lifecycle       *xudpLifecycle
+}
+
+type xudpLifecycle struct {
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (l *xudpLifecycle) Close() {
+	if l != nil {
+		l.once.Do(l.cancel)
+	}
+}
+
+func (x *XUDP) setLifecycle(lifecycle *xudpLifecycle) {
+	x.lifecycleAccess.Lock()
+	x.lifecycle = lifecycle
+	x.lifecycleAccess.Unlock()
+}
+
+func (x *XUDP) closeLifecycle() {
+	x.lifecycleAccess.Lock()
+	lifecycle := x.lifecycle
+	x.lifecycleAccess.Unlock()
+	lifecycle.Close()
 }
 
 func (x *XUDP) Interrupt() {
+	x.closeLifecycle()
 	common.Interrupt(x.Mux.input)
 	common.Close(x.Mux.output)
 }
