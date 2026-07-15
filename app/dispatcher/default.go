@@ -182,6 +182,9 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		if p.Stats.UserOnline {
 			trackOnlineIP(ctx, d.stats, user.Email, sessionInbound.Source.Address.String())
 		}
+
+		inboundLink.Writer = NewUserRateLimitWriter(ctx, user.Email, "uplink", user.SpeedLimitUpMbps, inboundLink.Writer)
+		outboundLink.Writer = NewUserRateLimitWriter(ctx, user.Email, "downlink", user.SpeedLimitDownMbps, outboundLink.Writer)
 	}
 
 	return inboundLink, outboundLink
@@ -216,6 +219,9 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		if p.Stats.UserOnline {
 			trackOnlineIP(ctx, statsManager, user.Email, sessionInbound.Source.Address.String())
 		}
+
+		link.Reader = NewUserRateLimitReader(ctx, user.Email, "uplink", user.SpeedLimitUpMbps, link.Reader)
+		link.Writer = NewUserRateLimitWriter(ctx, user.Email, "downlink", user.SpeedLimitDownMbps, link.Writer)
 	}
 
 	return link

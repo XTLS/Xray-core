@@ -16,4 +16,8 @@ message User {
   // Protocol specific account information. Must be the account proto in one of
   // the proxies.
   xray.common.serial.TypedMessage account = 3;
+
+  // Optional per-user bandwidth limits in megabits per second.
+  uint64 speed_limit_up_mbps = 4;
+  uint64 speed_limit_down_mbps = 5;
 }
