@@ -43,6 +43,17 @@ func (c *fragmentConn) Splice() bool {
 	return true
 }
 
+type closeWriteConn interface {
+	CloseWrite() error
+}
+
+func (c *fragmentConn) CloseWrite() error {
+	if raw, ok := c.Conn.(closeWriteConn); ok {
+		return raw.CloseWrite()
+	}
+	return net.ErrClosed
+}
+
 // lengthForSegment returns the length range (min, max) for the given segment index (0-based).
 // Clamps to the last entry when the index exceeds the list length.
 func (c *fragmentConn) lengthForSegment(segIdx int) (int64, int64) {
