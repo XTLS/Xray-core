@@ -70,10 +70,12 @@ func (p *mcPacket) readFields(fields ...field) error {
 
 type Varint int32
 
-func (v *Varint) readFrom(r io.Reader) error {
-	SEGMENT_BITS := byte(0x7F)
-	CONTINUE_BIT := byte(0x80)
+const (
+	SEGMENT_BITS = 0x7F
+	CONTINUE_BIT = 0x80
+)
 
+func (v *Varint) readFrom(r io.Reader) error {
 	var err error
 
 	var value int32 = 0
@@ -104,13 +106,10 @@ func (v *Varint) readFrom(r io.Reader) error {
 }
 
 func (v *Varint) writeTo(w io.Writer) error {
-	SEGMENT_BITS := byte(0x7F)
-	CONTINUE_BIT := byte(0x80)
-
-	value := int32(*v)
+	value := uint32(*v)
 
 	for {
-		currentByte := byte(value & int32(SEGMENT_BITS))
+		currentByte := byte(value & SEGMENT_BITS)
 		value >>= 7
 		if value != 0 {
 			currentByte |= CONTINUE_BIT
@@ -130,11 +129,12 @@ func (v *Varint) writeTo(w io.Writer) error {
 }
 
 func varintSize(value Varint) int {
+	uintValue := uint32(value)
 	size := 0
-	for {
+	for range 5 {
 		size++
-		value >>= 7
-		if value == 0 {
+		uintValue >>= 7
+		if uintValue == 0 {
 			break
 		}
 	}
