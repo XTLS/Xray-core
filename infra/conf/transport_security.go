@@ -18,6 +18,8 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+var defaultMinClientVer = [...]byte{26, 3, 27}
+
 type LimitFallback struct {
 	AfterBytes       uint64
 	BytesPerSec      uint64
@@ -100,21 +102,30 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		if config.PrivateKey, err = base64.RawURLEncoding.DecodeString(c.PrivateKey); err != nil || len(config.PrivateKey) != 32 {
 			return nil, errors.New(`invalid "privateKey": `, c.PrivateKey)
 		}
+
+		var clientVer [len(defaultMinClientVer)]byte
 		if c.MinClientVer != "" {
-			config.MinClientVer = make([]byte, 3)
 			var u uint64
 			for i, s := range strings.Split(c.MinClientVer, ".") {
-				if i == 3 {
+				if i == len(clientVer) {
 					return nil, errors.New(`invalid "minClientVer": `, c.MinClientVer)
 				}
 				if u, err = strconv.ParseUint(s, 10, 8); err != nil {
 					return nil, errors.New(`"minClientVer[`, i, `]" should be less than 256`)
 				} else {
-					config.MinClientVer[i] = byte(u)
+					clientVer[i] = byte(u)
 				}
 			}
 		} else {
-			config.MinClientVer = []byte{26, 3, 27} // change it at your own risk: https://github.com/XTLS/Xray-core/pull/6181#issuecomment-4567373533
+			clientVer = defaultMinClientVer
+		}
+
+		config.MinClientVer = clientVer[:]
+
+		if clientVer == defaultMinClientVer {
+			errors.LogWarning(context.Background(), `REALITY: The default "minClientVer" only allows Xray-core v26.3.27+ clients to connect`)
+		} else {
+			errors.LogWarning(context.Background(), `REALITY: A non-default "minClientVer" may create a distinctive fingerprint and increase detection risk: `, c.MinClientVer)
 		}
 		if c.MaxClientVer != "" {
 			config.MaxClientVer = make([]byte, 3)
