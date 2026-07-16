@@ -99,10 +99,15 @@ func (v *Varint) writeTo(w io.Writer) error {
 	SEGMENT_BITS := byte(0x7F)
 	CONTINUE_BIT := byte(0x80)
 
-	value := int32(*v)
+	// Must be an unsigned shift: value is the raw 32-bit wire pattern of a
+	// Varint (negative Go int32 values are a legal encoding, matching the
+	// Minecraft protocol's own VarInt spec). A signed int32 >>= 7 sign-extends
+	// and asymptotes to -1, never reaching 0 - the loop below would never
+	// terminate for a negative *v.
+	value := uint32(*v)
 
 	for {
-		currentByte := byte(value & int32(SEGMENT_BITS))
+		currentByte := byte(value & uint32(SEGMENT_BITS))
 		value >>= 7
 		if value != 0 {
 			currentByte |= CONTINUE_BIT
@@ -122,11 +127,18 @@ func (v *Varint) writeTo(w io.Writer) error {
 }
 
 func varintSize(value Varint) int {
+	// Unsigned shift for the same reason as writeTo above. readPacket() calls
+	// this with an attacker-controlled, unvalidated packetID read straight off
+	// the wire from an unauthenticated connection - a 5-byte VarInt encoding
+	// of a negative int32 (e.g. bytes 80 80 80 80 08 -> -2147483648) used to
+	// pin this in an infinite loop, a pre-auth 100%-CPU DoS with a ~6-byte
+	// payload.
+	uv := uint32(value)
 	size := 0
 	for {
 		size++
-		value >>= 7
-		if value == 0 {
+		uv >>= 7
+		if uv == 0 {
 			break
 		}
 	}
