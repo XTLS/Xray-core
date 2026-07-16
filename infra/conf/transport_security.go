@@ -1,7 +1,6 @@
 package conf
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -159,8 +158,10 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		}
 
 		for _, sn := range config.ServerNames {
-			if strings.Contains(sn, "apple") || strings.Contains(sn, "icloud") {
-				errors.LogWarning(context.Background(), `REALITY: Choosing apple, icloud, etc. as the target may get your IP blocked by the GFW`)
+			host := strings.ToLower(sn)
+			if strings.HasSuffix(host, ".ru") || strings.HasSuffix(host, ".ir") || strings.HasSuffix(host, ".cn") ||
+				strings.Contains(host, "apple") || strings.Contains(host, "icloud") || strings.Contains(host, "microsoft") {
+				return nil, errors.New(`REALITY: "`, sn, `" must not be used as the target: such domains get the server's IP blocked, choose a proper dest`)
 			}
 		}
 
