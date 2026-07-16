@@ -200,6 +200,23 @@ func NewVisionReader(reader buf.Reader, trafficState *TrafficState, isUplink boo
 	}
 }
 
+// Close closes the underlying real connection. VisionReader anonymously
+// embeds the buf.Reader *interface* (only ReadMultiBuffer), not any concrete
+// reader, so Go's method promotion never gives it a working Close/Interrupt
+// even when the wrapped reader supports one - common.Close/common.Interrupt
+// on a bare *VisionReader used to be a silent no-op. Since VisionReader
+// already holds the real net.Conn for exactly this connection (used above
+// for the splice-detection/TLS-unwrap path), forwarding to it here gives any
+// caller that force-closes a dispatched Link (e.g. v2node's LinkManager
+// kicking a banned/expired/device-limit-exceeded user's in-flight Vision
+// session) a real way to sever the socket instead of doing nothing. The
+// generic inbound worker already closes this same conn unconditionally once
+// Process() returns, so this is an idempotent no-op double-close on the
+// normal teardown path and only matters for the forced-close case.
+func (w *VisionReader) Close() error {
+	return w.conn.Close()
+}
+
 func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	buffer, err := w.Reader.ReadMultiBuffer()
 	if buffer.IsEmpty() {
@@ -317,6 +334,14 @@ func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink boo
 		ob:                ob,
 		testseed:          testseed,
 	}
+}
+
+// Close closes the underlying real connection - see the matching comment on
+// VisionReader.Close for why this is needed (VisionWriter has the identical
+// embed-an-interface-not-a-concrete-type problem, so it never got a working
+// Close either).
+func (w *VisionWriter) Close() error {
+	return w.conn.Close()
 }
 
 func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
