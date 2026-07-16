@@ -113,8 +113,10 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 					config.MinClientVer[i] = byte(u)
 				}
 			}
+			errors.LogWarning(context.Background(), `REALITY: Changing "minClientVer" will increase the likelihood of your server's IP being blocked by the GFW`)
 		} else {
-			config.MinClientVer = []byte{26, 3, 27} // change it at your own risk: https://github.com/XTLS/Xray-core/pull/6181#issuecomment-4567373533
+			config.MinClientVer = []byte{26, 3, 27} // change it at your own risk: https://github.com/XTLS/Xray-core/commit/af7eb68028732a8ee3c0e5d6ab2b8a657bb2e770
+			errors.LogWarning(context.Background(), `REALITY: The default minimal client version is Xray-core v26.3.27, other clients may be refused to connect`)
 		}
 		if c.MaxClientVer != "" {
 			config.MaxClientVer = make([]byte, 3)
@@ -159,8 +161,10 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		}
 
 		for _, sn := range config.ServerNames {
-			if strings.Contains(sn, "apple") || strings.Contains(sn, "icloud") {
-				errors.LogWarning(context.Background(), `REALITY: Choosing apple, icloud, etc. as the target may get your IP blocked by the GFW`)
+			sn = strings.ToLower(sn)
+			if strings.HasSuffix(sn, ".ru") || strings.HasSuffix(sn, ".ir") || strings.HasSuffix(sn, ".cn") ||
+				strings.Contains(sn, "apple") || strings.Contains(sn, "icloud") || strings.Contains(sn, "microsoft") {
+				errors.LogWarning(context.Background(), `REALITY: Choosing "`, sn, `" as the target will increase the likelihood of your server's IP being blocked by the GFW`)
 			}
 		}
 
