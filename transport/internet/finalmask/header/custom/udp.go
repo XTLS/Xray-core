@@ -20,7 +20,21 @@ type udpCustomClient struct {
 	merged []byte
 	read   int
 	state  *stateStore
-	vars   map[string][]byte
+	// mu guards vars: Match() writes it from the ReadFrom fan-in loop while
+	// WriteTo (called concurrently by many client sessions sharing this one
+	// outbound PacketConn) reads it as a fallback when no per-addr state
+	// exists yet - the adjacent stateStore already has its own lock for
+	// exactly this reason, but this plain field didn't.
+	mu   sync.Mutex
+	vars map[string][]byte
+}
+
+// currentVars returns a defensive copy of the last-matched vars, safe to
+// call concurrently with Match().
+func (h *udpCustomClient) currentVars() map[string][]byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return cloneVars(h.vars)
 }
 
 func (h *udpCustomClient) Serialize(b []byte) {
@@ -39,7 +53,9 @@ func (h *udpCustomClient) Match(b []byte, addr net.Addr) bool {
 	}
 	vars, ok := matchUDPItems(h.server, b, h.read, initial)
 	if ok {
+		h.mu.Lock()
 		h.vars = vars
+		h.mu.Unlock()
 		if h.state != nil {
 			h.state.set(udpStateKey(addr), vars)
 		}
@@ -110,8 +126,8 @@ func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	ctx := newEvalContextWithAddrs(c.PacketConn.LocalAddr(), addr)
 	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {
 		ctx.vars = cloneVars(vars)
-	} else if len(c.header.vars) > 0 {
-		ctx.vars = cloneVars(c.header.vars)
+	} else if v := c.header.currentVars(); len(v) > 0 {
+		ctx.vars = v
 	}
 	evaluated, err := evaluateUDPItemsWithContext(c.header.client, ctx)
 	if err != nil {
@@ -140,7 +156,17 @@ type udpCustomServer struct {
 	merged []byte
 	read   int
 	state  *stateStore
-	vars   map[string][]byte
+	// mu guards vars - see the matching comment on udpCustomClient.mu.
+	mu   sync.Mutex
+	vars map[string][]byte
+}
+
+// currentVars returns a defensive copy of the last-matched vars, safe to
+// call concurrently with Match().
+func (h *udpCustomServer) currentVars() map[string][]byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return cloneVars(h.vars)
 }
 
 func (h *udpCustomServer) Serialize(b []byte) {
@@ -159,7 +185,9 @@ func (h *udpCustomServer) Match(b []byte, addr net.Addr) bool {
 	}
 	vars, ok := matchUDPItems(h.client, b, h.read, initial)
 	if ok {
+		h.mu.Lock()
 		h.vars = vars
+		h.mu.Unlock()
 		if h.state != nil {
 			h.state.set(udpStateKey(addr), vars)
 		}
@@ -230,8 +258,8 @@ func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	ctx := newEvalContextWithAddrs(c.PacketConn.LocalAddr(), addr)
 	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {
 		ctx.vars = cloneVars(vars)
-	} else if len(c.header.vars) > 0 {
-		ctx.vars = cloneVars(c.header.vars)
+	} else if v := c.header.currentVars(); len(v) > 0 {
+		ctx.vars = v
 	}
 	evaluated, err := evaluateUDPItemsWithContext(c.header.server, ctx)
 	if err != nil {
@@ -328,7 +356,14 @@ type udpStandalonePacket struct {
 
 type udpStandaloneWaiter struct {
 	vars map[string][]byte
-	done chan error
+	// done is closed (never sent-on) so every concurrent WriteTo call
+	// waiting on the same in-flight handshake wakes up - a single buffered
+	// `chan error` only delivers to one of N waiters. err is set before
+	// close(done) and must only be read after <-done returns (closing a
+	// channel happens-before a receive that completes because of the
+	// close, per the Go memory model, so this needs no extra lock).
+	done chan struct{}
+	err  error
 }
 
 func NewConnClientUDPStandalone(c *UDPStandaloneConfig, raw net.PacketConn) (net.PacketConn, error) {
@@ -380,13 +415,18 @@ func (c *udpCustomStandaloneClientConn) WriteTo(p []byte, addr net.Addr) (n int,
 		if err != nil {
 			return 0, err
 		}
-		waiter := c.registerWaiter(key, ctx.vars)
-		if _, err := c.PacketConn.WriteTo(request, addr); err != nil {
-			c.unregisterWaiter(key, waiter)
-			return 0, err
+		waiter, isNew := c.registerOrJoinWaiter(key, ctx.vars)
+		if isNew {
+			if _, err := c.PacketConn.WriteTo(request, addr); err != nil {
+				c.unregisterWaiter(key, waiter)
+				waiter.err = err
+				close(waiter.done)
+				return 0, err
+			}
 		}
-		if err := <-waiter.done; err != nil {
-			return 0, err
+		<-waiter.done
+		if waiter.err != nil {
+			return 0, waiter.err
 		}
 	}
 
@@ -399,15 +439,26 @@ func (c *udpCustomStandaloneClientConn) ensureReader() {
 	})
 }
 
-func (c *udpCustomStandaloneClientConn) registerWaiter(key string, vars map[string][]byte) *udpStandaloneWaiter {
-	waiter := &udpStandaloneWaiter{
-		vars: cloneVars(vars),
-		done: make(chan error, 1),
-	}
+// registerOrJoinWaiter returns the already in-flight waiter for key if one
+// exists (isNew=false - the caller must NOT resend the handshake request,
+// just wait for the existing one to complete), or creates and registers a
+// new one (isNew=true). Used to overwrite any existing entry unconditionally,
+// so two concurrent first-packet WriteTo calls to the same not-yet-
+// established addr silently orphaned the first caller's waiter, which then
+// blocked forever on <-waiter.done - even connection teardown never woke it,
+// since failWaiters only drains whatever is *currently* in c.wait.
+func (c *udpCustomStandaloneClientConn) registerOrJoinWaiter(key string, vars map[string][]byte) (waiter *udpStandaloneWaiter, isNew bool) {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	if existing, ok := c.wait[key]; ok {
+		return existing, false
+	}
+	waiter = &udpStandaloneWaiter{
+		vars: cloneVars(vars),
+		done: make(chan struct{}),
+	}
 	c.wait[key] = waiter
-	c.mu.Unlock()
-	return waiter
+	return waiter, true
 }
 
 func (c *udpCustomStandaloneClientConn) unregisterWaiter(key string, waiter *udpStandaloneWaiter) {
@@ -456,7 +507,7 @@ func (c *udpCustomStandaloneClientConn) tryCompleteHandshake(addr net.Addr, data
 		delete(c.wait, key)
 	}
 	c.mu.Unlock()
-	waiter.done <- nil
+	close(waiter.done)
 	return true
 }
 
@@ -466,7 +517,8 @@ func (c *udpCustomStandaloneClientConn) failWaiters(err error) {
 	c.wait = make(map[string]*udpStandaloneWaiter)
 	c.mu.Unlock()
 	for _, waiter := range waiters {
-		waiter.done <- err
+		waiter.err = err
+		close(waiter.done)
 	}
 }
 
