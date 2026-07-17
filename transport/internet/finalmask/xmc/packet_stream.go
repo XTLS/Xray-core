@@ -10,9 +10,6 @@ import (
 )
 
 const (
-	modeRaw    = "raw"
-	modePacket = "packet"
-
 	configurationClientboundCustomPayload = 0x01
 	configurationServerboundCustomPayload = 0x02
 	configurationKeepAlive                = 0x04

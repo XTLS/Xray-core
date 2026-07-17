@@ -28,7 +28,6 @@ type Config struct {
 	RsaPrivateKey []byte                 `protobuf:"bytes,8,opt,name=rsa_private_key,json=rsaPrivateKey,proto3" json:"rsa_private_key,omitempty"`
 	RsaPublicKey  []byte                 `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
 	Hostname      string                 `protobuf:"bytes,10,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Mode          string                 `protobuf:"bytes,11,opt,name=mode,proto3" json:"mode,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -98,26 +97,18 @@ func (x *Config) GetHostname() string {
 	return ""
 }
 
-func (x *Config) GetMode() string {
-	if x != nil {
-		return x.Mode
-	}
-	return ""
-}
-
 var File_transport_internet_finalmask_xmc_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\n" +
-	"-transport/internet/finalmask/xmc/config.proto\x12%xray.transport.internet.finalmask.xmc\"\xc0\x01\n" +
+	"-transport/internet/finalmask/xmc/config.proto\x12%xray.transport.internet.finalmask.xmc\"\xac\x01\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12\x1c\n" +
 	"\tusernames\x18\x02 \x03(\tR\tusernames\x12&\n" +
 	"\x0frsa_private_key\x18\b \x01(\fR\rrsaPrivateKey\x12$\n" +
 	"\x0ersa_public_key\x18\t \x01(\fR\frsaPublicKey\x12\x1a\n" +
 	"\bhostname\x18\n" +
-	" \x01(\tR\bhostname\x12\x12\n" +
-	"\x04mode\x18\v \x01(\tR\x04modeB\x91\x01\n" +
+	" \x01(\tR\bhostnameB\x91\x01\n" +
 	")com.xray.transport.internet.finalmask.xmcP\x01Z:github.com/xtls/xray-core/transport/internet/finalmask/xmc\xaa\x02%Xray.Transport.Internet.Finalmask.XMCb\x06proto3"
 
 var (

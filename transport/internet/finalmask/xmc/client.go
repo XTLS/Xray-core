@@ -28,7 +28,6 @@ type clientConn struct {
 	password      string
 	rsaPublicKey  []byte
 	hostname      string
-	mode          string
 	packet        *packetStream
 }
 
@@ -39,20 +38,13 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, hostname, mode string) (*clientConn, error) {
+func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, hostname string) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
 	if len(usernames) == 0 {
 		return nil, fmt.Errorf("empty usernames")
 	}
-	if mode == "" {
-		mode = modeRaw
-	}
-	if mode != modeRaw && mode != modePacket {
-		return nil, fmt.Errorf("unsupported mode: %s", mode)
-	}
-
 	return &clientConn{
 		reader:        bufio.NewReader(c),
 		writer:        c,
@@ -63,7 +55,6 @@ func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey
 		password:      password,
 		rsaPublicKey:  rsaPublicKey,
 		hostname:      hostname,
-		mode:          mode,
 	}, nil
 }
 
@@ -198,41 +189,39 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("new crypto writer: %w", err)
 	}
 
-	if c.mode == modePacket {
-		pkt, err = readPacket(c.reader)
-		if err != nil {
-			return fmt.Errorf("read login success: %w", err)
-		}
-		if pkt.packetID == 0x00 {
-			var reason String
-			if readErr := pkt.readFields(&reason); readErr != nil {
-				return fmt.Errorf("authentication rejected")
-			}
-			return fmt.Errorf("authentication rejected: %s", reason)
-		}
-		if pkt.packetID != 0x02 {
-			return fmt.Errorf("bad login success packet id: %d", pkt.packetID)
-		}
-
-		var (
-			loginUUID  UUID
-			loginName  String
-			properties Varint
-		)
-		if err = pkt.readFields(&loginUUID, &loginName, &properties); err != nil {
-			return fmt.Errorf("read login success fields: %w", err)
-		}
-		if properties != 0 {
-			return fmt.Errorf("unsupported login property count: %d", properties)
-		}
-		if err = writePacket(c.writer, 0x03); err != nil {
-			return fmt.Errorf("write login acknowledged: %w", err)
-		}
-
-		c.packet = newPacketStream(c.reader, c.writer, true)
-		c.reader = c.packet
-		c.writer = c.packet
+	pkt, err = readPacket(c.reader)
+	if err != nil {
+		return fmt.Errorf("read login success: %w", err)
 	}
+	if pkt.packetID == 0x00 {
+		var reason String
+		if readErr := pkt.readFields(&reason); readErr != nil {
+			return fmt.Errorf("authentication rejected")
+		}
+		return fmt.Errorf("authentication rejected: %s", reason)
+	}
+	if pkt.packetID != 0x02 {
+		return fmt.Errorf("bad login success packet id: %d", pkt.packetID)
+	}
+
+	var (
+		loginUUID  UUID
+		loginName  String
+		properties Varint
+	)
+	if err = pkt.readFields(&loginUUID, &loginName, &properties); err != nil {
+		return fmt.Errorf("read login success fields: %w", err)
+	}
+	if properties != 0 {
+		return fmt.Errorf("unsupported login property count: %d", properties)
+	}
+	if err = writePacket(c.writer, 0x03); err != nil {
+		return fmt.Errorf("write login acknowledged: %w", err)
+	}
+
+	c.packet = newPacketStream(c.reader, c.writer, true)
+	c.reader = c.packet
+	c.writer = c.packet
 
 	c.state = clientStateProxy
 

@@ -42,7 +42,7 @@ func TestHandshakeSuccess(t *testing.T) {
 		}
 		defer rawConn.Close()
 
-		server, err := wrapConnServer(rawConn, password, privateKey, publicKey, modeRaw)
+		server, err := wrapConnServer(rawConn, password, privateKey, publicKey)
 		if err != nil {
 			t.Errorf("failed to wrap server: %v", err)
 			return
@@ -73,7 +73,7 @@ func TestHandshakeSuccess(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, usernames, password, publicKey, "localhost", modeRaw)
+	client, err := newClientConn(clientRaw, usernames, password, publicKey, "localhost")
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 		}
 		defer rawConn.Close()
 
-		server, err := wrapConnServer(rawConn, serverPassword, serverPrivateKey, serverPublicKey, modeRaw)
+		server, err := wrapConnServer(rawConn, serverPassword, serverPrivateKey, serverPublicKey)
 		if err != nil {
 			// Wrapping is synchronous and shouldn't fail initially simply because key derivation works with any string
 			t.Logf("wrapped server: %v", err)
@@ -139,17 +139,15 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, usernames, clientPassword, serverPublicKey, "localhost", modeRaw)
+	client, err := newClientConn(clientRaw, usernames, clientPassword, serverPublicKey, "localhost")
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
 
 	err = client.handshake()
-	if err != nil {
-		t.Fatalf("client handshake err: %v", err)
+	if err == nil {
+		t.Fatal("expected client handshake to fail due to password mismatch")
 	}
-
-	_, _ = client.Write([]byte{0x1, 0x2, 0x3, 0x4})
 
 	wg.Wait()
 
