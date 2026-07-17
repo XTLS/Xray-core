@@ -13,6 +13,7 @@ import (
 
 type TunConfig struct {
 	Name                   string   `json:"name"`
+	Desc                   string   `json:"desc"`
 	MTU                    uint32   `json:"mtu"`
 	Gateway                []string `json:"gateway"`
 	DNS                    []string `json:"dns"`
@@ -24,6 +25,7 @@ type TunConfig struct {
 func (v *TunConfig) Build() (proto.Message, error) {
 	config := &tun.Config{
 		Name:                   v.Name,
+		Desc:                   v.Desc,
 		MTU:                    v.MTU,
 		Gateway:                v.Gateway,
 		DNS:                    v.DNS,
@@ -43,6 +45,9 @@ func (v *TunConfig) Build() (proto.Message, error) {
 			return nil, err
 		}
 		config.Name = name
+	}
+	if config.Desc == "" {
+		config.Desc = "Wintun"
 	}
 	if config.MTU == 0 {
 		config.MTU = 1500

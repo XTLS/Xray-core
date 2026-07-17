@@ -31,12 +31,16 @@ Here is simple Xray config snippet to enable the inbound:
       "port": 0,
       "protocol": "tun",
       "settings": {
-        "name": "xray0",
-        "MTU": 1492
+        "name": "utun10",
+        "desc": "Wintun",
+        "mtu": 1500
       }
     }
   ],
 ```
+
+`desc` sets the Windows Wintun adapter tunnel type and defaults to `Wintun`.
+It is ignored on other platforms.
 
 ## SUPPORTED FEATURES
 

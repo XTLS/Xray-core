@@ -50,7 +50,7 @@ var _ GVisorDevice = (*WindowsTun)(nil)
 // interface with the same name exist, it tried to be reused.
 func NewTun(options *Config) (Tun, error) {
 	// instantiate wintun adapter
-	adapter, err := open(options.Name)
+	adapter, err := open(options.Name, options.Desc)
 	if err != nil {
 		return nil, err
 	}
@@ -73,12 +73,12 @@ func NewTun(options *Config) (Tun, error) {
 	return tun, nil
 }
 
-func open(name string) (*wintun.Adapter, error) {
+func open(name, desc string) (*wintun.Adapter, error) {
 	// generate a deterministic GUID from the adapter name
 	id := md5.Sum([]byte(name))
 	guid := (*windows.GUID)(unsafe.Pointer(&id[0]))
 	// try to create adapter anew
-	adapter, err := wintun.CreateAdapter(name, "Xray", guid)
+	adapter, err := wintun.CreateAdapter(name, desc, guid)
 	if err == nil {
 		return adapter, nil
 	}
