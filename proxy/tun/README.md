@@ -31,9 +31,9 @@ Here is simple Xray config snippet to enable the inbound:
       "port": 0,
       "protocol": "tun",
       "settings": {
-        "name": "xray0",
+        "name": "utun10",
         "desc": "Wintun",
-        "MTU": 1492
+        "mtu": 1500
       }
     }
   ],
