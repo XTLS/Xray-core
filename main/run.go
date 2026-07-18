@@ -95,7 +95,6 @@ func executeRun(cmd *base.Command, args []string) {
 		fmt.Println("Failed to start:", err)
 		os.Exit(-1)
 	}
-	defer server.Close()
 
 	// Explicitly triggering GC to remove garbage from config loading.
 	runtime.GC()
@@ -105,6 +104,22 @@ func executeRun(cmd *base.Command, args []string) {
 		osSignals := make(chan os.Signal, 1)
 		signal.Notify(osSignals, os.Interrupt, syscall.SIGTERM)
 		<-osSignals
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- server.Close()
+	}()
+
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			fmt.Println("Failed to close:", err)
+			os.Exit(1)
+		}
+	case <-time.After(10 * time.Second):
+		fmt.Println("Timed out while closing Xray.")
+		os.Exit(1)
 	}
 }
 
