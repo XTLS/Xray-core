@@ -1,5 +1,5 @@
-//go:build !wasm && !openbsd
-// +build !wasm,!openbsd
+//go:build !openbsd
+// +build !openbsd
 
 package buf
 
