@@ -57,7 +57,7 @@ message SenderConfig {
   // Send traffic through the given IP. Only IP is allowed.
   xray.common.net.IPOrDomain via = 1;
   xray.transport.internet.StreamConfig stream_settings = 2;
-  xray.transport.internet.ProxyConfig proxy_settings = 3;
+  reserved 3;
   MultiplexingConfig multiplex_settings = 4;
   string via_cidr = 5;
   xray.transport.internet.DomainStrategy target_strategy = 6;
