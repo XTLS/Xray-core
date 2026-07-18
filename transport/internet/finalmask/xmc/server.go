@@ -32,6 +32,7 @@ type serverConn struct {
 	state serverState
 
 	handshakeLock sync.Mutex
+	profiles      []loginProfile
 	password      string
 	rsaPrivateKey *rsa.PrivateKey
 	rsaPublicKey  []byte
@@ -139,14 +140,15 @@ func (c *serverConn) handshake() error {
 		if err != nil {
 			return fmt.Errorf("read login start packet: %w", err)
 		}
+		profile, found := findProfile(c.profiles, string(username), uuid)
 
 		// encrypt request
 
 		var (
-			serverId           String = String("")
-			publicKey          Bytes  = Bytes(c.rsaPublicKey)
-			verifyToken        Bytes  = Bytes(make([]byte, 4))
-			shouldAuthenticate Varint = Varint(1)
+			serverId           String  = String("")
+			publicKey          Bytes   = Bytes(c.rsaPublicKey)
+			verifyToken        Bytes   = Bytes(make([]byte, 4))
+			shouldAuthenticate Boolean = true
 		)
 
 		if _, err = rand.Read(verifyToken); err != nil {
@@ -216,9 +218,20 @@ func (c *serverConn) handshake() error {
 			writeDisconnectPacket(c.writer, `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`)
 			return fmt.Errorf("bad password")
 		}
+		if !found {
+			if err = writeDisconnectPacket(c.writer, `{"text":"You are not white-listed on this server!"}`); err != nil {
+				return fmt.Errorf("write unknown login profile disconnect: %w", err)
+			}
+			return fmt.Errorf("unknown login profile")
+		}
 
-		propertyCount := Varint(0)
-		if err = writePacket(c.writer, 0x02, &uuid, &username, &propertyCount); err != nil {
+		loginName := String(profile.Username)
+		propertyCount := Varint(1)
+		propertyName := String("textures")
+		texturesValue := String(profile.TexturesValue)
+		signed := Boolean(true)
+		texturesSignature := String(profile.TexturesSignature)
+		if err = writePacket(c.writer, 0x02, &profile.UUID, &loginName, &propertyCount, &propertyName, &texturesValue, &signed, &texturesSignature); err != nil {
 			return fmt.Errorf("write login success: %w", err)
 		}
 
@@ -288,7 +301,10 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.c.SetWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte) (*serverConn, error) {
+func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte) (*serverConn, error) {
+	if len(profiles) == 0 {
+		return nil, fmt.Errorf("empty profiles")
+	}
 	if len(rsaPrivateKeyDER) == 0 {
 		return nil, fmt.Errorf("empty rsa private key")
 	}
@@ -305,6 +321,7 @@ func wrapConnServer(c net.Conn, password string, rsaPrivateKeyDER []byte, rsaPub
 		writer:        c,
 		c:             c,
 		state:         serverStateHandshake,
+		profiles:      profiles,
 		password:      password,
 		rsaPrivateKey: rsaPrivateKey,
 		rsaPublicKey:  rsaPublicKey,

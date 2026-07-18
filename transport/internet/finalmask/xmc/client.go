@@ -3,7 +3,6 @@ package xmc
 import (
 	"bufio"
 	"bytes"
-	"crypto/md5"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -24,7 +23,7 @@ type clientConn struct {
 	state clientState
 
 	handshakeLock sync.Mutex
-	usernames     []string
+	profiles      []loginProfile
 	password      string
 	rsaPublicKey  []byte
 	hostname      string
@@ -38,12 +37,12 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey []byte, hostname string) (*clientConn, error) {
+func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
-	if len(usernames) == 0 {
-		return nil, fmt.Errorf("empty usernames")
+	if len(profiles) == 0 {
+		return nil, fmt.Errorf("empty profiles")
 	}
 	return &clientConn{
 		reader:        bufio.NewReader(c),
@@ -51,7 +50,7 @@ func newClientConn(c net.Conn, usernames []string, password string, rsaPublicKey
 		c:             c,
 		state:         clientStateHandshake,
 		handshakeLock: sync.Mutex{},
-		usernames:     usernames,
+		profiles:      profiles,
 		password:      password,
 		rsaPublicKey:  rsaPublicKey,
 		hostname:      hostname,
@@ -98,19 +97,14 @@ func (c *clientConn) handshake() error {
 	}
 
 	// Login Start
-	var (
-		username    string
-		offlineUUID UUID
-	)
-
-	randomUsername, err := rand.Int(rand.Reader, big.NewInt(int64(len(c.usernames))))
+	randomProfile, err := rand.Int(rand.Reader, big.NewInt(int64(len(c.profiles))))
 	if err != nil {
-		return fmt.Errorf("select username: %w", err)
+		return fmt.Errorf("select profile: %w", err)
 	}
-	username = c.usernames[randomUsername.Int64()]
-	generateOfflineUUID(&offlineUUID, string(username))
+	selectedProfile := c.profiles[randomProfile.Int64()]
+	username := String(selectedProfile.Username)
 
-	err = writePacket(c.writer, 0x00, new(String(username)), &offlineUUID)
+	err = writePacket(c.writer, 0x00, &username, &selectedProfile.UUID)
 	if err != nil {
 		return fmt.Errorf("write login start: %w", err)
 	}
@@ -204,16 +198,12 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("bad login success packet id: %d", pkt.packetID)
 	}
 
-	var (
-		loginUUID  UUID
-		loginName  String
-		properties Varint
-	)
-	if err = pkt.readFields(&loginUUID, &loginName, &properties); err != nil {
+	receivedProfile, err := readLoginSuccess(pkt)
+	if err != nil {
 		return fmt.Errorf("read login success fields: %w", err)
 	}
-	if properties != 0 {
-		return fmt.Errorf("unsupported login property count: %d", properties)
+	if receivedProfile != selectedProfile {
+		return fmt.Errorf("login profile mismatch")
 	}
 	if err = writePacket(c.writer, 0x03); err != nil {
 		return fmt.Errorf("write login acknowledged: %w", err)
@@ -271,11 +261,4 @@ func (c *clientConn) SetReadDeadline(t time.Time) error {
 
 func (c *clientConn) SetWriteDeadline(t time.Time) error {
 	return c.c.SetWriteDeadline(t)
-}
-
-func generateOfflineUUID(uuid *UUID, username string) {
-	h := md5.Sum([]byte("OfflinePlayer:" + username))
-	copy(uuid[:], h[:16])
-	uuid[6] = (uuid[6] & 0x0f) | 0x30 // UUID version 3
-	uuid[8] = (uuid[8] & 0x3f) | 0x80 // UUID variant
 }

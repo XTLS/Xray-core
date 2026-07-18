@@ -16,6 +16,7 @@ func TestPacketStreamRoundTrip(t *testing.T) {
 
 	const password = "packet-stream-shared-key"
 	privateKey, publicKey := deriveTestRSAKey(t, password)
+	profiles := []loginProfile{testLoginProfile("packet_user")}
 	clientPayload := bytes.Repeat([]byte("client-payload-"), 5000)
 	serverPayload := bytes.Repeat([]byte("server-payload-"), 5000)
 	serverDone := make(chan error, 1)
@@ -28,7 +29,7 @@ func TestPacketStreamRoundTrip(t *testing.T) {
 		}
 		defer rawConn.Close()
 
-		server, wrapErr := wrapConnServer(rawConn, password, privateKey, publicKey)
+		server, wrapErr := wrapConnServer(rawConn, profiles, password, privateKey, publicKey)
 		if wrapErr != nil {
 			serverDone <- wrapErr
 			return
@@ -52,7 +53,7 @@ func TestPacketStreamRoundTrip(t *testing.T) {
 	}
 	defer rawClient.Close()
 
-	client, err := newClientConn(rawClient, []string{"packet_user"}, password, publicKey, "localhost")
+	client, err := newClientConn(rawClient, profiles, password, publicKey, "localhost")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,14 +69,5 @@ func TestPacketStreamRoundTrip(t *testing.T) {
 	}
 	if err = <-serverDone; err != nil {
 		t.Fatalf("server: %v", err)
-	}
-}
-
-func TestOfflineUUIDVersion3(t *testing.T) {
-	var got UUID
-	generateOfflineUUID(&got, "Steve")
-	want := UUID{0x56, 0x27, 0xdd, 0x98, 0xe6, 0xbe, 0x3c, 0x21, 0xb8, 0xa8, 0xe9, 0x23, 0x44, 0x18, 0x36, 0x41}
-	if got != want {
-		t.Fatalf("offline UUID = %x, want %x", got, want)
 	}
 }

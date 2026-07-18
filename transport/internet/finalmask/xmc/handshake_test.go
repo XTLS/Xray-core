@@ -2,6 +2,7 @@ package xmc
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"crypto/x509"
 	"net"
 	"sync"
@@ -24,6 +25,19 @@ func deriveTestRSAKey(t *testing.T, password string) ([]byte, []byte) {
 	return x509.MarshalPKCS1PrivateKey(key), publicKey
 }
 
+func testLoginProfile(username string) loginProfile {
+	profile := loginProfile{
+		Username:          username,
+		TexturesValue:     "test-textures-value",
+		TexturesSignature: "test-textures-signature",
+	}
+	digest := sha256.Sum256([]byte(username))
+	copy(profile.UUID[:], digest[:16])
+	profile.UUID[6] = (profile.UUID[6] & 0x0f) | 0x40
+	profile.UUID[8] = (profile.UUID[8] & 0x3f) | 0x80
+	return profile
+}
+
 func TestHandshakeSuccess(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -32,7 +46,7 @@ func TestHandshakeSuccess(t *testing.T) {
 	defer ln.Close()
 
 	password := "super-secure-shared-key-12345"
-	usernames := []string{"test_user"}
+	profiles := []loginProfile{testLoginProfile("test_user")}
 	privateKey, publicKey := deriveTestRSAKey(t, password)
 
 	go func() {
@@ -42,7 +56,7 @@ func TestHandshakeSuccess(t *testing.T) {
 		}
 		defer rawConn.Close()
 
-		server, err := wrapConnServer(rawConn, password, privateKey, publicKey)
+		server, err := wrapConnServer(rawConn, profiles, password, privateKey, publicKey)
 		if err != nil {
 			t.Errorf("failed to wrap server: %v", err)
 			return
@@ -73,7 +87,7 @@ func TestHandshakeSuccess(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, usernames, password, publicKey, "localhost")
+	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost")
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -103,7 +117,7 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 
 	clientPassword := "client-secret-123"
 	serverPassword := "server-secret-456"
-	usernames := []string{"test_user"}
+	profiles := []loginProfile{testLoginProfile("test_user")}
 	serverPrivateKey, serverPublicKey := deriveTestRSAKey(t, serverPassword)
 
 	var wg sync.WaitGroup
@@ -117,7 +131,7 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 		}
 		defer rawConn.Close()
 
-		server, err := wrapConnServer(rawConn, serverPassword, serverPrivateKey, serverPublicKey)
+		server, err := wrapConnServer(rawConn, profiles, serverPassword, serverPrivateKey, serverPublicKey)
 		if err != nil {
 			// Wrapping is synchronous and shouldn't fail initially simply because key derivation works with any string
 			t.Logf("wrapped server: %v", err)
@@ -139,7 +153,7 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, usernames, clientPassword, serverPublicKey, "localhost")
+	client, err := newClientConn(clientRaw, profiles, clientPassword, serverPublicKey, "localhost")
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}

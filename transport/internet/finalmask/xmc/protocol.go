@@ -57,7 +57,6 @@ func readPacket(b io.Reader) (*mcPacket, error) {
 
 func (p *mcPacket) readFields(fields ...field) error {
 	r := bytes.NewReader(p.data)
-
 	for _, field := range fields {
 		err := field.readFrom(r)
 		if err != nil {
@@ -243,6 +242,31 @@ func (v *UUID) readFrom(r io.Reader) error {
 		return fmt.Errorf("read UUID: %w", err)
 	}
 
+	return nil
+}
+
+type Boolean bool
+
+func (v *Boolean) readFrom(r io.Reader) error {
+	b, err := readByte(r)
+	if err != nil {
+		return fmt.Errorf("read boolean: %w", err)
+	}
+	if b > 1 {
+		return fmt.Errorf("read boolean: invalid value: %d", b)
+	}
+	*v = b == 1
+	return nil
+}
+
+func (v *Boolean) writeTo(w io.Writer) error {
+	value := byte(0)
+	if *v {
+		value = 1
+	}
+	if _, err := w.Write([]byte{value}); err != nil {
+		return fmt.Errorf("write boolean: %w", err)
+	}
 	return nil
 }
 
