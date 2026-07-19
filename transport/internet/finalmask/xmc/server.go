@@ -31,12 +31,16 @@ type serverConn struct {
 
 	state serverState
 
-	handshakeLock sync.Mutex
-	profiles      []loginProfile
-	password      string
-	rsaPrivateKey *rsa.PrivateKey
-	rsaPublicKey  []byte
-	packet        *packetStream
+	handshakeLock   sync.Mutex
+	lifecycleMu     sync.Mutex
+	closed          bool
+	profiles        []loginProfile
+	password        string
+	rsaPrivateKey   *rsa.PrivateKey
+	rsaPublicKey    []byte
+	paddingSchedule []paddingTurn
+	packet          *packetStream
+	deadlines       *connectionDeadlines
 }
 
 func (c *serverConn) handshake() error {
@@ -47,12 +51,10 @@ func (c *serverConn) handshake() error {
 		return nil
 	}
 
-	// handshake timeout
-	err := c.c.SetDeadline(time.Now().Add(time.Second * 30))
-	if err != nil {
+	if err := c.deadlines.beginHandshake(); err != nil {
 		return fmt.Errorf("set deadline: %w", err)
 	}
-	defer c.c.SetDeadline(time.Time{})
+	defer func() { _ = c.deadlines.endHandshake() }()
 
 	var (
 		protocolVersion Varint
@@ -232,28 +234,49 @@ func (c *serverConn) handshake() error {
 		signed := Boolean(true)
 		texturesSignature := String(profile.TexturesSignature)
 		if err = writePacket(c.writer, 0x02, &profile.UUID, &loginName, &propertyCount, &propertyName, &texturesValue, &signed, &texturesSignature); err != nil {
-			return fmt.Errorf("write login success: %w", err)
+			return fmt.Errorf("write login finished: %w", err)
 		}
 
-		pkt, err = readPacket(c.reader)
+		var loginAcknowledgedLength int
+		pkt, loginAcknowledgedLength, err = readPacketWithLength(c.reader)
 		if err != nil {
 			return fmt.Errorf("read login acknowledged: %w", err)
 		}
-		if pkt.packetID != 0x03 {
-			return fmt.Errorf("bad login acknowledged packet id: %d", pkt.packetID)
+		if err = validateLoginAcknowledgedPacket(pkt); err != nil {
+			return err
+		}
+		if err = runPaddingSchedule(c.reader, c.writer, false, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+			return fmt.Errorf("run startup padding: %w", err)
 		}
 
-		c.packet = newPacketStream(c.reader, c.writer, false)
-		c.reader = c.packet
-		c.writer = c.packet
-
+		packet := newPacketStream(c.reader, c.writer, false)
+		c.lifecycleMu.Lock()
+		if c.closed {
+			c.lifecycleMu.Unlock()
+			packet.Stop()
+			return net.ErrClosed
+		}
+		c.packet = packet
+		c.reader = packet
+		c.writer = packet
 		c.state = serverStateProxy
+		c.lifecycleMu.Unlock()
 
 		return nil
 
 	default:
 		return fmt.Errorf("bad handshake packet: bad next state: %d", nextState)
 	}
+}
+
+func validateLoginAcknowledgedPacket(pkt *mcPacket) error {
+	if pkt.packetID != 0x03 {
+		return fmt.Errorf("bad login acknowledged packet id: %d", pkt.packetID)
+	}
+	if len(pkt.data) != 0 {
+		return fmt.Errorf("bad login acknowledged packet data length: %d", len(pkt.data))
+	}
+	return nil
 }
 
 func (c *serverConn) Read(b []byte) (int, error) {
@@ -275,8 +298,12 @@ func (c *serverConn) Write(b []byte) (int, error) {
 }
 
 func (c *serverConn) Close() error {
-	if c.packet != nil {
-		c.packet.Stop()
+	c.lifecycleMu.Lock()
+	c.closed = true
+	packet := c.packet
+	c.lifecycleMu.Unlock()
+	if packet != nil {
+		packet.Stop()
 	}
 	return c.c.Close()
 }
@@ -290,15 +317,15 @@ func (c *serverConn) RemoteAddr() net.Addr {
 }
 
 func (c *serverConn) SetDeadline(t time.Time) error {
-	return c.c.SetDeadline(t)
+	return c.deadlines.setDeadline(t)
 }
 
 func (c *serverConn) SetReadDeadline(t time.Time) error {
-	return c.c.SetReadDeadline(t)
+	return c.deadlines.setReadDeadline(t)
 }
 
 func (c *serverConn) SetWriteDeadline(t time.Time) error {
-	return c.c.SetWriteDeadline(t)
+	return c.deadlines.setWriteDeadline(t)
 }
 
 func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte) (*serverConn, error) {
@@ -315,16 +342,22 @@ func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPri
 	if err != nil {
 		return nil, fmt.Errorf("parse rsa private key: %w", err)
 	}
+	paddingSchedule, err := newServerPaddingSchedule2612()
+	if err != nil {
+		return nil, fmt.Errorf("select padding profile: %w", err)
+	}
 
 	s := &serverConn{
-		reader:        bufio.NewReader(c),
-		writer:        c,
-		c:             c,
-		state:         serverStateHandshake,
-		profiles:      profiles,
-		password:      password,
-		rsaPrivateKey: rsaPrivateKey,
-		rsaPublicKey:  rsaPublicKey,
+		reader:          bufio.NewReader(c),
+		writer:          c,
+		c:               c,
+		state:           serverStateHandshake,
+		profiles:        profiles,
+		password:        password,
+		rsaPrivateKey:   rsaPrivateKey,
+		rsaPublicKey:    rsaPublicKey,
+		paddingSchedule: paddingSchedule,
+		deadlines:       newConnectionDeadlines(c),
 	}
 
 	return s, nil

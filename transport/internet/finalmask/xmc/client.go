@@ -22,12 +22,16 @@ type clientConn struct {
 
 	state clientState
 
-	handshakeLock sync.Mutex
-	profiles      []loginProfile
-	password      string
-	rsaPublicKey  []byte
-	hostname      string
-	packet        *packetStream
+	handshakeLock   sync.Mutex
+	lifecycleMu     sync.Mutex
+	closed          bool
+	profiles        []loginProfile
+	password        string
+	rsaPublicKey    []byte
+	hostname        string
+	paddingSchedule []paddingTurn
+	packet          *packetStream
+	deadlines       *connectionDeadlines
 }
 
 type clientState int
@@ -44,16 +48,22 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 	if len(profiles) == 0 {
 		return nil, fmt.Errorf("empty profiles")
 	}
+	paddingSchedule, err := newClientPaddingSchedule2612()
+	if err != nil {
+		return nil, fmt.Errorf("select padding profile: %w", err)
+	}
 	return &clientConn{
-		reader:        bufio.NewReader(c),
-		writer:        c,
-		c:             c,
-		state:         clientStateHandshake,
-		handshakeLock: sync.Mutex{},
-		profiles:      profiles,
-		password:      password,
-		rsaPublicKey:  rsaPublicKey,
-		hostname:      hostname,
+		reader:          bufio.NewReader(c),
+		writer:          c,
+		c:               c,
+		state:           clientStateHandshake,
+		handshakeLock:   sync.Mutex{},
+		profiles:        profiles,
+		password:        password,
+		rsaPublicKey:    rsaPublicKey,
+		hostname:        hostname,
+		paddingSchedule: paddingSchedule,
+		deadlines:       newConnectionDeadlines(c),
 	}, nil
 }
 
@@ -65,12 +75,10 @@ func (c *clientConn) handshake() error {
 		return nil
 	}
 
-	// Handshake timeout
-	err := c.c.SetDeadline(time.Now().Add(time.Second * 30))
-	if err != nil {
+	if err := c.deadlines.beginHandshake(); err != nil {
 		return fmt.Errorf("set deadline: %w", err)
 	}
-	defer c.c.SetDeadline(time.Time{})
+	defer func() { _ = c.deadlines.endHandshake() }()
 
 	var (
 		protocolVersion Varint        = Varint(775)
@@ -185,7 +193,7 @@ func (c *clientConn) handshake() error {
 
 	pkt, err = readPacket(c.reader)
 	if err != nil {
-		return fmt.Errorf("read login success: %w", err)
+		return fmt.Errorf("read login finished: %w", err)
 	}
 	if pkt.packetID == 0x00 {
 		var reason String
@@ -195,25 +203,36 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("authentication rejected: %s", reason)
 	}
 	if pkt.packetID != 0x02 {
-		return fmt.Errorf("bad login success packet id: %d", pkt.packetID)
+		return fmt.Errorf("bad login finished packet id: %d", pkt.packetID)
 	}
 
 	receivedProfile, err := readLoginSuccess(pkt)
 	if err != nil {
-		return fmt.Errorf("read login success fields: %w", err)
+		return fmt.Errorf("read login finished fields: %w", err)
 	}
 	if receivedProfile != selectedProfile {
 		return fmt.Errorf("login profile mismatch")
 	}
-	if err = writePacket(c.writer, 0x03); err != nil {
+	loginAcknowledgedLength, err := writePacketWithLength(c.writer, 0x03)
+	if err != nil {
 		return fmt.Errorf("write login acknowledged: %w", err)
 	}
+	if err = runPaddingSchedule(c.reader, c.writer, true, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+		return fmt.Errorf("run startup padding: %w", err)
+	}
 
-	c.packet = newPacketStream(c.reader, c.writer, true)
-	c.reader = c.packet
-	c.writer = c.packet
-
+	packet := newPacketStream(c.reader, c.writer, true)
+	c.lifecycleMu.Lock()
+	if c.closed {
+		c.lifecycleMu.Unlock()
+		packet.Stop()
+		return net.ErrClosed
+	}
+	c.packet = packet
+	c.reader = packet
+	c.writer = packet
 	c.state = clientStateProxy
+	c.lifecycleMu.Unlock()
 
 	return nil
 }
@@ -237,8 +256,12 @@ func (c *clientConn) Write(b []byte) (int, error) {
 }
 
 func (c *clientConn) Close() error {
-	if c.packet != nil {
-		c.packet.Stop()
+	c.lifecycleMu.Lock()
+	c.closed = true
+	packet := c.packet
+	c.lifecycleMu.Unlock()
+	if packet != nil {
+		packet.Stop()
 	}
 	return c.c.Close()
 }
@@ -252,13 +275,13 @@ func (c *clientConn) RemoteAddr() net.Addr {
 }
 
 func (c *clientConn) SetDeadline(t time.Time) error {
-	return c.c.SetDeadline(t)
+	return c.deadlines.setDeadline(t)
 }
 
 func (c *clientConn) SetReadDeadline(t time.Time) error {
-	return c.c.SetReadDeadline(t)
+	return c.deadlines.setReadDeadline(t)
 }
 
 func (c *clientConn) SetWriteDeadline(t time.Time) error {
-	return c.c.SetWriteDeadline(t)
+	return c.deadlines.setWriteDeadline(t)
 }
