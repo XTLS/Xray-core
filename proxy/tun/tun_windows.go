@@ -149,13 +149,13 @@ func (t *WindowsTun) Start() (err error) {
 	}
 
 	var retryTimes int
-	var lastErr error
+	var firstErr error
 startOver:
 	if retryTimes > 0 {
 		if retryTimes > 15 {
 			return windows.ERROR_NOT_FOUND
 		}
-		errors.LogErrorInner(context.Background(), lastErr, "Interface configuration failed, retrying attempt ", retryTimes, "/15")
+		errors.LogErrorInner(context.Background(), firstErr, "Interface configuration failed, retrying attempt ", retryTimes, "/15")
 		time.Sleep(time.Second)
 	}
 	retryTimes++
@@ -163,21 +163,21 @@ startOver:
 		if family == windows.AF_INET && route4 || family == windows.AF_INET6 && route6 {
 			err = t.luid.SetRoutesForFamily(family, routesData)
 			if err != nil {
-				lastErr = errors.New("unable to set routes").Base(err)
+				firstErr = errors.New("unable to set routes").Base(err)
 				if err == windows.ERROR_NOT_FOUND {
 					goto startOver
 				}
-				return lastErr
+				return firstErr
 			}
 		}
 		if family == windows.AF_INET && address4 || family == windows.AF_INET6 && address6 {
 			err = t.luid.SetIPAddressesForFamily(family, addresses)
 			if err != nil {
-				lastErr = errors.New("unable to set ips").Base(err)
+				firstErr = errors.New("unable to set ips").Base(err)
 				if err == windows.ERROR_NOT_FOUND {
 					goto startOver
 				}
-				return lastErr
+				return firstErr
 			}
 		}
 		ipif, err := t.luid.IPInterface(family)
@@ -197,19 +197,19 @@ startOver:
 		}
 		err = ipif.Set()
 		if err != nil {
-			lastErr = errors.New("unable to set metric and MTU").Base(err)
+			firstErr = errors.New("unable to set metric and MTU").Base(err)
 			if err == windows.ERROR_NOT_FOUND {
 				goto startOver
 			}
-			return lastErr
+			return firstErr
 		}
 		err = t.luid.SetDNS(family, dns, nil)
 		if err != nil {
-			lastErr = errors.New("unable to set DNS").Base(err)
+			firstErr = errors.New("unable to set DNS").Base(err)
 			if err == windows.ERROR_NOT_FOUND {
 				goto startOver
 			}
-			return lastErr
+			return firstErr
 		}
 	}
 	return nil
