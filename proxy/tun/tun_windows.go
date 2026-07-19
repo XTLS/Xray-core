@@ -121,16 +121,9 @@ func (t *WindowsTun) Start() (err error) {
 		}
 		addresses = append(addresses, prefix)
 	}
-	var dns4, dns6 bool
 	dns := make([]netip.Addr, 0, len(t.options.DNS))
 	for _, ip := range t.options.DNS {
-		addr := netip.MustParseAddr(ip)
-		if addr.Is4() {
-			dns4 = true
-		} else {
-			dns6 = true
-		}
-		dns = append(dns, addr)
+		dns = append(dns, netip.MustParseAddr(ip))
 	}
 	var route4, route6 bool
 	routesMap := make(map[winipcfg.RouteData]struct{})
@@ -210,15 +203,13 @@ startOver:
 			}
 			return lastErr
 		}
-		if family == windows.AF_INET && dns4 || family == windows.AF_INET6 && dns6 {
-			err = t.luid.SetDNS(family, dns, nil)
-			if err != nil {
-				lastErr = errors.New("unable to set DNS").Base(err)
-				if err == windows.ERROR_NOT_FOUND {
-					goto startOver
-				}
-				return lastErr
+		err = t.luid.SetDNS(family, dns, nil)
+		if err != nil {
+			lastErr = errors.New("unable to set DNS").Base(err)
+			if err == windows.ERROR_NOT_FOUND {
+				goto startOver
 			}
+			return lastErr
 		}
 	}
 	return nil
