@@ -10,10 +10,12 @@ import "transport/internet/config.proto";
 
 message Config {
   xray.transport.internet.SocketConfig sockopt = 1;
-  bool overwrite_only = 2;
-  repeated string IPs = 3;
-  repeated uint32 ports = 4;
+  bool local = 2;
+  bool remote = 3;
+  bool remote_once = 4;
   int64 interval_min = 5;
   int64 interval_max = 6;
+  repeated uint32 ports = 7;
+  repeated string IPs = 8;
 }
 
