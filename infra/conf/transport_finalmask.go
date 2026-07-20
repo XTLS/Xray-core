@@ -83,6 +83,7 @@ var (
 		"xdns":          func() interface{} { return new(Xdns) },
 		"xicmp":         func() interface{} { return new(Xicmp) },
 		"realm":         func() interface{} { return new(Realm) },
+		"udphop":        func() interface{} { return new(Realm) },
 	}, "type", "settings")
 )
 
@@ -938,7 +939,6 @@ type QuicParamsConfig struct {
 	BrutalUp                      Bandwidth `json:"brutalUp"`
 	BrutalDown                    Bandwidth `json:"brutalDown"`
 	BrutalDisableLossCompensation bool      `json:"brutalDisableLossCompensation"`
-	UdpHop                        UdpHop    `json:"udpHop"`
 	InitStreamReceiveWindow       uint64    `json:"initStreamReceiveWindow"`
 	MaxStreamReceiveWindow        uint64    `json:"maxStreamReceiveWindow"`
 	InitConnectionReceiveWindow   uint64    `json:"initConnectionReceiveWindow"`
