@@ -56,3 +56,17 @@ func parseTrustedXForwardedFor(md metadata.MD, trusted []string, remoteAddr net.
 	}
 	return nil
 }
+
+func localAddrFromContext(ctx context.Context) net.Addr {
+	var localAddr net.Addr
+	if pr, ok := peer.FromContext(ctx); ok {
+		localAddr = pr.LocalAddr
+	}
+	if localAddr == nil {
+		localAddr = &net.TCPAddr{
+			IP:   []byte{0, 0, 0, 0},
+			Port: 0,
+		}
+	}
+	return localAddr
+}
