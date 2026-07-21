@@ -24,10 +24,16 @@ const (
 type Config struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// @Document The selectors for outbound under observation
-	SubjectSelector []string          `protobuf:"bytes,2,rep,name=subject_selector,json=subjectSelector,proto3" json:"subject_selector,omitempty"`
-	PingConfig      *HealthPingConfig `protobuf:"bytes,3,opt,name=ping_config,json=pingConfig,proto3" json:"ping_config,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	SubjectSelector []string `protobuf:"bytes,2,rep,name=subject_selector,json=subjectSelector,proto3" json:"subject_selector,omitempty"`
+	// @Document Controls how subject_selector entries are checked when there
+	// is more than one. Empty/"all" (default): every matching tag is checked
+	// together. "lazy": entries are treated as an ordered fallback chain, and
+	// an entry's group of tags is only checked once at least one check in a
+	// preceding entry's group failed.
+	SelectorMode  string            `protobuf:"bytes,3,opt,name=selector_mode,json=selectorMode,proto3" json:"selector_mode,omitempty"`
+	PingConfig    *HealthPingConfig `protobuf:"bytes,4,opt,name=ping_config,json=pingConfig,proto3" json:"ping_config,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -65,6 +71,13 @@ func (x *Config) GetSubjectSelector() []string {
 		return x.SubjectSelector
 	}
 	return nil
+}
+
+func (x *Config) GetSelectorMode() string {
+	if x != nil {
+		return x.SelectorMode
+	}
+	return ""
 }
 
 func (x *Config) GetPingConfig() *HealthPingConfig {
@@ -169,10 +182,11 @@ var File_app_observatory_burst_config_proto protoreflect.FileDescriptor
 
 const file_app_observatory_burst_config_proto_rawDesc = "" +
 	"\n" +
-	"\"app/observatory/burst/config.proto\x12\x1fxray.core.app.observatory.burst\"\x87\x01\n" +
+	"\"app/observatory/burst/config.proto\x12\x1fxray.core.app.observatory.burst\"\xac\x01\n" +
 	"\x06Config\x12)\n" +
-	"\x10subject_selector\x18\x02 \x03(\tR\x0fsubjectSelector\x12R\n" +
-	"\vping_config\x18\x03 \x01(\v21.xray.core.app.observatory.burst.HealthPingConfigR\n" +
+	"\x10subject_selector\x18\x02 \x03(\tR\x0fsubjectSelector\x12#\n" +
+	"\rselector_mode\x18\x03 \x01(\tR\fselectorMode\x12R\n" +
+	"\vping_config\x18\x04 \x01(\v21.xray.core.app.observatory.burst.HealthPingConfigR\n" +
 	"pingConfig\"\xd4\x01\n" +
 	"\x10HealthPingConfig\x12 \n" +
 	"\vdestination\x18\x01 \x01(\tR\vdestination\x12\"\n" +

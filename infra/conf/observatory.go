@@ -22,6 +22,9 @@ func (o *ObservatoryConfig) Build() (proto.Message, error) {
 
 type BurstObservatoryConfig struct {
 	SubjectSelector []string `json:"subjectSelector"`
+	// selectorMode controls how subjectSelector entries are checked when
+	// there is more than one. See burst.SelectorModeLazy.
+	SelectorMode string `json:"selectorMode,omitempty"`
 	// health check settings
 	HealthCheck *healthCheckSettings `json:"pingConfig,omitempty"`
 }
@@ -30,8 +33,11 @@ func (b BurstObservatoryConfig) Build() (proto.Message, error) {
 	if b.HealthCheck == nil {
 		return nil, errors.New("BurstObservatory requires a valid pingConfig")
 	}
+	if b.SelectorMode != "" && b.SelectorMode != burst.SelectorModeLazy {
+		return nil, errors.New("unknown selectorMode: ", b.SelectorMode)
+	}
 	if result, err := b.HealthCheck.Build(); err == nil {
-		return &burst.Config{SubjectSelector: b.SubjectSelector, PingConfig: result.(*burst.HealthPingConfig)}, nil
+		return &burst.Config{SubjectSelector: b.SubjectSelector, SelectorMode: b.SelectorMode, PingConfig: result.(*burst.HealthPingConfig)}, nil
 	} else {
 		return nil, err
 	}

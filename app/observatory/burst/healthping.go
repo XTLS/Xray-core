@@ -3,6 +3,7 @@ package burst
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,7 +22,13 @@ type HealthPingSettings struct {
 	SamplingCount int           `json:"sampling"`
 	Timeout       time.Duration `json:"timeout"`
 	HttpMethod    string        `json:"httpMethod"`
+	SelectorMode  string        `json:"selectorMode"`
 }
+
+// SelectorModeLazy makes StartScheduler treat each group as an ordered
+// fallback chain: a group is only checked if at least one check in a
+// preceding group failed.
+const SelectorModeLazy = "lazy"
 
 // HealthPing is the health checker for balancers
 type HealthPing struct {
@@ -36,11 +43,12 @@ type HealthPing struct {
 	Results  map[string]*HealthPingRTTS
 }
 
-// NewHealthPing creates a new HealthPing with settings
-func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *HealthPingConfig) *HealthPing {
+// NewHealthPing creates a new HealthPing with settings. selectorMode
+// controls how groups passed to StartScheduler are checked, see
+// SelectorModeLazy.
+func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *HealthPingConfig, selectorMode string) *HealthPing {
 	settings := &HealthPingSettings{}
 	if config != nil {
-
 		var httpMethod string
 		if config.HttpMethod == "" {
 			httpMethod = "HEAD"
@@ -77,6 +85,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 		// a larger timeout could possibly makes checks run longer
 		settings.Timeout = 5 * time.Second
 	}
+	settings.SelectorMode = selectorMode
 	ctx, cancel := context.WithCancel(ctx)
 	return &HealthPing{
 		ctx:        ctx,
@@ -87,8 +96,9 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	}
 }
 
-// StartScheduler implements the HealthChecker
-func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
+// StartScheduler implements the HealthChecker. The selector returns tags
+// grouped by their subjectSelector entry, in the same order as configured.
+func (h *HealthPing) StartScheduler(selector func() ([][]string, error)) {
 	if h.ticker != nil {
 		return
 	}
@@ -98,18 +108,18 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 
 	// init run to get a fast check result
 	go func() {
-		tags, err := selector()
+		groups, err := selector()
 		if err != nil {
 			errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
 			return
 		}
-		h.Check(tags)
+		h.checkGroups(h.ctx, groups, 0, 1)
 	}()
 
 	go func() {
 		for {
 			go func() {
-				tags, err := selector()
+				groups, err := selector()
 				if err != nil {
 					errors.LogWarning(h.ctx, "error select outbounds for scheduled health check: ", err)
 					return
@@ -120,9 +130,9 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 					errors.LogDebug(h.ctx, "scheduled health check not finished before next round, canceling previous one")
 					(*old)()
 				}
-				h.doCheck(subCtx, tags, interval, h.Settings.SamplingCount)
+				h.checkGroups(subCtx, groups, interval, h.Settings.SamplingCount)
 				h.cancelPending.CompareAndSwap(&cancel, nil)
-				h.Cleanup(tags)
+				h.Cleanup(flattenGroups(groups))
 			}()
 			select {
 			case <-ticker.C:
@@ -132,6 +142,41 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 			}
 		}
 	}()
+}
+
+// checkGroups checks the given tag groups according to h.Settings.SelectorMode.
+// In the default mode, every group is checked together as a single pool,
+// matching the historical behavior. In SelectorModeLazy, groups are checked
+// in order and a group is only checked if at least one check in a
+// preceding group failed.
+func (h *HealthPing) checkGroups(ctx context.Context, groups [][]string, duration time.Duration, rounds int) {
+	if h.Settings.SelectorMode != SelectorModeLazy {
+		h.doCheck(ctx, flattenGroups(groups), duration, rounds)
+		return
+	}
+	for _, tags := range groups {
+		if len(tags) == 0 {
+			continue
+		}
+		if !h.doCheck(ctx, tags, duration, rounds) {
+			return
+		}
+	}
+}
+
+// flattenGroups merges tag groups into a single deduplicated tag list.
+func flattenGroups(groups [][]string) []string {
+	switch len(groups) {
+	case 0:
+		return nil
+	case 1:
+		return groups[0]
+	default:
+		tags := slices.Concat(groups...)
+		slices.Sort(tags)
+
+		return slices.Compact(tags)
+	}
 }
 
 // StopScheduler implements the HealthChecker
@@ -162,7 +207,8 @@ type rtt struct {
 // doCheck performs the 'rounds' amount checks in given 'duration'. You should make
 // sure all tags are valid for current balancer
 // cancel ctx will stop all pending checks
-func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.Duration, rounds int) {
+// It returns true if at least one check failed (or could not be measured).
+func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.Duration, rounds int) (hasFailed bool) {
 	count := len(tags) * rounds
 	if count == 0 {
 		return
@@ -221,13 +267,17 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 				// should not put results when network is down
 				h.PutResult(rtt.handler, rtt.value)
 			}
+			if rtt.value == rttFailed {
+				hasFailed = true
+			}
 		case <-ctx.Done():
 			for _, timer := range timers {
 				timer.Stop()
 			}
-			return
+			return true
 		}
 	}
+	return
 }
 
 // PutResult put a ping rtt to results

@@ -68,14 +68,19 @@ func (o *Observer) Type() interface{} {
 func (o *Observer) Start() error {
 	if o.config != nil && len(o.config.SubjectSelector) != 0 {
 		o.finished = done.New()
-		o.hp.StartScheduler(func() ([]string, error) {
+		o.hp.StartScheduler(func() ([][]string, error) {
 			hs, ok := o.ohm.(outbound.HandlerSelector)
 			if !ok {
 				return nil, errors.New("outbound.Manager is not a HandlerSelector")
 			}
 
-			outbounds := hs.Select(o.config.SubjectSelector)
-			return outbounds, nil
+			groups := make([][]string, 0, len(o.config.SubjectSelector))
+			for _, selector := range o.config.SubjectSelector {
+				if tags := hs.Select([]string{selector}); len(tags) > 0 {
+					groups = append(groups, tags)
+				}
+			}
+			return groups, nil
 		})
 	}
 	return nil
@@ -99,7 +104,7 @@ func New(ctx context.Context, config *Config) (*Observer, error) {
 	if err != nil {
 		return nil, errors.New("Cannot get depended features").Base(err)
 	}
-	hp := NewHealthPing(ctx, dispatcher, config.PingConfig)
+	hp := NewHealthPing(ctx, dispatcher, config.PingConfig, config.SelectorMode)
 	return &Observer{
 		config: config,
 		ctx:    ctx,

@@ -11,7 +11,15 @@ message Config {
   */
   repeated string subject_selector = 2;
 
-  HealthPingConfig ping_config = 3;
+  /* @Document Controls how subject_selector entries are checked when there
+  is more than one. Empty/"all" (default): every matching tag is checked
+  together. "lazy": entries are treated as an ordered fallback chain, and
+  an entry's group of tags is only checked once at least one check in a
+  preceding entry's group failed.
+  */
+  string selector_mode = 3;
+
+  HealthPingConfig ping_config = 4;
 }
 
 message HealthPingConfig {
