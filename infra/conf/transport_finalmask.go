@@ -84,7 +84,7 @@ var (
 		"xdns":          func() interface{} { return new(Xdns) },
 		"xicmp":         func() interface{} { return new(Xicmp) },
 		"realm":         func() interface{} { return new(Realm) },
-		"udphop":        func() interface{} { return new(Realm) },
+		"udphop":        func() interface{} { return new(UDPHop) },
 	}, "type", "settings")
 )
 
