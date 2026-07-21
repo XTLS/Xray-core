@@ -86,12 +86,13 @@ func (l *Listener) OnReceive(payload *buf.Buffer, src net.Destination) {
 	}
 
 	l.Lock()
-	defer l.Unlock()
 
 	conn, found := l.sessions[id]
+	var netConn stat.Connection
 
 	if !found {
 		if cmd == CommandTerminate {
+			l.Unlock()
 			return
 		}
 		writer := &Writer{
@@ -110,15 +111,19 @@ func (l *Listener) OnReceive(payload *buf.Buffer, src net.Destination) {
 			RemoteAddr:   remoteAddr,
 			Conversation: conv,
 		}, writer, writer, l.config)
-		var netConn stat.Connection = conn
+		netConn = conn
 		if l.tlsConfig != nil {
 			netConn = tls.Server(conn, l.tlsConfig)
 		}
 
-		l.addConn(netConn)
 		l.sessions[id] = conn
 	}
 	conn.Input(segments)
+	l.Unlock()
+
+	if !found {
+		go l.addConn(netConn)
+	}
 }
 
 func (l *Listener) Remove(id ConnectionID) {
