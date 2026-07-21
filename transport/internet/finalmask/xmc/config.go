@@ -5,9 +5,6 @@ import (
 	"net"
 )
 
-func (c *Config) TCP() {
-}
-
 func (c *Config) WrapConnClient(conn net.Conn) (net.Conn, error) {
 	cc, err := newClientConn(conn, c.Usernames, c.Password, c.RsaPublicKey, c.Hostname)
 	if err != nil {
