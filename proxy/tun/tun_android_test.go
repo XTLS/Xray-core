@@ -3,8 +3,6 @@
 package tun
 
 import (
-	"net"
-	"net/netip"
 	"testing"
 )
 
@@ -65,34 +63,6 @@ func TestAndroidRoutes(t *testing.T) {
 		_, err := androidRoutes([]string{"bad/prefix"}, 2022, 0)
 		if err == nil {
 			t.Error("expected error for invalid CIDR")
-		}
-	})
-}
-
-// prefixToIPNet helper
-func TestPrefixToIPNet(t *testing.T) {
-	t.Run("converts IPv4 prefix", func(t *testing.T) {
-		got := prefixToIPNet(netip.MustParsePrefix("198.18.0.1/24"))
-		if got == nil {
-			t.Fatal("got nil")
-		}
-		if !got.IP.Equal(net.ParseIP("198.18.0.1")) {
-			t.Errorf("IP=%s, want 198.18.0.1", got.IP)
-		}
-		ones, bits := got.Mask.Size()
-		if ones != 24 || bits != 32 {
-			t.Errorf("Mask=%d/%d, want 24/32", ones, bits)
-		}
-	})
-
-	t.Run("converts IPv6 prefix", func(t *testing.T) {
-		got := prefixToIPNet(netip.MustParsePrefix("fc00::1/126"))
-		if got == nil {
-			t.Fatal("got nil")
-		}
-		ones, bits := got.Mask.Size()
-		if ones != 126 || bits != 128 {
-			t.Errorf("Mask=%d/%d, want 126/128", ones, bits)
 		}
 	})
 }

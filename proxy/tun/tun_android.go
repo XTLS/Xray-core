@@ -339,19 +339,26 @@ func (t *AndroidTun) unsetRules() error {
 // ---------------------------------------------------------------------------
 
 func (t *AndroidTun) monitorRouteChanges() {
+	if netlinkBanned() {
+		errors.LogInfo(context.Background(), "[tun] android: netlink banned by Google, fallback to polling /proc/net/route")
+		t.pollRouteChanges()
+		return
+	}
+
 	routeCh := make(chan netlink.RouteUpdate, 1)
 	if err := netlink.RouteSubscribe(routeCh, t.routeMonitorStop); err != nil {
-		errors.LogInfo(context.Background(), "[tun] android: failed to subscribe route changes, autoOutboundsInterface won't auto-update: ", err)
+		errors.LogInfo(context.Background(), "[tun] android: failed to subscribe route changes: ", err)
+		t.pollRouteChanges()
 		return
 	}
 
 	linkCh := make(chan netlink.LinkUpdate, 1)
 	if err := netlink.LinkSubscribe(linkCh, t.routeMonitorStop); err != nil {
-		errors.LogInfo(context.Background(), "[tun] android: failed to subscribe link changes, autoOutboundsInterface won't auto-update: ", err)
+		errors.LogInfo(context.Background(), "[tun] android: failed to subscribe link changes: ", err)
+		t.pollRouteChanges()
 		return
 	}
 
-	// Debounce timer: network transition takes time, don't query instantly
 	timer := time.NewTimer(0)
 	if !timer.Stop() {
 		<-timer.C
@@ -370,17 +377,7 @@ func (t *AndroidTun) monitorRouteChanges() {
 			}
 			timer.Reset(time.Second)
 		case <-timer.C:
-			if updater == nil {
-				continue
-			}
-			// Pre-check: only call shared updater.Update() when we're
-			// confident it will succeed. On failure it nils the interface,
-			// causing unbind → loop → outage during network transitions.
-			if updater.fixedName != "" {
-				updater.Update()
-			} else if iface, err := findOutboundAuto(updater.tunIndex); err == nil && iface != nil {
-				updater.Update()
-			}
+			t.updateOutboundInterface()
 		case <-t.routeMonitorStop:
 			if !timer.Stop() {
 				<-timer.C
@@ -388,6 +385,53 @@ func (t *AndroidTun) monitorRouteChanges() {
 			return
 		}
 	}
+}
+
+// pollRouteChanges polls /proc/net/route every 5s as fallback when netlink is banned.
+func (t *AndroidTun) pollRouteChanges() {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			t.updateOutboundInterface()
+		case <-t.routeMonitorStop:
+			return
+		}
+	}
+}
+
+// updateOutboundInterface updates the shared InterfaceUpdater directly,
+// avoiding double-query that happens via updater.Update().
+func (t *AndroidTun) updateOutboundInterface() {
+	if updater == nil {
+		return
+	}
+	var iface *net.Interface
+	var err error
+	if updater.fixedName != "" {
+		iface, err = findOutboundByName(updater.fixedName, updater.tunIndex)
+	} else {
+		iface, err = findOutboundAuto(updater.tunIndex)
+	}
+	if err != nil || iface == nil {
+		return
+	}
+	updater.Lock()
+	if updater.iface == nil || updater.iface.Index != iface.Index || updater.iface.Name != iface.Name {
+		updater.iface = iface
+	}
+	updater.Unlock()
+}
+
+// netlinkBanned checks whether Android 14+ has banned netlink for this process.
+func netlinkBanned() bool {
+	fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_DGRAM, unix.NETLINK_ROUTE)
+	if err != nil {
+		return true
+	}
+	defer unix.Close(fd)
+	return unix.Bind(fd, &unix.SockaddrNetlink{Family: unix.AF_NETLINK}) != nil
 }
 
 // ---------------------------------------------------------------------------
@@ -437,7 +481,11 @@ func findOutboundAuto(tunIndex int) (*net.Interface, error) {
 }
 
 // androidDefaultRouteTable scans ip rules to find the routing table
-// Android uses for the physical default route (Mask == 0xFFFF).
+// Android uses for the physical default route.
+//
+// On Android the default route lives in a per-network table (e.g. wlan0),
+// not RT_TABLE_MAIN. The ip rules entry for it has Mask=0xFFFF.
+// This matches sing-tun's detection logic.
 func androidDefaultRouteTable(family int) (int, error) {
 	rules, err := netlink.RuleList(family)
 	if err != nil {
@@ -459,9 +507,8 @@ func findInterfaceInTable(table, tunIndex int) (*net.Interface, error) {
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[int]bool)
 	for _, r := range routes {
-		if r.LinkIndex == 0 || seen[r.LinkIndex] {
+		if r.LinkIndex == 0 {
 			continue
 		}
 		iface, err := net.InterfaceByIndex(r.LinkIndex)
@@ -474,7 +521,6 @@ func findInterfaceInTable(table, tunIndex int) (*net.Interface, error) {
 		if iface.Flags&net.FlagUp == 0 {
 			continue
 		}
-		seen[r.LinkIndex] = true
 		if r.Dst == nil || r.Dst.IP.Equal(net.IPv4zero) {
 			return iface, nil
 		}
@@ -509,12 +555,4 @@ func findDefaultRouteFromProc(tunIndex int) (*net.Interface, error) {
 		return iface, nil
 	}
 	return nil, errors.New("no default route in /proc/net/route")
-}
-
-// prefixToIPNet converts a netip.Prefix to a *net.IPNet for use with netlink.
-func prefixToIPNet(prefix netip.Prefix) *net.IPNet {
-	return &net.IPNet{
-		IP:   prefix.Addr().AsSlice(),
-		Mask: net.CIDRMask(prefix.Bits(), prefix.Addr().BitLen()),
-	}
 }
