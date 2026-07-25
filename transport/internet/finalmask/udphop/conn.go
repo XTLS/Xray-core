@@ -42,8 +42,8 @@ type udpHopConn struct {
 
 	intervalMin int64
 	intervalMax int64
-	ports       []uint32
-	ips         []netip.Prefix
+	remotePorts []uint32
+	remoteIPs   []netip.Prefix
 
 	deadline      time.Time
 	readDeadline  time.Time
@@ -62,9 +62,9 @@ func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	if c.IntervalMin < 5 || c.IntervalMax < 5 {
 		return nil, errors.New("invalid interval")
 	}
-	ips := make([]netip.Prefix, 0, len(c.IPs))
-	for _, ip := range c.IPs {
-		ips = append(ips, netip.MustParsePrefix(ip))
+	remoteIPs := make([]netip.Prefix, 0, len(c.RemoteIPs))
+	for _, ip := range c.RemoteIPs {
+		remoteIPs = append(remoteIPs, netip.MustParsePrefix(ip))
 	}
 	conn := &udpHopConn{
 		conn:       raw,
@@ -75,8 +75,8 @@ func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		intervalMin: c.IntervalMin,
 		intervalMax: c.IntervalMax,
-		ports:       c.Ports,
-		ips:         ips,
+		remotePorts: c.RemotePorts,
+		remoteIPs:   remoteIPs,
 
 		readCh:  make(chan packet),
 		closeCh: make(chan struct{}),
@@ -100,11 +100,11 @@ func (c *udpHopConn) hop(addr *net.UDPAddr) {
 	newAddr := &net.UDPAddr{IP: addr.IP, Port: addr.Port}
 	newConn := c.conn
 	if c.remote || c.remoteOnce && c.addr == nil {
-		if len(c.ports) > 0 {
-			newAddr.Port = int(c.ports[mrand.Intn(len(c.ports))])
+		if len(c.remotePorts) > 0 {
+			newAddr.Port = int(c.remotePorts[mrand.Intn(len(c.remotePorts))])
 		}
-		if len(c.ips) > 0 {
-			newAddr.IP = randPrefix(c.ips[mrand.Intn(len(c.ips))])
+		if len(c.remoteIPs) > 0 {
+			newAddr.IP = randPrefix(c.remoteIPs[mrand.Intn(len(c.remoteIPs))])
 		}
 	}
 	if c.local {

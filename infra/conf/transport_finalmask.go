@@ -14,6 +14,7 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -23,6 +24,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
+	"github.com/xtls/xray-core/transport/internet/finalmask/udphop"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xmc"
@@ -903,6 +905,62 @@ func (c *Realm) Build() (proto.Message, error) {
 		TlsConfig:   tlsConfig,
 		IPMode:      strings.ToLower(c.IPMode),
 		PortMapping: c.PortMapping,
+	}, nil
+}
+
+type UDPHop struct {
+	Sockopt     *SocketConfig `json:"sockopt"`
+	Mode        string        `json:"mode"`
+	Interval    Int32Range    `json:"interval"`
+	RemotePorts PortList      `json:"remotePorts"`
+	RemoteIPs   []string      `json:"remoteIPs"`
+}
+
+func (c *UDPHop) Build() (proto.Message, error) {
+	var sockopt *internet.SocketConfig
+	if c.Sockopt != nil {
+		var err error
+		sockopt, err = c.Sockopt.Build()
+		if err != nil {
+			return nil, err
+		}
+	}
+	var local, remote, remoteOnce bool
+	for _, mode := range strings.Split(c.Mode, ",") {
+		switch strings.ToLower(mode) {
+		case "local":
+			local = true
+		case "remote":
+			remote = true
+		case "remoteOnce":
+			remoteOnce = true
+		default:
+			return nil, errors.New("invalid mode ", mode)
+		}
+	}
+	var remoteIPs []string
+	for _, ip := range c.RemoteIPs {
+		prefix, err := netip.ParsePrefix(ip)
+		if err == nil {
+			remoteIPs = append(remoteIPs, prefix.String())
+			continue
+		}
+		addr, err := netip.ParseAddr(ip)
+		if err == nil {
+			remoteIPs = append(remoteIPs, netip.PrefixFrom(addr, addr.BitLen()).String())
+			continue
+		}
+		return nil, errors.New("invalid ip ", ip)
+	}
+	return &udphop.Config{
+		Sockopt:     sockopt,
+		Local:       local,
+		Remote:      remote,
+		RemoteOnce:  remoteOnce,
+		IntervalMin: int64(c.Interval.From),
+		IntervalMax: int64(c.Interval.To),
+		RemotePorts: c.RemotePorts.Build().Ports(),
+		RemoteIPs:   remoteIPs,
 	}, nil
 }
 
