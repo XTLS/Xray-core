@@ -103,12 +103,11 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 
 	ctx = session.ContextWithFullHandler(ctx, h)
 
-	newCtx := ctx
 	if h.streamSettings != nil {
-		newCtx = session.ContextWithStreamSettings(newCtx, h.streamSettings)
+		ctx = session.ContextWithStreamSettings(ctx, h.streamSettings)
 	}
 
-	rawProxyHandler, err := common.CreateObject(newCtx, proxyConfig)
+	rawProxyHandler, err := common.CreateObject(ctx, proxyConfig)
 	if err != nil {
 		return nil, err
 	}
