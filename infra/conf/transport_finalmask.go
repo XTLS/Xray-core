@@ -863,11 +863,11 @@ func (c *Realm) Build() (proto.Message, error) {
 }
 
 type UDPHop struct {
-	Sockopt  *SocketConfig `json:"sockopt"`
-	Mode     string        `json:"mode"`
-	Interval Int32Range    `json:"interval"`
-	Ports    PortList      `json:"ports"`
-	IPs      []string      `json:"ips"`
+	Sockopt     *SocketConfig `json:"sockopt"`
+	Mode        string        `json:"mode"`
+	Interval    Int32Range    `json:"interval"`
+	RemotePorts PortList      `json:"remotePorts"`
+	RemoteIPs   []string      `json:"remoteIPs"`
 }
 
 func (c *UDPHop) Build() (proto.Message, error) {
@@ -892,16 +892,16 @@ func (c *UDPHop) Build() (proto.Message, error) {
 			return nil, errors.New("invalid mode ", mode)
 		}
 	}
-	var ips []string
-	for _, ip := range c.IPs {
+	var remoteIPs []string
+	for _, ip := range c.RemoteIPs {
 		prefix, err := netip.ParsePrefix(ip)
 		if err == nil {
-			ips = append(ips, prefix.String())
+			remoteIPs = append(remoteIPs, prefix.String())
 			continue
 		}
 		addr, err := netip.ParseAddr(ip)
 		if err == nil {
-			ips = append(ips, netip.PrefixFrom(addr, addr.BitLen()).String())
+			remoteIPs = append(remoteIPs, netip.PrefixFrom(addr, addr.BitLen()).String())
 			continue
 		}
 		return nil, errors.New("invalid ip ", ip)
@@ -913,8 +913,8 @@ func (c *UDPHop) Build() (proto.Message, error) {
 		RemoteOnce:  remoteOnce,
 		IntervalMin: int64(c.Interval.From),
 		IntervalMax: int64(c.Interval.To),
-		Ports:       c.Ports.Build().Ports(),
-		IPs:         ips,
+		RemotePorts: c.RemotePorts.Build().Ports(),
+		RemoteIPs:   remoteIPs,
 	}, nil
 }
 

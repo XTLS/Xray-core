@@ -15,7 +15,7 @@ message Config {
   bool remote_once = 4;
   int64 interval_min = 5;
   int64 interval_max = 6;
-  repeated uint32 ports = 7;
-  repeated string IPs = 8;
+  repeated uint32 remote_ports = 7;
+  repeated string remoteIPs = 8;
 }
 

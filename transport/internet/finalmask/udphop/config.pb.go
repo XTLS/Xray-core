@@ -30,8 +30,8 @@ type Config struct {
 	RemoteOnce    bool                   `protobuf:"varint,4,opt,name=remote_once,json=remoteOnce,proto3" json:"remote_once,omitempty"`
 	IntervalMin   int64                  `protobuf:"varint,5,opt,name=interval_min,json=intervalMin,proto3" json:"interval_min,omitempty"`
 	IntervalMax   int64                  `protobuf:"varint,6,opt,name=interval_max,json=intervalMax,proto3" json:"interval_max,omitempty"`
-	Ports         []uint32               `protobuf:"varint,7,rep,packed,name=ports,proto3" json:"ports,omitempty"`
-	IPs           []string               `protobuf:"bytes,8,rep,name=IPs,proto3" json:"IPs,omitempty"`
+	RemotePorts   []uint32               `protobuf:"varint,7,rep,packed,name=remote_ports,json=remotePorts,proto3" json:"remote_ports,omitempty"`
+	RemoteIPs     []string               `protobuf:"bytes,8,rep,name=remoteIPs,proto3" json:"remoteIPs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -108,16 +108,16 @@ func (x *Config) GetIntervalMax() int64 {
 	return 0
 }
 
-func (x *Config) GetPorts() []uint32 {
+func (x *Config) GetRemotePorts() []uint32 {
 	if x != nil {
-		return x.Ports
+		return x.RemotePorts
 	}
 	return nil
 }
 
-func (x *Config) GetIPs() []string {
+func (x *Config) GetRemoteIPs() []string {
 	if x != nil {
-		return x.IPs
+		return x.RemoteIPs
 	}
 	return nil
 }
@@ -126,7 +126,7 @@ var File_transport_internet_finalmask_udphop_config_proto protoreflect.FileDescr
 
 const file_transport_internet_finalmask_udphop_config_proto_rawDesc = "" +
 	"\n" +
-	"0transport/internet/finalmask/udphop/config.proto\x12(xray.transport.internet.finalmask.udphop\x1a\x1ftransport/internet/config.proto\"\x86\x02\n" +
+	"0transport/internet/finalmask/udphop/config.proto\x12(xray.transport.internet.finalmask.udphop\x1a\x1ftransport/internet/config.proto\"\x9f\x02\n" +
 	"\x06Config\x12?\n" +
 	"\asockopt\x18\x01 \x01(\v2%.xray.transport.internet.SocketConfigR\asockopt\x12\x14\n" +
 	"\x05local\x18\x02 \x01(\bR\x05local\x12\x16\n" +
@@ -134,9 +134,9 @@ const file_transport_internet_finalmask_udphop_config_proto_rawDesc = "" +
 	"\vremote_once\x18\x04 \x01(\bR\n" +
 	"remoteOnce\x12!\n" +
 	"\finterval_min\x18\x05 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x06 \x01(\x03R\vintervalMax\x12\x14\n" +
-	"\x05ports\x18\a \x03(\rR\x05ports\x12\x10\n" +
-	"\x03IPs\x18\b \x03(\tR\x03IPsB\x9a\x01\n" +
+	"\finterval_max\x18\x06 \x01(\x03R\vintervalMax\x12!\n" +
+	"\fremote_ports\x18\a \x03(\rR\vremotePorts\x12\x1c\n" +
+	"\tremoteIPs\x18\b \x03(\tR\tremoteIPsB\x9a\x01\n" +
 	",com.xray.transport.internet.finalmask.udphopP\x01Z=github.com/xtls/xray-core/transport/internet/finalmask/udphop\xaa\x02(Xray.Transport.Internet.Finalmask.Udphopb\x06proto3"
 
 var (
