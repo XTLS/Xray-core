@@ -13,12 +13,14 @@ import (
 )
 
 // UseStrictJSON, when true, makes JSON config decoders skip the custom
-// comment-stripping reader and parse input as strict RFC 8259 JSON.
+// comment-stripping reader (parse as strict RFC 8259 JSON).
 //
 // Enabled by setting the env variable xray.json.strict=true (or its normalized
-// form XRAY_JSON_STRICT=true). Default false preserves backward-compatible
-// behavior for human-edited configs that may contain comments or other
-// JSON5/JSONC syntax.
+// form XRAY_JSON_STRICT=true). Default false keeps comment-stripping enabled.
+//
+// The same env variable controls DisallowUnknownFields. When set to "false",
+// unknown fields are allowed (for configs with fields from newer versions).
+// Default (unset or "true") rejects unknown fields.
 var UseStrictJSON = platform.NewEnvFlag(platform.UseStrictJSON).GetValue(func() string { return "" }) == "true"
 
 func MergeConfigFromFiles(files []*core.ConfigSource) (string, error) {

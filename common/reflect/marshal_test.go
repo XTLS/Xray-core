@@ -224,16 +224,6 @@ func getConfig() string {
           "tcpcongestion": "bbr",
           "tcpMptcp": true
         }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": [
-          "http",
-          "tls",
-          "quic"
-        ],
-        "metadataOnly": false,
-        "routeOnly": true
       }
     }
   ]

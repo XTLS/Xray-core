@@ -79,16 +79,23 @@ func executeRun(cmd *base.Command, args []string) {
 	}
 
 	printVersion()
+
+	if *test {
+		configFiles := getConfigFilePath(false)
+		_, err := core.LoadConfig(getConfigFormat(), configFiles)
+		if err != nil {
+			fmt.Println("Config error:", err)
+			os.Exit(23)
+		}
+		fmt.Println("Configuration OK.")
+		os.Exit(0)
+	}
+
 	server, err := startXray()
 	if err != nil {
 		fmt.Println("Failed to start:", err)
 		// Configuration error. Exit with a special value to prevent systemd from restarting.
 		os.Exit(23)
-	}
-
-	if *test {
-		fmt.Println("Configuration OK.")
-		os.Exit(0)
 	}
 
 	if err := server.Start(); err != nil {

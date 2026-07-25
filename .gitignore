@@ -63,6 +63,10 @@ node_modules/
 Thumbs.db
 ehthumbs.db
 
+# AI-generated collateral
+.scratch/
+docs/
+
 # Other common ignores
 *.bak
 *.tmp

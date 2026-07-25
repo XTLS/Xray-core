@@ -8,6 +8,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/pelletier/go-toml"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 	json_reader "github.com/xtls/xray-core/infra/conf/json"
@@ -40,6 +41,10 @@ func findOffset(b []byte, o int) *offset {
 	return &offset{line: line, char: char}
 }
 
+func rejectUnknownFields() bool {
+	return platform.NewEnvFlag(platform.UseStrictJSON).GetValue(func() string { return "" }) != "false"
+}
+
 // DecodeJSONConfig reads from reader and decode the config into *conf.Config
 // syntax error could be detected.
 //
@@ -53,6 +58,9 @@ func DecodeJSONConfig(reader io.Reader) (*conf.Config, error) {
 		Reader: reader,
 	}, jsonContent)
 	decoder := json.NewDecoder(jsonReader)
+	if rejectUnknownFields() {
+		decoder.DisallowUnknownFields()
+	}
 
 	if err := decoder.Decode(jsonConfig); err != nil {
 		var pos *offset
@@ -83,7 +91,11 @@ func DecodeJSONConfigStrict(reader io.Reader) (*conf.Config, error) {
 		return nil, errors.New("failed to read config file").Base(err)
 	}
 	jsonConfig := &conf.Config{}
-	if err := json.Unmarshal(data, jsonConfig); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	if rejectUnknownFields() {
+		decoder.DisallowUnknownFields()
+	}
+	if err := decoder.Decode(jsonConfig); err != nil {
 		return nil, errors.New("failed to parse remote JSON config").Base(err)
 	}
 	return jsonConfig, nil
