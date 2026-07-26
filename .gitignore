@@ -66,6 +66,8 @@ ehthumbs.db
 # AI-generated collateral
 .scratch/
 docs/
+CLAUDE.md
+AGENTS.md
 
 # Other common ignores
 *.bak
