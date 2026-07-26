@@ -18,9 +18,9 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet/rawconn"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
@@ -70,7 +70,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
-	if !proxy.IsRAWTransportWithoutSecurity(conn) {
+	if !rawconn.IsRAW(conn) {
 		inbound.CanSpliceCopy = 3
 	}
 

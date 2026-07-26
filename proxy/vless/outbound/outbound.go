@@ -1,15 +1,12 @@
 package outbound
 
 import (
-	"bytes"
 	"context"
 	gotls "crypto/tls"
 	"encoding/base64"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	utls "github.com/refraction-networking/utls"
 	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
@@ -30,12 +27,13 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
+	"github.com/xtls/xray-core/proxy/vision"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/rawconn"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -245,8 +243,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		Flow: account.Flow,
 	}
 
-	var input *bytes.Reader
-	var rawInput *bytes.Buffer
 	allowUDP443 := false
 	switch requestAddons.Flow {
 	case vless.XRV + "-udp443":
@@ -263,30 +259,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		case protocol.RequestCommandMux:
 			fallthrough // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
-			var t reflect.Type
-			var p uintptr
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
-				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
-					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
+				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !rawconn.IsRAW(iConn) {
+					ob.CanSpliceCopy = 3
 				}
-				t = reflect.TypeOf(commonConn).Elem()
-				p = uintptr(unsafe.Pointer(commonConn))
-			} else if tlsConn, ok := iConn.(*tls.Conn); ok {
-				t = reflect.TypeOf(tlsConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(tlsConn.Conn))
-			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
-				t = reflect.TypeOf(utlsConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(utlsConn.Conn))
-			} else if realityConn, ok := iConn.(*reality.UConn); ok {
-				t = reflect.TypeOf(realityConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(realityConn.Conn))
-			} else {
-				return errors.New("XTLS only supports TLS and REALITY directly for now.").AtWarning()
 			}
-			i, _ := t.FieldByName("input")
-			r, _ := t.FieldByName("rawInput")
-			input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
-			rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+			if err := checkConnType(iConn); err != nil {
+				return err
+			}
 		default:
 			panic("unknown VLESS request command")
 		}
@@ -311,7 +291,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
-	trafficState := proxy.NewTrafficState(account.ID.Bytes())
+	trafficState := vision.NewTrafficState(account.ID.Bytes())
 	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
@@ -327,7 +307,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		// default: serverWriter := bufferWriter
-		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
+		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, vision.DirectionUpstream, ctx, conn, ob)
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
 		}
@@ -389,7 +369,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		// default: serverReader := buf.NewReader(conn)
 		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
 		if requestAddons.Flow == vless.XRV {
-			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx, conn, input, rawInput, ob)
+			serverReader = vision.WrapReader(serverReader, conn, trafficState, vision.DirectionDownstream, ctx)
 		}
 		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
 			if requestAddons.Flow == vless.XRV {
@@ -400,7 +380,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 
 		if requestAddons.Flow == vless.XRV {
-			err = encoding.XtlsRead(serverReader, clientWriter, timer, conn, trafficState, false, ctx)
+			err = vision.RunReader(serverReader, clientWriter, conn, trafficState, vision.DirectionDownstream, ctx, timer)
 		} else {
 			// from serverReader.ReadMultiBuffer to clientWriter.WriteMultiBuffer
 			err = buf.Copy(serverReader, clientWriter, buf.UpdateActivity(timer))
@@ -478,6 +458,14 @@ func (r *Reverse) monitor() error {
 		}()
 	}
 	return nil
+}
+
+func checkConnType(iConn stat.Connection) error {
+	switch iConn.(type) {
+	case *tls.Conn, *tls.UConn, *reality.UConn:
+		return nil
+	}
+	return errors.New("XTLS only supports TLS and REALITY directly for now.").AtWarning()
 }
 
 func (r *Reverse) Start() error {

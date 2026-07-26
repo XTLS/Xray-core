@@ -22,8 +22,8 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet/rawconn"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -96,7 +96,7 @@ func (s *Server) ProcessWithFirstbyte(ctx context.Context, network net.Network, 
 	inbound.User = &protocol.MemoryUser{
 		Level: s.config.UserLevel,
 	}
-	if !proxy.IsRAWTransportWithoutSecurity(conn) {
+	if !rawconn.IsRAW(conn) {
 		inbound.CanSpliceCopy = 3
 	}
 	var reader *bufio.Reader

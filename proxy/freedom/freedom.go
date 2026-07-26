@@ -25,8 +25,8 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet/rawconn"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -430,14 +430,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	responseDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
-		if destination.Network == net.Network_TCP && useSplice.Load() && proxy.IsRAWTransportWithoutSecurity(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
+		if destination.Network == net.Network_TCP && useSplice.Load() && rawconn.IsRAW(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
 			var writeConn net.Conn
 			var inTimer *signal.ActivityTimer
 			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
 				writeConn = inbound.Conn
 				inTimer = inbound.Timer
 			}
-			return proxy.CopyRawConnIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
+			return rawconn.CopyIfExist(ctx, conn, writeConn, link.Writer, timer, inTimer)
 		}
 		var reader buf.Reader
 		if destination.Network == net.Network_TCP {

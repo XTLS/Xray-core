@@ -1,17 +1,13 @@
 package encoding
 
 import (
-	"context"
 	"io"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/uuid"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 )
 
@@ -170,35 +166,4 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 	}
 
 	return responseAddons, nil
-}
-
-// XtlsRead can switch to splice copy
-func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer, conn net.Conn, trafficState *proxy.TrafficState, isUplink bool, ctx context.Context) error {
-	err := func() error {
-		for {
-			if isUplink && trafficState.Inbound.UplinkReaderDirectCopy || !isUplink && trafficState.Outbound.DownlinkReaderDirectCopy {
-				var writerConn net.Conn
-				var inTimer *signal.ActivityTimer
-				if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {
-					writerConn = inbound.Conn
-					inTimer = inbound.Timer
-				}
-				return proxy.CopyRawConnIfExist(ctx, conn, writerConn, writer, timer, inTimer)
-			}
-			buffer, err := reader.ReadMultiBuffer()
-			if !buffer.IsEmpty() {
-				timer.Update()
-				if werr := writer.WriteMultiBuffer(buffer); werr != nil {
-					return werr
-				}
-			}
-			if err != nil {
-				return err
-			}
-		}
-	}()
-	if err != nil && errors.Cause(err) != io.EOF {
-		return err
-	}
-	return nil
 }

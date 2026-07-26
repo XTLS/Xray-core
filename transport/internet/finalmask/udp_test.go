@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
+	"github.com/xtls/xray-core/transport/internet/rawconn"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
@@ -1017,7 +1017,7 @@ func TestSudokuBDD(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		unwrapped, readCounter, writeCounter := proxy.UnwrapRawConn(clientConn)
+		unwrapped, readCounter, writeCounter := rawconn.Unwrap(clientConn)
 		if readCounter != nil || writeCounter != nil {
 			t.Fatal("unexpected stat counters while unwrapping sudoku conn")
 		}
@@ -1041,7 +1041,7 @@ func TestSudokuBDD(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		unwrapped, readCounter, writeCounter := proxy.UnwrapRawConn(clientConn)
+		unwrapped, readCounter, writeCounter := rawconn.Unwrap(clientConn)
 		if readCounter != nil || writeCounter != nil {
 			t.Fatal("unexpected stat counters while unwrapping sudoku conn")
 		}

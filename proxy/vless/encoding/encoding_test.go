@@ -1,6 +1,8 @@
 package encoding_test
 
 import (
+	"bytes"
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -9,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/proxy/vision"
 	"github.com/xtls/xray-core/proxy/vless"
 	. "github.com/xtls/xray-core/proxy/vless/encoding"
 )
@@ -57,6 +60,25 @@ func TestRequestSerialization(t *testing.T) {
 	}
 	if r := cmp.Diff(actualAddons, expectedAddons, cmp.Comparer(addonsComparer)); r != "" {
 		t.Error(r)
+	}
+}
+
+func TestEncodeBodyAddonsDirection(t *testing.T) {
+	ctx := context.Background()
+	w := buf.NewWriter(&bytes.Buffer{})
+
+	request := &protocol.RequestHeader{
+		Version: Version,
+		Command: protocol.RequestCommandTCP,
+		Address: net.DomainAddress("www.example.com"),
+		Port:    net.Port(443),
+	}
+	addons := &Addons{}
+	state := vision.NewTrafficState([]byte("test-uuid"))
+
+	result := EncodeBodyAddons(w, request, addons, state, vision.DirectionUpstream, ctx, nil, nil)
+	if result != w {
+		t.Error("non-XRV flow should return the same writer")
 	}
 }
 

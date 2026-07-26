@@ -287,35 +287,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	if !sniffingRequest.Enabled {
 		go d.routedDispatch(ctx, outbound, destination)
 	} else {
-		go func() {
-			cReader := &cachedReader{
-				reader: outbound.Reader.(*pipe.Reader),
-			}
-			outbound.Reader = cReader
-			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
-			if err == nil {
-				content.Protocol = result.Protocol()
-			}
-			if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
-				domain := result.Domain()
-				errors.LogInfo(ctx, "sniffed domain: ", domain)
-				destination.Address = net.ParseAddress(domain)
-				protocol := result.Protocol()
-				if resComp, ok := result.(SnifferResultComposite); ok {
-					protocol = resComp.ProtocolForDomainResult()
-				}
-				isFakeIP := false
-				if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && fkr0.IsIPInIPPool(ob.Target.Address) {
-					isFakeIP = true
-				}
-				if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
-					ob.RouteTarget = destination
-				} else {
-					ob.Target = destination
-				}
-			}
-			d.routedDispatch(ctx, outbound, destination)
-		}()
+		go d.sniffAndDispatch(ctx, outbound, destination, sniffingRequest)
 	}
 	return inbound, nil
 }
@@ -343,33 +315,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 	if !sniffingRequest.Enabled {
 		d.routedDispatch(ctx, outbound, destination)
 	} else {
-		cReader := &cachedReader{
-			reader: outbound.Reader.(buf.TimeoutReader),
-		}
-		outbound.Reader = cReader
-		result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
-		if err == nil {
-			content.Protocol = result.Protocol()
-		}
-		if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
-			domain := result.Domain()
-			errors.LogInfo(ctx, "sniffed domain: ", domain)
-			destination.Address = net.ParseAddress(domain)
-			protocol := result.Protocol()
-			if resComp, ok := result.(SnifferResultComposite); ok {
-				protocol = resComp.ProtocolForDomainResult()
-			}
-			isFakeIP := false
-			if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && fkr0.IsIPInIPPool(ob.Target.Address) {
-				isFakeIP = true
-			}
-			if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
-				ob.RouteTarget = destination
-			} else {
-				ob.Target = destination
-			}
-		}
-		d.routedDispatch(ctx, outbound, destination)
+		d.sniffAndDispatch(ctx, outbound, destination, sniffingRequest)
 	}
 
 	return nil
@@ -429,6 +375,41 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 		return CompositeResult(metaresult, contentResult), nil
 	}
 	return contentResult, contentErr
+}
+
+func (d *DefaultDispatcher) sniffAndDispatch(ctx context.Context, outbound *transport.Link, destination net.Destination, sniffingRequest session.SniffingRequest) {
+	cReader := &cachedReader{
+		reader: outbound.Reader.(buf.TimeoutReader),
+	}
+	outbound.Reader = cReader
+	result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
+	if err == nil {
+		content := session.ContentFromContext(ctx)
+		if content != nil {
+			content.Protocol = result.Protocol()
+		}
+	}
+	if err == nil && d.shouldOverride(ctx, result, sniffingRequest, destination) {
+		outbounds := session.OutboundsFromContext(ctx)
+		ob := outbounds[len(outbounds)-1]
+		domain := result.Domain()
+		errors.LogInfo(ctx, "sniffed domain: ", domain)
+		destination.Address = net.ParseAddress(domain)
+		protocol := result.Protocol()
+		if resComp, ok := result.(SnifferResultComposite); ok {
+			protocol = resComp.ProtocolForDomainResult()
+		}
+		isFakeIP := false
+		if fkr0, ok := d.fdns.(dns.FakeDNSEngineRev0); ok && fkr0.IsIPInIPPool(ob.Target.Address) {
+			isFakeIP = true
+		}
+		if sniffingRequest.RouteOnly && protocol != "fakedns" && protocol != "fakedns+others" && !isFakeIP {
+			ob.RouteTarget = destination
+		} else {
+			ob.Target = destination
+		}
+	}
+	d.routedDispatch(ctx, outbound, destination)
 }
 
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
