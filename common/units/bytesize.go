@@ -60,7 +60,8 @@ func (b ByteSize) String() string {
 		value = float64(b) / float64(EB)
 	}
 	result := strconv.FormatFloat(value, 'f', 2, 64)
-	result = strings.TrimSuffix(result, ".0")
+	result = strings.TrimRight(result, "0")
+	result = strings.TrimSuffix(result, ".")
 	return result + unit
 }
 
