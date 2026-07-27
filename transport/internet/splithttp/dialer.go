@@ -54,14 +54,11 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	}
 
 	globalDialerAccess.Lock()
-	defer globalDialerAccess.Unlock()
-
 	if globalDialerMap == nil {
 		globalDialerMap = make(map[dialerConf]*XmuxManager)
 	}
 
 	key := dialerConf{dest, streamSettings}
-
 	xmuxManager, found := globalDialerMap[key]
 
 	if !found {
@@ -76,6 +73,7 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		})
 		globalDialerMap[key] = xmuxManager
 	}
+	globalDialerAccess.Unlock()
 
 	xmuxClient := xmuxManager.GetXmuxClient(ctx)
 	return xmuxClient.XmuxConn.(DialerClient), xmuxClient

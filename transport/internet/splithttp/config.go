@@ -477,6 +477,17 @@ func (m *XmuxConfig) GetNormalizedHMaxReusableSecs() *RangeConfig {
 	return m.HMaxReusableSecs
 }
 
+func (m *XmuxConfig) GetNormalizedHMinSocketInterval() *RangeConfig {
+	if m.HMinSocketInterval == nil {
+		return &RangeConfig{
+			From: 0,
+			To:   0,
+		}
+	}
+
+	return m.HMinSocketInterval
+}
+
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
 		return new(Config)

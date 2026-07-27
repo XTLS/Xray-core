@@ -20,6 +20,7 @@ message XmuxConfig {
   RangeConfig hMaxRequestTimes = 4;
   RangeConfig hMaxReusableSecs = 5;
   int64 hKeepAlivePeriod = 6;
+  RangeConfig hMinSocketInterval = 7;
 }
 
 message Config {

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"math"
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -42,24 +43,40 @@ func (c *XmuxClient) maybeClose() {
 }
 
 type XmuxManager struct {
-	xmuxConfig  XmuxConfig
-	concurrency int32
-	connections int32
-	newConnFunc func() XmuxConn
-	xmuxClients []*XmuxClient
+	mu                 sync.Mutex
+	xmuxConfig         XmuxConfig
+	concurrency        int32
+	connections        int32
+	minSocketInterval  time.Duration
+	lastSocketCreateAt time.Time
+	newConnFunc        func() XmuxConn
+	xmuxClients        []*XmuxClient
 }
 
 func NewXmuxManager(xmuxConfig XmuxConfig, newConnFunc func() XmuxConn) *XmuxManager {
-	return &XmuxManager{
+	m := &XmuxManager{
 		xmuxConfig:  xmuxConfig,
 		concurrency: xmuxConfig.GetNormalizedMaxConcurrency().rand(),
 		connections: xmuxConfig.GetNormalizedMaxConnections().rand(),
 		newConnFunc: newConnFunc,
 		xmuxClients: make([]*XmuxClient, 0),
 	}
+	if x := xmuxConfig.GetNormalizedHMinSocketInterval().rand(); x > 0 {
+		m.minSocketInterval = time.Duration(x) * time.Millisecond
+	}
+	return m
 }
 
 func (m *XmuxManager) newXmuxClient() *XmuxClient {
+	if m.minSocketInterval > 0 {
+		elapsed := time.Since(m.lastSocketCreateAt)
+		if elapsed < m.minSocketInterval {
+			sleepDur := m.minSocketInterval - elapsed
+			errors.LogDebug(context.TODO(), "XMUX: hMinSocketInterval sleeping ", sleepDur, " before creating new client")
+			time.Sleep(sleepDur)
+		}
+		m.lastSocketCreateAt = time.Now()
+	}
 	xmuxClient := &XmuxClient{
 		XmuxConn:  m.newConnFunc(),
 		leftUsage: -1,
@@ -78,7 +95,10 @@ func (m *XmuxManager) newXmuxClient() *XmuxClient {
 	return xmuxClient
 }
 
-func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when locking
+func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	for i := 0; i < len(m.xmuxClients); {
 		xmuxClient := m.xmuxClients[i]
 		if xmuxClient.XmuxConn.IsClosed() ||
