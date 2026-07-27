@@ -17,6 +17,8 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
+const defaultLinuxGateway = "198.18.0.1/15"
+
 // LinuxTun is an object that handles tun network interface on linux
 // current version is heavily stripped to do nothing more,
 // then create a network interface, to be provided as file descriptor to gVisor ip stack
@@ -26,6 +28,7 @@ type LinuxTun struct {
 	options *Config
 	ownsTun bool
 
+	gateway            netip.Prefix
 	interfaceAddresses []netlink.Addr
 	systemRoutes       []netlink.Route
 	routeMonitorStop   chan struct{}
@@ -60,11 +63,18 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
+	gateway, err := selectLinuxGateway(options.Gateway)
+	if err != nil {
+		_ = unix.Close(tunFd)
+		return nil, err
+	}
+
 	linuxTun := &LinuxTun{
 		tunFd:   tunFd,
 		tunLink: tunLink,
 		options: options,
 		ownsTun: true,
+		gateway: gateway,
 	}
 
 	return linuxTun, nil
@@ -233,10 +243,11 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 }
 
 func (t *LinuxTun) setInterfaceAddresses() error {
-	if len(t.options.Gateway) == 0 {
-		return nil
+	addrs := t.options.Gateway
+	if len(addrs) == 0 {
+		addrs = []string{t.gateway.String()}
 	}
-	for _, address := range t.options.Gateway {
+	for _, address := range addrs {
 		addr, err := netlink.ParseAddr(address)
 		if err != nil {
 			_ = t.unsetInterfaceAddresses()
@@ -264,17 +275,37 @@ func (t *LinuxTun) unsetInterfaceAddresses() error {
 }
 
 func (t *LinuxTun) setSystemRoutes() error {
-	if len(t.options.AutoSystemRoutingTable) == 0 {
+	tunIndex := t.tunLink.Attrs().Index
+
+	if len(t.options.AutoSystemRoutingTable) > 0 {
+		for _, cidr := range t.options.AutoSystemRoutingTable {
+			prefix, err := netip.ParsePrefix(cidr)
+			if err != nil {
+				return errors.New("invalid system route ", cidr).Base(err)
+			}
+			prefix = prefix.Masked()
+			_, ipNet, _ := net.ParseCIDR(prefix.String())
+			route := netlink.Route{
+				LinkIndex: tunIndex,
+				Dst:       ipNet,
+				Priority:  1,
+			}
+			if err := netlink.RouteAdd(&route); err != nil {
+				_ = t.unsetSystemRoutes()
+				return errors.New("failed to add system route ", cidr).Base(err)
+			}
+			t.systemRoutes = append(t.systemRoutes, route)
+		}
 		return nil
 	}
-	tunIndex := t.tunLink.Attrs().Index
-	for _, cidr := range t.options.AutoSystemRoutingTable {
-		prefix, err := netip.ParsePrefix(cidr)
+
+	// Default split-horizon routes: 0.0.0.0/1 + 128.0.0.0/1 cover the entire IPv4 space
+	// without replacing the existing default gateway, avoiding network loops.
+	for _, cidr := range []string{"0.0.0.0/1", "128.0.0.0/1"} {
+		_, ipNet, err := net.ParseCIDR(cidr)
 		if err != nil {
-			return errors.New("invalid system route ", cidr).Base(err)
+			return errors.New("invalid default route ", cidr).Base(err)
 		}
-		prefix = prefix.Masked()
-		_, ipNet, _ := net.ParseCIDR(prefix.String())
 		route := netlink.Route{
 			LinkIndex: tunIndex,
 			Dst:       ipNet,
@@ -282,10 +313,11 @@ func (t *LinuxTun) setSystemRoutes() error {
 		}
 		if err := netlink.RouteAdd(&route); err != nil {
 			_ = t.unsetSystemRoutes()
-			return errors.New("failed to add system route ", cidr).Base(err)
+			return errors.New("failed to add default route ", cidr).Base(err)
 		}
 		t.systemRoutes = append(t.systemRoutes, route)
 	}
+
 	return nil
 }
 
@@ -359,6 +391,25 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 	}
 
 	return nil, errors.New("no usable outbound interface found")
+}
+
+func selectLinuxGateway(configured []string) (netip.Prefix, error) {
+	if len(configured) == 0 {
+		return netip.ParsePrefix(defaultLinuxGateway)
+	}
+
+	for _, value := range configured {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			return netip.Prefix{}, errors.New("invalid Linux gateway ", value).Base(err)
+		}
+		if !prefix.Addr().Is4() {
+			continue
+		}
+		return prefix, nil
+	}
+
+	return netip.Prefix{}, errors.New("Linux gateway requires at least one IPv4 prefix")
 }
 
 func findDefaultInterface(family int, tunIndex int) (*net.Interface, error) {
