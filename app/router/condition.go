@@ -345,6 +345,13 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	srcPort := uint16(ctx.GetSourcePort())
 	srcIP := ctx.GetSourceIPs()[0].String()
 
+	// Skip process lookup for loopback addresses — the source is a local proxy
+	// (SOCKS/HTTP), not the actual application. The connection may already be
+	// closed by the time we look it up in /proc/net/tcp, causing spurious errors.
+	if net.ParseIP(srcIP).IsLoopback() {
+		return false
+	}
+
 	var network string
 	switch ctx.GetNetwork() {
 	case net.Network_TCP:
