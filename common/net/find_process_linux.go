@@ -55,7 +55,7 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 		return 0, "", "", errors.New("could not search in ", procFile).Base(err)
 	}
 	if inode == "" {
-		return 0, "", "", errors.New("connection for ", srcIP, ":", srcPort, " not found in ", procFile)
+		return 0, "", "", ErrProcessNotFound
 	}
 
 	pidStr, err := findPidByInode(inode)

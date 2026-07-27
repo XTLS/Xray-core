@@ -20,6 +20,7 @@ const QuicgoH3KeepAlivePeriod = 10 * time.Second
 const ChromeH2KeepAlivePeriod = 45 * time.Second
 
 var ErrNotLocal = errors.New("the source address is not from local machine.")
+var ErrProcessNotFound = errors.New("process not found for the connection")
 
 type localIPCacheEntry struct {
 	addrs      []net.Addr
