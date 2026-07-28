@@ -450,8 +450,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
 	if c.Xmux == (XmuxConfig{}) {
-		c.Xmux.MaxConnections.From = 6
-		c.Xmux.MaxConnections.To = 6
+		c.Xmux.MaxConnections.From = 3
+		c.Xmux.MaxConnections.To = 3
 		c.Xmux.HMaxRequestTimes.From = 600
 		c.Xmux.HMaxRequestTimes.To = 900
 		c.Xmux.HMaxReusableSecs.From = 1800
