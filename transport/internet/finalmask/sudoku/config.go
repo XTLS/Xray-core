@@ -6,12 +6,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-func (c *Config) TCP() {
-}
-
-func (c *Config) UDP() {
-}
-
 // Sudoku in finalmask mode is a pure appearance transform with no standalone handshake.
 // TCP always keeps classic sudoku on uplink and uses packed downlink optimization on server writes.
 func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
