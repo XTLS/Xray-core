@@ -105,6 +105,7 @@
   - [XRAYUI](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui)
   - [fancyss](https://github.com/hq450/fancyss)
 - Windows
+  - [DisruptorProxy](https://github.com/DisruptorProxy/Core) 
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [Furious](https://github.com/LorenEteval/Furious)
   - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
@@ -113,6 +114,7 @@
   - [OneXray](https://github.com/OneXray/OneXray)
   - [XrayUI-dev](https://github.com/PhoenixNil/XrayUI-dev)
 - Android
+  - [DisruptorProxy](https://github.com/DisruptorProxy/Core) 
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
