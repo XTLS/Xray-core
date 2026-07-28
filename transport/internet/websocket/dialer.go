@@ -178,7 +178,7 @@ type delayDialConn struct {
 // LocalAddr returns nil until the deferred WebSocket dial has completed.
 // Without this method, Go promotes LocalAddr from the embedded net.Conn; the
 // embedded interface is nil before the first Write, so the promoted call panics.
-func (d *delayDialConn) LocalAddr() gonet.Addr {
+func (d *delayDialConn) LocalAddr() net.Addr {
 	if d.Conn == nil {
 		return nil
 	}
@@ -187,7 +187,7 @@ func (d *delayDialConn) LocalAddr() gonet.Addr {
 
 // RemoteAddr returns nil until the deferred WebSocket dial has completed.
 // See LocalAddr for why an explicit method is required here.
-func (d *delayDialConn) RemoteAddr() gonet.Addr {
+func (d *delayDialConn) RemoteAddr() net.Addr {
 	if d.Conn == nil {
 		return nil
 	}
