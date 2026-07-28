@@ -6,11 +6,21 @@ option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/xmc"
 option java_package = "com.xray.transport.internet.finalmask.xmc";
 option java_multiple_files = true;
 
+message Profile {
+    // Resolve the UUID from https://api.mojang.com/users/profiles/minecraft/{username}.
+    string username = 1;
+    bytes uuid = 2;
+    // Copy the signed textures property returned by
+    // https://sessionserver.mojang.com/session/minecraft/profile/{uuid}?unsigned=false.
+    string textures_value = 3;
+    string textures_signature = 4;
+}
 
 message Config {
     string password = 1;
-    repeated string usernames = 2;
+    reserved 2;
     bytes rsa_private_key = 8;
     bytes rsa_public_key = 9;
     string hostname = 10;
+    repeated Profile profiles = 11;
 }

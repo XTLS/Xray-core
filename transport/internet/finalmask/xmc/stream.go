@@ -6,12 +6,14 @@ import (
 	"crypto/cipher"
 	"fmt"
 	"io"
+	"sync"
 )
 
 type cryptoStream struct {
 	stream cipher.Stream
 	r      io.Reader
 	w      io.Writer
+	mu     sync.Mutex
 }
 
 func newCryptoReader(r io.Reader, sharedSecret []byte) (*cryptoStream, error) {
@@ -30,12 +32,19 @@ func (c *cryptoStream) Read(b []byte) (int, error) {
 		panic("read on a write-only crypto stream")
 	}
 
-	n, err := c.r.Read(b)
-	if err != nil {
-		return 0, fmt.Errorf("crypto reader: read: %w", err)
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	c.stream.XORKeyStream(b[:n], b[:n])
+	n, err := c.r.Read(b)
+	if n > 0 {
+		c.stream.XORKeyStream(b[:n], b[:n])
+	}
+	if err != nil {
+		if err == io.EOF {
+			return n, io.EOF
+		}
+		return n, fmt.Errorf("crypto reader: read: %w", err)
+	}
 
 	return n, nil
 }
@@ -56,13 +65,15 @@ func (c *cryptoStream) Write(b []byte) (int, error) {
 		panic("write on a read-only crypto stream")
 	}
 
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	encrypted := make([]byte, len(b))
 	c.stream.XORKeyStream(encrypted, b)
 
-	n, err := c.w.Write(encrypted)
-	if err != nil {
+	if err := writeFull(c.w, encrypted); err != nil {
 		return 0, fmt.Errorf("crypto writer: write: %w", err)
 	}
 
-	return n, nil
+	return len(b), nil
 }

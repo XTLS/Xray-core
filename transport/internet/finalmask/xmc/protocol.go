@@ -7,6 +7,11 @@ import (
 	"io"
 )
 
+const (
+	maxPacketDataLength = 32 * 1024
+	maxPacketBodyLength = maxPacketDataLength + 5
+)
+
 type field interface {
 	readFrom(r io.Reader) error
 	writeTo(w io.Writer) error
@@ -18,25 +23,38 @@ type mcPacket struct {
 }
 
 func readPacket(b io.Reader) (*mcPacket, error) {
-	var packetLength Varint
-	err := packetLength.readFrom(b)
+	packet, _, err := readPacketWithLength(b)
+	return packet, err
+}
+
+func readPacketWithLength(b io.Reader) (*mcPacket, int, error) {
+	packetData, wireLength, err := readFrame(b, maxPacketBodyLength)
 	if err != nil {
-		return nil, fmt.Errorf("read packet length: %w", err)
+		return nil, 0, err
+	}
+	packet, err := decodePacketBody(packetData)
+	return packet, wireLength, err
+}
+
+func decodePacketBody(packetData []byte) (*mcPacket, error) {
+	if len(packetData) < 1 || len(packetData) > maxPacketBodyLength {
+		return nil, fmt.Errorf("read packet: bad length: %d", len(packetData))
 	}
 
+	body := bytes.NewReader(packetData)
 	var packetID Varint
-	err = packetID.readFrom(b)
+	err := packetID.readFrom(body)
 	if err != nil {
 		return nil, fmt.Errorf("read packet ID: %w", err)
 	}
 
-	dataLength := int(packetLength) - varintSize(packetID)
-	if dataLength < 0 || dataLength > 1024*32 {
+	dataLength := body.Len()
+	if dataLength > maxPacketDataLength {
 		return nil, fmt.Errorf("read packet: bad length: %d", dataLength)
 	}
 
 	data := make([]byte, dataLength)
-	_, err = io.ReadFull(b, data)
+	_, err = io.ReadFull(body, data)
 	if err != nil {
 		return nil, fmt.Errorf("read packet data: %w", err)
 	}
@@ -47,9 +65,24 @@ func readPacket(b io.Reader) (*mcPacket, error) {
 	}, nil
 }
 
+func readFrame(r io.Reader, maxLength int) ([]byte, int, error) {
+	frameLength, prefixLength, err := readVarintWithLength(r)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read packet length: %w", err)
+	}
+	if frameLength < 1 || int(frameLength) > maxLength {
+		return nil, 0, fmt.Errorf("read packet: bad length: %d", frameLength)
+	}
+
+	frame := make([]byte, int(frameLength))
+	if _, err := io.ReadFull(r, frame); err != nil {
+		return nil, 0, fmt.Errorf("read packet data: %w", err)
+	}
+	return frame, prefixLength + len(frame), nil
+}
+
 func (p *mcPacket) readFields(fields ...field) error {
 	r := bytes.NewReader(p.data)
-
 	for _, field := range fields {
 		err := field.readFrom(r)
 		if err != nil {
@@ -62,47 +95,49 @@ func (p *mcPacket) readFields(fields ...field) error {
 
 type Varint int32
 
+const (
+	SEGMENT_BITS = 0x7F
+	CONTINUE_BIT = 0x80
+)
+
 func (v *Varint) readFrom(r io.Reader) error {
-	SEGMENT_BITS := byte(0x7F)
-	CONTINUE_BIT := byte(0x80)
-
-	var err error
-
-	var value int32 = 0
-	var position int32 = 0
-	var currentByte byte
-
-	for true {
-		currentByte, err = readByte(r)
-		if err != nil {
-			return fmt.Errorf("read varint: %w", err)
-		}
-		value |= int32(currentByte&SEGMENT_BITS) << position
-
-		if (currentByte & CONTINUE_BIT) == 0 {
-			break
-		}
-
-		position += 7
-
-		if position >= 32 {
-			return fmt.Errorf("read varint: too large")
-		}
+	value, _, err := readVarintWithLength(r)
+	if err != nil {
+		return err
 	}
-
-	*v = Varint(value)
-
+	*v = value
 	return nil
 }
 
-func (v *Varint) writeTo(w io.Writer) error {
-	SEGMENT_BITS := byte(0x7F)
-	CONTINUE_BIT := byte(0x80)
+func readVarintWithLength(r io.Reader) (Varint, int, error) {
+	var value int32
+	for index := 0; index < 5; index++ {
+		currentByte, err := readByte(r)
+		if err != nil {
+			return 0, 0, fmt.Errorf("read varint: %w", err)
+		}
+		if index == 4 && currentByte&0xf0 != 0 {
+			return 0, 0, fmt.Errorf("read varint: too large")
+		}
+		value |= int32(currentByte&SEGMENT_BITS) << (7 * index)
 
-	value := int32(*v)
+		if currentByte&CONTINUE_BIT == 0 {
+			parsed := Varint(value)
+			length := index + 1
+			if length != varintSize(parsed) {
+				return 0, 0, fmt.Errorf("read varint: non-canonical encoding")
+			}
+			return parsed, length, nil
+		}
+	}
+	return 0, 0, fmt.Errorf("read varint: too large")
+}
+
+func (v *Varint) writeTo(w io.Writer) error {
+	value := uint32(*v)
 
 	for {
-		currentByte := byte(value & int32(SEGMENT_BITS))
+		currentByte := byte(value & SEGMENT_BITS)
 		value >>= 7
 		if value != 0 {
 			currentByte |= CONTINUE_BIT
@@ -122,11 +157,12 @@ func (v *Varint) writeTo(w io.Writer) error {
 }
 
 func varintSize(value Varint) int {
+	uintValue := uint32(value)
 	size := 0
-	for {
+	for range 5 {
 		size++
-		value >>= 7
-		if value == 0 {
+		uintValue >>= 7
+		if uintValue == 0 {
 			break
 		}
 	}
@@ -238,6 +274,31 @@ func (v *UUID) readFrom(r io.Reader) error {
 	return nil
 }
 
+type Boolean bool
+
+func (v *Boolean) readFrom(r io.Reader) error {
+	b, err := readByte(r)
+	if err != nil {
+		return fmt.Errorf("read boolean: %w", err)
+	}
+	if b > 1 {
+		return fmt.Errorf("read boolean: invalid value: %d", b)
+	}
+	*v = b == 1
+	return nil
+}
+
+func (v *Boolean) writeTo(w io.Writer) error {
+	value := byte(0)
+	if *v {
+		value = 1
+	}
+	if _, err := w.Write([]byte{value}); err != nil {
+		return fmt.Errorf("write boolean: %w", err)
+	}
+	return nil
+}
+
 func (v *UUID) writeTo(w io.Writer) error {
 	_, err := w.Write(v[:])
 	if err != nil {
@@ -256,7 +317,7 @@ func (v *Bytes) readFrom(r io.Reader) error {
 	}
 
 	if length < 0 || length >= 1024 {
-		return fmt.Errorf("read bytes: invalid size: %d", err)
+		return fmt.Errorf("read bytes: invalid size: %d", length)
 	}
 
 	buf := make([]byte, length)
@@ -268,6 +329,24 @@ func (v *Bytes) readFrom(r io.Reader) error {
 
 	*v = append([]byte(*v), buf...)
 
+	return nil
+}
+
+type RestBytes []byte
+
+func (v *RestBytes) readFrom(r io.Reader) error {
+	buf, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("read remaining bytes: %w", err)
+	}
+	*v = append((*v)[:0], buf...)
+	return nil
+}
+
+func (v *RestBytes) writeTo(w io.Writer) error {
+	if _, err := w.Write(*v); err != nil {
+		return fmt.Errorf("write remaining bytes: %w", err)
+	}
 	return nil
 }
 
@@ -297,36 +376,66 @@ func readByte(r io.Reader) (byte, error) {
 }
 
 func writePacket(w io.Writer, packetID int, fields ...field) error {
+	_, err := writePacketWithLength(w, packetID, fields...)
+	return err
+}
+
+func writePacketWithLength(w io.Writer, packetID int, fields ...field) (int, error) {
+	frame, err := encodePacket(packetID, fields...)
+	if err != nil {
+		return 0, err
+	}
+	if err = writeFull(w, frame); err != nil {
+		return 0, fmt.Errorf("write packet data: %w", err)
+	}
+	return len(frame), nil
+}
+
+func encodePacket(packetID int, fields ...field) ([]byte, error) {
 	var dataBuf bytes.Buffer
 
 	for _, field := range fields {
 		err := field.writeTo(&dataBuf)
 		if err != nil {
-			return fmt.Errorf("write packet field: %w", err)
+			return nil, fmt.Errorf("write packet field: %w", err)
 		}
 	}
-
-	var buf bytes.Buffer
-
-	var packetLength Varint = Varint(varintSize(Varint(packetID)) + dataBuf.Len())
-	err := packetLength.writeTo(&buf)
-	if err != nil {
-		return fmt.Errorf("write packet length: %w", err)
+	if dataBuf.Len() > maxPacketDataLength {
+		return nil, fmt.Errorf("write packet: bad length: %d", dataBuf.Len())
 	}
 
-	var packetIDVarint Varint = Varint(packetID)
-	err = packetIDVarint.writeTo(&buf)
-	if err != nil {
-		return fmt.Errorf("write packet ID: %w", err)
+	packetIDVarint := Varint(packetID)
+	bodyLength := varintSize(packetIDVarint) + dataBuf.Len()
+	if bodyLength > maxPacketBodyLength {
+		return nil, fmt.Errorf("write packet: bad length: %d", bodyLength)
 	}
 
-	buf.Write(dataBuf.Bytes())
-
-	_, err = w.Write(buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("write packet data: %w", err)
+	var frame bytes.Buffer
+	frame.Grow(varintSize(Varint(bodyLength)) + bodyLength)
+	frameLength := Varint(bodyLength)
+	if err := frameLength.writeTo(&frame); err != nil {
+		return nil, fmt.Errorf("write packet length: %w", err)
 	}
+	if err := packetIDVarint.writeTo(&frame); err != nil {
+		return nil, fmt.Errorf("write packet ID: %w", err)
+	}
+	frame.Write(dataBuf.Bytes())
+	return frame.Bytes(), nil
+}
 
+func writeFull(w io.Writer, p []byte) error {
+	for len(p) > 0 {
+		n, err := w.Write(p)
+		if n > 0 {
+			p = p[n:]
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+	}
 	return nil
 }
 
