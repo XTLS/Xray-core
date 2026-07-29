@@ -126,6 +126,7 @@
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [INCY](https://apps.apple.com/en/app/incy/id6756943388)
+  - [Rocket Proxy](https://apps.apple.com/app/id6785291194)
 - macOS arm64 & x64
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973)
   - [V2rayU](https://github.com/yanue/V2rayU)
