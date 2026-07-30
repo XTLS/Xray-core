@@ -14,7 +14,6 @@ import (
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/proxy/tun/firewall"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
@@ -60,13 +59,6 @@ func NewTun(options *Config) (Tun, error) {
 	// start the interface with ring buffer capacity of 8 MiB
 	session, err := adapter.StartSession(0x800000)
 	if err != nil {
-		_ = adapter.Close()
-		return nil, err
-	}
-
-	err = firewall.EnableFirewall(adapter.LUID())
-	if err != nil {
-		session.End()
 		_ = adapter.Close()
 		return nil, err
 	}
@@ -225,7 +217,6 @@ func (t *WindowsTun) Close() error {
 	}
 	t.closed = true
 
-	firewall.DisableFirewall()
 	if t.cbr != nil {
 		t.cbr.Unregister()
 	}
