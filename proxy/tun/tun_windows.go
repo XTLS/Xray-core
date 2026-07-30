@@ -95,21 +95,6 @@ func open(name string) (*wintun.Adapter, error) {
 }
 
 func (t *WindowsTun) Start() (err error) {
-	if updater != nil {
-		t.cbr, err = winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
-			updater.Update()
-		})
-		if err != nil {
-			return err
-		}
-		t.cbi, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
-			updater.Update()
-		})
-		if err != nil {
-			return err
-		}
-	}
-
 	var address4, address6 bool
 	addresses := make([]netip.Prefix, 0, len(t.options.Gateway))
 	for _, cidr := range t.options.Gateway {
@@ -121,10 +106,12 @@ func (t *WindowsTun) Start() (err error) {
 		}
 		addresses = append(addresses, prefix)
 	}
+
 	dns := make([]netip.Addr, 0, len(t.options.DNS))
 	for _, ip := range t.options.DNS {
 		dns = append(dns, netip.MustParseAddr(ip))
 	}
+
 	var route4, route6 bool
 	routesMap := make(map[winipcfg.RouteData]struct{})
 	for _, cidr := range t.options.AutoSystemRoutingTable {
@@ -210,6 +197,21 @@ startOver:
 				goto startOver
 			}
 			return firstErr
+		}
+	}
+
+	if updater != nil {
+		t.cbr, err = winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
+			updater.Update()
+		})
+		if err != nil {
+			return err
+		}
+		t.cbi, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
+			updater.Update()
+		})
+		if err != nil {
+			return err
 		}
 	}
 	return nil
