@@ -2,7 +2,9 @@ package router_test
 
 import (
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 
 	. "github.com/xtls/xray-core/app/router"
@@ -339,6 +341,31 @@ func TestChinaSites(t *testing.T) {
 		r := matcher.ApplyDomain(testCase.Domain)
 		if r != testCase.Output {
 			t.Error("DomainMatcher expected output ", testCase.Output, " for domain ", testCase.Domain, " but got ", r)
+		}
+	}
+}
+
+func TestLocalOSRule(t *testing.T) {
+	otherOS := "plan9"
+	if runtime.GOOS == otherOS {
+		otherOS = "linux"
+	}
+
+	cases := []struct {
+		localOS []string
+		output  bool
+	}{
+		{localOS: []string{runtime.GOOS}, output: true},
+		{localOS: []string{otherOS}, output: false},
+		{localOS: []string{otherOS, runtime.GOOS}, output: true},
+		{localOS: []string{strings.ToUpper(runtime.GOOS)}, output: true},
+	}
+
+	for _, test := range cases {
+		cond, err := (&RoutingRule{LocalOs: test.localOS}).BuildCondition()
+		common.Must(err)
+		if got := cond.Apply(withBackground()); got != test.output {
+			t.Errorf("for localOS %v on %s: expected %v, got %v", test.localOS, runtime.GOOS, test.output, got)
 		}
 	}
 }

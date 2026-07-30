@@ -148,6 +148,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		LocalIP    *StringList        `json:"localIP"`
 		LocalPort  *PortList          `json:"localPort"`
 		Process    *StringList        `json:"process"`
+		LocalOS    *StringList        `json:"localOS"`
 		Webhook    *WebhookRuleConfig `json:"webhook"`
 	}
 	rawFieldRule := new(RawFieldRule)
@@ -259,6 +260,10 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.Process != nil && len(*rawFieldRule.Process) > 0 {
 		rule.Process = *rawFieldRule.Process
+	}
+
+	if rawFieldRule.LocalOS != nil && len(*rawFieldRule.LocalOS) > 0 {
+		rule.LocalOs = *rawFieldRule.LocalOS
 	}
 
 	if rawFieldRule.Webhook != nil && rawFieldRule.Webhook.URL != "" {
