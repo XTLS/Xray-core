@@ -67,6 +67,16 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
+	// stream-down framing: advertise support with a meta marker on the download
+	// GET. Only sent when this client opted in; the server frames only if it
+	// also opted in and then confirms with the X-Down-Frame response header.
+	downFrameRequested := method == "GET" && c.transportConfig.DownFrame
+	if downFrameRequested {
+		q := req.URL.Query()
+		q.Set(c.transportConfig.GetNormalizedDownFrameKey(), "1")
+		req.URL.RawQuery = q.Encode()
+	}
+
 	wrc = &WaitReadCloser{Wait: make(chan struct{})}
 	go func() {
 		resp, err := c.client.Do(req)
@@ -90,7 +100,13 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			wrc.Close()
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+		// Strip stream-down framing only when we asked for it and the server
+		// confirmed. Without the confirmation (old server), read the raw stream.
+		if downFrameRequested && resp.Header.Get(downFrameConfirmHeader) == "1" {
+			wrc.(*WaitReadCloser).Set(newFramedReader(resp.Body))
+		} else {
+			wrc.(*WaitReadCloser).Set(resp.Body)
+		}
 	}()
 
 	<-gotConn.Wait()
