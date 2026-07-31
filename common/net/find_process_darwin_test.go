@@ -52,6 +52,57 @@ func TestFindProcessDarwinTCP(t *testing.T) {
 	assertCurrentProcess(t, pid, name, path)
 }
 
+func TestFindProcessDarwinTCPIPv4Mapped(t *testing.T) {
+	listener, err := stdnet.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	accepted := make(chan stdnet.Conn, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err == nil {
+			accepted <- conn
+			return
+		}
+		close(accepted)
+	}()
+
+	listenerAddr := listener.Addr().(*stdnet.TCPAddr)
+	fd, err := unix.Socket(unix.AF_INET6, unix.SOCK_STREAM, unix.IPPROTO_TCP)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unix.Close(fd)
+
+	mappedAddr := [16]byte{10: 0xff, 11: 0xff, 12: 127, 15: 1}
+	if err := unix.Connect(fd, &unix.SockaddrInet6{
+		Port: listenerAddr.Port,
+		Addr: mappedAddr,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	serverConn := <-accepted
+	if serverConn == nil {
+		t.Fatal("server did not accept tcp connection")
+	}
+	defer serverConn.Close()
+
+	local, err := unix.Getsockname(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	localPort := local.(*unix.SockaddrInet6).Port
+
+	pid, name, path, err := FindProcess("tcp", "127.0.0.1", uint16(localPort), "127.0.0.1", uint16(listenerAddr.Port))
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCurrentProcess(t, pid, name, path)
+}
+
 func TestFindProcessDarwinUDP(t *testing.T) {
 	conn, err := stdnet.ListenUDP("udp", &stdnet.UDPAddr{IP: stdnet.ParseIP("127.0.0.1")})
 	if err != nil {
@@ -261,6 +312,18 @@ func TestDarwinSocketInfoMatchLevelFallbacks(t *testing.T) {
 				t.Fatalf("unexpected match level: got %d, want %d", level, test.wantLevel)
 			}
 		})
+	}
+}
+
+func TestDarwinSocketInfoMatchLevelIPv4Mapped(t *testing.T) {
+	src := netip.MustParseAddr("127.0.0.1")
+	dst := netip.MustParseAddr("203.0.113.10")
+	info := newDarwinSocketInfo("tcp", src, 12345, dst, 443)
+	writeDarwinNativeUint32(info, darwinSocketInfoFamilyOff, uint32(unix.AF_INET6))
+
+	level := darwinSocketInfoMatchLevel(info, "tcp", src, 12345, dst, 443, true)
+	if level != darwinSocketExactMatch {
+		t.Fatalf("unexpected match level: got %d, want %d", level, darwinSocketExactMatch)
 	}
 }
 
