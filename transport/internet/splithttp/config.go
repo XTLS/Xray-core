@@ -177,6 +177,26 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() *RangeConfig {
 	return c.ScStreamUpServerSecs
 }
 
+// GetNormalizedScStreamDownServerSecs returns the server-side keepalive
+// interval for the stream-down response. Unlike scStreamUpServerSecs (which
+// defaults to 20-80s), this defaults to 0 = disabled, so the wire is unchanged
+// unless the operator opts in.
+func (c *Config) GetNormalizedScStreamDownServerSecs() *RangeConfig {
+	if c.ScStreamDownServerSecs == nil {
+		return &RangeConfig{From: 0, To: 0}
+	}
+	return c.ScStreamDownServerSecs
+}
+
+// GetNormalizedDownFrameKey returns the meta key the client uses to advertise
+// stream-down framing support (default "x_df").
+func (c *Config) GetNormalizedDownFrameKey() string {
+	if c.DownFrameKey != "" {
+		return c.DownFrameKey
+	}
+	return "x_df"
+}
+
 func (c *Config) GetNormalizedUplinkChunkSize() *RangeConfig {
 	if c.UplinkChunkSize == nil || c.UplinkChunkSize.To == 0 {
 		switch c.UplinkDataPlacement {

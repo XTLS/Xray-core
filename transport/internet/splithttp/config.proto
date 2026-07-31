@@ -52,4 +52,14 @@ message Config {
   int32 serverMaxHeaderBytes = 27;
   string sessionIDTable = 28;
   RangeConfig sessionIDLength = 29;
+  // Server-side keepalive interval (seconds) for the stream-down response.
+  // 0 disables it (default). Completes scStreamUpServerSecs, which only
+  // keeps the stream-up (upload) response alive.
+  RangeConfig scStreamDownServerSecs = 30;
+  // Meta key the client uses to signal that it understands stream-down
+  // framing. Empty means the default "x_df".
+  string downFrameKey = 31;
+  // Client-side switch: request stream-down framing/keepalive. Off by default;
+  // framing only activates when both peers opt in (see the negotiation).
+  bool downFrame = 32;
 }
