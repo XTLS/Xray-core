@@ -25,6 +25,8 @@ const (
 	XUDPBaseKey          = "xray.xudp.basekey"
 
 	TunFdKey = "xray.tun.fd"
+
+	MuxServerKeepAlive = "xray.mux.server.keepalive"
 )
 
 type EnvFlag struct {

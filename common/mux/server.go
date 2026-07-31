@@ -3,6 +3,7 @@ package mux
 import (
 	"context"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -10,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
@@ -18,6 +20,21 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
+
+// ServerKeepAliveInterval is the interval at which ServerWorker sends a
+// SessionStatusKeepAlive frame when the downlink has been idle while
+// sessions are still active. This keeps otherwise idle download paths
+// (e.g. the server-to-client stream of XHTTP "packet-up" mode) from being
+// cut by middleboxes with short idle timeouts.
+// Configurable via the "xray.mux.server.keepalive" env flag
+// (XRAY_MUX_SERVER_KEEPALIVE), in seconds. 0 disables emission.
+var ServerKeepAliveInterval = func() time.Duration {
+	seconds := platform.NewEnvFlag(platform.MuxServerKeepAlive).GetValueAsInt(15)
+	if seconds < 0 {
+		seconds = 0
+	}
+	return time.Duration(seconds) * time.Second
+}()
 
 type Server struct {
 	dispatcher routing.Dispatcher
@@ -87,9 +104,23 @@ func (s *Server) Close() error {
 type ServerWorker struct {
 	dispatcher     routing.Dispatcher
 	link           *transport.Link
+	output         buf.Writer // wraps link.Writer, recording write times for the keepalive loop
 	sessionManager *SessionManager
 	done           *done.Instance
 	timer          *time.Ticker
+	keepAlive      time.Duration
+	lastWrite      atomic.Int64 // unix nano of the last downlink write
+}
+
+// downlinkWriter records the time of every downlink write, so that
+// keepAliveLoop only emits frames when the downlink is actually idle.
+type downlinkWriter struct {
+	worker *ServerWorker
+}
+
+func (w *downlinkWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	w.worker.lastWrite.Store(time.Now().UnixNano())
+	return w.worker.link.Writer.WriteMultiBuffer(mb)
 }
 
 func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.Link) (*ServerWorker, error) {
@@ -99,12 +130,18 @@ func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.
 		sessionManager: NewSessionManager(),
 		done:           done.New(),
 		timer:          time.NewTicker(60 * time.Second),
+		keepAlive:      ServerKeepAliveInterval,
 	}
+	worker.output = &downlinkWriter{worker: worker}
+	worker.lastWrite.Store(time.Now().UnixNano())
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		inbound.CanSpliceCopy = 3
 	}
 	go worker.run(ctx)
 	go worker.monitor()
+	if worker.keepAlive > 0 {
+		go worker.keepAliveLoop()
+	}
 	return worker, nil
 }
 
@@ -137,6 +174,46 @@ func (w *ServerWorker) monitor() {
 			}
 		}
 	}
+}
+
+// keepAliveLoop periodically emits a SessionStatusKeepAlive frame while at
+// least one session is active and the downlink has been idle for at least
+// w.keepAlive. The receiving side has always discarded this frame (see
+// handleStatueKeepAlive in client.go, present since the protocol was
+// introduced), so emission is safe with any existing peer.
+func (w *ServerWorker) keepAliveLoop() {
+	ticker := time.NewTicker(w.keepAlive)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-w.done.Wait():
+			return
+		case <-ticker.C:
+			if w.sessionManager.Size() == 0 {
+				// Nothing to keep alive; let monitor() reap the connection.
+				continue
+			}
+			if time.Since(time.Unix(0, w.lastWrite.Load())) < w.keepAlive {
+				continue
+			}
+			if err := w.sendKeepAlive(); err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to send keepalive frame")
+				return
+			}
+		}
+	}
+}
+
+// sendKeepAlive writes a minimal SessionStatusKeepAlive frame: no options,
+// no payload, 6 bytes on the wire.
+func (w *ServerWorker) sendKeepAlive() error {
+	meta := FrameMetadata{
+		SessionStatus: SessionStatusKeepAlive,
+	}
+	frame := buf.New()
+	common.Must(meta.WriteTo(frame))
+	return w.output.WriteMultiBuffer(buf.MultiBuffer{frame})
 }
 
 func (w *ServerWorker) ActiveConnections() uint32 {
@@ -257,7 +334,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 			x.Mux.Close(false)
 			return errors.New("failed to add new session")
 		}
-		go handle(ctx, x.Mux, w.link.Writer)
+		go handle(ctx, x.Mux, w.output)
 		return nil
 	}
 
@@ -282,7 +359,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		s.Close(false)
 		return errors.New("failed to add new session")
 	}
-	go handle(ctx, s, w.link.Writer)
+	go handle(ctx, s, w.output)
 	if !meta.Option.Has(OptionData) {
 		return nil
 	}
@@ -305,7 +382,7 @@ func (w *ServerWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 	s, found := w.sessionManager.Get(meta.SessionID)
 	if !found {
 		// Notify remote peer to close this session.
-		closingWriter := NewResponseWriter(meta.SessionID, w.link.Writer, protocol.TransferTypeStream)
+		closingWriter := NewResponseWriter(meta.SessionID, w.output, protocol.TransferTypeStream)
 		closingWriter.Close()
 
 		return buf.Copy(NewStreamReader(reader), buf.Discard)
