@@ -3,6 +3,7 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	crand "crypto/rand"
 	gotls "crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -365,6 +366,19 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
 
+		// Stream-down framing negotiation: the client advertises support with a
+		// meta marker; we frame (and keepalive) only if we also opted in via
+		// scStreamDownServerSecs. stream-one (no session) is never framed.
+		scStreamDownServerSecs := h.config.GetNormalizedScStreamDownServerSecs()
+		downFrameRequested := request.URL.Query().Get(h.config.GetNormalizedDownFrameKey()) != ""
+		framingNegotiated := sessionId != "" && downFrameRequested && scStreamDownServerSecs.To > 0
+		if framingNegotiated {
+			// confirm to the client, before the body starts, that it should
+			// strip framing. An old client that never sent the marker, or an old
+			// server that never sets this, keeps the raw stream.
+			writer.Header().Set(downFrameConfirmHeader, "1")
+		}
+
 		writer.WriteHeader(http.StatusOK)
 		writer.(http.Flusher).Flush()
 
@@ -385,6 +399,38 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 		if sessionId != "" { // if not stream-one
 			conn.reader = currentSession.uploadQueue
+		}
+
+		if framingNegotiated {
+			// wrap the download writer so every proxied Write becomes a data
+			// record, and drip padding records whenever the download half goes
+			// idle (e.g. during a bulk upload) so a fronting CDN's idle timeout
+			// never fires.
+			fw := newDownFramer(httpSC)
+			conn.writer = fw
+			go func() {
+				for {
+					interval := time.Duration(scStreamDownServerSecs.rand()) * time.Second
+					if interval <= 0 {
+						return
+					}
+					timer := time.NewTimer(interval)
+					select {
+					case <-request.Context().Done():
+						timer.Stop()
+						return
+					case <-httpSC.Wait():
+						timer.Stop()
+						return
+					case <-timer.C:
+					}
+					padding := make([]byte, int(h.config.GetNormalizedXPaddingBytes().rand()))
+					_, _ = crand.Read(padding)
+					if _, err := fw.WritePadding(interval, padding); err != nil {
+						return
+					}
+				}
+			}()
 		}
 
 		h.ln.addConn(stat.Connection(&conn))
