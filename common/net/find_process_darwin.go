@@ -198,7 +198,9 @@ func darwinSocketInfoMatchLevel(info []byte, network string, srcAddr netip.Addr,
 
 	vflag := info[darwinInSockInfoVFlagOff]
 	if srcAddr.Is4() {
-		if family != unix.AF_INET || vflag&darwinInSockInfoIPv4 == 0 {
+		// Dual-stack sockets expose IPv4-mapped connections as AF_INET6
+		// while marking the endpoint as IPv4 in ini_vflag.
+		if (family != unix.AF_INET && family != unix.AF_INET6) || vflag&darwinInSockInfoIPv4 == 0 {
 			return darwinSocketNoMatch
 		}
 	} else {
