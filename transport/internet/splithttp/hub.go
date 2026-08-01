@@ -622,7 +622,7 @@ func (l *QListener) Accept(ctx context.Context) (*quic.Conn, error) {
 	case "", "bbr":
 		congestion.UseBBR(conn, bbr.Profile(l.quicParams.BbrProfile))
 	case "force-brutal":
-		congestion.UseBrutal(conn, l.quicParams.BrutalUp)
+		congestion.UseBrutal(conn, l.quicParams.BrutalUp, l.quicParams.BrutalDisableLossCompensation)
 	default:
 		panic(l.quicParams.Congestion)
 	}

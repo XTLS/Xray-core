@@ -78,10 +78,10 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 				if quicParams.BrutalUp == 0 || down == 0 {
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				} else {
-					congestion.UseBrutal(conn, min(quicParams.BrutalUp, down))
+					congestion.UseBrutal(conn, min(quicParams.BrutalUp, down), quicParams.BrutalDisableLossCompensation)
 				}
 			case "force-brutal":
-				congestion.UseBrutal(conn, quicParams.BrutalUp)
+				congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)
 			default:
 				panic(quicParams.Congestion)
 			}
