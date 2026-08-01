@@ -816,9 +816,11 @@ func (c *Xicmp) Build() (proto.Message, error) {
 }
 
 type Realm struct {
-	Url         string     `json:"url"`
-	StunServers []string   `json:"stunServers"`
-	TlsConfig   *TLSConfig `json:"tlsConfig"`
+	Url         string             `json:"url"`
+	StunServers []string           `json:"stunServers"`
+	TlsConfig   *TLSConfig         `json:"tlsConfig"`
+	IPMode      string             `json:"ipMode"`
+	PortMapping *realm.PortMapping `json:"portMapping"`
 }
 
 func (c *Realm) Build() (proto.Message, error) {
@@ -898,6 +900,8 @@ func (c *Realm) Build() (proto.Message, error) {
 		ID:          id,
 		StunServers: stunServers,
 		TlsConfig:   tlsConfig,
+		IPMode:      strings.ToLower(c.IPMode),
+		PortMapping: c.PortMapping,
 	}, nil
 }
 
