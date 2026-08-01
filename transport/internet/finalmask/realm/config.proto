@@ -8,6 +8,18 @@ option java_multiple_files = true;
 
 import "transport/internet/tls/config.proto";
 
+enum Family {
+  Dual = 0;
+  V4 = 1;
+  V6 = 2;
+}
+
+message PortMapping {
+  bool enabled = 1;
+  int64 timeout = 2;
+  int64 lifetime = 3;
+}
+
 message Config {
   string scheme = 1;
   string host = 2;
@@ -16,4 +28,6 @@ message Config {
   string ID = 5;
   repeated string stun_servers = 6;
   xray.transport.internet.tls.Config tls_config = 7;
+  string IPMode = 8;
+  PortMapping port_mapping = 9;
 }
