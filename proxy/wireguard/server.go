@@ -95,7 +95,7 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		return nil, err
 	}
 
-	tun, _, stack, err := CreateNetTUN(localAddresses, nil, int(conf.Mtu), false)
+	tun, _, stack, err := CreateNetTUN(localAddresses, int(conf.Mtu), false)
 	if err != nil {
 		return nil, err
 	}

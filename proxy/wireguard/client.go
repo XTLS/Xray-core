@@ -106,10 +106,10 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	var tnet *Net
 	if !conf.NoKernelTun && kernelTunSupported {
 		errors.LogWarning(context.Background(), "Using kernel TUN")
-		tun, tnet, err = createKernelTun(localAddresses, []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("1.0.0.1"), netip.MustParseAddr("2606:4700:4700::1111"), netip.MustParseAddr("2606:4700:4700::1001")}, int(conf.Mtu))
+		tun, tnet, err = createKernelTun(localAddresses, int(conf.Mtu))
 	} else {
 		errors.LogWarning(context.Background(), "Using gVisor TUN")
-		tun, tnet, _, err = CreateNetTUN(localAddresses, []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("1.0.0.1"), netip.MustParseAddr("2606:4700:4700::1111"), netip.MustParseAddr("2606:4700:4700::1001")}, int(conf.Mtu), true)
+		tun, tnet, _, err = CreateNetTUN(localAddresses, int(conf.Mtu), true)
 	}
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	var addr netip.Addr
 	if ob.Target.Address.Family().IsDomain() {
-		ip, err := h.resolveRemote(ob.Target.Address.String())
+		ip, err := h.resolveLocal(ob.Target.Address.String())
 		if err != nil {
 			return errors.New("failed to resolve domain").Base(err)
 		}
@@ -206,7 +206,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		defer conn.Close()
 		c := &udpConnClient{
 			PacketConn:  conn.(*internet.PacketConnWrapper).PacketConn,
-			resolveFunc: h.resolveRemote,
+			resolveFunc: h.resolveLocal,
 			dest:        gonet.UDPAddrFromAddrPort(addrPort),
 		}
 		reader = c
@@ -345,20 +345,6 @@ func (h *Handler) resolveLocal(host string) (net.IP, error) {
 	return resolveDomain(host, h.conf.DomainStrategy, func(host string) ([]net.IP, error) {
 		ips, _, err := h.dns.LookupIP(host, dns.IPOption{IPv4Enable: true, IPv6Enable: true})
 		return ips, err
-	})
-}
-
-func (h *Handler) resolveRemote(host string) (net.IP, error) {
-	return resolveDomain(host, h.conf.DomainStrategy, func(host string) ([]net.IP, error) {
-		addrs, err := h.tnet.LookupHost(host)
-		if err != nil {
-			return nil, err
-		}
-		ips := make([]net.IP, 0, len(addrs))
-		for _, addr := range addrs {
-			ips = append(ips, net.ParseIP(addr))
-		}
-		return ips, nil
 	})
 }
 
