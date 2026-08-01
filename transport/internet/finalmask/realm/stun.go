@@ -23,14 +23,23 @@ const (
 	symmetricNATMaxPortsPerHost = 32
 )
 
-func resolveSTUNServers(local net.IP, servers []string) []*net.UDPAddr {
+func resolveSTUNServers(local net.IP, servers []string, family Family) []*net.UDPAddr {
 	var network string
-	if local.IsUnspecified() {
-		network = "ip"
-	} else {
-		if local.To4() != nil {
-			network = "ip4"
+	if family == Family_Dual {
+		if local.IsUnspecified() {
+			network = "ip"
 		} else {
+			if local.To4() != nil {
+				network = "ip4"
+			} else {
+				network = "ip6"
+			}
+		}
+	} else {
+		if family == Family_V4 {
+			network = "ip4"
+		}
+		if family == Family_V6 {
 			network = "ip6"
 		}
 	}
@@ -104,7 +113,7 @@ func netIPPortToAddrPort(ip net.IP, port int) (netip.AddrPort, error) {
 	return netip.AddrPortFrom(netip.AddrFrom16(addr), uint16(port)), nil
 }
 
-func candidatePunchAddrs(locals, peers []netip.AddrPort) ([]netip.AddrPort, map[netip.AddrPort]struct{}) {
+func candidatePunchAddrs(locals, peers []netip.AddrPort, family Family) ([]netip.AddrPort, map[netip.AddrPort]struct{}) {
 	var allow4, allow6 bool
 	for _, local := range locals {
 		if local.Addr().Is4() {
@@ -115,6 +124,12 @@ func candidatePunchAddrs(locals, peers []netip.AddrPort) ([]netip.AddrPort, map[
 		if allow4 && allow6 {
 			break
 		}
+	}
+	if family == Family_V4 {
+		allow6 = false
+	}
+	if family == Family_V6 {
+		allow4 = false
 	}
 	seen := make(map[netip.AddrPort]struct{}, len(peers))
 	candidates := make([]netip.AddrPort, 0, len(peers))
@@ -217,4 +232,18 @@ func parseAddrPorts(addrs []string) ([]netip.AddrPort, error) {
 		out = append(out, addr)
 	}
 	return out, nil
+}
+
+func insertAddr(addrs []netip.AddrPort, addr netip.AddrPort) []netip.AddrPort {
+	if !addr.IsValid() {
+		return addrs
+	}
+	out := append([]netip.AddrPort(nil), addrs...)
+	i, found := slices.BinarySearchFunc(out, addr, func(a, b netip.AddrPort) int {
+		return strings.Compare(a.String(), b.String())
+	})
+	if found {
+		return out
+	}
+	return slices.Insert(out, i, addr)
 }
