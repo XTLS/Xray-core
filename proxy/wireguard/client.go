@@ -11,7 +11,6 @@ import (
 
 	"golang.zx2c4.com/wireguard/tun"
 
-	"github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
@@ -36,10 +35,9 @@ type Handler struct {
 	policyManager policy.Manager
 	dns           dns.Client
 
-	setOutboundGateway func(ctx context.Context, ob *session.Outbound)
-	streamSettings     *internet.MemoryStreamConfig
-	uplinkCounter      stats.Counter
-	downlinkCounter    stats.Counter
+	streamSettings  *internet.MemoryStreamConfig
+	uplinkCounter   stats.Counter
+	downlinkCounter stats.Counter
 
 	tun  tun.Device
 	tnet *Net
@@ -51,9 +49,7 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	p := v.GetFeature(policy.ManagerType()).(policy.Manager)
 	d := v.GetFeature(dns.ClientType()).(dns.Client)
-	h := session.FullHandlerFromContext(ctx)
 
-	setOutboundGateway := h.(*outbound.Handler).SetOutboundGateway
 	streamSettings := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
 	tag := session.FullHandlerFromContext(ctx).Tag()
 	var uplinkCounter stats.Counter
@@ -124,10 +120,9 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		policyManager: p,
 		dns:           d,
 
-		setOutboundGateway: setOutboundGateway,
-		streamSettings:     streamSettings,
-		uplinkCounter:      uplinkCounter,
-		downlinkCounter:    downlinkCounter,
+		streamSettings:  streamSettings,
+		uplinkCounter:   uplinkCounter,
+		downlinkCounter: downlinkCounter,
 
 		tun:  tun,
 		tnet: tnet,
@@ -144,6 +139,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "wireguard"
 	ob.CanSpliceCopy = 3
 
+	dialer.SetOutboundGateway(ctx, ob)
 	if err := h.init(ctx); err != nil {
 		return err
 	}
@@ -265,9 +261,6 @@ func (h *Handler) init(ctx context.Context) error {
 	}
 	resolveFunc := h.resolveLocal
 	listenFunc := func() (net.PacketConn, error) {
-		outbounds := session.OutboundsFromContext(ctx)
-		ob := outbounds[len(outbounds)-1]
-		h.setOutboundGateway(ctx, ob)
 		dest, err := net.ParseDestination("udp:" + h.conf.Peers[0].Endpoint)
 		if err != nil {
 			return nil, err
