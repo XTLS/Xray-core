@@ -41,8 +41,8 @@ func UseBBR(conn *quic.Conn, profile bbr.Profile) {
 	))
 }
 
-func UseBrutal(conn *quic.Conn, tx uint64) {
-	conn.SetCongestionControl(brutal.NewBrutalSender(tx))
+func UseBrutal(conn *quic.Conn, tx uint64, disableLossCompensation bool) {
+	conn.SetCongestionControl(brutal.NewBrutalSender(tx, disableLossCompensation))
 }
 
 func UseConfigured(conn *quic.Conn, congestionType, bbrProfile string) {

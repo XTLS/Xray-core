@@ -266,7 +266,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				case "", "bbr":
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				case "force-brutal":
-					congestion.UseBrutal(conn, quicParams.BrutalUp)
+					congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)
 				default:
 					panic(quicParams.Congestion)
 				}
