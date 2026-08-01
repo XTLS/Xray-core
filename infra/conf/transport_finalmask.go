@@ -886,20 +886,22 @@ func (c *Mask) Build(tcp bool) (proto.Message, error) {
 }
 
 type QuicParamsConfig struct {
-	Congestion                  string    `json:"congestion"`
-	Debug                       bool      `json:"debug"`
-	BbrProfile                  string    `json:"bbrProfile"`
-	BrutalUp                    Bandwidth `json:"brutalUp"`
-	BrutalDown                  Bandwidth `json:"brutalDown"`
-	UdpHop                      UdpHop    `json:"udpHop"`
-	InitStreamReceiveWindow     uint64    `json:"initStreamReceiveWindow"`
-	MaxStreamReceiveWindow      uint64    `json:"maxStreamReceiveWindow"`
-	InitConnectionReceiveWindow uint64    `json:"initConnectionReceiveWindow"`
-	MaxConnectionReceiveWindow  uint64    `json:"maxConnectionReceiveWindow"`
-	MaxIdleTimeout              int64     `json:"maxIdleTimeout"`
-	KeepAlivePeriod             int64     `json:"keepAlivePeriod"`
-	DisablePathMTUDiscovery     bool      `json:"disablePathMTUDiscovery"`
-	MaxIncomingStreams          int64     `json:"maxIncomingStreams"`
+	Congestion                    string    `json:"congestion"`
+	Debug                         bool      `json:"debug"`
+	BbrProfile                    string    `json:"bbrProfile"`
+	BrutalUp                      Bandwidth `json:"brutalUp"`
+	BrutalDown                    Bandwidth `json:"brutalDown"`
+	BrutalDisableLossCompensation bool      `json:"brutalDisableLossCompensation"`
+	UdpHop                        UdpHop    `json:"udpHop"`
+	InitStreamReceiveWindow       uint64    `json:"initStreamReceiveWindow"`
+	MaxStreamReceiveWindow        uint64    `json:"maxStreamReceiveWindow"`
+	InitConnectionReceiveWindow   uint64    `json:"initConnectionReceiveWindow"`
+	MaxConnectionReceiveWindow    uint64    `json:"maxConnectionReceiveWindow"`
+	MaxIdleTimeout                int64     `json:"maxIdleTimeout"`
+	KeepAlivePeriod               int64     `json:"keepAlivePeriod"`
+	DisablePathMTUDiscovery       bool      `json:"disablePathMTUDiscovery"`
+	DisableChromeParrot           bool      `json:"disableChromeParrot"`
+	MaxIncomingStreams            int64     `json:"maxIncomingStreams"`
 }
 
 type FinalMask struct {
