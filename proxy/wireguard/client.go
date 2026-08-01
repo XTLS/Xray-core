@@ -11,6 +11,7 @@ import (
 
 	"golang.zx2c4.com/wireguard/tun"
 
+	"github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/dice"
@@ -35,9 +36,10 @@ type Handler struct {
 	policyManager policy.Manager
 	dns           dns.Client
 
-	streamSettings  *internet.MemoryStreamConfig
-	uplinkCounter   stats.Counter
-	downlinkCounter stats.Counter
+	setOutboundGateway func(ctx context.Context, ob *session.Outbound)
+	streamSettings     *internet.MemoryStreamConfig
+	uplinkCounter      stats.Counter
+	downlinkCounter    stats.Counter
 
 	tun  tun.Device
 	tnet *Net
@@ -49,7 +51,9 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	p := v.GetFeature(policy.ManagerType()).(policy.Manager)
 	d := v.GetFeature(dns.ClientType()).(dns.Client)
+	h := session.FullHandlerFromContext(ctx)
 
+	setOutboundGateway := h.(*outbound.Handler).SetOutboundGateway
 	streamSettings := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
 	tag := session.FullHandlerFromContext(ctx).Tag()
 	var uplinkCounter stats.Counter
@@ -106,10 +110,10 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	var tnet *Net
 	if !conf.NoKernelTun && kernelTunSupported {
 		errors.LogWarning(context.Background(), "Using kernel TUN")
-		tun, tnet, err = createKernelTun(localAddresses, []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("1.0.0.1"), netip.MustParseAddr("2606:4700:4700::1111"), netip.MustParseAddr("2606:4700:4700::1001")}, int(conf.Mtu))
+		tun, tnet, err = createKernelTun(localAddresses, nil, int(conf.Mtu))
 	} else {
 		errors.LogWarning(context.Background(), "Using gVisor TUN")
-		tun, tnet, _, err = CreateNetTUN(localAddresses, []netip.Addr{netip.MustParseAddr("1.1.1.1"), netip.MustParseAddr("1.0.0.1"), netip.MustParseAddr("2606:4700:4700::1111"), netip.MustParseAddr("2606:4700:4700::1001")}, int(conf.Mtu), true)
+		tun, tnet, _, err = CreateNetTUN(localAddresses, nil, int(conf.Mtu), true)
 	}
 	if err != nil {
 		return nil, err
@@ -120,9 +124,10 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		policyManager: p,
 		dns:           d,
 
-		streamSettings:  streamSettings,
-		uplinkCounter:   uplinkCounter,
-		downlinkCounter: downlinkCounter,
+		setOutboundGateway: setOutboundGateway,
+		streamSettings:     streamSettings,
+		uplinkCounter:      uplinkCounter,
+		downlinkCounter:    downlinkCounter,
 
 		tun:  tun,
 		tnet: tnet,
@@ -145,7 +150,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	var addr netip.Addr
 	if ob.Target.Address.Family().IsDomain() {
-		ip, err := h.resolveRemote(ob.Target.Address.String())
+		ip, err := h.resolveLocal(ob.Target.Address.String())
 		if err != nil {
 			return errors.New("failed to resolve domain").Base(err)
 		}
@@ -206,7 +211,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		defer conn.Close()
 		c := &udpConnClient{
 			PacketConn:  conn.(*internet.PacketConnWrapper).PacketConn,
-			resolveFunc: h.resolveRemote,
+			resolveFunc: h.resolveLocal,
 			dest:        gonet.UDPAddrFromAddrPort(addrPort),
 		}
 		reader = c
@@ -260,6 +265,9 @@ func (h *Handler) init(ctx context.Context) error {
 	}
 	resolveFunc := h.resolveLocal
 	listenFunc := func() (net.PacketConn, error) {
+		outbounds := session.OutboundsFromContext(ctx)
+		ob := outbounds[len(outbounds)-1]
+		h.setOutboundGateway(ctx, ob)
 		dest, err := net.ParseDestination("udp:" + h.conf.Peers[0].Endpoint)
 		if err != nil {
 			return nil, err
