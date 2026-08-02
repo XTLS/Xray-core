@@ -69,7 +69,7 @@ func NewConnServer(config *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	var mapper *PortMapper
-	if config.PortMapping.Enabled {
+	if config.PortMapping != nil && config.PortMapping.Enabled {
 		var err error
 		start := time.Now()
 		mapper, err = NewPortMapper(context.Background(), raw.LocalAddr().(*net.UDPAddr).Port, PortMapConfig{Timeout: time.Duration(config.PortMapping.Timeout) * time.Second, Lifetime: time.Duration(config.PortMapping.Lifetime) * time.Second})
