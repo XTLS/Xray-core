@@ -176,6 +176,7 @@ func (c *client) dial(ctx context.Context) error {
 	tr := &quic.Transport{Conn: pktConn}
 	if quicConfig.ChromeParrot {
 		tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
+		c.tlsConfig.GetCertificate = nil
 	}
 
 	var conn *quic.Conn
