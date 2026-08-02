@@ -22,8 +22,10 @@ func DialTaggedOutbound(ctx context.Context, dispatcher routing.Dispatcher, dest
 	ctx = session.ContextWithContent(ctx, content)
 	ctx = session.SetForcedOutboundTagToContext(ctx, tag)
 
+	ctx, cancel := context.WithCancel(ctx)
 	r, err := dispatcher.Dispatch(ctx, dest)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	var readerOpt cnc.ConnectionOption
@@ -32,7 +34,16 @@ func DialTaggedOutbound(ctx context.Context, dispatcher routing.Dispatcher, dest
 	} else {
 		readerOpt = cnc.ConnectionOutputMultiUDP(r.Reader)
 	}
-	return cnc.NewConnection(cnc.ConnectionInputMulti(r.Writer), readerOpt), nil
+	// Closing the returned connection must also tear down the dispatched
+	// outbound, otherwise it keeps running until the whole instance stops.
+	return cnc.NewConnection(cnc.ConnectionInputMulti(r.Writer), readerOpt, cnc.ConnectionOnClose(cancelCloser(cancel))), nil
+}
+
+type cancelCloser context.CancelFunc
+
+func (c cancelCloser) Close() error {
+	c()
+	return nil
 }
 
 func init() {
