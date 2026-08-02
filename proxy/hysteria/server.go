@@ -121,6 +121,13 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 			writer: conn,
 			addr:   addr.NetAddr(),
 		}
+		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+			From:   conn.RemoteAddr(),
+			To:     addr,
+			Status: log.AccessAccepted,
+			Reason: "",
+			Email:  inbound.User.Email,
+		})
 
 		return dispatcher.DispatchLink(ctx, *addr, &transport.Link{
 			Reader: reader,
