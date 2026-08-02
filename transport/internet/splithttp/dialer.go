@@ -46,6 +46,10 @@ var (
 	globalDialerAccess sync.Mutex
 )
 
+// dialHandshakeTimeout bounds the connection-establishment phase of an XHTTP
+// dial. Matches the default policy handshake timeout.
+const dialHandshakeTimeout = 60 * time.Second
+
 func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
@@ -118,6 +122,14 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
 	dialContext := func(ctxInner context.Context) (net.Conn, error) {
+		// Requests are created with context.WithoutCancel so that an
+		// established stream is never torn down mid-transfer. That also makes
+		// the dial phase uncancellable, so a stalled TCP/TLS/REALITY handshake
+		// would keep its goroutine forever. Bound the establishment phase
+		// explicitly; ctxInner is not referenced once a conn is returned.
+		ctxInner, cancel := context.WithTimeout(ctxInner, dialHandshakeTimeout)
+		defer cancel()
+
 		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
 		if err != nil {
 			return nil, err
