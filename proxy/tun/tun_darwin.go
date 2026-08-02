@@ -11,6 +11,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -47,9 +48,40 @@ type DarwinTun struct {
 	tunFd   int
 	ownsFd  bool // true for macOS (we created the fd), false for iOS (fd from system)
 
+	// kqueue fd used by Wait() to genuinely sleep until tunFd is readable,
+	// instead of the previous procyield-only busy-spin (dispatchLoop in
+	// stack_gvisor_endpoint.go calls ReadPacket() then Wait() in a tight
+	// loop with no other throttling whenever the queue is empty -- with
+	// only procyield(1), that pins a full CPU core for as long as the
+	// tunnel is up, observed causing severe device heating/thermal
+	// shutdown). -1 if kqueue setup failed, in which case Wait() falls
+	// back to the original procyield behavior.
+	waitKq int
+
 	routeMonitor     *os.File
 	routeMonitorOnce sync.Once
 	systemRoutes     []netip.Prefix
+}
+
+// newWaitKqueue creates a kqueue registered for read-readiness on fd, for
+// Wait() to block on. Returns -1 (never a valid fd) if anything fails, so
+// callers can fall back to procyield rather than error out of NewTun over
+// what is purely a CPU-efficiency concern.
+func newWaitKqueue(fd int) int {
+	kq, err := unix.Kqueue()
+	if err != nil {
+		return -1
+	}
+	_, err = unix.Kevent(kq, []unix.Kevent_t{{
+		Ident:  uint64(fd),
+		Filter: unix.EVFILT_READ,
+		Flags:  unix.EV_ADD | unix.EV_ENABLE,
+	}}, nil, nil)
+	if err != nil {
+		_ = unix.Close(kq)
+		return -1
+	}
+	return kq
 }
 
 var (
@@ -76,6 +108,7 @@ func NewTun(options *Config) (Tun, error) {
 			options: options,
 			tunFd:   fd,
 			ownsFd:  false,
+			waitKq:  newWaitKqueue(fd),
 		}, nil
 	}
 
@@ -96,6 +129,7 @@ func NewTun(options *Config) (Tun, error) {
 		options: options,
 		tunFd:   int(tunFile.Fd()),
 		ownsFd:  true,
+		waitKq:  newWaitKqueue(int(tunFile.Fd())),
 	}, nil
 }
 
@@ -126,6 +160,9 @@ func (t *DarwinTun) Close() error {
 			_ = t.routeMonitor.Close()
 		}
 	})
+	if t.waitKq >= 0 {
+		_ = unix.Close(t.waitKq)
+	}
 	routeErr := t.unsetSystemRoutes()
 	if t.ownsFd {
 		return xerrors.Combine(routeErr, t.tunFile.Close())
@@ -234,9 +271,18 @@ func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 	}), nil
 }
 
-// Wait some cpu cycles
+// Wait blocks until tunFd is readable (or a short timeout elapses), rather
+// than spinning the CPU -- see the waitKq field's own doc comment. A bounded
+// timeout (not an indefinite wait) keeps this responsive to a Close() that
+// happens to race a call already parked here.
 func (t *DarwinTun) Wait() {
-	procyield(1)
+	if t.waitKq < 0 {
+		procyield(1)
+		return
+	}
+	events := make([]unix.Kevent_t, 1)
+	timeout := unix.NsecToTimespec((1 * time.Second).Nanoseconds())
+	_, _ = unix.Kevent(t.waitKq, nil, events, &timeout)
 }
 
 func (t *DarwinTun) newEndpoint() (stack.LinkEndpoint, error) {
