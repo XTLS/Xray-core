@@ -172,7 +172,7 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 	for _, tag := range tags {
 		handler := tag
 		client := newPingClient(
-			h.ctx,
+			ctx,
 			h.dispatcher,
 			h.Settings.Destination,
 			h.Settings.Timeout,

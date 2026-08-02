@@ -41,6 +41,7 @@ func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler 
 			}
 			return tagged.Dialer(ctxv, dispatcher, dest, handler)
 		},
+		TLSHandshakeTimeout: timeout,
 	}
 	return &http.Client{
 		Transport: tr,
