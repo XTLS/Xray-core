@@ -64,6 +64,14 @@ jobs:
           echo "Latest: '$LATEST'."
           echo "LATEST=$LATEST" >>${GITHUB_ENV}
 
+          NEWEST=false
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            NEWEST=true
+          fi
+
+          echo "Newest: '$NEWEST'."
+          echo "NEWEST=$NEWEST" >>${GITHUB_ENV}
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -124,10 +132,21 @@ jobs:
             ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           fi
 
+          if [[ "${{ env.NEWEST }}" == "true" ]]; then
+            echo "Adding 'pre-release' tag to manifest: '${{ env.FULL_IMAGE_NAME }}:pre-release'."
+            docker buildx imagetools create \
+            --tag ${{ env.FULL_IMAGE_NAME }}:pre-release \
+            ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          fi
+
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
           if [[ "${{ env.LATEST }}" == "true" ]]; then
             docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:latest
+          fi
+
+          if [[ "${{ env.NEWEST }}" == "true" ]]; then
+            docker buildx imagetools inspect ${{ env.FULL_IMAGE_NAME }}:pre-release
           fi

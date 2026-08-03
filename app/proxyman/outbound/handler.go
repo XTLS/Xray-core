@@ -39,7 +39,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.OutboundUplink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "outbound>>>" + tag + ">>>traffic>>>uplink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			uplinkCounter = c
 		}
@@ -47,7 +47,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.OutboundDownlink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "outbound>>>" + tag + ">>>traffic>>>downlink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			downlinkCounter = c
 		}

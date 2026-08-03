@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"io"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -31,11 +32,23 @@ import (
 )
 
 var (
-	useSplice               bool
+	useSplice               atomic.Bool
 	allNetworks             [8]bool
 	defaultBlockPrivateRule *FinalRule
 	defaultBlockAllRule     *FinalRule
 )
+
+func reloadEnvSettings() error {
+	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	value := platform.NewEnvFlag(platform.UseFreedomSplice).GetValue(func() string { return defaultFlagValue })
+	enabled := false
+	switch value {
+	case defaultFlagValue, "auto", "enable":
+		enabled = true
+	}
+	useSplice.Store(enabled)
+	return nil
+}
 
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
@@ -48,12 +61,7 @@ func init() {
 		return h, nil
 	}))
 
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-	value := platform.NewEnvFlag(platform.UseFreedomSplice).GetValue(func() string { return defaultFlagValue })
-	switch value {
-	case defaultFlagValue, "auto", "enable":
-		useSplice = true
-	}
+	platform.RegisterEnvReload(reloadEnvSettings)
 
 	for i := range allNetworks {
 		allNetworks[i] = true
@@ -62,26 +70,7 @@ func init() {
 	defaultBlockPrivateRule = &FinalRule{
 		action:  RuleAction_Block,
 		network: allNetworks,
-		ip: common.Must2(geodata.IPReg.BuildIPMatcher(common.Must2(geodata.ParseIPRules([]string{
-			"0.0.0.0/8",
-			"10.0.0.0/8",
-			"100.64.0.0/10",
-			"127.0.0.0/8",
-			"169.254.0.0/16",
-			"172.16.0.0/12",
-			"192.0.0.0/24",
-			"192.0.2.0/24",
-			"192.88.99.0/24",
-			"192.168.0.0/16",
-			"198.18.0.0/15",
-			"198.51.100.0/24",
-			"203.0.113.0/24",
-			"224.0.0.0/3",
-			"::/127",
-			"fc00::/7",
-			"fe80::/10",
-			"ff00::/8",
-		})))),
+		ip:      geodata.GetPrivateIPMatcher(),
 	}
 
 	defaultBlockAllRule = &FinalRule{
@@ -441,7 +430,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	responseDone := func() error {
 		defer timer.SetTimeout(plcy.Timeouts.UplinkOnly)
-		if destination.Network == net.Network_TCP && useSplice && proxy.IsRAWTransportWithoutSecurity(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
+		if destination.Network == net.Network_TCP && useSplice.Load() && proxy.IsRAWTransportWithoutSecurity(conn) { // it would be tls conn in special use case of MITM, we need to let link handle traffic
 			var writeConn net.Conn
 			var inTimer *signal.ActivityTimer
 			if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Conn != nil {

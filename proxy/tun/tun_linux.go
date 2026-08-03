@@ -26,9 +26,10 @@ type LinuxTun struct {
 	options *Config
 	ownsTun bool
 
-	systemRoutes     []netlink.Route
-	routeMonitorStop chan struct{}
-	routeMonitorOnce sync.Once
+	interfaceAddresses []netlink.Addr
+	systemRoutes       []netlink.Route
+	routeMonitorStop   chan struct{}
+	routeMonitorOnce   sync.Once
 }
 
 // LinuxTun implements Tun
@@ -172,7 +173,14 @@ func (t *LinuxTun) Start() error {
 		return err
 	}
 
+	if err := t.setInterfaceAddresses(); err != nil {
+		_ = netlink.LinkSetDown(t.tunLink)
+		return err
+	}
+
 	if err := t.setSystemRoutes(); err != nil {
+		_ = t.unsetInterfaceAddresses()
+		_ = netlink.LinkSetDown(t.tunLink)
 		return err
 	}
 
@@ -193,6 +201,7 @@ func (t *LinuxTun) Close() error {
 	})
 
 	_ = t.unsetSystemRoutes()
+	_ = t.unsetInterfaceAddresses()
 
 	if t.ownsTun {
 		_ = netlink.LinkSetDown(t.tunLink)
@@ -221,6 +230,37 @@ func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
 
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
 	return unix.BindToDevice(int(fd), iface.Name)
+}
+
+func (t *LinuxTun) setInterfaceAddresses() error {
+	if len(t.options.Gateway) == 0 {
+		return nil
+	}
+	for _, address := range t.options.Gateway {
+		addr, err := netlink.ParseAddr(address)
+		if err != nil {
+			_ = t.unsetInterfaceAddresses()
+			return errors.New("invalid interface address ", address).Base(err)
+		}
+		if err := netlink.AddrAdd(t.tunLink, addr); err != nil {
+			_ = t.unsetInterfaceAddresses()
+			return errors.New("failed to add interface address ", address).Base(err)
+		}
+		t.interfaceAddresses = append(t.interfaceAddresses, *addr)
+	}
+	return nil
+}
+
+func (t *LinuxTun) unsetInterfaceAddresses() error {
+	var errs []error
+	for i := len(t.interfaceAddresses) - 1; i >= 0; i-- {
+		address := t.interfaceAddresses[i]
+		if err := netlink.AddrDel(t.tunLink, &address); err != nil {
+			errs = append(errs, errors.New("failed to delete interface address ", address.String()).Base(err))
+		}
+	}
+	t.interfaceAddresses = nil
+	return errors.Combine(errs...)
 }
 
 func (t *LinuxTun) setSystemRoutes() error {
@@ -308,36 +348,37 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 		return iface, nil
 	}
 
-	probeIPs := []net.IP{
-		net.ParseIP("8.8.8.8"),
-		net.ParseIP("2001:4860:4860::8888"),
+	for _, family := range []int{
+		netlink.FAMILY_V4,
+		netlink.FAMILY_V6,
+	} {
+		iface, err := findDefaultInterface(family, tunIndex)
+		if err == nil {
+			return iface, nil
+		}
 	}
 
-	for _, ip := range probeIPs {
-		routes, err := netlink.RouteGet(ip)
-		if err != nil || len(routes) == 0 {
-			continue
-		}
-		route := routes[0]
-		if route.LinkIndex == tunIndex {
-			continue
+	return nil, errors.New("no usable outbound interface found")
+}
+
+func findDefaultInterface(family int, tunIndex int) (*net.Interface, error) {
+	routes, err := netlink.RouteList(nil, family)
+	if err != nil {
+		return nil, err
+	}
+
+	var selected *net.Interface
+	selectedMetric := -1
+
+	for _, route := range routes {
+		if route.Dst != nil {
+			ones, _ := route.Dst.Mask.Size()
+			if ones != 0 {
+				continue
+			}
 		}
 
-		link, err := netlink.LinkByIndex(route.LinkIndex)
-		if err != nil {
-			continue
-		}
-		attrs := link.Attrs()
-
-		if attrs.Flags&net.FlagUp == 0 {
-			continue
-		}
-		operState := attrs.OperState
-		if operState != netlink.OperUp && operState != netlink.OperUnknown {
-			continue
-		}
-
-		if route.Src == nil || route.Src.IsLoopback() || route.Src.IsLinkLocalUnicast() {
+		if route.LinkIndex == 0 || route.LinkIndex == tunIndex {
 			continue
 		}
 
@@ -345,8 +386,21 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 		if err != nil {
 			continue
 		}
-		return iface, nil
+
+		if iface.Flags&net.FlagUp == 0 ||
+			iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		if selected == nil || route.Priority < selectedMetric {
+			selected = iface
+			selectedMetric = route.Priority
+		}
 	}
 
-	return nil, errors.New("no usable outbound interface found")
+	if selected == nil {
+		return nil, errors.New("physical default route not found")
+	}
+
+	return selected, nil
 }

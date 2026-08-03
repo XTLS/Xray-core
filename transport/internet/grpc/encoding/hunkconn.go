@@ -38,12 +38,14 @@ func NewHunkReadWriter(hc HunkConn, cancel context.CancelFunc) *HunkReaderWriter
 
 func NewHunkConn(hc HunkConn, cancel context.CancelFunc, trustedXForwardedFor []string) net.Conn {
 	rAddr := remoteAddrFromContext(hc.Context(), trustedXForwardedFor)
+	lAddr := localAddrFromContext(hc.Context())
 	wrc := NewHunkReadWriter(hc, cancel)
 	return cnc.NewConnection(
 		cnc.ConnectionInput(wrc),
 		cnc.ConnectionOutput(wrc),
 		cnc.ConnectionOnClose(wrc),
 		cnc.ConnectionRemoteAddr(rAddr),
+		cnc.ConnectionLocalAddr(lAddr),
 	)
 }
 

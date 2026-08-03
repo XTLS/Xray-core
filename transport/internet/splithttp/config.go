@@ -24,8 +24,11 @@ func (c *Config) GetNormalizedPath() string {
 		path = "/" + path
 	}
 
-	if path[len(path)-1] != '/' {
-		path = path + "/"
+	if c.GetNormalizedSessionPlacement() == PlacementPath ||
+		c.GetNormalizedSeqPlacement() == PlacementPath {
+		if path[len(path)-1] != '/' {
+			path = path + "/"
+		}
 	}
 
 	return path

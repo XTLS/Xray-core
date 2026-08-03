@@ -3,6 +3,7 @@ package conf
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -175,7 +176,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		receiverSettings.StreamSettings = ss
 		if strings.Contains(ss.SecurityType, "reality") && (receiverSettings.PortList == nil ||
 			len(receiverSettings.PortList.Ports()) != 1 || receiverSettings.PortList.Ports()[0] != 443) {
-			errors.LogWarning(context.Background(), `REALITY: Listening on non-443 ports may get your IP blocked by the GFW`)
+			errors.LogWarning(context.Background(), `REALITY: Listening on non-443 ports will increase the likelihood of your server's IP being blocked by the GFW`)
 		}
 	}
 	if c.SniffingConfig != nil {
@@ -227,6 +228,40 @@ func (c *OutboundDetourConfig) checkChainProxyConfig() error {
 	if len(c.ProxySettings.Tag) > 0 && len(c.StreamSetting.SocketSettings.DialerProxy) > 0 {
 		return errors.New("proxySettings.tag is conflicted with sockopt.dialerProxy").AtWarning()
 	}
+	return nil
+}
+
+func requiresTransportSecurity(address *Address) bool {
+	if address == nil || address.Address == nil {
+		return false
+	}
+	if address.Family().IsIP() {
+		return !geodata.GetPrivateIPMatcher().Match(address.IP())
+	}
+	domain := strings.TrimSuffix(strings.ToLower(address.Domain()), ".")
+	return !geodata.GetPrivateDomainMatcher().MatchAny(domain)
+}
+
+func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
+	if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.GetSecurityType() != "" {
+		return nil
+	}
+
+	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
+		if vlessCfg.Encryption != "" && vlessCfg.Encryption != "none" {
+			return nil
+		}
+		if requiresTransportSecurity(vlessCfg.Address) {
+			return errors.New("vless without TLS or other encryption is prohibited unless the server address is a private IP or domain")
+		}
+	}
+
+	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
+		if requiresTransportSecurity(tjCfg.Address) {
+			return errors.New("trojan without TLS is prohibited unless the server address is a private IP or domain")
+		}
+	}
+
 	return nil
 }
 
@@ -323,6 +358,9 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
+	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
+		return nil, err
+	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
@@ -342,11 +380,20 @@ func (c *StatsConfig) Build() (*stats.Config, error) {
 	return &stats.Config{}, nil
 }
 
+type EnvConfig map[string]string
+
+func (c EnvConfig) Override(o EnvConfig) {
+	for key, value := range o {
+		c[key] = value
+	}
+}
+
 type Config struct {
 	// Deprecated: Global transport config is no longer used
 	// left for returning error
 	Transport map[string]json.RawMessage `json:"transport"`
 
+	Env              EnvConfig               `json:"env"`
 	LogConfig        *LogConfig              `json:"log"`
 	RouterConfig     *RouterConfig           `json:"routing"`
 	DNSConfig        *DNSConfig              `json:"dns"`
@@ -401,6 +448,12 @@ func (c *Config) Override(o *Config, fn string) {
 	}
 	if o.Transport != nil {
 		c.Transport = o.Transport
+	}
+	if o.Env != nil {
+		if c.Env == nil {
+			c.Env = EnvConfig{}
+		}
+		c.Env.Override(o.Env)
 	}
 	if o.Policy != nil {
 		c.Policy = o.Policy
@@ -477,6 +530,12 @@ func (c *Config) Override(o *Config, fn string) {
 
 // Build implements Buildable.
 func (c *Config) Build() (*core.Config, error) {
+	for key, value := range c.Env {
+		if err := os.Setenv(key, value); err != nil {
+			return nil, errors.New("failed to apply environment configuration").Base(err)
+		}
+	}
+
 	if err := PostProcessConfigureFile(c); err != nil {
 		return nil, errors.New("failed to post-process configuration file").Base(err)
 	}
