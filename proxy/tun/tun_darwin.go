@@ -39,9 +39,6 @@ const (
 	ND6_INFINITE_LIFETIME = 0xFFFFFFFF // netinet6/nd6.h
 )
 
-//go:linkname procyield runtime.procyield
-func procyield(cycles uint32)
-
 type DarwinTun struct {
 	tunFile *os.File
 	options *Config
@@ -55,7 +52,7 @@ type DarwinTun struct {
 	// only procyield(1), that pins a full CPU core for as long as the
 	// tunnel is up, observed causing severe device heating/thermal
 	// shutdown). -1 if kqueue setup failed, in which case Wait() falls
-	// back to the original procyield behavior.
+	// back to a bounded time.Sleep instead.
 	waitKq int
 
 	routeMonitor     *os.File
@@ -65,8 +62,8 @@ type DarwinTun struct {
 
 // newWaitKqueue creates a kqueue registered for read-readiness on fd, for
 // Wait() to block on. Returns -1 (never a valid fd) if anything fails, so
-// callers can fall back to procyield rather than error out of NewTun over
-// what is purely a CPU-efficiency concern.
+// callers can fall back to a bounded sleep rather than error out of NewTun
+// over what is purely a CPU-efficiency concern.
 func newWaitKqueue(fd int) int {
 	kq, err := unix.Kqueue()
 	if err != nil {
@@ -277,7 +274,14 @@ func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 // happens to race a call already parked here.
 func (t *DarwinTun) Wait() {
 	if t.waitKq < 0 {
-		procyield(1)
+		// Reviewer feedback (XTLS/Xray-core#6580): procyield here is the
+		// same busy-spin this whole change exists to remove, just gated
+		// behind an edge case (kqueue setup failing, which practically
+		// never happens on real Darwin systems) instead of always -- a
+		// genuine bounded sleep actually yields the CPU instead of being a
+		// near-instant scheduler hint that lets the tight dispatchLoop
+		// caller (stack_gvisor_endpoint.go) spin just as hot as before.
+		time.Sleep(time.Millisecond)
 		return
 	}
 	events := make([]unix.Kevent_t, 1)
