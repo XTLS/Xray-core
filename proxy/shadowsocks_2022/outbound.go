@@ -84,7 +84,9 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	}
 
 	if session.TimeoutOnlyFromContext(ctx) {
-		ctx, _ = context.WithCancel(context.Background())
+		cancelableCtx, cancel := context.WithCancel(context.Background())
+		ctx = cancelableCtx
+		defer cancel()
 	}
 
 	if network == net.Network_TCP {
