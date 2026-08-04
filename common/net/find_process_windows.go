@@ -108,7 +108,16 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	}
 	s := newSearcher(networkType, familyType)
 
-	pid, err := s.Search(buf, addr, uint16(port))
+	var destAddr netip.Addr
+	if destIP != "" {
+		if ip := net.ParseIP(destIP); ip != nil {
+			if addr, ok := netip.AddrFromSlice(ip); ok {
+				destAddr = addr.Unmap()
+			}
+		}
+	}
+
+	pid, err := s.Search(buf, addr, uint16(port), destAddr, destPort)
 	if err != nil {
 		return 0, "", "", err
 	}
@@ -120,86 +129,6 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	procName := nameSplit[len(nameSplit)-1]
 	procName = strings.TrimSuffix(procName, ".exe")
 	return int(pid), procName, NameWithPath, err
-}
-
-type searcher struct {
-	itemSize int
-	port     int
-	ip       int
-	ipSize   int
-	pid      int
-	tcpState int
-}
-
-func (s *searcher) Search(b []byte, ip netip.Addr, port uint16) (uint32, error) {
-	n := int(readNativeUint32(b[:4]))
-	itemSize := s.itemSize
-	for i := range n {
-		row := b[4+itemSize*i : 4+itemSize*(i+1)]
-
-		if s.tcpState >= 0 {
-			tcpState := readNativeUint32(row[s.tcpState : s.tcpState+4])
-			// MIB_TCP_STATE_ESTAB, only check established connections for TCP
-			if tcpState != 5 {
-				continue
-			}
-		}
-
-		// according to MSDN, only the lower 16 bits of dwLocalPort are used and the port number is in network endian.
-		// this field can be illustrated as follows depends on different machine endianess:
-		//     little endian: [ MSB LSB  0   0  ]   interpret as native uint32 is ((LSB<<8)|MSB)
-		//       big  endian: [  0   0  MSB LSB ]   interpret as native uint32 is ((MSB<<8)|LSB)
-		// so we need an syscall.Ntohs on the lower 16 bits after read the port as native uint32
-		srcPort := syscall.Ntohs(uint16(readNativeUint32(row[s.port : s.port+4])))
-		if srcPort != port {
-			continue
-		}
-
-		srcIP, _ := netip.AddrFromSlice(row[s.ip : s.ip+s.ipSize])
-		srcIP = srcIP.Unmap()
-		// windows binds an unbound udp socket to 0.0.0.0/[::] while first sendto
-		if ip != srcIP && (!srcIP.IsUnspecified() || s.tcpState != -1) {
-			continue
-		}
-
-		pid := readNativeUint32(row[s.pid : s.pid+4])
-		return pid, nil
-	}
-	return 0, errors.New("not found")
-}
-
-func newSearcher(network Network, family AddressFamily) *searcher {
-	var itemSize, port, ip, ipSize, pid int
-	tcpState := -1
-	switch network {
-	case Network_TCP:
-		if family == AddressFamilyIPv4 {
-			// struct MIB_TCPROW_OWNER_PID
-			itemSize, port, ip, ipSize, pid, tcpState = 24, 8, 4, 4, 20, 0
-		}
-		if family == AddressFamilyIPv6 {
-			// struct MIB_TCP6ROW_OWNER_PID
-			itemSize, port, ip, ipSize, pid, tcpState = 56, 20, 0, 16, 52, 48
-		}
-	case Network_UDP:
-		if family == AddressFamilyIPv4 {
-			// struct MIB_UDPROW_OWNER_PID
-			itemSize, port, ip, ipSize, pid = 12, 4, 0, 4, 8
-		}
-		if family == AddressFamilyIPv6 {
-			// struct MIB_UDP6ROW_OWNER_PID
-			itemSize, port, ip, ipSize, pid = 28, 20, 0, 16, 24
-		}
-	}
-
-	return &searcher{
-		itemSize: itemSize,
-		port:     port,
-		ip:       ip,
-		ipSize:   ipSize,
-		pid:      pid,
-		tcpState: tcpState,
-	}
 }
 
 func getTransportTable(fn uintptr, family int, class int) ([]byte, error) {
@@ -216,10 +145,6 @@ func getTransportTable(fn uintptr, family int, class int) ([]byte, error) {
 			return nil, errors.New("syscall error: ", int(err))
 		}
 	}
-}
-
-func readNativeUint32(b []byte) uint32 {
-	return *(*uint32)(unsafe.Pointer(&b[0]))
 }
 
 func getExecPathFromPID(pid uint32) (string, error) {
