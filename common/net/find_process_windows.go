@@ -67,6 +67,9 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	if network != "tcp" && network != "udp" {
 		panic("Unsupported network type for process lookup.")
 	}
+	if pid, name, absolutePath, found := lookupProcessAttribution(network, srcIP, srcPort, destIP, destPort); found {
+		return pid, name, absolutePath, nil
+	}
 	var class int
 	var fn uintptr
 	switch network {
@@ -119,6 +122,9 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 
 	pid, err := s.Search(buf, addr, uint16(port), destAddr, destPort)
 	if err != nil {
+		if pid, name, absolutePath, found := waitProcessAttribution(network, srcIP, srcPort, destIP, destPort); found {
+			return pid, name, absolutePath, nil
+		}
 		return 0, "", "", err
 	}
 	NameWithPath, err := getExecPathFromPID(pid)
@@ -128,6 +134,7 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	nameSplit := strings.Split(NameWithPath, "/")
 	procName := nameSplit[len(nameSplit)-1]
 	procName = strings.TrimSuffix(procName, ".exe")
+	storeProcessAttribution(network, srcIP, srcPort, destIP, destPort, int(pid), procName, NameWithPath)
 	return int(pid), procName, NameWithPath, err
 }
 

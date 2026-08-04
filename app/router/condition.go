@@ -297,6 +297,8 @@ type ProcessNameMatcher struct {
 }
 
 func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
+	net.EnableProcessAttribution()
+
 	processNames := []string{}
 	folders := []string{}
 	absPaths := []string{}
