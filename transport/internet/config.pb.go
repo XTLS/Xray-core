@@ -458,7 +458,8 @@ type QuicParams struct {
 	KeepAlivePeriod               int64                  `protobuf:"varint,12,opt,name=keep_alive_period,json=keepAlivePeriod,proto3" json:"keep_alive_period,omitempty"`
 	DisablePathMtuDiscovery       bool                   `protobuf:"varint,13,opt,name=disable_path_mtu_discovery,json=disablePathMtuDiscovery,proto3" json:"disable_path_mtu_discovery,omitempty"`
 	DisableChromeParrot           bool                   `protobuf:"varint,14,opt,name=disable_chrome_parrot,json=disableChromeParrot,proto3" json:"disable_chrome_parrot,omitempty"`
-	MaxIncomingStreams            int64                  `protobuf:"varint,15,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
+	DisableGSO                    bool                   `protobuf:"varint,15,opt,name=disableGSO,proto3" json:"disableGSO,omitempty"`
+	MaxIncomingStreams            int64                  `protobuf:"varint,16,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
 	unknownFields                 protoimpl.UnknownFields
 	sizeCache                     protoimpl.SizeCache
 }
@@ -587,6 +588,13 @@ func (x *QuicParams) GetDisablePathMtuDiscovery() bool {
 func (x *QuicParams) GetDisableChromeParrot() bool {
 	if x != nil {
 		return x.DisableChromeParrot
+	}
+	return false
+}
+
+func (x *QuicParams) GetDisableGSO() bool {
+	if x != nil {
+		return x.DisableGSO
 	}
 	return false
 }
@@ -1036,7 +1044,7 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x06UdpHop\x12\x14\n" +
 	"\x05ports\x18\x01 \x03(\rR\x05ports\x12!\n" +
 	"\finterval_min\x18\x02 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\xef\x05\n" +
+	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\x8f\x06\n" +
 	"\n" +
 	"QuicParams\x12\x1e\n" +
 	"\n" +
@@ -1057,8 +1065,11 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x10max_idle_timeout\x18\v \x01(\x03R\x0emaxIdleTimeout\x12*\n" +
 	"\x11keep_alive_period\x18\f \x01(\x03R\x0fkeepAlivePeriod\x12;\n" +
 	"\x1adisable_path_mtu_discovery\x18\r \x01(\bR\x17disablePathMtuDiscovery\x122\n" +
-	"\x15disable_chrome_parrot\x18\x0e \x01(\bR\x13disableChromeParrot\x120\n" +
-	"\x14max_incoming_streams\x18\x0f \x01(\x03R\x12maxIncomingStreams\"Q\n" +
+	"\x15disable_chrome_parrot\x18\x0e \x01(\bR\x13disableChromeParrot\x12\x1e\n" +
+	"\n" +
+	"disableGSO\x18\x0f \x01(\bR\n" +
+	"disableGSO\x120\n" +
+	"\x14max_incoming_streams\x18\x10 \x01(\x03R\x12maxIncomingStreams\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
 	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\x93\x01\n" +

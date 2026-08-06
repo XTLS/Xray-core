@@ -256,7 +256,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					pktConn = newConn
 				}
 
-				tr := &quic.Transport{Conn: pktConn}
+				tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
 				if quicConfig.ChromeParrot {
 					tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
 					tlsCfg.GetCertificate = nil

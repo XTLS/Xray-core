@@ -506,7 +506,9 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		}
 
-		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, quicConfig)
+		tr := &quic.Transport{Conn: Conn, DisableGSO: quicParams.DisableGSO}
+
+		l.h3listener, err = tr.ListenEarly(tlsConfig, quicConfig)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
