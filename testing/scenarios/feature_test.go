@@ -92,7 +92,7 @@ func TestPassiveConnection(t *testing.T) {
 	}
 }
 
-func TestProxy(t *testing.T) {
+func TestDialerProxy(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -187,8 +187,10 @@ func TestProxy(t *testing.T) {
 					},
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-					ProxySettings: &internet.ProxyConfig{
-						Tag: "proxy",
+					StreamSettings: &internet.StreamConfig{
+						SocketSettings: &internet.SocketConfig{
+							DialerProxy: "proxy",
+						},
 					},
 				}),
 			},
@@ -218,7 +220,7 @@ func TestProxy(t *testing.T) {
 	}
 }
 
-func TestProxyOverKCP(t *testing.T) {
+func TestDialerProxyOverKCP(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -321,11 +323,11 @@ func TestProxyOverKCP(t *testing.T) {
 					},
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-					ProxySettings: &internet.ProxyConfig{
-						Tag: "proxy",
-					},
 					StreamSettings: &internet.StreamConfig{
 						ProtocolName: "mkcp",
+						SocketSettings: &internet.SocketConfig{
+							DialerProxy: "proxy",
+						},
 					},
 				}),
 			},
