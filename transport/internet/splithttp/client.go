@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
-	"sync"
 
 	"github.com/apernet/quic-go/http3"
 	"github.com/xtls/xray-core/common"
@@ -35,7 +34,7 @@ type DefaultDialerClient struct {
 	closed          bool
 	httpVersion     string
 	// pool of net.Conn, created using dialUploadConn
-	uploadRawPool  *sync.Pool
+	uploadRawPool  *h1UploadPool
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
 }
 
@@ -127,33 +126,34 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		requestBuff.Grow(512 + int(req.ContentLength))
 		common.Must(req.Write(requestBuff))
 
-		var uploadConn any
 		var h1UploadConn *H1Conn
 
 		for {
-			uploadConn = c.uploadRawPool.Get()
-			newConnection := uploadConn == nil
+			h1UploadConn = c.uploadRawPool.Get()
+			newConnection := h1UploadConn == nil
 			if newConnection {
 				newConn, err := c.dialUploadConn(context.WithoutCancel(ctx))
 				if err != nil {
 					return err
 				}
 				h1UploadConn = NewH1Conn(newConn)
-				uploadConn = h1UploadConn
+				if !c.uploadRawPool.Add(h1UploadConn) {
+					return errors.New("HTTP/1.1 upload client is closed")
+				}
 			} else {
-				h1UploadConn = uploadConn.(*H1Conn)
-
 				// TODO: Replace 0 here with a config value later
 				// Or add some other condition for optimization purposes
 				if h1UploadConn.UnreadedResponsesCount > 0 {
 					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
 					if err != nil {
 						c.closed = true
+						c.uploadRawPool.Discard(h1UploadConn)
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
 					io.Copy(io.Discard, resp.Body)
 					defer resp.Body.Close()
 					if resp.StatusCode != 200 {
+						c.uploadRawPool.Discard(h1UploadConn)
 						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
 					}
 				}
@@ -167,18 +167,22 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 			if err == nil {
 				break
 			} else if newConnection {
+				c.uploadRawPool.Discard(h1UploadConn)
 				return err
+			} else {
+				c.uploadRawPool.Discard(h1UploadConn)
 			}
 		}
 
-		c.uploadRawPool.Put(uploadConn)
+		c.uploadRawPool.Release(h1UploadConn)
 	}
 
 	return nil
 }
 
-// HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
 func (c *DefaultDialerClient) Close() error {
+	c.uploadRawPool.Close()
+
 	transport := c.client.Transport
 	if h3Transport, ok := transport.(*http3.Transport); ok {
 		h3Transport.Close()
