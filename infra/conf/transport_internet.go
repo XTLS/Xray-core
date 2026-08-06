@@ -303,6 +303,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				KeepAlivePeriod:         c.FinalMask.QuicParams.KeepAlivePeriod,
 				DisablePathMtuDiscovery: c.FinalMask.QuicParams.DisablePathMTUDiscovery,
 				DisableChromeParrot:     c.FinalMask.QuicParams.DisableChromeParrot,
+				DisableGSO:              c.FinalMask.QuicParams.DisableGSO,
 				MaxIncomingStreams:      c.FinalMask.QuicParams.MaxIncomingStreams,
 			}
 		}
