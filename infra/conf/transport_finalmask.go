@@ -905,6 +905,7 @@ type QuicParamsConfig struct {
 	KeepAlivePeriod               int64     `json:"keepAlivePeriod"`
 	DisablePathMTUDiscovery       bool      `json:"disablePathMTUDiscovery"`
 	DisableChromeParrot           bool      `json:"disableChromeParrot"`
+	DisableGSO                    bool      `json:"disableGSO"`
 	MaxIncomingStreams            int64     `json:"maxIncomingStreams"`
 }
 
