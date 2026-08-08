@@ -172,13 +172,13 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 	for _, tag := range tags {
 		handler := tag
 		client := newPingClient(
-			h.ctx,
+			ctx,
 			h.dispatcher,
 			h.Settings.Destination,
 			h.Settings.Timeout,
 			handler,
 		)
-		for i := 0; i < rounds; i++ {
+		for range rounds {
 			delay := time.Duration(0)
 			if duration > 0 {
 				delay = time.Duration(dice.RollInt63n(int64(duration)))
