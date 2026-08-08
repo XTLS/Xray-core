@@ -30,6 +30,15 @@ message Config {
   string spider_x = 26;
   repeated int64 spider_y = 27;
 
+  // Client-only policy. compact-single-segment removes hybrid post-quantum
+  // key shares while retaining the Chrome X25519 key share.
+  string client_hello_profile = 28;
+
+  // Maximum size of the serialized ClientHello TLS record, including its
+  // 5-byte record header. Zero disables the limit unless a profile supplies
+  // a default.
+  uint32 client_hello_max_bytes = 29;
+
   string master_key_log = 31;
 }
 

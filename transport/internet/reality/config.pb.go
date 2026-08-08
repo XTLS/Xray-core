@@ -43,9 +43,16 @@ type Config struct {
 	Mldsa65Verify         []byte                 `protobuf:"bytes,25,opt,name=mldsa65_verify,json=mldsa65Verify,proto3" json:"mldsa65_verify,omitempty"`
 	SpiderX               string                 `protobuf:"bytes,26,opt,name=spider_x,json=spiderX,proto3" json:"spider_x,omitempty"`
 	SpiderY               []int64                `protobuf:"varint,27,rep,packed,name=spider_y,json=spiderY,proto3" json:"spider_y,omitempty"`
-	MasterKeyLog          string                 `protobuf:"bytes,31,opt,name=master_key_log,json=masterKeyLog,proto3" json:"master_key_log,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Client-only policy. compact-single-segment removes hybrid post-quantum
+	// key shares while retaining the Chrome X25519 key share.
+	ClientHelloProfile string `protobuf:"bytes,28,opt,name=client_hello_profile,json=clientHelloProfile,proto3" json:"client_hello_profile,omitempty"`
+	// Maximum size of the serialized ClientHello TLS record, including its
+	// 5-byte record header. Zero disables the limit unless a profile supplies
+	// a default.
+	ClientHelloMaxBytes uint32 `protobuf:"varint,29,opt,name=client_hello_max_bytes,json=clientHelloMaxBytes,proto3" json:"client_hello_max_bytes,omitempty"`
+	MasterKeyLog        string `protobuf:"bytes,31,opt,name=master_key_log,json=masterKeyLog,proto3" json:"master_key_log,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -218,6 +225,20 @@ func (x *Config) GetSpiderY() []int64 {
 	return nil
 }
 
+func (x *Config) GetClientHelloProfile() string {
+	if x != nil {
+		return x.ClientHelloProfile
+	}
+	return ""
+}
+
+func (x *Config) GetClientHelloMaxBytes() uint32 {
+	if x != nil {
+		return x.ClientHelloMaxBytes
+	}
+	return 0
+}
+
 func (x *Config) GetMasterKeyLog() string {
 	if x != nil {
 		return x.MasterKeyLog
@@ -289,7 +310,7 @@ var File_transport_internet_reality_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_reality_config_proto_rawDesc = "" +
 	"\n" +
-	"'transport/internet/reality/config.proto\x12\x1fxray.transport.internet.reality\"\x98\x06\n" +
+	"'transport/internet/reality/config.proto\x12\x1fxray.transport.internet.reality\"\xff\x06\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04show\x18\x01 \x01(\bR\x04show\x12\x12\n" +
 	"\x04dest\x18\x02 \x01(\tR\x04dest\x12\x12\n" +
@@ -314,7 +335,9 @@ const file_transport_internet_reality_config_proto_rawDesc = "" +
 	"\bshort_id\x18\x18 \x01(\fR\ashortId\x12%\n" +
 	"\x0emldsa65_verify\x18\x19 \x01(\fR\rmldsa65Verify\x12\x19\n" +
 	"\bspider_x\x18\x1a \x01(\tR\aspiderX\x12\x19\n" +
-	"\bspider_y\x18\x1b \x03(\x03R\aspiderY\x12$\n" +
+	"\bspider_y\x18\x1b \x03(\x03R\aspiderY\x120\n" +
+	"\x14client_hello_profile\x18\x1c \x01(\tR\x12clientHelloProfile\x123\n" +
+	"\x16client_hello_max_bytes\x18\x1d \x01(\rR\x13clientHelloMaxBytes\x12$\n" +
 	"\x0emaster_key_log\x18\x1f \x01(\tR\fmasterKeyLog\"\x83\x01\n" +
 	"\rLimitFallback\x12\x1f\n" +
 	"\vafter_bytes\x18\x01 \x01(\x04R\n" +

@@ -136,7 +136,12 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	}
 	uConn.UConn = utls.UClient(c, utlsConfig, *fingerprint)
 	{
-		uConn.BuildHandshakeState()
+		if err := uConn.BuildHandshakeState(); err != nil {
+			return nil, errors.New("REALITY: failed to build ClientHello").Base(err)
+		}
+		if err := applyClientHelloPolicy(uConn.UConn, config); err != nil {
+			return nil, errors.New("REALITY: failed to apply ClientHello policy").Base(err)
+		}
 		hello := uConn.HandshakeState.Hello
 		hello.SessionId = make([]byte, 32)
 		copy(hello.Raw[39:], hello.SessionId) // the fixed location of `Session ID`

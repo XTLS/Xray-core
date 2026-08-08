@@ -49,6 +49,9 @@ type REALITYConfig struct {
 	ShortId       string `json:"shortId"`
 	Mldsa65Verify string `json:"mldsa65Verify"`
 	SpiderX       string `json:"spiderX"`
+
+	ClientHelloProfile  string `json:"clientHelloProfile"`
+	ClientHelloMaxBytes uint32 `json:"clientHelloMaxBytes"`
 }
 
 func (c *REALITYConfig) Build() (proto.Message, error) {
@@ -183,6 +186,11 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		}
 		if tls.GetFingerprint(config.Fingerprint) == nil {
 			return nil, errors.New(`unknown "fingerprint": `, config.Fingerprint)
+		}
+		config.ClientHelloProfile = strings.ToLower(c.ClientHelloProfile)
+		config.ClientHelloMaxBytes = c.ClientHelloMaxBytes
+		if err := reality.ValidateClientHelloPolicy(config.Fingerprint, config.ClientHelloProfile, config.ClientHelloMaxBytes); err != nil {
+			return nil, err
 		}
 		if len(c.ServerNames) != 0 {
 			return nil, errors.New(`non-empty "serverNames", please use "serverName" instead`)
