@@ -165,8 +165,9 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 		Handler:          handler,
 		StreamDispatcher: handler.StreamDispatcher,
 	}
-	_ = h3s.ServeQUICConn(conn)
+	err := h3s.ServeQUICConn(conn)
 	_ = conn.CloseWithError(closeErrCodeOK, "")
+	errors.LogDebug(context.Background(), conn.RemoteAddr(), " ServeQUICConn exited with ", err)
 }
 
 func (l *Listener) keepAccepting() {
