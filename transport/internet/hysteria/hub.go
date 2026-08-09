@@ -2,6 +2,7 @@ package hysteria
 
 import (
 	"context"
+	"crypto/rand"
 	gotls "crypto/tls"
 	"net/http"
 	"net/http/httputil"
@@ -308,7 +309,9 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		pktConn = newConn
 	}
 
-	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
+	var k quic.StatelessResetKey
+	common.Must2(rand.Read(k[:]))
+	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: &k}
 
 	listener, err := tr.Listen(tlsConfig.GetTLSConfig(tls.WithNextProto("h3")), quicConfig)
 	if err != nil {
