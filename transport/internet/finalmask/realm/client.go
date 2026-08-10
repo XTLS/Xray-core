@@ -50,10 +50,10 @@ func NewConnClient(config *Config, raw net.PacketConn) (net.PacketConn, error) {
 		start := time.Now()
 		mapper, err = NewPortMapper(context.Background(), raw.LocalAddr().(*net.UDPAddr).Port, PortMapConfig{Timeout: time.Duration(config.PortMapping.Timeout) * time.Second, Lifetime: time.Duration(config.PortMapping.Lifetime) * time.Second})
 		if err != nil {
-			errors.LogErrorInner(context.Background(), err, "[realm] [port mapping] init failed; continuing without it")
+			errors.LogErrorInner(context.Background(), err, "[realm] [port mapping] [", raw.LocalAddr().(*net.UDPAddr).Port, "] init failed after ", time.Since(start))
 		} else {
-			errors.LogDebug(context.Background(), "[realm] [port mapping] gateway ", mapper.GatewayType(), ", external ", mapper.ExternalAddr().String())
-			errors.LogDebug(context.Background(), "[realm] [port mapping] init with ", time.Since(start))
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] gateway ", mapper.GatewayType(), ", external ", mapper.ExternalAddr())
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] init success with ", time.Since(start))
 		}
 	}
 
@@ -221,7 +221,7 @@ func portMapLoop(ctx context.Context, mapper *PortMapper, done func()) {
 	defer func() {
 		err := mapper.Close()
 		done()
-		errors.LogDebug(context.Background(), "[realm] [port mapping] removed with ", err)
+		errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] removed with ", err)
 	}()
 	interval := mapper.Lifetime() / 2
 	if interval <= 0 {
@@ -241,14 +241,14 @@ func portMapLoop(ctx context.Context, mapper *PortMapper, done func()) {
 					return
 				}
 				if !failing {
-					errors.LogError(context.Background(), "[realm] [port mapping] renewal failed")
+					errors.LogError(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] renewal failed")
 					failing = true
 				}
 				continue
 			}
-			errors.LogDebug(context.Background(), "[realm] [port mapping] external ", mapper.ExternalAddr().String(), ", changed ", changed)
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] external ", mapper.ExternalAddr(), ", changed ", changed)
 			if failing {
-				errors.LogError(context.Background(), "[realm] [port mapping] recovered")
+				errors.LogError(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] recovered")
 				failing = false
 			}
 		}
