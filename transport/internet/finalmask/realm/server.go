@@ -74,10 +74,10 @@ func NewConnServer(config *Config, raw net.PacketConn) (net.PacketConn, error) {
 		start := time.Now()
 		mapper, err = NewPortMapper(context.Background(), raw.LocalAddr().(*net.UDPAddr).Port, PortMapConfig{Timeout: time.Duration(config.PortMapping.Timeout) * time.Second, Lifetime: time.Duration(config.PortMapping.Lifetime) * time.Second})
 		if err != nil {
-			errors.LogErrorInner(context.Background(), err, "[realm] [port mapping] init failed; continuing without it")
+			errors.LogErrorInner(context.Background(), err, "[realm] [port mapping] [", raw.LocalAddr().(*net.UDPAddr).Port, "] init failed after ", time.Since(start))
 		} else {
-			errors.LogDebug(context.Background(), "[realm] [port mapping] gateway ", mapper.GatewayType(), ", external ", mapper.ExternalAddr().String())
-			errors.LogDebug(context.Background(), "[realm] [port mapping] init with ", time.Since(start))
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] gateway ", mapper.GatewayType(), ", external ", mapper.ExternalAddr())
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] init success with ", time.Since(start))
 		}
 	}
 
