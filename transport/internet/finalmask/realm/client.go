@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pion/stun/v3"
@@ -15,6 +16,7 @@ import (
 )
 
 type realmConnClient struct {
+	wg     sync.WaitGroup
 	ctx    context.Context
 	cancel context.CancelFunc
 	net.PacketConn
@@ -118,7 +120,8 @@ func (c *realmConnClient) getpeer() (net.PacketConn, error) {
 	errors.LogDebug(context.Background(), "[realm] punch peer ", peer, " with ", time.Since(start))
 
 	if c.mapper != nil {
-		go portMapLoop(c.ctx, c.mapper)
+		c.wg.Add(1)
+		go portMapLoop(c.ctx, c.mapper, c.wg.Done)
 	}
 
 	c.peer = peer
@@ -208,13 +211,16 @@ func (c *realmConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 }
 
 func (c *realmConnClient) Close() error {
+	// Sadly, closing the core does not first close the sockets created for outbound connections
 	c.cancel()
+	c.wg.Wait()
 	return nil
 }
 
-func portMapLoop(ctx context.Context, mapper *PortMapper) {
+func portMapLoop(ctx context.Context, mapper *PortMapper, done func()) {
 	defer func() {
 		_ = mapper.Close()
+		done()
 	}()
 	interval := mapper.Lifetime() / 2
 	if interval <= 0 {

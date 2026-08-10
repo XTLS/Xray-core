@@ -33,9 +33,9 @@ type STUNPacketEvent struct {
 }
 
 type realmConnServer struct {
-	cleaned chan struct{}
-	ctx     context.Context
-	cancel  context.CancelFunc
+	wg     sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
 	net.PacketConn
 
 	realmClient   *Client
@@ -82,7 +82,6 @@ func NewConnServer(config *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	conn := &realmConnServer{
-		cleaned:    make(chan struct{}),
 		ctx:        ctx,
 		cancel:     cancel,
 		PacketConn: raw,
@@ -101,9 +100,11 @@ func NewConnServer(config *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	if mapper != nil {
-		go portMapLoop(ctx, mapper)
+		conn.wg.Add(1)
+		go portMapLoop(ctx, mapper, conn.wg.Done)
 	}
 
+	conn.wg.Add(1)
 	go conn.run()
 
 	return conn, nil
@@ -265,7 +266,7 @@ retry:
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "[realm] ", c.realmID, " register session err retry in ", backoff)
 		if c.waitctx(c.ctx, backoff) {
-			close(c.cleaned)
+			c.wg.Done()
 			return
 		}
 		backoff *= 2
@@ -292,7 +293,7 @@ retry:
 	case <-c.ctx.Done():
 		_ = c.realmClient.Deregister(context.Background(), c.realmID, resp.SessionID)
 		errors.LogDebug(context.Background(), "[realm] ", c.realmID, " ", resp.SessionID, " deregistered")
-		close(c.cleaned)
+		c.wg.Done()
 		return
 	default:
 		goto retry
@@ -431,6 +432,6 @@ func (c *realmConnServer) ReadFrom(p []byte) (int, net.Addr, error) {
 
 func (c *realmConnServer) Close() error {
 	c.cancel()
-	<-c.cleaned
+	c.wg.Wait()
 	return c.PacketConn.Close()
 }
