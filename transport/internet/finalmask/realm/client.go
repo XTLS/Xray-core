@@ -219,8 +219,9 @@ func (c *realmConnClient) Close() error {
 
 func portMapLoop(ctx context.Context, mapper *PortMapper, done func()) {
 	defer func() {
-		_ = mapper.Close()
+		err := mapper.Close()
 		done()
+		errors.LogDebug(context.Background(), "[realm] [port mapping] removed with ", err)
 	}()
 	interval := mapper.Lifetime() / 2
 	if interval <= 0 {

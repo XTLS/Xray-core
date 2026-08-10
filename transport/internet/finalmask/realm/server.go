@@ -168,6 +168,8 @@ func (c *realmConnServer) discover(servers []*net.UDPAddr) []netip.AddrPort {
 	results := make([]netip.AddrPort, 0, len(servers))
 	for len(transactionIDs) > 0 {
 		select {
+		case <-c.ctx.Done():
+			goto end
 		case <-deadline.C:
 			goto end
 		case ev := <-c.stun:
