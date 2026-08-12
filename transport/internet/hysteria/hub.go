@@ -2,6 +2,7 @@ package hysteria
 
 import (
 	"context"
+	"crypto/rand"
 	gotls "crypto/tls"
 	"net/http"
 	"net/http/httputil"
@@ -78,10 +79,10 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 				if quicParams.BrutalUp == 0 || down == 0 {
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				} else {
-					congestion.UseBrutal(conn, min(quicParams.BrutalUp, down))
+					congestion.UseBrutal(conn, min(quicParams.BrutalUp, down), quicParams.BrutalDisableLossCompensation)
 				}
 			case "force-brutal":
-				congestion.UseBrutal(conn, quicParams.BrutalUp)
+				congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)
 			default:
 				panic(quicParams.Congestion)
 			}
@@ -165,8 +166,9 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 		Handler:          handler,
 		StreamDispatcher: handler.StreamDispatcher,
 	}
-	_ = h3s.ServeQUICConn(conn)
+	err := h3s.ServeQUICConn(conn)
 	_ = conn.CloseWithError(closeErrCodeOK, "")
+	errors.LogDebug(context.Background(), conn.RemoteAddr(), " ServeQUICConn exited with ", err)
 }
 
 func (l *Listener) keepAccepting() {
@@ -307,7 +309,9 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		pktConn = newConn
 	}
 
-	tr := &quic.Transport{Conn: pktConn}
+	var k quic.StatelessResetKey
+	common.Must2(rand.Read(k[:]))
+	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: &k}
 
 	listener, err := tr.Listen(tlsConfig.GetTLSConfig(tls.WithNextProto("h3")), quicConfig)
 	if err != nil {

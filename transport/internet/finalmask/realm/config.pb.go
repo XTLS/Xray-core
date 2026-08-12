@@ -22,6 +22,115 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Family int32
+
+const (
+	Family_Dual Family = 0
+	Family_V4   Family = 1
+	Family_V6   Family = 2
+)
+
+// Enum value maps for Family.
+var (
+	Family_name = map[int32]string{
+		0: "Dual",
+		1: "V4",
+		2: "V6",
+	}
+	Family_value = map[string]int32{
+		"Dual": 0,
+		"V4":   1,
+		"V6":   2,
+	}
+)
+
+func (x Family) Enum() *Family {
+	p := new(Family)
+	*p = x
+	return p
+}
+
+func (x Family) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Family) Descriptor() protoreflect.EnumDescriptor {
+	return file_transport_internet_finalmask_realm_config_proto_enumTypes[0].Descriptor()
+}
+
+func (Family) Type() protoreflect.EnumType {
+	return &file_transport_internet_finalmask_realm_config_proto_enumTypes[0]
+}
+
+func (x Family) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Family.Descriptor instead.
+func (Family) EnumDescriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_realm_config_proto_rawDescGZIP(), []int{0}
+}
+
+type PortMapping struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Timeout       int64                  `protobuf:"varint,2,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Lifetime      int64                  `protobuf:"varint,3,opt,name=lifetime,proto3" json:"lifetime,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PortMapping) Reset() {
+	*x = PortMapping{}
+	mi := &file_transport_internet_finalmask_realm_config_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PortMapping) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PortMapping) ProtoMessage() {}
+
+func (x *PortMapping) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_realm_config_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PortMapping.ProtoReflect.Descriptor instead.
+func (*PortMapping) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_realm_config_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *PortMapping) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *PortMapping) GetTimeout() int64 {
+	if x != nil {
+		return x.Timeout
+	}
+	return 0
+}
+
+func (x *PortMapping) GetLifetime() int64 {
+	if x != nil {
+		return x.Lifetime
+	}
+	return 0
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Scheme        string                 `protobuf:"bytes,1,opt,name=scheme,proto3" json:"scheme,omitempty"`
@@ -31,13 +140,15 @@ type Config struct {
 	ID            string                 `protobuf:"bytes,5,opt,name=ID,proto3" json:"ID,omitempty"`
 	StunServers   []string               `protobuf:"bytes,6,rep,name=stun_servers,json=stunServers,proto3" json:"stun_servers,omitempty"`
 	TlsConfig     *tls.Config            `protobuf:"bytes,7,opt,name=tls_config,json=tlsConfig,proto3" json:"tls_config,omitempty"`
+	IPMode        string                 `protobuf:"bytes,8,opt,name=IPMode,proto3" json:"IPMode,omitempty"`
+	PortMapping   *PortMapping           `protobuf:"bytes,9,opt,name=port_mapping,json=portMapping,proto3" json:"port_mapping,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_transport_internet_finalmask_realm_config_proto_msgTypes[0]
+	mi := &file_transport_internet_finalmask_realm_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49,7 +160,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_realm_config_proto_msgTypes[0]
+	mi := &file_transport_internet_finalmask_realm_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +173,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_realm_config_proto_rawDescGZIP(), []int{0}
+	return file_transport_internet_finalmask_realm_config_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Config) GetScheme() string {
@@ -114,11 +225,29 @@ func (x *Config) GetTlsConfig() *tls.Config {
 	return nil
 }
 
+func (x *Config) GetIPMode() string {
+	if x != nil {
+		return x.IPMode
+	}
+	return ""
+}
+
+func (x *Config) GetPortMapping() *PortMapping {
+	if x != nil {
+		return x.PortMapping
+	}
+	return nil
+}
+
 var File_transport_internet_finalmask_realm_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_realm_config_proto_rawDesc = "" +
 	"\n" +
-	"/transport/internet/finalmask/realm/config.proto\x12'xray.transport.internet.finalmask.realm\x1a#transport/internet/tls/config.proto\"\xd5\x01\n" +
+	"/transport/internet/finalmask/realm/config.proto\x12'xray.transport.internet.finalmask.realm\x1a#transport/internet/tls/config.proto\"]\n" +
+	"\vPortMapping\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x18\n" +
+	"\atimeout\x18\x02 \x01(\x03R\atimeout\x12\x1a\n" +
+	"\blifetime\x18\x03 \x01(\x03R\blifetime\"\xc6\x02\n" +
 	"\x06Config\x12\x16\n" +
 	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x12\n" +
 	"\x04host\x18\x02 \x01(\tR\x04host\x12\x12\n" +
@@ -127,7 +256,13 @@ const file_transport_internet_finalmask_realm_config_proto_rawDesc = "" +
 	"\x02ID\x18\x05 \x01(\tR\x02ID\x12!\n" +
 	"\fstun_servers\x18\x06 \x03(\tR\vstunServers\x12B\n" +
 	"\n" +
-	"tls_config\x18\a \x01(\v2#.xray.transport.internet.tls.ConfigR\ttlsConfigB\x97\x01\n" +
+	"tls_config\x18\a \x01(\v2#.xray.transport.internet.tls.ConfigR\ttlsConfig\x12\x16\n" +
+	"\x06IPMode\x18\b \x01(\tR\x06IPMode\x12W\n" +
+	"\fport_mapping\x18\t \x01(\v24.xray.transport.internet.finalmask.realm.PortMappingR\vportMapping*\"\n" +
+	"\x06Family\x12\b\n" +
+	"\x04Dual\x10\x00\x12\x06\n" +
+	"\x02V4\x10\x01\x12\x06\n" +
+	"\x02V6\x10\x02B\x97\x01\n" +
 	"+com.xray.transport.internet.finalmask.realmP\x01Z<github.com/xtls/xray-core/transport/internet/finalmask/realm\xaa\x02'Xray.Transport.Internet.Finalmask.Realmb\x06proto3"
 
 var (
@@ -142,18 +277,22 @@ func file_transport_internet_finalmask_realm_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_finalmask_realm_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_realm_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_transport_internet_finalmask_realm_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_transport_internet_finalmask_realm_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_transport_internet_finalmask_realm_config_proto_goTypes = []any{
-	(*Config)(nil),     // 0: xray.transport.internet.finalmask.realm.Config
-	(*tls.Config)(nil), // 1: xray.transport.internet.tls.Config
+	(Family)(0),         // 0: xray.transport.internet.finalmask.realm.Family
+	(*PortMapping)(nil), // 1: xray.transport.internet.finalmask.realm.PortMapping
+	(*Config)(nil),      // 2: xray.transport.internet.finalmask.realm.Config
+	(*tls.Config)(nil),  // 3: xray.transport.internet.tls.Config
 }
 var file_transport_internet_finalmask_realm_config_proto_depIdxs = []int32{
-	1, // 0: xray.transport.internet.finalmask.realm.Config.tls_config:type_name -> xray.transport.internet.tls.Config
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: xray.transport.internet.finalmask.realm.Config.tls_config:type_name -> xray.transport.internet.tls.Config
+	1, // 1: xray.transport.internet.finalmask.realm.Config.port_mapping:type_name -> xray.transport.internet.finalmask.realm.PortMapping
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_realm_config_proto_init() }
@@ -166,13 +305,14 @@ func file_transport_internet_finalmask_realm_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_realm_config_proto_rawDesc), len(file_transport_internet_finalmask_realm_config_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   1,
+			NumEnums:      1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_transport_internet_finalmask_realm_config_proto_goTypes,
 		DependencyIndexes: file_transport_internet_finalmask_realm_config_proto_depIdxs,
+		EnumInfos:         file_transport_internet_finalmask_realm_config_proto_enumTypes,
 		MessageInfos:      file_transport_internet_finalmask_realm_config_proto_msgTypes,
 	}.Build()
 	File_transport_internet_finalmask_realm_config_proto = out.File

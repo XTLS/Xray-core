@@ -506,7 +506,9 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		}
 
-		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, quicConfig)
+		tr := &quic.Transport{Conn: Conn, DisableGSO: quicParams.DisableGSO}
+
+		l.h3listener, err = tr.ListenEarly(tlsConfig, quicConfig)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
@@ -525,6 +527,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			if err := l.h3server.ServeListener(l.h3listener); err != nil {
 				errors.LogErrorInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
 			}
+			_ = tr.Close()
+			_ = Conn.Close()
 		}()
 	} else { // tcp
 		l.listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
@@ -622,7 +626,7 @@ func (l *QListener) Accept(ctx context.Context) (*quic.Conn, error) {
 	case "", "bbr":
 		congestion.UseBBR(conn, bbr.Profile(l.quicParams.BbrProfile))
 	case "force-brutal":
-		congestion.UseBrutal(conn, l.quicParams.BrutalUp)
+		congestion.UseBrutal(conn, l.quicParams.BrutalUp, l.quicParams.BrutalDisableLossCompensation)
 	default:
 		panic(l.quicParams.Congestion)
 	}
