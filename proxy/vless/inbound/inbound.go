@@ -39,6 +39,9 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
+	"github.com/xtls/xray-core/proxy/vless/validator/memory"
+	"github.com/xtls/xray-core/proxy/vless/validator/redis"
+	"github.com/xtls/xray-core/proxy/vless/validator/rest"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -57,7 +60,11 @@ func init() {
 
 		c := config.(*Config)
 
-		validator := new(vless.MemoryValidator)
+		validator, err := newValidatorFromConfig(c)
+		if err != nil {
+			return nil, err
+		}
+
 		for _, user := range c.Users {
 			u, err := user.ToMemoryUser()
 			if err != nil {
@@ -70,6 +77,28 @@ func init() {
 
 		return New(ctx, c, dc, validator)
 	}))
+}
+
+func newValidatorFromConfig(config *Config) (vless.Validator, error) {
+	if config == nil || config.ValidatorSettings == nil {
+		return new(memory.MemoryValidator), nil
+	}
+
+	settings, err := config.ValidatorSettings.GetInstance()
+	if err != nil {
+		return nil, err
+	}
+
+	switch c := settings.(type) {
+	case *memory.Config:
+		return new(memory.MemoryValidator), nil
+	case *redis.Config:
+		return redis.NewValidator(c)
+	case *rest.Config:
+		return rest.NewValidator(c)
+	default:
+		return nil, errors.New("unknown VLESS validator config: ", config.ValidatorSettings.Type)
+	}
 }
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.

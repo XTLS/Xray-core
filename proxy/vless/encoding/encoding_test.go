@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy/vless"
 	. "github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/proxy/vless/validator/memory"
 )
 
 func toAccount(a *vless.Account) protocol.Account {
@@ -42,7 +43,7 @@ func TestRequestSerialization(t *testing.T) {
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
 
-	Validator := new(vless.MemoryValidator)
+	Validator := new(memory.MemoryValidator)
 	Validator.Add(user)
 
 	_, actualRequest, actualAddons, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)
@@ -83,7 +84,7 @@ func TestInvalidRequest(t *testing.T) {
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
 
-	Validator := new(vless.MemoryValidator)
+	Validator := new(memory.MemoryValidator)
 	Validator.Add(user)
 
 	_, _, _, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)
@@ -114,7 +115,7 @@ func TestMuxRequest(t *testing.T) {
 	buffer := buf.StackNew()
 	common.Must(EncodeRequestHeader(&buffer, expectedRequest, expectedAddons))
 
-	Validator := new(vless.MemoryValidator)
+	Validator := new(memory.MemoryValidator)
 	Validator.Add(user)
 
 	_, actualRequest, actualAddons, _, err := DecodeRequestHeader(false, nil, &buffer, Validator)

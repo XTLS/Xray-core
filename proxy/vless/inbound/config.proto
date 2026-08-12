@@ -7,6 +7,7 @@ option java_package = "com.xray.proxy.vless.inbound";
 option java_multiple_files = true;
 
 import "common/protocol/user.proto";
+import "common/serial/typed_message.proto";
 
 message Fallback {
   string name = 1;
@@ -26,4 +27,6 @@ message Config {
   int64 seconds_from = 5;
   int64 seconds_to = 6;
   string padding = 7;
+
+  xray.common.serial.TypedMessage validator_settings = 8;
 }

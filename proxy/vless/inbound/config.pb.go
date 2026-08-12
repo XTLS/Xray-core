@@ -8,6 +8,7 @@ package inbound
 
 import (
 	protocol "github.com/xtls/xray-core/common/protocol"
+	serial "github.com/xtls/xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -107,16 +108,17 @@ func (x *Fallback) GetXver() uint64 {
 }
 
 type Config struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
-	Fallbacks     []*Fallback            `protobuf:"bytes,2,rep,name=fallbacks,proto3" json:"fallbacks,omitempty"`
-	Decryption    string                 `protobuf:"bytes,3,opt,name=decryption,proto3" json:"decryption,omitempty"`
-	XorMode       uint32                 `protobuf:"varint,4,opt,name=xorMode,proto3" json:"xorMode,omitempty"`
-	SecondsFrom   int64                  `protobuf:"varint,5,opt,name=seconds_from,json=secondsFrom,proto3" json:"seconds_from,omitempty"`
-	SecondsTo     int64                  `protobuf:"varint,6,opt,name=seconds_to,json=secondsTo,proto3" json:"seconds_to,omitempty"`
-	Padding       string                 `protobuf:"bytes,7,opt,name=padding,proto3" json:"padding,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Users             []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	Fallbacks         []*Fallback            `protobuf:"bytes,2,rep,name=fallbacks,proto3" json:"fallbacks,omitempty"`
+	Decryption        string                 `protobuf:"bytes,3,opt,name=decryption,proto3" json:"decryption,omitempty"`
+	XorMode           uint32                 `protobuf:"varint,4,opt,name=xorMode,proto3" json:"xorMode,omitempty"`
+	SecondsFrom       int64                  `protobuf:"varint,5,opt,name=seconds_from,json=secondsFrom,proto3" json:"seconds_from,omitempty"`
+	SecondsTo         int64                  `protobuf:"varint,6,opt,name=seconds_to,json=secondsTo,proto3" json:"seconds_to,omitempty"`
+	Padding           string                 `protobuf:"bytes,7,opt,name=padding,proto3" json:"padding,omitempty"`
+	ValidatorSettings *serial.TypedMessage   `protobuf:"bytes,8,opt,name=validator_settings,json=validatorSettings,proto3" json:"validator_settings,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -198,18 +200,25 @@ func (x *Config) GetPadding() string {
 	return ""
 }
 
+func (x *Config) GetValidatorSettings() *serial.TypedMessage {
+	if x != nil {
+		return x.ValidatorSettings
+	}
+	return nil
+}
+
 var File_proxy_vless_inbound_config_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_inbound_config_proto_rawDesc = "" +
 	"\n" +
-	" proxy/vless/inbound/config.proto\x12\x18xray.proxy.vless.inbound\x1a\x1acommon/protocol/user.proto\"\x82\x01\n" +
+	" proxy/vless/inbound/config.proto\x12\x18xray.proxy.vless.inbound\x1a\x1acommon/protocol/user.proto\x1a!common/serial/typed_message.proto\"\x82\x01\n" +
 	"\bFallback\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04alpn\x18\x02 \x01(\tR\x04alpn\x12\x12\n" +
 	"\x04path\x18\x03 \x01(\tR\x04path\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
 	"\x04dest\x18\x05 \x01(\tR\x04dest\x12\x12\n" +
-	"\x04xver\x18\x06 \x01(\x04R\x04xver\"\x92\x02\n" +
+	"\x04xver\x18\x06 \x01(\x04R\x04xver\"\xe3\x02\n" +
 	"\x06Config\x120\n" +
 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x12@\n" +
 	"\tfallbacks\x18\x02 \x03(\v2\".xray.proxy.vless.inbound.FallbackR\tfallbacks\x12\x1e\n" +
@@ -220,7 +229,8 @@ const file_proxy_vless_inbound_config_proto_rawDesc = "" +
 	"\fseconds_from\x18\x05 \x01(\x03R\vsecondsFrom\x12\x1d\n" +
 	"\n" +
 	"seconds_to\x18\x06 \x01(\x03R\tsecondsTo\x12\x18\n" +
-	"\apadding\x18\a \x01(\tR\apaddingBj\n" +
+	"\apadding\x18\a \x01(\tR\apadding\x12O\n" +
+	"\x12validator_settings\x18\b \x01(\v2 .xray.common.serial.TypedMessageR\x11validatorSettingsBj\n" +
 	"\x1ccom.xray.proxy.vless.inboundP\x01Z-github.com/xtls/xray-core/proxy/vless/inbound\xaa\x02\x18Xray.Proxy.Vless.Inboundb\x06proto3"
 
 var (
@@ -237,18 +247,20 @@ func file_proxy_vless_inbound_config_proto_rawDescGZIP() []byte {
 
 var file_proxy_vless_inbound_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proxy_vless_inbound_config_proto_goTypes = []any{
-	(*Fallback)(nil),      // 0: xray.proxy.vless.inbound.Fallback
-	(*Config)(nil),        // 1: xray.proxy.vless.inbound.Config
-	(*protocol.User)(nil), // 2: xray.common.protocol.User
+	(*Fallback)(nil),            // 0: xray.proxy.vless.inbound.Fallback
+	(*Config)(nil),              // 1: xray.proxy.vless.inbound.Config
+	(*protocol.User)(nil),       // 2: xray.common.protocol.User
+	(*serial.TypedMessage)(nil), // 3: xray.common.serial.TypedMessage
 }
 var file_proxy_vless_inbound_config_proto_depIdxs = []int32{
 	2, // 0: xray.proxy.vless.inbound.Config.users:type_name -> xray.common.protocol.User
 	0, // 1: xray.proxy.vless.inbound.Config.fallbacks:type_name -> xray.proxy.vless.inbound.Fallback
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 2: xray.proxy.vless.inbound.Config.validator_settings:type_name -> xray.common.serial.TypedMessage
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proxy_vless_inbound_config_proto_init() }

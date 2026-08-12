@@ -37,11 +37,20 @@ type VLessInboundConfig struct {
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
 	Flow       string                  `json:"flow"`
 	Testseed   []uint32                `json:"testseed"`
+	Validator  *VLessValidatorConfig   `json:"validator"`
 }
 
 // Build implements Buildable
 func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config := new(inbound.Config)
+
+	if c.Validator != nil {
+		validatorSettings, err := c.Validator.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.ValidatorSettings = serial.ToTypedMessage(validatorSettings)
+	}
 
 	if c.Clients != nil {
 		c.Users = c.Clients
