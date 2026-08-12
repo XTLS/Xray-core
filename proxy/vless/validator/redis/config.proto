@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package xray.proxy.vless.validator.redis;
+option csharp_namespace = "Xray.Proxy.Vless";
+option go_package = "github.com/xtls/xray-core/proxy/vless/validator/redis";
+option java_package = "com.xray.proxy.vless.validator.redis";
+option java_multiple_files = true;
+
+
+message Config {
+  string address = 1;
+}
