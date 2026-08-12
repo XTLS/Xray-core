@@ -1,0 +1,261 @@
+---
+openapi: 3.0.4
+info:
+  title: VLESS Validator REST API
+  version: 0.1.0
+  description: |
+    REST API for the VLESS validator interface.
+
+    The API mirrors the Go interface from proxy/vless/validator.go:
+    Get, Add, Del, GetByEmail, GetAll and GetCount.
+tags:
+  - name: Validator
+    description: VLESS validator users management.
+paths:
+  /vless/validator/users:
+    get:
+      operationId: getAllVlessUsers
+      summary: Get all users
+      description: Returns all users stored in the validator.
+      tags:
+        - Validator
+      responses:
+        '200':
+          $ref: '#/components/responses/GetUsersResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      operationId: addVlessUser
+      summary: Add user
+      description: |
+        Adds a VLESS user to the validator.
+
+        If email is provided, it must be unique.
+      tags:
+        - Validator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VlessUser'
+      responses:
+        '201':
+          $ref: '#/components/responses/UserCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/UserAlreadyExists'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vless/validator/users/count:
+    get:
+      operationId: getVlessUsersCount
+      summary: Get users count
+      description: Returns the number of users stored in the validator.
+      tags:
+        - Validator
+      responses:
+        '200':
+          $ref: '#/components/responses/GetUsersCountResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vless/validator/users/by-id/{uuid}:
+    get:
+      operationId: getVlessUserByUuid
+      summary: Get user by UUID
+      description: |
+        Returns a user by VLESS UUID.
+
+        The validator applies the same UUID normalization as ProcessUUID in
+        proxy/vless/validator.go before lookup.
+      tags:
+        - Validator
+      parameters:
+        - $ref: '#/components/parameters/UUID'
+      responses:
+        '200':
+          $ref: '#/components/responses/GetUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vless/validator/users/by-email/{email}:
+    get:
+      operationId: getVlessUserByEmail
+      summary: Get user by email
+      description: Returns a user by email.
+      tags:
+        - Validator
+      parameters:
+        - $ref: '#/components/parameters/Email'
+      responses:
+        '200':
+          $ref: '#/components/responses/GetUserResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      operationId: deleteVlessUserByEmail
+      summary: Delete user by email
+      description: |
+        Deletes a VLESS user by email.
+
+        This endpoint corresponds to Validator.Del(email). Empty email is not
+        allowed.
+      tags:
+        - Validator
+      parameters:
+        - $ref: '#/components/parameters/Email'
+      responses:
+        '204':
+          description: No content.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/UserNotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  parameters:
+    UUID:
+      name: uuid
+      in: path
+      required: true
+      description: VLESS user UUID.
+      schema:
+        $ref: '#/components/schemas/UUID'
+    Email:
+      name: email
+      in: path
+      required: true
+      description: User email.
+      schema:
+        type: string
+        minLength: 1
+        example: user@example.com
+
+  responses:
+    GetUserResponse:
+      description: OK.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VlessUser'
+    GetUsersResponse:
+      description: OK.
+      content:
+        application/json:
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/VlessUser'
+    GetUsersCountResponse:
+      description: OK.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UsersCount'
+    UserCreated:
+      description: Created.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VlessUser'
+    BadRequest:
+      description: Bad request.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UserAlreadyExists:
+      description: User already exists.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UserNotFound:
+      description: User not found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Internal server error.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      example: 11111111-2222-3333-4444-555555555555
+    VlessUser:
+      type: object
+      description: JSON representation of protocol.MemoryUser.
+      properties:
+        email:
+          type: string
+          description: User email. Must be unique when provided.
+          example: user@example.com
+        level:
+          type: integer
+          format: uint32
+          minimum: 0
+          description: User policy level.
+          example: 0
+        account:
+          $ref: '#/components/schemas/JSON'
+      required:
+        - account
+    JSON:
+      type: object
+      description: Arbitrary JSON object owned by the validator implementation.
+      additionalProperties: true
+    UsersCount:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+          example: 42
+      required:
+        - count
+    Error:
+      type: object
+      description: RFC 9457 problem details.
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          example: urn:vless-validator:problems:user-not-found
+        title:
+          type: string
+          example: User not found
+        status:
+          type: integer
+          minimum: 100
+          maximum: 599
+          example: 404
+        detail:
+          type: string
+          example: User user@example.com not found.
+        instance:
+          type: string
+          example: /vless/validator/users/by-email/user@example.com
+      required:
+        - type
+        - title
+        - status
