@@ -98,7 +98,7 @@ func (r *Router) PickRoute(ctx routing.Context) (routing.Route, error) {
 	if err != nil {
 		return nil, err
 	}
-	tag, err := rule.GetTag()
+	tag, err := rule.GetTagForContext(ctx)
 	if err != nil {
 		return nil, err
 	}

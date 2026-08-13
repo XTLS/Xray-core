@@ -38,7 +38,7 @@ func (r *BalancingRule) Build() (*router.BalancingRule, error) {
 	switch r.Strategy.Type {
 	case "":
 		r.Strategy.Type = strategyRandom
-	case strategyRandom, strategyLeastLoad, strategyLeastPing, strategyRoundRobin:
+	case strategyRandom, strategyLeastLoad, strategyLeastPing, strategyRoundRobin, strategyConsistentHash:
 	default:
 		return nil, errors.New("unknown balancing strategy: " + r.Strategy.Type)
 	}

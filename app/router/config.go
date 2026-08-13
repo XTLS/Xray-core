@@ -19,8 +19,13 @@ type Rule struct {
 }
 
 func (r *Rule) GetTag() (string, error) {
+	return r.GetTagForContext(nil)
+}
+
+// GetTagForContext 在负载均衡策略支持时使用路由上下文选择出站标签。
+func (r *Rule) GetTagForContext(ctx routing.Context) (string, error) {
 	if r.Balancer != nil {
-		return r.Balancer.PickOutbound()
+		return r.Balancer.PickOutboundForContext(ctx)
 	}
 	return r.Tag, nil
 }
@@ -135,6 +140,13 @@ func (br *BalancingRule) Build(ohm outbound.Manager, dispatcher routing.Dispatch
 		return &Balancer{
 			selectors:   br.OutboundSelector,
 			strategy:    &RoundRobinStrategy{FallbackTag: br.FallbackTag},
+			fallbackTag: br.FallbackTag,
+			ohm:         ohm,
+		}, nil
+	case "consistenthash":
+		return &Balancer{
+			selectors:   br.OutboundSelector,
+			strategy:    &ConsistentHashStrategy{FallbackTag: br.FallbackTag},
 			fallbackTag: br.FallbackTag,
 			ohm:         ohm,
 		}, nil

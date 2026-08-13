@@ -11,17 +11,19 @@ import (
 )
 
 const (
-	strategyRandom     string = "random"
-	strategyLeastPing  string = "leastping"
-	strategyRoundRobin string = "roundrobin"
-	strategyLeastLoad  string = "leastload"
+	strategyRandom         string = "random"
+	strategyLeastPing      string = "leastping"
+	strategyRoundRobin     string = "roundrobin"
+	strategyLeastLoad      string = "leastload"
+	strategyConsistentHash string = "consistenthash"
 )
 
 var strategyConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
-	strategyRandom:     func() interface{} { return new(strategyEmptyConfig) },
-	strategyLeastPing:  func() interface{} { return new(strategyEmptyConfig) },
-	strategyRoundRobin: func() interface{} { return new(strategyEmptyConfig) },
-	strategyLeastLoad:  func() interface{} { return new(strategyLeastLoadConfig) },
+	strategyRandom:         func() interface{} { return new(strategyEmptyConfig) },
+	strategyLeastPing:      func() interface{} { return new(strategyEmptyConfig) },
+	strategyRoundRobin:     func() interface{} { return new(strategyEmptyConfig) },
+	strategyLeastLoad:      func() interface{} { return new(strategyLeastLoadConfig) },
+	strategyConsistentHash: func() interface{} { return new(strategyEmptyConfig) },
 }, "type", "settings")
 
 type strategyEmptyConfig struct{}

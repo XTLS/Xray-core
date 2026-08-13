@@ -85,6 +85,14 @@ func TestRouterConfig(t *testing.T) {
 							}
 						},
 						"fallbackTag": "fall"
+					},
+					{
+						"tag": "b3",
+						"selector": ["test"],
+						"strategy": {
+							"type": "consistentHash"
+						},
+						"fallbackTag": "fall"
 					}
 				]
 			}`,
@@ -119,6 +127,12 @@ func TestRouterConfig(t *testing.T) {
 							Tolerance: 0.5,
 						}),
 						FallbackTag: "fall",
+					},
+					{
+						Tag:              "b3",
+						OutboundSelector: []string{"test"},
+						Strategy:         "consistenthash",
+						FallbackTag:      "fall",
 					},
 				},
 				Rule: []*router.RoutingRule{
