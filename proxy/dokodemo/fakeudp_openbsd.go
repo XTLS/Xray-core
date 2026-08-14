@@ -35,6 +35,11 @@ func FakeUDP(addr *net.UDPAddr, mark int) (net.PacketConn, error) {
 	if err = unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
 		return nil, &net.OpError{Op: "fake", Err: fmt.Errorf("set socket option SO_REUSEADDR: %w", err)}
 	}
+	// Several client sessions can be answered from the same original
+	// destination at the same time, so the address has to be shareable.
+	if err = unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEPORT, 1); err != nil {
+		return nil, &net.OpError{Op: "fake", Err: fmt.Errorf("set socket option SO_REUSEPORT: %w", err)}
+	}
 
 	sockaddr := &unix.SockaddrInet4{Port: addr.Port}
 	copy(sockaddr.Addr[:], ip4)
