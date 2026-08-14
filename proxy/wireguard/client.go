@@ -50,6 +50,7 @@ type Handler struct {
 	dev  *device.Device
 	mu   sync.Mutex
 
+	// TODO: cache cleanup loop
 	local   bool
 	cache   map[string]entry
 	cacheMu sync.Mutex
