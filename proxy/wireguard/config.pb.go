@@ -164,6 +164,7 @@ type DeviceConfig struct {
 	DomainStrategy DeviceConfig_DomainStrategy `protobuf:"varint,7,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.proxy.wireguard.DeviceConfig_DomainStrategy" json:"domain_strategy,omitempty"`
 	IsClient       bool                        `protobuf:"varint,8,opt,name=is_client,json=isClient,proto3" json:"is_client,omitempty"`
 	NoKernelTun    bool                        `protobuf:"varint,9,opt,name=no_kernel_tun,json=noKernelTun,proto3" json:"no_kernel_tun,omitempty"`
+	DNS            []string                    `protobuf:"bytes,10,rep,name=DNS,proto3" json:"DNS,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -261,6 +262,13 @@ func (x *DeviceConfig) GetNoKernelTun() bool {
 	return false
 }
 
+func (x *DeviceConfig) GetDNS() []string {
+	if x != nil {
+		return x.DNS
+	}
+	return nil
+}
+
 var File_proxy_wireguard_config_proto protoreflect.FileDescriptor
 
 const file_proxy_wireguard_config_proto_rawDesc = "" +
@@ -275,7 +283,7 @@ const file_proxy_wireguard_config_proto_rawDesc = "" +
 	"\n" +
 	"keep_alive\x18\x04 \x01(\tR\tkeepAlive\x12\x1f\n" +
 	"\vallowed_ips\x18\x05 \x03(\tR\n" +
-	"allowedIps\"\xdc\x03\n" +
+	"allowedIps\"\xee\x03\n" +
 	"\fDeviceConfig\x12\x1d\n" +
 	"\n" +
 	"secret_key\x18\x01 \x01(\tR\tsecretKey\x12\x1a\n" +
@@ -286,7 +294,9 @@ const file_proxy_wireguard_config_proto_rawDesc = "" +
 	"\breserved\x18\x06 \x01(\fR\breserved\x12Z\n" +
 	"\x0fdomain_strategy\x18\a \x01(\x0e21.xray.proxy.wireguard.DeviceConfig.DomainStrategyR\x0edomainStrategy\x12\x1b\n" +
 	"\tis_client\x18\b \x01(\bR\bisClient\x12\"\n" +
-	"\rno_kernel_tun\x18\t \x01(\bR\vnoKernelTun\"\\\n" +
+	"\rno_kernel_tun\x18\t \x01(\bR\vnoKernelTun\x12\x10\n" +
+	"\x03DNS\x18\n" +
+	" \x03(\tR\x03DNS\"\\\n" +
 	"\x0eDomainStrategy\x12\f\n" +
 	"\bFORCE_IP\x10\x00\x12\r\n" +
 	"\tFORCE_IP4\x10\x01\x12\r\n" +
