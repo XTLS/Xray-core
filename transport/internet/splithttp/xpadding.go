@@ -245,6 +245,14 @@ func (c *Config) ApplyXPaddingToResponse(writer http.ResponseWriter, config XPad
 	switch placement {
 	case PlacementCookie:
 		ApplyPaddingToResponseCookie(writer, config.Placement.Key, paddingValue)
+	case PlacementQuery:
+		// HTTP responses carry no query string, so "query" placement has no
+		// place to put padding on the response side. Fall back to the
+		// configured padding header instead of silently discarding the
+		// generated value, so both directions stay padded in obfs mode.
+		if header := config.Placement.Header; header != "" && paddingValue != "" {
+			writer.Header().Set(header, paddingValue)
+		}
 	}
 }
 
