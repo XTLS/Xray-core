@@ -159,6 +159,9 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 				}
 			}
 
+			// the connection is in use again, cancel a pending idle close
+			h1UploadConn.ResetIdle()
+
 			_, err := h1UploadConn.Write(requestBuff.Bytes())
 			// if the write failed, we try another connection from
 			// the pool, until the write on a new connection fails.
@@ -167,11 +170,17 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 			if err == nil {
 				break
 			} else if newConnection {
+				common.Close(h1UploadConn)
 				return err
 			}
+
+			// the failed pooled connection is dropped; schedule a close
+			// so it does not linger until the GC collects it
+			h1UploadConn.SetIdle()
 		}
 
 		c.uploadRawPool.Put(uploadConn)
+		h1UploadConn.SetIdle()
 	}
 
 	return nil
