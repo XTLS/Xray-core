@@ -32,7 +32,7 @@ import (
 )
 
 type entry struct {
-	ip   net.IP
+	got  []net.IP
 	time time.Time
 }
 
@@ -392,7 +392,7 @@ func (h *Handler) resolveDomain(host string, strategy DeviceConfig_DomainStrateg
 	if entry, ok := h.cache[host]; ok {
 		if time.Now().Before(entry.time) {
 			h.cacheMu.Unlock()
-			return entry.ip, nil
+			return entry.got[dice.Roll(len(entry.got))], nil
 		}
 		delete(h.cache, host)
 	}
@@ -438,13 +438,13 @@ func (h *Handler) resolveDomain(host string, strategy DeviceConfig_DomainStrateg
 		return nil, dns.ErrEmptyResponse
 	}
 	entry := entry{
-		ip:   got[dice.Roll(len(got))],
+		got:  got,
 		time: time.Now().Add(time.Duration(ttl) * time.Second),
 	}
 	h.cacheMu.Lock()
 	h.cache[host] = entry
 	h.cacheMu.Unlock()
-	return entry.ip, nil
+	return got[dice.Roll(len(got))], nil
 }
 
 type udpConnClient struct {
