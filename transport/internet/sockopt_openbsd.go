@@ -14,11 +14,18 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 
 func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig) error {
 	if config.ReceiveOriginalDestAddress && isUDPSocket(network) {
-		if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_RECVDSTADDR, 1); err != nil {
-			return errors.New("failed to set IP_RECVDSTADDR").Base(err)
+		// Only the options matching the socket's address family are accepted,
+		// so one of the two pairs succeeding is enough.
+		err6 := unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_RECVPKTINFO, 1)
+		if err6 == nil {
+			err6 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_RECVDSTPORT, 1)
 		}
-		if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_RECVDSTPORT, 1); err != nil {
-			return errors.New("failed to set IP_RECVDSTPORT").Base(err)
+		err4 := unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_RECVDSTADDR, 1)
+		if err4 == nil {
+			err4 = unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_RECVDSTPORT, 1)
+		}
+		if err4 != nil && err6 != nil {
+			return errors.New("failed to enable receiving the original destination").Base(err4)
 		}
 	}
 	return nil
