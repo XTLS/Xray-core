@@ -280,13 +280,18 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			} else if realityConn, ok := iConn.(*reality.UConn); ok {
 				t = reflect.TypeOf(realityConn.Conn).Elem()
 				p = uintptr(unsafe.Pointer(realityConn.Conn))
+			} else if !proxy.IsRAWTransportWithoutSecurity(iConn) {
+				// Non-RAW transport (e.g. XHTTP): Vision is used in padding mode, without TLS/REALITY penetration.
+				ob.CanSpliceCopy = 3
 			} else {
 				return errors.New("XTLS only supports TLS and REALITY directly for now.").AtWarning()
 			}
-			i, _ := t.FieldByName("input")
-			r, _ := t.FieldByName("rawInput")
-			input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
-			rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+			if t != nil {
+				i, _ := t.FieldByName("input")
+				r, _ := t.FieldByName("rawInput")
+				input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
+				rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+			}
 		default:
 			panic("unknown VLESS request command")
 		}
