@@ -1,6 +1,7 @@
 package splithttp
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -330,14 +331,26 @@ func (c *Config) FillStreamRequest(request *http.Request, sessionId string, seqS
 func (c *Config) FillPacketRequest(request *http.Request, sessionId string, seqStr string, payload buf.MultiBuffer) error {
 	dataPlacement := c.GetNormalizedUplinkDataPlacement()
 
+	// Materialize the payload so that GetBody can hand out a fresh reader.
+	// Without GetBody, http2 cannot replay a request whose body was already
+	// written: the transport gives up with "cannot retry ... after
+	// Request.Body was written". For packet-up that packet is then never
+	// sent, and since the server waits for an exact seq and never skips, the
+	// stalled reassembly queue tears down the whole connection. Duplicate
+	// seqs caused by a replay are harmless: uploadQueue drops any packet
+	// with seq below nextSeq.
+	data := make([]byte, payload.Len())
+	payload.Copy(data)
+	buf.ReleaseMulti(payload)
+
 	if dataPlacement == PlacementBody || dataPlacement == PlacementAuto {
 		request.Header = c.GetRequestHeader()
-		request.Body = io.NopCloser(&buf.MultiBufferContainer{MultiBuffer: payload})
-		request.ContentLength = int64(payload.Len())
+		request.Body = io.NopCloser(bytes.NewReader(data))
+		request.ContentLength = int64(len(data))
+		request.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(data)), nil
+		}
 	} else {
-		data := make([]byte, payload.Len())
-		payload.Copy(data)
-		buf.ReleaseMulti(payload)
 		switch dataPlacement {
 		case PlacementHeader:
 			request.Header = c.GetRequestHeaderWithPayload(data)
