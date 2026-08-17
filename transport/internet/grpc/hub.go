@@ -55,6 +55,9 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 	grpcSettings := settings.ProtocolSettings.(*Config)
 	var listener *Listener
 	if port == net.Port(0) { // unix
+		if !address.Family().IsDomain() {
+			return nil, errors.New("invalid unix listen: ", address).AtError()
+		}
 		listener = &Listener{
 			handler: handler,
 			local: &net.UnixAddr{

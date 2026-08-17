@@ -1,10 +1,14 @@
 package grpc
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -126,4 +130,18 @@ func TestSetUserAgent(t *testing.T) {
 	defer conn.Close()
 	setUserAgent(conn, ua)
 	assert.Equal(t, ua, reflect.ValueOf(conn).Elem().FieldByName("dopts").FieldByName("copts").FieldByName("UserAgent").String())
+}
+
+func TestListenUnixRejectsIPAddress(t *testing.T) {
+	settings := &internet.MemoryStreamConfig{
+		ProtocolSettings: &Config{},
+	}
+
+	var listener internet.Listener
+	var err error
+	assert.NotPanics(t, func() {
+		listener, err = Listen(context.Background(), net.AnyIP, net.Port(0), settings, func(stat.Connection) {})
+	})
+	assert.Nil(t, listener)
+	assert.ErrorContains(t, err, "invalid unix listen")
 }
