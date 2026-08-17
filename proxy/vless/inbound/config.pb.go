@@ -106,22 +106,110 @@ func (x *Fallback) GetXver() uint64 {
 	return 0
 }
 
-type Config struct {
+// ExternalValidator delegates user lookups to an HTTP(S) endpoint, layered on
+// top of the inbound's local user list. Its presence on Config selects the
+// external validator; nil means the local user list alone is used.
+type ExternalValidator struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
-	Fallbacks     []*Fallback            `protobuf:"bytes,2,rep,name=fallbacks,proto3" json:"fallbacks,omitempty"`
-	Decryption    string                 `protobuf:"bytes,3,opt,name=decryption,proto3" json:"decryption,omitempty"`
-	XorMode       uint32                 `protobuf:"varint,4,opt,name=xorMode,proto3" json:"xorMode,omitempty"`
-	SecondsFrom   int64                  `protobuf:"varint,5,opt,name=seconds_from,json=secondsFrom,proto3" json:"seconds_from,omitempty"`
-	SecondsTo     int64                  `protobuf:"varint,6,opt,name=seconds_to,json=secondsTo,proto3" json:"seconds_to,omitempty"`
-	Padding       string                 `protobuf:"bytes,7,opt,name=padding,proto3" json:"padding,omitempty"`
+	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Timeout       uint32                 `protobuf:"varint,2,opt,name=timeout,proto3" json:"timeout,omitempty"`                            // seconds, 0 = default
+	CacheTtl      uint32                 `protobuf:"varint,3,opt,name=cache_ttl,json=cacheTtl,proto3" json:"cache_ttl,omitempty"`          // seconds, 0 = default
+	NegativeTtl   uint32                 `protobuf:"varint,4,opt,name=negative_ttl,json=negativeTtl,proto3" json:"negative_ttl,omitempty"` // seconds, 0 = default
+	Outbound      string                 `protobuf:"bytes,5,opt,name=outbound,proto3" json:"outbound,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,6,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // sent as-is on every lookup request
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *ExternalValidator) Reset() {
+	*x = ExternalValidator{}
+	mi := &file_proxy_vless_inbound_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalValidator) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalValidator) ProtoMessage() {}
+
+func (x *ExternalValidator) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_vless_inbound_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalValidator.ProtoReflect.Descriptor instead.
+func (*ExternalValidator) Descriptor() ([]byte, []int) {
+	return file_proxy_vless_inbound_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ExternalValidator) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *ExternalValidator) GetTimeout() uint32 {
+	if x != nil {
+		return x.Timeout
+	}
+	return 0
+}
+
+func (x *ExternalValidator) GetCacheTtl() uint32 {
+	if x != nil {
+		return x.CacheTtl
+	}
+	return 0
+}
+
+func (x *ExternalValidator) GetNegativeTtl() uint32 {
+	if x != nil {
+		return x.NegativeTtl
+	}
+	return 0
+}
+
+func (x *ExternalValidator) GetOutbound() string {
+	if x != nil {
+		return x.Outbound
+	}
+	return ""
+}
+
+func (x *ExternalValidator) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+type Config struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Users             []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	Fallbacks         []*Fallback            `protobuf:"bytes,2,rep,name=fallbacks,proto3" json:"fallbacks,omitempty"`
+	Decryption        string                 `protobuf:"bytes,3,opt,name=decryption,proto3" json:"decryption,omitempty"`
+	XorMode           uint32                 `protobuf:"varint,4,opt,name=xorMode,proto3" json:"xorMode,omitempty"`
+	SecondsFrom       int64                  `protobuf:"varint,5,opt,name=seconds_from,json=secondsFrom,proto3" json:"seconds_from,omitempty"`
+	SecondsTo         int64                  `protobuf:"varint,6,opt,name=seconds_to,json=secondsTo,proto3" json:"seconds_to,omitempty"`
+	Padding           string                 `protobuf:"bytes,7,opt,name=padding,proto3" json:"padding,omitempty"`
+	ExternalValidator *ExternalValidator     `protobuf:"bytes,8,opt,name=external_validator,json=externalValidator,proto3" json:"external_validator,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_proxy_vless_inbound_config_proto_msgTypes[1]
+	mi := &file_proxy_vless_inbound_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -133,7 +221,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_vless_inbound_config_proto_msgTypes[1]
+	mi := &file_proxy_vless_inbound_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -146,7 +234,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_proxy_vless_inbound_config_proto_rawDescGZIP(), []int{1}
+	return file_proxy_vless_inbound_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Config) GetUsers() []*protocol.User {
@@ -198,6 +286,13 @@ func (x *Config) GetPadding() string {
 	return ""
 }
 
+func (x *Config) GetExternalValidator() *ExternalValidator {
+	if x != nil {
+		return x.ExternalValidator
+	}
+	return nil
+}
+
 var File_proxy_vless_inbound_config_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_inbound_config_proto_rawDesc = "" +
@@ -209,7 +304,17 @@ const file_proxy_vless_inbound_config_proto_rawDesc = "" +
 	"\x04path\x18\x03 \x01(\tR\x04path\x12\x12\n" +
 	"\x04type\x18\x04 \x01(\tR\x04type\x12\x12\n" +
 	"\x04dest\x18\x05 \x01(\tR\x04dest\x12\x12\n" +
-	"\x04xver\x18\x06 \x01(\x04R\x04xver\"\x92\x02\n" +
+	"\x04xver\x18\x06 \x01(\x04R\x04xver\"\xab\x02\n" +
+	"\x11ExternalValidator\x12\x10\n" +
+	"\x03url\x18\x01 \x01(\tR\x03url\x12\x18\n" +
+	"\atimeout\x18\x02 \x01(\rR\atimeout\x12\x1b\n" +
+	"\tcache_ttl\x18\x03 \x01(\rR\bcacheTtl\x12!\n" +
+	"\fnegative_ttl\x18\x04 \x01(\rR\vnegativeTtl\x12\x1a\n" +
+	"\boutbound\x18\x05 \x01(\tR\boutbound\x12R\n" +
+	"\aheaders\x18\x06 \x03(\v28.xray.proxy.vless.inbound.ExternalValidator.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x02\n" +
 	"\x06Config\x120\n" +
 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x12@\n" +
 	"\tfallbacks\x18\x02 \x03(\v2\".xray.proxy.vless.inbound.FallbackR\tfallbacks\x12\x1e\n" +
@@ -220,7 +325,8 @@ const file_proxy_vless_inbound_config_proto_rawDesc = "" +
 	"\fseconds_from\x18\x05 \x01(\x03R\vsecondsFrom\x12\x1d\n" +
 	"\n" +
 	"seconds_to\x18\x06 \x01(\x03R\tsecondsTo\x12\x18\n" +
-	"\apadding\x18\a \x01(\tR\apaddingBj\n" +
+	"\apadding\x18\a \x01(\tR\apadding\x12Z\n" +
+	"\x12external_validator\x18\b \x01(\v2+.xray.proxy.vless.inbound.ExternalValidatorR\x11externalValidatorBj\n" +
 	"\x1ccom.xray.proxy.vless.inboundP\x01Z-github.com/xtls/xray-core/proxy/vless/inbound\xaa\x02\x18Xray.Proxy.Vless.Inboundb\x06proto3"
 
 var (
@@ -235,20 +341,24 @@ func file_proxy_vless_inbound_config_proto_rawDescGZIP() []byte {
 	return file_proxy_vless_inbound_config_proto_rawDescData
 }
 
-var file_proxy_vless_inbound_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proxy_vless_inbound_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proxy_vless_inbound_config_proto_goTypes = []any{
-	(*Fallback)(nil),      // 0: xray.proxy.vless.inbound.Fallback
-	(*Config)(nil),        // 1: xray.proxy.vless.inbound.Config
-	(*protocol.User)(nil), // 2: xray.common.protocol.User
+	(*Fallback)(nil),          // 0: xray.proxy.vless.inbound.Fallback
+	(*ExternalValidator)(nil), // 1: xray.proxy.vless.inbound.ExternalValidator
+	(*Config)(nil),            // 2: xray.proxy.vless.inbound.Config
+	nil,                       // 3: xray.proxy.vless.inbound.ExternalValidator.HeadersEntry
+	(*protocol.User)(nil),     // 4: xray.common.protocol.User
 }
 var file_proxy_vless_inbound_config_proto_depIdxs = []int32{
-	2, // 0: xray.proxy.vless.inbound.Config.users:type_name -> xray.common.protocol.User
-	0, // 1: xray.proxy.vless.inbound.Config.fallbacks:type_name -> xray.proxy.vless.inbound.Fallback
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 0: xray.proxy.vless.inbound.ExternalValidator.headers:type_name -> xray.proxy.vless.inbound.ExternalValidator.HeadersEntry
+	4, // 1: xray.proxy.vless.inbound.Config.users:type_name -> xray.common.protocol.User
+	0, // 2: xray.proxy.vless.inbound.Config.fallbacks:type_name -> xray.proxy.vless.inbound.Fallback
+	1, // 3: xray.proxy.vless.inbound.Config.external_validator:type_name -> xray.proxy.vless.inbound.ExternalValidator
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_proxy_vless_inbound_config_proto_init() }
@@ -262,7 +372,7 @@ func file_proxy_vless_inbound_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_vless_inbound_config_proto_rawDesc), len(file_proxy_vless_inbound_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

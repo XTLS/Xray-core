@@ -1,6 +1,7 @@
 package conf_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/xtls/xray-core/common/net"
@@ -155,5 +156,58 @@ func TestVLessInbound(t *testing.T) {
 				},
 			},
 		},
+		{
+			Input: `{
+				"clients": [
+					{
+						"id": "27848739-7e62-4138-9fd3-098a63964b6b"
+					}
+				],
+				"decryption": "none",
+				"validator": {
+					"type": "external",
+					"url": "https://auth.example.com/check",
+					"timeout": 2,
+					"cacheTtl": 300,
+					"negativeTtl": 30,
+					"outbound": "auth-out",
+					"headers": {"Authorization": "Bearer s3cr3t"}
+				}
+			}`,
+			Parser: loadJSON(creator),
+			Output: &inbound.Config{
+				Users: []*protocol.User{
+					{
+						Account: serial.ToTypedMessage(&vless.Account{
+							Id: "27848739-7e62-4138-9fd3-098a63964b6b",
+						}),
+					},
+				},
+				Decryption: "none",
+				ExternalValidator: &inbound.ExternalValidator{
+					Url:         "https://auth.example.com/check",
+					Timeout:     2,
+					CacheTtl:    300,
+					NegativeTtl: 30,
+					Outbound:    "auth-out",
+					Headers:     map[string]string{"Authorization": "Bearer s3cr3t"},
+				},
+			},
+		},
 	})
+}
+
+func TestVLessInboundValidatorErrors(t *testing.T) {
+	for _, input := range []string{
+		`{"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b"}], "decryption": "none", "validator": {"type": "external"}}`,
+		`{"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b"}], "decryption": "none", "validator": {"type": "bogus"}}`,
+	} {
+		c := new(VLessInboundConfig)
+		if err := json.Unmarshal([]byte(input), c); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Build(); err == nil {
+			t.Fatalf("expected error for input: %s", input)
+		}
+	}
 }

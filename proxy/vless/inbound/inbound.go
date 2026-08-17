@@ -174,6 +174,21 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 		}
 	}
 
+	if ev := config.ExternalValidator; ev != nil {
+		external, err := vless.NewExternalValidator(ctx, handler.defaultDispatcher, validator, vless.ExternalValidatorConfig{
+			URL:         ev.Url,
+			Timeout:     time.Duration(ev.Timeout) * time.Second,
+			CacheTTL:    time.Duration(ev.CacheTtl) * time.Second,
+			NegativeTTL: time.Duration(ev.NegativeTtl) * time.Second,
+			Outbound:    ev.Outbound,
+			Headers:     ev.Headers,
+		})
+		if err != nil {
+			return nil, errors.New("failed to use validator").Base(err).AtError()
+		}
+		handler.validator = external
+	}
+
 	return handler, nil
 }
 
@@ -300,6 +315,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	var request *protocol.RequestHeader
 	var requestAddons *encoding.Addons
 	var err error
+	var inbound *session.Inbound
 
 	napfb := h.fallbacks
 	isfb := napfb != nil
@@ -307,7 +323,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if isfb && firstLen < 18 {
 		err = errors.New("fallback directly")
 	} else {
-		userSentID, request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, h.validator)
+		inbound = session.InboundFromContext(ctx)
+		validator := h.validator
+		if aware, ok := validator.(vless.SourceAware); ok && inbound != nil {
+			validator = aware.WithSource(inbound.Source)
+		}
+		userSentID, request, requestAddons, isfb, err = encoding.DecodeRequestHeader(isfb, first, reader, validator)
 	}
 
 	if err != nil {
@@ -529,7 +550,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	errors.LogInfo(ctx, "received request for ", request.Destination())
 
-	inbound := session.InboundFromContext(ctx)
 	if inbound == nil {
 		panic("no inbound metadata")
 	}

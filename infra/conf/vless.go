@@ -30,13 +30,28 @@ type VLessInboundFallback struct {
 	Xver uint64          `json:"xver"`
 }
 
+// VLessInboundValidatorConfig selects and configures how VLESS users are
+// validated. Type "memory" (the default, used when the field is omitted)
+// checks only the local "clients"/"users" list. Type "external" additionally
+// queries an HTTP(S) endpoint for users not found locally.
+type VLessInboundValidatorConfig struct {
+	Type        string            `json:"type"`
+	URL         string            `json:"url"`
+	Timeout     uint32            `json:"timeout"`     // seconds, 0 = default
+	CacheTTL    uint32            `json:"cacheTtl"`    // seconds, 0 = default
+	NegativeTTL uint32            `json:"negativeTtl"` // seconds, 0 = default
+	Outbound    string            `json:"outbound"`    // tagged outbound to dial the endpoint through
+	Headers     map[string]string `json:"headers"`     // sent as-is on every lookup request
+}
+
 type VLessInboundConfig struct {
-	Users      []json.RawMessage       `json:"users"`
-	Clients    []json.RawMessage       `json:"clients"`
-	Decryption string                  `json:"decryption"`
-	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
-	Flow       string                  `json:"flow"`
-	Testseed   []uint32                `json:"testseed"`
+	Users      []json.RawMessage            `json:"users"`
+	Clients    []json.RawMessage            `json:"clients"`
+	Decryption string                       `json:"decryption"`
+	Fallbacks  []*VLessInboundFallback      `json:"fallbacks"`
+	Flow       string                       `json:"flow"`
+	Testseed   []uint32                     `json:"testseed"`
+	Validator  *VLessInboundValidatorConfig `json:"validator"`
 }
 
 // Build implements Buildable
@@ -103,6 +118,25 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 		return nil, err
 	}
 
+	if c.Validator != nil {
+		switch c.Validator.Type {
+		case "", "memory":
+		case "external":
+			if c.Validator.URL == "" {
+				return nil, errors.New(`VLESS "validator" of type "external" requires "url"`)
+			}
+			config.ExternalValidator = &inbound.ExternalValidator{
+				Url:         c.Validator.URL,
+				Timeout:     c.Validator.Timeout,
+				CacheTtl:    c.Validator.CacheTTL,
+				NegativeTtl: c.Validator.NegativeTTL,
+				Outbound:    c.Validator.Outbound,
+				Headers:     c.Validator.Headers,
+			}
+		default:
+			return nil, errors.New(`VLESS "validator.type" must be "memory" or "external", got "` + c.Validator.Type + `"`)
+		}
+	}
 	config.Decryption = c.Decryption
 	if !func() bool {
 		s := strings.Split(config.Decryption, ".")

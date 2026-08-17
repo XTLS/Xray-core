@@ -17,6 +17,18 @@ message Fallback {
   uint64 xver = 6;
 }
 
+// ExternalValidator delegates user lookups to an HTTP(S) endpoint, layered on
+// top of the inbound's local user list. Its presence on Config selects the
+// external validator; nil means the local user list alone is used.
+message ExternalValidator {
+  string url = 1;
+  uint32 timeout = 2;      // seconds, 0 = default
+  uint32 cache_ttl = 3;    // seconds, 0 = default
+  uint32 negative_ttl = 4; // seconds, 0 = default
+  string outbound = 5;
+  map<string, string> headers = 6; // sent as-is on every lookup request
+}
+
 message Config {
   repeated xray.common.protocol.User users = 1;
   repeated Fallback fallbacks = 2;
@@ -26,4 +38,5 @@ message Config {
   int64 seconds_from = 5;
   int64 seconds_to = 6;
   string padding = 7;
+  ExternalValidator external_validator = 8;
 }
