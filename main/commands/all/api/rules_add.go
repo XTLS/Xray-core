@@ -80,9 +80,6 @@ func executeAddRules(cmd *base.Command, args []string) {
 			base.Fatalf("failed to build conf: %s", err)
 		}
 		tmsg := cserial.ToTypedMessage(config)
-		if tmsg == nil {
-			base.Fatalf("failed to format config to TypedMessage.")
-		}
 
 		ra := &routerService.AddRuleRequest{
 			Config:       tmsg,

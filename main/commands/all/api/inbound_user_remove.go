@@ -46,9 +46,6 @@ func executeRemoveUsers(cmd *base.Command, args []string) {
 	for _, email := range emails {
 		fmt.Println("remove user:", email)
 		tmsg := cserial.ToTypedMessage(&handlerService.RemoveUserOperation{Email: email})
-		if tmsg == nil {
-			base.Fatalf(("failed to format config to TypedMessage"))
-		}
 		_, err := client.AlterInbound(ctx, &handlerService.AlterInboundRequest{
 			Tag:       tag,
 			Operation: tmsg,
