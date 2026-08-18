@@ -11,24 +11,28 @@ import (
 )
 
 var cmdMLKEM768 = &base.Command{
-	UsageLine: `{{.Exec}} mlkem768 [-i "seed (base64.RawURLEncoding)"]`,
-	Short:     `Generate key pair for ML-KEM-768 post-quantum key exchange (VLESS Encryption)`,
+	CustomFlags: true,
+	UsageLine:   `{{.Exec}} mlkem768 [-i "seed (base64.RawURLEncoding)"]`,
+	Short:       `Generate key pair for ML-KEM-768 post-quantum key exchange (VLESS Encryption)`,
 	Long: `
 Generate key pair for ML-KEM-768 post-quantum key exchange (VLESS Encryption).
 
-Random: {{.Exec}} mlkem768
+Arguments:
 
-From seed: {{.Exec}} mlkem768 -i "seed (base64.RawURLEncoding)"
+	-i
+		Generate key pair from seed (base64.RawURLEncoding).
+
+Example:
+
+	Random: {{.Exec}} {{.LongName}}
+	From seed: {{.Exec}} {{.LongName}} -i "seed (base64.RawURLEncoding)"
 `,
+	Run: executeMLKEM768,
 }
-
-func init() {
-	cmdMLKEM768.Run = executeMLKEM768 // break init loop
-}
-
-var input_mlkem768 = cmdMLKEM768.Flag.String("i", "", "")
 
 func executeMLKEM768(cmd *base.Command, args []string) {
+	var input_mlkem768 = cmd.Flag.String("i", "", "")
+	cmd.Flag.Parse(args)
 	var seed [64]byte
 	if len(*input_mlkem768) > 0 {
 		s, _ := base64.RawURLEncoding.DecodeString(*input_mlkem768)

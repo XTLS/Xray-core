@@ -16,8 +16,9 @@ import (
 
 // cmdCert is the tls cert command
 var cmdCert = &base.Command{
-	UsageLine: "{{.Exec}} tls cert [--ca] [--domain=example.com] [--expire=240h]",
-	Short:     "Generate TLS certificates",
+	CustomFlags: true,
+	UsageLine:   "{{.Exec}} tls cert [--ca] [--domain=example.com] [--expire=240h]",
+	Short:       "Generate TLS certificates",
 	Long: `
 Generate TLS certificates.
 
@@ -33,10 +34,10 @@ Arguments:
 		The organization name for the certificate.
 
 	-ca 
-		Whether this certificate is a CA
+		Whether this certificate is a CA.
 
 	-json 
-		The output of certificate to JSON
+		The output of certificate to JSON.
 
 	-file 
 		The certificate path to save.
@@ -44,28 +45,19 @@ Arguments:
 	-expire 
 		Expire time of the certificate. Default value 3 months.
 `,
+	Run: executeCert,
 }
-
-func init() {
-	cmdCert.Run = executeCert // break init loop
-}
-
-var (
-	certDomainNames stringList
-	_               = func() bool {
-		cmdCert.Flag.Var(&certDomainNames, "domain", "Domain name for the certificate")
-		return true
-	}()
-
-	certCommonName   = cmdCert.Flag.String("name", "Xray Inc", "The common name of this certificate")
-	certOrganization = cmdCert.Flag.String("org", "Xray Inc", "Organization of the certificate")
-	certIsCA         = cmdCert.Flag.Bool("ca", false, "Whether this certificate is a CA")
-	certJSONOutput   = cmdCert.Flag.Bool("json", true, "Print certificate in JSON format")
-	certFileOutput   = cmdCert.Flag.String("file", "", "Save certificate in file.")
-	certExpire       = cmdCert.Flag.Duration("expire", time.Hour*24*90 /* 90 days */, "Time until the certificate expires. Default value 3 months.")
-)
 
 func executeCert(cmd *base.Command, args []string) {
+	var certDomainNames base.OptionList
+	cmd.Flag.Var(&certDomainNames, "domain", "Domain name for the certificate")
+	certCommonName := cmd.Flag.String("name", "Xray Inc", "The common name of this certificate")
+	certOrganization := cmd.Flag.String("org", "Xray Inc", "Organization of the certificate")
+	certIsCA := cmd.Flag.Bool("ca", false, "Whether this certificate is a CA")
+	certJSONOutput := cmd.Flag.Bool("json", true, "Print certificate in JSON format")
+	certFileOutput := cmd.Flag.String("file", "", "Save certificate in file.")
+	certExpire := cmd.Flag.Duration("expire", time.Hour*24*90 /* 90 days */, "Time until the certificate expires. Default value 3 months.")
+	cmd.Flag.Parse(args)
 	var opts []cert.Option
 	if *certIsCA {
 		opts = append(opts, cert.Authority(*certIsCA))
@@ -124,20 +116,6 @@ func printFile(certificate *cert.Certificate, name string) error {
 	}, func() error {
 		return writeFile(keyPEM, name+".key")
 	})
-}
-
-type stringList []string
-
-func (l *stringList) String() string {
-	return "String list"
-}
-
-func (l *stringList) Set(v string) error {
-	if v == "" {
-		base.Fatalf("empty value")
-	}
-	*l = append(*l, v)
-	return nil
 }
 
 type jsonCert struct {

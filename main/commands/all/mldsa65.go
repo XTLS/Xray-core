@@ -10,24 +10,28 @@ import (
 )
 
 var cmdMLDSA65 = &base.Command{
-	UsageLine: `{{.Exec}} mldsa65 [-i "seed (base64.RawURLEncoding)"]`,
-	Short:     `Generate key pair for ML-DSA-65 post-quantum signature (REALITY)`,
+	CustomFlags: true,
+	UsageLine:   `{{.Exec}} mldsa65 [-i "seed (base64.RawURLEncoding)"]`,
+	Short:       `Generate key pair for ML-DSA-65 post-quantum signature (REALITY)`,
 	Long: `
 Generate key pair for ML-DSA-65 post-quantum signature (REALITY).
 
-Random: {{.Exec}} mldsa65
+Arguments:
 
-From seed: {{.Exec}} mldsa65 -i "seed (base64.RawURLEncoding)"
+	-i
+		Generate key pair from seed (base64.RawURLEncoding).
+
+Example:
+
+	Random: {{.Exec}} {{.LongName}}
+	From seed: {{.Exec}} {{.LongName}} -i "seed (base64.RawURLEncoding)"
 `,
+	Run: executeMLDSA65,
 }
-
-func init() {
-	cmdMLDSA65.Run = executeMLDSA65 // break init loop
-}
-
-var input_mldsa65 = cmdMLDSA65.Flag.String("i", "", "")
 
 func executeMLDSA65(cmd *base.Command, args []string) {
+	var input_mldsa65 = cmd.Flag.String("i", "", "")
+	cmd.Flag.Parse(args)
 	var seed [32]byte
 	if len(*input_mldsa65) > 0 {
 		s, _ := base64.RawURLEncoding.DecodeString(*input_mldsa65)

@@ -5,27 +5,32 @@ import (
 )
 
 var cmdX25519 = &base.Command{
-	UsageLine: `{{.Exec}} x25519 [-i "private key (base64.RawURLEncoding)"] [--std-encoding]`,
-	Short:     `Generate key pair for X25519 key exchange (REALITY, VLESS Encryption)`,
+	CustomFlags: true,
+	UsageLine:   `{{.Exec}} x25519 [-i "private key (base64.RawURLEncoding)"] [--std-encoding]`,
+	Short:       `Generate key pair for X25519 key exchange (REALITY, VLESS Encryption)`,
 	Long: `
 Generate key pair for X25519 key exchange (REALITY, VLESS Encryption).
 
-Random: {{.Exec}} x25519
+Arguments:
 
-From private key: {{.Exec}} x25519 -i "private key (base64.RawURLEncoding)"
-For Std Encoding: {{.Exec}} x25519 --std-encoding
+	-i
+		Generate key pair from private key (base64.RawURLEncoding).
+	
+	--std-encoding
+		Use standard Base64 encoding format instead of URL-friendly format.
+
+Example:
+
+	Random: {{.Exec}} {{.LongName}}
+	From private key: {{.Exec}} {{.LongName}} -i "private key (base64.RawURLEncoding)"
+	For Std Encoding: {{.Exec}} {{.LongName}} --std-encoding
 `,
+	Run: executeX25519,
 }
-
-func init() {
-	cmdX25519.Run = executeX25519 // break init loop
-}
-
-var (
-	input_stdEncoding = cmdX25519.Flag.Bool("std-encoding", false, "")
-	input_x25519      = cmdX25519.Flag.String("i", "", "")
-)
 
 func executeX25519(cmd *base.Command, args []string) {
-	Curve25519Genkey(false, *input_x25519)
+	var input_stdEncoding = cmd.Flag.Bool("std-encoding", false, "")
+	var input_x25519 = cmd.Flag.String("i", "", "")
+	cmd.Flag.Parse(args)
+	Curve25519Genkey(*input_stdEncoding, *input_x25519)
 }

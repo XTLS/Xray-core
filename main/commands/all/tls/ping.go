@@ -19,8 +19,9 @@ import (
 
 // cmdPing is the tls ping command
 var cmdPing = &base.Command{
-	UsageLine: "{{.Exec}} tls ping [-ip <ip>] <domain>",
-	Short:     "Ping the domain with TLS handshake",
+	CustomFlags: true,
+	UsageLine:   "{{.Exec}} tls ping [-ip <ip>] <domain>",
+	Short:       "Ping the domain with TLS handshake",
 	Long: `
 Ping the domain with TLS handshake.
 
@@ -29,20 +30,17 @@ Arguments:
 	-ip
 		The IP address of the domain.
 `,
+	Run: executePing,
 }
-
-func init() {
-	cmdPing.Run = executePing // break init loop
-}
-
-var pingIPStr = cmdPing.Flag.String("ip", "", "")
 
 func executePing(cmd *base.Command, args []string) {
-	if cmdPing.Flag.NArg() < 1 {
+	pingIPStr := cmd.Flag.String("ip", "", "")
+	cmd.Flag.Parse(args)
+	if cmd.Flag.NArg() < 1 {
 		base.Fatalf("domain not specified")
 	}
 
-	domainWithPort := cmdPing.Flag.Arg(0)
+	domainWithPort := cmd.Flag.Arg(0)
 	fmt.Println("TLS ping: ", domainWithPort)
 	TargetPort := 443
 	domain, port, err := net.SplitHostPort(domainWithPort)

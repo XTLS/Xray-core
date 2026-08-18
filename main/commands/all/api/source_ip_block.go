@@ -18,6 +18,8 @@ var cmdSourceIpBlock = &base.Command{
 	Long: `
 Block connections by source IP address.
 
+> Before using it, please ensure that there is an outbound pointing to blackhole.
+
 Arguments:
 
 	-s, -server <server:port>
@@ -41,20 +43,20 @@ Arguments:
 Example:
 
 	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -outbound=blocked -inbound=socks 1.2.3.4
-	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -outbound=blocked -inbound=socks 1.2.3.4 -reset
+	{{.Exec}} {{.LongName}} --server=127.0.0.1:8080 -outbound=blocked -inbound=socks -inbound=http 1.2.3.4 -reset
 `,
 	Run: executeSourceIpBlock,
 }
 
 func executeSourceIpBlock(cmd *base.Command, args []string) {
 	var (
-		inbound  string
+		inbound  base.OptionList
 		outbound string
 		ruletag  string
 		reset    bool
 	)
 	setSharedFlags(cmd)
-	cmd.Flag.StringVar(&inbound, "inbound", "", "")
+	cmd.Flag.Var(&inbound, "inbound", "")
 	cmd.Flag.StringVar(&outbound, "outbound", "", "")
 	cmd.Flag.StringVar(&ruletag, "ruletag", "sourceIpBlock", "")
 	cmd.Flag.BoolVar(&reset, "reset", false, "")
@@ -63,8 +65,7 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 
 	unnamedArgs := cmd.Flag.Args()
 	if len(unnamedArgs) == 0 {
-		fmt.Println("reading from stdin:")
-		unnamedArgs = []string{"stdin:"}
+		base.Fatalf("No source ip specified.")
 	}
 	conn, ctx, close := dialAPIServer()
 	defer close()
@@ -77,14 +78,16 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 		return
 	}
 
-	jsonInbound, err := json.Marshal([]string{inbound})
-	if inbound == "" {
-		jsonInbound, err = json.Marshal([]string{})
+	jsonInbound := []string(inbound)
+	if jsonInbound == nil {
+		jsonInbound = []string{}
 	}
+	jsonInboundBytes, err := json.Marshal(jsonInbound)
 	if err != nil {
 		fmt.Println("Error marshaling JSON:", err)
 		return
 	}
+
 	stringConfig := fmt.Sprintf(`
 	{
 		"routing": {
@@ -99,7 +102,7 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 		  }
 	  }
 	  
-	`, ruletag, string(jsonInbound), outbound, string(jsonIps))
+	`, ruletag, string(jsonInboundBytes), outbound, string(jsonIps))
 
 	conf, err := serial.DecodeJSONConfig(strings.NewReader(stringConfig))
 	if err != nil {

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/pem"
-	"flag"
+
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -14,26 +14,23 @@ import (
 )
 
 var cmdHash = &base.Command{
-	UsageLine: "{{.Exec}} tls hash",
-	Short:     "Calculate TLS certificate hash.",
+	CustomFlags: true,
+	UsageLine:   "{{.Exec}} tls hash [-cert=cert.pem]",
+	Short:       "Calculate TLS certificate hash.",
 	Long: `
-	xray tls hash --cert <cert.pem>
-	Calculate TLS certificate hash.
-	`,
-}
+Calculate TLS certificate hash.
 
-func init() {
-	cmdHash.Run = executeHash // break init loop
-}
+Arguments:
 
-var input = cmdHash.Flag.String("cert", "fullchain.pem", "The file path of the certificate")
+	-cert
+		The certificate file to be calculated.
+`,
+	Run: executeHash,
+}
 
 func executeHash(cmd *base.Command, args []string) {
-	fs := flag.NewFlagSet("hash", flag.ContinueOnError)
-	if err := fs.Parse(args); err != nil {
-		fmt.Println(err)
-		return
-	}
+	var input = cmd.Flag.String("cert", "fullchain.pem", "The file path of the certificate")
+	cmd.Flag.Parse(args)
 	certContent, err := os.ReadFile(*input)
 	if err != nil {
 		fmt.Println(err)

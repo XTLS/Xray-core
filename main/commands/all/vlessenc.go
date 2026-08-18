@@ -14,10 +14,7 @@ var cmdVLESSEnc = &base.Command{
 	Long: `
 Generate decryption/encryption json pair (VLESS Encryption).
 `,
-}
-
-func init() {
-	cmdVLESSEnc.Run = executeVLESSEnc // break init loop
+	Run: executeVLESSEnc,
 }
 
 func executeVLESSEnc(cmd *base.Command, args []string) {

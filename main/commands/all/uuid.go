@@ -8,24 +8,28 @@ import (
 )
 
 var cmdUUID = &base.Command{
-	UsageLine: `{{.Exec}} uuid [-i "example"]`,
-	Short:     `Generate UUIDv4 or UUIDv5 (VLESS)`,
+	CustomFlags: true,
+	UsageLine:   `{{.Exec}} uuid [-i "example"]`,
+	Short:       `Generate UUIDv4 or UUIDv5 (VLESS)`,
 	Long: `
 Generate UUIDv4 or UUIDv5 (VLESS).
 
-UUIDv4 (random): {{.Exec}} uuid
+Arguments:
 
-UUIDv5 (from input): {{.Exec}} uuid -i "example"
+	-i
+		Generate uuid from input (UUIDv5).
+
+Example:
+
+	UUIDv4 (random): {{.Exec}} {{.LongName}}
+	UUIDv5 (from input): {{.Exec}} {{.LongName}} -i example
 `,
+	Run: executeUUID,
 }
-
-func init() {
-	cmdUUID.Run = executeUUID // break init loop
-}
-
-var input = cmdUUID.Flag.String("i", "", "")
 
 func executeUUID(cmd *base.Command, args []string) {
+	var input = cmd.Flag.String("i", "", "")
+	cmd.Flag.Parse(args)
 	var output string
 	if l := len(*input); l == 0 {
 		u := uuid.New()

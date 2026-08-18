@@ -131,3 +131,18 @@ func SetExitStatus(n int) {
 func GetExitStatus() int {
 	return exitStatus
 }
+
+// OptionList supports flag reuse
+type OptionList []string
+
+func (l *OptionList) String() string {
+	return "String list"
+}
+
+func (l *OptionList) Set(v string) error {
+	if v == "" {
+		Fatalf("empty value")
+	}
+	*l = append(*l, v)
+	return nil
+}

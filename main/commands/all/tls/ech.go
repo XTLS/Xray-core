@@ -16,43 +16,45 @@ import (
 )
 
 var cmdECH = &base.Command{
-	UsageLine: `{{.Exec}} tls ech [--serverName (string)] [--pem] [-i "ECHServerKeys (base64.StdEncoding)"]`,
-	Short:     `Generate TLS-ECH certificates`,
+	CustomFlags: true,
+	UsageLine:   `{{.Exec}} tls ech [--serverName (string)] [--pem] [-i "ECHServerKeys (base64.StdEncoding)"]`,
+	Short:       `Generate TLS-ECH certificates`,
 	Long: `
 Generate TLS-ECH certificates.
 
-Set serverName to your custom string: {{.Exec}} tls ech --serverName (string)
-Generate into pem format: {{.Exec}} tls ech --pem
-Restore ECHConfigs from ECHServerKeys: {{.Exec}} tls ech -i "ECHServerKeys (base64.StdEncoding)"
-`, // Enable PQ signature schemes: {{.Exec}} tls ech --pq-signature-schemes-enabled
+Arguments:
+
+	-serverName
+		Set serverName to your custom string.
+	
+	-pem
+		Generate into pem format.
+
+	-i
+		Restore ECHConfigs from ECHServerKeys.
+`,
+	// --pq-signature-schemes-enabled
+	//     Enable PQ signature schemes.
+	Run: executeECH,
 }
-
-func init() {
-	cmdECH.Run = executeECH
-}
-
-var input_echServerKeys = cmdECH.Flag.String("i", "", "ECHServerKeys (base64.StdEncoding)")
-
-// var input_pqSignatureSchemesEnabled = cmdECH.Flag.Bool("pqSignatureSchemesEnabled", false, "")
-var (
-	input_serverName = cmdECH.Flag.String("serverName", "cloudflare-ech.com", "")
-	input_pem        = cmdECH.Flag.Bool("pem", false, "True == turn on pem output")
-)
 
 func executeECH(cmd *base.Command, args []string) {
+	var input_echServerKeys = cmd.Flag.String("i", "", "ECHServerKeys (base64.StdEncoding)")
+	// var input_pqSignatureSchemesEnabled = cmdECH.Flag.Bool("pqSignatureSchemesEnabled", false, "")
+	var input_serverName = cmd.Flag.String("serverName", "cloudflare-ech.com", "")
+	var input_pem = cmd.Flag.Bool("pem", false, "True == turn on pem output")
+	cmd.Flag.Parse(args)
 	var kem uint16
-
-	// if *input_pqSignatureSchemesEnabled {
-	// 	kem = 0x30 // hpke.KEM_X25519_KYBER768_DRAFT00
-	// } else {
-	kem = hpke.DHKEM(ecdh.X25519()).ID()
-	// }
-
-	echConfig, priv, err := generateECHKeySet(0, *input_serverName, kem)
-	common.Must(err)
 
 	var configBuffer, keyBuffer []byte
 	if *input_echServerKeys == "" {
+		// if *input_pqSignatureSchemesEnabled {
+		// 	kem = 0x30 // hpke.KEM_X25519_KYBER768_DRAFT00
+		// } else {
+		kem = hpke.DHKEM(ecdh.X25519()).ID()
+		// }
+		echConfig, priv, err := generateECHKeySet(0, *input_serverName, kem)
+		common.Must(err)
 		configBytes, _ := marshalBinary(echConfig)
 		var b cryptobyte.Builder
 		b.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
