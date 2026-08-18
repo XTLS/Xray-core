@@ -40,7 +40,13 @@ type DefaultDialerClient struct {
 }
 
 func (c *DefaultDialerClient) IsClosed() bool {
-	return c.closed
+	if c.closed {
+		return true
+	}
+	if carrier, ok := c.client.Transport.(interface{ IsClosed() bool }); ok {
+		return carrier.IsClosed()
+	}
+	return false
 }
 
 func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
@@ -177,11 +183,14 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	return nil
 }
 
-// HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
 func (c *DefaultDialerClient) Close() error {
+	c.closed = true
 	transport := c.client.Transport
+	if closer, ok := transport.(io.Closer); ok {
+		return closer.Close()
+	}
 	if h3Transport, ok := transport.(*http3.Transport); ok {
-		h3Transport.Close()
+		return h3Transport.Close()
 	}
 	return nil
 }

@@ -47,6 +47,7 @@ type XmuxManager struct {
 	connections int32
 	newConnFunc func() XmuxConn
 	xmuxClients []*XmuxClient
+	draining    *XmuxClient
 }
 
 func NewXmuxManager(xmuxConfig XmuxConfig, newConnFunc func() XmuxConn) *XmuxManager {
@@ -79,23 +80,62 @@ func (m *XmuxManager) newXmuxClient() *XmuxClient {
 }
 
 func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when locking
+	// Planned fixed-pool rotation is make-before-break, but only one old
+	// carrier drains at a time. This bounds a maxConnections=N pool to N+1
+	// physical carriers during graceful rotation instead of letting multiple
+	// generations accumulate when long-lived flows pin old carriers.
+	if m.connections > 0 && m.draining != nil && (m.draining.Running.Load() <= 0 || m.draining.XmuxConn.IsClosed()) {
+		m.draining.NotUsed.Store(true)
+		m.draining.maybeClose()
+		m.draining = nil
+	}
+
+	now := time.Now()
 	for i := 0; i < len(m.xmuxClients); {
 		xmuxClient := m.xmuxClients[i]
-		if xmuxClient.XmuxConn.IsClosed() ||
-			xmuxClient.leftUsage == 0 ||
+		closed := xmuxClient.XmuxConn.IsClosed()
+		exhausted := xmuxClient.leftUsage == 0 ||
 			xmuxClient.LeftRequests.Load() <= 0 ||
-			(xmuxClient.UnreusableAt != time.Time{} && time.Now().After(xmuxClient.UnreusableAt)) {
-			errors.LogDebug(ctx, "XMUX: removing xmuxClient, IsClosed() = ", xmuxClient.XmuxConn.IsClosed(),
-				", Running = ", xmuxClient.Running.Load(),
+			(xmuxClient.UnreusableAt != time.Time{} && now.After(xmuxClient.UnreusableAt))
+
+		if closed {
+			errors.LogDebug(ctx, "XMUX: removing closed xmuxClient, Running = ", xmuxClient.Running.Load())
+			xmuxClient.NotUsed.Store(true)
+			xmuxClient.maybeClose()
+			m.xmuxClients = append(m.xmuxClients[:i], m.xmuxClients[i+1:]...)
+			continue
+		}
+
+		if exhausted {
+			if m.connections > 0 && xmuxClient.Running.Load() > 0 {
+				if m.draining == nil {
+					errors.LogDebug(ctx, "XMUX: serial-draining xmuxClient, Running = ", xmuxClient.Running.Load(),
+						", leftUsage = ", xmuxClient.leftUsage,
+						", LeftRequests = ", xmuxClient.LeftRequests.Load(),
+						", UnreusableAt = ", xmuxClient.UnreusableAt)
+					xmuxClient.NotUsed.Store(true)
+					xmuxClient.maybeClose()
+					m.draining = xmuxClient
+					m.xmuxClients = append(m.xmuxClients[:i], m.xmuxClients[i+1:]...)
+					continue
+				}
+
+				// Another carrier is already draining. Keep this expired carrier
+				// active temporarily; it will become the next rotation candidate.
+				i++
+				continue
+			}
+
+			errors.LogDebug(ctx, "XMUX: removing exhausted xmuxClient, Running = ", xmuxClient.Running.Load(),
 				", leftUsage = ", xmuxClient.leftUsage,
 				", LeftRequests = ", xmuxClient.LeftRequests.Load(),
 				", UnreusableAt = ", xmuxClient.UnreusableAt)
 			xmuxClient.NotUsed.Store(true)
 			xmuxClient.maybeClose()
 			m.xmuxClients = append(m.xmuxClients[:i], m.xmuxClients[i+1:]...)
-		} else {
-			i++
+			continue
 		}
+		i++
 	}
 
 	if len(m.xmuxClients) == 0 {
@@ -104,7 +144,7 @@ func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when l
 	}
 
 	if m.connections > 0 && len(m.xmuxClients) < int(m.connections) {
-		errors.LogDebug(ctx, "XMUX: creating xmuxClient because maxConnections was not hit, xmuxClients = ", len(m.xmuxClients))
+		errors.LogDebug(ctx, "XMUX: creating xmuxClient because fixed pool has a free active slot, xmuxClients = ", len(m.xmuxClients))
 		return m.newXmuxClient()
 	}
 
@@ -112,6 +152,20 @@ func (m *XmuxManager) GetXmuxClient(ctx context.Context) *XmuxClient { // when l
 	if m.concurrency > 0 {
 		for _, xmuxClient := range m.xmuxClients {
 			if xmuxClient.Running.Load() < m.concurrency {
+				xmuxClients = append(xmuxClients, xmuxClient)
+			}
+		}
+	} else if m.connections > 0 {
+		// Keep new proxy flows spread across the least-loaded active carriers.
+		// Each flow remains pinned to the chosen XmuxClient for its lifetime.
+		minRunning := int32(math.MaxInt32)
+		for _, xmuxClient := range m.xmuxClients {
+			running := xmuxClient.Running.Load()
+			if running < minRunning {
+				minRunning = running
+				xmuxClients = xmuxClients[:0]
+			}
+			if running == minRunning {
 				xmuxClients = append(xmuxClients, xmuxClient)
 			}
 		}

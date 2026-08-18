@@ -90,3 +90,29 @@ func TestDefault(t *testing.T) {
 		t.Error("did not get 1 distinct clients, got ", len(xmuxClients))
 	}
 }
+
+func TestMaxConnectionsPreferLeastLoaded(t *testing.T) {
+	xmuxConfig := XmuxConfig{
+		MaxConnections: &RangeConfig{From: 4, To: 4},
+	}
+
+	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
+		return &fakeRoundTripper{}
+	})
+
+	clients := make([]*XmuxClient, 4)
+	for i := range clients {
+		clients[i] = xmuxManager.GetXmuxClient(context.Background())
+		clients[i].AddRunning()
+	}
+
+	clients[0].AddRunning()
+	clients[0].AddRunning()
+	clients[1].AddRunning()
+	clients[2].AddRunning()
+
+	got := xmuxManager.GetXmuxClient(context.Background())
+	if got != clients[3] {
+		t.Fatalf("expected least-loaded xmux client, got %p want %p", got, clients[3])
+	}
+}

@@ -81,6 +81,81 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	return xmuxClient.XmuxConn.(DialerClient), xmuxClient
 }
 
+type fixedH2RoundTripper struct {
+	mu        sync.Mutex
+	transport *http2.Transport
+	dial      func(context.Context) (net.Conn, error)
+	conn      *http2.ClientConn
+	rawConn   net.Conn
+	closed    bool
+}
+
+func (t *fixedH2RoundTripper) getConn(ctx context.Context) (*http2.ClientConn, net.Conn, bool, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return nil, nil, false, errors.New("fixed H2 carrier is closed")
+	}
+	if t.conn != nil {
+		state := t.conn.State()
+		if state.Closed || state.Closing {
+			return nil, t.rawConn, false, errors.New("fixed H2 carrier is no longer reusable")
+		}
+		return t.conn, t.rawConn, true, nil
+	}
+
+	raw, err := t.dial(ctx)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	cc, err := t.transport.NewClientConn(raw)
+	if err != nil {
+		raw.Close()
+		return nil, nil, false, err
+	}
+	t.conn = cc
+	t.rawConn = raw
+	return cc, raw, false, nil
+}
+
+func (t *fixedH2RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	cc, raw, reused, err := t.getConn(req.Context())
+	if err != nil {
+		return nil, err
+	}
+	if trace := httptrace.ContextClientTrace(req.Context()); trace != nil && trace.GotConn != nil {
+		trace.GotConn(httptrace.GotConnInfo{Conn: raw, Reused: reused})
+	}
+	return cc.RoundTrip(req)
+}
+
+func (t *fixedH2RoundTripper) IsClosed() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.closed {
+		return true
+	}
+	if t.conn == nil {
+		return false
+	}
+	state := t.conn.State()
+	return state.Closed || state.Closing
+}
+
+func (t *fixedH2RoundTripper) Close() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.closed = true
+	if t.conn == nil {
+		return nil
+	}
+	err := t.conn.Close()
+	t.conn = nil
+	t.rawConn = nil
+	return err
+}
+
 func decideHTTPVersion(tlsConfig *tls.Config, realityConfig *reality.Config) string {
 	if realityConfig != nil {
 		return "2"
@@ -281,12 +356,24 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		if keepAlivePeriod < 0 {
 			keepAlivePeriod = 0
 		}
-		transport = &http2.Transport{
+		fixedPool := transportConfig.Xmux != nil && transportConfig.Xmux.GetNormalizedMaxConnections().To > 0
+		h2Transport := &http2.Transport{
 			DialTLSContext: func(ctxInner context.Context, network string, addr string, cfg *gotls.Config) (net.Conn, error) {
 				return dialContext(ctxInner)
 			},
-			IdleConnTimeout: net.ConnIdleTimeout,
-			ReadIdleTimeout: keepAlivePeriod,
+			IdleConnTimeout:            net.ConnIdleTimeout,
+			ReadIdleTimeout:            keepAlivePeriod,
+			StrictMaxConcurrentStreams: fixedPool,
+		}
+		if fixedPool {
+			// maxConnections describes physical carrier connections. A regular
+			// http2.Transport is itself a connection pool and may create multiple
+			// TCP connections internally under burst load. Bind one ClientConn to
+			// each XmuxClient so pool accounting matches the wire.
+			h2Transport.IdleConnTimeout = 0 // XMUX owns carrier lifetime/rotation.
+			transport = &fixedH2RoundTripper{transport: h2Transport, dial: dialContext}
+		} else {
+			transport = h2Transport
 		}
 	} else {
 		httpDialContext := func(ctxInner context.Context, network string, addr string) (net.Conn, error) {
