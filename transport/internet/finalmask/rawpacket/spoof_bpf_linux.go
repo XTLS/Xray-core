@@ -40,7 +40,7 @@ const (
 func attachBPFFilter(fd int, proto uint8) {
 	filter := []sockFilter{
 		{Code: bpfLdAbs, K: 9},                         // A = ip.proto
-		{Code: bpfJeq, Jt: 0, Jf: 1, K: uint32(proto)}, // if A == proto keep
+		{Code: bpfJeq, Jt: 1, Jf: 0, K: uint32(proto)}, // if A == proto skip the drop
 		{Code: bpfRet, K: bpfDrop},                     // else drop
 		{Code: bpfRet, K: bpfKeepAll},                  // keep
 	}
