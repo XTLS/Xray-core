@@ -50,9 +50,13 @@ func TestTCPSimStateServer(t *testing.T) {
 	if st.serverFlags() != TCPFlagAck {
 		t.Fatalf("second server segment should be ACK, got %#x", st.serverFlags())
 	}
-	st.observeClientSeq(777)
+	st.observeClientSeq(777, 0)
 	if st.ack() != 778 {
 		t.Fatalf("server ack should be observed client seq+1, got %d want 778", st.ack())
+	}
+	st.observeClientSeq(778, 20)
+	if st.ack() != 798 {
+		t.Fatalf("server ack should advance by payload length, got %d want 798", st.ack())
 	}
 	seq := st.nextSeq(50)
 	if seq != st.isn {
