@@ -218,7 +218,7 @@ func (r *Relay) deliverToSession(s *RelaySession, pkt []byte, tcp *TCPMeta) bool
 		return false
 	}
 	if tcp != nil && tcp.Flags != 0 {
-		s.tcp.observeClientSeq(tcp.Seq)
+		s.tcp.observeClientSeq(tcp.Seq, len(pkt))
 	}
 	s.mu.Lock()
 	s.LastSeen = time.Now()

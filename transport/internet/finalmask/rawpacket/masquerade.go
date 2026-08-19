@@ -169,7 +169,7 @@ func (m *masquerade) onTCPSYN(relayIP netip.Addr, relayPort uint16, probeIP neti
 		}
 	}
 	f.lastSeen = time.Now()
-	f.tcp.observeClientSeq(seq)
+	f.tcp.observeClientSeq(seq, 0)
 	m.mu.Unlock()
 	m.sendTCP(relayIP, relayPort, probeIP, probePort, f, nil, true)
 }
@@ -189,7 +189,7 @@ func (m *masquerade) onTCPData(relayIP netip.Addr, relayPort uint16, probeIP net
 		return
 	}
 	f.lastSeen = time.Now()
-	f.tcp.observeClientSeq(seq)
+	f.tcp.observeClientSeq(seq, len(payload))
 	chunk := f.resp[f.sent:]
 	if len(chunk) > masqMaxChunkLen {
 		chunk = chunk[:masqMaxChunkLen]

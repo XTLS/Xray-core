@@ -96,12 +96,19 @@ func (s *TCPSimState) observePeer(seq uint32, payloadLen int) {
 
 // observeClientSeq records the client's latest wire sequence number so
 // server-role acknowledgements are correct. Used on the relay, where the
-// client's cumulative sequence is already encoded in the wire seq.
-func (s *TCPSimState) observeClientSeq(seq uint32) {
+// client's cumulative sequence is already encoded in the wire seq. The
+// first segment (the client's SYN) consumes one byte; later segments
+// advance by their payload length only.
+func (s *TCPSimState) observeClientSeq(seq uint32, payloadLen int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.peerSeen = true
-	s.peerSeq = seq + 1
+	if !s.peerSeen {
+		s.peerSeen = true
+		s.peerISN = seq
+		s.peerSeq = seq + 1 + uint32(payloadLen)
+		return
+	}
+	s.peerSeq = seq + uint32(payloadLen)
 }
 
 // tsVal returns a plausible TCP timestamp value: milliseconds since a
