@@ -251,6 +251,9 @@ type RawpacketMask struct {
 	ClientPort    uint16   `json:"clientPort"`
 	PeerSpoofIP   string   `json:"peerSpoofIP"`
 	SpoofPort     uint16   `json:"spoofPort"`
+	Auth          string   `json:"auth"`
+	SuppressRst   bool     `json:"suppressRst"`
+	Masquerade    string   `json:"masquerade"`
 }
 
 func (c *RawpacketMask) Build() (proto.Message, error) {
@@ -272,6 +275,9 @@ func (c *RawpacketMask) Build() (proto.Message, error) {
 		ClientPort:    uint32(c.ClientPort),
 		PeerSpoofIp:   c.PeerSpoofIP,
 		SpoofPort:     uint32(c.SpoofPort),
+		Auth:          c.Auth,
+		SuppressRst:   c.SuppressRst,
+		Masquerade:    c.Masquerade,
 	}
 	return config, nil
 }

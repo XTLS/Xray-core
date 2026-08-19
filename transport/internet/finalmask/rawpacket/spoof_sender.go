@@ -7,13 +7,13 @@ import (
 )
 
 type tcpSender struct {
-	srcIPs  []netip.Addr
-	rotator *SourceIPRotator
+	srcIP   netip.Addr
 	srcPort uint16
 	ttl     uint8
-	seqNum  uint32
-	seqMu   sync.Mutex
+	ipID    uint16
+	server  bool
 	fd      *rawSendFD
+	mu      sync.Mutex
 }
 
 func newTCPSender(cfg *SpoofSenderConfig) (*tcpSender, error) {
@@ -26,23 +26,34 @@ func newTCPSender(cfg *SpoofSenderConfig) (*tcpSender, error) {
 		return nil, err
 	}
 	return &tcpSender{
-		srcIPs:  ips,
-		rotator: NewSourceIPRotator(ips),
+		srcIP:   ips[0],
 		srcPort: cfg.SourcePort,
 		ttl:     cfg.TTL,
-		seqNum:  uint32(rand.Int63n(1 << 31)),
+		ipID:    uint16(rand.Intn(65535)),
+		server:  cfg.Server,
 		fd:      fd,
 	}, nil
 }
 
-func (s *tcpSender) Send(payload []byte, dstIP netip.Addr, dstPort uint16) error {
-	s.seqMu.Lock()
-	seq := s.seqNum
-	s.seqNum += uint32(len(payload))
-	s.seqMu.Unlock()
+func (s *tcpSender) nextIPID() uint16 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ipID++
+	return s.ipID
+}
 
-	spoofIP := s.rotator.Next()
-	pkt := BuildTCPSYN(spoofIP, dstIP, s.srcPort, dstPort, seq, payload, s.ttl)
+func (s *tcpSender) Send(payload []byte, dstIP netip.Addr, dstPort uint16, tcp *TCPSimState) error {
+	if tcp == nil {
+		return nil
+	}
+	seq := tcp.nextSeq(len(payload))
+	var flags uint8
+	if s.server {
+		flags = tcp.serverFlags()
+	} else {
+		flags = tcp.clientFlags()
+	}
+	pkt := BuildTCPPacket(s.srcIP, dstIP, s.srcPort, dstPort, seq, tcp.ack(), flags, payload, s.ttl, s.nextIPID(), flags&TCPFlagSyn != 0)
 	return s.fd.send(pkt)
 }
 
@@ -54,11 +65,12 @@ func (s *tcpSender) Close() error {
 }
 
 type udpSender struct {
-	srcIPs  []netip.Addr
-	rotator *SourceIPRotator
+	srcIP   netip.Addr
 	srcPort uint16
 	ttl     uint8
+	ipID    uint16
 	fd      *rawSendFD
+	mu      sync.Mutex
 }
 
 func newUDPSender(cfg *SpoofSenderConfig) (*udpSender, error) {
@@ -71,17 +83,23 @@ func newUDPSender(cfg *SpoofSenderConfig) (*udpSender, error) {
 		return nil, err
 	}
 	return &udpSender{
-		srcIPs:  ips,
-		rotator: NewSourceIPRotator(ips),
+		srcIP:   ips[0],
 		srcPort: cfg.SourcePort,
 		ttl:     cfg.TTL,
+		ipID:    uint16(rand.Intn(65535)),
 		fd:      fd,
 	}, nil
 }
 
-func (s *udpSender) Send(payload []byte, dstIP netip.Addr, dstPort uint16) error {
-	spoofIP := s.rotator.Next()
-	pkt := BuildRawUDP(spoofIP, dstIP, s.srcPort, dstPort, payload, s.ttl)
+func (s *udpSender) nextIPID() uint16 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.ipID++
+	return s.ipID
+}
+
+func (s *udpSender) Send(payload []byte, dstIP netip.Addr, dstPort uint16, tcp *TCPSimState) error {
+	pkt := BuildRawUDP(s.srcIP, dstIP, s.srcPort, dstPort, payload, s.ttl, s.nextIPID())
 	return s.fd.send(pkt)
 }
 
@@ -93,13 +111,13 @@ func (s *udpSender) Close() error {
 }
 
 type icmpSender struct {
-	srcIPs  []netip.Addr
-	rotator *SourceIPRotator
-	id      uint16
-	seq     uint16
-	ttl     uint8
-	seqMu   sync.Mutex
-	fd      *rawSendFD
+	srcIP netip.Addr
+	id    uint16
+	seq   uint16
+	ttl   uint8
+	ipID  uint16
+	seqMu sync.Mutex
+	fd    *rawSendFD
 }
 
 func newICMPSender(cfg *SpoofSenderConfig) (*icmpSender, error) {
@@ -112,23 +130,29 @@ func newICMPSender(cfg *SpoofSenderConfig) (*icmpSender, error) {
 		return nil, err
 	}
 	return &icmpSender{
-		srcIPs:  ips,
-		rotator: NewSourceIPRotator(ips),
-		id:      cfg.SourcePort,
-		seq:     1,
-		ttl:     cfg.TTL,
-		fd:      fd,
+		srcIP: ips[0],
+		id:    cfg.SourcePort,
+		seq:   1,
+		ttl:   cfg.TTL,
+		ipID:  uint16(rand.Intn(65535)),
+		fd:    fd,
 	}, nil
 }
 
-func (s *icmpSender) Send(payload []byte, dstIP netip.Addr, dstPort uint16) error {
+func (s *icmpSender) nextIPID() uint16 {
+	s.seqMu.Lock()
+	defer s.seqMu.Unlock()
+	s.ipID++
+	return s.ipID
+}
+
+func (s *icmpSender) Send(payload []byte, dstIP netip.Addr, dstPort uint16, tcp *TCPSimState) error {
 	s.seqMu.Lock()
 	seq := s.seq
 	s.seq++
 	s.seqMu.Unlock()
 
-	spoofIP := s.rotator.Next()
-	pkt := BuildICMPv4Echo(spoofIP, dstIP, s.id, seq, payload, s.ttl)
+	pkt := BuildICMPv4Echo(s.srcIP, dstIP, s.id, seq, payload, s.ttl, s.nextIPID())
 	return s.fd.send(pkt)
 }
 
@@ -140,13 +164,13 @@ func (s *icmpSender) Close() error {
 }
 
 type icmpv6Sender struct {
-	srcIPs  []netip.Addr
-	rotator *SourceIPRotator
-	id      uint16
-	seq     uint16
-	ttl     uint8
-	seqMu   sync.Mutex
-	fd      *rawSendFD
+	srcIP netip.Addr
+	id    uint16
+	seq   uint16
+	ttl   uint8
+	ipID  uint16
+	seqMu sync.Mutex
+	fd    *rawSendFD
 }
 
 func newICMPv6Sender(cfg *SpoofSenderConfig) (*icmpv6Sender, error) {
@@ -159,23 +183,29 @@ func newICMPv6Sender(cfg *SpoofSenderConfig) (*icmpv6Sender, error) {
 		return nil, err
 	}
 	return &icmpv6Sender{
-		srcIPs:  ips,
-		rotator: NewSourceIPRotator(ips),
-		id:      cfg.SourcePort,
-		seq:     1,
-		ttl:     cfg.TTL,
-		fd:      fd,
+		srcIP: ips[0],
+		id:    cfg.SourcePort,
+		seq:   1,
+		ttl:   cfg.TTL,
+		ipID:  uint16(rand.Intn(65535)),
+		fd:    fd,
 	}, nil
 }
 
-func (s *icmpv6Sender) Send(payload []byte, dstIP netip.Addr, dstPort uint16) error {
+func (s *icmpv6Sender) nextIPID() uint16 {
+	s.seqMu.Lock()
+	defer s.seqMu.Unlock()
+	s.ipID++
+	return s.ipID
+}
+
+func (s *icmpv6Sender) Send(payload []byte, dstIP netip.Addr, dstPort uint16, tcp *TCPSimState) error {
 	s.seqMu.Lock()
 	seq := s.seq
 	s.seq++
 	s.seqMu.Unlock()
 
-	spoofIP := s.rotator.Next()
-	pkt := BuildICMPv6Echo(spoofIP, dstIP, s.id, seq, payload, s.ttl)
+	pkt := BuildICMPv6Echo(s.srcIP, dstIP, s.id, seq, payload, s.ttl, s.nextIPID())
 	return s.fd.send(pkt)
 }
 

@@ -30,10 +30,8 @@ func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
 }
 
 func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
-	if c.Mode == "remote" {
-		go c.startRelay()
-		return raw, nil
-	}
+	// The relay is owned and started by the listener (listenRawpacket);
+	// starting it here too would run two relays over the same port.
 	return raw, nil
 }
 
@@ -100,26 +98,20 @@ func (c *Config) dialLocal() (net.Conn, error) {
 		return nil, err
 	}
 
-	return DialSpoof(relayAddrPort, ips, recvPort, ttl, sendProto, recvProto, toNetipAddr(c.PeerSpoofIp))
-}
+	if c.Auth == "" {
+		return nil, fmt.Errorf("rawpacket: auth (PSK) required in local mode")
+	}
 
-func (c *Config) startRelay() {
-	cfg, err := c.buildRelayConfig()
-	if err != nil {
-		return
-	}
-	r, err := NewRelay(cfg)
-	if err != nil {
-		return
-	}
-	defer r.Close()
-	r.Run()
+	return DialSpoof(relayAddrPort, ips, recvPort, ttl, c.Mtu, sendProto, recvProto, toNetipAddr(c.PeerSpoofIp), []byte(c.Auth))
 }
 
 func (c *Config) buildRelayConfig() (*RelayConfig, error) {
 	spoofIPs := c.SpoofIps
 	if len(spoofIPs) == 0 {
 		return nil, fmt.Errorf("rawpacket: at least one spoof IP required for relay")
+	}
+	if c.Auth == "" {
+		return nil, fmt.Errorf("rawpacket: auth (PSK) required in remote mode")
 	}
 
 	target := c.Target
@@ -178,6 +170,10 @@ func (c *Config) buildRelayConfig() (*RelayConfig, error) {
 		PeerSpoofIP:      toNetipAddr(c.PeerSpoofIp),
 		SendTransport:    sendProto,
 		RecvTransport:    recvProto,
+		Mtu:              c.Mtu,
+		SuppressRst:      c.SuppressRst,
+		Masquerade:       c.Masquerade,
+		Auth:             []byte(c.Auth),
 	}, nil
 }
 

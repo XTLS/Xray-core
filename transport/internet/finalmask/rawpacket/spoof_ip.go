@@ -5,17 +5,25 @@ import (
 	"net/netip"
 )
 
-func BuildIPv4Header(totalLen uint16, id uint16, ttl uint8, protocol uint8, src, dst netip.Addr) []byte {
+// BuildIPv4Header builds a 20-byte IPv4 header. df sets the Don't
+// Fragment bit (real hosts set it; prevents MTU-blackhole fragmentation).
+func BuildIPv4Header(totalLen uint16, id uint16, ttl uint8, protocol uint8, src, dst netip.Addr, df bool) []byte {
 	b := make([]byte, 20)
 	b[0] = (4 << 4) | 5
 	b[1] = 0
 	binary.BigEndian.PutUint16(b[2:], totalLen)
 	binary.BigEndian.PutUint16(b[4:], id)
-	binary.BigEndian.PutUint16(b[6:], 0)
+	if df {
+		binary.BigEndian.PutUint16(b[6:], 0x4000)
+	} else {
+		binary.BigEndian.PutUint16(b[6:], 0)
+	}
 	b[8] = ttl
 	b[9] = protocol
 	copy(b[12:16], src.AsSlice())
 	copy(b[16:20], dst.AsSlice())
+	csum := Checksum(b[:20], 0)
+	binary.BigEndian.PutUint16(b[10:], ^csum)
 	return b
 }
 
@@ -65,5 +73,3 @@ func IPv6PseudoHeaderChecksum(src, dst netip.Addr, protocol uint8, totalLen uint
 	}
 	return uint16(csum)
 }
-
-

@@ -41,16 +41,20 @@ func ParseIPs(ss []string) ([]netip.Addr, error) {
 }
 
 type RelayConfig struct {
-	ListenPort      uint16
-	ForwardAddr     string
+	ListenPort       uint16
+	ForwardAddr      string
 	ForwardTransport string // "tcp" (Xray) or "udp" (reference, default)
-	ClientIP        netip.Addr
-	ClientPort      uint16
-	SpoofIP         netip.Addr // single fallback
-	SpoofIPs        []string
-	SpoofPort       uint16
-	PeerSpoofIP     netip.Addr
-	SendTransport   string
-	RecvTransport   string
-	icmpSuppressed  bool
+	ClientIP         netip.Addr
+	ClientPort       uint16
+	SpoofIP          netip.Addr // single fallback
+	SpoofIPs         []string
+	SpoofPort        uint16
+	PeerSpoofIP      netip.Addr
+	SendTransport    string
+	RecvTransport    string
+	Mtu              uint32
+	SuppressRst      bool
+	Masquerade       string // "off" | "http" | "tls" | "dns"
+	Auth             []byte
+	icmpSuppressed   bool
 }

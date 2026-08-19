@@ -137,8 +137,8 @@ type IPv6 []byte
 
 func (b IPv6) PayloadLength() uint16    { return binary.BigEndian.Uint16(b[4:]) }
 func (b IPv6) TransportProtocol() uint8 { return b[6] }
-func (b IPv6) Src() netip.Addr         { return netip.AddrFrom16([16]byte(b[8:24])) }
-func (b IPv6) Dst() netip.Addr         { return netip.AddrFrom16([16]byte(b[24:40])) }
+func (b IPv6) Src() netip.Addr          { return netip.AddrFrom16([16]byte(b[8:24])) }
+func (b IPv6) Dst() netip.Addr          { return netip.AddrFrom16([16]byte(b[24:40])) }
 
 func (b IPv6) SetPayloadLength(n uint16) {
 	binary.BigEndian.PutUint16(b[4:], n)

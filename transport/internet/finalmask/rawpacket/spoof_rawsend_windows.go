@@ -11,14 +11,21 @@ import (
 )
 
 type rawSendFD struct {
-	h      *windivert.Handle
+	h *windivert.Handle
+	// sendFn, when set, replaces the real send path (used by tests).
+	sendFn func(pkt []byte, dstIP netip.Addr) error
 	mu     sync.Mutex
 	closed bool
 }
 
 func openRawSender(dstIP netip.Addr) (*rawSendFD, error) {
-	filter := fmt.Sprintf("outbound and ip.DstAddr == %s", dstIP.String())
-	h, err := windivert.Open(filter, windivert.LayerNetwork, windivert.PriorityLowest, uint64(windivert.FlagSendOnly))
+	return openRawSenderAny()
+}
+
+// openRawSenderAny opens a WinDivert send handle. WinDivert injects
+// packets from the header contents, so no destination binding is needed.
+func openRawSenderAny() (*rawSendFD, error) {
+	h, err := windivert.Open(windivert.AcceptAll(), windivert.LayerNetwork, windivert.PriorityLowest, windivert.FlagSendOnly)
 	if err != nil {
 		return nil, fmt.Errorf("rawpacket: WinDivert open: %w", err)
 	}
@@ -26,6 +33,15 @@ func openRawSender(dstIP netip.Addr) (*rawSendFD, error) {
 }
 
 func (r *rawSendFD) send(packet []byte) error {
+	return r.sendTo(packet, netip.Addr{})
+}
+
+// sendTo sends packet via WinDivert; the destination is read from the
+// packet itself.
+func (r *rawSendFD) sendTo(packet []byte, dstIP netip.Addr) error {
+	if r.sendFn != nil {
+		return r.sendFn(packet, dstIP)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {

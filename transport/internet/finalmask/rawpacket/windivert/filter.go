@@ -70,6 +70,15 @@ func reject() *Filter {
 	return &Filter{}
 }
 
+// AcceptAll returns a filter that matches every network-layer packet.
+// Suitable for sniffing handles that filter in userspace. All filter
+// flags are set since the filter may match any packet class.
+func AcceptAll() *Filter {
+	f := &Filter{flags: filterFlagOutbound | filterFlagIP | filterFlagIPv6}
+	f.add(fieldZero, testEQ, argUint32(0))
+	return f
+}
+
 // OutboundTCP returns a filter matching outbound TCP packets on the given
 // 5-tuple. Both addresses must share an address family (IPv4 or IPv6).
 func OutboundTCP(src, dst netip.AddrPort) (*Filter, error) {

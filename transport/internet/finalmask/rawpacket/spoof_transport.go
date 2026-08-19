@@ -3,12 +3,24 @@ package rawpacket
 import "net/netip"
 
 type SpoofSender interface {
-	Send(payload []byte, dstIP netip.Addr, dstPort uint16) error
+	Send(payload []byte, dstIP netip.Addr, dstPort uint16, tcp *TCPSimState) error
 	Close() error
 }
 
+// TCPMeta carries the header fields of a received raw packet so the
+// caller can keep the fake conversation's sequence/ack state plausible,
+// and the relay can masquerade replies from the address the probe dialed.
+// DstIP/DstPort are always set; Seq/Flags are non-zero only for TCP.
+// nil for transports the receiver does not describe (ICMP).
+type TCPMeta struct {
+	Seq     uint32
+	Flags   uint8
+	DstIP   netip.Addr
+	DstPort uint16
+}
+
 type SpoofReceiver interface {
-	Receive() (payload []byte, srcIP netip.Addr, srcPort uint16, err error)
+	Receive() (payload []byte, srcIP netip.Addr, srcPort uint16, tcp *TCPMeta, err error)
 	Close() error
 }
 
@@ -45,6 +57,9 @@ type SpoofSenderConfig struct {
 	SourceIPs  []netip.Addr
 	SourcePort uint16
 	TTL        uint8
+	// Server marks a relay-side sender: outbound TCP segments take the
+	// passive-opener role (SYN|ACK then ACK).
+	Server bool
 }
 
 type SpoofReceiverConfig struct {

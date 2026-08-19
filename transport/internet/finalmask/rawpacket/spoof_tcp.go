@@ -2,30 +2,60 @@ package rawpacket
 
 import (
 	"encoding/binary"
-	"math/rand"
 	"net/netip"
 )
 
-func BuildTCPSYN(srcIP, dstIP netip.Addr, srcPort, dstPort uint16, seqNum uint32, payload []byte, ttl uint8) []byte {
-	ipHdrLen := 20
-	tcpHdrLen := 20
-	totalLen := ipHdrLen + tcpHdrLen + len(payload)
+const (
+	tcpMaxSegmentMSS = 1460
+	tcpWindowScale   = 7
+)
+
+// tcpOptions builds the TCP options for an outbound segment. SYN segments
+// carry MSS/SACK-permitted/TS/WScale like Linux; data segments keep the
+// timestamp option (RFC 7323 requires it on every segment once
+// negotiated). Header size: 20 bytes for SYN, 12 for data.
+func tcpOptions(syn bool, ts uint32, tsecr uint32) []byte {
+	if syn {
+		opt := make([]byte, 0, 20)
+		opt = append(opt, 2, 4, byte(tcpMaxSegmentMSS>>8), byte(tcpMaxSegmentMSS&0xff)) // MSS
+		opt = append(opt, 4, 2)                                                         // SACK permitted
+		opt = append(opt, 8, 10)                                                        // TS
+		opt = binary.BigEndian.AppendUint32(opt, ts)
+		opt = binary.BigEndian.AppendUint32(opt, tsecr)
+		opt = append(opt, 1) // NOP
+		opt = append(opt, 3, 3, tcpWindowScale)
+		return opt
+	}
+	opt := make([]byte, 0, 12)
+	opt = append(opt, 1, 1, 8, 10)
+	opt = binary.BigEndian.AppendUint32(opt, ts)
+	opt = binary.BigEndian.AppendUint32(opt, tsecr)
+	return opt
+}
+
+// BuildTCPPacket builds a TCP segment over IPv4 with plausible options,
+// DF set, and a caller-provided (monotonic) IP ID.
+func BuildTCPPacket(srcIP, dstIP netip.Addr, srcPort, dstPort uint16, seqNum, ackNum uint32, flags uint8, payload []byte, ttl uint8, ipID uint16, syn bool) []byte {
+	opts := tcpOptions(syn, tsVal(), 0)
+	tcpHdrLen := 20 + len(opts)
+	totalLen := 20 + tcpHdrLen + len(payload)
 
 	frame := make([]byte, totalLen)
-	ip := BuildIPv4Header(uint16(totalLen), uint16(rand.Intn(65535)), ttl, 6, srcIP, dstIP)
+	ip := BuildIPv4Header(uint16(totalLen), ipID, ttl, 6, srcIP, dstIP, true)
 	copy(frame, ip)
 
-	tcp := frame[ipHdrLen:]
+	tcp := frame[20:]
 	binary.BigEndian.PutUint16(tcp[0:], srcPort)
 	binary.BigEndian.PutUint16(tcp[2:], dstPort)
 	binary.BigEndian.PutUint32(tcp[4:], seqNum)
-	binary.BigEndian.PutUint32(tcp[8:], 0)
+	binary.BigEndian.PutUint32(tcp[8:], ackNum)
 	tcp[12] = byte((tcpHdrLen / 4) << 4)
-	tcp[13] = TCPFlagSyn
+	tcp[13] = flags
 	binary.BigEndian.PutUint16(tcp[14:], 65535)
 
+	copy(tcp[20:], opts)
 	if len(payload) > 0 {
-		copy(frame[ipHdrLen+tcpHdrLen:], payload)
+		copy(tcp[tcpHdrLen:], payload)
 	}
 
 	pseudo := IPv4PseudoHeaderChecksum(srcIP, dstIP, 6, uint16(tcpHdrLen+len(payload)))
@@ -35,14 +65,14 @@ func BuildTCPSYN(srcIP, dstIP netip.Addr, srcPort, dstPort uint16, seqNum uint32
 	return frame
 }
 
-func BuildICMPv4Echo(srcIP, dstIP netip.Addr, id, seq uint16, payload []byte, ttl uint8) []byte {
+func BuildICMPv4Echo(srcIP, dstIP netip.Addr, id, seq uint16, payload []byte, ttl uint8, ipID uint16) []byte {
 	totalLen := 20 + 8 + len(payload)
 	frame := make([]byte, totalLen)
-	ip := BuildIPv4Header(uint16(totalLen), uint16(rand.Intn(65535)), ttl, 1, srcIP, dstIP)
+	ip := BuildIPv4Header(uint16(totalLen), ipID, ttl, 1, srcIP, dstIP, false)
 	copy(frame, ip)
 
 	icmp := frame[20:]
-	icmp[0] = 8  // Echo Request
+	icmp[0] = 8 // Echo Request
 	icmp[1] = 0
 	binary.BigEndian.PutUint16(icmp[4:], id)
 	binary.BigEndian.PutUint16(icmp[6:], seq)
@@ -54,12 +84,12 @@ func BuildICMPv4Echo(srcIP, dstIP netip.Addr, id, seq uint16, payload []byte, tt
 	return frame
 }
 
-func BuildICMPv6Echo(srcIP, dstIP netip.Addr, id, seq uint16, payload []byte, ttl uint8) []byte {
+func BuildICMPv6Echo(srcIP, dstIP netip.Addr, id, seq uint16, payload []byte, ttl uint8, ipID uint16) []byte {
 	// Non-standard: ICMPv6 Echo Request (type 128) over IPv4 header with protocol 58.
 	icmpLen := 8 + len(payload)
 	totalLen := 20 + icmpLen
 	frame := make([]byte, totalLen)
-	ip := BuildIPv4Header(uint16(totalLen), uint16(rand.Intn(65535)), ttl, 58, srcIP, dstIP)
+	ip := BuildIPv4Header(uint16(totalLen), ipID, ttl, 58, srcIP, dstIP, false)
 	copy(frame, ip)
 
 	icmp := frame[20:]
@@ -76,13 +106,13 @@ func BuildICMPv6Echo(srcIP, dstIP netip.Addr, id, seq uint16, payload []byte, tt
 	return frame
 }
 
-func BuildRawUDP(srcIP, dstIP netip.Addr, srcPort, dstPort uint16, payload []byte, ttl uint8) []byte {
+func BuildRawUDP(srcIP, dstIP netip.Addr, srcPort, dstPort uint16, payload []byte, ttl uint8, ipID uint16) []byte {
 	ipHdrLen := 20
 	udpHdrLen := 8
 	totalLen := ipHdrLen + udpHdrLen + len(payload)
 
 	frame := make([]byte, totalLen)
-	ip := BuildIPv4Header(uint16(totalLen), uint16(rand.Intn(65535)), ttl, 17, srcIP, dstIP)
+	ip := BuildIPv4Header(uint16(totalLen), ipID, ttl, 17, srcIP, dstIP, false)
 	copy(frame, ip)
 
 	udp := frame[ipHdrLen:]

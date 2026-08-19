@@ -8,73 +8,59 @@ import (
 )
 
 type RelaySession struct {
+	ID         [8]byte
 	ClientIP   netip.Addr
 	ClientPort uint16
-	ServerAddr netip.Addr
 	TargetConn net.Conn
+	crypto     *frameCrypto
+	tcp        *TCPSimState
 	LastSeen   time.Time
 	mu         sync.Mutex
 	closed     bool
 }
 
 type SessionManager struct {
-	sessions map[sessionKey]*RelaySession
+	sessions map[[8]byte]*RelaySession
 	mu       sync.Mutex
-}
-
-type sessionKey struct {
-	ip   [16]byte
-	port uint16
-}
-
-func addrToKey(ip netip.Addr) [16]byte {
-	var out [16]byte
-	b := ip.As16()
-	copy(out[:], b[:])
-	return out
 }
 
 func NewSessionManager() *SessionManager {
 	return &SessionManager{
-		sessions: make(map[sessionKey]*RelaySession),
+		sessions: make(map[[8]byte]*RelaySession),
 	}
 }
 
-func (sm *SessionManager) Add(clientIP netip.Addr, clientPort uint16, targetConn net.Conn, serverAddr netip.Addr) *RelaySession {
-	key := sessionKey{ip: addrToKey(clientIP), port: clientPort}
+func (sm *SessionManager) Add(id [8]byte, clientIP netip.Addr, clientPort uint16, targetConn net.Conn, crypto *frameCrypto, tcp *TCPSimState) *RelaySession {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	s := &RelaySession{
+		ID:         id,
 		ClientIP:   clientIP,
 		ClientPort: clientPort,
-		ServerAddr: serverAddr,
 		TargetConn: targetConn,
+		crypto:     crypto,
+		tcp:        tcp,
 		LastSeen:   time.Now(),
 	}
-	sm.sessions[key] = s
+	sm.sessions[id] = s
 	return s
 }
 
-func (sm *SessionManager) Get(clientIP netip.Addr, clientPort uint16) *RelaySession {
-	key := sessionKey{ip: addrToKey(clientIP), port: clientPort}
+func (sm *SessionManager) Get(id [8]byte) *RelaySession {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	s, ok := sm.sessions[key]
-	if !ok {
-		return nil
-	}
-	s.LastSeen = time.Now()
-	return s
+	return sm.sessions[id]
 }
 
-func (sm *SessionManager) Remove(clientIP netip.Addr, clientPort uint16) {
-	key := sessionKey{ip: addrToKey(clientIP), port: clientPort}
+// Remove is idempotent: it closes the target connection, marks the
+// session closed and drops it from the map.
+func (sm *SessionManager) Remove(id [8]byte) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	if s, ok := sm.sessions[key]; ok {
+	if s, ok := sm.sessions[id]; ok {
 		s.closed = true
 		s.TargetConn.Close()
-		delete(sm.sessions, key)
+		delete(sm.sessions, id)
 	}
 }
 

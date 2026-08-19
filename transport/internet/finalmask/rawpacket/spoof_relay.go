@@ -1,7 +1,7 @@
 package rawpacket
 
 import (
-	"io"
+	"errors"
 	"net"
 	"net/netip"
 	"sync"
@@ -10,19 +10,27 @@ import (
 
 type Relay struct {
 	cfg            *RelayConfig
+	psk            []byte
 	recver         SpoofReceiver
 	sender         SpoofSender
 	done           chan struct{}
 	closeOnce      sync.Once
 	icmpSuppressed bool
+	maxPayload     int
+	sessionTimeout time.Duration
+	rstManaged     bool
+	masq           *masquerade
 
-	// UDP forwarding (reference mode)
-	targetUDPConn *net.UDPConn
-	fwdUDPAddr    *net.UDPAddr
-
-	// TCP forwarding (Xray mode)
 	man *SessionManager
+
+	recentSIDs map[[8]byte]time.Time
+	recentMu   sync.Mutex
 }
+
+const (
+	relaySessionTimeout = 120 * time.Second
+	relaySIDRemember    = 10 * time.Minute
+)
 
 func NewRelay(cfg *RelayConfig) (*Relay, error) {
 	if cfg.SendTransport == "" {
@@ -30,6 +38,9 @@ func NewRelay(cfg *RelayConfig) (*Relay, error) {
 	}
 	if cfg.RecvTransport == "" {
 		cfg.RecvTransport = "tcp"
+	}
+	if len(cfg.Auth) == 0 {
+		return nil, errors.New("rawpacket: auth (PSK) required in remote mode")
 	}
 
 	if cfg.RecvTransport == "icmp" || cfg.RecvTransport == "icmpv6" {
@@ -65,6 +76,7 @@ func NewRelay(cfg *RelayConfig) (*Relay, error) {
 		SourceIPs:  spoofIPs,
 		SourcePort: cfg.SpoofPort,
 		TTL:        64,
+		Server:     true,
 	})
 	if err != nil {
 		recver.Close()
@@ -76,50 +88,36 @@ func NewRelay(cfg *RelayConfig) (*Relay, error) {
 
 	r := &Relay{
 		cfg:            cfg,
+		psk:            []byte(cfg.Auth),
 		recver:         recver,
 		sender:         sender,
 		done:           make(chan struct{}),
 		icmpSuppressed: cfg.icmpSuppressed,
+		maxPayload:     maxPayloadForMTU(cfg.Mtu),
+		sessionTimeout: relaySessionTimeout,
+		man:            NewSessionManager(),
+		recentSIDs:     make(map[[8]byte]time.Time),
 	}
-
-	if cfg.ForwardTransport == "tcp" {
-		// TCP mode: create session manager for Xray integration
-		r.man = NewSessionManager()
-	} else {
-		// UDP mode: match reference behavior
-		fwdAddr, err := net.ResolveUDPAddr("udp4", cfg.ForwardAddr)
-		if err != nil {
-			recver.Close()
-			sender.Close()
-			if cfg.icmpSuppressed {
-				restoreICMPEchoReply()
-			}
-			return nil, err
-		}
-		udpConn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-		if err != nil {
-			recver.Close()
-			sender.Close()
-			if cfg.icmpSuppressed {
-				restoreICMPEchoReply()
-			}
-			return nil, err
-		}
-		r.targetUDPConn = udpConn
-		r.fwdUDPAddr = fwdAddr
+	if cfg.SuppressRst {
+		r.rstManaged = suppressKernelRST(cfg.ListenPort)
 	}
-
+	masq, masqErr := newMasquerade(cfg.Masquerade, cfg.ListenPort)
+	if masqErr != nil {
+		r.Close()
+		return nil, masqErr
+	}
+	r.masq = masq
 	return r, nil
 }
 
 func (r *Relay) Run() {
 	go r.uplinkLoop()
-	if r.man != nil {
-		go r.forwardResponses()
-	} else {
-		go r.downlinkLoop()
-	}
+	go r.janitorLoop()
 	<-r.done
+}
+
+func (r *Relay) dialTarget() (net.Conn, error) {
+	return net.DialTimeout(r.cfg.ForwardTransport, r.cfg.ForwardAddr, 10*time.Second)
 }
 
 func (r *Relay) uplinkLoop() {
@@ -130,94 +128,212 @@ func (r *Relay) uplinkLoop() {
 		default:
 		}
 
-		data, srcIP, srcPort, err := r.recver.Receive()
+		pkt, srcIP, srcPort, tcp, err := r.recver.Receive()
 		if err != nil {
 			return
 		}
-		if len(data) == 0 {
-			continue
-		}
-
-		if r.man != nil {
-			// TCP mode: forward to target via TCP with session
-			r.handleTCPForward(data, srcIP, srcPort)
-		} else {
-			// UDP mode: forward to target via UDP (reference behavior)
-			if _, err := r.targetUDPConn.WriteToUDP(data, r.fwdUDPAddr); err != nil {
-				continue
+		if len(pkt) == 0 {
+			// A TCP segment without payload is never a tunnel frame:
+			// bare SYNs are handshake probes from scanners.
+			if r.masq != nil && tcp != nil && tcp.Flags&TCPFlagSyn != 0 && tcp.Flags&TCPFlagAck == 0 {
+				r.masq.onTCPSYN(tcp.DstIP, tcp.DstPort, srcIP, srcPort, tcp.Seq)
 			}
-		}
-	}
-}
-
-func (r *Relay) handleTCPForward(data []byte, srcIP netip.Addr, srcPort uint16) {
-	session := r.man.Get(srcIP, srcPort)
-	if session == nil {
-		targetConn, err := net.DialTimeout("tcp", r.cfg.ForwardAddr, 10*time.Second)
-		if err != nil {
-			return
-		}
-		session = r.man.Add(srcIP, srcPort, targetConn, r.cfg.ClientIP)
-	}
-	session.mu.Lock()
-	defer session.mu.Unlock()
-	if !session.closed {
-		session.TargetConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		_, _ = session.TargetConn.Write(data)
-	}
-}
-
-func (r *Relay) downlinkLoop() {
-	buf := make([]byte, 65536)
-	for {
-		select {
-		case <-r.done:
-			return
-		default:
-		}
-
-		n, _, err := r.targetUDPConn.ReadFromUDP(buf)
-		if err != nil {
 			continue
+		}
+		r.handleFrame(pkt, srcIP, srcPort, tcp)
+	}
+}
+
+func (r *Relay) handleFrame(pkt []byte, srcIP netip.Addr, srcPort uint16, tcp *TCPMeta) {
+	sid, ok := frameSessionID(pkt)
+	if !ok {
+		r.masqueradeProbe(pkt, srcIP, srcPort, tcp)
+		return
+	}
+	s := r.man.Get(sid)
+	if s == nil {
+		if !r.handleNewSession(sid, pkt, srcIP, srcPort) {
+			r.masqueradeProbe(pkt, srcIP, srcPort, tcp)
+		}
+		return
+	}
+	if !r.deliverToSession(s, pkt, tcp) {
+		r.masqueradeProbe(pkt, srcIP, srcPort, tcp)
+	}
+}
+
+// masqueradeProbe answers packets that do not belong to any tunnel
+// session (failed frame parse or decryption) with fake service traffic.
+func (r *Relay) masqueradeProbe(pkt []byte, srcIP netip.Addr, srcPort uint16, tcp *TCPMeta) {
+	if r.masq == nil || tcp == nil {
+		return
+	}
+	if tcp.Flags != 0 {
+		r.masq.onTCPData(tcp.DstIP, tcp.DstPort, srcIP, srcPort, tcp.Seq, pkt)
+	} else {
+		r.masq.onUDP(tcp.DstIP, tcp.DstPort, srcIP, srcPort, pkt)
+	}
+}
+
+func (r *Relay) handleNewSession(sid [8]byte, pkt []byte, srcIP netip.Addr, srcPort uint16) bool {
+	if r.recentSIDSeen(sid) {
+		// Replay of a session that was already torn down: drop.
+		return false
+	}
+	crypto, err := newFrameCrypto(r.psk, sid)
+	if err != nil {
+		return false
+	}
+	payload, flags, err := crypto.open(pkt, false)
+	if err != nil {
+		return false
+	}
+	if flags&frameFlagKeepalive != 0 {
+		// A keepalive for a session that no longer exists: ignore.
+		return false
+	}
+	targetConn, err := r.dialTarget()
+	if err != nil {
+		return false
+	}
+	s := r.man.Add(sid, srcIP, srcPort, targetConn, crypto, newTCPSimState())
+	r.rememberSID(sid)
+	go r.forwardSession(s)
+	if len(payload) > 0 {
+		writeTarget(s, payload)
+	}
+	return true
+}
+
+func (r *Relay) deliverToSession(s *RelaySession, pkt []byte, tcp *TCPMeta) bool {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return false
+	}
+	s.mu.Unlock()
+
+	payload, _, err := s.crypto.open(pkt, false)
+	if err != nil {
+		return false
+	}
+	if tcp != nil && tcp.Flags != 0 {
+		s.tcp.observeClientSeq(tcp.Seq)
+	}
+	s.mu.Lock()
+	s.LastSeen = time.Now()
+	s.mu.Unlock()
+
+	if len(payload) > 0 {
+		if !writeTarget(s, payload) {
+			r.man.Remove(s.ID)
+			return false
+		}
+	}
+	return true
+}
+
+// writeTarget writes the whole payload to the target connection, handling
+// partial writes. Returns false if the write failed (caller should remove
+// the session).
+func writeTarget(s *RelaySession, data []byte) bool {
+	if s.TargetConn == nil {
+		return false
+	}
+	_ = s.TargetConn.SetWriteDeadline(time.Now().Add(30 * time.Second))
+	n := 0
+	for n < len(data) {
+		m, err := s.TargetConn.Write(data[n:])
+		if err != nil {
+			return false
+		}
+		if m == 0 {
+			return false
+		}
+		n += m
+	}
+	return true
+}
+
+// forwardSession pumps target->client data for one session. It exits on
+// read error or EOF and removes the session.
+func (r *Relay) forwardSession(s *RelaySession) {
+	buf := make([]byte, 64*1024)
+	for {
+		n, err := s.TargetConn.Read(buf)
+		if err != nil {
+			r.man.Remove(s.ID)
+			return
 		}
 		if n == 0 {
 			continue
 		}
-		_ = r.sender.Send(buf[:n], r.cfg.ClientIP, r.cfg.ClientPort)
+		frames, ferr := s.crypto.sealSplit(true, buf[:n], r.maxPayload, false)
+		if ferr != nil {
+			continue
+		}
+		ok := true
+		for _, f := range frames {
+			if serr := r.sender.Send(f, s.ClientIP, s.ClientPort, s.tcp); serr != nil {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			s.mu.Lock()
+			s.LastSeen = time.Now()
+			s.mu.Unlock()
+		} else {
+			r.man.Remove(s.ID)
+			return
+		}
 	}
 }
 
-func (r *Relay) forwardResponses() {
+// janitorLoop reaps sessions idle for longer than sessionTimeout and
+// prunes the recent-session-ID anti-replay set.
+func (r *Relay) janitorLoop() {
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
 	for {
 		select {
 		case <-r.done:
 			return
-		default:
-		}
-
-		for _, s := range r.man.All() {
-			s.mu.Lock()
-			if s.closed {
+		case <-t.C:
+			now := time.Now()
+			for _, s := range r.man.All() {
+				s.mu.Lock()
+				idle := now.Sub(s.LastSeen)
 				s.mu.Unlock()
-				continue
-			}
-			buf := make([]byte, 65536)
-			s.TargetConn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-			n, err := s.TargetConn.Read(buf)
-			if err != nil {
-				if err == io.EOF {
-					s.closed = true
-					s.TargetConn.Close()
+				if idle > r.sessionTimeout {
+					r.man.Remove(s.ID)
 				}
-				s.mu.Unlock()
-				continue
 			}
-			s.mu.Unlock()
-			if n > 0 {
-				_ = r.sender.Send(buf[:n], s.ClientIP, s.ClientPort)
-			}
+			r.pruneRecentSIDs(now)
 		}
-		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func (r *Relay) rememberSID(sid [8]byte) {
+	r.recentMu.Lock()
+	r.recentSIDs[sid] = time.Now()
+	r.recentMu.Unlock()
+}
+
+func (r *Relay) recentSIDSeen(sid [8]byte) bool {
+	r.recentMu.Lock()
+	defer r.recentMu.Unlock()
+	_, ok := r.recentSIDs[sid]
+	return ok
+}
+
+func (r *Relay) pruneRecentSIDs(now time.Time) {
+	r.recentMu.Lock()
+	defer r.recentMu.Unlock()
+	for sid, t := range r.recentSIDs {
+		if now.Sub(t) > relaySIDRemember {
+			delete(r.recentSIDs, sid)
+		}
 	}
 }
 
@@ -226,14 +342,12 @@ func (r *Relay) Close() {
 		close(r.done)
 		r.recver.Close()
 		r.sender.Close()
-		if r.targetUDPConn != nil {
-			r.targetUDPConn.Close()
-		}
-		if r.man != nil {
-			r.man.Close()
-		}
+		r.man.Close()
 		if r.icmpSuppressed {
 			restoreICMPEchoReply()
+		}
+		if r.rstManaged {
+			restoreKernelRST(r.cfg.ListenPort, true)
 		}
 	})
 }

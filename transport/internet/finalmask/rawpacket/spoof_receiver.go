@@ -1,80 +1,56 @@
 package rawpacket
 
 import (
-	"fmt"
+	"errors"
 	"net/netip"
-
-	"golang.org/x/sys/unix"
 )
 
-type rawRecvSocket struct {
-	fd     int
-	buf    []byte
-	closed bool
-	proto  uint8
-}
+var errReceiverClosed = errors.New("rawpacket: receiver closed")
 
-func newRawRecvSocket(domain, proto int, bufSize int) (*rawRecvSocket, error) {
-	fd, err := unix.Socket(domain, unix.SOCK_RAW, proto)
-	if err != nil {
-		return nil, fmt.Errorf("rawpacket: socket: %w", err)
-	}
-	if bufSize > 0 {
-		_ = unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_RCVBUF, bufSize)
-	}
-	// 1-second timeout for clean shutdown
-	tv := unix.Timeval{Sec: 1, Usec: 0}
-	_ = unix.SetsockoptTimeval(fd, unix.SOL_SOCKET, unix.SO_RCVTIMEO, &tv)
-	return &rawRecvSocket{fd: fd, buf: make([]byte, 65536)}, nil
-}
-
-func (r *rawRecvSocket) recv() ([]byte, bool) {
-	n, _, err := unix.Recvfrom(r.fd, r.buf, 0)
-	if err != nil {
-		return nil, false
-	}
-	if n == 0 {
-		return nil, false
-	}
-	out := make([]byte, n)
-	copy(out, r.buf[:n])
-	return out, true
-}
-
-func (r *rawRecvSocket) close() {
-	if !r.closed {
-		r.closed = true
-		unix.Close(r.fd)
-	}
+// rawPktRecv is the platform-specific raw socket: unix SOCK_RAW on
+// darwin/freebsd/linux, WinDivert on windows (amd64/386).
+type rawPktRecv interface {
+	// recv returns a copy of one raw IP packet. ok is false when the
+	// socket is closed or a transient read failure occurred (callers
+	// must tolerate spurious false returns and re-try).
+	recv() (pkt []byte, ok bool)
+	// closed reports whether the socket has been closed (recv will no
+	// longer produce packets and errReceiverClosed is the permanent
+	// outcome).
+	closed() bool
+	close()
 }
 
 type tcpReceiver struct {
-	raw *rawRecvSocket
+	raw rawPktRecv
 	cfg *SpoofReceiverConfig
 }
 
 func newTCPReceiver(cfg *SpoofReceiverConfig) (*tcpReceiver, error) {
-	raw, err := newRawRecvSocket(unix.AF_INET, unix.IPPROTO_TCP, cfg.BufferSize)
+	raw, err := newRawRecvSocket(ProtocolTCP, cfg.BufferSize)
 	if err != nil {
 		return nil, err
 	}
 	return &tcpReceiver{raw: raw, cfg: cfg}, nil
 }
 
-func (r *tcpReceiver) Receive() ([]byte, netip.Addr, uint16, error) {
+func (r *tcpReceiver) Receive() ([]byte, netip.Addr, uint16, *TCPMeta, error) {
 	for {
 		pkt, ok := r.raw.recv()
 		if !ok {
+			if r.raw.closed() {
+				return nil, netip.Addr{}, 0, nil, errReceiverClosed
+			}
 			continue
 		}
-		_, flags, payload, srcIP, _, srcPort, dstPort, ok := ParseRawTCPPacket(pkt)
-		if !ok || dstPort != r.cfg.ListenPort || flags&TCPFlagSyn == 0 {
+		seq, flags, payload, srcIP, dstIP, srcPort, dstPort, ok := ParseRawTCPPacket(pkt)
+		if !ok || dstPort != r.cfg.ListenPort {
 			continue
 		}
 		if r.cfg.PeerSpoofIP.IsValid() && srcIP != r.cfg.PeerSpoofIP {
 			continue
 		}
-		return payload, srcIP, srcPort, nil
+		return payload, srcIP, srcPort, &TCPMeta{Seq: seq, Flags: flags, DstIP: dstIP, DstPort: dstPort}, nil
 	}
 }
 
@@ -84,33 +60,36 @@ func (r *tcpReceiver) Close() error {
 }
 
 type udpReceiver struct {
-	raw *rawRecvSocket
+	raw rawPktRecv
 	cfg *SpoofReceiverConfig
 }
 
 func newUDPReceiver(cfg *SpoofReceiverConfig) (*udpReceiver, error) {
-	raw, err := newRawRecvSocket(unix.AF_INET, unix.IPPROTO_UDP, cfg.BufferSize)
+	raw, err := newRawRecvSocket(ProtocolUDP, cfg.BufferSize)
 	if err != nil {
 		return nil, err
 	}
 	return &udpReceiver{raw: raw, cfg: cfg}, nil
 }
 
-func (r *udpReceiver) Receive() ([]byte, netip.Addr, uint16, error) {
+func (r *udpReceiver) Receive() ([]byte, netip.Addr, uint16, *TCPMeta, error) {
 	for {
 		pkt, ok := r.raw.recv()
 		if !ok {
+			if r.raw.closed() {
+				return nil, netip.Addr{}, 0, nil, errReceiverClosed
+			}
 			continue
 		}
 		payload, srcPort, dstPort, ok := ParseUDPPacket(pkt)
 		if !ok || dstPort != r.cfg.ListenPort {
 			continue
 		}
-		srcIP, _, _ := ParseSrcIP(pkt, false)
+		srcIP, dstIP, _ := ParseSrcIP(pkt, false)
 		if r.cfg.PeerSpoofIP.IsValid() && srcIP != r.cfg.PeerSpoofIP {
 			continue
 		}
-		return payload, srcIP, srcPort, nil
+		return payload, srcIP, srcPort, &TCPMeta{DstIP: dstIP, DstPort: dstPort}, nil
 	}
 }
 
@@ -120,22 +99,25 @@ func (r *udpReceiver) Close() error {
 }
 
 type icmpReceiver struct {
-	raw *rawRecvSocket
+	raw rawPktRecv
 	cfg *SpoofReceiverConfig
 }
 
 func newICMPReceiver(cfg *SpoofReceiverConfig) (*icmpReceiver, error) {
-	raw, err := newRawRecvSocket(unix.AF_INET, unix.IPPROTO_ICMP, cfg.BufferSize)
+	raw, err := newRawRecvSocket(ProtocolICMP, cfg.BufferSize)
 	if err != nil {
 		return nil, err
 	}
 	return &icmpReceiver{raw: raw, cfg: cfg}, nil
 }
 
-func (r *icmpReceiver) Receive() ([]byte, netip.Addr, uint16, error) {
+func (r *icmpReceiver) Receive() ([]byte, netip.Addr, uint16, *TCPMeta, error) {
 	for {
 		pkt, ok := r.raw.recv()
 		if !ok {
+			if r.raw.closed() {
+				return nil, netip.Addr{}, 0, nil, errReceiverClosed
+			}
 			continue
 		}
 		id, _, payload, ok := ParseICMPv4Echo(pkt)
@@ -146,7 +128,7 @@ func (r *icmpReceiver) Receive() ([]byte, netip.Addr, uint16, error) {
 		if r.cfg.PeerSpoofIP.IsValid() && srcIP != r.cfg.PeerSpoofIP {
 			continue
 		}
-		return payload, srcIP, id, nil
+		return payload, srcIP, id, nil, nil
 	}
 }
 
@@ -156,23 +138,26 @@ func (r *icmpReceiver) Close() error {
 }
 
 type icmpv6Receiver struct {
-	raw *rawRecvSocket
+	raw rawPktRecv
 	cfg *SpoofReceiverConfig
 }
 
 func newICMPv6Receiver(cfg *SpoofReceiverConfig) (*icmpv6Receiver, error) {
 	// Non-standard: protocol 58 on IPv4 (same as reference)
-	raw, err := newRawRecvSocket(unix.AF_INET, int(ProtocolICMPv6), cfg.BufferSize)
+	raw, err := newRawRecvSocket(ProtocolICMPv6, cfg.BufferSize)
 	if err != nil {
 		return nil, err
 	}
 	return &icmpv6Receiver{raw: raw, cfg: cfg}, nil
 }
 
-func (r *icmpv6Receiver) Receive() ([]byte, netip.Addr, uint16, error) {
+func (r *icmpv6Receiver) Receive() ([]byte, netip.Addr, uint16, *TCPMeta, error) {
 	for {
 		pkt, ok := r.raw.recv()
 		if !ok {
+			if r.raw.closed() {
+				return nil, netip.Addr{}, 0, nil, errReceiverClosed
+			}
 			continue
 		}
 		id, _, payload, ok := ParseICMPv6Echo(pkt)
@@ -183,7 +168,7 @@ func (r *icmpv6Receiver) Receive() ([]byte, netip.Addr, uint16, error) {
 		if r.cfg.PeerSpoofIP.IsValid() && srcIP != r.cfg.PeerSpoofIP {
 			continue
 		}
-		return payload, srcIP, id, nil
+		return payload, srcIP, id, nil, nil
 	}
 }
 

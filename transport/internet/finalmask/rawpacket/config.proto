@@ -57,4 +57,18 @@ message Config {
 
   // Source port to use in spoofed packets (default: 443).
   uint32 spoof_port = 22;
+
+  // Pre-shared key authenticating and encrypting the tunnel. Required
+  // in both modes; must match on client and relay.
+  string auth = 23;
+
+  // Suppress kernel-generated TCP RST for the relay's listen port
+  // (Linux only; uses iptables OUTPUT REJECT rules). Prevents the kernel
+  // from answering the fake TCP handshake with RST.
+  bool suppress_rst = 24;
+
+  // Masquerade for non-tunnel traffic (probes, scanners): "http" or
+  // "tls" serve a fake web service to TCP probes, "dns" answers UDP
+  // queries. Empty or "off" disables.
+  string masquerade = 26;
 }
