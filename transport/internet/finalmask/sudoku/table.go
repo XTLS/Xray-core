@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"math/bits"
 	"math/rand"
+	rand_v2 "math/rand/v2"
 	"sort"
 	"strings"
 	"sync"
-	"time"
+
+	"github.com/xtls/xray-core/common"
 )
 
 type table struct {
@@ -570,11 +572,8 @@ func sort4(in [4]byte) [4]byte {
 	return in
 }
 
-func newSeededRand() *rand.Rand {
-	seed := time.Now().UnixNano()
-	var seedBytes [8]byte
-	if _, err := crypto_rand.Read(seedBytes[:]); err == nil {
-		seed = int64(binary.BigEndian.Uint64(seedBytes[:]))
-	}
-	return rand.New(rand.NewSource(seed))
+func newSeededRand() *rand_v2.Rand {
+	var seedBytes [32]byte
+	common.Must2(crypto_rand.Read(seedBytes[:]))
+	return rand_v2.New(rand_v2.NewChaCha8(seedBytes))
 }

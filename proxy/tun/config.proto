@@ -14,4 +14,5 @@ message Config {
   uint32 user_level = 5;
   repeated string auto_system_routing_table = 6;
   string auto_outbounds_interface = 7;
+  string desc = 8;
 }

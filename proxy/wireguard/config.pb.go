@@ -7,6 +7,7 @@
 package wireguard
 
 import (
+	protocol "github.com/xtls/xray-core/common/protocol"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -81,7 +82,7 @@ type PeerConfig struct {
 	PublicKey     string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
 	PreSharedKey  string                 `protobuf:"bytes,2,opt,name=pre_shared_key,json=preSharedKey,proto3" json:"pre_shared_key,omitempty"`
 	Endpoint      string                 `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
-	KeepAlive     uint32                 `protobuf:"varint,4,opt,name=keep_alive,json=keepAlive,proto3" json:"keep_alive,omitempty"`
+	KeepAlive     string                 `protobuf:"bytes,4,opt,name=keep_alive,json=keepAlive,proto3" json:"keep_alive,omitempty"`
 	AllowedIps    []string               `protobuf:"bytes,5,rep,name=allowed_ips,json=allowedIps,proto3" json:"allowed_ips,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -138,11 +139,11 @@ func (x *PeerConfig) GetEndpoint() string {
 	return ""
 }
 
-func (x *PeerConfig) GetKeepAlive() uint32 {
+func (x *PeerConfig) GetKeepAlive() string {
 	if x != nil {
 		return x.KeepAlive
 	}
-	return 0
+	return ""
 }
 
 func (x *PeerConfig) GetAllowedIps() []string {
@@ -157,8 +158,8 @@ type DeviceConfig struct {
 	SecretKey      string                      `protobuf:"bytes,1,opt,name=secret_key,json=secretKey,proto3" json:"secret_key,omitempty"`
 	Endpoint       []string                    `protobuf:"bytes,2,rep,name=endpoint,proto3" json:"endpoint,omitempty"`
 	Peers          []*PeerConfig               `protobuf:"bytes,3,rep,name=peers,proto3" json:"peers,omitempty"`
+	Users          []*protocol.User            `protobuf:"bytes,5,rep,name=users,proto3" json:"users,omitempty"`
 	Mtu            int32                       `protobuf:"varint,4,opt,name=mtu,proto3" json:"mtu,omitempty"`
-	NumWorkers     int32                       `protobuf:"varint,5,opt,name=num_workers,json=numWorkers,proto3" json:"num_workers,omitempty"`
 	Reserved       []byte                      `protobuf:"bytes,6,opt,name=reserved,proto3" json:"reserved,omitempty"`
 	DomainStrategy DeviceConfig_DomainStrategy `protobuf:"varint,7,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.proxy.wireguard.DeviceConfig_DomainStrategy" json:"domain_strategy,omitempty"`
 	IsClient       bool                        `protobuf:"varint,8,opt,name=is_client,json=isClient,proto3" json:"is_client,omitempty"`
@@ -218,16 +219,16 @@ func (x *DeviceConfig) GetPeers() []*PeerConfig {
 	return nil
 }
 
+func (x *DeviceConfig) GetUsers() []*protocol.User {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
 func (x *DeviceConfig) GetMtu() int32 {
 	if x != nil {
 		return x.Mtu
-	}
-	return 0
-}
-
-func (x *DeviceConfig) GetNumWorkers() int32 {
-	if x != nil {
-		return x.NumWorkers
 	}
 	return 0
 }
@@ -264,7 +265,7 @@ var File_proxy_wireguard_config_proto protoreflect.FileDescriptor
 
 const file_proxy_wireguard_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1cproxy/wireguard/config.proto\x12\x14xray.proxy.wireguard\"\xad\x01\n" +
+	"\x1cproxy/wireguard/config.proto\x12\x14xray.proxy.wireguard\x1a\x1acommon/protocol/user.proto\"\xad\x01\n" +
 	"\n" +
 	"PeerConfig\x12\x1d\n" +
 	"\n" +
@@ -272,17 +273,16 @@ const file_proxy_wireguard_config_proto_rawDesc = "" +
 	"\x0epre_shared_key\x18\x02 \x01(\tR\fpreSharedKey\x12\x1a\n" +
 	"\bendpoint\x18\x03 \x01(\tR\bendpoint\x12\x1d\n" +
 	"\n" +
-	"keep_alive\x18\x04 \x01(\rR\tkeepAlive\x12\x1f\n" +
+	"keep_alive\x18\x04 \x01(\tR\tkeepAlive\x12\x1f\n" +
 	"\vallowed_ips\x18\x05 \x03(\tR\n" +
-	"allowedIps\"\xcb\x03\n" +
+	"allowedIps\"\xdc\x03\n" +
 	"\fDeviceConfig\x12\x1d\n" +
 	"\n" +
 	"secret_key\x18\x01 \x01(\tR\tsecretKey\x12\x1a\n" +
 	"\bendpoint\x18\x02 \x03(\tR\bendpoint\x126\n" +
-	"\x05peers\x18\x03 \x03(\v2 .xray.proxy.wireguard.PeerConfigR\x05peers\x12\x10\n" +
-	"\x03mtu\x18\x04 \x01(\x05R\x03mtu\x12\x1f\n" +
-	"\vnum_workers\x18\x05 \x01(\x05R\n" +
-	"numWorkers\x12\x1a\n" +
+	"\x05peers\x18\x03 \x03(\v2 .xray.proxy.wireguard.PeerConfigR\x05peers\x120\n" +
+	"\x05users\x18\x05 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x12\x10\n" +
+	"\x03mtu\x18\x04 \x01(\x05R\x03mtu\x12\x1a\n" +
 	"\breserved\x18\x06 \x01(\fR\breserved\x12Z\n" +
 	"\x0fdomain_strategy\x18\a \x01(\x0e21.xray.proxy.wireguard.DeviceConfig.DomainStrategyR\x0edomainStrategy\x12\x1b\n" +
 	"\tis_client\x18\b \x01(\bR\bisClient\x12\"\n" +
@@ -315,15 +315,17 @@ var file_proxy_wireguard_config_proto_goTypes = []any{
 	(DeviceConfig_DomainStrategy)(0), // 0: xray.proxy.wireguard.DeviceConfig.DomainStrategy
 	(*PeerConfig)(nil),               // 1: xray.proxy.wireguard.PeerConfig
 	(*DeviceConfig)(nil),             // 2: xray.proxy.wireguard.DeviceConfig
+	(*protocol.User)(nil),            // 3: xray.common.protocol.User
 }
 var file_proxy_wireguard_config_proto_depIdxs = []int32{
 	1, // 0: xray.proxy.wireguard.DeviceConfig.peers:type_name -> xray.proxy.wireguard.PeerConfig
-	0, // 1: xray.proxy.wireguard.DeviceConfig.domain_strategy:type_name -> xray.proxy.wireguard.DeviceConfig.DomainStrategy
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 1: xray.proxy.wireguard.DeviceConfig.users:type_name -> xray.common.protocol.User
+	0, // 2: xray.proxy.wireguard.DeviceConfig.domain_strategy:type_name -> xray.proxy.wireguard.DeviceConfig.DomainStrategy
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proxy_wireguard_config_proto_init() }

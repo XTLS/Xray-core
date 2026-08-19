@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -392,4 +393,23 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 		}
 	}
 	return false
+}
+
+// LocalOSMatcher matches the operating system Xray itself is running on. That never
+// changes while Xray is running, so the result is resolved when the rule is built.
+type LocalOSMatcher struct {
+	matched bool
+}
+
+func NewLocalOSMatcher(names []string) *LocalOSMatcher {
+	return &LocalOSMatcher{
+		matched: slices.ContainsFunc(names, func(name string) bool {
+			return strings.EqualFold(name, runtime.GOOS)
+		}),
+	}
+}
+
+// Apply implements Condition.
+func (m *LocalOSMatcher) Apply(_ routing.Context) bool {
+	return m.matched
 }

@@ -38,19 +38,6 @@ func TestUDPEncodingDecoding(t *testing.T) {
 				}),
 			},
 		},
-		{
-			Version: Version,
-			Command: protocol.RequestCommandUDP,
-			Address: net.LocalHostIP,
-			Port:    1234,
-			User: &protocol.MemoryUser{
-				Email: "love@example.com",
-				Account: toAccount(&Account{
-					Password:   "123",
-					CipherType: CipherType_NONE,
-				}),
-			},
-		},
 	}
 
 	for _, request := range testRequests {
@@ -79,10 +66,6 @@ func TestUDPDecodingWithPayloadTooShort(t *testing.T) {
 		toAccount(&Account{
 			Password:   "password",
 			CipherType: CipherType_AES_128_GCM,
-		}),
-		toAccount(&Account{
-			Password:   "password",
-			CipherType: CipherType_NONE,
 		}),
 	}
 

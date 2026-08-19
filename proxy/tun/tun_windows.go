@@ -8,6 +8,8 @@ import (
 	go_errors "errors"
 	"net"
 	"net/netip"
+	"sort"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -48,7 +50,7 @@ var _ GVisorDevice = (*WindowsTun)(nil)
 // interface with the same name exist, it tried to be reused.
 func NewTun(options *Config) (Tun, error) {
 	// instantiate wintun adapter
-	adapter, err := open(options.Name)
+	adapter, err := open(options.Name, options.Desc)
 	if err != nil {
 		return nil, err
 	}
@@ -71,12 +73,12 @@ func NewTun(options *Config) (Tun, error) {
 	return tun, nil
 }
 
-func open(name string) (*wintun.Adapter, error) {
+func open(name, desc string) (*wintun.Adapter, error) {
 	// generate a deterministic GUID from the adapter name
 	id := md5.Sum([]byte(name))
 	guid := (*windows.GUID)(unsafe.Pointer(&id[0]))
 	// try to create adapter anew
-	adapter, err := wintun.CreateAdapter(name, "Xray", guid)
+	adapter, err := wintun.CreateAdapter(name, desc, guid)
 	if err == nil {
 		return adapter, nil
 	}
@@ -306,4 +308,78 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 	}
 
 	return errors.Combine(err1, err2, err3, err4)
+}
+
+func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	if fixedName != "" {
+		for _, iface := range interfaces {
+			if iface.Index != tunIndex && iface.Name == fixedName {
+				return &iface, nil
+			}
+		}
+		return nil, nil
+	}
+
+	var candidates []struct {
+		index int
+		score int
+	}
+	for i, iface := range interfaces {
+		if iface.Index == tunIndex {
+			continue
+		}
+		if strings.Contains(iface.Name, "vEthernet") {
+			continue
+		}
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil || len(addrs) == 0 {
+			continue
+		}
+		candidates = append(candidates, struct {
+			index int
+			score int
+		}{i, scoreWindowsInterface(&iface, addrs)})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
+		}
+		return interfaces[candidates[i].index].Name < interfaces[candidates[j].index].Name
+	})
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	iface := interfaces[candidates[0].index]
+	return &iface, nil
+}
+
+func scoreWindowsInterface(iface *net.Interface, addrs []net.Addr) int {
+	score := 0
+
+	name := strings.ToLower(iface.Name)
+	if strings.Contains(name, "wlan") || strings.Contains(name, "wi-fi") {
+		score += 2
+	}
+
+	for _, addr := range addrs {
+		if strings.HasPrefix(addr.String(), "192.168.") {
+			score++
+			break
+		}
+	}
+
+	return score
 }

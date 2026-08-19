@@ -1,4 +1,4 @@
-//go:build !windows && !linux && !android
+//go:build !windows && !linux && !android && !darwin
 
 package net
 

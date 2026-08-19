@@ -6,7 +6,6 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
-	"os"
 
 	"github.com/xtls/xray-core/common/dice"
 
@@ -40,7 +39,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.OutboundUplink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "outbound>>>" + tag + ">>>traffic>>>uplink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			uplinkCounter = c
 		}
@@ -48,7 +47,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.OutboundDownlink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "outbound>>>" + tag + ">>>traffic>>>downlink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			downlinkCounter = c
 		}
@@ -109,7 +108,9 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 
 	ctx = session.ContextWithFullHandler(ctx, h)
 
-	rawProxyHandler, err := common.CreateObject(ctx, proxyConfig)
+	newCtx := session.ContextWithStreamSettings(ctx, h.streamSettings)
+
+	rawProxyHandler, err := common.CreateObject(newCtx, proxyConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -306,11 +307,6 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 			ob := outbounds[len(outbounds)-1]
 			h.SetOutboundGateway(ctx, ob)
 		}
-
-	}
-
-	if conn, err := h.getUoTConnection(ctx, dest); err != os.ErrInvalid {
-		return conn, err
 	}
 
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
@@ -351,7 +347,6 @@ func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) 
 		// case addr.Family().IsDomain():
 		default:
 			ob.Gateway = addr
-
 		}
 
 	}

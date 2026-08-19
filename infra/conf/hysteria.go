@@ -22,7 +22,6 @@ func (c *HysteriaClientConfig) Build() (proto.Message, error) {
 	}
 
 	config := &hysteria.ClientConfig{}
-	config.Version = c.Version
 	config.Server = &protocol.ServerEndpoint{
 		Address: c.Address.Build(),
 		Port:    uint32(c.Port),
@@ -44,6 +43,10 @@ type HysteriaServerConfig struct {
 }
 
 func (c *HysteriaServerConfig) Build() (proto.Message, error) {
+	if c.Version != 2 {
+		return nil, errors.New("version != 2")
+	}
+
 	config := new(hysteria.ServerConfig)
 
 	if c.Clients != nil {

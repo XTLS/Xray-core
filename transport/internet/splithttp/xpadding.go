@@ -176,15 +176,15 @@ func ApplyPaddingToQuery(u *url.URL, key, value string) {
 	u.RawQuery = q.Encode()
 }
 
-func (c *Config) GetNormalizedXPaddingBytes() RangeConfig {
+func (c *Config) GetNormalizedXPaddingBytes() *RangeConfig {
 	if c.XPaddingBytes == nil || c.XPaddingBytes.To == 0 {
-		return RangeConfig{
+		return &RangeConfig{
 			From: 100,
 			To:   1000,
 		}
 	}
 
-	return *c.XPaddingBytes
+	return c.XPaddingBytes
 }
 
 func (c *Config) ApplyXPaddingToHeader(h http.Header, config XPaddingConfig) {

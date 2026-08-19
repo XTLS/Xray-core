@@ -98,18 +98,22 @@ type udpConn struct {
 }
 
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	e, ok := <-c.egress
-	if !ok {
-		return nil, io.EOF
-	}
+	for {
+		e, ok := <-c.egress
+		if !ok {
+			return nil, io.EOF
+		}
 
-	b := buf.New()
-	if _, err := b.Write(e.data); err != nil {
-		return nil, err
-	}
-	b.UDP = e.dest
+		b := buf.New()
+		if _, err := b.Write(e.data); err != nil {
+			errors.LogErrorInner(context.Background(), err, "drop packet to ", e.dest, " with size ", len(e.data))
+			b.Release()
+			continue
+		}
+		b.UDP = e.dest
 
-	return buf.MultiBuffer{b}, nil
+		return buf.MultiBuffer{b}, nil
+	}
 }
 
 // Read packets from the connection
@@ -129,7 +133,11 @@ func (c *udpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for i, b := range mb {
 		dst := c.dst
 		if b.UDP != nil {
-			dst = *b.UDP
+			if b.UDP.Address.Family().IsDomain() {
+				errors.LogError(context.Background(), "impossible domain packet ", b.UDP, " reply via original target ", dst)
+			} else {
+				dst = *b.UDP
+			}
 		}
 		err := c.handler.writePacket(b.Bytes(), dst, c.src)
 		if err != nil {

@@ -3,6 +3,7 @@ package loopback
 import (
 	"context"
 
+	proxyman "github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/session"
@@ -13,7 +14,8 @@ import (
 )
 
 type Loopback struct {
-	config             *Config
+	inboundTag         string
+	sniffingRequest    session.SniffingRequest
 	dispatcherInstance routing.Dispatcher
 }
 
@@ -29,6 +31,7 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 	errors.LogInfo(ctx, "opening connection to ", destination)
 	content := new(session.Content)
 	content.SkipDNSResolve = true
+	content.SniffingRequest = l.sniffingRequest
 
 	ctx = session.ContextWithContent(ctx, content)
 	inbound := &session.Inbound{}
@@ -37,20 +40,26 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 		// get a shallow copy to avoid modifying the inbound tag in upstream context
 		*inbound = *originInbound
 	}
-	inbound.Tag = l.config.InboundTag
+	inbound.Tag = l.inboundTag
 	ctx = session.ContextWithInbound(ctx, inbound)
 
 	err := l.dispatcherInstance.DispatchLink(ctx, destination, link)
 	if err != nil {
-		errors.New(ctx, "failed to process loopback connection").Base(err)
-		return err
+		return errors.New(ctx, "failed to process loopback connection").Base(err)
 	}
 	return nil
 }
 
 func (l *Loopback) init(config *Config, dispatcherInstance routing.Dispatcher) error {
 	l.dispatcherInstance = dispatcherInstance
-	l.config = config
+	l.inboundTag = config.InboundTag
+	if config.Sniffing.GetEnabled() {
+		request, err := proxyman.BuildSniffingRequest(config.Sniffing)
+		if err != nil {
+			return errors.New("failed to build loopback sniffing request").Base(err).AtError()
+		}
+		l.sniffingRequest = request
+	}
 	return nil
 }
 

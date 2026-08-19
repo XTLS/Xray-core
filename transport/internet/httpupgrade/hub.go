@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -43,7 +45,11 @@ func (s *server) Handle(conn net.Conn) {
 
 // upgrade execute a fake websocket upgrade process and return the available connection
 func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
-	connReader := bufio.NewReader(conn)
+	// timeout and header limit are the same as websocket
+	conn.SetReadDeadline(time.Now().Add(time.Second * 4))
+	defer conn.SetReadDeadline(time.Time{})
+	connReader := bufio.NewReader(io.LimitReader(conn, 12288))
+
 	req, err := http.ReadRequest(connReader)
 	if err != nil {
 		return nil, err
@@ -80,24 +86,12 @@ func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
 		return nil, err
 	}
 
-	var forwardedAddrs []net.Address
-	if s.socketSettings != nil && len(s.socketSettings.TrustedXForwardedFor) > 0 {
-		for _, key := range s.socketSettings.TrustedXForwardedFor {
-			if len(req.Header.Values(key)) > 0 {
-				forwardedAddrs = http_proto.ParseXForwardedFor(req.Header)
-				break
-			}
-		}
-	} else {
-		forwardedAddrs = http_proto.ParseXForwardedFor(req.Header)
-	}
 	remoteAddr := conn.RemoteAddr()
-	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
-		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddrs[0].IP(),
-			Port: int(0),
-		}
+	var trustedXFF []string
+	if s.socketSettings != nil {
+		trustedXFF = s.socketSettings.TrustedXForwardedFor
 	}
+	remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 
 	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }
@@ -106,7 +100,15 @@ func (s *server) keepAccepting() {
 	for {
 		conn, err := s.innnerListener.Accept()
 		if err != nil {
-			return
+			errStr := err.Error()
+			if strings.Contains(errStr, "closed") {
+				break
+			}
+			errors.LogWarningInner(context.Background(), err, "failed to accept raw connections")
+			if strings.Contains(errStr, "too many") {
+				time.Sleep(time.Millisecond * 500)
+			}
+			continue
 		}
 		go s.Handle(conn)
 	}

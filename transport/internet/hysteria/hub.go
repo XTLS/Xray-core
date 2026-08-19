@@ -58,7 +58,7 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 
 		var user *protocol.MemoryUser
 		var ok bool
-		if h.validator != nil && h.validator.GetCount() > 0 {
+		if h.validator != nil && h.validator.NotEmpty() {
 			user = h.validator.Get(auth)
 		} else if h.config.Auth != "" {
 			ok = auth == h.config.Auth

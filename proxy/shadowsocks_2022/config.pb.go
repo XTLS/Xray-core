@@ -356,15 +356,13 @@ func (x *Account) GetKey() string {
 }
 
 type ClientConfig struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Address           *net.IPOrDomain        `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	Port              uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
-	Method            string                 `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"`
-	Key               string                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
-	UdpOverTcp        bool                   `protobuf:"varint,5,opt,name=udp_over_tcp,json=udpOverTcp,proto3" json:"udp_over_tcp,omitempty"`
-	UdpOverTcpVersion uint32                 `protobuf:"varint,6,opt,name=udp_over_tcp_version,json=udpOverTcpVersion,proto3" json:"udp_over_tcp_version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Address       *net.IPOrDomain        `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Port          uint32                 `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Method        string                 `protobuf:"bytes,3,opt,name=method,proto3" json:"method,omitempty"`
+	Key           string                 `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ClientConfig) Reset() {
@@ -425,20 +423,6 @@ func (x *ClientConfig) GetKey() string {
 	return ""
 }
 
-func (x *ClientConfig) GetUdpOverTcp() bool {
-	if x != nil {
-		return x.UdpOverTcp
-	}
-	return false
-}
-
-func (x *ClientConfig) GetUdpOverTcpVersion() uint32 {
-	if x != nil {
-		return x.UdpOverTcpVersion
-	}
-	return 0
-}
-
 var File_proxy_shadowsocks_2022_config_proto protoreflect.FileDescriptor
 
 const file_proxy_shadowsocks_2022_config_proto_rawDesc = "" +
@@ -467,15 +451,12 @@ const file_proxy_shadowsocks_2022_config_proto_rawDesc = "" +
 	"\fdestinations\x18\x03 \x03(\v2-.xray.proxy.shadowsocks_2022.RelayDestinationR\fdestinations\x122\n" +
 	"\anetwork\x18\x04 \x03(\x0e2\x18.xray.common.net.NetworkR\anetwork\"\x1b\n" +
 	"\aAccount\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"\xd6\x01\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"\x83\x01\n" +
 	"\fClientConfig\x125\n" +
 	"\aaddress\x18\x01 \x01(\v2\x1b.xray.common.net.IPOrDomainR\aaddress\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x16\n" +
 	"\x06method\x18\x03 \x01(\tR\x06method\x12\x10\n" +
-	"\x03key\x18\x04 \x01(\tR\x03key\x12 \n" +
-	"\fudp_over_tcp\x18\x05 \x01(\bR\n" +
-	"udpOverTcp\x12/\n" +
-	"\x14udp_over_tcp_version\x18\x06 \x01(\rR\x11udpOverTcpVersionBr\n" +
+	"\x03key\x18\x04 \x01(\tR\x03keyBr\n" +
 	"\x1fcom.xray.proxy.shadowsocks_2022P\x01Z0github.com/xtls/xray-core/proxy/shadowsocks_2022\xaa\x02\x1aXray.Proxy.Shadowsocks2022b\x06proto3"
 
 var (

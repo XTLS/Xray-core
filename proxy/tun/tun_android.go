@@ -81,3 +81,17 @@ func (t *AndroidTun) newEndpoint() (stack.LinkEndpoint, error) {
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
 	return unix.BindToDevice(int(fd), iface.Name)
 }
+
+func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, error) {
+	if fixedName == "" {
+		return nil, errors.New("automatic outbound interface selection is not supported on this platform")
+	}
+	iface, err := net.InterfaceByName(fixedName)
+	if err != nil {
+		return nil, err
+	}
+	if iface.Index == tunIndex {
+		return nil, errors.New("outbound interface cannot be the TUN interface")
+	}
+	return iface, nil
+}

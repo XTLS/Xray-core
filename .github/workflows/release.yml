@@ -14,13 +14,13 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     steps:
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-geodat-
 
       - name: Restore Wintun Cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-wintun-
@@ -170,7 +170,7 @@ jobs:
       CGO_ENABLED: 0
     steps:
       - name: Checkout codebase
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up NDK
         if: matrix.goos == 'android'
@@ -193,7 +193,7 @@ jobs:
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           check-latest: true
@@ -225,14 +225,14 @@ jobs:
           fi
 
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-geodat-
 
       - name: Restore Wintun Cache
         if: matrix.goos == 'windows'
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-wintun-
@@ -241,8 +241,10 @@ jobs:
         run: |
           mv -f resources/geo* build_assets/
           if [[ ${GOOS} == 'windows' ]]; then
-            echo 'CreateObject("Wscript.Shell").Run "xray.exe -config config.json",0' > build_assets/xray_no_window.vbs
-            echo 'Start-Process -FilePath ".\xray.exe" -ArgumentList "-config .\config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
+            cp .github/build/windows/* build_assets/
+          fi
+          if [[ ${GOOS} == 'windows' ]]; then
+            echo 'Adding Wintun into packages'
             if [[ ${GOARCH} == 'amd64' ]]; then
               mv resources/wintun/bin/amd64/wintun.dll build_assets/
             fi
@@ -252,7 +254,7 @@ jobs:
             if [[ ${GOARCH} == 'arm64' ]]; then
               mv resources/wintun/bin/arm64/wintun.dll build_assets/
             fi
-            mv resources/wintun/LICENSE.txt build_assets/LICENSE-wintun.txt
+            mv resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
           fi
 
       - name: Copy README.md & LICENSE

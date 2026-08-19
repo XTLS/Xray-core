@@ -220,7 +220,7 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 	case Domain_Regex:
 		return strmatcher.Regex.New(d.Value)
 	case Domain_Domain:
-		return strmatcher.Domain.New(d.Value)
+		return strmatcher.Domain.New(strings.ToLower(d.Value))
 	case Domain_Full:
 		return strmatcher.Full.New(strings.ToLower(d.Value))
 	default:
