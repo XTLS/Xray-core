@@ -48,7 +48,7 @@ type kernelTun struct {
 	rules     []*netlink.Rule
 }
 
-func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun.Device, tnet *Net, err error) {
+func createKernelTun(localAddresses []netip.Addr, mtu int) (tdev tun.Device, tnet *Net, err error) {
 	var v4, v6 *netip.Addr
 	for _, prefixes := range localAddresses {
 		if v4 == nil && prefixes.Is4() {
@@ -226,9 +226,6 @@ func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun
 	tnet = &Net{
 		DialContextTCPAddrPort: t.DialContextTCPAddrPort,
 		DialUDPAddrPort:        t.DialUDPAddrPort,
-		dnsServers:             dnsServers,
-		hasV4:                  v4 != nil,
-		hasV6:                  v6 != nil,
 	}
 
 	return t, tnet, nil
