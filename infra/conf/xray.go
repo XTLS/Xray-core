@@ -248,17 +248,58 @@ func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *pr
 	}
 
 	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
-		if vlessCfg.Encryption != "" && vlessCfg.Encryption != "none" {
+		// Contract with VLessOutboundConfig.Build(): when top-level Address
+		// is set, Build() synthesizes Vnext from it (and reads Encryption
+		// from top-level); otherwise it uses the supplied Vnext where
+		// encryption lives inside users[0]. We must mirror that here so
+		// both config styles are enforced.
+		if vlessCfg.Address != nil {
+			if vlessCfg.Encryption != "" && vlessCfg.Encryption != "none" {
+				return nil
+			}
+			if requiresTransportSecurity(vlessCfg.Address) {
+				return errors.New("vless without TLS or other encryption is prohibited unless the server address is a private IP or domain")
+			}
 			return nil
 		}
-		if requiresTransportSecurity(vlessCfg.Address) {
-			return errors.New("vless without TLS or other encryption is prohibited unless the server address is a private IP or domain")
+		for _, vnext := range vlessCfg.Vnext {
+			if vnext == nil {
+				continue
+			}
+			var encryption string
+			if len(vnext.Users) > 0 {
+				var u struct {
+					Encryption string `json:"encryption"`
+				}
+				_ = json.Unmarshal(vnext.Users[0], &u)
+				encryption = u.Encryption
+			}
+			if encryption != "" && encryption != "none" {
+				continue
+			}
+			if requiresTransportSecurity(vnext.Address) {
+				return errors.New("vless without TLS or other encryption is prohibited unless the server address is a private IP or domain")
+			}
 		}
+		return nil
 	}
 
 	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
-		if requiresTransportSecurity(tjCfg.Address) {
-			return errors.New("trojan without TLS is prohibited unless the server address is a private IP or domain")
+		// Same contract as TrojanClientConfig.Build(): top-level Address
+		// synthesizes Servers, otherwise the explicit Servers list is used.
+		if tjCfg.Address != nil {
+			if requiresTransportSecurity(tjCfg.Address) {
+				return errors.New("trojan without TLS is prohibited unless the server address is a private IP or domain")
+			}
+			return nil
+		}
+		for _, s := range tjCfg.Servers {
+			if s == nil {
+				continue
+			}
+			if requiresTransportSecurity(s.Address) {
+				return errors.New("trojan without TLS is prohibited unless the server address is a private IP or domain")
+			}
 		}
 	}
 
