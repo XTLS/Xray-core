@@ -140,7 +140,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	// TUN inbound doesn't need port configuration as it uses network interface instead
 	if strings.ToLower(c.Protocol) == "tun" {
 		// Skip port validation for TUN
-	} else if c.ListenOn == nil {
+	} else if c.ListenOn == nil || len(c.ListenOn.String()) == 0 {
 		// Listen on anyip, must set PortList
 		if c.PortList == nil {
 			return nil, errors.New("Listen on AnyIP but no Port(s) set in InboundDetour.")
