@@ -65,6 +65,9 @@ func (v *Address) UnmarshalJSON(data []byte) error {
 }
 
 func (v *Address) Build() *net.IPOrDomain {
+	if v == nil {
+		return nil
+	}
 	return net.NewIPOrDomain(v.Address)
 }
 
