@@ -23,22 +23,22 @@ func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
 }
 
 func newPackedDirectionalConn(raw net.Conn, config *Config, readPacked bool) (net.Conn, error) {
-    tables, err := getTables(config)
-    if err != nil {
-        return nil, err
-    }
-    pMin, pMax := normalizedPadding(config)
+	tables, err := getTables(config)
+	if err != nil {
+		return nil, err
+	}
+	pMin, pMax := normalizedPadding(config)
 
-    if readPacked {
-        reader := newStreamReader(raw, &packedStreamDecoder{layouts: tablesToLayouts(tables)})
-        c := newCodec(tables, pMin, pMax)
-        writer := newStreamWriter(raw, c.encode)
-        return newWrappedConn(raw, reader, writer), nil
-    }
-    reader := newStreamReader(raw, newHintStreamDecoder(tables))
-    encoder := newPackedEncoder(tables, pMin, pMax)
-    writer := newStreamWriter(raw, encoder.encode)
-    return newWrappedConn(raw, reader, writer), nil
+	if readPacked {
+		reader := newStreamReader(raw, &packedStreamDecoder{layouts: tablesToLayouts(tables)})
+		c := newCodec(tables, pMin, pMax)
+		writer := newStreamWriter(raw, c.encode)
+		return newWrappedConn(raw, reader, writer), nil
+	}
+	reader := newStreamReader(raw, newHintStreamDecoder(tables))
+	encoder := newPackedEncoder(tables, pMin, pMax)
+	writer := newStreamWriter(raw, encoder.encode)
+	return newWrappedConn(raw, reader, writer), nil
 }
 
 func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
