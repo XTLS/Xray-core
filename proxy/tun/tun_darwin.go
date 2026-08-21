@@ -104,7 +104,7 @@ func newWaitKqueue(fd int) *waitKqueue {
 		_ = unix.Close(kq)
 		return nil
 	}
-	return &waitKqueue{fd: fd}
+	return &waitKqueue{fd: kq}
 }
 
 // wait blocks until the registered fd is readable, timeout elapses, or a
