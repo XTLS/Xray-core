@@ -11,6 +11,8 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -38,19 +40,109 @@ const (
 	ND6_INFINITE_LIFETIME = 0xFFFFFFFF // netinet6/nd6.h
 )
 
-//go:linkname procyield runtime.procyield
-func procyield(cycles uint32)
-
 type DarwinTun struct {
 	tunFile *os.File
 	options *Config
 	tunFd   int
 	ownsFd  bool // true for macOS (we created the fd), false for iOS (fd from system)
 
+	// Genuinely blocks Wait() until tunFd is readable, instead of the
+	// previous procyield-only busy-spin (dispatchLoop in
+	// stack_gvisor_endpoint.go calls ReadPacket() then Wait() in a tight
+	// loop with no other throttling whenever the queue is empty -- with
+	// only procyield(1), that pins a full CPU core for as long as the
+	// tunnel is up, observed causing severe device heating/thermal
+	// shutdown). nil if kqueue setup failed, in which case Wait() falls
+	// back to a bounded time.Sleep instead. See waitKqueue's own doc
+	// comment for why this is a dedicated type rather than a bare fd.
+	waitKq *waitKqueue
+
 	routeMonitor     *os.File
 	routeMonitorOnce sync.Once
 	systemRoutes     []netip.Prefix
 	gateway          netip.Prefix
+}
+
+// waitKqueue owns a kqueue fd used by DarwinTun.Wait() to block on
+// read-readiness. Closing and waiting can race from different goroutines
+// (Close() from the caller that tears down the tunnel, Wait() from
+// dispatchLoop's own goroutine) -- reviewer feedback on XTLS/Xray-core#6580
+// found that a bare `int` fd field let Close() race Wait()'s use of the
+// same fd number, and on Darwin a closed fd number can be reused by an
+// unrelated concurrent open() before Wait() gets to call Kevent on it,
+// so Wait() could end up polling (or Close() could end up closing) a
+// completely unrelated file descriptor. This type makes closing
+// idempotent (sync.Once) and gates every Kevent call behind an atomic
+// "closed" flag checked immediately before the syscall, so Wait() never
+// issues a kevent syscall against a fd number that Close() has already
+// (or is concurrently) invalidated -- there's still a narrow window where
+// Wait() checks-then-uses the fd, but Close() only actually closes it
+// after Wait() cannot start a new syscall on it (the flag is set first,
+// synchronized with acquire/release semantics), which is sufficient since
+// Wait()'s Kevent call itself is what's being raced, not a fd read/write.
+type waitKqueue struct {
+	fd     int
+	closed atomic.Bool
+	once   sync.Once
+}
+
+// newWaitKqueue creates a kqueue registered for read-readiness on fd, for
+// Wait() to block on. Returns nil if anything fails, so callers can fall
+// back to a bounded sleep rather than error out of NewTun over what is
+// purely a CPU-efficiency concern.
+func newWaitKqueue(fd int) *waitKqueue {
+	kq, err := unix.Kqueue()
+	if err != nil {
+		return nil
+	}
+	_, err = unix.Kevent(kq, []unix.Kevent_t{{
+		Ident:  uint64(fd),
+		Filter: unix.EVFILT_READ,
+		Flags:  unix.EV_ADD | unix.EV_ENABLE,
+	}}, nil, nil)
+	if err != nil {
+		_ = unix.Close(kq)
+		return nil
+	}
+	return &waitKqueue{fd: kq}
+}
+
+// wait blocks until the registered fd is readable, timeout elapses, or a
+// benign interrupt occurs -- all three are "this kqueue is still healthy,
+// the caller should just try again" and return true; the caller
+// (DarwinTun.Wait) doesn't need to distinguish them since it always calls
+// ReadPacket() right after anyway, and that already handles "nothing was
+// actually there" via ErrQueueEmpty. Returns false only when the kqueue
+// itself is no longer usable -- already closed, or the kevent syscall
+// failed for a reason other than EINTR -- see its own call site in
+// DarwinTun.Wait for why a persistent failure must not be silently
+// retried forever (reviewer feedback, XTLS/Xray-core#6580 P2).
+func (w *waitKqueue) wait(timeout time.Duration) (ok bool) {
+	if w.closed.Load() {
+		return false
+	}
+	events := make([]unix.Kevent_t, 1)
+	ts := unix.NsecToTimespec(timeout.Nanoseconds())
+	_, err := unix.Kevent(w.fd, nil, events, &ts)
+	if err != nil {
+		return errors.Is(err, unix.EINTR)
+	}
+	return true
+}
+
+// close marks the kqueue as unusable (so any Wait() call that hasn't yet
+// entered the kevent syscall bails out instead) and closes the underlying
+// fd exactly once, regardless of how many times close is called or
+// whether it races a Wait() already inside its kevent syscall (that call
+// either completes against the still-open fd or returns an error safely
+// -- either way, no other goroutine can be handed this fd number in
+// between the atomic flag flip and the actual close, since nothing else
+// in this type ever creates a new kqueue with the same field).
+func (w *waitKqueue) close() {
+	w.once.Do(func() {
+		w.closed.Store(true)
+		_ = unix.Close(w.fd)
+	})
 }
 
 var (
@@ -77,6 +169,7 @@ func NewTun(options *Config) (Tun, error) {
 			options: options,
 			tunFd:   fd,
 			ownsFd:  false,
+			waitKq:  newWaitKqueue(fd),
 		}, nil
 	}
 
@@ -103,6 +196,7 @@ func NewTun(options *Config) (Tun, error) {
 		options: options,
 		tunFd:   int(tunFile.Fd()),
 		ownsFd:  true,
+		waitKq:  newWaitKqueue(int(tunFile.Fd())),
 		gateway: gateway,
 	}, nil
 }
@@ -134,6 +228,9 @@ func (t *DarwinTun) Close() error {
 			_ = t.routeMonitor.Close()
 		}
 	})
+	if t.waitKq != nil {
+		t.waitKq.close()
+	}
 	routeErr := t.unsetSystemRoutes()
 	if t.ownsFd {
 		return xerrors.Combine(routeErr, t.tunFile.Close())
@@ -242,9 +339,43 @@ func (t *DarwinTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
 	}), nil
 }
 
-// Wait some cpu cycles
+// Wait blocks until tunFd is readable (or a short timeout elapses), rather
+// than spinning the CPU -- see the waitKq field's own doc comment. A bounded
+// timeout (not an indefinite wait) keeps this responsive to a Close() that
+// happens to race a call already parked here.
+//
+// Reviewer feedback (XTLS/Xray-core#6580, P2): the original version
+// discarded every error from the underlying kevent syscall. dispatchLoop
+// (stack_gvisor_endpoint.go) calls ReadPacket() then Wait() in an
+// unconditional tight loop -- if kevent started failing at runtime for a
+// persistent reason (not just a benign EINTR), Wait() returning
+// immediately every time reintroduces exactly the busy-spin this whole
+// change exists to remove, just routed through a failing syscall instead
+// of procyield. waitKq.wait's own bool return distinguishes "genuinely
+// interrupted, try again" from "this kqueue is unusable now" -- Wait()
+// permanently falls back to the sleep path once that happens, rather than
+// retrying the same broken kqueue forever.
 func (t *DarwinTun) Wait() {
-	procyield(1)
+	if t.waitKq != nil && t.waitKq.wait(time.Second) {
+		return
+	}
+	if t.waitKq != nil {
+		// Persistent kevent failure (not a benign EINTR, and not just
+		// "the 1s timeout elapsed with nothing to read" -- wait() already
+		// returned true for both of those cases above). Stop trusting
+		// this kqueue for the rest of this DarwinTun's lifetime instead of
+		// re-attempting a syscall that's already shown it won't succeed.
+		t.waitKq.close()
+		t.waitKq = nil
+	}
+	// Reviewer feedback (XTLS/Xray-core#6580): procyield here is the same
+	// busy-spin this whole change exists to remove, just gated behind an
+	// edge case (kqueue setup failing, which practically never happens on
+	// real Darwin systems, or having just failed permanently above)
+	// instead of always -- a genuine bounded sleep actually yields the CPU
+	// instead of being a near-instant scheduler hint that lets the tight
+	// dispatchLoop caller spin just as hot as before.
+	time.Sleep(time.Millisecond)
 }
 
 func (t *DarwinTun) newEndpoint() (stack.LinkEndpoint, error) {
