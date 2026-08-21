@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/ocsp"
@@ -22,6 +23,7 @@ import (
 )
 
 var globalSessionCache = tls.NewLRUClientSessionCache(128)
+var uGlobalSessionCache = utls.NewLRUClientSessionCache(128)
 
 // ParseCertificate converts a cert.Certificate to Certificate.
 func ParseCertificate(c *cert.Certificate) *Certificate {
@@ -280,12 +282,10 @@ func (c *Config) parseServerName() string {
 	return c.ServerName
 }
 
-func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) (err error) {
-	// extract x509 certificates from rawCerts (verifiedChains will be nil if InsecureSkipVerify is true)
-	certs := make([]*x509.Certificate, len(rawCerts))
-	for i, asn1Data := range rawCerts {
-		certs[i], _ = x509.ParseCertificate(asn1Data)
-	}
+// Note: Remember to update uVerifyConnectionAdapter if this function needs more fields in the future.
+func (r *RandCarrier) verifyConnection(cs tls.ConnectionState) error {
+	certs := cs.PeerCertificates
+	// extract x509 certificates from cs.PeerCertificates
 	if len(certs) == 0 {
 		return errors.New("unexpected certs")
 	}
@@ -325,7 +325,7 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 			}
 		}
 		if verifyResult == foundCA {
-			errors.New("peer cert is invalid (against pinned CA and verifyPeerCertByName)")
+			return errors.New("peer cert is invalid (against pinned CA and verifyPeerCertByName)")
 		}
 		return errors.New("peer cert is invalid (against root CAs and verifyPeerCertByName)")
 	}
@@ -350,6 +350,18 @@ func (r *RandCarrier) verifyPeerCert(rawCerts [][]byte, verifiedChains [][]*x509
 	}
 
 	return nil // r.PinnedPeerCertSha256==nil && r.verifyPeerCertByName==nil
+}
+
+func uVerifyConnectionAdapter(f func(tls.ConnectionState) error) func(utls.ConnectionState) error {
+	if f == nil {
+		return nil
+	}
+	return func(cs utls.ConnectionState) error {
+		standardCS := tls.ConnectionState{
+			PeerCertificates: cs.PeerCertificates,
+		}
+		return f(standardCS)
+	}
 }
 
 type RandCarrier struct {
@@ -389,7 +401,7 @@ func (c *Config) GetTLSConfig(opts ...Option) *tls.Config {
 		RootCAs:                root,
 		NextProtos:             slices.Clone(c.NextProtocol),
 		SessionTicketsDisabled: !c.EnableSessionResumption,
-		VerifyPeerCertificate:  randCarrier.verifyPeerCert,
+		VerifyConnection:       randCarrier.verifyConnection,
 	}
 	randCarrier.Config = config
 	if len(c.VerifyPeerCertByName) > 0 {

@@ -152,11 +152,16 @@ func copyConfig(c *tls.Config) *utls.Config {
 		RootCAs:                        c.RootCAs,
 		ServerName:                     c.ServerName,
 		InsecureSkipVerify:             c.InsecureSkipVerify,
-		VerifyPeerCertificate:          c.VerifyPeerCertificate,
+		VerifyConnection:               uVerifyConnectionAdapter(c.VerifyConnection),
+		SessionTicketsDisabled:         c.SessionTicketsDisabled,
 		KeyLogWriter:                   c.KeyLogWriter,
 		EncryptedClientHelloConfigList: c.EncryptedClientHelloConfigList,
 		NextProtos:                     c.NextProtos,
 	}
+	if c.ClientSessionCache != nil {
+		config.ClientSessionCache = uGlobalSessionCache
+	}
+
 	return config
 }
 

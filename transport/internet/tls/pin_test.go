@@ -110,15 +110,15 @@ func TestVerifyPeerLeafCert(t *testing.T) {
 		PinnedPeerCertSha256: [][]byte{leafHash[:]},
 	}
 
-	rawCerts := [][]byte{leaf.Raw}
-	err := r.verifyPeerCert(rawCerts, nil)
+	cs := tls.ConnectionState{PeerCertificates: []*x509.Certificate{leaf}}
+	err := r.verifyConnection(cs)
 	if err != nil {
 		t.Fatal("expected to verify leaf cert signed by pinned CA, but got error:", err)
 	}
 
 	// make the pinned hash incorrect
 	r.PinnedPeerCertSha256[0][0] += 1
-	err = r.verifyPeerCert(rawCerts, nil)
+	err = r.verifyConnection(cs)
 	if err == nil {
 		t.Fatal("expected to fail verifying leaf cert with incorrect pinned CA hash, but got no error")
 	}
@@ -138,15 +138,15 @@ func TestVerifyPeerCACert(t *testing.T) {
 		PinnedPeerCertSha256: [][]byte{caHash[:]},
 	}
 
-	rawCerts := [][]byte{leaf.Raw, ca.Raw}
-	err := r.verifyPeerCert(rawCerts, nil)
+	cs := tls.ConnectionState{PeerCertificates: []*x509.Certificate{leaf, ca}}
+	err := r.verifyConnection(cs)
 	if err != nil {
 		t.Fatal("expected to verify leaf cert signed by pinned CA, but got error:", err)
 	}
 
 	// make the pinned hash incorrect
 	r.PinnedPeerCertSha256[0][0] += 1
-	err = r.verifyPeerCert(rawCerts, nil)
+	err = r.verifyConnection(cs)
 	if err == nil {
 		t.Fatal("expected to fail verifying leaf cert with incorrect pinned CA hash, but got no error")
 	}
