@@ -163,6 +163,7 @@ func TestSniffingConfig_Build(t *testing.T) {
 		DestOverride:    StringList{"http", "tls"},
 		DomainsExcluded: StringList{"full:api.example.com", "domain:blocked.example", "regexp:^test[0-9]+\\.internal$"},
 		IPsExcluded:     StringList{"192.168.1.1", "2001:db8::/32"},
+		PortsExcluded:   &PortList{Range: []PortRange{{From: 22, To: 22}, {From: 993, To: 995}}},
 		MetadataOnly:    true,
 		RouteOnly:       true,
 	}
@@ -183,6 +184,11 @@ func TestSniffingConfig_Build(t *testing.T) {
 	}
 	if len(built.IpsExcluded) != 2 {
 		t.Fatalf("SniffingConfig.Build() produced %d ip rules", len(built.IpsExcluded))
+	}
+
+	wantPorts := net.MemoryPortList{{From: 22, To: 22}, {From: 993, To: 995}}
+	if gotPorts := net.PortListFromProto(built.PortsExcluded); !reflect.DeepEqual(gotPorts, wantPorts) {
+		t.Fatalf("SniffingConfig.Build() produced ports %v, want %v", gotPorts, wantPorts)
 	}
 
 	want := []struct {

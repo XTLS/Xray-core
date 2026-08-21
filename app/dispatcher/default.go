@@ -229,6 +229,13 @@ func trackOnlineIP(ctx context.Context, sm stats.Manager, email, ip string) {
 	}
 }
 
+// shouldSniff reports whether the payload is worth reading at all. Ports listed
+// in portsExcluded are skipped here, before the sniffer waits for a first packet
+// the client may never send.
+func shouldSniff(request session.SniffingRequest, destination net.Destination) bool {
+	return request.Enabled && !request.ExcludeForPort.Contains(destination.Port)
+}
+
 func (d *DefaultDispatcher) shouldOverride(ctx context.Context, result SniffResult, request session.SniffingRequest, destination net.Destination) bool {
 	domain := result.Domain()
 	if domain == "" {
@@ -284,7 +291,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 
 	sniffingRequest := content.SniffingRequest
 	inbound, outbound := d.getLink(ctx)
-	if !sniffingRequest.Enabled {
+	if !shouldSniff(sniffingRequest, destination) {
 		go d.routedDispatch(ctx, outbound, destination)
 	} else {
 		go func() {
@@ -340,7 +347,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 	}
 	outbound = WrapLink(ctx, d.policy, d.stats, outbound)
 	sniffingRequest := content.SniffingRequest
-	if !sniffingRequest.Enabled {
+	if !shouldSniff(sniffingRequest, destination) {
 		d.routedDispatch(ctx, outbound, destination)
 	} else {
 		cReader := &cachedReader{

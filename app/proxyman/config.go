@@ -2,6 +2,7 @@ package proxyman
 
 import (
 	"github.com/xtls/xray-core/common/geodata"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 )
 
@@ -29,6 +30,9 @@ func BuildSniffingRequest(config *SniffingConfig) (session.SniffingRequest, erro
 			return session.SniffingRequest{}, err
 		}
 		request.ExcludeForIP = excludeForIP
+	}
+	if portsExcluded := config.GetPortsExcluded(); portsExcluded != nil {
+		request.ExcludeForPort = net.PortListFromProto(portsExcluded)
 	}
 	return request, nil
 }

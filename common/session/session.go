@@ -81,6 +81,7 @@ type Outbound struct {
 type SniffingRequest struct {
 	ExcludeForDomain               geodata.DomainMatcher
 	ExcludeForIP                   geodata.IPMatcher
+	ExcludeForPort                 net.MemoryPortList
 	OverrideDestinationForProtocol []string
 	Enabled                        bool
 	MetadataOnly                   bool

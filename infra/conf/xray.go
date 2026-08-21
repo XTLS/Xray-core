@@ -57,6 +57,7 @@ type SniffingConfig struct {
 	DestOverride    StringList `json:"destOverride"`
 	DomainsExcluded StringList `json:"domainsExcluded"`
 	IPsExcluded     StringList `json:"ipsExcluded"`
+	PortsExcluded   *PortList  `json:"portsExcluded"`
 	MetadataOnly    bool       `json:"metadataOnly"`
 	RouteOnly       bool       `json:"routeOnly"`
 }
@@ -89,11 +90,17 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		return nil, err
 	}
 
+	var ports *net.PortList
+	if c.PortsExcluded != nil {
+		ports = c.PortsExcluded.Build()
+	}
+
 	return &proxyman.SniffingConfig{
 		Enabled:             c.Enabled,
 		DestinationOverride: protocols,
 		DomainsExcluded:     domains,
 		IpsExcluded:         ips,
+		PortsExcluded:       ports,
 		MetadataOnly:        c.MetadataOnly,
 		RouteOnly:           c.RouteOnly,
 	}, nil

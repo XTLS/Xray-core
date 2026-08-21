@@ -70,6 +70,10 @@ type SniffingConfig struct {
 	DestinationOverride []string              `protobuf:"bytes,2,rep,name=destination_override,json=destinationOverride,proto3" json:"destination_override,omitempty"`
 	DomainsExcluded     []*geodata.DomainRule `protobuf:"bytes,3,rep,name=domains_excluded,json=domainsExcluded,proto3" json:"domains_excluded,omitempty"`
 	IpsExcluded         []*geodata.IPRule     `protobuf:"bytes,6,rep,name=ips_excluded,json=ipsExcluded,proto3" json:"ips_excluded,omitempty"`
+	// Skip the sniffer entirely when the destination port is in this list.
+	// Unlike domains_excluded and ips_excluded, which drop the override after
+	// sniffing, this is checked before any payload is read.
+	PortsExcluded *net.PortList `protobuf:"bytes,7,opt,name=ports_excluded,json=portsExcluded,proto3" json:"ports_excluded,omitempty"`
 	// Whether should only try to sniff metadata without waiting for client input.
 	// Can be used to support SMTP like protocol where server send the first
 	// message.
@@ -133,6 +137,13 @@ func (x *SniffingConfig) GetDomainsExcluded() []*geodata.DomainRule {
 func (x *SniffingConfig) GetIpsExcluded() []*geodata.IPRule {
 	if x != nil {
 		return x.IpsExcluded
+	}
+	return nil
+}
+
+func (x *SniffingConfig) GetPortsExcluded() *net.PortList {
+	if x != nil {
+		return x.PortsExcluded
 	}
 	return nil
 }
@@ -487,12 +498,13 @@ var File_app_proxyman_config_proto protoreflect.FileDescriptor
 const file_app_proxyman_config_proto_rawDesc = "" +
 	"\n" +
 	"\x19app/proxyman/config.proto\x12\x11xray.app.proxyman\x1a\x18common/net/address.proto\x1a\x15common/net/port.proto\x1a\x1ftransport/internet/config.proto\x1a!common/serial/typed_message.proto\x1a\x1bcommon/geodata/geodat.proto\"\x0f\n" +
-	"\rInboundConfig\"\xad\x02\n" +
+	"\rInboundConfig\"\xef\x02\n" +
 	"\x0eSniffingConfig\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x121\n" +
 	"\x14destination_override\x18\x02 \x03(\tR\x13destinationOverride\x12J\n" +
 	"\x10domains_excluded\x18\x03 \x03(\v2\x1f.xray.common.geodata.DomainRuleR\x0fdomainsExcluded\x12>\n" +
-	"\fips_excluded\x18\x06 \x03(\v2\x1b.xray.common.geodata.IPRuleR\vipsExcluded\x12#\n" +
+	"\fips_excluded\x18\x06 \x03(\v2\x1b.xray.common.geodata.IPRuleR\vipsExcluded\x12@\n" +
+	"\x0eports_excluded\x18\a \x01(\v2\x19.xray.common.net.PortListR\rportsExcluded\x12#\n" +
 	"\rmetadata_only\x18\x04 \x01(\bR\fmetadataOnly\x12\x1d\n" +
 	"\n" +
 	"route_only\x18\x05 \x01(\bR\trouteOnly\"\xe5\x02\n" +
@@ -554,22 +566,23 @@ var file_app_proxyman_config_proto_goTypes = []any{
 var file_app_proxyman_config_proto_depIdxs = []int32{
 	7,  // 0: xray.app.proxyman.SniffingConfig.domains_excluded:type_name -> xray.common.geodata.DomainRule
 	8,  // 1: xray.app.proxyman.SniffingConfig.ips_excluded:type_name -> xray.common.geodata.IPRule
-	9,  // 2: xray.app.proxyman.ReceiverConfig.port_list:type_name -> xray.common.net.PortList
-	10, // 3: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
-	11, // 4: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
-	1,  // 5: xray.app.proxyman.ReceiverConfig.sniffing_settings:type_name -> xray.app.proxyman.SniffingConfig
-	12, // 6: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
-	12, // 7: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
-	10, // 8: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
-	11, // 9: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
-	13, // 10: xray.app.proxyman.SenderConfig.proxy_settings:type_name -> xray.transport.internet.ProxyConfig
-	6,  // 11: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
-	14, // 12: xray.app.proxyman.SenderConfig.target_strategy:type_name -> xray.transport.internet.DomainStrategy
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	9,  // 2: xray.app.proxyman.SniffingConfig.ports_excluded:type_name -> xray.common.net.PortList
+	9,  // 3: xray.app.proxyman.ReceiverConfig.port_list:type_name -> xray.common.net.PortList
+	10, // 4: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
+	11, // 5: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	1,  // 6: xray.app.proxyman.ReceiverConfig.sniffing_settings:type_name -> xray.app.proxyman.SniffingConfig
+	12, // 7: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
+	12, // 8: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
+	10, // 9: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
+	11, // 10: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	13, // 11: xray.app.proxyman.SenderConfig.proxy_settings:type_name -> xray.transport.internet.ProxyConfig
+	6,  // 12: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
+	14, // 13: xray.app.proxyman.SenderConfig.target_strategy:type_name -> xray.transport.internet.DomainStrategy
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_app_proxyman_config_proto_init() }
