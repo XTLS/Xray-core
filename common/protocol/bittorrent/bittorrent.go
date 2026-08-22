@@ -3,11 +3,8 @@ package bittorrent
 import (
 	"encoding/binary"
 	"errors"
-	"math"
-	"time"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/buf"
 )
 
 type SniffHeader struct{}
@@ -39,50 +36,44 @@ func SniffUTP(b []byte) (*SniffHeader, error) {
 		return nil, common.ErrNoClue
 	}
 
-	buffer := buf.FromBytes(b)
-
-	var typeAndVersion uint8
-
-	if binary.Read(buffer, binary.BigEndian, &typeAndVersion) != nil {
-		return nil, common.ErrNoClue
-	} else if b[0]>>4&0xF > 4 || b[0]&0xF != 1 {
+	// type 4 (ST_SYN), version 1
+	if b[0] != 0x41 {
 		return nil, errNotBittorrent
 	}
 
-	var extension uint8
-
-	if binary.Read(buffer, binary.BigEndian, &extension) != nil {
-		return nil, common.ErrNoClue
-	} else if extension != 0 && extension != 1 {
+	// timestamp_difference is always 0 in new connections
+	if binary.BigEndian.Uint32(b[8:12]) != 0 {
 		return nil, errNotBittorrent
 	}
 
+	// Walk the extension chain. Selective ack (1) and extension bits (2)
+	extension, offset := b[1], 20
 	for extension != 0 {
-		if extension != 1 {
+		if len(b) < offset+2 {
 			return nil, errNotBittorrent
 		}
-		if binary.Read(buffer, binary.BigEndian, &extension) != nil {
-			return nil, common.ErrNoClue
+		length := int(b[offset+1])
+		switch extension {
+		case 1: // selective ack
+			if length < 4 || length%4 != 0 {
+				return nil, errNotBittorrent
+			}
+		case 2: // extension bits: fixed 8 bytes, sent in ST_SYN by µTorrent
+			if length != 8 {
+				return nil, errNotBittorrent
+			}
+		default:
+			return nil, errNotBittorrent
 		}
-
-		var length uint8
-		if err := binary.Read(buffer, binary.BigEndian, &length); err != nil {
-			return nil, common.ErrNoClue
+		if len(b) < offset+2+length {
+			return nil, errNotBittorrent
 		}
-		if common.Error2(buffer.ReadBytes(int32(length))) != nil {
-			return nil, common.ErrNoClue
-		}
+		extension = b[offset]
+		offset += 2 + length
 	}
 
-	if common.Error2(buffer.ReadBytes(2)) != nil {
-		return nil, common.ErrNoClue
-	}
-
-	var timestamp uint32
-	if err := binary.Read(buffer, binary.BigEndian, &timestamp); err != nil {
-		return nil, common.ErrNoClue
-	}
-	if math.Abs(float64(time.Now().UnixMicro()-int64(timestamp))) > float64(24*time.Hour) {
+	// extensions should consume all ST_SYN payload
+	if len(b) != offset {
 		return nil, errNotBittorrent
 	}
 
