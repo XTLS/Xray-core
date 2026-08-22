@@ -62,11 +62,11 @@ func TestStateUDPResponseReusesPriorCapturedValues(t *testing.T) {
 	}
 	defer serverRaw.Close()
 
-	client, err := maskManager.WrapPacketConnClient(clientRaw)
+	client, err := maskManager.WrapPacketConnClient(finalmask.WrapConn(clientRaw))
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := maskManager.WrapPacketConnServer(serverRaw)
+	server, err := maskManager.WrapPacketConnServer(finalmask.WrapConn(serverRaw))
 	if err != nil {
 		t.Fatal(err)
 	}

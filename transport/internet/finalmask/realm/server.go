@@ -14,6 +14,7 @@ import (
 	"github.com/pion/stun/v3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const (
@@ -36,7 +37,7 @@ type realmConnServer struct {
 	cleaned chan struct{}
 	ctx     context.Context
 	cancel  context.CancelFunc
-	net.PacketConn
+	finalmask.PacketConn
 
 	realmClient   *Client
 	realmID       string
@@ -54,7 +55,7 @@ type realmConnServer struct {
 	localsLast time.Time
 }
 
-func NewConnServer(config *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServer(config *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	conn := &realmConnServer{

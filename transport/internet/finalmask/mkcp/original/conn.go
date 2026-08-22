@@ -8,6 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type simple struct{}
@@ -72,18 +73,18 @@ func (a *simple) Open(dst, nonce, cipherText, extra []byte) ([]byte, error) {
 }
 
 type simpleConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	aead cipher.AEAD
 }
 
-func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	return &simpleConn{
 		PacketConn: raw,
 		aead:       &simple{},
 	}, nil
 }
 
-func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServer(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	return NewConnClient(c, raw)
 }
 

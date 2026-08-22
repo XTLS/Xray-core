@@ -26,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
@@ -247,7 +248,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				}
 
 				if streamSettings.UdpmaskManager != nil {
-					newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
+					newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(finalmask.WrapConn(pktConn))
 					if err != nil {
 						pktConn.Close()
 						return nil, errors.New("mask err").Base(err)

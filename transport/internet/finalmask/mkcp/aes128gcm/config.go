@@ -1,17 +1,17 @@
 package aes128gcm
 
 import (
-	"net"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 func (c *Config) UDP() {}
 
 func (c *Config) HeaderConn() {}
 
-func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnClient(raw finalmask.PacketConn, level int, levelCount int) (finalmask.PacketConn, error) {
 	return NewConnClient(c, raw)
 }
 
-func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnServer(raw finalmask.PacketConn, level int, levelCount int) (finalmask.PacketConn, error) {
 	return NewConnServer(c, raw)
 }

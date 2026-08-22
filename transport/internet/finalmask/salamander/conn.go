@@ -14,11 +14,11 @@ import (
 )
 
 type salamanderConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	obfs *SalamanderObfuscator
 }
 
-func NewSalamanderConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewSalamanderConnClient(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	ob, err := NewSalamanderObfuscator([]byte(c.Password))
 	if err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func NewSalamanderConnClient(c *Config, raw net.PacketConn) (net.PacketConn, err
 	}, nil
 }
 
-func NewSalamanderConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewSalamanderConnServer(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	return NewSalamanderConnClient(c, raw)
 }
 
@@ -71,7 +71,7 @@ type reassemblyEntry struct {
 }
 
 type geckoConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	obfs           *SalamanderObfuscator
 	minPkt, maxPkt int
 
@@ -85,7 +85,7 @@ type geckoConn struct {
 	closeOnce sync.Once
 }
 
-func NewGeckoConnClient(c *GeckoConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewGeckoConnClient(c *GeckoConfig, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	ob, err := NewSalamanderObfuscator([]byte(c.Password))
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func NewGeckoConnClient(c *GeckoConfig, raw net.PacketConn) (net.PacketConn, err
 	return g, nil
 }
 
-func NewGeckoConnServer(c *GeckoConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewGeckoConnServer(c *GeckoConfig, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	return NewGeckoConnClient(c, raw)
 }
 

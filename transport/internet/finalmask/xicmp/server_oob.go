@@ -39,7 +39,7 @@ type record struct {
 }
 
 type xicmpConnServer struct {
-	conn     net.PacketConn
+	conn     finalmask.PacketConn
 	icmp4    *icmp.PacketConn
 	icmp6    *icmp.PacketConn
 	ipv4PC   *ipv4.PacketConn
@@ -51,7 +51,7 @@ type xicmpConnServer struct {
 	mu       sync.Mutex
 }
 
-func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServer(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	icmp4, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
 		return nil, err
@@ -339,6 +339,14 @@ func (c *xicmpConnServer) Close() error {
 	_ = c.icmp6.Close()
 	_ = c.conn.Close()
 	return nil
+}
+
+func (c *xicmpConnServer) SetReadBuffer(bytes int) error {
+	return c.conn.SetReadBuffer(bytes)
+}
+
+func (c *xicmpConnServer) SetWriteBuffer(bytes int) error {
+	return c.conn.SetWriteBuffer(bytes)
 }
 
 func (c *xicmpConnServer) LocalAddr() net.Addr {

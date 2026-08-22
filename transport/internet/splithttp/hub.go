@@ -25,6 +25,7 @@ import (
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -480,7 +481,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
 		}
 		if streamSettings.UdpmaskManager != nil {
-			newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(Conn)
+			newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(finalmask.WrapConn(Conn))
 			if err != nil {
 				Conn.Close()
 				return nil, errors.New("mask err").Base(err)

@@ -36,7 +36,7 @@ type packet struct {
 }
 
 type xicmpConnClient struct {
-	conn     net.PacketConn
+	conn     finalmask.PacketConn
 	icmp4    *icmp.PacketConn
 	icmp6    *icmp.PacketConn
 	udp      bool
@@ -49,7 +49,7 @@ type xicmpConnClient struct {
 	mu       sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	var icmp4, icmp6 *icmp.PacketConn
 	var err4, err6 error
 	if c.DGRAM {
@@ -312,6 +312,14 @@ func (c *xicmpConnClient) Close() error {
 	_ = c.icmp6.Close()
 	_ = c.conn.Close()
 	return nil
+}
+
+func (c *xicmpConnClient) SetReadBuffer(bytes int) error {
+	return c.conn.SetReadBuffer(bytes)
+}
+
+func (c *xicmpConnClient) SetWriteBuffer(bytes int) error {
+	return c.conn.SetWriteBuffer(bytes)
 }
 
 func (c *xicmpConnClient) LocalAddr() net.Addr {

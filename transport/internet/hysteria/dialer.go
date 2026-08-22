@@ -164,7 +164,7 @@ func (c *client) dial(ctx context.Context) error {
 	}
 
 	if c.udpmaskManager != nil {
-		newConn, err := c.udpmaskManager.WrapPacketConnClient(pktConn)
+		newConn, err := c.udpmaskManager.WrapPacketConnClient(finalmask.WrapConn(pktConn))
 		if err != nil {
 			pktConn.Close()
 			return errors.New("mask err").Base(err)

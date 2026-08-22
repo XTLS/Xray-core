@@ -227,11 +227,11 @@ func newUDPClientServerPair(t *testing.T, cfg *custom.UDPStandaloneConfig) (net.
 
 	maskManager := finalmask.NewUdpmaskManager([]finalmask.Udpmask{cfg})
 
-	client, err := maskManager.WrapPacketConnClient(clientRaw)
+	client, err := maskManager.WrapPacketConnClient(finalmask.WrapConn(clientRaw))
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := maskManager.WrapPacketConnServer(serverRaw)
+	server, err := maskManager.WrapPacketConnServer(finalmask.WrapConn(serverRaw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +359,7 @@ func TestPacketConnReadWrite(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			client, err = maskManager.WrapPacketConnClient(client)
+			client, err = maskManager.WrapPacketConnClient(finalmask.WrapConn(client))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -369,7 +369,7 @@ func TestPacketConnReadWrite(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			server, err = maskManager.WrapPacketConnServer(server)
+			server, err = maskManager.WrapPacketConnServer(finalmask.WrapConn(server))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -411,7 +411,7 @@ func TestUDPcustomStaticHeaderWireShape(t *testing.T) {
 	}
 	defer serverRaw.Close()
 
-	client, err := maskManager.WrapPacketConnClient(clientRaw)
+	client, err := maskManager.WrapPacketConnClient(finalmask.WrapConn(clientRaw))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -876,7 +876,7 @@ func TestSudokuBDD(t *testing.T) {
 		}
 		defer raw.Close()
 
-		if _, err := cfg.WrapPacketConnClient(raw, 0, 1); err == nil {
+		if _, err := cfg.WrapPacketConnClient(finalmask.WrapConn(raw), 0, 1); err == nil {
 			t.Fatal("expected innermost check failure")
 		}
 	})
@@ -903,11 +903,11 @@ func TestSudokuBDD(t *testing.T) {
 		}
 		defer serverRaw.Close()
 
-		client, err := maskManager.WrapPacketConnClient(clientRaw)
+		client, err := maskManager.WrapPacketConnClient(finalmask.WrapConn(clientRaw))
 		if err != nil {
 			t.Fatal(err)
 		}
-		server, err := maskManager.WrapPacketConnServer(serverRaw)
+		server, err := maskManager.WrapPacketConnServer(finalmask.WrapConn(serverRaw))
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -36,7 +36,7 @@ type packet struct {
 }
 
 type xdnsConnClient struct {
-	net.PacketConn
+	finalmask.PacketConn
 
 	resolverAddrs []*net.UDPAddr
 	resolverTypes []uint16
@@ -54,7 +54,7 @@ type xdnsConnClient struct {
 	mutex  sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	if len(c.Resolvers) == 0 {
 		return nil, errors.New("empty resolvers")
 	}

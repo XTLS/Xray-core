@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"golang.org/x/crypto/curve25519"
 	"golang.zx2c4.com/wireguard/device"
@@ -263,7 +264,7 @@ func (s *Server) Start() error {
 			return nil, err
 		}
 		if s.streamSettings.UdpmaskManager != nil {
-			newConn, err := s.streamSettings.UdpmaskManager.WrapPacketConnServer(pktConn)
+			newConn, err := s.streamSettings.UdpmaskManager.WrapPacketConnServer(finalmask.WrapConn(pktConn))
 			if err != nil {
 				pktConn.Close()
 				return nil, errors.New("mask err").Base(err)

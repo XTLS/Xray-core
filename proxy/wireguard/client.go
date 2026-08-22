@@ -27,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.zx2c4.com/wireguard/device"
 )
 
@@ -279,7 +280,7 @@ func (h *Handler) init(ctx context.Context) error {
 			panic(reflect.TypeOf(c))
 		}
 		if h.streamSettings.UdpmaskManager != nil {
-			newConn, err := h.streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
+			newConn, err := h.streamSettings.UdpmaskManager.WrapPacketConnClient(finalmask.WrapConn(pktConn))
 			if err != nil {
 				pktConn.Close()
 				return nil, errors.New("mask err").Base(err)

@@ -8,6 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type HubOption func(h *Hub)
@@ -69,7 +70,7 @@ func ListenUDP(ctx context.Context, address net.Address, port net.Port, streamSe
 	raw := hub.conn
 
 	if streamSettings.UdpmaskManager != nil {
-		hub.conn, err = streamSettings.UdpmaskManager.WrapPacketConnServer(raw)
+		hub.conn, err = streamSettings.UdpmaskManager.WrapPacketConnServer(finalmask.WrapConn(raw))
 		if err != nil {
 			raw.Close()
 			return nil, errors.New("mask err").Base(err)

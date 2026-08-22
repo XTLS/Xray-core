@@ -53,7 +53,7 @@ type queue struct {
 }
 
 type xdnsConnServer struct {
-	net.PacketConn
+	finalmask.PacketConn
 
 	domains []domainSpec
 
@@ -65,7 +65,7 @@ type xdnsConnServer struct {
 	mutex  sync.Mutex
 }
 
-func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServer(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	if len(c.Domains) == 0 {
 		return nil, errors.New("empty domains")
 	}

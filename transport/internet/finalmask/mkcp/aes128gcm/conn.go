@@ -8,14 +8,15 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type aes128gcmConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	aead cipher.AEAD
 }
 
-func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	hashedPsk := sha256.Sum256([]byte(c.Password))
 	return &aes128gcmConn{
 		PacketConn: raw,
@@ -23,7 +24,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}, nil
 }
 
-func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServer(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	return NewConnClient(c, raw)
 }
 

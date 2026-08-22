@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/hysteria/account"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -299,7 +300,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 	}
 
 	if streamSettings.UdpmaskManager != nil {
-		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(pktConn)
+		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(finalmask.WrapConn(pktConn))
 		if err != nil {
 			pktConn.Close()
 			return nil, errors.New("mask err").Base(err)

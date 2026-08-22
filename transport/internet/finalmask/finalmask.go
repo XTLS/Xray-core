@@ -9,11 +9,50 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
+// quic-go raises UDP socket buffers only if the net.PacketConn asserts to SetRead/WriteBuffer; masks hold the socket
+// in an interface field, so nothing is promoted and the raise is lost. SyscallConn is deliberately absent: quic-go
+// aborts the dial on a failing SyscallConn/setDF, and a mask can wrap a non-socket (internet.FakePacketConn).
+type PacketConn interface {
+	net.PacketConn
+	SetReadBuffer(bytes int) error
+	SetWriteBuffer(bytes int) error
+}
+
+// WrapConn adapts a conn without the setters at the boundary, so masks always take a PacketConn.
+func WrapConn(pc net.PacketConn) PacketConn {
+	if c, ok := pc.(PacketConn); ok {
+		return c
+	}
+	return &noSockoptConn{PacketConn: pc}
+}
+
+// UnwrapUdpMask looks through the adapter, for masks that reject specific underlying transports.
+func UnwrapUdpMask(pc PacketConn) net.PacketConn {
+	if c, ok := pc.(*noSockoptConn); ok {
+		return c.PacketConn
+	}
+	return pc
+}
+
+type noSockoptConn struct {
+	net.PacketConn
+}
+
+// noSockoptConn only wraps conns with no socket-buffer setters at all (FakePacketConn and friends);
+// quic-go's raise has nowhere to land on those paths, so both setters are no-ops.
+func (c *noSockoptConn) SetReadBuffer(bytes int) error {
+	return nil
+}
+
+func (c *noSockoptConn) SetWriteBuffer(bytes int) error {
+	return nil
+}
+
 type Udpmask interface {
 	UDP()
 
-	WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
-	WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
+	WrapPacketConnClient(raw PacketConn, level int, levelCount int) (PacketConn, error)
+	WrapPacketConnServer(raw PacketConn, level int, levelCount int) (PacketConn, error)
 }
 
 type UdpmaskManager struct {
@@ -26,9 +65,9 @@ func NewUdpmaskManager(udpmasks []Udpmask) *UdpmaskManager {
 	}
 }
 
-func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
+func (m *UdpmaskManager) WrapPacketConnClient(raw PacketConn) (PacketConn, error) {
 	var sizes []int
-	var conns []net.PacketConn
+	var conns []PacketConn
 	for i, mask := range slices.Backward(m.udpmasks) {
 		if _, ok := mask.(headerConn); ok {
 			conn, err := mask.WrapPacketConnClient(nil, i, len(m.udpmasks)-1)
@@ -59,9 +98,9 @@ func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketCon
 	return raw, nil
 }
 
-func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
+func (m *UdpmaskManager) WrapPacketConnServer(raw PacketConn) (PacketConn, error) {
 	var sizes []int
-	var conns []net.PacketConn
+	var conns []PacketConn
 	for i, mask := range slices.Backward(m.udpmasks) {
 		if _, ok := mask.(headerConn); ok {
 			conn, err := mask.WrapPacketConnServer(nil, i, len(m.udpmasks)-1)
@@ -105,10 +144,10 @@ type headerSize interface {
 }
 
 type headerManagerConn struct {
-	net.PacketConn
+	PacketConn
 
 	sizes []int
-	conns []net.PacketConn
+	conns []PacketConn
 }
 
 func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {

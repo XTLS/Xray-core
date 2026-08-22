@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type udpConn struct {
-	conn   net.PacketConn
+	conn   finalmask.PacketConn
 	tables []*table
 	pMin   int
 	pMax   int
@@ -21,7 +22,7 @@ type udpConn struct {
 	writeMu sync.Mutex
 }
 
-func NewUDPConn(raw net.PacketConn, config *Config) (net.PacketConn, error) {
+func NewUDPConn(raw finalmask.PacketConn, config *Config) (finalmask.PacketConn, error) {
 	tables, err := getTables(config)
 	if err != nil {
 		return nil, err
@@ -105,4 +106,12 @@ func (c *udpConn) SetReadDeadline(t time.Time) error {
 
 func (c *udpConn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
+}
+
+func (c *udpConn) SetReadBuffer(bytes int) error {
+	return c.conn.SetReadBuffer(bytes)
+}
+
+func (c *udpConn) SetWriteBuffer(bytes int) error {
+	return c.conn.SetWriteBuffer(bytes)
 }

@@ -6,16 +6,17 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/crypto"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type noiseConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	config *Config
 	m      map[string]time.Time
 	mu     sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	return &noiseConn{
 		PacketConn: raw,
 		config:     c,
@@ -23,7 +24,7 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}, nil
 }
 
-func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServer(c *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	return NewConnClient(c, raw)
 }
 

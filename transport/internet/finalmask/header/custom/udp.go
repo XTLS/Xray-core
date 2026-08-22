@@ -48,11 +48,11 @@ func (h *udpCustomClient) Match(b []byte, addr net.Addr) bool {
 }
 
 type udpCustomClientConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	header *udpCustomClient
 }
 
-func NewConnClientUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClientUDP(c *UDPConfig, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	conn := &udpCustomClientConn{
 		PacketConn: raw,
 		header: &udpCustomClient{
@@ -168,11 +168,11 @@ func (h *udpCustomServer) Match(b []byte, addr net.Addr) bool {
 }
 
 type udpCustomServerConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	header *udpCustomServer
 }
 
-func NewConnServerUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServerUDP(c *UDPConfig, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	conn := &udpCustomServerConn{
 		PacketConn: raw,
 		header: &udpCustomServer{
@@ -309,7 +309,7 @@ func udpStateKey(addr net.Addr) string {
 }
 
 type udpCustomStandaloneClientConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	client []*UDPItem
 	server []*UDPItem
 	state  *stateStore
@@ -331,7 +331,7 @@ type udpStandaloneWaiter struct {
 	done chan error
 }
 
-func NewConnClientUDPStandalone(c *UDPStandaloneConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClientUDPStandalone(c *UDPStandaloneConfig, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	clientSavedSizes := collectSavedUDPSizes(c.Client)
 	read, err := measureUDPItemsWithFallback(c.Server, clientSavedSizes)
 	if err != nil {
@@ -471,14 +471,14 @@ func (c *udpCustomStandaloneClientConn) failWaiters(err error) {
 }
 
 type udpCustomStandaloneServerConn struct {
-	net.PacketConn
+	finalmask.PacketConn
 	client []*UDPItem
 	server []*UDPItem
 	state  *stateStore
 	read   int
 }
 
-func NewConnServerUDPStandalone(c *UDPStandaloneConfig, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServerUDPStandalone(c *UDPStandaloneConfig, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	read, err := measureUDPItems(c.Client)
 	if err != nil {
 		return nil, err

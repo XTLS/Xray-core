@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -69,7 +70,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 		default:
 			panic(reflect.TypeOf(c))
 		}
-		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
+		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(finalmask.WrapConn(pktConn))
 		if err != nil {
 			pktConn.Close()
 			return nil, errors.New("mask err").Base(err)

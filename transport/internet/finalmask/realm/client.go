@@ -12,10 +12,11 @@ import (
 	"github.com/pion/stun/v3"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type realmConnClient struct {
-	net.PacketConn
+	finalmask.PacketConn
 	peer *net.UDPAddr
 
 	realmClient   *Client
@@ -26,7 +27,7 @@ type realmConnClient struct {
 	punchInterval time.Duration
 }
 
-func NewConnClient(config *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(config *Config, raw finalmask.PacketConn) (finalmask.PacketConn, error) {
 	conn := &realmConnClient{
 		PacketConn: raw,
 
@@ -41,7 +42,7 @@ func NewConnClient(config *Config, raw net.PacketConn) (net.PacketConn, error) {
 	return conn.getpeer()
 }
 
-func (c *realmConnClient) getpeer() (net.PacketConn, error) {
+func (c *realmConnClient) getpeer() (finalmask.PacketConn, error) {
 	start := time.Now()
 	servers := resolveSTUNServers(c.PacketConn.LocalAddr().(*net.UDPAddr).IP, c.stunServers)
 	errors.LogDebug(context.Background(), "[realm] update stun servers ", servers, " with ", time.Since(start))
