@@ -1,6 +1,7 @@
 package bittorrent
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"math"
@@ -22,12 +23,14 @@ func (h *SniffHeader) Domain() string {
 
 var errNotBittorrent = errors.New("not bittorrent header")
 
+var bittorrentHandshake = []byte("BitTorrent protocol")
+
 func SniffBittorrent(b []byte) (*SniffHeader, error) {
 	if len(b) < 20 {
 		return nil, common.ErrNoClue
 	}
 
-	if b[0] == 19 && string(b[1:20]) == "BitTorrent protocol" {
+	if b[0] == 19 && bytes.HasPrefix(b[1:], bittorrentHandshake) {
 		return &SniffHeader{}, nil
 	}
 
@@ -87,4 +90,57 @@ func SniffUTP(b []byte) (*SniffHeader, error) {
 	}
 
 	return &SniffHeader{}, nil
+}
+
+func SniffUDPTracker(b []byte) (*SniffHeader, error) {
+	if len(b) < 16 {
+		return nil, common.ErrNoClue
+	}
+
+	// protocol_id
+	if binary.BigEndian.Uint64(b[0:8]) != 0x41727101980 {
+		return nil, errNotBittorrent
+	}
+
+	// action connect
+	if binary.BigEndian.Uint32(b[8:12]) != 0 {
+		return nil, errNotBittorrent
+	}
+
+	return &SniffHeader{}, nil
+}
+
+var dhtPrefixes = [][]byte{
+	[]byte("d1:ad"), // query
+	[]byte("d1:rd"), // response
+	[]byte("d2:ip"), // BEP-42
+	[]byte("d1:el"), // error
+}
+
+func SniffDHT(b []byte) (*SniffHeader, error) {
+	if len(b) < 5 {
+		return nil, common.ErrNoClue
+	}
+
+	for _, p := range dhtPrefixes {
+		if bytes.HasPrefix(b, p) {
+			return &SniffHeader{}, nil
+		}
+	}
+
+	return nil, errNotBittorrent
+}
+
+var lsdPrefix = []byte("BT-SEARCH * HTTP/1.1\r\n")
+
+func SniffLSD(b []byte) (*SniffHeader, error) {
+	if len(b) < len(lsdPrefix) {
+		return nil, common.ErrNoClue
+	}
+
+	if bytes.HasPrefix(b, lsdPrefix) {
+		return &SniffHeader{}, nil
+	}
+
+	return nil, errNotBittorrent
 }
