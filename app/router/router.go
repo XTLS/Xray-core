@@ -2,6 +2,8 @@ package router
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/xtls/xray-core/common"
@@ -24,7 +26,7 @@ type Router struct {
 	ctx        context.Context
 	ohm        outbound.Manager
 	dispatcher routing.Dispatcher
-	mu         sync.Mutex
+	mu         sync.RWMutex
 }
 
 // Route is an implementation of routing.Route.
@@ -114,28 +116,55 @@ func (r *Router) AddRule(config *serial.TypedMessage, shouldAppend bool) error {
 	if err != nil {
 		return err
 	}
-	if c, ok := inst.(*Config); ok {
-		return r.ReloadRules(c, shouldAppend)
+
+	c, ok := inst.(*Config)
+	if !ok {
+		return errors.New("AddRule: config type error")
 	}
-	return errors.New("AddRule: config type error")
+	return r.ReloadRules(c, shouldAppend)
 }
 
 func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if !shouldAppend {
-		for _, rule := range r.rules {
-			if rule.Webhook != nil {
-				rule.Webhook.Close()
-			}
-		}
-		r.balancers = make(map[string]*Balancer, len(config.BalancingRule))
-		r.rules = make([]*Rule, 0, len(config.Rule))
+	var (
+		newRules     []*Rule
+		newBalancers map[string]*Balancer
+	)
+
+	if shouldAppend {
+		newRules = make([]*Rule, len(r.rules), len(r.rules)+len(config.Rule))
+		newBalancers = make(map[string]*Balancer, len(r.balancers)+len(config.BalancingRule))
+		copy(newRules, r.rules)
+		maps.Copy(newBalancers, r.balancers)
+	} else {
+		newRules = make([]*Rule, 0, len(config.Rule))
+		newBalancers = make(map[string]*Balancer, len(config.BalancingRule))
 	}
+
+	startIdx := len(newRules)
+	success := false
+	defer func() {
+		if !success {
+			for _, rule := range newRules[startIdx:] {
+				if rule.Webhook != nil {
+					rule.Webhook.Close()
+				}
+			}
+			return
+		}
+
+		if !shouldAppend {
+			r.closeWebhooks()
+		}
+
+		r.rules = newRules
+		r.balancers = newBalancers
+	}()
+
 	for _, rule := range config.BalancingRule {
-		_, found := r.balancers[rule.Tag]
-		if found {
+		if _, found := newBalancers[rule.Tag]; found {
 			return errors.New("duplicate balancer tag")
 		}
 		balancer, err := rule.Build(r.ohm, r.dispatcher)
@@ -143,27 +172,16 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 			return err
 		}
 		balancer.InjectContext(r.ctx)
-		r.balancers[rule.Tag] = balancer
-	}
-
-	startIdx := len(r.rules)
-	closeNewWebhooks := func() {
-		for i := startIdx; i < len(r.rules); i++ {
-			if r.rules[i].Webhook != nil {
-				r.rules[i].Webhook.Close()
-			}
-		}
-		r.rules = r.rules[:startIdx]
+		newBalancers[rule.Tag] = balancer
 	}
 
 	for _, rule := range config.Rule {
-		if r.RuleExists(rule.GetRuleTag()) {
-			closeNewWebhooks()
-			return errors.New("duplicate ruleTag ", rule.GetRuleTag())
+		if tag := rule.GetRuleTag(); ruleTagExists(newRules, tag) {
+			return errors.New("duplicate ruleTag ", tag)
 		}
+
 		cond, err := rule.BuildCondition()
 		if err != nil {
-			closeNewWebhooks()
 			return err
 		}
 		rr := &Rule{
@@ -174,65 +192,66 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 		if wh := rule.GetWebhook(); wh != nil {
 			notifier, err := NewWebhookNotifier(wh)
 			if err != nil {
-				closeNewWebhooks()
 				return err
 			}
 			rr.Webhook = notifier
 		}
-		btag := rule.GetBalancingTag()
-		if len(btag) > 0 {
-			brule, found := r.balancers[btag]
+		if btag := rule.GetBalancingTag(); len(btag) > 0 {
+			brule, found := newBalancers[btag]
 			if !found {
 				if rr.Webhook != nil {
 					rr.Webhook.Close()
 				}
-				closeNewWebhooks()
 				return errors.New("balancer ", btag, " not found")
 			}
 			rr.Balancer = brule
 		}
-		r.rules = append(r.rules, rr)
+		newRules = append(newRules, rr)
 	}
+
+	success = true
 
 	return nil
 }
 
-func (r *Router) RuleExists(tag string) bool {
-	if tag != "" {
-		for _, rule := range r.rules {
-			if rule.RuleTag == tag {
-				return true
-			}
-		}
+func ruleTagExists(rules []*Rule, tag string) bool {
+	if tag == "" {
+		return false
 	}
-	return false
+
+	return slices.ContainsFunc(rules, func(rule *Rule) bool {
+		return rule.RuleTag == tag
+	})
 }
 
 // RemoveRule implements routing.Router.
 func (r *Router) RemoveRule(tag string) error {
+	if tag == "" {
+		return errors.New("empty tag name!")
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	newRules := []*Rule{}
-	if tag != "" {
-		for _, rule := range r.rules {
-			if rule.RuleTag != tag {
-				newRules = append(newRules, rule)
-			} else if rule.Webhook != nil {
-				rule.Webhook.Close()
-			}
+	newRules := make([]*Rule, 0, len(r.rules))
+	for _, rule := range r.rules {
+		if rule.RuleTag != tag {
+			newRules = append(newRules, rule)
+		} else if rule.Webhook != nil {
+			rule.Webhook.Close()
 		}
-		r.rules = newRules
-		return nil
 	}
-	return errors.New("empty tag name!")
+	r.rules = newRules
+
+	return nil
 }
 
 // ListRule implements routing.Router
 func (r *Router) ListRule() []routing.Route {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	ruleList := make([]routing.Route, 0)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	ruleList := make([]routing.Route, 0, len(r.rules))
 	for _, rule := range r.rules {
 		ruleList = append(ruleList, &Route{
 			outboundTag: rule.Tag,
@@ -252,7 +271,11 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
 
-	for _, rule := range r.rules {
+	r.mu.RLock()
+	rules := r.rules
+	r.mu.RUnlock()
+
+	for _, rule := range rules {
 		if rule.Apply(ctx) {
 			return rule, ctx, nil
 		}
@@ -265,7 +288,7 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 
 	// Try applying rules again if we have IPs.
-	for _, rule := range r.rules {
+	for _, rule := range rules {
 		if rule.Apply(ctx) {
 			return rule, ctx, nil
 		}
