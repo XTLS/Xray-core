@@ -505,6 +505,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 		dynamicHTTPClient := httpClient
 		dynamicXmuxClient := xmuxClient
+
+		if dynamicXmuxClient != nil {
+			dynamicXmuxClient.AddRunning()
+			defer func() {
+				if dynamicXmuxClient != nil {
+					dynamicXmuxClient.DoneRunning()
+				}
+			}()
+		}
 		for {
 			// by offloading the uploads into a buffered pipe, multiple conn.Write
 			// calls get automatically batched together into larger POST requests.
@@ -541,10 +550,21 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 				if dynamicXmuxClient != nil && (dynamicXmuxClient.LeftRequests.Add(-1) <= 0 ||
 					(dynamicXmuxClient.UnreusableAt != time.Time{} && lastWrite.After(dynamicXmuxClient.UnreusableAt))) {
-					dynamicHTTPClient, dynamicXmuxClient = getHTTPClient(ctx, dest, streamSettings)
+					newHTTPClient, newXmuxClient := getHTTPClient(ctx, dest, streamSettings)
+					if newXmuxClient != nil {
+						newXmuxClient.AddRunning()
+					}
+					dynamicXmuxClient.DoneRunning()
+					dynamicHTTPClient, dynamicXmuxClient = newHTTPClient, newXmuxClient
 				}
 
-				go func(hClient DialerClient) {
+				if dynamicXmuxClient != nil {
+					dynamicXmuxClient.AddRunning()
+				}
+				go func(hClient DialerClient, hXmuxClient *XmuxClient) {
+					if hXmuxClient != nil {
+						defer hXmuxClient.DoneRunning()
+					}
 					err := hClient.PostPacket(
 						ctx,
 						requestURL.String(),
@@ -558,7 +578,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 						uploadPipeReader.Interrupt()
 						doSplit.Store(false)
 					}
-				}(dynamicHTTPClient)
+				}(dynamicHTTPClient, dynamicXmuxClient)
 
 				if _, ok := dynamicHTTPClient.(*DefaultDialerClient); ok {
 					<-wroteRequest.Wait()
