@@ -8,7 +8,7 @@ import (
 
 func (r *Router) OverrideBalancer(balancer string, target string) error {
 	var b *Balancer
-	for tag, bl := range r.balancers {
+	for tag, bl := range *r.balancers.Load() {
 		if tag == balancer {
 			b = bl
 			break
