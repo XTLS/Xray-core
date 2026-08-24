@@ -43,8 +43,8 @@ type strategyLeastLoadConfig struct {
 	Tolerance float64 `json:"tolerance,omitempty"`
 }
 
-// healthCheckSettings holds settings for health Checker
-type healthCheckSettings struct {
+// HealthCheckSettings holds settings for health Checker
+type HealthCheckSettings struct {
 	Destination   string            `json:"destination"`
 	Connectivity  string            `json:"connectivity"`
 	Interval      duration.Duration `json:"interval"`
@@ -53,7 +53,7 @@ type healthCheckSettings struct {
 	HttpMethod    string            `json:"httpMethod"`
 }
 
-func (h healthCheckSettings) Build() (proto.Message, error) {
+func (h HealthCheckSettings) Build() (proto.Message, error) {
 	var httpMethod string
 	if h.HttpMethod == "" {
 		httpMethod = "HEAD"
