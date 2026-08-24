@@ -48,6 +48,9 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 
 	balancers := make(map[string]*Balancer, len(config.BalancingRule))
 	for _, rule := range config.BalancingRule {
+		if _, found := balancers[rule.Tag]; found {
+			return errors.New("duplicate balancer tag")
+		}
 		balancer, err := rule.Build(ohm, dispatcher)
 		if err != nil {
 			return err
