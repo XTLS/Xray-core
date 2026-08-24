@@ -21,10 +21,11 @@ import (
 )
 
 type requestHandler struct {
-	host           string
-	path           string
-	ln             *Listener
-	socketSettings *internet.SocketConfig
+	host                string
+	path                string
+	ln                  *Listener
+	socketSettings      *internet.SocketConfig
+	canUseXForwardedFor bool
 }
 
 var replacer = strings.NewReplacer("+", "-", "/", "_", "=", "")
@@ -66,11 +67,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	}
 
 	remoteAddr := conn.RemoteAddr()
-	var trustedXFF []string
-	if h.socketSettings != nil {
-		trustedXFF = h.socketSettings.TrustedXForwardedFor
+	if h.canUseXForwardedFor {
+		var trustedXFF []string
+		if h.socketSettings != nil {
+			trustedXFF = h.socketSettings.TrustedXForwardedFor
+		}
+		remoteAddr = http_proto.ApplyTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
 	}
-	remoteAddr = http_proto.ApplyTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
 
 	h.ln.addConn(NewConnection(conn, remoteAddr, extraReader, h.ln.config.HeartbeatPeriod))
 }
@@ -89,6 +92,9 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 	}
 	wsSettings := streamSettings.ProtocolSettings.(*Config)
 	l.config = wsSettings
+	if err := internet.ValidateProxyProtocolTransportConfig(streamSettings.SocketSettings, wsSettings); err != nil {
+		return nil, errors.New("invalid PROXY protocol transport configuration").Base(err)
+	}
 	if l.config != nil {
 		if streamSettings.SocketSettings == nil {
 			streamSettings.SocketSettings = &internet.SocketConfig{}
@@ -121,10 +127,6 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
 	}
 
-	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
-		errors.LogWarning(ctx, "accepting PROXY protocol")
-	}
-
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
 			listener = tls.NewListener(listener, tlsConfig)
@@ -135,10 +137,11 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 
 	l.server = http.Server{
 		Handler: &requestHandler{
-			host:           wsSettings.Host,
-			path:           wsSettings.GetNormalizedPath(),
-			ln:             l,
-			socketSettings: streamSettings.SocketSettings,
+			host:                wsSettings.Host,
+			path:                wsSettings.GetNormalizedPath(),
+			ln:                  l,
+			socketSettings:      streamSettings.SocketSettings,
+			canUseXForwardedFor: internet.CanUseXForwardedFor(streamSettings.SocketSettings, uint32(port)),
 		},
 		ReadHeaderTimeout: time.Second * 4,
 		MaxHeaderBytes:    8192,

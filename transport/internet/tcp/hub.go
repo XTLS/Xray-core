@@ -33,6 +33,9 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	}
 	tcpSettings := streamSettings.ProtocolSettings.(*Config)
 	l.config = tcpSettings
+	if err := internet.ValidateProxyProtocolTransportConfig(streamSettings.SocketSettings, tcpSettings); err != nil {
+		return nil, errors.New("invalid PROXY protocol transport configuration").Base(err)
+	}
 	if l.config != nil {
 		if streamSettings.SocketSettings == nil {
 			streamSettings.SocketSettings = &internet.SocketConfig{}
@@ -66,10 +69,6 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 
 	if streamSettings.TcpmaskManager != nil {
 		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
-	}
-
-	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
-		errors.LogWarning(ctx, "accepting PROXY protocol")
 	}
 
 	l.listener = listener

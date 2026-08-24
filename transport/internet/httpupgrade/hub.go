@@ -19,10 +19,11 @@ import (
 )
 
 type server struct {
-	config         *Config
-	addConn        internet.ConnHandler
-	innnerListener net.Listener
-	socketSettings *internet.SocketConfig
+	config              *Config
+	addConn             internet.ConnHandler
+	innnerListener      net.Listener
+	socketSettings      *internet.SocketConfig
+	canUseXForwardedFor bool
 }
 
 func (s *server) Close() error {
@@ -87,11 +88,13 @@ func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
 	}
 
 	remoteAddr := conn.RemoteAddr()
-	var trustedXFF []string
-	if s.socketSettings != nil {
-		trustedXFF = s.socketSettings.TrustedXForwardedFor
+	if s.canUseXForwardedFor {
+		var trustedXFF []string
+		if s.socketSettings != nil {
+			trustedXFF = s.socketSettings.TrustedXForwardedFor
+		}
+		remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 	}
-	remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 
 	return stat.Connection(newConnection(conn, remoteAddr)), nil
 }
@@ -116,6 +119,9 @@ func (s *server) keepAccepting() {
 
 func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
+	if err := internet.ValidateProxyProtocolTransportConfig(streamSettings.SocketSettings, transportConfiguration); err != nil {
+		return nil, errors.New("invalid PROXY protocol transport configuration").Base(err)
+	}
 	if transportConfiguration != nil {
 		if streamSettings.SocketSettings == nil {
 			streamSettings.SocketSettings = &internet.SocketConfig{}
@@ -148,10 +154,6 @@ func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, 
 		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
 	}
 
-	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
-		errors.LogWarning(ctx, "accepting PROXY protocol")
-	}
-
 	if config := v2tls.ConfigFromStreamSettings(streamSettings); config != nil {
 		if tlsConfig := config.GetTLSConfig(); tlsConfig != nil {
 			listener = tls.NewListener(listener, tlsConfig)
@@ -159,10 +161,11 @@ func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, 
 	}
 
 	serverInstance := &server{
-		config:         transportConfiguration,
-		addConn:        addConn,
-		innnerListener: listener,
-		socketSettings: streamSettings.SocketSettings,
+		config:              transportConfiguration,
+		addConn:             addConn,
+		innnerListener:      listener,
+		socketSettings:      streamSettings.SocketSettings,
+		canUseXForwardedFor: internet.CanUseXForwardedFor(streamSettings.SocketSettings, uint32(port)),
 	}
 	go serverInstance.keepAccepting()
 	return serverInstance, nil

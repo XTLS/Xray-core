@@ -14,6 +14,7 @@ func TestRemoteAddrFromContext(t *testing.T) {
 		name                  string
 		metadata              metadata.MD
 		trustedXForwardedFor  []string
+		disableXForwardedFor  bool
 		expectedRemoteAddress string
 	}{
 		{
@@ -34,6 +35,13 @@ func TestRemoteAddrFromContext(t *testing.T) {
 			trustedXForwardedFor:  []string{"X-Trusted-CDN"},
 			expectedRemoteAddress: "127.0.0.1:12345",
 		},
+		{
+			name:                  "source-aware listener preserves PROXY peer address",
+			metadata:              metadata.Pairs("X-Forwarded-For", "6.6.6.6"),
+			trustedXForwardedFor:  []string{"X-Forwarded-For"},
+			disableXForwardedFor:  true,
+			expectedRemoteAddress: "127.0.0.1:12345",
+		},
 	}
 
 	for _, test := range tests {
@@ -44,7 +52,7 @@ func TestRemoteAddrFromContext(t *testing.T) {
 					Port: 12345,
 				},
 			})
-			remoteAddr := remoteAddrFromContext(ctx, test.trustedXForwardedFor)
+			remoteAddr := remoteAddrFromContext(ctx, test.trustedXForwardedFor, !test.disableXForwardedFor)
 			if remoteAddr.String() != test.expectedRemoteAddress {
 				t.Fatalf("unexpected remote address: %s", remoteAddr.String())
 			}

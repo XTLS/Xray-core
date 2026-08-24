@@ -31,8 +31,9 @@ func NewMultiHunkReadWriter(hc MultiHunkConn, cancel context.CancelFunc) *MultiH
 	return &MultiHunkReaderWriter{hc, cancel, done.New(), nil}
 }
 
-func NewMultiHunkConn(hc MultiHunkConn, cancel context.CancelFunc, trustedXForwardedFor []string) net.Conn {
-	rAddr := remoteAddrFromContext(hc.Context(), trustedXForwardedFor)
+func NewMultiHunkConn(hc MultiHunkConn, cancel context.CancelFunc, trustedXForwardedFor []string, canUseXForwardedFor ...bool) net.Conn {
+	allowXForwardedFor := len(canUseXForwardedFor) == 0 || canUseXForwardedFor[0]
+	rAddr := remoteAddrFromContext(hc.Context(), trustedXForwardedFor, allowXForwardedFor)
 	lAddr := localAddrFromContext(hc.Context())
 	wrc := NewMultiHunkReadWriter(hc, cancel)
 	return cnc.NewConnection(

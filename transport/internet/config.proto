@@ -117,6 +117,14 @@ message SocketConfig {
     Redirect = 2;
   }
 
+  enum ProxyProtocolMode {
+    // Preserve the legacy accept_proxy_protocol behavior.
+    ProxyProtocolDefault = 0;
+    // Trust source-bearing TCP PROXY v2 headers only from explicitly
+    // configured IP prefixes. LOCAL, UNKNOWN and datagram headers are rejected.
+    ProxyProtocolTrustedSources = 1;
+  }
+
   // TProxy is for enabling TProxy socket option.
   TProxyMode tproxy = 3;
 
@@ -157,6 +165,26 @@ message SocketConfig {
   HappyEyeballsConfig happy_eyeballs = 22;
 
   repeated string trusted_x_forwarded_for = 23;
+
+  // Source IP addresses or canonical CIDR prefixes trusted to send PROXY
+  // protocol in ProxyProtocolTrustedSources mode. IPv6 link-local addresses
+  // and prefixes are unsupported because their runtime peer requires a zone.
+  repeated string proxy_protocol_trusted_sources = 24;
+
+  // Explicitly enables source-aware TCP PROXY protocol v2. Packet-based
+  // transports, packet listeners and Unix domain sockets reject this mode.
+  // Legacy accept_proxy_protocol flags must be disabled in this mode. The
+  // default value keeps legacy behavior unchanged.
+  ProxyProtocolMode proxy_protocol_mode = 25;
+
+  // When non-empty in ProxyProtocolTrustedSources mode, only these local TCP
+  // listener ports accept PROXY protocol v2. Other ports remain ordinary direct
+  // listeners. Untrusted peers on the selected ports are dropped before any
+  // application bytes are read. An empty list enables same-port coexistence:
+  // trusted peers must send PROXY protocol v2, while parsing is bypassed for all
+  // other peers and their bytes are delivered unchanged. Every configured
+  // port must belong to the inbound listener set.
+  repeated uint32 proxy_protocol_listen_ports = 26;
 }
 
 message HappyEyeballsConfig {

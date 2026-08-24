@@ -8,6 +8,7 @@ import (
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
 	finalmaskcustom "github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -289,5 +290,101 @@ func TestHeaderCustomUDPBuildRejectsExprWithoutArgs(t *testing.T) {
 	}`)
 	if err == nil || !strings.Contains(err.Error(), "transform args") {
 		t.Fatalf("expected transform arg rejection, got %v", err)
+	}
+}
+
+func TestProxyProtocolTrustedSources(t *testing.T) {
+	config := new(SocketConfig)
+	if err := json.Unmarshal([]byte(`{
+		"proxyProtocolMode": "trusted-sources",
+		"proxyProtocolTrustedSources": ["192.0.2.10", "2001:db8::/32"],
+		"proxyProtocolListenPorts": [18443]
+	}`), config); err != nil {
+		t.Fatal(err)
+	}
+	built, err := config.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.AcceptProxyProtocol {
+		t.Fatal("source-aware mode unexpectedly enabled the legacy acceptProxyProtocol bit")
+	}
+	wire, err := proto.Marshal(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for len(wire) > 0 {
+		fieldNumber, fieldType, tagLength := protowire.ConsumeTag(wire)
+		if tagLength < 0 {
+			t.Fatalf("invalid encoded SocketConfig: %v", protowire.ParseError(tagLength))
+		}
+		wire = wire[tagLength:]
+		if fieldNumber == 7 {
+			t.Fatal("source-aware config serialized the legacy accept_proxy_protocol field")
+		}
+		fieldLength := protowire.ConsumeFieldValue(fieldNumber, fieldType, wire)
+		if fieldLength < 0 {
+			t.Fatalf("invalid encoded SocketConfig field: %v", protowire.ParseError(fieldLength))
+		}
+		wire = wire[fieldLength:]
+	}
+	if len(built.ProxyProtocolTrustedSources) != 2 {
+		t.Fatalf("unexpected trusted source count: %d", len(built.ProxyProtocolTrustedSources))
+	}
+	if built.ProxyProtocolMode != internet.SocketConfig_ProxyProtocolTrustedSources {
+		t.Fatalf("unexpected proxy protocol mode: %v", built.ProxyProtocolMode)
+	}
+	if len(built.ProxyProtocolListenPorts) != 1 || built.ProxyProtocolListenPorts[0] != 18443 {
+		t.Fatalf("unexpected proxy protocol listen ports: %v", built.ProxyProtocolListenPorts)
+	}
+
+	for _, input := range []string{
+		`{"proxyProtocolTrustedSources":["192.0.2.10"]}`,
+		`{"proxyProtocolMode":"trusted-sources"}`,
+		`{"proxyProtocolMode":"trusted-sources","proxyProtocolTrustedSources":["not-an-address"]}`,
+		`{"proxyProtocolMode":"trusted-sources","proxyProtocolTrustedSources":["192.0.2.10/24"]}`,
+		`{"proxyProtocolMode":"trusted-sources","proxyProtocolTrustedSources":["fe80::1"]}`,
+		`{"proxyProtocolMode":"trusted-sources","proxyProtocolTrustedSources":["fe80::/10"]}`,
+		`{"proxyProtocolMode":"trusted-sources","proxyProtocolTrustedSources":["192.0.2.10"],"proxyProtocolListenPorts":[0]}`,
+		`{"proxyProtocolMode":"trusted-sources","proxyProtocolTrustedSources":["192.0.2.10"],"proxyProtocolListenPorts":[18443,18443]}`,
+		`{"proxyProtocolMode":"unknown","proxyProtocolTrustedSources":["192.0.2.10"]}`,
+	} {
+		config := new(SocketConfig)
+		if err := json.Unmarshal([]byte(input), config); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.Build(); err == nil {
+			t.Fatalf("expected configuration error for %s", input)
+		}
+	}
+}
+
+func TestProxyProtocolTrustedSourcesRejectsLegacyTransportSettings(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		network string
+		field   string
+	}{
+		{name: "raw", network: "tcp", field: "rawSettings"},
+		{name: "websocket", network: "ws", field: "wsSettings"},
+		{name: "httpupgrade", network: "httpupgrade", field: "httpupgradeSettings"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := `{
+				"network":"` + test.network + `",
+				"` + test.field + `":{"acceptProxyProtocol":true},
+				"sockopt":{
+					"proxyProtocolMode":"trusted-sources",
+					"proxyProtocolTrustedSources":["192.0.2.10"]
+				}
+			}`
+			config := new(StreamConfig)
+			if err := json.Unmarshal([]byte(input), config); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := config.Build(); err == nil {
+				t.Fatal("source-aware mode accepted a legacy transport-level acceptProxyProtocol flag")
+			}
+		})
 	}
 }

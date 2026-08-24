@@ -43,30 +43,42 @@ func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
 }
 
 type SocketConfig struct {
-	Mark                  int32                  `json:"mark"`
-	TFO                   interface{}            `json:"tcpFastOpen"`
-	TProxy                string                 `json:"tproxy"`
-	AcceptProxyProtocol   bool                   `json:"acceptProxyProtocol"`
-	DomainStrategy        string                 `json:"domainStrategy"`
-	DialerProxy           string                 `json:"dialerProxy"`
-	TCPKeepAliveInterval  int32                  `json:"tcpKeepAliveInterval"`
-	TCPKeepAliveIdle      int32                  `json:"tcpKeepAliveIdle"`
-	TCPCongestion         string                 `json:"tcpCongestion"`
-	TCPWindowClamp        int32                  `json:"tcpWindowClamp"`
-	TCPMaxSeg             int32                  `json:"tcpMaxSeg"`
-	Penetrate             bool                   `json:"penetrate"`
-	TCPUserTimeout        int32                  `json:"tcpUserTimeout"`
-	V6only                bool                   `json:"v6only"`
-	Interface             string                 `json:"interface"`
-	TcpMptcp              bool                   `json:"tcpMptcp"`
-	CustomSockopt         []*CustomSockoptConfig `json:"customSockopt"`
-	AddressPortStrategy   string                 `json:"addressPortStrategy"`
-	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
-	TrustedXForwardedFor  []string               `json:"trustedXForwardedFor"`
+	Mark                        int32                  `json:"mark"`
+	TFO                         interface{}            `json:"tcpFastOpen"`
+	TProxy                      string                 `json:"tproxy"`
+	AcceptProxyProtocol         bool                   `json:"acceptProxyProtocol"`
+	DomainStrategy              string                 `json:"domainStrategy"`
+	DialerProxy                 string                 `json:"dialerProxy"`
+	TCPKeepAliveInterval        int32                  `json:"tcpKeepAliveInterval"`
+	TCPKeepAliveIdle            int32                  `json:"tcpKeepAliveIdle"`
+	TCPCongestion               string                 `json:"tcpCongestion"`
+	TCPWindowClamp              int32                  `json:"tcpWindowClamp"`
+	TCPMaxSeg                   int32                  `json:"tcpMaxSeg"`
+	Penetrate                   bool                   `json:"penetrate"`
+	TCPUserTimeout              int32                  `json:"tcpUserTimeout"`
+	V6only                      bool                   `json:"v6only"`
+	Interface                   string                 `json:"interface"`
+	TcpMptcp                    bool                   `json:"tcpMptcp"`
+	CustomSockopt               []*CustomSockoptConfig `json:"customSockopt"`
+	AddressPortStrategy         string                 `json:"addressPortStrategy"`
+	HappyEyeballsSettings       *HappyEyeballsConfig   `json:"happyEyeballs"`
+	TrustedXForwardedFor        []string               `json:"trustedXForwardedFor"`
+	ProxyProtocolMode           string                 `json:"proxyProtocolMode"`
+	ProxyProtocolTrustedSources []string               `json:"proxyProtocolTrustedSources"`
+	ProxyProtocolListenPorts    []uint32               `json:"proxyProtocolListenPorts"`
 }
 
 // Build implements Buildable.
 func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
+	proxyProtocolMode := internet.SocketConfig_ProxyProtocolDefault
+	switch strings.ToLower(strings.TrimSpace(c.ProxyProtocolMode)) {
+	case "":
+	case "trusted-sources", "trustedsources":
+		proxyProtocolMode = internet.SocketConfig_ProxyProtocolTrustedSources
+	default:
+		return nil, errors.New("unsupported proxy protocol mode: ", c.ProxyProtocolMode)
+	}
+
 	tfo := int32(0) // don't invoke setsockopt() for TFO
 	if c.TFO != nil {
 		switch v := c.TFO.(type) {
@@ -162,26 +174,36 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		happyEyeballs.MaxConcurrentTry = c.HappyEyeballsSettings.MaxConcurrentTry
 	}
 
-	return &internet.SocketConfig{
-		Mark:                 c.Mark,
-		Tfo:                  tfo,
-		Tproxy:               tproxy,
-		DomainStrategy:       dStrategy,
-		AcceptProxyProtocol:  c.AcceptProxyProtocol,
-		DialerProxy:          c.DialerProxy,
-		TcpKeepAliveInterval: c.TCPKeepAliveInterval,
-		TcpKeepAliveIdle:     c.TCPKeepAliveIdle,
-		TcpCongestion:        c.TCPCongestion,
-		TcpWindowClamp:       c.TCPWindowClamp,
-		TcpMaxSeg:            c.TCPMaxSeg,
-		Penetrate:            c.Penetrate,
-		TcpUserTimeout:       c.TCPUserTimeout,
-		V6Only:               c.V6only,
-		Interface:            c.Interface,
-		TcpMptcp:             c.TcpMptcp,
-		CustomSockopt:        customSockopts,
-		AddressPortStrategy:  addressPortStrategy,
-		HappyEyeballs:        happyEyeballs,
-		TrustedXForwardedFor: c.TrustedXForwardedFor,
-	}, nil
+	config := &internet.SocketConfig{
+		Mark:           c.Mark,
+		Tfo:            tfo,
+		Tproxy:         tproxy,
+		DomainStrategy: dStrategy,
+		// Keep the legacy bit independent from source-aware mode. Older cores
+		// ignore the new fields; setting this bit implicitly would make them
+		// fall back to trusting PROXY headers from every source.
+		AcceptProxyProtocol:         c.AcceptProxyProtocol,
+		DialerProxy:                 c.DialerProxy,
+		TcpKeepAliveInterval:        c.TCPKeepAliveInterval,
+		TcpKeepAliveIdle:            c.TCPKeepAliveIdle,
+		TcpCongestion:               c.TCPCongestion,
+		TcpWindowClamp:              c.TCPWindowClamp,
+		TcpMaxSeg:                   c.TCPMaxSeg,
+		Penetrate:                   c.Penetrate,
+		TcpUserTimeout:              c.TCPUserTimeout,
+		V6Only:                      c.V6only,
+		Interface:                   c.Interface,
+		TcpMptcp:                    c.TcpMptcp,
+		CustomSockopt:               customSockopts,
+		AddressPortStrategy:         addressPortStrategy,
+		HappyEyeballs:               happyEyeballs,
+		TrustedXForwardedFor:        c.TrustedXForwardedFor,
+		ProxyProtocolMode:           proxyProtocolMode,
+		ProxyProtocolTrustedSources: c.ProxyProtocolTrustedSources,
+		ProxyProtocolListenPorts:    c.ProxyProtocolListenPorts,
+	}
+	if err := internet.ValidateProxyProtocolConfig(config); err != nil {
+		return nil, err
+	}
+	return config, nil
 }

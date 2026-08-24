@@ -209,6 +209,55 @@ func (SocketConfig_TProxyMode) EnumDescriptor() ([]byte, []int) {
 	return file_transport_internet_config_proto_rawDescGZIP(), []int{6, 0}
 }
 
+type SocketConfig_ProxyProtocolMode int32
+
+const (
+	// Preserve the legacy accept_proxy_protocol behavior.
+	SocketConfig_ProxyProtocolDefault SocketConfig_ProxyProtocolMode = 0
+	// Trust source-bearing TCP PROXY v2 headers only from explicitly
+	// configured IP prefixes. LOCAL, UNKNOWN and datagram headers are rejected.
+	SocketConfig_ProxyProtocolTrustedSources SocketConfig_ProxyProtocolMode = 1
+)
+
+// Enum value maps for SocketConfig_ProxyProtocolMode.
+var (
+	SocketConfig_ProxyProtocolMode_name = map[int32]string{
+		0: "ProxyProtocolDefault",
+		1: "ProxyProtocolTrustedSources",
+	}
+	SocketConfig_ProxyProtocolMode_value = map[string]int32{
+		"ProxyProtocolDefault":        0,
+		"ProxyProtocolTrustedSources": 1,
+	}
+)
+
+func (x SocketConfig_ProxyProtocolMode) Enum() *SocketConfig_ProxyProtocolMode {
+	p := new(SocketConfig_ProxyProtocolMode)
+	*p = x
+	return p
+}
+
+func (x SocketConfig_ProxyProtocolMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SocketConfig_ProxyProtocolMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_transport_internet_config_proto_enumTypes[3].Descriptor()
+}
+
+func (SocketConfig_ProxyProtocolMode) Type() protoreflect.EnumType {
+	return &file_transport_internet_config_proto_enumTypes[3]
+}
+
+func (x SocketConfig_ProxyProtocolMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SocketConfig_ProxyProtocolMode.Descriptor instead.
+func (SocketConfig_ProxyProtocolMode) EnumDescriptor() ([]byte, []int) {
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{6, 1}
+}
+
 type TransportConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Transport protocol name.
@@ -747,8 +796,25 @@ type SocketConfig struct {
 	AddressPortStrategy        AddressPortStrategy  `protobuf:"varint,21,opt,name=address_port_strategy,json=addressPortStrategy,proto3,enum=xray.transport.internet.AddressPortStrategy" json:"address_port_strategy,omitempty"`
 	HappyEyeballs              *HappyEyeballsConfig `protobuf:"bytes,22,opt,name=happy_eyeballs,json=happyEyeballs,proto3" json:"happy_eyeballs,omitempty"`
 	TrustedXForwardedFor       []string             `protobuf:"bytes,23,rep,name=trusted_x_forwarded_for,json=trustedXForwardedFor,proto3" json:"trusted_x_forwarded_for,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Source IP addresses or canonical CIDR prefixes trusted to send PROXY
+	// protocol in ProxyProtocolTrustedSources mode. IPv6 link-local addresses
+	// and prefixes are unsupported because their runtime peer requires a zone.
+	ProxyProtocolTrustedSources []string `protobuf:"bytes,24,rep,name=proxy_protocol_trusted_sources,json=proxyProtocolTrustedSources,proto3" json:"proxy_protocol_trusted_sources,omitempty"`
+	// Explicitly enables source-aware TCP PROXY protocol v2. Packet-based
+	// transports, packet listeners and Unix domain sockets reject this mode.
+	// Legacy accept_proxy_protocol flags must be disabled in this mode. The
+	// default value keeps legacy behavior unchanged.
+	ProxyProtocolMode SocketConfig_ProxyProtocolMode `protobuf:"varint,25,opt,name=proxy_protocol_mode,json=proxyProtocolMode,proto3,enum=xray.transport.internet.SocketConfig_ProxyProtocolMode" json:"proxy_protocol_mode,omitempty"`
+	// When non-empty in ProxyProtocolTrustedSources mode, only these local TCP
+	// listener ports accept PROXY protocol v2. Other ports remain ordinary direct
+	// listeners. Untrusted peers on the selected ports are dropped before any
+	// application bytes are read. An empty list enables same-port coexistence:
+	// trusted peers must send PROXY protocol v2, while parsing is bypassed for all
+	// other peers and their bytes are delivered unchanged. Every configured
+	// port must belong to the inbound listener set.
+	ProxyProtocolListenPorts []uint32 `protobuf:"varint,26,rep,packed,name=proxy_protocol_listen_ports,json=proxyProtocolListenPorts,proto3" json:"proxy_protocol_listen_ports,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *SocketConfig) Reset() {
@@ -928,6 +994,27 @@ func (x *SocketConfig) GetTrustedXForwardedFor() []string {
 	return nil
 }
 
+func (x *SocketConfig) GetProxyProtocolTrustedSources() []string {
+	if x != nil {
+		return x.ProxyProtocolTrustedSources
+	}
+	return nil
+}
+
+func (x *SocketConfig) GetProxyProtocolMode() SocketConfig_ProxyProtocolMode {
+	if x != nil {
+		return x.ProxyProtocolMode
+	}
+	return SocketConfig_ProxyProtocolDefault
+}
+
+func (x *SocketConfig) GetProxyProtocolListenPorts() []uint32 {
+	if x != nil {
+		return x.ProxyProtocolListenPorts
+	}
+	return nil
+}
+
 type HappyEyeballsConfig struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	PrioritizeIpv6   bool                   `protobuf:"varint,1,opt,name=prioritize_ipv6,json=prioritizeIpv6,proto3" json:"prioritize_ipv6,omitempty"`
@@ -1050,7 +1137,7 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x05level\x18\x03 \x01(\tR\x05level\x12\x10\n" +
 	"\x03opt\x18\x04 \x01(\tR\x03opt\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\tR\x05value\x12\x12\n" +
-	"\x04type\x18\x06 \x01(\tR\x04type\"\xc9\b\n" +
+	"\x04type\x18\x06 \x01(\tR\x04type\"\x86\v\n" +
 	"\fSocketConfig\x12\x12\n" +
 	"\x04mark\x18\x01 \x01(\x05R\x04mark\x12\x10\n" +
 	"\x03tfo\x18\x02 \x01(\x05R\x03tfo\x12H\n" +
@@ -1073,13 +1160,19 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\rcustomSockopt\x18\x14 \x03(\v2&.xray.transport.internet.CustomSockoptR\rcustomSockopt\x12`\n" +
 	"\x15address_port_strategy\x18\x15 \x01(\x0e2,.xray.transport.internet.AddressPortStrategyR\x13addressPortStrategy\x12S\n" +
 	"\x0ehappy_eyeballs\x18\x16 \x01(\v2,.xray.transport.internet.HappyEyeballsConfigR\rhappyEyeballs\x125\n" +
-	"\x17trusted_x_forwarded_for\x18\x17 \x03(\tR\x14trustedXForwardedFor\"/\n" +
+	"\x17trusted_x_forwarded_for\x18\x17 \x03(\tR\x14trustedXForwardedFor\x12C\n" +
+	"\x1eproxy_protocol_trusted_sources\x18\x18 \x03(\tR\x1bproxyProtocolTrustedSources\x12g\n" +
+	"\x13proxy_protocol_mode\x18\x19 \x01(\x0e27.xray.transport.internet.SocketConfig.ProxyProtocolModeR\x11proxyProtocolMode\x12=\n" +
+	"\x1bproxy_protocol_listen_ports\x18\x1a \x03(\rR\x18proxyProtocolListenPorts\"/\n" +
 	"\n" +
 	"TProxyMode\x12\a\n" +
 	"\x03Off\x10\x00\x12\n" +
 	"\n" +
 	"\x06TProxy\x10\x01\x12\f\n" +
-	"\bRedirect\x10\x02\"\xad\x01\n" +
+	"\bRedirect\x10\x02\"N\n" +
+	"\x11ProxyProtocolMode\x12\x18\n" +
+	"\x14ProxyProtocolDefault\x10\x00\x12\x1f\n" +
+	"\x1bProxyProtocolTrustedSources\x10\x01\"\xad\x01\n" +
 	"\x13HappyEyeballsConfig\x12'\n" +
 	"\x0fprioritize_ipv6\x18\x01 \x01(\bR\x0eprioritizeIpv6\x12\x1e\n" +
 	"\n" +
@@ -1126,43 +1219,45 @@ func file_transport_internet_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_config_proto_rawDescData
 }
 
-var file_transport_internet_config_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_transport_internet_config_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_transport_internet_config_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_transport_internet_config_proto_goTypes = []any{
-	(DomainStrategy)(0),          // 0: xray.transport.internet.DomainStrategy
-	(AddressPortStrategy)(0),     // 1: xray.transport.internet.AddressPortStrategy
-	(SocketConfig_TProxyMode)(0), // 2: xray.transport.internet.SocketConfig.TProxyMode
-	(*TransportConfig)(nil),      // 3: xray.transport.internet.TransportConfig
-	(*StreamConfig)(nil),         // 4: xray.transport.internet.StreamConfig
-	(*UdpHop)(nil),               // 5: xray.transport.internet.UdpHop
-	(*QuicParams)(nil),           // 6: xray.transport.internet.QuicParams
-	(*ProxyConfig)(nil),          // 7: xray.transport.internet.ProxyConfig
-	(*CustomSockopt)(nil),        // 8: xray.transport.internet.CustomSockopt
-	(*SocketConfig)(nil),         // 9: xray.transport.internet.SocketConfig
-	(*HappyEyeballsConfig)(nil),  // 10: xray.transport.internet.HappyEyeballsConfig
-	(*serial.TypedMessage)(nil),  // 11: xray.common.serial.TypedMessage
-	(*net.IPOrDomain)(nil),       // 12: xray.common.net.IPOrDomain
+	(DomainStrategy)(0),                 // 0: xray.transport.internet.DomainStrategy
+	(AddressPortStrategy)(0),            // 1: xray.transport.internet.AddressPortStrategy
+	(SocketConfig_TProxyMode)(0),        // 2: xray.transport.internet.SocketConfig.TProxyMode
+	(SocketConfig_ProxyProtocolMode)(0), // 3: xray.transport.internet.SocketConfig.ProxyProtocolMode
+	(*TransportConfig)(nil),             // 4: xray.transport.internet.TransportConfig
+	(*StreamConfig)(nil),                // 5: xray.transport.internet.StreamConfig
+	(*UdpHop)(nil),                      // 6: xray.transport.internet.UdpHop
+	(*QuicParams)(nil),                  // 7: xray.transport.internet.QuicParams
+	(*ProxyConfig)(nil),                 // 8: xray.transport.internet.ProxyConfig
+	(*CustomSockopt)(nil),               // 9: xray.transport.internet.CustomSockopt
+	(*SocketConfig)(nil),                // 10: xray.transport.internet.SocketConfig
+	(*HappyEyeballsConfig)(nil),         // 11: xray.transport.internet.HappyEyeballsConfig
+	(*serial.TypedMessage)(nil),         // 12: xray.common.serial.TypedMessage
+	(*net.IPOrDomain)(nil),              // 13: xray.common.net.IPOrDomain
 }
 var file_transport_internet_config_proto_depIdxs = []int32{
-	11, // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
-	12, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
-	3,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
-	11, // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
-	11, // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
-	11, // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
-	6,  // 6: xray.transport.internet.StreamConfig.quic_params:type_name -> xray.transport.internet.QuicParams
-	9,  // 7: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
-	5,  // 8: xray.transport.internet.QuicParams.udp_hop:type_name -> xray.transport.internet.UdpHop
+	12, // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
+	13, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
+	4,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
+	12, // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
+	12, // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
+	12, // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
+	7,  // 6: xray.transport.internet.StreamConfig.quic_params:type_name -> xray.transport.internet.QuicParams
+	10, // 7: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
+	6,  // 8: xray.transport.internet.QuicParams.udp_hop:type_name -> xray.transport.internet.UdpHop
 	2,  // 9: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
 	0,  // 10: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
-	8,  // 11: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
+	9,  // 11: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
 	1,  // 12: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
-	10, // 13: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	11, // 13: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
+	3,  // 14: xray.transport.internet.SocketConfig.proxy_protocol_mode:type_name -> xray.transport.internet.SocketConfig.ProxyProtocolMode
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_config_proto_init() }
@@ -1175,7 +1270,7 @@ func file_transport_internet_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_config_proto_rawDesc), len(file_transport_internet_config_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,

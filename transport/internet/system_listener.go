@@ -75,6 +75,11 @@ func (conn *UnixConnWrapper) RemoteAddr() net.Addr {
 }
 
 func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (l net.Listener, err error) {
+	proxyProtocolConfig, err := newProxyProtocolListenerConfig(addr, sockopt)
+	if err != nil {
+		return nil, err
+	}
+
 	var lc net.ListenConfig
 	var network, address string
 	// callback is called after the Listen function returns
@@ -166,14 +171,25 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 	}
 
 	l, err = callback(lc.Listen(ctx, network, address))
-	if err == nil && sockopt != nil && sockopt.AcceptProxyProtocol {
-		policyFunc := func(upstream net.Addr) (proxyproto.Policy, error) { return proxyproto.REQUIRE, nil }
-		l = &proxyproto.Listener{Listener: l, Policy: policyFunc}
+	if err == nil && proxyProtocolConfig != nil {
+		errors.LogWarning(ctx, "accepting PROXY protocol")
+		l = &proxyproto.Listener{
+			Listener:       l,
+			ConnPolicy:     proxyProtocolConfig.policy,
+			ValidateHeader: proxyProtocolConfig.validator,
+		}
 	}
 	return l, err
 }
 
 func (dl *DefaultListener) ListenPacket(ctx context.Context, addr net.Addr, sockopt *SocketConfig) (net.PacketConn, error) {
+	if err := ValidateProxyProtocolConfig(sockopt); err != nil {
+		return nil, err
+	}
+	if sockopt != nil && sockopt.ProxyProtocolMode == SocketConfig_ProxyProtocolTrustedSources {
+		return nil, errors.New("proxyProtocolMode trusted-sources is unsupported for packet listeners")
+	}
+
 	var lc net.ListenConfig
 
 	lc.Control = getControlFunc(ctx, sockopt, dl.controllers)

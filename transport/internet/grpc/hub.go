@@ -24,20 +24,21 @@ type Listener struct {
 	local                net.Addr
 	config               *Config
 	trustedXForwardedFor []string
+	canUseXForwardedFor  bool
 
 	s *grpc.Server
 }
 
 func (l Listener) Tun(server encoding.GRPCService_TunServer) error {
 	tunCtx, cancel := context.WithCancel(l.ctx)
-	l.handler(encoding.NewHunkConn(server, cancel, l.trustedXForwardedFor))
+	l.handler(encoding.NewHunkConn(server, cancel, l.trustedXForwardedFor, l.canUseXForwardedFor))
 	<-tunCtx.Done()
 	return nil
 }
 
 func (l Listener) TunMulti(server encoding.GRPCService_TunMultiServer) error {
 	tunCtx, cancel := context.WithCancel(l.ctx)
-	l.handler(encoding.NewMultiHunkConn(server, cancel, l.trustedXForwardedFor))
+	l.handler(encoding.NewMultiHunkConn(server, cancel, l.trustedXForwardedFor, l.canUseXForwardedFor))
 	<-tunCtx.Done()
 	return nil
 }
@@ -53,6 +54,14 @@ func (l Listener) Addr() net.Addr {
 
 func Listen(ctx context.Context, address net.Address, port net.Port, settings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
 	grpcSettings := settings.ProtocolSettings.(*Config)
+	if err := internet.ValidateProxyProtocolTransportConfig(settings.SocketSettings, grpcSettings); err != nil {
+		return nil, errors.New("invalid PROXY protocol transport configuration").Base(err)
+	}
+	if port == net.Port(0) {
+		if err := internet.ValidateProxyProtocolListenerSet(settings.SocketSettings, nil); err != nil {
+			return nil, errors.New("invalid PROXY protocol listener configuration").Base(err)
+		}
+	}
 	var listener *Listener
 	if port == net.Port(0) { // unix
 		listener = &Listener{
@@ -75,6 +84,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 	}
 
 	listener.ctx = ctx
+	listener.canUseXForwardedFor = internet.CanUseXForwardedFor(settings.SocketSettings, uint32(port))
 	if settings.SocketSettings != nil {
 		listener.trustedXForwardedFor = settings.SocketSettings.TrustedXForwardedFor
 	}
@@ -96,10 +106,6 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 
 	s = grpc.NewServer(options...)
 	listener.s = s
-
-	if settings.SocketSettings != nil && settings.SocketSettings.AcceptProxyProtocol {
-		errors.LogWarning(ctx, "accepting PROXY protocol")
-	}
 
 	go func() {
 		var streamListener net.Listener

@@ -68,6 +68,9 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	if err != nil {
 		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
 	}
+	if err := internet.ValidateProxyProtocolTransportConfig(mss.SocketSettings, mss.ProtocolSettings); err != nil {
+		return nil, errors.New("invalid PROXY protocol transport configuration").Base(err)
+	}
 
 	newCtx := session.ContextWithInbound(ctx, &session.Inbound{Tag: tag, Source: src})
 	newCtx = session.ContextWithContent(newCtx, &session.Content{SniffingRequest: sniffingRequest})
@@ -81,6 +84,10 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	if !ok {
 		return nil, errors.New("not an inbound proxy.")
 	}
+	nl := p.Network()
+	if err := internet.ValidateProxyProtocolInboundConfig(mss.SocketSettings, receiverConfig.PortList, nl, mss); err != nil {
+		return nil, errors.New("invalid PROXY protocol listener configuration").Base(err)
+	}
 
 	h := &AlwaysOnInboundHandler{
 		receiverConfig: receiverConfig,
@@ -92,7 +99,6 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 
 	uplinkCounter, downlinkCounter := getStatCounter(core.MustFromContext(ctx), tag)
 
-	nl := p.Network()
 	pl := receiverConfig.PortList
 	address := receiverConfig.Listen.AsAddress()
 	if address == nil {

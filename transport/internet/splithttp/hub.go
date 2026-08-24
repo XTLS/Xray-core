@@ -33,14 +33,15 @@ import (
 )
 
 type requestHandler struct {
-	config         *Config
-	host           string
-	path           string
-	ln             *Listener
-	sessionMu      *sync.Mutex
-	sessions       sync.Map
-	localAddr      net.Addr
-	socketSettings *internet.SocketConfig
+	config              *Config
+	host                string
+	path                string
+	ln                  *Listener
+	sessionMu           *sync.Mutex
+	sessions            sync.Map
+	localAddr           net.Addr
+	socketSettings      *internet.SocketConfig
+	canUseXForwardedFor bool
 }
 
 type httpSession struct {
@@ -171,11 +172,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Port: remoteAddr.(*net.TCPAddr).Port,
 		}
 	}
-	var trustedXFF []string
-	if h.socketSettings != nil {
-		trustedXFF = h.socketSettings.TrustedXForwardedFor
+	if h.canUseXForwardedFor {
+		var trustedXFF []string
+		if h.socketSettings != nil {
+			trustedXFF = h.socketSettings.TrustedXForwardedFor
+		}
+		remoteAddr = http_proto.ApplyTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
 	}
-	remoteAddr = http_proto.ApplyTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
 
 	var currentSession *httpSession
 	if sessionId != "" {
@@ -450,13 +453,14 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		}
 	}
 	handler := &requestHandler{
-		config:         l.config,
-		host:           l.config.Host,
-		path:           l.config.GetNormalizedPath(),
-		ln:             l,
-		sessionMu:      &sync.Mutex{},
-		sessions:       sync.Map{},
-		socketSettings: streamSettings.SocketSettings,
+		config:              l.config,
+		host:                l.config.Host,
+		path:                l.config.GetNormalizedPath(),
+		ln:                  l,
+		sessionMu:           &sync.Mutex{},
+		sessions:            sync.Map{},
+		socketSettings:      streamSettings.SocketSettings,
+		canUseXForwardedFor: internet.CanUseXForwardedFor(streamSettings.SocketSettings, uint32(port)),
 	}
 	tlsConfig := getTLSConfig(streamSettings)
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"

@@ -306,6 +306,14 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		}
 	}
 
+	transportSettings, err := config.GetEffectiveTransportSettings()
+	if err != nil {
+		return nil, err
+	}
+	if err := internet.ValidateProxyProtocolTransportConfig(config.SocketSettings, transportSettings); err != nil {
+		return nil, errors.New("invalid PROXY protocol transport configuration").Base(err)
+	}
+
 	return config, nil
 }
 

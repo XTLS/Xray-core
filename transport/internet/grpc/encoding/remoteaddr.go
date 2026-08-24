@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-func remoteAddrFromContext(ctx context.Context, trusted []string) net.Addr {
+func remoteAddrFromContext(ctx context.Context, trusted []string, canUseXForwardedFor bool) net.Addr {
 	var remoteAddr net.Addr
 	if pr, ok := peer.FromContext(ctx); ok {
 		remoteAddr = pr.Addr
@@ -19,6 +19,9 @@ func remoteAddrFromContext(ctx context.Context, trusted []string) net.Addr {
 			IP:   []byte{0, 0, 0, 0},
 			Port: 0,
 		}
+	}
+	if !canUseXForwardedFor {
+		return remoteAddr
 	}
 
 	md, ok := metadata.FromIncomingContext(ctx)
