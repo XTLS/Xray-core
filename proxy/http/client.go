@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"text/template"
 
@@ -202,6 +203,27 @@ func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error)
 	return filled, nil
 }
 
+// applyRequestHeaders copies the configured headers onto the CONNECT request.
+//
+// Host needs care. Request.Write ignores Header["Host"] and writes req.Host
+// instead, so a configured Host never reaches the wire on its own. Moving it to
+// req.Host is not enough either: for CONNECT, Request.Write also derives the
+// request-URI from req.Host, so setting it would rewrite the tunnel authority
+// as well. Pinning the real target in URL.Opaque keeps the request-URI intact
+// while letting the configured value appear as the Host header.
+func applyRequestHeaders(req *http.Request, target string, header []*Header) {
+	for _, h := range header {
+		if strings.EqualFold(h.Key, "Host") {
+			if req.URL.Opaque == "" {
+				req.URL.Opaque = target
+			}
+			req.Host = h.Value
+			continue
+		}
+		req.Header.Set(h.Key, h.Value)
+	}
+}
+
 // setUpHTTPTunnel will create a socket tunnel via HTTP CONNECT method
 func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, user *protocol.MemoryUser, dialer internet.Dialer, header []*Header, firstPayload []byte) (net.Conn, error) {
 	req := &http.Request{
@@ -217,9 +239,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 		req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(auth)))
 	}
 
-	for _, h := range header {
-		req.Header.Set(h.Key, h.Value)
-	}
+	applyRequestHeaders(req, target, header)
 	utils.TryDefaultHeadersWith(req.Header, "nav")
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
