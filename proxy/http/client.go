@@ -169,19 +169,22 @@ func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error)
 		return header, nil
 	}
 
-	inbound := session.InboundFromContext(ctx)
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 
-	if inbound == nil || ob == nil {
-		return nil, errors.New("missing inbound or outbound metadata from context")
+	// A request can reach here without an inbound, for example a health check
+	// dispatched through tagged.Dialer. Fall back to an unspecified source
+	// rather than refusing to build the headers.
+	source := net.TCPDestination(net.AnyIP, 0)
+	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		source = inbound.Source
 	}
 
 	data := struct {
 		Source net.Destination
 		Target net.Destination
 	}{
-		Source: inbound.Source,
+		Source: source,
 		Target: ob.Target,
 	}
 
