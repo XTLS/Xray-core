@@ -34,4 +34,5 @@ message DeviceConfig {
   DomainStrategy domain_strategy = 7;
   bool is_client = 8;
   bool no_kernel_tun = 9;
+  repeated string DNS = 10;
 }
