@@ -78,6 +78,12 @@ func (o *Observer) background() {
 			sleepTime = time.Duration(o.config.ProbeInterval)
 		}
 
+		if len(outbounds) == 0 {
+			errors.LogWarning(o.ctx, "no outbound matches subjectSelector ", o.config.SubjectSelector)
+			time.Sleep(sleepTime)
+			continue
+		}
+
 		if !o.config.EnableConcurrency {
 			sort.Strings(outbounds)
 			for _, v := range outbounds {
