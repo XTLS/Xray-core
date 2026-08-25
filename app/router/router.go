@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"maps"
-	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -46,53 +45,9 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 	r.ohm = ohm
 	r.dispatcher = dispatcher
 
-	balancers := make(map[string]*Balancer, len(config.BalancingRule))
-	for _, rule := range config.BalancingRule {
-		if _, found := balancers[rule.Tag]; found {
-			return errors.New("duplicate balancer tag")
-		}
-		balancer, err := rule.Build(ohm, dispatcher)
-		if err != nil {
-			return err
-		}
-		balancer.InjectContext(ctx)
-		balancers[rule.Tag] = balancer
-	}
-
-	// Webhooks that never went live need no cleanup on failure: constructing
-	// a notifier has no side effects, dropping it is enough.
-	rules := make([]*Rule, 0, len(config.Rule))
-	for _, rule := range config.Rule {
-		cond, err := rule.BuildCondition()
-		if err != nil {
-			return err
-		}
-		rr := &Rule{
-			Condition: cond,
-			Tag:       rule.GetTag(),
-			RuleTag:   rule.GetRuleTag(),
-		}
-		if wh := rule.GetWebhook(); wh != nil {
-			notifier, err := NewWebhookNotifier(wh)
-			if err != nil {
-				return err
-			}
-			rr.Webhook = notifier
-		}
-		btag := rule.GetBalancingTag()
-		if len(btag) > 0 {
-			brule, found := balancers[btag]
-			if !found {
-				return errors.New("balancer ", btag, " not found")
-			}
-			rr.Balancer = brule
-		}
-		rules = append(rules, rr)
-	}
-
-	r.balancers.Store(&balancers)
-	r.rules.Store(&rules)
-	return nil
+	r.rules.Store(new([]*Rule))
+	r.balancers.Store(&map[string]*Balancer{})
+	return r.ReloadRules(config, false)
 }
 
 // PickRoute implements routing.Router.
@@ -131,11 +86,15 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	oldRules := *r.rules.Load()
 	oldBalancers := *r.balancers.Load()
 
-	newRules := make([]*Rule, 0, len(oldRules)+len(config.Rule))
-	newBalancers := make(map[string]*Balancer, len(oldBalancers)+len(config.BalancingRule))
+	var newRules []*Rule
+	newBalancers := make(map[string]*Balancer)
+	existTags := make(map[string]bool, len(oldRules)+len(config.Rule))
 	if shouldAppend {
 		newRules = append(newRules, oldRules...)
 		maps.Copy(newBalancers, oldBalancers)
+		for _, rule := range oldRules {
+			existTags[rule.RuleTag] = true
+		}
 	}
 
 	for _, rule := range config.BalancingRule {
@@ -151,9 +110,6 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	}
 
 	for _, rule := range config.Rule {
-		if tag := rule.GetRuleTag(); tag != "" && slices.ContainsFunc(newRules, func(nr *Rule) bool { return nr.RuleTag == tag }) {
-			return errors.New("duplicate ruleTag ", tag)
-		}
 		cond, err := rule.BuildCondition()
 		if err != nil {
 			return err
@@ -163,6 +119,10 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 			Tag:       rule.GetTag(),
 			RuleTag:   rule.GetRuleTag(),
 		}
+		if rr.RuleTag != "" && existTags[rr.RuleTag] {
+			return errors.New("duplicate ruleTag ", rr.RuleTag)
+		}
+		existTags[rr.RuleTag] = true
 		if wh := rule.GetWebhook(); wh != nil {
 			notifier, err := NewWebhookNotifier(wh)
 			if err != nil {
