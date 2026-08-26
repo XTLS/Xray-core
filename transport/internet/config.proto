@@ -87,6 +87,7 @@ message QuicParams {
   bool disable_chrome_parrot = 14;
   bool disableGSO = 15;
   int64 max_incoming_streams = 16;
+  bool disable_stateless_reset = 17;    
 }
 
 message ProxyConfig {

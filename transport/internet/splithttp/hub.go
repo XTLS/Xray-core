@@ -3,6 +3,7 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	gotls "crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -506,7 +507,12 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		}
 
-		tr := &quic.Transport{Conn: Conn, DisableGSO: quicParams.DisableGSO}
+		var k *quic.StatelessResetKey
+		if !quicParams.DisableStatelessReset {
+			k = &quic.StatelessResetKey{}
+			common.Must2(rand.Read((*k)[:]))
+		}
+		tr := &quic.Transport{Conn: Conn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: k}
 
 		l.h3listener, err = tr.ListenEarly(tlsConfig, quicConfig)
 		if err != nil {

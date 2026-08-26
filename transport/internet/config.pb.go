@@ -460,6 +460,7 @@ type QuicParams struct {
 	DisableChromeParrot           bool                   `protobuf:"varint,14,opt,name=disable_chrome_parrot,json=disableChromeParrot,proto3" json:"disable_chrome_parrot,omitempty"`
 	DisableGSO                    bool                   `protobuf:"varint,15,opt,name=disableGSO,proto3" json:"disableGSO,omitempty"`
 	MaxIncomingStreams            int64                  `protobuf:"varint,16,opt,name=max_incoming_streams,json=maxIncomingStreams,proto3" json:"max_incoming_streams,omitempty"`
+	DisableStatelessReset         bool                   `protobuf:"varint,17,opt,name=disable_stateless_reset,json=disableStatelessReset,proto3" json:"disable_stateless_reset,omitempty"`
 	unknownFields                 protoimpl.UnknownFields
 	sizeCache                     protoimpl.SizeCache
 }
@@ -604,6 +605,13 @@ func (x *QuicParams) GetMaxIncomingStreams() int64 {
 		return x.MaxIncomingStreams
 	}
 	return 0
+}
+
+func (x *QuicParams) GetDisableStatelessReset() bool {
+	if x != nil {
+		return x.DisableStatelessReset
+	}
+	return false
 }
 
 type ProxyConfig struct {
@@ -1044,7 +1052,7 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x06UdpHop\x12\x14\n" +
 	"\x05ports\x18\x01 \x03(\rR\x05ports\x12!\n" +
 	"\finterval_min\x18\x02 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\x8f\x06\n" +
+	"\finterval_max\x18\x03 \x01(\x03R\vintervalMax\"\xc7\x06\n" +
 	"\n" +
 	"QuicParams\x12\x1e\n" +
 	"\n" +
@@ -1069,7 +1077,8 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\n" +
 	"disableGSO\x18\x0f \x01(\bR\n" +
 	"disableGSO\x120\n" +
-	"\x14max_incoming_streams\x18\x10 \x01(\x03R\x12maxIncomingStreams\"Q\n" +
+	"\x14max_incoming_streams\x18\x10 \x01(\x03R\x12maxIncomingStreams\x126\n" +
+	"\x17disable_stateless_reset\x18\x11 \x01(\bR\x15disableStatelessReset\"Q\n" +
 	"\vProxyConfig\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x120\n" +
 	"\x13transportLayerProxy\x18\x02 \x01(\bR\x13transportLayerProxy\"\x93\x01\n" +

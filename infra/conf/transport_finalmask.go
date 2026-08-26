@@ -949,6 +949,7 @@ type QuicParamsConfig struct {
 	DisableChromeParrot           bool      `json:"disableChromeParrot"`
 	DisableGSO                    bool      `json:"disableGSO"`
 	MaxIncomingStreams            int64     `json:"maxIncomingStreams"`
+	DisableStatelessReset         bool      `json:"disableStatelessReset"`
 }
 
 type FinalMask struct {
