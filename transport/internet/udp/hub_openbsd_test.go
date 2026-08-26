@@ -33,6 +33,36 @@ func TestRetrieveOriginalDestFromControlMessages(t *testing.T) {
 	}
 }
 
+func TestRetrieveOriginalDestFromControlMessagesIPv6(t *testing.T) {
+	// 2001:db8::7 followed by the interface index, as in struct in6_pktinfo.
+	pktinfo := []byte{
+		0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0x07,
+		0x02, 0, 0, 0,
+	}
+	msgs := []unix.SocketControlMessage{
+		{
+			Header: unix.Cmsghdr{Level: unix.IPPROTO_IPV6, Type: unix.IPV6_RECVDSTPORT},
+			Data:   []byte{0x30, 0x39},
+		},
+		{
+			Header: unix.Cmsghdr{Level: unix.IPPROTO_IPV6, Type: unix.IPV6_PKTINFO},
+			Data:   pktinfo,
+		},
+	}
+
+	dest := retrieveOriginalDestFromControlMessages(msgs)
+	if !dest.IsValid() {
+		t.Fatal("destination is invalid")
+	}
+	if got, want := dest.Address.IP().String(), "2001:db8::7"; got != want {
+		t.Fatalf("address = %q, want %q", got, want)
+	}
+	if got, want := dest.Port.Value(), uint16(12345); got != want {
+		t.Fatalf("port = %d, want %d", got, want)
+	}
+}
+
 func TestRetrieveOriginalDestRequiresAddressAndPort(t *testing.T) {
 	tests := [][]unix.SocketControlMessage{
 		{
@@ -44,6 +74,18 @@ func TestRetrieveOriginalDestRequiresAddressAndPort(t *testing.T) {
 		{
 			{
 				Header: unix.Cmsghdr{Level: unix.IPPROTO_IP, Type: unix.IP_RECVDSTPORT},
+				Data:   []byte{0x30, 0x39},
+			},
+		},
+		{
+			{
+				Header: unix.Cmsghdr{Level: unix.IPPROTO_IPV6, Type: unix.IPV6_PKTINFO},
+				Data:   make([]byte, 20),
+			},
+		},
+		{
+			{
+				Header: unix.Cmsghdr{Level: unix.IPPROTO_IPV6, Type: unix.IPV6_RECVDSTPORT},
 				Data:   []byte{0x30, 0x39},
 			},
 		},

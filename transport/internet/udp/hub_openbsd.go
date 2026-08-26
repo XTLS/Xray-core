@@ -17,23 +17,39 @@ func retrieveOriginalDestFromControlMessages(msgs []unix.SocketControlMessage) n
 	var havePort bool
 
 	for _, msg := range msgs {
-		if msg.Header.Level != unix.IPPROTO_IP {
-			continue
-		}
-
-		switch msg.Header.Type {
-		case unix.IP_RECVDSTADDR:
-			if len(msg.Data) < 4 {
-				continue
+		switch msg.Header.Level {
+		case unix.IPPROTO_IP:
+			switch msg.Header.Type {
+			case unix.IP_RECVDSTADDR:
+				if len(msg.Data) < 4 {
+					continue
+				}
+				ip = append(ip[:0], msg.Data[:4]...)
+				haveAddress = true
+			case unix.IP_RECVDSTPORT:
+				if len(msg.Data) < 2 {
+					continue
+				}
+				port = binary.BigEndian.Uint16(msg.Data[:2])
+				havePort = true
 			}
-			ip = append(ip[:0], msg.Data[:4]...)
-			haveAddress = true
-		case unix.IP_RECVDSTPORT:
-			if len(msg.Data) < 2 {
-				continue
+		case unix.IPPROTO_IPV6:
+			switch msg.Header.Type {
+			case unix.IPV6_PKTINFO:
+				// struct in6_pktinfo: the destination address is followed by
+				// the interface index.
+				if len(msg.Data) < 16 {
+					continue
+				}
+				ip = append(ip[:0], msg.Data[:16]...)
+				haveAddress = true
+			case unix.IPV6_RECVDSTPORT:
+				if len(msg.Data) < 2 {
+					continue
+				}
+				port = binary.BigEndian.Uint16(msg.Data[:2])
+				havePort = true
 			}
-			port = binary.BigEndian.Uint16(msg.Data[:2])
-			havePort = true
 		}
 	}
 
