@@ -221,21 +221,41 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 			return nil, err
 		}
 		transport := http.DefaultTransport.(*http.Transport)
-		if config.MasqUrlInsecure {
-			transport = transport.Clone()
-			transport.TLSClientConfig = &gotls.Config{
-				InsecureSkipVerify: true,
+		switch u.Scheme {
+		case "http", "https":
+			if config.MasqUrlInsecure {
+				transport = transport.Clone()
+				if transport.TLSClientConfig == nil {
+					transport.TLSClientConfig = &gotls.Config{}
+				}
+				transport.TLSClientConfig.InsecureSkipVerify = true
 			}
+		case "", "unix":
+			u = &url.URL{Scheme: "http", Host: "localhost"}
+			path := u.Path
+			dialer := &net.Dialer{Timeout: 30 * time.Second}
+			transport = transport.Clone()
+			transport.Proxy = nil
+			transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, "unix", path)
+			}
+			transport.MaxIdleConns = masqueradeProxyMaxIdleConnections
+			transport.MaxIdleConnsPerHost = masqueradeProxyMaxIdleConnsPerHost
 		}
 		masqHandler = &httputil.ReverseProxy{
-			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(u)
+			Rewrite: func(r *httputil.ProxyRequest) {
+				r.SetURL(u)
 				if !config.MasqUrlRewriteHost {
-					pr.Out.Host = pr.In.Host
+					r.Out.Host = r.In.Host
+				}
+				if config.MasqUrlXForwarded {
+					r.SetXForwarded()
 				}
 			},
-			Transport: transport,
+			Transport:  transport,
+			BufferPool: newMasqueradeProxyBufferPool(),
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+				errors.LogErrorInner(context.Background(), err, "HTTP reverse proxy error")
 				w.WriteHeader(http.StatusBadGateway)
 			},
 		}
@@ -342,4 +362,35 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 
 func init() {
 	common.Must(internet.RegisterTransportListener(protocolName, Listen))
+}
+
+const (
+	masqueradeProxyBufferSize          = 32 * 1024
+	masqueradeProxyMaxIdleConnections  = 100
+	masqueradeProxyMaxIdleConnsPerHost = 32
+)
+
+type masqueradeProxyBufferPool struct {
+	pool sync.Pool
+}
+
+func newMasqueradeProxyBufferPool() *masqueradeProxyBufferPool {
+	return &masqueradeProxyBufferPool{
+		pool: sync.Pool{
+			New: func() any {
+				return make([]byte, masqueradeProxyBufferSize)
+			},
+		},
+	}
+}
+
+func (p *masqueradeProxyBufferPool) Get() []byte {
+	return p.pool.Get().([]byte)
+}
+
+func (p *masqueradeProxyBufferPool) Put(buf []byte) {
+	if cap(buf) < masqueradeProxyBufferSize {
+		return
+	}
+	p.pool.Put(buf[:masqueradeProxyBufferSize])
 }
