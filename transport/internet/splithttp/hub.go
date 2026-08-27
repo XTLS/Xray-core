@@ -512,6 +512,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			k = &quic.StatelessResetKey{}
 			common.Must2(rand.Read((*k)[:]))
 		}
+
 		tr := &quic.Transport{Conn: Conn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: k}
 
 		l.h3listener, err = tr.ListenEarly(tlsConfig, quicConfig)

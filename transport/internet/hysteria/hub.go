@@ -334,6 +334,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		k = &quic.StatelessResetKey{}
 		common.Must2(rand.Read((*k)[:]))
 	}
+
 	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: k}
 
 	listener, err := tr.Listen(tlsConfig.GetTLSConfig(tls.WithNextProto("h3")), quicConfig)
