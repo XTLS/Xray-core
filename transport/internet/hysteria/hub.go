@@ -241,6 +241,8 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 			}
 			transport.MaxIdleConns = masqueradeProxyMaxIdleConnections
 			transport.MaxIdleConnsPerHost = masqueradeProxyMaxIdleConnsPerHost
+		default:
+			return nil, errors.New("unknown scheme")
 		}
 		masqHandler = &httputil.ReverseProxy{
 			Rewrite: func(r *httputil.ProxyRequest) {
