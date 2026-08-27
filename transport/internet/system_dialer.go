@@ -56,10 +56,8 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		}
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)
 		if srcAddr == nil {
-			// Bind the wildcard of the destination's own address family.
-			// Where IPv4-mapped IPv6 addresses are unavailable, OpenBSD among
-			// them, binding 0.0.0.0 gives an AF_INET socket that cannot reach
-			// an IPv6 peer.
+			// some OS don't support mapped IPv4 dual stack
+			// and need to select 0.0.0.0 or [::] manually based on the destination
 			wildcard := net.AnyIP.IP()
 			if destAddr.IP.To4() == nil {
 				wildcard = net.AnyIPv6.IP()
