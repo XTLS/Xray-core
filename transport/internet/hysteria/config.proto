@@ -11,12 +11,17 @@ message Config {
   string auth = 2;
 
   int64 udp_idle_timeout = 3;
+
   string masq_type = 4;
+
   string masq_file = 5;
+
   string masq_url = 6;
   bool masq_url_rewrite_host = 7;
-  bool masq_url_insecure = 8;
-  string masq_string = 9;
-  map<string, string> masq_string_headers = 10;
-  int32 masq_string_status_code = 11;
+  bool masq_url_x_forwarded = 8;
+  bool masq_url_insecure = 9;
+
+  string masq_string = 10;
+  map<string, string> masq_string_headers = 11;
+  int32 masq_string_status_code = 12;
 }

@@ -75,15 +75,19 @@ message QuicParams {
   string bbr_profile = 2;
   uint64 brutal_up = 3;
   uint64 brutal_down = 4;
-  UdpHop udp_hop = 5;
-  uint64 init_stream_receive_window = 6;
-  uint64 max_stream_receive_window = 7;
-  uint64 init_conn_receive_window = 8;
-  uint64 max_conn_receive_window = 9;
-  int64 max_idle_timeout = 10;
-  int64 keep_alive_period = 11;
-  bool disable_path_mtu_discovery = 12;
-  int64 max_incoming_streams = 13;
+  bool brutal_disable_loss_compensation = 5;
+  UdpHop udp_hop = 6;
+  uint64 init_stream_receive_window = 7;
+  uint64 max_stream_receive_window = 8;
+  uint64 init_conn_receive_window = 9;
+  uint64 max_conn_receive_window = 10;
+  int64 max_idle_timeout = 11;
+  int64 keep_alive_period = 12;
+  bool disable_path_mtu_discovery = 13;
+  bool disable_chrome_parrot = 14;
+  bool disableGSO = 15;
+  int64 max_incoming_streams = 16;
+  bool disable_stateless_reset = 17;    
 }
 
 message ProxyConfig {

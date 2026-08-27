@@ -751,6 +751,7 @@ type Masquerade struct {
 
 	Url         string `json:"url"`
 	RewriteHost bool   `json:"rewriteHost"`
+	XForwarded  bool   `json:"xForwarded"`
 	Insecure    bool   `json:"insecure"`
 
 	Content    string            `json:"content"`
@@ -791,6 +792,7 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config.MasqFile = c.Masquerade.Dir
 	config.MasqUrl = c.Masquerade.Url
 	config.MasqUrlRewriteHost = c.Masquerade.RewriteHost
+	config.MasqUrlXForwarded = c.Masquerade.XForwarded
 	config.MasqUrlInsecure = c.Masquerade.Insecure
 	config.MasqString = c.Masquerade.Content
 	config.MasqStringHeaders = c.Masquerade.Headers
