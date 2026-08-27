@@ -3,7 +3,6 @@ package hysteria
 import (
 	"context"
 	go_tls "crypto/tls"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -22,7 +21,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
-	"github.com/xtls/xray-core/transport/internet/hysteria/udphop"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -78,7 +76,6 @@ func (c *client) dial(ctx context.Context) error {
 	if quicParams == nil {
 		quicParams = &internet.QuicParams{
 			BbrProfile: string(bbr.ProfileStandard),
-			UdpHop:     &internet.UdpHop{},
 		}
 	}
 
@@ -114,35 +111,8 @@ func (c *client) dial(ctx context.Context) error {
 	// 	quicConfig.KeepAlivePeriod = 10 * time.Second
 	// }
 
-	udpHopDialer := func(addr *net.UDPAddr) (net.PacketConn, error) {
-		conn, err := internet.DialSystem(ctx, net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.socketConfig)
-		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "skip hop: failed to dial to dest")
-			return nil, errors.New("")
-		}
-
-		var pktConn net.PacketConn
-
-		switch c := conn.(type) {
-		case *internet.PacketConnWrapper:
-			pktConn = c.PacketConn
-		case *cnc.Connection:
-			pktConn = &internet.FakePacketConn{Conn: c}
-		default:
-			panic(reflect.TypeOf(c))
-		}
-
-		return pktConn, nil
-	}
-
 	var pktConn net.PacketConn
 	var udpAddr *net.UDPAddr
-	var index int
-
-	if len(quicParams.UdpHop.Ports) > 0 {
-		index = rand.Intn(len(quicParams.UdpHop.Ports))
-		c.dest.Port = net.Port(quicParams.UdpHop.Ports[index])
-	}
 
 	raw, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
 	if err != nil {
@@ -157,10 +127,6 @@ func (c *client) dial(ctx context.Context) error {
 		udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
 	default:
 		panic(reflect.TypeOf(c))
-	}
-
-	if len(quicParams.UdpHop.Ports) > 0 {
-		pktConn = udphop.NewUDPHopPacketConn(udphop.ToAddrs(udpAddr.IP, quicParams.UdpHop.Ports), time.Duration(quicParams.UdpHop.IntervalMin)*time.Second, time.Duration(quicParams.UdpHop.IntervalMax)*time.Second, udpHopDialer, pktConn, index)
 	}
 
 	if c.udpmaskManager != nil {

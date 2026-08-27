@@ -10,8 +10,6 @@ import (
 )
 
 type Udpmask interface {
-	UDP()
-
 	WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
 	WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
 }
@@ -21,15 +19,14 @@ type UdpmaskManager struct {
 }
 
 func NewUdpmaskManager(udpmasks []Udpmask) *UdpmaskManager {
-	return &UdpmaskManager{
-		udpmasks: udpmasks,
-	}
+	slices.Reverse(udpmasks)
+	return &UdpmaskManager{udpmasks: udpmasks}
 }
 
 func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
 	var sizes []int
 	var conns []net.PacketConn
-	for i, mask := range slices.Backward(m.udpmasks) {
+	for i, mask := range m.udpmasks {
 		if _, ok := mask.(headerConn); ok {
 			conn, err := mask.WrapPacketConnClient(nil, i, len(m.udpmasks)-1)
 			if err != nil {
@@ -62,7 +59,7 @@ func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketCon
 func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
 	var sizes []int
 	var conns []net.PacketConn
-	for i, mask := range slices.Backward(m.udpmasks) {
+	for i, mask := range m.udpmasks {
 		if _, ok := mask.(headerConn); ok {
 			conn, err := mask.WrapPacketConnServer(nil, i, len(m.udpmasks)-1)
 			if err != nil {
@@ -195,8 +192,6 @@ func (c *headerManagerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) 
 }
 
 type Tcpmask interface {
-	TCP()
-
 	WrapConnClient(net.Conn) (net.Conn, error)
 	WrapConnServer(net.Conn) (net.Conn, error)
 }
@@ -206,14 +201,13 @@ type TcpmaskManager struct {
 }
 
 func NewTcpmaskManager(tcpmasks []Tcpmask) *TcpmaskManager {
-	return &TcpmaskManager{
-		tcpmasks: tcpmasks,
-	}
+	slices.Reverse(tcpmasks)
+	return &TcpmaskManager{tcpmasks: tcpmasks}
 }
 
 func (m *TcpmaskManager) WrapConnClient(raw net.Conn) (net.Conn, error) {
 	var err error
-	for _, mask := range slices.Backward(m.tcpmasks) {
+	for _, mask := range m.tcpmasks {
 		raw, err = mask.WrapConnClient(raw)
 		if err != nil {
 			return nil, err
@@ -224,7 +218,7 @@ func (m *TcpmaskManager) WrapConnClient(raw net.Conn) (net.Conn, error) {
 
 func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
 	var err error
-	for _, mask := range slices.Backward(m.tcpmasks) {
+	for _, mask := range m.tcpmasks {
 		raw, err = mask.WrapConnServer(raw)
 		if err != nil {
 			return nil, err
