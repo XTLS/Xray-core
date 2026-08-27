@@ -173,15 +173,18 @@ func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error)
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 
-	if inbound == nil || ob == nil {
-		return nil, errors.New("missing inbound or outbound metadata from context")
+	var src net.Destination
+	if inbound != nil {
+		src = inbound.Source
+	} else {
+		src = net.TCPDestination(net.AnyIP, 0)
 	}
 
 	data := struct {
 		Source net.Destination
 		Target net.Destination
 	}{
-		Source: inbound.Source,
+		Source: src,
 		Target: ob.Target,
 	}
 

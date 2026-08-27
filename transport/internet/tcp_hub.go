@@ -65,6 +65,9 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, settings
 	if address.Family().IsDomain() {
 		return nil, errors.New("domain address is not allowed for listening: ", address.Domain())
 	}
+	if port == 0 {
+		return nil, errors.New("port 0 is not allowed for listening on TCP")
+	}
 
 	protocol := settings.ProtocolName
 	listenFunc := transportListenerCache[protocol]
