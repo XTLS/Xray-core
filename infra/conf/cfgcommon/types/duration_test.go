@@ -1,20 +1,20 @@
-package duration_test
+package types_test
 
 import (
 	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/xtls/xray-core/infra/conf/cfgcommon/duration"
+	"github.com/xtls/xray-core/infra/conf/cfgcommon/types"
 )
 
 type testWithDuration struct {
-	Duration duration.Duration
+	Duration types.Duration
 }
 
 func TestDurationJSON(t *testing.T) {
 	expected := &testWithDuration{
-		Duration: duration.Duration(time.Hour),
+		Duration: types.Duration(time.Hour),
 	}
 	data, err := json.Marshal(expected)
 	if err != nil {
