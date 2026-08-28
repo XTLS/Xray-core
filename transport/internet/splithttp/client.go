@@ -68,7 +68,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
-	wrc = &WaitReadCloser{Wait: make(chan struct{})}
+	wrc = &WaitReadCloser{wait: done.New()}
 	go func() {
 		resp, err := c.client.Do(req)
 		if err != nil {
@@ -188,44 +188,33 @@ func (c *DefaultDialerClient) Close() error {
 }
 
 type WaitReadCloser struct {
-	Wait chan struct{}
-	rc   atomic.Pointer[io.ReadCloser]
+	wait   *done.Instance
+	reader atomic.Pointer[io.ReadCloser]
 }
 
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
-	w.rc.Store(&rc)
-	defer func() {
-		if recover() != nil {
-			rc.Close()
-		}
-	}()
-	close(w.Wait)
+	w.reader.Store(&rc)
+	if w.wait.Done() {
+		rc.Close()
+	}
+	w.wait.Close()
 }
 
 func (w *WaitReadCloser) Read(b []byte) (int, error) {
-	<-w.Wait
-	if rc := w.rc.Load(); rc != nil {
-		return (*rc).Read(b)
+	rc := w.reader.Load()
+	if rc == nil {
+		<-w.wait.Wait()
+		if rc = w.reader.Load(); rc == nil {
+			return 0, io.ErrClosedPipe
+		}
 	}
-	return 0, io.ErrClosedPipe
+	return (*rc).Read(b)
 }
 
 func (w *WaitReadCloser) Close() error {
-	select {
-	case <-w.Wait:
-		if rc := w.rc.Load(); rc != nil {
-			return (*rc).Close()
-		}
-		return nil
-	default:
+	w.wait.Close()
+	if p := w.reader.Load(); p != nil {
+		return (*p).Close()
 	}
-	defer func() {
-		if recover() != nil {
-			if rc := w.rc.Load(); rc != nil {
-				(*rc).Close()
-			}
-		}
-	}()
-	close(w.Wait)
 	return nil
 }
