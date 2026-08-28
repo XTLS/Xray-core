@@ -3,7 +3,6 @@ package quic
 import (
 	"crypto"
 	"crypto/aes"
-	"crypto/tls"
 	"encoding/binary"
 	"io"
 
@@ -28,22 +27,39 @@ func (s SniffHeader) Domain() string {
 	return s.domain
 }
 
-const (
-	versionDraft29 uint32 = 0xff00001d
-	version1       uint32 = 0x1
-)
-
 var (
-	quicSaltOld  = []byte{0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99}
-	quicSalt     = []byte{0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a}
-	initialSuite = &CipherSuiteTLS13{
-		ID:     tls.TLS_AES_128_GCM_SHA256,
-		KeyLen: 16,
-		AEAD:   AEADAESGCMTLS13,
-		Hash:   crypto.SHA256,
-	}
 	errNotQuic        = errors.New("not quic")
 	errNotQuicInitial = errors.New("not initial packet")
+)
+
+type quicStructure struct {
+	ver         uint32
+	typeInitial byte
+	initialSalt []byte
+	labelPrefix string
+}
+
+var (
+	quicDraft29 = quicStructure{
+		ver:         0xff00001d,
+		typeInitial: 0b00,
+		initialSalt: []byte{0xaf, 0xbf, 0xec, 0x28, 0x99, 0x93, 0xd2, 0x4c, 0x9e, 0x97, 0x86, 0xf1, 0x9c, 0x61, 0x11, 0xe0, 0x43, 0x90, 0xa8, 0x99},
+		labelPrefix: "quic",
+	}
+	quicV1 = quicStructure{
+		ver:         0x1,
+		typeInitial: 0b00,
+		initialSalt: []byte{0x38, 0x76, 0x2c, 0xf7, 0xf5, 0x59, 0x34, 0xb3, 0x4d, 0x17, 0x9a, 0xe6, 0xa4, 0xc8, 0x0c, 0xad, 0xcc, 0xbb, 0x7f, 0x0a},
+		labelPrefix: "quic",
+	}
+	quicV2 = quicStructure{
+		ver:         0x6b3343cf,
+		typeInitial: 0b01,
+		initialSalt: []byte{0x0d, 0xed, 0xe3, 0xde, 0xf7, 0x00, 0xa6, 0xdb, 0x81, 0x93, 0x81, 0xbe, 0x6e, 0x26, 0x9d, 0xcb, 0xf9, 0xbd, 0x2e, 0xd9},
+		labelPrefix: "quicv2",
+	}
+
+	listQUICVersions = []*quicStructure{&quicDraft29, &quicV1, &quicV2}
 )
 
 func SniffQUIC(b []byte) (*SniffHeader, error) {
@@ -77,14 +93,17 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		}
 
 		versionNumber := binary.BigEndian.Uint32(vb)
-		if versionNumber != 0 && typeByte&0x40 == 0 {
-			return nil, errNotQuic
-		} else if versionNumber != versionDraft29 && versionNumber != version1 {
-			return nil, errNotQuic
+		var s *quicStructure
+		for _, v := range listQUICVersions {
+			if v.ver == versionNumber {
+				s = v
+				break
+			}
 		}
 
-		packetType := (typeByte & 0x30) >> 4
-		isQuicInitial := packetType == 0x0
+		if s == nil {
+			return nil, errNotQuic
+		}
 
 		var destConnID []byte
 		if l, err := buffer.ReadByte(); err != nil {
@@ -98,6 +117,9 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		} else if common.Error2(buffer.ReadBytes(int32(l))) != nil {
 			return nil, errNotQuic
 		}
+
+		packetType := (typeByte & 0x30) >> 4
+		isQuicInitial := packetType == s.typeInitial
 
 		if isQuicInitial { // Only initial packets have token, see https://datatracker.ietf.org/doc/html/rfc9000#section-17.2.2
 			tokenLen, err := readShortQuicVarint(buffer)
@@ -130,15 +152,11 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			continue
 		}
 
-		var salt []byte
-		if versionNumber == version1 {
-			salt = quicSalt
-		} else {
-			salt = quicSaltOld
-		}
+		salt := s.initialSalt
+		label := s.labelPrefix
 		initialSecret := hkdf.Extract(crypto.SHA256.New, destConnID, salt)
-		secret := hkdfExpandLabel(crypto.SHA256, initialSecret, []byte{}, "client in", crypto.SHA256.Size())
-		hpKey := hkdfExpandLabel(initialSuite.Hash, secret, []byte{}, "quic hp", initialSuite.KeyLen)
+		secret := hkdfExpandLabel(initialSecret, "client in", crypto.SHA256.Size())
+		hpKey := hkdfExpandLabel(secret, label+" hp", 16)
 		block, err := aes.NewCipher(hpKey)
 		if err != nil {
 			return nil, err
@@ -155,8 +173,8 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			b[hdrLen+i] ^= mask[i+1]
 		}
 
-		key := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic key", 16)
-		iv := hkdfExpandLabel(crypto.SHA256, secret, []byte{}, "quic iv", 12)
+		key := hkdfExpandLabel(secret, label+" key", 16)
+		iv := hkdfExpandLabel(secret, label+" iv", 12)
 		cipher := AEADAESGCMTLS13(key, iv)
 
 		nonce := cache.Extend(int32(cipher.NonceSize()))
@@ -268,18 +286,16 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 	return nil, protocol.ErrProtoNeedMoreData
 }
 
-func hkdfExpandLabel(hash crypto.Hash, secret, context []byte, label string, length int) []byte {
-	b := make([]byte, 3, 3+6+len(label)+1+len(context))
-	binary.BigEndian.PutUint16(b, uint16(length))
-	b[2] = uint8(6 + len(label))
-	b = append(b, []byte("tls13 ")...)
-	b = append(b, []byte(label)...)
-	b = b[:3+6+len(label)+1]
-	b[3+6+len(label)] = uint8(len(context))
-	b = append(b, context...)
+func hkdfExpandLabel(secret []byte, label string, length int) []byte {
+	b := make([]byte, 0, 2+1+6+len(label)+1)
+	b = binary.BigEndian.AppendUint16(b, uint16(length))
+	b = append(b, byte(6+len(label)))
+	b = append(b, "tls13 "...)
+	b = append(b, label...)
+	b = append(b, 0) // context
 
 	out := make([]byte, length)
-	n, err := hkdf.Expand(hash.New, secret, b).Read(out)
+	n, err := hkdf.Expand(crypto.SHA256.New, secret, b).Read(out)
 	if err != nil || n != length {
 		panic("quic: HKDF-Expand-Label invocation failed unexpectedly")
 	}
