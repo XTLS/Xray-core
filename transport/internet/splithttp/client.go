@@ -189,11 +189,11 @@ func (c *DefaultDialerClient) Close() error {
 
 type WaitReadCloser struct {
 	Wait chan struct{}
-	io.ReadCloser
+	rc   atomic.Pointer[io.ReadCloser]
 }
 
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
-	w.ReadCloser = rc
+	w.rc.Store(&rc)
 	defer func() {
 		if recover() != nil {
 			rc.Close()
@@ -203,21 +203,27 @@ func (w *WaitReadCloser) Set(rc io.ReadCloser) {
 }
 
 func (w *WaitReadCloser) Read(b []byte) (int, error) {
-	if w.ReadCloser == nil {
-		if <-w.Wait; w.ReadCloser == nil {
-			return 0, io.ErrClosedPipe
-		}
+	<-w.Wait
+	if rc := w.rc.Load(); rc != nil {
+		return (*rc).Read(b)
 	}
-	return w.ReadCloser.Read(b)
+	return 0, io.ErrClosedPipe
 }
 
 func (w *WaitReadCloser) Close() error {
-	if w.ReadCloser != nil {
-		return w.ReadCloser.Close()
+	select {
+	case <-w.Wait:
+		if rc := w.rc.Load(); rc != nil {
+			return (*rc).Close()
+		}
+		return nil
+	default:
 	}
 	defer func() {
-		if recover() != nil && w.ReadCloser != nil {
-			w.ReadCloser.Close()
+		if recover() != nil {
+			if rc := w.rc.Load(); rc != nil {
+				(*rc).Close()
+			}
 		}
 	}()
 	close(w.Wait)
