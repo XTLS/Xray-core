@@ -28,8 +28,8 @@ func (s SniffHeader) Domain() string {
 }
 
 var (
-	errNotQuic        = errors.New("not quic")
-	errNotQuicInitial = errors.New("not initial packet")
+	errNotQUIC        = errors.New("not quic")
+	errNotQUICInitial = errors.New("not initial packet")
 )
 
 type quicVersionSpec struct {
@@ -83,17 +83,17 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		buffer := buf.FromBytes(b)
 		typeByte, err := buffer.ReadByte()
 		if err != nil {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 
 		isLongHeader := typeByte&0x80 > 0
 		if !isLongHeader || typeByte&0x40 == 0 {
-			return nil, errNotQuicInitial
+			return nil, errNotQUICInitial
 		}
 
 		vb, err := buffer.ReadBytes(4)
 		if err != nil {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 
 		versionNumber := binary.BigEndian.Uint32(vb)
@@ -101,43 +101,43 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		if v, ok := quicVersionSpecMap[versionNumber]; ok {
 			s = v
 		} else {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 
 		var destConnID []byte
 		if l, err := buffer.ReadByte(); err != nil {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		} else if destConnID, err = buffer.ReadBytes(int32(l)); err != nil {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 
 		if l, err := buffer.ReadByte(); err != nil {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		} else if common.Error2(buffer.ReadBytes(int32(l))) != nil {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 
 		packetType := (typeByte & 0x30) >> 4
-		isQuicInitial := packetType == s.typeInitial
+		isQUICInitial := packetType == s.typeInitial
 
-		if isQuicInitial { // Only initial packets have token, see https://datatracker.ietf.org/doc/html/rfc9000#section-17.2.2
-			tokenLen, err := readShortQuicVarint(buffer)
+		if isQUICInitial { // Only initial packets have token, see https://datatracker.ietf.org/doc/html/rfc9000#section-17.2.2
+			tokenLen, err := readShortQUICVarint(buffer)
 			if err != nil || tokenLen > int32(len(b)) {
-				return nil, errNotQuic
+				return nil, errNotQUIC
 			}
 
 			if _, err = buffer.ReadBytes(tokenLen); err != nil {
-				return nil, errNotQuic
+				return nil, errNotQUIC
 			}
 		}
 
-		packetLen, err := readShortQuicVarint(buffer)
+		packetLen, err := readShortQUICVarint(buffer)
 		if err != nil {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 		// packetLen is impossible to be shorter than this
 		if packetLen < 4 {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 
 		hdrLen := len(b) - int(buffer.Len())
@@ -146,7 +146,7 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		}
 
 		restPayload := b[hdrLen+int(packetLen):]
-		if !isQuicInitial { // Skip this packet if it's not initial packet
+		if !isQUICInitial { // Skip this packet if it's not initial packet
 			b = restPayload
 			continue
 		}
@@ -161,7 +161,7 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			return nil, err
 		}
 		if len(b) < hdrLen+4+block.BlockSize() {
-			return nil, errNotQuic
+			return nil, errNotQUIC
 		}
 		cache.Clear()
 		mask := cache.Extend(int32(block.BlockSize()))
@@ -198,44 +198,44 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			case 0x00: // PADDING frame
 			case 0x01: // PING frame
 			case 0x02, 0x03: // ACK frame
-				if _, err = readShortQuicVarint(buffer); err != nil { // Field: Largest Acknowledged
+				if _, err = readShortQUICVarint(buffer); err != nil { // Field: Largest Acknowledged
 					return nil, io.ErrUnexpectedEOF
 				}
-				if _, err = readShortQuicVarint(buffer); err != nil { // Field: ACK Delay
+				if _, err = readShortQUICVarint(buffer); err != nil { // Field: ACK Delay
 					return nil, io.ErrUnexpectedEOF
 				}
-				ackRangeCount, err := readShortQuicVarint(buffer) // Field: ACK Range Count
+				ackRangeCount, err := readShortQUICVarint(buffer) // Field: ACK Range Count
 				if err != nil {
 					return nil, io.ErrUnexpectedEOF
 				}
-				if _, err = readShortQuicVarint(buffer); err != nil { // Field: First ACK Range
+				if _, err = readShortQUICVarint(buffer); err != nil { // Field: First ACK Range
 					return nil, io.ErrUnexpectedEOF
 				}
 				for i := 0; i < int(ackRangeCount); i++ { // Field: ACK Range
-					if _, err = readShortQuicVarint(buffer); err != nil { // Field: ACK Range -> Gap
+					if _, err = readShortQUICVarint(buffer); err != nil { // Field: ACK Range -> Gap
 						return nil, io.ErrUnexpectedEOF
 					}
-					if _, err = readShortQuicVarint(buffer); err != nil { // Field: ACK Range -> ACK Range Length
+					if _, err = readShortQUICVarint(buffer); err != nil { // Field: ACK Range -> ACK Range Length
 						return nil, io.ErrUnexpectedEOF
 					}
 				}
 				if frameType == 0x03 {
-					if _, err = readShortQuicVarint(buffer); err != nil { // Field: ECN Counts -> ECT0 Count
+					if _, err = readShortQUICVarint(buffer); err != nil { // Field: ECN Counts -> ECT0 Count
 						return nil, io.ErrUnexpectedEOF
 					}
-					if _, err = readShortQuicVarint(buffer); err != nil { // Field: ECN Counts -> ECT1 Count
+					if _, err = readShortQUICVarint(buffer); err != nil { // Field: ECN Counts -> ECT1 Count
 						return nil, io.ErrUnexpectedEOF
 					}
-					if _, err = readShortQuicVarint(buffer); err != nil { //nolint:misspell // Field: ECN Counts -> ECT-CE Count
+					if _, err = readShortQUICVarint(buffer); err != nil { //nolint:misspell // Field: ECN Counts -> ECT-CE Count
 						return nil, io.ErrUnexpectedEOF
 					}
 				}
 			case 0x06: // CRYPTO frame, we will use this frame
-				offset, err := readShortQuicVarint(buffer) // Field: Offset
+				offset, err := readShortQUICVarint(buffer) // Field: Offset
 				if err != nil {
 					return nil, io.ErrUnexpectedEOF
 				}
-				length, err := readShortQuicVarint(buffer) // Field: Length
+				length, err := readShortQUICVarint(buffer) // Field: Length
 				if err != nil || length > buffer.Len() {
 					return nil, io.ErrUnexpectedEOF
 				}
@@ -251,13 +251,13 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 					return nil, io.ErrUnexpectedEOF
 				}
 			case 0x1c: // CONNECTION_CLOSE frame, only 0x1c is permitted in initial packet
-				if _, err = readShortQuicVarint(buffer); err != nil { // Field: Error Code
+				if _, err = readShortQUICVarint(buffer); err != nil { // Field: Error Code
 					return nil, io.ErrUnexpectedEOF
 				}
-				if _, err = readShortQuicVarint(buffer); err != nil { // Field: Frame Type
+				if _, err = readShortQUICVarint(buffer); err != nil { // Field: Frame Type
 					return nil, io.ErrUnexpectedEOF
 				}
-				length, err := readShortQuicVarint(buffer) // Field: Reason Phrase Length
+				length, err := readShortQUICVarint(buffer) // Field: Reason Phrase Length
 				if err != nil {
 					return nil, io.ErrUnexpectedEOF
 				}
@@ -267,7 +267,7 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			default:
 				// Only above frame types are permitted in initial packet.
 				// See https://www.rfc-editor.org/rfc/rfc9000.html#section-17.2.2-8
-				return nil, errNotQuicInitial
+				return nil, errNotQUICInitial
 			}
 		}
 
@@ -301,17 +301,17 @@ func hkdfExpandLabel(secret []byte, label string, length int) []byte {
 	return out
 }
 
-// readShortQuicVarint wraps quicvarint.Read with a max limit for length related fields.
+// readShortQUICVarint wraps quicvarint.Read with a max limit for length related fields.
 // we only handle QUIC Initial so these numbers should not exceed 65535
 // returns int32 to reduce type conversion
-func readShortQuicVarint(reader io.ByteReader) (int32, error) {
+func readShortQUICVarint(reader io.ByteReader) (int32, error) {
 	v, err := quicvarint.Read(reader)
 	if err != nil {
 		return 0, err
 	}
 	if v > 65535 {
 		// not used(
-		return 0, errNotQuicInitial
+		return 0, errNotQUICInitial
 	}
 	return int32(v), nil
 }
