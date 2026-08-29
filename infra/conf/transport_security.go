@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
@@ -59,7 +60,7 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 	if c.Target != nil {
 		c.Dest = c.Target
 	}
-	if c.Dest != nil {
+	if c.Dest != nil && !bytes.Equal(c.Dest, []byte("null")){
 		var i uint16
 		var s string
 		if err = json.Unmarshal(c.Dest, &i); err == nil {
