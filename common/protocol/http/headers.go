@@ -65,13 +65,13 @@ func RemoveHopByHopHeaders(header http.Header) {
 // ParseHost splits host and port from a raw string. Default port is used when raw string doesn't contain port.
 func ParseHost(rawHost string, defaultPort net.Port) (net.Destination, error) {
 	port := defaultPort
+
 	host, rawPort, err := net.SplitHostPort(rawHost)
 	if err != nil {
-		if addrError, ok := err.(*net.AddrError); ok && strings.Contains(addrError.Err, "missing port") {
-			host = rawHost
-		} else {
+		if addrError, ok := err.(*net.AddrError); !ok || !strings.Contains(addrError.Err, "missing port") {
 			return net.Destination{}, err
 		}
+		host = rawHost
 	} else if len(rawPort) > 0 {
 		intPort, err := strconv.Atoi(rawPort)
 		if err != nil {
@@ -79,6 +79,8 @@ func ParseHost(rawHost string, defaultPort net.Port) (net.Destination, error) {
 		}
 		port = net.Port(intPort)
 	}
+
+	host = strings.ToLower(strings.TrimRight(host, "."))
 
 	return net.TCPDestination(net.ParseAddress(host), port), nil
 }

@@ -86,6 +86,51 @@ first_name=John&last_name=Doe&action=Submit`,
 			domain: "",
 			err:    true,
 		},
+		{
+			input:  "GET http://example.com HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "example.com",
+		},
+		{
+			input:  "GET http://example.com/some/path HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "example.com",
+		},
+		{
+			input:  "GET http://example.com?x=1 HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "example.com",
+		},
+		{
+			input:  "GET http://example.com#frag HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "example.com",
+		},
+		{
+			input:  "GET http://example.com:443/path HTTP/1.1\r\nContent-Type: text/html\r\n\r\n",
+			domain: "example.com",
+		},
+		{
+			input:  "CONNECT example.com:443 HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "example.com",
+		},
+		{
+			input:  "OPTIONS * HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "test.example.com",
+		},
+		{
+			input:  "get /path HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "",
+			err:    true,
+		},
+		{
+			input:  "GET / HTTP/1.1\r\nHost: [1EeT:S2:A2:tTt::1]:8080\r\n\r\n",
+			domain: "1eet:s2:a2:ttt::1",
+		},
+		{
+			input:  "GET / HTTP/1.1\r\nHost: example.com.\r\n\r\n",
+			domain: "example.com",
+		},
+		{
+			input:  "GET http://chicken:leg@example.com/path HTTP/1.1\r\nHost: test.example.com\r\n\r\n",
+			domain: "example.com",
+		},
 	}
 
 	for _, test := range cases {
@@ -97,6 +142,7 @@ first_name=John&last_name=Doe&action=Submit`,
 		} else {
 			if err != nil {
 				t.Errorf("Expect no error but actually %s in test %v", err.Error(), test)
+				continue
 			}
 			if header.Domain() != test.domain {
 				t.Error("expected domain ", test.domain, " but got ", header.Domain())
