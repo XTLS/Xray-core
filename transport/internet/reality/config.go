@@ -2,13 +2,14 @@ package reality
 
 import (
 	"context"
+	"crypto/mldsa"
 	"io"
 	"net"
 	"os"
 	"time"
 
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/xtls/reality"
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -34,7 +35,7 @@ func (c *Config) GetREALITYConfig() *reality.Config {
 		KeyLogWriter: KeyLogWriterFromConfig(c),
 	}
 	if c.Mldsa65Seed != nil {
-		_, key := mldsa65.NewKeyFromSeed((*[32]byte)(c.Mldsa65Seed))
+		key := common.Must2(mldsa.NewPrivateKey(mldsa.MLDSA65(), c.Mldsa65Seed))
 		config.Mldsa65Key = key.Bytes()
 	}
 	if c.LimitFallbackUpload != nil {
