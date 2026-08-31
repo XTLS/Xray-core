@@ -1,13 +1,16 @@
 package http
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
+	"unsafe"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 )
 
@@ -39,79 +42,67 @@ func (h *SniffHeader) Domain() string {
 }
 
 var (
-	methods = [...]string{"get", "post", "head", "put", "delete", "options", "connect"}
-
-	errNotHTTPMethod = errors.New("not an HTTP method")
+	validMethods = map[string]bool{}
+	errNotHTTP   = errors.New("not an HTTP request")
 )
 
-func beginWithHTTPMethod(b []byte) error {
-	for _, m := range &methods {
-		if len(b) >= len(m) && strings.EqualFold(string(b[:len(m)]), m) {
-			return nil
-		}
-
-		if len(b) < len(m) {
-			return common.ErrNoClue
-		}
+func init() {
+	// https://www.iana.org/assignments/http-methods
+	methods := []string{
+		"ACL", "BASELINE-CONTROL", "BIND", "CHECKIN", "CHECKOUT",
+		"CONNECT", "COPY", "DELETE", "GET", "HEAD",
+		"LABEL", "LINK", "LOCK", "MERGE", "MKACTIVITY",
+		"MKCALENDAR", "MKCOL", "MKREDIRECTREF", "MKWORKSPACE", "MOVE",
+		"OPTIONS", "ORDERPATCH", "PATCH", "POST", "PRI",
+		"PROPFIND", "PROPPATCH", "PUT", "QUERY", "REBIND",
+		"REPORT", "SEARCH", "TRACE", "UNBIND", "UNCHECKOUT",
+		"UNLINK", "UNLOCK", "UPDATE", "UPDATEREDIRECTREF", "VERSION-CONTROL",
 	}
+	for _, m := range methods {
+		validMethods[m] = true
+	}
+}
 
-	return errNotHTTPMethod
+func isValidHTTPMethod(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	idx := bytes.IndexByte(b, ' ')
+	if idx == -1 {
+		return false
+	}
+	method := unsafe.String(unsafe.SliceData(b), idx)
+	return validMethods[method]
 }
 
 func SniffHTTP(b []byte, c context.Context) (*SniffHeader, error) {
+	if !isValidHTTPMethod(b) {
+		return nil, errNotHTTP
+	}
 	content := session.ContentFromContext(c)
-	ShouldSniffAttr := true
-	// If content.Attributes have information, that means it comes from HTTP inbound PlainHTTP mode.
-	// It will set attributes, so skip it.
-	if content == nil || len(content.Attributes) != 0 {
-		ShouldSniffAttr = false
+	r, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(b)))
+	if err != nil {
+		if err == io.ErrUnexpectedEOF {
+			return nil, common.ErrNoClue
+		}
+		return nil, errNotHTTP
 	}
-	if err := beginWithHTTPMethod(b); err != nil {
-		return nil, err
+	if r.Host == "" {
+		return nil, common.ErrNoClue
 	}
-
 	sh := &SniffHeader{
 		version: HTTP1,
+		host:    r.Host,
+	}
+	// If content.Attributes have information, that means it comes from HTTP inbound PlainHTTP mode.
+	// It will set attributes, so skip it.
+	if content != nil && len(content.Attributes) == 0 {
+		for key, h := range r.Header {
+			content.Attributes[key] = strings.Join(h, ",")
+		}
+		content.Attributes[":method"] = r.Method
+		content.Attributes[":path"] = r.URL.Path
 	}
 
-	headers := bytes.Split(b, []byte{'\n'})
-	for i := 1; i < len(headers); i++ {
-		header := headers[i]
-		if len(header) == 0 {
-			break
-		}
-		parts := bytes.SplitN(header, []byte{':'}, 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.ToLower(string(parts[0]))
-		value := string(bytes.TrimSpace(parts[1]))
-		if ShouldSniffAttr {
-			content.SetAttribute(key, value) // Put header in attribute
-		}
-		if key == "host" {
-			rawHost := strings.ToLower(value)
-			dest, err := ParseHost(rawHost, net.Port(80))
-			if err != nil {
-				return nil, err
-			}
-			sh.host = dest.Address.String()
-		}
-	}
-	// Parse request line
-	// Request line is like this
-	// "GET /homo/114514 HTTP/1.1"
-	if len(headers) > 0 && ShouldSniffAttr {
-		RequestLineParts := bytes.Split(headers[0], []byte{' '})
-		if len(RequestLineParts) == 3 {
-			content.SetAttribute(":method", string(RequestLineParts[0]))
-			content.SetAttribute(":path", string(RequestLineParts[1]))
-		}
-	}
-
-	if len(sh.host) > 0 {
-		return sh, nil
-	}
-
-	return nil, common.ErrNoClue
+	return sh, nil
 }
