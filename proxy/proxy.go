@@ -13,6 +13,8 @@ import (
 	"math/big"
 	"runtime"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -102,6 +104,11 @@ type GetOutbound interface {
 // TrafficState is used to track uplink and downlink of one connection
 // It is used by XTLS to determine if switch to raw copy mode, It is used by Vision to calculate padding
 type TrafficState struct {
+	// TLS classification is shared by the concurrent Vision reader and writer.
+	// Keep the mutable phase serialized and publish an immutable final snapshot
+	// so established connections avoid a mutex on the data path.
+	filterAccess           sync.Mutex
+	finalTLSState          atomic.Pointer[trafficStateSnapshot]
 	UserUUID               []byte
 	NumberOfPacketToFilter int
 	EnableXtls             bool
@@ -111,6 +118,55 @@ type TrafficState struct {
 	RemainingServerHello   int32
 	Inbound                InboundState
 	Outbound               OutboundState
+}
+
+type trafficStateSnapshot struct {
+	numberOfPacketToFilter int
+	enableXtls             bool
+	isTLS12orAbove         bool
+	isTLS                  bool
+}
+
+func (s *TrafficState) snapshotLocked() trafficStateSnapshot {
+	return trafficStateSnapshot{
+		numberOfPacketToFilter: s.NumberOfPacketToFilter,
+		enableXtls:             s.EnableXtls,
+		isTLS12orAbove:         s.IsTLS12orAbove,
+		isTLS:                  s.IsTLS,
+	}
+}
+
+func (s *TrafficState) publishFinalTLSStateLocked(snapshot trafficStateSnapshot) {
+	if snapshot.numberOfPacketToFilter <= 0 {
+		s.finalTLSState.Store(&snapshot)
+	} else {
+		s.finalTLSState.Store(nil)
+	}
+}
+
+func (s *TrafficState) isFilteringTLS() bool {
+	if s.finalTLSState.Load() != nil {
+		return false
+	}
+	s.filterAccess.Lock()
+	defer s.filterAccess.Unlock()
+	snapshot := s.snapshotLocked()
+	s.publishFinalTLSStateLocked(snapshot)
+	return snapshot.numberOfPacketToFilter > 0
+}
+
+func (s *TrafficState) filterTLSIfNeeded(buffer buf.MultiBuffer, ctx context.Context) trafficStateSnapshot {
+	if snapshot := s.finalTLSState.Load(); snapshot != nil {
+		return *snapshot
+	}
+	s.filterAccess.Lock()
+	defer s.filterAccess.Unlock()
+	if s.NumberOfPacketToFilter > 0 {
+		xtlsFilterTLS(buffer, s, ctx)
+	}
+	snapshot := s.snapshotLocked()
+	s.publishFinalTLSStateLocked(snapshot)
+	return snapshot
 }
 
 type InboundState struct {
@@ -232,7 +288,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		return buffer, err
 	}
 
-	if *withinPaddingBuffers || w.trafficState.NumberOfPacketToFilter > 0 {
+	if *withinPaddingBuffers || w.trafficState.isFilteringTLS() {
 		mb2 := make(buf.MultiBuffer, 0, len(buffer))
 		for _, b := range buffer {
 			newbuffer := XtlsUnpadding(b, w.trafficState, w.isUplink, w.ctx)
@@ -252,9 +308,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			errors.LogDebug(w.ctx, "XtlsRead unknown command ", *currentCommand, buffer.Len())
 		}
 	}
-	if w.trafficState.NumberOfPacketToFilter > 0 {
-		XtlsFilterTls(buffer, w.trafficState, w.ctx)
-	}
+	w.trafficState.filterTLSIfNeeded(buffer, w.ctx)
 
 	if *switchToDirectCopy {
 		// XTLS Vision processes TLS-like conn's input and rawInput
@@ -349,9 +403,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		w.directWriteCounter.Add(int64(mb.Len()))
 	}
 
-	if w.trafficState.NumberOfPacketToFilter > 0 {
-		XtlsFilterTls(mb, w.trafficState, w.ctx)
-	}
+	tlsState := w.trafficState.filterTLSIfNeeded(mb, w.ctx)
 
 	if *isPadding {
 		if len(mb) == 1 && mb[0] == nil {
@@ -359,16 +411,16 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		} else {
 			isComplete := IsCompleteRecord(mb)
 			mb = ReshapeMultiBuffer(w.ctx, mb)
-			longPadding := w.trafficState.IsTLS
+			longPadding := tlsState.isTLS
 			for i, b := range mb {
-				if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
-					if w.trafficState.EnableXtls {
+				if tlsState.isTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
+					if tlsState.enableXtls {
 						*switchToDirectCopy = true
 					}
 					var command byte = CommandPaddingContinue
 					if i == len(mb)-1 {
 						command = CommandPaddingEnd
-						if w.trafficState.EnableXtls {
+						if tlsState.enableXtls {
 							command = CommandPaddingDirect
 						}
 					}
@@ -376,7 +428,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 					*isPadding = false // padding going to end
 					longPadding = false
 					continue
-				} else if !w.trafficState.IsTLS12orAbove && w.trafficState.NumberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
+				} else if !tlsState.isTLS12orAbove && tlsState.numberOfPacketToFilter <= 1 { // For compatibility with earlier vision receiver, we finish padding 1 packet early
 					*isPadding = false
 					mb[i] = XtlsPadding(b, CommandPaddingEnd, &w.writeOnceUserUUID, longPadding, w.ctx, w.testseed)
 					break
@@ -384,7 +436,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				var command byte = CommandPaddingContinue
 				if i == len(mb)-1 && !*isPadding {
 					command = CommandPaddingEnd
-					if w.trafficState.EnableXtls {
+					if tlsState.enableXtls {
 						command = CommandPaddingDirect
 					}
 				}
@@ -617,6 +669,13 @@ func XtlsUnpadding(b *buf.Buffer, s *TrafficState, isUplink bool, ctx context.Co
 
 // XtlsFilterTls filter and recognize tls 1.3 and other info
 func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx context.Context) {
+	trafficState.filterAccess.Lock()
+	defer trafficState.filterAccess.Unlock()
+	xtlsFilterTLS(buffer, trafficState, ctx)
+	trafficState.publishFinalTLSStateLocked(trafficState.snapshotLocked())
+}
+
+func xtlsFilterTLS(buffer buf.MultiBuffer, trafficState *TrafficState, ctx context.Context) {
 	for _, b := range buffer {
 		if b == nil {
 			continue
