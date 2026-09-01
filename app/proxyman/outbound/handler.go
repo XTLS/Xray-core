@@ -194,7 +194,6 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 				common.Interrupt(link.Reader)
 				return
 			}
-
 		} else {
 			unchangedDomain := ob.Target.Address.Domain()
 			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
@@ -275,13 +274,6 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	conn = h.getStatCouterConnection(conn)
-	outbounds := session.OutboundsFromContext(ctx)
-	if outbounds != nil {
-		ob := outbounds[len(outbounds)-1]
-		ob.Conn = conn
-	} else {
-		// for Vision's pre-connect
-	}
 	return conn, err
 }
 
