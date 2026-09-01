@@ -90,11 +90,6 @@ message QuicParams {
   bool disable_stateless_reset = 17;    
 }
 
-message ProxyConfig {
-  string tag = 1;
-  bool transportLayerProxy = 2;
-}
-
 message CustomSockopt {
   string system = 1;
   string network = 2;

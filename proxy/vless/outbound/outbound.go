@@ -202,8 +202,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	defer conn.Close()
 
-	ob.Conn = conn // for Vision's pre-connect
-
 	iConn := stat.TryUnwrapStatsConn(conn)
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
