@@ -57,3 +57,32 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 func NewStreamReader(reader *buf.BufferedReader) buf.Reader {
 	return crypto.NewChunkStreamReaderWithChunkCount(crypto.PlainChunkSizeParser{}, reader, 1)
 }
+
+func CopyChunk(reader *buf.BufferedReader, writer buf.Writer) error {
+	size, err := serial.ReadUint16(reader)
+	if err != nil {
+		return err
+	}
+	var writeErr error
+	for size > 0 {
+		mb, readErr := reader.ReadAtMost(int32(size))
+		if !mb.IsEmpty() {
+			size -= uint16(mb.Len())
+			if writeErr == nil {
+				if err := writer.WriteMultiBuffer(mb); err != nil {
+					writeErr = err
+				}
+			} else {
+				buf.ReleaseMulti(mb)
+			}
+			continue
+		}
+		if readErr != nil {
+			return buf.NewReadError(readErr)
+		}
+	}
+	if writeErr != nil {
+		return buf.NewWriteError(writeErr)
+	}
+	return nil
+}
