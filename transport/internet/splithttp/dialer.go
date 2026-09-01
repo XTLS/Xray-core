@@ -175,6 +175,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			KeepAlivePeriod:                time.Duration(quicParams.KeepAlivePeriod) * time.Second,
 			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
 			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
+			ChromeParrot:                   !quicParams.DisableChromeParrot,
 		}
 		if quicParams.MaxIdleTimeout == 0 {
 			quicConfig.MaxIdleTimeout = net.ConnIdleTimeout
@@ -255,18 +256,25 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					pktConn = newConn
 				}
 
-				conn, err := quic.DialEarly(ctx, pktConn, udpAddr, tlsCfg, cfg)
+				tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
+
+				if !quicParams.DisableChromeParrot {
+					tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
+					tlsCfg.GetCertificate = nil
+				}
+
+				conn, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 				if err != nil {
 					return nil, err
 				}
-				context.AfterFunc(conn.Context(), func() { pktConn.Close() })
+				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
 
 				switch quicParams.Congestion {
 				case "reno":
 				case "", "bbr":
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				case "force-brutal":
-					congestion.UseBrutal(conn, quicParams.BrutalUp)
+					congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)
 				default:
 					panic(quicParams.Congestion)
 				}
@@ -595,11 +603,12 @@ func (w uploadWriter) Write(b []byte) (int, error) {
 
 	var writed int
 	for _, buff := range buffer.MultiBuffer {
+		n := int(buff.Len())
 		err := w.WriteMultiBuffer(buf.MultiBuffer{buff})
 		if err != nil {
 			return writed, err
 		}
-		writed += int(buff.Len())
+		writed += n
 	}
 	return writed, nil
 }

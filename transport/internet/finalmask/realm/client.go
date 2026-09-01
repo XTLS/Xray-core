@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pion/stun/v3"
@@ -15,35 +16,67 @@ import (
 )
 
 type realmConnClient struct {
+	wg     sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
 	net.PacketConn
 	peer *net.UDPAddr
 
 	realmClient   *Client
 	realmID       string
 	stunServers   []string
+	family        Family
+	mapper        *PortMapper
 	stunTimeout   time.Duration
 	punchTimeout  time.Duration
 	punchInterval time.Duration
 }
 
 func NewConnClient(config *Config, raw net.PacketConn) (net.PacketConn, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	family := Family_Dual
+	switch config.IPMode {
+	case "dual":
+	case "v4":
+		family = Family_V4
+	case "v6":
+		family = Family_V6
+	}
+
+	var mapper *PortMapper
+	if config.PortMapping != nil && config.PortMapping.Enabled {
+		var err error
+		start := time.Now()
+		mapper, err = NewPortMapper(context.Background(), raw.LocalAddr().(*net.UDPAddr).Port, PortMapConfig{Timeout: time.Duration(config.PortMapping.Timeout) * time.Second, Lifetime: time.Duration(config.PortMapping.Lifetime) * time.Second})
+		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "[realm] [port mapping] [", raw.LocalAddr().(*net.UDPAddr).Port, "] init failed after ", time.Since(start))
+		} else {
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] gateway ", mapper.GatewayType(), ", external ", mapper.ExternalAddr())
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] init success with ", time.Since(start))
+		}
+	}
+
 	conn := &realmConnClient{
+		ctx:        ctx,
+		cancel:     cancel,
 		PacketConn: raw,
 
 		realmClient:   NewClient(config.Scheme, config.Host, config.Port, config.Token, config.TlsConfig),
 		realmID:       config.ID,
 		stunServers:   config.StunServers,
+		family:        family,
+		mapper:        mapper,
 		stunTimeout:   defaultSTUNTimeout,
 		punchTimeout:  defaultPunchTimeout,
 		punchInterval: defaultPunchInterval,
 	}
-
 	return conn.getpeer()
 }
 
 func (c *realmConnClient) getpeer() (net.PacketConn, error) {
 	start := time.Now()
-	servers := resolveSTUNServers(c.PacketConn.LocalAddr().(*net.UDPAddr).IP, c.stunServers)
+	servers := resolveSTUNServers(c.PacketConn.LocalAddr().(*net.UDPAddr).IP, c.stunServers, c.family)
 	errors.LogDebug(context.Background(), "[realm] update stun servers ", servers, " with ", time.Since(start))
 	if len(servers) == 0 {
 		return nil, errors.New("empty locals")
@@ -70,7 +103,7 @@ func (c *realmConnClient) getpeer() (net.PacketConn, error) {
 
 	peers, _ := parseAddrPorts(resp.Addresses)
 	errors.LogDebug(context.Background(), "[realm] update peers ", peers)
-	filteredPeers, seen := candidatePunchAddrs(locals, peers)
+	filteredPeers, seen := candidatePunchAddrs(locals, peers, c.family)
 	errors.LogDebug(context.Background(), "[realm] filtered peers ", filteredPeers)
 	expandedPeers := expandSymmetricNATCandidates(filteredPeers, seen)
 	errors.LogDebug(context.Background(), "[realm] expanded peers ", expandedPeers)
@@ -85,6 +118,11 @@ func (c *realmConnClient) getpeer() (net.PacketConn, error) {
 		return nil, errors.New("punch fail").Base(err)
 	}
 	errors.LogDebug(context.Background(), "[realm] punch peer ", peer, " with ", time.Since(start))
+
+	if c.mapper != nil {
+		c.wg.Add(1)
+		go portMapLoop(c.ctx, c.mapper, c.wg.Done)
+	}
 
 	c.peer = peer
 	return c, nil
@@ -116,10 +154,12 @@ func (c *realmConnClient) discover(servers []*net.UDPAddr) []netip.AddrPort {
 		}
 	}
 	c.PacketConn.SetReadDeadline(time.Time{})
+	if c.mapper != nil {
+		results = insertAddr(results, c.mapper.ExternalAddr())
+	}
 	slices.SortFunc(results, func(a, b netip.AddrPort) int {
 		return strings.Compare(a.String(), b.String())
 	})
-
 	return results
 }
 
@@ -168,4 +208,49 @@ func (c *realmConnClient) punch(meta PunchMetadata, peers []netip.AddrPort) (*ne
 
 func (c *realmConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	return c.PacketConn.WriteTo(p, c.peer)
+}
+
+func (c *realmConnClient) Close() error {
+	// Sadly, closing the core does not first close the sockets created for outbound connections
+	c.cancel()
+	c.wg.Wait()
+	return nil
+}
+
+func portMapLoop(ctx context.Context, mapper *PortMapper, done func()) {
+	defer func() {
+		err := mapper.Close()
+		done()
+		errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] removed with ", err)
+	}()
+	interval := mapper.Lifetime() / 2
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	failing := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			changed, err := mapper.Renew(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				if !failing {
+					errors.LogError(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] renewal failed")
+					failing = true
+				}
+				continue
+			}
+			errors.LogDebug(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] external ", mapper.ExternalAddr(), ", changed ", changed)
+			if failing {
+				errors.LogError(context.Background(), "[realm] [port mapping] [", mapper.InternalPort(), "] recovered")
+				failing = false
+			}
+		}
+	}
 }

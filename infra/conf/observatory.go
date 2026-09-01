@@ -23,7 +23,7 @@ func (o *ObservatoryConfig) Build() (proto.Message, error) {
 type BurstObservatoryConfig struct {
 	SubjectSelector []string `json:"subjectSelector"`
 	// health check settings
-	HealthCheck *healthCheckSettings `json:"pingConfig,omitempty"`
+	HealthCheck *HealthCheckSettings `json:"pingConfig,omitempty"`
 }
 
 func (b BurstObservatoryConfig) Build() (proto.Message, error) {

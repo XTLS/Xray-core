@@ -450,8 +450,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
 	if c.Xmux == (XmuxConfig{}) {
-		c.Xmux.MaxConnections.From = 6
-		c.Xmux.MaxConnections.To = 6
+		c.Xmux.MaxConnections.From = 3
+		c.Xmux.MaxConnections.To = 3
 		c.Xmux.HMaxRequestTimes.From = 600
 		c.Xmux.HMaxRequestTimes.To = 900
 		c.Xmux.HMaxReusableSecs.From = 1800
@@ -751,6 +751,7 @@ type Masquerade struct {
 
 	Url         string `json:"url"`
 	RewriteHost bool   `json:"rewriteHost"`
+	XForwarded  bool   `json:"xForwarded"`
 	Insecure    bool   `json:"insecure"`
 
 	Content    string            `json:"content"`
@@ -791,6 +792,7 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	config.MasqFile = c.Masquerade.Dir
 	config.MasqUrl = c.Masquerade.Url
 	config.MasqUrlRewriteHost = c.Masquerade.RewriteHost
+	config.MasqUrlXForwarded = c.Masquerade.XForwarded
 	config.MasqUrlInsecure = c.Masquerade.Insecure
 	config.MasqString = c.Masquerade.Content
 	config.MasqStringHeaders = c.Masquerade.Headers

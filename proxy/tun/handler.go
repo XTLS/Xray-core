@@ -65,7 +65,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	if len(t.tag) > 0 && pm.ForSystem().Stats.InboundUplink {
 		statsManager := core.MustFromContext(ctx).GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "inbound>>>" + t.tag + ">>>traffic>>>uplink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			t.uplinkCounter = c
 		}
@@ -73,7 +73,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	if len(t.tag) > 0 && pm.ForSystem().Stats.InboundDownlink {
 		statsManager := core.MustFromContext(ctx).GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "inbound>>>" + t.tag + ">>>traffic>>>downlink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			t.downlinkCounter = c
 		}

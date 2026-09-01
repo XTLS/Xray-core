@@ -285,10 +285,11 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			}
 
 			config.QuicParams = &internet.QuicParams{
-				Congestion: c.FinalMask.QuicParams.Congestion,
-				BbrProfile: profile,
-				BrutalUp:   up,
-				BrutalDown: down,
+				Congestion:                    c.FinalMask.QuicParams.Congestion,
+				BbrProfile:                    profile,
+				BrutalUp:                      up,
+				BrutalDown:                    down,
+				BrutalDisableLossCompensation: c.FinalMask.QuicParams.BrutalDisableLossCompensation,
 				UdpHop: &internet.UdpHop{
 					Ports:       c.FinalMask.QuicParams.UdpHop.PortList.Build().Ports(),
 					IntervalMin: int64(c.FinalMask.QuicParams.UdpHop.Interval.From),
@@ -301,7 +302,10 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 				MaxIdleTimeout:          c.FinalMask.QuicParams.MaxIdleTimeout,
 				KeepAlivePeriod:         c.FinalMask.QuicParams.KeepAlivePeriod,
 				DisablePathMtuDiscovery: c.FinalMask.QuicParams.DisablePathMTUDiscovery,
+				DisableChromeParrot:     c.FinalMask.QuicParams.DisableChromeParrot,
+				DisableGSO:              c.FinalMask.QuicParams.DisableGSO,
 				MaxIncomingStreams:      c.FinalMask.QuicParams.MaxIncomingStreams,
+				DisableStatelessReset:   c.FinalMask.QuicParams.DisableStatelessReset,
 			}
 		}
 	}

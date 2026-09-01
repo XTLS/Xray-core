@@ -248,7 +248,7 @@ var (
 	errTimeout                      = errors.New("i/o timeout")
 )
 
-func (net *Net) LookupHost(host string) (addrs []string, err error) {
+func (net *Net) LookupHost(host string) (addrs []net.IP, ttl uint32, err error) {
 	return net.LookupContextHost(context.Background(), host)
 }
 
@@ -567,9 +567,9 @@ func (tnet *Net) tryOneName(ctx context.Context, name string, qtype dnsmessage.T
 	return dnsmessage.Parser{}, "", lastErr
 }
 
-func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, error) {
+func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]net.IP, uint32, error) {
 	if host == "" || (!tnet.hasV6 && !tnet.hasV4) {
-		return nil, &net.DNSError{Err: errNoSuchHost.Error(), Name: host, IsNotFound: true}
+		return nil, 0, &net.DNSError{Err: errNoSuchHost.Error(), Name: host, IsNotFound: true}
 	}
 	zlen := len(host)
 	if strings.IndexByte(host, ':') != -1 {
@@ -578,11 +578,11 @@ func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, 
 		}
 	}
 	if ip, err := netip.ParseAddr(host[:zlen]); err == nil {
-		return []string{ip.String()}, nil
+		return []net.IP{ip.AsSlice()}, 0, nil
 	}
 
 	if !isDomainName(host) {
-		return nil, &net.DNSError{Err: errNoSuchHost.Error(), Name: host, IsNotFound: true}
+		return nil, 0, &net.DNSError{Err: errNoSuchHost.Error(), Name: host, IsNotFound: true}
 	}
 	type result struct {
 		p      dnsmessage.Parser
@@ -611,6 +611,7 @@ func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, 
 			lane <- result{p, server, err}
 		}()
 	}
+	ttl := uint32(300)
 	for l := 0; l < lanes; l++ {
 		result := <-lane
 		if result.error != nil {
@@ -644,6 +645,7 @@ func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, 
 					}
 					break loop
 				}
+				ttl = min(ttl, h.TTL)
 				addrsV4 = append(addrsV4, netip.AddrFrom4(a.A))
 
 			case dnsmessage.TypeAAAA:
@@ -656,6 +658,7 @@ func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, 
 					}
 					break loop
 				}
+				ttl = min(ttl, h.TTL)
 				addrsV6 = append(addrsV6, netip.AddrFrom16(aaaa.AAAA))
 
 			default:
@@ -680,11 +683,11 @@ func (tnet *Net) LookupContextHost(ctx context.Context, host string) ([]string, 
 	}
 
 	if len(addrs) == 0 && lastErr != nil {
-		return nil, lastErr
+		return nil, 0, lastErr
 	}
-	saddrs := make([]string, 0, len(addrs))
+	ips := make([]net.IP, 0, len(addrs))
 	for _, ip := range addrs {
-		saddrs = append(saddrs, ip.String())
+		ips = append(ips, ip.AsSlice())
 	}
-	return saddrs, nil
+	return ips, ttl, nil
 }
