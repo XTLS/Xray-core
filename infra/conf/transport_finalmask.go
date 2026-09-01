@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
+	"github.com/xtls/xray-core/transport/internet/finalmask/rawpacket"
 	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
@@ -70,6 +71,7 @@ var (
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
+		"rawpacket":     func() interface{} { return new(RawpacketMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
 		"xmc":           func() interface{} { return new(XMC) },
 	}, "type", "settings")
@@ -229,6 +231,55 @@ func (c *HeaderCustomTCP) Build() (proto.Message, error) {
 		Servers: servers,
 		Errors:  errors,
 	}, nil
+}
+
+type RawpacketMask struct {
+	Mode          string   `json:"mode"`
+	RemoteAddress string   `json:"remoteAddress"`
+	RemotePort    uint16   `json:"remotePort"`
+	RecvPort      uint16   `json:"recvPort"`
+	SpoofIPs      []string `json:"spoofIPs"`
+	Protocols     []string `json:"protocols"`
+	MTU           uint16   `json:"mtu"`
+	Target        string   `json:"target"`
+	TTL           uint8    `json:"ttl"`
+	SendTransport string   `json:"sendTransport"`
+	RecvTransport string   `json:"recvTransport"`
+	RelayAddress  string   `json:"relayAddress"`
+	RelayPort     uint16   `json:"relayPort"`
+	ClientIP      string   `json:"clientIP"`
+	ClientPort    uint16   `json:"clientPort"`
+	PeerSpoofIP   string   `json:"peerSpoofIP"`
+	SpoofPort     uint16   `json:"spoofPort"`
+	Auth          string   `json:"auth"`
+	SuppressRst   bool     `json:"suppressRst"`
+	Masquerade    string   `json:"masquerade"`
+}
+
+func (c *RawpacketMask) Build() (proto.Message, error) {
+	config := &rawpacket.Config{
+		Mode:          c.Mode,
+		RemoteAddress: c.RemoteAddress,
+		RemotePort:    uint32(c.RemotePort),
+		RecvPort:      uint32(c.RecvPort),
+		SpoofIps:      c.SpoofIPs,
+		Protocols:     c.Protocols,
+		Mtu:           uint32(c.MTU),
+		Target:        c.Target,
+		Ttl:           uint32(c.TTL),
+		SendTransport: c.SendTransport,
+		RecvTransport: c.RecvTransport,
+		RelayAddress:  c.RelayAddress,
+		RelayPort:     uint32(c.RelayPort),
+		ClientIp:      c.ClientIP,
+		ClientPort:    uint32(c.ClientPort),
+		PeerSpoofIp:   c.PeerSpoofIP,
+		SpoofPort:     uint32(c.SpoofPort),
+		Auth:          c.Auth,
+		SuppressRst:   c.SuppressRst,
+		Masquerade:    c.Masquerade,
+	}
+	return config, nil
 }
 
 type FragmentMask struct {

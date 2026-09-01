@@ -74,6 +74,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			}
 		}
 		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
+			if spoofConn, err := tls.WrapWithSpoof(conn, config.Spoof, config.SpoofMethod, config.SpoofCount, tlsConfig.ServerName); err != nil {
+				return nil, err
+			} else {
+				conn = spoofConn
+			}
 			conn = tls.UClient(conn, tlsConfig, fingerprint)
 			if len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "http/1.1" { // allow manually specify
 				err = conn.(*tls.UConn).WebsocketHandshakeContext(ctx)
@@ -81,6 +86,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				err = conn.(*tls.UConn).HandshakeContext(ctx)
 			}
 		} else {
+			if spoofConn, err := tls.WrapWithSpoof(conn, config.Spoof, config.SpoofMethod, config.SpoofCount, tlsConfig.ServerName); err != nil {
+				return nil, err
+			} else {
+				conn = spoofConn
+			}
 			conn = tls.Client(conn, tlsConfig)
 			err = conn.(*tls.Conn).HandshakeContext(ctx)
 		}
