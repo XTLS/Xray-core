@@ -2,7 +2,9 @@
 package blackhole
 
 import (
+	"bytes"
 	"context"
+	"net/http"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -21,6 +23,16 @@ type Handler struct {
 	response []byte
 }
 
+var http403response = http.Response{
+	StatusCode: 403,
+	ProtoMajor: 1,
+	ProtoMinor: 1,
+	Header: http.Header{
+		"Connection":    {"close"},
+		"Cache-Control": {"max-age=3600, public"},
+	},
+}
+
 // New creates a new blackhole handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
 	response := []byte{}
@@ -28,7 +40,9 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		switch config.Response.Type {
 		case "", "none":
 		case "http":
-			response = http403response
+			var data bytes.Buffer
+			common.Must(http403response.Write(&data))
+			response = data.Bytes()
 		case "custom":
 			response = config.Response.CustomResponseData
 		default:

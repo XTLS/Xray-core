@@ -1,8 +1,11 @@
 package blackhole_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
+	"net/http"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
@@ -22,22 +25,22 @@ func TestBlackholeHTTPResponse(t *testing.T) {
 
 	reader, writer := pipe.New(pipe.WithoutSizeLimit())
 
-	var mb buf.MultiBuffer
-	var rerr error
+	dataCh := make(chan buf.MultiBuffer, 1)
 	go func() {
-		b, e := reader.ReadMultiBuffer()
-		mb = b
-		rerr = e
+		mb := common.Must2(reader.ReadMultiBuffer())
+		dataCh <- mb
 	}()
-
 	link := transport.Link{
 		Reader: reader,
 		Writer: writer,
 	}
 	common.Must(handler.Process(ctx, &link, nil))
-	common.Must(rerr)
-	if mb.IsEmpty() {
-		t.Error("expect http response, but nothing")
+	mb := <-dataCh
+	data := make([]byte, mb.Len())
+	mb.Copy(data)
+	resp := common.Must2(http.ReadResponse(bufio.NewReader(bytes.NewBuffer(data)), nil))
+	if resp.StatusCode != 403 {
+		t.Errorf("expected 403 response, got %d", resp.StatusCode)
 	}
 }
 
