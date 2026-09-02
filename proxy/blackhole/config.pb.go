@@ -7,7 +7,6 @@
 package blackhole
 
 import (
-	serial "github.com/xtls/xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -22,26 +21,28 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type NoneResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+type Response struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Type               string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	CustomResponseData []byte                 `protobuf:"bytes,2,opt,name=custom_response_data,json=customResponseData,proto3" json:"custom_response_data,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
-func (x *NoneResponse) Reset() {
-	*x = NoneResponse{}
+func (x *Response) Reset() {
+	*x = Response{}
 	mi := &file_proxy_blackhole_config_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *NoneResponse) String() string {
+func (x *Response) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NoneResponse) ProtoMessage() {}
+func (*Response) ProtoMessage() {}
 
-func (x *NoneResponse) ProtoReflect() protoreflect.Message {
+func (x *Response) ProtoReflect() protoreflect.Message {
 	mi := &file_proxy_blackhole_config_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -53,57 +54,35 @@ func (x *NoneResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NoneResponse.ProtoReflect.Descriptor instead.
-func (*NoneResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use Response.ProtoReflect.Descriptor instead.
+func (*Response) Descriptor() ([]byte, []int) {
 	return file_proxy_blackhole_config_proto_rawDescGZIP(), []int{0}
 }
 
-type HTTPResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *HTTPResponse) Reset() {
-	*x = HTTPResponse{}
-	mi := &file_proxy_blackhole_config_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *HTTPResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*HTTPResponse) ProtoMessage() {}
-
-func (x *HTTPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_blackhole_config_proto_msgTypes[1]
+func (x *Response) GetType() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
+		return x.Type
 	}
-	return mi.MessageOf(x)
+	return ""
 }
 
-// Deprecated: Use HTTPResponse.ProtoReflect.Descriptor instead.
-func (*HTTPResponse) Descriptor() ([]byte, []int) {
-	return file_proxy_blackhole_config_proto_rawDescGZIP(), []int{1}
+func (x *Response) GetCustomResponseData() []byte {
+	if x != nil {
+		return x.CustomResponseData
+	}
+	return nil
 }
 
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Response      *serial.TypedMessage   `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
+	Response      *Response              `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_proxy_blackhole_config_proto_msgTypes[2]
+	mi := &file_proxy_blackhole_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -115,7 +94,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_blackhole_config_proto_msgTypes[2]
+	mi := &file_proxy_blackhole_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -128,10 +107,10 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_proxy_blackhole_config_proto_rawDescGZIP(), []int{2}
+	return file_proxy_blackhole_config_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Config) GetResponse() *serial.TypedMessage {
+func (x *Config) GetResponse() *Response {
 	if x != nil {
 		return x.Response
 	}
@@ -142,11 +121,12 @@ var File_proxy_blackhole_config_proto protoreflect.FileDescriptor
 
 const file_proxy_blackhole_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1cproxy/blackhole/config.proto\x12\x14xray.proxy.blackhole\x1a!common/serial/typed_message.proto\"\x0e\n" +
-	"\fNoneResponse\"\x0e\n" +
-	"\fHTTPResponse\"F\n" +
-	"\x06Config\x12<\n" +
-	"\bresponse\x18\x01 \x01(\v2 .xray.common.serial.TypedMessageR\bresponseB^\n" +
+	"\x1cproxy/blackhole/config.proto\x12\x14xray.proxy.blackhole\"P\n" +
+	"\bResponse\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x120\n" +
+	"\x14custom_response_data\x18\x02 \x01(\fR\x12customResponseData\"D\n" +
+	"\x06Config\x12:\n" +
+	"\bresponse\x18\x01 \x01(\v2\x1e.xray.proxy.blackhole.ResponseR\bresponseB^\n" +
 	"\x18com.xray.proxy.blackholeP\x01Z)github.com/xtls/xray-core/proxy/blackhole\xaa\x02\x14Xray.Proxy.Blackholeb\x06proto3"
 
 var (
@@ -161,15 +141,13 @@ func file_proxy_blackhole_config_proto_rawDescGZIP() []byte {
 	return file_proxy_blackhole_config_proto_rawDescData
 }
 
-var file_proxy_blackhole_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proxy_blackhole_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_proxy_blackhole_config_proto_goTypes = []any{
-	(*NoneResponse)(nil),        // 0: xray.proxy.blackhole.NoneResponse
-	(*HTTPResponse)(nil),        // 1: xray.proxy.blackhole.HTTPResponse
-	(*Config)(nil),              // 2: xray.proxy.blackhole.Config
-	(*serial.TypedMessage)(nil), // 3: xray.common.serial.TypedMessage
+	(*Response)(nil), // 0: xray.proxy.blackhole.Response
+	(*Config)(nil),   // 1: xray.proxy.blackhole.Config
 }
 var file_proxy_blackhole_config_proto_depIdxs = []int32{
-	3, // 0: xray.proxy.blackhole.Config.response:type_name -> xray.common.serial.TypedMessage
+	0, // 0: xray.proxy.blackhole.Config.response:type_name -> xray.proxy.blackhole.Response
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -188,7 +166,7 @@ func file_proxy_blackhole_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_blackhole_config_proto_rawDesc), len(file_proxy_blackhole_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
