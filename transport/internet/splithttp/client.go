@@ -195,7 +195,9 @@ type WaitReadCloser struct {
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
 	w.reader.Store(&rc)
 	if w.wait.Done() {
-		rc.Close()
+		if p := w.reader.Swap(nil); p != nil {
+			(*p).Close()
+		}
 	}
 	w.wait.Close()
 }
@@ -213,7 +215,7 @@ func (w *WaitReadCloser) Read(b []byte) (int, error) {
 
 func (w *WaitReadCloser) Close() error {
 	w.wait.Close()
-	if p := w.reader.Load(); p != nil {
+	if p := w.reader.Swap(nil); p != nil {
 		return (*p).Close()
 	}
 	return nil
