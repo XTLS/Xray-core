@@ -30,5 +30,29 @@ func TestHTTPResponseJSON(t *testing.T) {
 			Parser: loadJSON(creator),
 			Output: &blackhole.Config{},
 		},
+		{
+			Input: `{
+				"response": {
+					"type": "http",
+					"statusCode": 204
+				}
+			}`,
+			Parser: loadJSON(creator),
+			Output: &blackhole.Config{
+				Response: serial.ToTypedMessage(&blackhole.HTTPResponse{StatusCode: 204}),
+			},
+		},
+		{
+			Input: `{
+				"response": {
+					"type": "http",
+					"statusCode": 404
+				}
+			}`,
+			Parser: loadJSON(creator),
+			Output: &blackhole.Config{
+				Response: serial.ToTypedMessage(&blackhole.HTTPResponse{StatusCode: 404}),
+			},
+		},
 	})
 }

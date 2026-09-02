@@ -1,18 +1,11 @@
 package blackhole
 
 import (
+	"fmt"
+	"net/http"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-)
-
-const (
-	http403response = `HTTP/1.1 403 Forbidden
-Connection: close
-Cache-Control: max-age=3600, public
-Content-Length: 0
-
-
-`
 )
 
 // ResponseConfig is the configuration for blackhole responses.
@@ -25,9 +18,24 @@ type ResponseConfig interface {
 func (*NoneResponse) WriteTo(buf.Writer) int32 { return 0 }
 
 // WriteTo implements ResponseConfig.WriteTo().
-func (*HTTPResponse) WriteTo(writer buf.Writer) int32 {
+// Returns an HTTP response with the configured status code.
+// If status code is not set (0), defaults to 403 Forbidden for backward compatibility.
+func (r *HTTPResponse) WriteTo(writer buf.Writer) int32 {
+	statusCode := int(r.GetStatusCode())
+	if statusCode == 0 {
+		statusCode = http.StatusForbidden // Default to 403 for backward compatibility
+	}
+
+	statusText := http.StatusText(statusCode)
+	if statusText == "" {
+		statusText = "Unknown"
+	}
+
+	response := fmt.Sprintf("HTTP/1.1 %d %s\r\nConnection: close\r\nCache-Control: max-age=3600, public\r\nContent-Length: 0\r\n\r\n",
+		statusCode, statusText)
+
 	b := buf.New()
-	common.Must2(b.WriteString(http403response))
+	common.Must2(b.WriteString(response))
 	n := b.Len()
 	writer.WriteMultiBuffer(buf.MultiBuffer{b})
 	return n

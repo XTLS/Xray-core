@@ -10,7 +10,11 @@ import "common/serial/typed_message.proto";
 
 message NoneResponse {}
 
-message HTTPResponse {}
+message HTTPResponse {
+  // HTTP status code to return. Default is 403 (Forbidden).
+  // Common values: 200 (OK), 204 (No Content), 403 (Forbidden), 404 (Not Found), 500 (Internal Server Error)
+  int32 status_code = 1;
+}
 
 message Config {
   xray.common.serial.TypedMessage response = 1;

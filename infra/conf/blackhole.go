@@ -15,10 +15,17 @@ func (*NoneResponse) Build() (proto.Message, error) {
 	return new(blackhole.NoneResponse), nil
 }
 
-type HTTPResponse struct{}
+type HTTPResponse struct {
+	// StatusCode is the HTTP status code to return.
+	// Default is 403 (Forbidden) for backward compatibility.
+	// Common values: 200 (OK), 204 (No Content), 403 (Forbidden), 404 (Not Found)
+	StatusCode int32 `json:"statusCode"`
+}
 
-func (*HTTPResponse) Build() (proto.Message, error) {
-	return new(blackhole.HTTPResponse), nil
+func (r *HTTPResponse) Build() (proto.Message, error) {
+	return &blackhole.HTTPResponse{
+		StatusCode: r.StatusCode,
+	}, nil
 }
 
 type BlackholeConfig struct {
