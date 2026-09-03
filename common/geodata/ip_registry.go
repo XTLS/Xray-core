@@ -35,6 +35,8 @@ func (r *IPRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	ResetEntryCache()
+
 	var matchers []*DynamicIPMatcher
 	r.matchers.Range(func(_ uuid.UUID, matcher *DynamicIPMatcher) bool {
 		matchers = append(matchers, matcher)

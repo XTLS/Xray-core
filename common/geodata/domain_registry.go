@@ -34,6 +34,8 @@ func (r *DomainRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	ResetEntryCache()
+
 	var matchers []*DynamicDomainMatcher
 	r.matchers.Range(func(_ uuid.UUID, matcher *DynamicDomainMatcher) bool {
 		matchers = append(matchers, matcher)

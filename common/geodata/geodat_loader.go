@@ -4,35 +4,56 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"runtime"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform/filesystem"
+	"github.com/xtls/xray-core/common/utils"
 
 	"google.golang.org/protobuf/proto"
 )
 
-func checkFile(file, code string) error {
-	r, err := filesystem.OpenAsset(file)
-	if err != nil {
-		return errors.New("failed to open ", file).Base(err)
-	}
-	defer r.Close()
-	if _, err := find(r, []byte(code), false); err != nil {
-		return errors.New("failed to check code ", code, " from ", file).Base(err)
-	}
-	return nil
+// entryCache caches the raw protobuf bytes of a single GeoIP/GeoSite entry,
+// keyed by file name and entry code. A config usually references the same .dat
+// file from many ext: rules; without this cache every rule triggers a full
+// linear scan of the file (tens of MB) both at parse time (checkFile) and at
+// matcher build time (loadIP/loadSite).
+var entryCache = utils.NewWeakCacheMap[string, []byte]()
+
+// ResetEntryCache drops all cached GeoIP/GeoSite entries. It must be called
+// when the .dat files are reloaded (see app/geodata) so a swapped file is
+// picked up instead of serving stale cached entries.
+func ResetEntryCache() {
+	entryCache = utils.NewWeakCacheMap[string, []byte]()
 }
 
-func loadFile(file, code string) ([]byte, error) {
-	runtime.GC() // peak mem
+func loadEntry(file, code string) ([]byte, error) {
+	key := file + "\x00" + code
+	if bs, ok := entryCache.Load(key); ok {
+		return *bs, nil
+	}
 	r, err := filesystem.OpenAsset(file)
 	if err != nil {
 		return nil, errors.New("failed to open ", file).Base(err)
 	}
 	defer r.Close()
 	bs, err := find(r, []byte(code), true)
+	if err != nil {
+		return nil, err
+	}
+	entryCache.Store(key, &bs)
+	return bs, nil
+}
+
+func checkFile(file, code string) error {
+	if _, err := loadEntry(file, code); err != nil {
+		return errors.New("failed to check code ", code, " from ", file).Base(err)
+	}
+	return nil
+}
+
+func loadFile(file, code string) ([]byte, error) {
+	bs, err := loadEntry(file, code)
 	if err != nil {
 		return nil, errors.New("failed to load code ", code, " from ", file).Base(err)
 	}
@@ -44,7 +65,6 @@ func loadIP(file, code string) ([]*CIDR, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer runtime.GC() // peak mem
 	var geoip GeoIP
 	if err := proto.Unmarshal(bs, &geoip); err != nil {
 		return nil, errors.New("error unmarshal IP in ", file, ":", code).Base(err)
@@ -57,7 +77,6 @@ func loadSite(file, code string) ([]*Domain, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer runtime.GC() // peak mem
 	var geosite GeoSite
 	if err := proto.Unmarshal(bs, &geosite); err != nil {
 		return nil, errors.New("error unmarshal Site in ", file, ":", code).Base(err)
