@@ -1,7 +1,7 @@
 package xdns
 
 import (
-	"bytes"
+	bytes "bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base32"
