@@ -46,6 +46,11 @@ func SniffUTP(b []byte) (*SniffHeader, error) {
 		return nil, errNotBittorrent
 	}
 
+	// Known uTP implementations initialize ack_nr to 0 in ST_SYN.
+	if binary.BigEndian.Uint16(b[18:20]) != 0 {
+		return nil, errNotBittorrent
+	}
+
 	// Walk the extension chain. Selective ack (1) and extension bits (2)
 	extension, offset := b[1], 20
 	for extension != 0 {
