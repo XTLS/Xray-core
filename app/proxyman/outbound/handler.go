@@ -310,6 +310,9 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 	}
 
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
+	if err == nil && conn != nil {
+		session.SetOutboundEgressSourceFromAddr(session.OutboundsFromContext(ctx), conn.LocalAddr())
+	}
 	conn = h.getStatCouterConnection(conn)
 	outbounds := session.OutboundsFromContext(ctx)
 	if outbounds != nil {

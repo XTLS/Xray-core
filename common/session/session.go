@@ -4,6 +4,7 @@ package session // import "github.com/xtls/xray-core/common/session"
 import (
 	"context"
 	"math/rand"
+	"sync"
 
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
@@ -60,6 +61,7 @@ type Inbound struct {
 
 // Outbound is the metadata of an outbound connection.
 type Outbound struct {
+	egressSourceMu sync.RWMutex
 	// Target address of the outbound connection.
 	OriginalTarget net.Destination
 	Target         net.Destination
@@ -72,6 +74,10 @@ type Outbound struct {
 	Name string
 	// Unused. Conn is actually internet.Connection. May be nil. It is currently nil for outbound with proxySettings
 	Conn net.Conn
+	// EgressSource is the local endpoint of the physical outbound socket, when known.
+	EgressSource net.Destination
+	// OnEgressSource bridges a physical mux worker socket back to logical request sessions.
+	OnEgressSource func(net.Destination)
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
 	CanSpliceCopy int
