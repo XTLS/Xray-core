@@ -157,6 +157,36 @@ func TestXrayConfig(t *testing.T) {
 	})
 }
 
+func TestOutboundDetourLegacyRawVLESSRequiresExplicitOptIn(t *testing.T) {
+	base := `{
+		"tag": "legacy-vless",
+		"protocol": "vless",
+		"settings": {
+			"vnext": [{
+				"address": "8.8.8.8",
+				"port": 8443,
+				"users": [{"id": "00000000-0000-4000-8000-000000000001", "encryption": "none"}]
+			}]
+		},
+		"streamSettings": {"network": "tcp", "security": "none"}
+	}`
+
+	config := new(OutboundDetourConfig)
+	if err := json.Unmarshal([]byte(base), config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Build(); err == nil {
+		t.Fatal("public raw VLESS outbound must require explicit opt-in")
+	}
+
+	if err := json.Unmarshal([]byte(base[:len(base)-2]+`, "allowInsecureVlessOutbound": true}`), config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Build(); err != nil {
+		t.Fatalf("explicit legacy VLESS opt-in must build: %v", err)
+	}
+}
+
 func TestSniffingConfig_Build(t *testing.T) {
 	config := &SniffingConfig{
 		Enabled:         true,
