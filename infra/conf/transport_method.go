@@ -270,6 +270,9 @@ type SplitHTTPConfig struct {
 	SessionIDKey         string            `json:"sessionIDKey"`
 	SessionIDTable       string            `json:"sessionIDTable"`
 	SessionIDLength      Int32Range        `json:"sessionIDLength"`
+	PathTable            string            `json:"pathTable"`
+	PathLength           Int32Range        `json:"pathLength"`
+	PathExtension        string            `json:"pathExtension"`
 	SeqPlacement         string            `json:"seqPlacement"`
 	SeqKey               string            `json:"seqKey"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
@@ -424,6 +427,31 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	if c.PathTable != "" {
+		if predefined, ok := splithttp.PredefinedTable[c.PathTable]; ok {
+			c.PathTable = predefined
+		}
+		room := roomSize(len(c.PathTable), c.PathLength.From, c.PathLength.To)
+		// 2.1B possiblities should be enough
+		if room.Cmp(big.NewInt(2<<30)) < 0 {
+			return nil, errors.New("pathTable or pathLength is too small")
+		}
+		if c.PathLength.From <= 0 {
+			return nil, errors.New("pathLength.from must be greater than 0")
+		}
+		for i := 0; i < len(c.PathTable); i++ {
+			if c.PathTable[i] >= 0x80 {
+				return nil, errors.New("pathTable must contain only ASCII characters")
+			}
+		}
+	} else if c.PathExtension != "" {
+		return nil, errors.New("pathExtension requires pathTable to be set")
+	}
+
+	if strings.ContainsRune(c.PathExtension, '/') {
+		return nil, errors.New("pathExtension must not contain '/'")
+	}
+
 	if c.SeqPlacement != "path" && c.SeqKey == "" {
 		switch c.SeqPlacement {
 		case "cookie", "query":
@@ -486,6 +514,9 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
 		SessionIDTable:       c.SessionIDTable,
 		SessionIDLength:      newRangeConfig(c.SessionIDLength),
+		PathTable:            c.PathTable,
+		PathLength:           newRangeConfig(c.PathLength),
+		PathExtension:        c.PathExtension,
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),

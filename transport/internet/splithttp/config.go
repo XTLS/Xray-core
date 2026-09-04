@@ -2,6 +2,7 @@ package splithttp
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -296,6 +297,12 @@ func (c *Config) ApplyMetaToRequest(req *http.Request, sessionId string, seqStr 
 			req.AddCookie(&http.Cookie{Name: seqKey, Value: seqStr})
 		}
 	}
+
+	// Always last, so that the request ends in something that looks like a file
+	// name regardless of where the session ID and the sequence number went.
+	if segment := c.GeneratePathSegment(sessionId); segment != "" {
+		req.URL.Path = appendToPath(req.URL.Path, segment)
+	}
 }
 
 func (c *Config) FillStreamRequest(request *http.Request, sessionId string, seqStr string) {
@@ -524,6 +531,69 @@ func (c *Config) GenerateSessionID() string {
 		uuid := uuid.New()
 		return uuid.String()
 	}
+}
+
+// GeneratePathSegment builds the trailing path segment that disguises a request
+// as a static file, e.g. "9f3ac21b7e4d.js". It returns "" unless PathTable is set.
+//
+// The segment is derived from the session ID instead of being drawn at random,
+// so that every request belonging to one session asks for the same "file" — the
+// way a real page keeps fetching one asset — while a new session picks a new
+// name. Sessionless modes (stream-one) fall back to a random segment.
+func (c *Config) GeneratePathSegment(sessionId string) string {
+	table := c.PathTable
+	if predefined, ok := PredefinedTable[table]; ok {
+		table = predefined
+	}
+	if table == "" {
+		return ""
+	}
+
+	if sessionId == "" {
+		length := c.PathLength.rand()
+		name := make([]byte, length)
+		for i := range name {
+			name[i] = table[rand.N(len(table))]
+		}
+		return string(name) + c.PathExtension
+	}
+
+	// Deterministic, uniform pick over the table, seeded by the session ID.
+	digest := sha256.Sum256([]byte(sessionId))
+	stream := digest[:]
+	pos := 0
+	next := func() byte {
+		if pos == len(stream) {
+			digest = sha256.Sum256(stream)
+			stream = digest[:]
+			pos = 0
+		}
+		b := stream[pos]
+		pos++
+		return b
+	}
+	// Reject the tail of the byte range that would skew the distribution.
+	limit := 256
+	if len(table) < limit {
+		limit -= limit % len(table)
+	}
+	pick := func() byte {
+		for {
+			if b := next(); int(b) < limit {
+				return table[int(b)%len(table)]
+			}
+		}
+	}
+
+	length := int(c.PathLength.From)
+	if spread := int(c.PathLength.To) - length; spread > 0 {
+		length += int(next()) % (spread + 1)
+	}
+	name := make([]byte, length)
+	for i := range name {
+		name[i] = pick()
+	}
+	return string(name) + c.PathExtension
 }
 
 func appendToPath(path, value string) string {
