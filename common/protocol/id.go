@@ -19,7 +19,7 @@ type ID struct {
 
 // Equals returns true if this ID equals to the other one.
 func (id *ID) Equals(another *ID) bool {
-	return id.uuid.Equals(&(another.uuid))
+	return id.uuid.Equals(&another.uuid)
 }
 
 func (id *ID) Bytes() []byte {

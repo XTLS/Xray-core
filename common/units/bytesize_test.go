@@ -10,37 +10,44 @@ func TestByteSizes(t *testing.T) {
 	size := units.ByteSize(0)
 	assertSizeString(t, size, "0")
 	size++
-	assertSizeValue(t,
+	assertSizeValue(
+		t,
 		assertSizeString(t, size, "1.00B"),
 		size,
 	)
 	size <<= 10
-	assertSizeValue(t,
+	assertSizeValue(
+		t,
 		assertSizeString(t, size, "1.00KB"),
 		size,
 	)
 	size <<= 10
-	assertSizeValue(t,
+	assertSizeValue(
+		t,
 		assertSizeString(t, size, "1.00MB"),
 		size,
 	)
 	size <<= 10
-	assertSizeValue(t,
+	assertSizeValue(
+		t,
 		assertSizeString(t, size, "1.00GB"),
 		size,
 	)
 	size <<= 10
-	assertSizeValue(t,
+	assertSizeValue(
+		t,
 		assertSizeString(t, size, "1.00TB"),
 		size,
 	)
 	size <<= 10
-	assertSizeValue(t,
+	assertSizeValue(
+		t,
 		assertSizeString(t, size, "1.00PB"),
 		size,
 	)
 	size <<= 10
-	assertSizeValue(t,
+	assertSizeValue(
+		t,
 		assertSizeString(t, size, "1.00EB"),
 		size,
 	)

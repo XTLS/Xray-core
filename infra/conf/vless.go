@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/inbound"
@@ -30,59 +31,76 @@ type VLessInboundFallback struct {
 }
 
 type VLessInboundConfig struct {
+	Users      []json.RawMessage       `json:"users"`
 	Clients    []json.RawMessage       `json:"clients"`
 	Decryption string                  `json:"decryption"`
 	Fallbacks  []*VLessInboundFallback `json:"fallbacks"`
 	Flow       string                  `json:"flow"`
+	Testseed   []uint32                `json:"testseed"`
 }
 
 // Build implements Buildable
 func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	config := new(inbound.Config)
-	config.Clients = make([]*protocol.User, len(c.Clients))
+
+	if c.Clients != nil {
+		c.Users = c.Clients
+	}
+	config.Users = make([]*protocol.User, len(c.Users))
 	switch c.Flow {
-	case vless.None:
-		c.Flow = ""
-	case "", vless.XRV:
+	case vless.XRV, "":
 	default:
 		return nil, errors.New(`VLESS "settings.flow" doesn't support "` + c.Flow + `" in this version`)
 	}
-	for idx, rawUser := range c.Clients {
+	processClient := func(idx int) error {
+		rawUser := c.Users[idx]
 		user := new(protocol.User)
 		if err := json.Unmarshal(rawUser, user); err != nil {
-			return nil, errors.New(`VLESS clients: invalid user`).Base(err)
+			return errors.New(`VLESS users: invalid user`).Base(err)
 		}
 		account := new(vless.Account)
 		if err := json.Unmarshal(rawUser, account); err != nil {
-			return nil, errors.New(`VLESS clients: invalid user`).Base(err)
+			return errors.New(`VLESS users: invalid user`).Base(err)
 		}
 
 		u, err := uuid.ParseString(account.Id)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		account.Id = u.String()
 
 		switch account.Flow {
 		case "":
 			account.Flow = c.Flow
-		case vless.None:
-			account.Flow = ""
 		case vless.XRV:
 		default:
-			return nil, errors.New(`VLESS clients: "flow" doesn't support "` + account.Flow + `" in this version`)
+			return errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
+		}
+
+		if len(account.Testseed) < 4 {
+			account.Testseed = c.Testseed
 		}
 
 		if account.Encryption != "" {
-			return nil, errors.New(`VLESS clients: "encryption" should not be in inbound settings`)
+			return errors.New(`VLESS users: "encryption" should not be in inbound settings`)
 		}
 
-		if account.Reverse != nil && account.Reverse.Tag == "" {
-			return nil, errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
+		if account.Reverse != nil {
+			if account.Reverse.Tag == "" {
+				return errors.New(`VLESS users: "tag" can't be empty for "reverse"`)
+			}
+			if account.Reverse.Sniffing != nil { // may not be reached: error json unmarshal
+				return errors.New(`VLESS users: inbound's "reverse" can't have "sniffing"`)
+			}
 		}
 
 		user.Account = serial.ToTypedMessage(account)
-		config.Clients[idx] = user
+		config.Users[idx] = user
+		return nil
+	}
+
+	if err := task.ParallelForN(len(c.Users), processClient); err != nil {
+		return nil, err
 	}
 
 	config.Decryption = c.Decryption
@@ -196,6 +214,28 @@ func (c *VLessInboundConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
+type VLessReverseConfig struct {
+	Tag      string          `json:"tag"`
+	Sniffing *SniffingConfig `json:"sniffing"`
+}
+
+func (c *VLessReverseConfig) Build() (*vless.Reverse, error) {
+	if c.Tag == "" {
+		return nil, errors.New(`VLESS reverse: "tag" can't be empty`)
+	}
+	r := &vless.Reverse{
+		Tag: c.Tag,
+	}
+	if c.Sniffing != nil {
+		sc, err := c.Sniffing.Build()
+		if err != nil {
+			return nil, errors.New(`VLESS reverse: invalid "sniffing" config`).Base(err)
+		}
+		r.Sniffing = sc
+	}
+	return r, nil
+}
+
 type VLessOutboundVnext struct {
 	Address *Address          `json:"address"`
 	Port    uint16            `json:"port"`
@@ -211,7 +251,9 @@ type VLessOutboundConfig struct {
 	Flow       string                `json:"flow"`
 	Seed       string                `json:"seed"`
 	Encryption string                `json:"encryption"`
-	Reverse    *vless.Reverse        `json:"reverse"`
+	Reverse    *VLessReverseConfig   `json:"reverse"`
+	Testpre    uint32                `json:"testpre"`
+	Testseed   []uint32              `json:"testseed"`
 	Vnext      []*VLessOutboundVnext `json:"vnext"`
 }
 
@@ -257,10 +299,21 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 				account.Flow = c.Flow
 				//account.Seed = c.Seed
 				account.Encryption = c.Encryption
-				account.Reverse = c.Reverse
+				if c.Reverse != nil {
+					rvs, err := c.Reverse.Build()
+					if err != nil {
+						return nil, err
+					}
+					account.Reverse = rvs
+				}
+				account.Testpre = c.Testpre
+				account.Testseed = c.Testseed
 			} else {
 				if err := json.Unmarshal(rawUser, account); err != nil {
 					return nil, errors.New(`VLESS users: invalid user`).Base(err)
+				}
+				if account.Reverse != nil { // may not be reached: error json unmarshal
+					return nil, errors.New(`VLESS users: please use simplified outbound's config style to use "reverse"`)
 				}
 			}
 
@@ -271,7 +324,8 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			account.Id = u.String()
 
 			switch account.Flow {
-			case "", vless.XRV, vless.XRV + "-udp443":
+			case "":
+			case vless.XRV, vless.XRV + "-udp443":
 			default:
 				return nil, errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
 			}
@@ -318,10 +372,6 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 					return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
 				}
 				return nil, errors.New(`VLESS users: unsupported "encryption": ` + account.Encryption)
-			}
-
-			if account.Reverse != nil && account.Reverse.Tag == "" {
-				return nil, errors.New(`VLESS clients: "tag" can't be empty for "reverse"`)
 			}
 
 			user.Account = serial.ToTypedMessage(account)

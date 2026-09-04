@@ -12,6 +12,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -26,11 +27,14 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/extension"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
@@ -54,7 +58,7 @@ func init() {
 		c := config.(*Config)
 
 		validator := new(vless.MemoryValidator)
-		for _, user := range c.Clients {
+		for _, user := range c.Users {
 			u, err := user.ToMemoryUser()
 			if err != nil {
 				return nil, errors.New("failed to get VLESS user").Base(err).AtError()
@@ -72,10 +76,12 @@ func init() {
 type Handler struct {
 	inboundHandlerManager  feature_inbound.Manager
 	policyManager          policy.Manager
+	stats                  stats.Manager
 	validator              vless.Validator
 	decryption             *encryption.ServerInstance
 	outboundHandlerManager outbound.Manager
-	wrapLink               func(ctx context.Context, link *transport.Link) *transport.Link
+	observer               features.Feature
+	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -84,16 +90,14 @@ type Handler struct {
 // New creates a new VLess inbound handler.
 func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Validator) (*Handler, error) {
 	v := core.MustFromContext(ctx)
-	var wrapLinkFunc func(ctx context.Context, link *transport.Link) *transport.Link
-	if dispatcher, ok := v.GetFeature(routing.DispatcherType()).(routing.WrapLinkDispatcher); ok {
-		wrapLinkFunc = dispatcher.WrapLink
-	}
 	handler := &Handler{
 		inboundHandlerManager:  v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		policyManager:          v.GetFeature(policy.ManagerType()).(policy.Manager),
+		stats:                  v.GetFeature(stats.ManagerType()).(stats.Manager),
 		validator:              validator,
 		outboundHandlerManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
-		wrapLink:               wrapLinkFunc,
+		observer:               v.GetFeature(extension.ObservatoryType()),
+		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
 	}
 
@@ -264,11 +268,8 @@ func (*Handler) Network() []net.Network {
 }
 
 // Process implements proxy.Inbound.Process().
-func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
-	iConn := connection
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
-	}
+func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatch routing.Dispatcher) error {
+	iConn := stat.TryUnwrapStatsConn(connection)
 
 	if h.decryption != nil {
 		var err error
@@ -626,15 +627,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		if err != nil {
 			return err
 		}
-		if h.wrapLink == nil {
-			return errors.New("VLESS reverse must have a dispatcher that implemented routing.WrapLinkDispatcher")
-		}
-		return r.NewMux(ctx, h.wrapLink(ctx, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
 	}
 
-	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
-		Reader: clientReader,
-		Writer: clientWriter},
+	if err := dispatch.DispatchLink(
+		ctx, request.Destination(), &transport.Link{
+			Reader: clientReader,
+			Writer: clientWriter,
+		},
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
@@ -651,7 +651,7 @@ func (r *Reverse) Tag() string {
 	return r.tag
 }
 
-func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error {
+func (r *Reverse) NewMux(ctx context.Context, link *transport.Link, observer features.Feature) error {
 	muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
 	if err != nil {
 		return errors.New("failed to create mux client worker").Base(err).AtWarning()
@@ -661,6 +661,9 @@ func (r *Reverse) NewMux(ctx context.Context, link *transport.Link) error {
 		return errors.New("failed to create portal worker").Base(err).AtWarning()
 	}
 	r.picker.AddWorker(worker)
+	if burstObs, ok := observer.(extension.BurstObservatory); ok {
+		go burstObs.Check([]string{r.Tag()})
+	}
 	select {
 	case <-ctx.Done():
 	case <-muxClient.WaitClosed():

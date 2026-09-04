@@ -131,12 +131,22 @@ type AckSegment struct {
 	ReceivingNext   uint32
 	Timestamp       uint32
 	NumberList      []uint32
+
+	Limit int
 }
 
 const ackNumberLimit = 128
 
-func NewAckSegment() *AckSegment {
-	return new(AckSegment)
+func NewAckSegment(limit int) *AckSegment {
+	if limit <= 0 {
+		limit = 1
+	}
+	if limit > ackNumberLimit {
+		limit = ackNumberLimit
+	}
+	return &AckSegment{
+		Limit: limit,
+	}
 }
 
 func (s *AckSegment) parse(conv uint16, cmd Command, opt SegmentOption, buf []byte) (bool, []byte) {
@@ -188,7 +198,7 @@ func (s *AckSegment) PutNumber(number uint32) {
 }
 
 func (s *AckSegment) IsFull() bool {
-	return len(s.NumberList) == ackNumberLimit
+	return len(s.NumberList) == s.Limit
 }
 
 func (s *AckSegment) IsEmpty() bool {
@@ -290,7 +300,7 @@ func ReadSegment(buf []byte) (Segment, []byte) {
 	case CommandData:
 		seg = NewDataSegment()
 	case CommandACK:
-		seg = NewAckSegment()
+		seg = NewAckSegment(128)
 	default:
 		seg = NewCmdOnlySegment()
 	}

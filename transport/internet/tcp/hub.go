@@ -42,9 +42,6 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	var listener net.Listener
 	var err error
 	if port == net.Port(0) { // unix
-		if !address.Family().IsDomain() {
-			return nil, errors.New("invalid unix listen: ", address).AtError()
-		}
 		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
 			Name: address.Domain(),
 			Net:  "unix",
@@ -62,6 +59,10 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 			return nil, errors.New("failed to listen TCP on ", address, ":", port).Base(err)
 		}
 		errors.LogInfo(ctx, "listening TCP on ", address, ":", port)
+	}
+
+	if streamSettings.TcpmaskManager != nil {
+		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
@@ -108,6 +109,7 @@ func (v *Listener) keepAccepting() {
 			}
 			continue
 		}
+
 		go func() {
 			if v.tlsConfig != nil {
 				conn = tls.Server(conn, v.tlsConfig)

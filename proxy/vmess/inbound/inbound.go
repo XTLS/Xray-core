@@ -138,7 +138,8 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 func (h *Handler) Close() error {
 	return errors.Combine(
 		h.sessionHistory.Close(),
-		common.Close(h.usersByEmail))
+		common.Close(h.usersByEmail),
+	)
 }
 
 // Network implements proxy.Inbound.Network().
@@ -229,10 +230,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("unable to set read deadline").Base(err).AtWarning()
 	}
 
-	iConn := connection
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
-	}
+	iConn := stat.TryUnwrapStatsConn(connection)
 	_, isDrain := iConn.(*net.TCPConn)
 	if !isDrain {
 		_, isDrain = iConn.(*net.UnixConn)

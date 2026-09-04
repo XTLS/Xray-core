@@ -79,6 +79,9 @@ func TestDialWithRemoteAddr(t *testing.T) {
 		ProtocolSettings: &Config{
 			Path: "ws",
 		},
+		SocketSettings: &internet.SocketConfig{
+			TrustedXForwardedFor: []string{"X-Forwarded-For"},
+		},
 	}, func(conn stat.Connection) {
 		go func(c stat.Connection) {
 			defer c.Close()
@@ -123,6 +126,8 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 
 	start := time.Now()
 
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+
 	streamSettings := &internet.MemoryStreamConfig{
 		ProtocolName: "websocket",
 		ProtocolSettings: &Config{
@@ -130,8 +135,8 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 		},
 		SecurityType: "tls",
 		SecuritySettings: &tls.Config{
-			AllowInsecure: true,
-			Certificate:   []*tls.Certificate{tls.ParseCertificate(cert.MustGenerate(nil, cert.CommonName("localhost")))},
+			Certificate:          []*tls.Certificate{tls.ParseCertificate(ct)},
+			PinnedPeerCertSha256: [][]byte{ctHash[:]},
 		},
 	}
 	listen, err := ListenWS(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {

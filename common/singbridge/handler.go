@@ -31,15 +31,23 @@ func NewDispatcher(dispatcher routing.Dispatcher, newErrorFunc func(values ...an
 }
 
 func (d *Dispatcher) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
+	dest, err := ToDestination(metadata.Destination, net.Network_TCP)
+	if err != nil {
+		return err
+	}
 	xConn := NewConn(conn)
-	return d.upstream.DispatchLink(ctx, ToDestination(metadata.Destination, net.Network_TCP), &transport.Link{
+	return d.upstream.DispatchLink(ctx, dest, &transport.Link{
 		Reader: xConn,
 		Writer: xConn,
 	})
 }
 
 func (d *Dispatcher) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
-	return d.upstream.DispatchLink(ctx, ToDestination(metadata.Destination, net.Network_UDP), &transport.Link{
+	dest, err := ToDestination(metadata.Destination, net.Network_UDP)
+	if err != nil {
+		return err
+	}
+	return d.upstream.DispatchLink(ctx, dest, &transport.Link{
 		Reader: buf.NewPacketReader(conn.(io.Reader)),
 		Writer: buf.NewWriter(conn.(io.Writer)),
 	})

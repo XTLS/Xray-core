@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package xray.common.geodata;
+option csharp_namespace = "Xray.Common.Geodata";
+option go_package = "github.com/xtls/xray-core/common/geodata";
+option java_package = "com.xray.common.geodata";
+option java_multiple_files = true;
+
+message Domain {
+  // Type of domain value.
+  enum Type {
+    // The value is used as a sub string.
+    Substr = 0;
+    // The value is used as a regular expression.
+    Regex = 1;
+    // The value is a domain.
+    Domain = 2;
+    // The value is a full domain.
+    Full = 3;
+  }
+  // Domain matching type.
+  Type type = 1;
+
+  // Domain value.
+  string value = 2;
+
+  message Attribute {
+    string key = 1;
+
+    oneof typed_value {
+      bool bool_value = 2;
+      int64 int_value = 3;
+    }
+  }
+  // Attributes of this domain. May be used for filtering.
+  repeated Attribute attribute = 3;
+}
+
+message GeoSite {
+  string code = 1;
+  repeated Domain domain = 2;
+}
+
+message GeoSiteList {
+  repeated GeoSite entry = 1;
+}
+
+message GeoSiteRule {
+  string file = 1;
+  string code = 2;
+  string attrs = 3;
+}
+
+message DomainRule {
+  oneof value {
+    GeoSiteRule geosite = 1;
+    Domain custom = 2;
+  }
+}
+
+message CIDR {
+  // IP address, should be either 4 or 16 bytes.
+  bytes ip = 1;
+
+  // Number of leading ones in the network mask.
+  uint32 prefix = 2;
+}
+
+message CIDRRule {
+  CIDR cidr = 1;
+  bool reverse_match = 2;
+}
+
+message GeoIP {
+  string code = 1;
+  repeated CIDR cidr = 2;
+  bool reverse_match = 3;
+}
+
+message GeoIPList {
+  repeated GeoIP entry = 1;
+}
+
+message GeoIPRule {
+  string file = 1;
+  string code = 2;
+  bool reverse_match = 3;
+}
+
+message IPRule {
+  oneof value {
+    GeoIPRule geoip = 1;
+    CIDRRule custom = 2;
+  }
+}

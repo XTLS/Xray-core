@@ -2,21 +2,29 @@ package singbridge
 
 import (
 	"context"
+	"time"
 
 	B "github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	M "github.com/sagernet/sing/common/metadata"
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/transport"
 )
 
 func CopyPacketConn(ctx context.Context, inboundConn net.Conn, link *transport.Link, destination net.Destination, serverConn net.PacketConn) error {
+	cancel := func() {
+		common.Interrupt(link.Reader)
+		common.Interrupt(serverConn)
+	}
 	conn := &PacketConnWrapper{
 		Reader: link.Reader,
 		Writer: link.Writer,
 		Dest:   destination,
 		Conn:   inboundConn,
+		T:      signal.CancelAfterInactivity(ctx, cancel, 300*time.Second),
 	}
 	return ReturnError(bufio.CopyPacketConn(ctx, conn, bufio.NewPacketConn(serverConn)))
 }
@@ -27,9 +35,19 @@ type PacketConnWrapper struct {
 	net.Conn
 	Dest   net.Destination
 	cached buf.MultiBuffer
+
+	// A simple patch to avoid goroutine leak since sing infra cannot awake read block by write err
+	T *signal.ActivityTimer
 }
 
-func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
+func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err error) {
+	w.T.Update()
+	defer func() {
+		if err != nil {
+			// uplinkonly
+			w.T.SetTimeout(2 * time.Second)
+		}
+	}()
 	if w.cached != nil {
 		mb, bb := buf.SplitFirst(w.cached)
 		if bb == nil {
@@ -48,9 +66,6 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 		}
 	}
 	mb, err := w.ReadMultiBuffer()
-	if err != nil {
-		return M.Socksaddr{}, err
-	}
 	nb, bb := buf.SplitFirst(mb)
 	if bb == nil {
 		return M.Socksaddr{}, nil
@@ -68,12 +83,22 @@ func (w *PacketConnWrapper) ReadPacket(buffer *B.Buffer) (M.Socksaddr, error) {
 	}
 }
 
-func (w *PacketConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksaddr) error {
+func (w *PacketConnWrapper) WritePacket(buffer *B.Buffer, destination M.Socksaddr) (err error) {
+	w.T.Update()
+	defer func() {
+		if err != nil {
+			// downlinkonly
+			w.T.SetTimeout(5 * time.Second)
+		}
+	}()
+	endpoint, err := ToDestination(destination, net.Network_UDP)
+	if err != nil {
+		return err
+	}
 	vBuf := buf.New()
 	vBuf.Write(buffer.Bytes())
-	endpoint := ToDestination(destination, net.Network_UDP)
 	vBuf.UDP = &endpoint
-	return w.Writer.WriteMultiBuffer(buf.MultiBuffer{vBuf})
+	return w.WriteMultiBuffer(buf.MultiBuffer{vBuf})
 }
 
 func (w *PacketConnWrapper) Close() error {

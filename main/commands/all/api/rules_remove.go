@@ -56,5 +56,4 @@ func executeRemoveRules(cmd *base.Command, args []string) {
 		}
 		showJSONResponse(resp)
 	}
-
 }

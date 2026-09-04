@@ -1,8 +1,9 @@
 package conf
 
 import (
-	"google.golang.org/protobuf/proto"
 	"strings"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/xtls/xray-core/app/observatory/burst"
 	"github.com/xtls/xray-core/app/router"
@@ -16,17 +17,14 @@ const (
 	strategyLeastLoad  string = "leastload"
 )
 
-var (
-	strategyConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		strategyRandom:     func() interface{} { return new(strategyEmptyConfig) },
-		strategyLeastPing:  func() interface{} { return new(strategyEmptyConfig) },
-		strategyRoundRobin: func() interface{} { return new(strategyEmptyConfig) },
-		strategyLeastLoad:  func() interface{} { return new(strategyLeastLoadConfig) },
-	}, "type", "settings")
-)
+var strategyConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
+	strategyRandom:     func() interface{} { return new(strategyEmptyConfig) },
+	strategyLeastPing:  func() interface{} { return new(strategyEmptyConfig) },
+	strategyRoundRobin: func() interface{} { return new(strategyEmptyConfig) },
+	strategyLeastLoad:  func() interface{} { return new(strategyLeastLoadConfig) },
+}, "type", "settings")
 
-type strategyEmptyConfig struct {
-}
+type strategyEmptyConfig struct{}
 
 func (v *strategyEmptyConfig) Build() (proto.Message, error) {
 	return nil, nil
@@ -45,8 +43,8 @@ type strategyLeastLoadConfig struct {
 	Tolerance float64 `json:"tolerance,omitempty"`
 }
 
-// healthCheckSettings holds settings for health Checker
-type healthCheckSettings struct {
+// HealthCheckSettings holds settings for health Checker
+type HealthCheckSettings struct {
 	Destination   string            `json:"destination"`
 	Connectivity  string            `json:"connectivity"`
 	Interval      duration.Duration `json:"interval"`
@@ -55,7 +53,7 @@ type healthCheckSettings struct {
 	HttpMethod    string            `json:"httpMethod"`
 }
 
-func (h healthCheckSettings) Build() (proto.Message, error) {
+func (h HealthCheckSettings) Build() (proto.Message, error) {
 	var httpMethod string
 	if h.HttpMethod == "" {
 		httpMethod = "HEAD"

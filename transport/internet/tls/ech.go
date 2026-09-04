@@ -3,8 +3,6 @@ package tls
 import (
 	"bytes"
 	"context"
-	"crypto/ecdh"
-	"crypto/rand"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
@@ -19,12 +17,9 @@ import (
 
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/crypto"
-	dns2 "github.com/xtls/xray-core/features/dns"
 	"golang.org/x/net/http2"
 
 	"github.com/miekg/dns"
-	"github.com/xtls/reality"
-	"github.com/xtls/reality/hpke"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/utils"
@@ -53,45 +48,33 @@ func ApplyECH(c *Config, config *tls.Config) error {
 
 	// for client
 	if len(c.EchConfigList) != 0 {
-		ECHForceQuery := c.EchForceQuery
-		switch ECHForceQuery {
-		case "none", "half", "full":
-		case "":
-			ECHForceQuery = "none" // default to none
-		default:
-			panic("Invalid ECHForceQuery: " + c.EchForceQuery)
-		}
 		defer func() {
 			// if failed to get ECHConfig, use an invalid one to make connection fail
-			if err != nil || len(ECHConfig) == 0 {
-				if ECHForceQuery == "full" {
-					ECHConfig = []byte{1, 1, 4, 5, 1, 4}
-				}
+			if len(ECHConfig) == 0 {
+				ECHConfig = []byte{1, 1, 4, 5, 1, 4}
 			}
 			config.EncryptedClientHelloConfigList = ECHConfig
 		}()
-		// direct base64 config
+		// query config from dns
 		if strings.Contains(c.EchConfigList, "://") {
-			// query config from dns
-			parts := strings.Split(c.EchConfigList, "+")
+			// parse ECH DNS server in format of "example.com+https://1.1.1.1/dns-query"
+			parts := strings.SplitN(c.EchConfigList, "+", 2)
 			if len(parts) == 2 {
-				// parse ECH DNS server in format of "example.com+https://1.1.1.1/dns-query"
 				nameToQuery = parts[0]
 				DNSServer = parts[1]
-			} else if len(parts) == 1 {
+			} else {
 				// normal format
 				DNSServer = parts[0]
-			} else {
-				return errors.New("Invalid ECH DNS server format: ", c.EchConfigList)
 			}
 			if nameToQuery == "" {
 				return errors.New("Using DNS for ECH Config needs serverName or use Server format example.com+https://1.1.1.1/dns-query")
 			}
-			ECHConfig, err = QueryRecord(nameToQuery, DNSServer, c.EchForceQuery, c.EchSocketSettings)
+			ECHConfig, err = QueryRecord(nameToQuery, DNSServer, c.EchSocketSettings)
 			if err != nil {
 				return errors.New("Failed to query ECH DNS record for domain: ", nameToQuery, " at server: ", DNSServer).Base(err)
 			}
 		} else {
+			// direct base64 config
 			ECHConfig, err = base64.StdEncoding.DecodeString(c.EchConfigList)
 			if err != nil {
 				return errors.New("Failed to unmarshal ECHConfigList: ", err)
@@ -111,7 +94,6 @@ type ECHConfigCache struct {
 type echConfigRecord struct {
 	config []byte
 	expire time.Time
-	err    error
 }
 
 var (
@@ -129,39 +111,34 @@ func ECHCacheKey(server, domain string, sockopt *internet.SocketConfig) string {
 // Update updates the ECH config for given domain and server.
 // this method is concurrent safe, only one update request will be sent, others get the cache.
 // if isLockedUpdate is true, it will not try to acquire the lock.
-func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate bool, forceQuery string, sockopt *internet.SocketConfig) ([]byte, error) {
+func (c *ECHConfigCache) Update(domain string, server string, isLockedUpdate bool, sockopt *internet.SocketConfig) ([]byte, error) {
 	if !isLockedUpdate {
 		c.UpdateLock.Lock()
 		defer c.UpdateLock.Unlock()
 	}
 	// Double check cache after acquiring lock
 	configRecord := c.configRecord.Load()
-	if configRecord.expire.After(time.Now()) && configRecord.err == nil {
+	if configRecord.expire.After(time.Now()) {
 		errors.LogDebug(context.Background(), "Cache hit for domain after double check: ", domain)
-		return configRecord.config, configRecord.err
+		return configRecord.config, nil
 	}
 	// Query ECH config from DNS server
 	errors.LogDebug(context.Background(), "Trying to query ECH config for domain: ", domain, " with ECH server: ", server)
 	echConfig, ttl, err := dnsQuery(server, domain, sockopt)
-	// if in "full", directly return
-	if err != nil && forceQuery == "full" {
+	if err != nil {
 		return nil, err
-	}
-	if ttl == 0 {
-		ttl = dns2.DefaultTTL
 	}
 	configRecord = &echConfigRecord{
 		config: echConfig,
 		expire: time.Now().Add(time.Duration(ttl) * time.Second),
-		err:    err,
 	}
 	c.configRecord.Store(configRecord)
-	return configRecord.config, configRecord.err
+	return configRecord.config, nil
 }
 
 // QueryRecord returns the ECH config for given domain.
 // If the record is not in cache or expired, it will query the DNS server and update the cache.
-func QueryRecord(domain string, server string, forceQuery string, sockopt *internet.SocketConfig) ([]byte, error) {
+func QueryRecord(domain string, server string, sockopt *internet.SocketConfig) ([]byte, error) {
 	GlobalECHConfigCacheKey := ECHCacheKey(server, domain, sockopt)
 	echConfigCache, ok := GlobalECHConfigCache.Load(GlobalECHConfigCacheKey)
 	if !ok {
@@ -170,25 +147,25 @@ func QueryRecord(domain string, server string, forceQuery string, sockopt *inter
 		echConfigCache, _ = GlobalECHConfigCache.LoadOrStore(GlobalECHConfigCacheKey, echConfigCache)
 	}
 	configRecord := echConfigCache.configRecord.Load()
-	if configRecord.expire.After(time.Now()) && (configRecord.err == nil || forceQuery == "none") {
+	if configRecord.expire.After(time.Now()) {
 		errors.LogDebug(context.Background(), "Cache hit for domain: ", domain)
-		return configRecord.config, configRecord.err
+		return configRecord.config, nil
 	}
 
 	// If expire is zero value, it means we are in initial state, wait for the query to finish
 	// otherwise return old value immediately and update in a goroutine
 	// but if the cache is too old, wait for update
-	if configRecord.expire == (time.Time{}) || configRecord.expire.Add(time.Hour*6).Before(time.Now()) {
-		return echConfigCache.Update(domain, server, false, forceQuery, sockopt)
+	if configRecord.expire.IsZero() || configRecord.expire.Add(time.Hour*4).Before(time.Now()) {
+		return echConfigCache.Update(domain, server, false, sockopt)
 	} else {
 		// If someone already acquired the lock, it means it is updating, do not start another update goroutine
 		if echConfigCache.UpdateLock.TryLock() {
 			go func() {
 				defer echConfigCache.UpdateLock.Unlock()
-				echConfigCache.Update(domain, server, true, forceQuery, sockopt)
+				echConfigCache.Update(domain, server, true, sockopt)
 			}()
 		}
-		return configRecord.config, configRecord.err
+		return configRecord.config, nil
 	}
 }
 
@@ -246,7 +223,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 				},
 			}
 			c := &http.Client{
-				Timeout:   5 * time.Second,
+				Timeout:   30 * time.Second,
 				Transport: tr,
 			}
 			client, _ = clientForECHDOH.LoadOrStore(serverKey, c)
@@ -255,9 +232,14 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		if err != nil {
 			return nil, 0, err
 		}
+		// h2c: in config is just for claim
+		// change scheme to https and expect outbound to handle TLS (freedom + tlsSetting)
+		req.URL.Scheme = "https"
 		req.Header.Set("Accept", "application/dns-message")
 		req.Header.Set("Content-Type", "application/dns-message")
-		req.Header.Set("X-Padding", strings.Repeat("X", int(crypto.RandBetween(100, 1000))))
+		utils.TryDefaultHeadersWith(req.Header, "fetch")
+		req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
+
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err
@@ -272,14 +254,17 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		}
 		dnsResolve = respBody
 	} else if strings.HasPrefix(server, "udp://") { // for classic udp dns server
-		udpServerAddr := server[len("udp://"):]
-		// default port 53 if not specified
-		if !strings.Contains(udpServerAddr, ":") {
-			udpServerAddr = udpServerAddr + ":53"
-		}
-		dest, err := net.ParseDestination("udp" + ":" + udpServerAddr)
+		udpServerURL, err := url.Parse(server)
 		if err != nil {
-			return nil, 0, errors.New("failed to parse udp dns server ", udpServerAddr, " for ECH: ", err)
+			return nil, 0, errors.New("failed to parse udp dns server ", server, " for ECH: ", err)
+		}
+		// default port 53 if not specified
+		if udpServerURL.Port() == "" {
+			udpServerURL.Host = udpServerURL.Host + ":53"
+		}
+		dest, err := net.ParseDestination("udp" + ":" + udpServerURL.Host)
+		if err != nil {
+			return nil, 0, errors.New("failed to parse udp dns server ", udpServerURL.Host, " for ECH: ", err)
 		}
 		dnsTimeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -324,36 +309,7 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 			}
 		}
 	}
-	// empty is valid, means no ECH config found
-	return nil, dns2.DefaultTTL, nil
-}
-
-// reference github.com/OmarTariq612/goech
-func MarshalBinary(ech reality.EchConfig) ([]byte, error) {
-	var b cryptobyte.Builder
-	b.AddUint16(ech.Version)
-	b.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
-		child.AddUint8(ech.ConfigID)
-		child.AddUint16(ech.KemID)
-		child.AddUint16(uint16(len(ech.PublicKey)))
-		child.AddBytes(ech.PublicKey)
-		child.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
-			for _, cipherSuite := range ech.SymmetricCipherSuite {
-				child.AddUint16(cipherSuite.KDFID)
-				child.AddUint16(cipherSuite.AEADID)
-			}
-		})
-		child.AddUint8(ech.MaxNameLength)
-		child.AddUint8(uint8(len(ech.PublicName)))
-		child.AddBytes(ech.PublicName)
-		child.AddUint16LengthPrefixed(func(child *cryptobyte.Builder) {
-			for _, extention := range ech.Extensions {
-				child.AddUint16(extention.Type)
-				child.AddBytes(extention.Data)
-			}
-		})
-	})
-	return b.Bytes()
+	return nil, 0, errors.New("no valid ECH config found in DNS response")
 }
 
 var ErrInvalidLen = errors.New("goech: invalid length")
@@ -374,9 +330,7 @@ func ConvertToGoECHKeys(data []byte) ([]tls.EncryptedClientHelloKey, error) {
 			return keys, ErrInvalidLen
 		}
 		child := cryptobyte.String(s[:2+keyLength+2+configLength])
-		var (
-			sk, config cryptobyte.String
-		)
+		var sk, config cryptobyte.String
 		if !child.ReadUint16LengthPrefixed(&sk) || !child.ReadUint16LengthPrefixed(&config) || !child.Empty() {
 			return keys, ErrInvalidLen
 		}
@@ -389,42 +343,4 @@ func ConvertToGoECHKeys(data []byte) ([]tls.EncryptedClientHelloKey, error) {
 		})
 	}
 	return keys, nil
-}
-
-const ExtensionEncryptedClientHello = 0xfe0d
-const KDF_HKDF_SHA384 = 0x0002
-const KDF_HKDF_SHA512 = 0x0003
-
-func GenerateECHKeySet(configID uint8, domain string, kem uint16) (reality.EchConfig, []byte, error) {
-	config := reality.EchConfig{
-		Version:    ExtensionEncryptedClientHello,
-		ConfigID:   configID,
-		PublicName: []byte(domain),
-		KemID:      kem,
-		SymmetricCipherSuite: []reality.EchCipher{
-			{KDFID: hpke.KDF_HKDF_SHA256, AEADID: hpke.AEAD_AES_128_GCM},
-			{KDFID: hpke.KDF_HKDF_SHA256, AEADID: hpke.AEAD_AES_256_GCM},
-			{KDFID: hpke.KDF_HKDF_SHA256, AEADID: hpke.AEAD_ChaCha20Poly1305},
-			{KDFID: KDF_HKDF_SHA384, AEADID: hpke.AEAD_AES_128_GCM},
-			{KDFID: KDF_HKDF_SHA384, AEADID: hpke.AEAD_AES_256_GCM},
-			{KDFID: KDF_HKDF_SHA384, AEADID: hpke.AEAD_ChaCha20Poly1305},
-			{KDFID: KDF_HKDF_SHA512, AEADID: hpke.AEAD_AES_128_GCM},
-			{KDFID: KDF_HKDF_SHA512, AEADID: hpke.AEAD_AES_256_GCM},
-			{KDFID: KDF_HKDF_SHA512, AEADID: hpke.AEAD_ChaCha20Poly1305},
-		},
-		MaxNameLength: 0,
-		Extensions:    nil,
-	}
-	// if kem == hpke.DHKEM_X25519_HKDF_SHA256 {
-	curve := ecdh.X25519()
-	priv := make([]byte, 32) //x25519
-	_, err := io.ReadFull(rand.Reader, priv)
-	if err != nil {
-		return config, nil, err
-	}
-	privKey, _ := curve.NewPrivateKey(priv)
-	config.PublicKey = privKey.PublicKey().Bytes()
-	return config, priv, nil
-	// }
-	// TODO: add mlkem768 (former kyber768 draft00). The golang mlkem private key is 64 bytes seed?
 }

@@ -16,10 +16,10 @@ import (
 
 // Manager manages all inbound handlers.
 type Manager struct {
-	access          sync.RWMutex
+	access           sync.RWMutex
 	untaggedHandlers []inbound.Handler
-	taggedHandlers  map[string]inbound.Handler
-	running         bool
+	taggedHandlers   map[string]inbound.Handler
+	running          bool
 }
 
 // New returns a new Manager for inbound handlers.

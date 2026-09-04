@@ -204,7 +204,7 @@ type Connection struct {
 }
 
 // NewConnection create a new KCP connection between local and remote.
-func NewConnection(meta ConnMetadata, writer PacketWriter, closer io.Closer, config *Config) *Connection {
+func NewConnection(meta ConnMetadata, writer io.Writer, closer io.Closer, config *Config) *Connection {
 	errors.LogInfo(context.Background(), "#", meta.Conversation, " creating connection to ", meta.RemoteAddr)
 
 	conn := &Connection{
@@ -215,10 +215,10 @@ func NewConnection(meta ConnMetadata, writer PacketWriter, closer io.Closer, con
 		dataOutput: signal.NewNotifier(),
 		Config:     config,
 		output:     NewRetryableWriter(NewSegmentWriter(writer)),
-		mss:        config.GetMTUValue() - uint32(writer.Overhead()) - DataSegmentOverhead,
+		mss:        config.Mtu - DataSegmentOverhead,
 		roundTrip: &RoundTripInfo{
 			rto:    100,
-			minRtt: config.GetTTIValue(),
+			minRtt: config.Tti,
 		},
 	}
 
@@ -232,17 +232,19 @@ func NewConnection(meta ConnMetadata, writer PacketWriter, closer io.Closer, con
 		return conn.State() == StateTerminated
 	}
 	conn.dataUpdater = NewUpdater(
-		config.GetTTIValue(),
+		config.Tti,
 		func() bool {
 			return !isTerminating() && (conn.sendingWorker.UpdateNecessary() || conn.receivingWorker.UpdateNecessary())
 		},
 		isTerminating,
-		conn.updateTask)
+		conn.updateTask,
+	)
 	conn.pingUpdater = NewUpdater(
 		5000, // 5 seconds
 		func() bool { return !isTerminated() },
 		isTerminated,
-		conn.updateTask)
+		conn.updateTask,
+	)
 	conn.pingUpdater.WakeUp()
 
 	return conn

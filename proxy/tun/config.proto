@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package xray.proxy.tun;
+option csharp_namespace = "Xray.Proxy.Tun";
+option go_package = "github.com/xtls/xray-core/proxy/tun";
+option java_package = "com.xray.proxy.tun";
+option java_multiple_files = true;
+
+message Config {
+  string name = 1;
+  uint32 MTU = 2;
+  repeated string gateway = 3;
+  repeated string DNS = 4;
+  uint32 user_level = 5;
+  repeated string auto_system_routing_table = 6;
+  string auto_outbounds_interface = 7;
+  string desc = 8;
+}

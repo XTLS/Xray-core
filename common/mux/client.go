@@ -148,9 +148,12 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		return nil, err
 	}
 
-	go func(p proxy.Outbound, d internet.Dialer, c common.Closable) {
+	go func(p proxy.Outbound, d internet.Dialer, c *ClientWorker) {
 		outbounds := []*session.Outbound{{
 			Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
+			OnEgressSource: func(source net.Destination) {
+				c.setEgressSource(source)
+			},
 		}}
 		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
 		ctx, cancel := context.WithCancel(ctx)
@@ -163,7 +166,7 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		}
 		common.Must(c.Close())
 		cancel()
-	}(f.Proxy, f.Dialer, c.done)
+	}(f.Proxy, f.Dialer, c)
 
 	return c, nil
 }
@@ -179,6 +182,9 @@ type ClientWorker struct {
 	done           *done.Instance
 	timer          *time.Ticker
 	strategy       ClientStrategy
+	egressAccess   sync.Mutex
+	egressSource   net.Destination
+	egressWaiters  []*session.Outbound
 }
 
 var (
@@ -318,6 +324,7 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 	if s == nil {
 		return false
 	}
+	m.attachEgressSource(session.OutboundsFromContext(ctx))
 	s.input = link.Reader
 	s.output = link.Writer
 	go fetchInput(ctx, s, m.link.Writer)
@@ -328,6 +335,37 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 		}
 	}
 	return true
+}
+
+func (m *ClientWorker) attachEgressSource(outbounds []*session.Outbound) {
+	if len(outbounds) == 0 {
+		return
+	}
+	m.egressAccess.Lock()
+	if m.egressSource.IsValid() {
+		source := m.egressSource
+		m.egressAccess.Unlock()
+		session.SetOutboundEgressSource(outbounds, source)
+		return
+	}
+	for _, outbound := range outbounds {
+		if outbound != nil {
+			m.egressWaiters = append(m.egressWaiters, outbound)
+		}
+	}
+	m.egressAccess.Unlock()
+}
+
+func (m *ClientWorker) setEgressSource(source net.Destination) {
+	if !source.IsValid() {
+		return
+	}
+	m.egressAccess.Lock()
+	m.egressSource = source
+	waiters := m.egressWaiters
+	m.egressWaiters = nil
+	m.egressAccess.Unlock()
+	session.SetOutboundEgressSource(waiters, source)
 }
 
 func (m *ClientWorker) handleStatueKeepAlive(meta *FrameMetadata, reader *buf.BufferedReader) error {

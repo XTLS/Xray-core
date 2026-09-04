@@ -122,7 +122,7 @@ func NewReader(reader io.Reader) Reader {
 	}
 
 	_, isFile := reader.(*os.File)
-	if !isFile && useReadv {
+	if !isFile && useReadV() {
 		if sc, ok := reader.(syscall.Conn); ok {
 			rawConn, err := sc.SyscallConn()
 			if err != nil {

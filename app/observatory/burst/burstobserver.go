@@ -2,7 +2,6 @@ package burst
 
 import (
 	"context"
-
 	"sync"
 
 	"github.com/xtls/xray-core/app/observatory"
@@ -30,6 +29,10 @@ type Observer struct {
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
 	return &observatory.ObservationResult{Status: o.createResult()}, nil
+}
+
+func (o *Observer) Check(tag []string) {
+	o.hp.Check(tag)
 }
 
 func (o *Observer) createResult() []*observatory.OutboundStatus {
@@ -68,7 +71,6 @@ func (o *Observer) Start() error {
 		o.hp.StartScheduler(func() ([]string, error) {
 			hs, ok := o.ohm.(outbound.HandlerSelector)
 			if !ok {
-
 				return nil, errors.New("outbound.Manager is not a HandlerSelector")
 			}
 

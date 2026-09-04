@@ -49,6 +49,4 @@ message ClientConfig {
   uint32 port = 2;
   string method = 3;
   string key = 4;
-  bool udp_over_tcp = 5;
-  uint32 udp_over_tcp_version = 6;
 }

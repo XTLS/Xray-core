@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"hash/crc64"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -105,18 +106,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	account := request.User.Account.(*vmess.MemoryAccount)
 	request.Security = account.Security
 
-	if request.Security == protocol.SecurityType_AES128_GCM || request.Security == protocol.SecurityType_NONE || request.Security == protocol.SecurityType_CHACHA20_POLY1305 {
+	if request.Security == protocol.SecurityType_AES128_GCM || request.Security == protocol.SecurityType_CHACHA20_POLY1305 {
 		request.Option.Set(protocol.RequestOptionChunkMasking)
 	}
 
 	if shouldEnablePadding(request.Security) && request.Option.Has(protocol.RequestOptionChunkMasking) {
 		request.Option.Set(protocol.RequestOptionGlobalPadding)
-	}
-
-	if request.Security == protocol.SecurityType_ZERO {
-		request.Security = protocol.SecurityType_NONE
-		request.Option.Clear(protocol.RequestOptionChunkStream)
-		request.Option.Clear(protocol.RequestOptionChunkMasking)
 	}
 
 	if account.AuthenticatedLengthExperiment {
@@ -224,12 +219,17 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
-var (
-	enablePadding = false
-)
+var enablePadding atomic.Bool
 
 func shouldEnablePadding(s protocol.SecurityType) bool {
-	return enablePadding || s == protocol.SecurityType_AES128_GCM || s == protocol.SecurityType_CHACHA20_POLY1305 || s == protocol.SecurityType_AUTO
+	return enablePadding.Load() || s == protocol.SecurityType_AES128_GCM || s == protocol.SecurityType_CHACHA20_POLY1305 || s == protocol.SecurityType_AUTO
+}
+
+func reloadEnvSettings() error {
+	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	paddingValue := platform.NewEnvFlag(platform.UseVmessPadding).GetValue(func() string { return defaultFlagValue })
+	enablePadding.Store(paddingValue != defaultFlagValue)
+	return nil
 }
 
 func init() {
@@ -237,10 +237,5 @@ func init() {
 		return New(ctx, config.(*Config))
 	}))
 
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-
-	paddingValue := platform.NewEnvFlag(platform.UseVmessPadding).GetValue(func() string { return defaultFlagValue })
-	if paddingValue != defaultFlagValue {
-		enablePadding = true
-	}
+	platform.RegisterEnvReload(reloadEnvSettings)
 }

@@ -2,7 +2,6 @@ package internet
 
 import (
 	"context"
-	"net"
 	"runtime"
 	"strconv"
 	"strings"
@@ -11,32 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/sys/unix"
 )
-
-func bindAddr(fd uintptr, ip []byte, port uint32) error {
-	setReuseAddr(fd)
-	setReusePort(fd)
-
-	var sockaddr syscall.Sockaddr
-
-	switch len(ip) {
-	case net.IPv4len:
-		a4 := &syscall.SockaddrInet4{
-			Port: int(port),
-		}
-		copy(a4.Addr[:], ip)
-		sockaddr = a4
-	case net.IPv6len:
-		a6 := &syscall.SockaddrInet6{
-			Port: int(port),
-		}
-		copy(a6.Addr[:], ip)
-		sockaddr = a6
-	default:
-		return errors.New("unexpected length of ip")
-	}
-
-	return syscall.Bind(int(fd), sockaddr)
-}
 
 // applyOutboundSocketOptions applies socket options for outbound connection.
 // note that unlike other part of Xray, this function needs network with speified network stack(tcp4/tcp6/udp4/udp6)
@@ -103,7 +76,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			if !strings.HasPrefix(network, custom.Network) {
 				continue
 			}
-			var level = 0x6 // default TCP
+			level := 0x6 // default TCP
 			var opt int
 			if len(custom.Opt) == 0 {
 				return errors.New("No opt!")
@@ -196,41 +169,42 @@ func applyInboundSocketOptions(network string, fd uintptr, config *SocketConfig)
 				return errors.New("failed to set TCP_MAXSEG", err)
 			}
 		}
-		if len(config.CustomSockopt) > 0 {
-			for _, custom := range config.CustomSockopt {
-				if custom.System != "" && custom.System != runtime.GOOS {
-					errors.LogDebug(context.Background(), "CustomSockopt system not match: ", "want ", custom.System, " got ", runtime.GOOS)
-					continue
+	}
+
+	if len(config.CustomSockopt) > 0 {
+		for _, custom := range config.CustomSockopt {
+			if custom.System != "" && custom.System != runtime.GOOS {
+				errors.LogDebug(context.Background(), "CustomSockopt system not match: ", "want ", custom.System, " got ", runtime.GOOS)
+				continue
+			}
+			// Skip unwanted network type
+			// network might be tcp4 or tcp6
+			// use HasPrefix so that "tcp" can match tcp4/6 with "tcp" if user want to control all tcp (udp is also the same)
+			// if it is empty, strings.HasPrefix will always return true to make it apply for all networks
+			if !strings.HasPrefix(network, custom.Network) {
+				continue
+			}
+			level := 0x6 // default TCP
+			var opt int
+			if len(custom.Opt) == 0 {
+				return errors.New("No opt!")
+			} else {
+				opt, _ = strconv.Atoi(custom.Opt)
+			}
+			if custom.Level != "" {
+				level, _ = strconv.Atoi(custom.Level)
+			}
+			if custom.Type == "int" {
+				value, _ := strconv.Atoi(custom.Value)
+				if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
+					return errors.New("failed to set CustomSockoptInt", opt, value, err)
 				}
-				// Skip unwanted network type
-				// network might be tcp4 or tcp6
-				// use HasPrefix so that "tcp" can match tcp4/6 with "tcp" if user want to control all tcp (udp is also the same)
-				// if it is empty, strings.HasPrefix will always return true to make it apply for all networks
-				if !strings.HasPrefix(network, custom.Network) {
-					continue
+			} else if custom.Type == "str" {
+				if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
+					return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
 				}
-				var level = 0x6 // default TCP
-				var opt int
-				if len(custom.Opt) == 0 {
-					return errors.New("No opt!")
-				} else {
-					opt, _ = strconv.Atoi(custom.Opt)
-				}
-				if custom.Level != "" {
-					level, _ = strconv.Atoi(custom.Level)
-				}
-				if custom.Type == "int" {
-					value, _ := strconv.Atoi(custom.Value)
-					if err := syscall.SetsockoptInt(int(fd), level, opt, value); err != nil {
-						return errors.New("failed to set CustomSockoptInt", opt, value, err)
-					}
-				} else if custom.Type == "str" {
-					if err := syscall.SetsockoptString(int(fd), level, opt, custom.Value); err != nil {
-						return errors.New("failed to set CustomSockoptString", opt, custom.Value, err)
-					}
-				} else {
-					return errors.New("unknown CustomSockopt type:", custom.Type)
-				}
+			} else {
+				return errors.New("unknown CustomSockopt type:", custom.Type)
 			}
 		}
 	}

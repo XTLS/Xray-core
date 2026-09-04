@@ -228,7 +228,6 @@ func isValueKind(kind reflect.Kind) bool {
 }
 
 func marshalInterface(v interface{}, ignoreNullValue bool, insertTypeInfo bool) interface{} {
-
 	if r, ok := marshalKnownType(v, ignoreNullValue, insertTypeInfo); ok {
 		return r
 	}

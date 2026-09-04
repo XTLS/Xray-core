@@ -5,11 +5,21 @@ import (
 	"io"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	creflect "github.com/xtls/xray-core/common/reflect"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/main/confloader"
 )
+
+// UseStrictJSON, when true, makes JSON config decoders skip the custom
+// comment-stripping reader and parse input as strict RFC 8259 JSON.
+//
+// Enabled by setting the env variable xray.json.strict=true (or its normalized
+// form XRAY_JSON_STRICT=true). Default false preserves backward-compatible
+// behavior for human-edited configs that may contain comments or other
+// JSON5/JSONC syntax.
+var UseStrictJSON = platform.NewEnvFlag(platform.UseStrictJSON).GetValue(func() string { return "" }) == "true"
 
 func MergeConfigFromFiles(files []*core.ConfigSource) (string, error) {
 	c, err := mergeConfigs(files)
@@ -31,7 +41,11 @@ func mergeConfigs(files []*core.ConfigSource) (*conf.Config, error) {
 		if err != nil {
 			return nil, errors.New("failed to read config: ", file).Base(err)
 		}
-		c, err := ReaderDecoderByFormat[file.Format](r)
+		decoder := ReaderDecoderByFormat[file.Format]
+		if file.Format == "json" && UseStrictJSON {
+			decoder = DecodeJSONConfigStrict
+		}
+		c, err := decoder(r)
 		if err != nil {
 			return nil, errors.New("failed to decode config: ", file).Base(err)
 		}

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,12 +20,18 @@ import (
 var webpage []byte
 
 type task struct {
-	Method string `json:"method"`
-	URL    string `json:"url"`
-	Extra  any    `json:"extra,omitempty"`
+	Method         string `json:"method"`
+	URL            string `json:"url"`
+	Extra          any    `json:"extra,omitempty"`
+	StreamResponse bool   `json:"streamResponse"`
 }
 
-var conns chan *websocket.Conn
+var (
+	conns       chan *websocket.Conn
+	server      *http.Server
+	currentAddr string
+	mu          sync.Mutex
+)
 
 var upgrader = &websocket.Upgrader{
 	ReadBufferSize:   0,
@@ -35,26 +42,54 @@ var upgrader = &websocket.Upgrader{
 	},
 }
 
-func init() {
+// Used by external projects when using xray as a go module
+func Reload() {
 	addr := platform.NewEnvFlag(platform.BrowserDialerAddress).GetValue(func() string { return "" })
+	mu.Lock()
+	defer mu.Unlock()
+
+	if addr == currentAddr && (addr == "" || server != nil) {
+		return
+	}
+
+	if server != nil {
+		server.Close()
+		server = nil
+	}
+	if HasBrowserDialer() {
+		for len(conns) > 0 {
+			select {
+			case c := <-conns:
+				c.Close()
+			default:
+			}
+		}
+		conns = nil
+	}
+	currentAddr = addr
 	if addr != "" {
 		token := uuid.New()
 		csrfToken := token.String()
-		webpage = bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
+		webpage := bytes.ReplaceAll(webpage, []byte("csrfToken"), []byte(csrfToken))
 		conns = make(chan *websocket.Conn, 256)
-		go http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/websocket" {
-				if r.URL.Query().Get("token") == csrfToken {
-					if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
-						conns <- conn
-					} else {
-						errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
+		server = &http.Server{
+			Addr: addr,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/websocket" {
+					if r.URL.Query().Get("token") == csrfToken {
+						if conn, err := upgrader.Upgrade(w, r, nil); err == nil {
+							conns <- conn
+						} else {
+							errors.LogError(context.Background(), "Browser dialer http upgrade unexpected error")
+						}
 					}
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+					w.Write(webpage)
 				}
-			} else {
-				w.Write(webpage)
-			}
-		}))
+			}),
+		}
+		go server.ListenAndServe()
 	}
 }
 
@@ -68,14 +103,13 @@ type webSocketExtra struct {
 
 func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
 	task := task{
-		Method: "WS",
-		URL:    uri,
+		Method:         "WS",
+		URL:            uri,
+		StreamResponse: true,
 	}
 
-	if ed != nil {
-		task.Extra = webSocketExtra{
-			Protocol: base64.RawURLEncoding.EncodeToString(ed),
-		}
+	task.Extra = webSocketExtra{
+		Protocol: base64.RawURLEncoding.EncodeToString(ed),
 	}
 
 	return dialTask(task)
@@ -84,9 +118,10 @@ func DialWS(uri string, ed []byte) (*websocket.Conn, error) {
 type httpExtra struct {
 	Referrer string            `json:"referrer,omitempty"`
 	Headers  map[string]string `json:"headers,omitempty"`
+	Cookies  map[string]string `json:"cookies,omitempty"`
 }
 
-func httpExtraFromHeaders(headers http.Header) *httpExtra {
+func httpExtraFromHeadersAndCookies(headers http.Header, cookies []*http.Cookie) *httpExtra {
 	if len(headers) == 0 {
 		return nil
 	}
@@ -104,24 +139,37 @@ func httpExtraFromHeaders(headers http.Header) *httpExtra {
 		}
 	}
 
+	if len(cookies) > 0 {
+		extra.Cookies = make(map[string]string)
+		for _, cookie := range cookies {
+			extra.Cookies[cookie.Name] = cookie.Value
+		}
+	}
+
 	return &extra
 }
 
-func DialGet(uri string, headers http.Header) (*websocket.Conn, error) {
+func DialGet(uri string, headers http.Header, cookies []*http.Cookie) (*websocket.Conn, error) {
 	task := task{
-		Method: "GET",
-		URL:    uri,
-		Extra:  httpExtraFromHeaders(headers),
+		Method:         "GET",
+		URL:            uri,
+		Extra:          httpExtraFromHeadersAndCookies(headers, cookies),
+		StreamResponse: true,
 	}
 
 	return dialTask(task)
 }
 
-func DialPost(uri string, headers http.Header, payload []byte) error {
+func DialPacket(method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
+	return dialWithBody(method, uri, headers, cookies, payload)
+}
+
+func dialWithBody(method string, uri string, headers http.Header, cookies []*http.Cookie, payload []byte) error {
 	task := task{
-		Method: "POST",
-		URL:    uri,
-		Extra:  httpExtraFromHeaders(headers),
+		Method:         method,
+		URL:            uri,
+		Extra:          httpExtraFromHeadersAndCookies(headers, cookies),
+		StreamResponse: false,
 	}
 
 	conn, err := dialTask(task)
@@ -176,4 +224,11 @@ func CheckOK(conn *websocket.Conn) error {
 	}
 
 	return nil
+}
+
+func init() {
+	platform.RegisterEnvReload(func() error {
+		Reload()
+		return nil
+	})
 }

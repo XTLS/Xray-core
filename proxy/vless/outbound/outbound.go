@@ -7,14 +7,17 @@ import (
 	"encoding/base64"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
 	utls "github.com/refraction-networking/utls"
+	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
 	proxyman "github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	xctx "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
@@ -52,6 +55,15 @@ type Handler struct {
 	cone          bool
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
+
+	testpre  uint32
+	initpre  sync.Once
+	preConns chan *ConnExpire
+}
+
+type ConnExpire struct {
+	Conn   stat.Connection
+	Expire time.Time
 }
 
 // New creates a new VLess outbound handler.
@@ -86,14 +98,25 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	if a.Reverse != nil {
+		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
+			Tag:  a.Reverse.Tag,
+			Name: "vless-reverse",
+			User: handler.server.User, // TODO: email
+		})
+		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
+			request, err := proxymanConfig.BuildSniffingRequest(sc)
+			if err != nil {
+				return nil, errors.New("failed to build reverse sniffing request").Base(err).AtError()
+			}
+			rvsCtx = session.ContextWithContent(rvsCtx, &session.Content{
+				SniffingRequest: request,
+			})
+		}
 		handler.reverse = &Reverse{
 			tag:        a.Reverse.Tag,
 			dispatcher: v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
-			ctx: session.ContextWithInbound(ctx, &session.Inbound{
-				Tag:  a.Reverse.Tag,
-				User: handler.server.User, // TODO: email
-			}),
-			handler: handler,
+			ctx:        rvsCtx,
+			handler:    handler,
 		}
 		handler.reverse.monitorTask = &task.Periodic{
 			Execute:  handler.reverse.monitor,
@@ -105,11 +128,16 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}()
 	}
 
+	handler.testpre = a.Testpre
+
 	return handler, nil
 }
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
+	if h.preConns != nil {
+		close(h.preConns)
+	}
 	if h.reverse != nil {
 		return h.reverse.Close()
 	}
@@ -128,22 +156,55 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	rec := h.server
 	var conn stat.Connection
 
-	if err := retry.ExponentialBackoff(5, 200).On(func() error {
-		var err error
-		conn, err = dialer.Dial(ctx, rec.Destination)
-		if err != nil {
-			return err
+	if h.testpre > 0 && h.reverse == nil {
+		h.initpre.Do(func() {
+			h.preConns = make(chan *ConnExpire)
+			for range h.testpre { // TODO: randomize
+				go func() {
+					defer func() { recover() }()
+					ctx := xctx.ContextWithID(context.Background(), session.NewID())
+					for {
+						conn, err := dialer.Dial(ctx, rec.Destination)
+						if err != nil {
+							errors.LogWarningInner(ctx, err, "pre-connect failed")
+							continue
+						}
+						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
+						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
+					}
+				}()
+			}
+		})
+		for {
+			connTime := <-h.preConns
+			if connTime == nil {
+				return errors.New("closed handler").AtWarning()
+			}
+			if time.Now().Before(connTime.Expire) {
+				conn = connTime.Conn
+				break
+			}
+			connTime.Conn.Close()
 		}
-		return nil
-	}); err != nil {
-		return errors.New("failed to find an available destination").Base(err).AtWarning()
+	}
+
+	if conn == nil {
+		if err := retry.ExponentialBackoff(5, 200).On(func() error {
+			var err error
+			conn, err = dialer.Dial(ctx, rec.Destination)
+			if err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return errors.New("failed to find an available destination").Base(err).AtWarning()
+		}
 	}
 	defer conn.Close()
 
-	iConn := conn
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
-	}
+	ob.Conn = conn // for Vision's pre-connect
+
+	iConn := stat.TryUnwrapStatsConn(conn)
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 

@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
@@ -69,11 +71,17 @@ func (o *Observer) background() {
 
 		outbounds := hs.Select(o.config.SubjectSelector)
 
-		o.updateStatus(outbounds)
+		o.clearRemovedOutbounds(outbounds)
 
 		sleepTime := time.Second * 10
 		if o.config.ProbeInterval != 0 {
 			sleepTime = time.Duration(o.config.ProbeInterval)
+		}
+
+		if len(outbounds) == 0 {
+			errors.LogWarning(o.ctx, "no outbound matches subjectSelector ", o.config.SubjectSelector)
+			time.Sleep(sleepTime)
+			continue
 		}
 
 		if !o.config.EnableConcurrency {
@@ -110,11 +118,19 @@ func (o *Observer) background() {
 	}
 }
 
-func (o *Observer) updateStatus(outbounds []string) {
+func (o *Observer) clearRemovedOutbounds(outbounds []string) {
 	o.statusLock.Lock()
 	defer o.statusLock.Unlock()
-	// TODO should remove old inbound that is removed
-	_ = outbounds
+	if len(o.status) == 0 {
+		return
+	}
+	var pruned []*OutboundStatus
+	for _, status := range o.status {
+		if slices.Contains(outbounds, status.OutboundTag) {
+			pruned = append(pruned, status)
+		}
+	}
+	o.status = pruned
 }
 
 func (o *Observer) probe(outbound string) ProbeResult {
@@ -162,7 +178,9 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		if o.config.ProbeUrl != "" {
 			probeURL = o.config.ProbeUrl
 		}
-		response, err := httpClient.Get(probeURL)
+		req, _ := http.NewRequest(http.MethodGet, probeURL, nil)
+		utils.TryDefaultHeadersWith(req.Header, "nav")
+		response, err := httpClient.Do(req)
 		if err != nil {
 			return errors.New("outbound failed to relay connection").Base(err)
 		}
@@ -174,7 +192,7 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		return nil
 	})
 	if err != nil {
-		var errorMessage = "the outbound " + outbound + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
+		errorMessage := "the outbound " + outbound + " is dead: GET request failed:" + err.Error() + "with outbound handler report underlying connection failed"
 		errors.LogInfoInner(o.ctx, errorCollectorForRequest.UnderlyingError(), errorMessage)
 		return ProbeResult{Alive: false, LastErrorReason: errorMessage}
 	}

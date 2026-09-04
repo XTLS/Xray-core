@@ -2,6 +2,7 @@ package dns
 
 import (
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,8 @@ func Test_parseResponse(t *testing.T) {
 
 	ans = new(dns.Msg)
 	ans.Id = 1
-	ans.Answer = append(ans.Answer,
+	ans.Answer = append(
+		ans.Answer,
 		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")),
 		common.Must2(dns.NewRR("google.com. IN A 8.8.8.8")),
@@ -34,7 +36,8 @@ func Test_parseResponse(t *testing.T) {
 
 	ans = new(dns.Msg)
 	ans.Id = 2
-	ans.Answer = append(ans.Answer,
+	ans.Answer = append(
+		ans.Answer,
 		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME fake.google.com")),
 		common.Must2(dns.NewRR("google.com. IN CNAME m.test.google.com")),
@@ -131,10 +134,15 @@ func Test_buildReqMsgs(t *testing.T) {
 			IPv6Enable: false,
 			FakeEnable: false,
 		}, nil}, 0},
+		{"name too long", args{strings.Repeat("a", 256), dns_feature.IPOption{
+			IPv4Enable: true,
+			IPv6Enable: true,
+			FakeEnable: false,
+		}, nil}, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := buildReqMsgs(tt.args.domain, tt.args.option, stubID, tt.args.reqOpts); !(len(got) == tt.want) {
+			if got, _ := buildReqMsgs(tt.args.domain, tt.args.option, stubID, tt.args.reqOpts); !(len(got) == tt.want) {
 				t.Errorf("buildReqMsgs() = %v, want %v", got, tt.want)
 			}
 		})

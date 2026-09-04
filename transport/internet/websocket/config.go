@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -23,6 +24,7 @@ func (c *Config) GetRequestHeader() http.Header {
 	for k, v := range c.Header {
 		header.Add(k, v)
 	}
+	utils.TryDefaultHeadersWith(header, "ws")
 	return header
 }
 
