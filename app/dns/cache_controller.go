@@ -139,7 +139,8 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 
 	if lenAfter == 0 {
 		if c.highWatermark >= minSizeForEmptyRebuild {
-			errors.LogDebug(context.Background(), c.name,
+			errors.LogDebug(
+				context.Background(), c.name,
 				" rebuilding empty cache map to reclaim memory.",
 				" size_before_cleanup=", lenBefore,
 				" peak_size_before_rebuild=", c.highWatermark,
@@ -153,7 +154,8 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 
 	if reductionFromPeak := c.highWatermark - lenAfter; reductionFromPeak > shrinkAbsoluteThreshold &&
 		float64(reductionFromPeak) > float64(c.highWatermark)*shrinkRatioThreshold {
-		errors.LogDebug(context.Background(), c.name,
+		errors.LogDebug(
+			context.Background(), c.name,
 			" shrinking cache map to reclaim memory.",
 			" new_size=", lenAfter,
 			" peak_size_before_shrink=", c.highWatermark,
@@ -165,7 +167,6 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 		c.highWatermark = lenAfter
 		go c.migrate()
 	}
-
 }
 
 type migrationEntry struct {

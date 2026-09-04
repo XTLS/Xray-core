@@ -11,12 +11,19 @@ on:
 jobs:
   check-assets:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     steps:
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-geodat-
+
+      - name: Restore Wintun Cache
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-wintun-
 
       - name: Check Assets Existence
         id: check-assets
@@ -34,10 +41,22 @@ jobs:
               break
             fi
           done
+          LIST=('amd64' 'x86' 'arm64')
+          for ARCHITECTURE in "${LIST[@]}"
+          do
+            echo -e "Checking wintun.dll for ${ARCHITECTURE}..."
+            if [ -s "./resources/wintun/bin/${ARCHITECTURE}/wintun.dll" ]; then
+              echo -e "wintun.dll for ${ARCHITECTURE} exists."
+            else
+              echo -e "wintun.dll for ${ARCHITECTURE} is missing."
+              echo "missing=true" >> $GITHUB_OUTPUT
+              break
+            fi
+          done
 
       - name: Trigger Asset Update Workflow if Assets Missing
         if: steps.check-assets.outputs.missing == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -96,9 +115,6 @@ jobs:
           # Windows ARM
           - goos: windows
             goarch: arm64
-          - goos: windows
-            goarch: arm
-            goarm: 7
           # BEGIN Other architectures
           # BEGIN riscv64 & ARM64 & LOONG64
           - goos: linux
@@ -146,6 +162,7 @@ jobs:
       fail-fast: false
 
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
@@ -153,7 +170,7 @@ jobs:
       CGO_ENABLED: 0
     steps:
       - name: Checkout codebase
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up NDK
         if: matrix.goos == 'android'
@@ -176,7 +193,7 @@ jobs:
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           check-latest: true
@@ -191,10 +208,11 @@ jobs:
           if [[ ${GOOS} == 'windows' ]]; then
             echo 'Building Xray for Windows...'
             go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-            echo 'CreateObject("Wscript.Shell").Run "xray.exe -config config.json",0' > build_assets/xray_no_window.vbs
-            echo 'Start-Process -FilePath ".\xray.exe" -ArgumentList "-config .\config.json" -WindowStyle Hidden' > build_assets/xray_no_window.ps1
             # The line below is for without running conhost.exe version. Commented for not being used. Provided for reference.
             # go build -o build_assets/wxray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          elif [[ ${GOOS} == 'android' ]]; then
+            echo 'Building Xray for Android...'
+            go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
           else
             echo 'Building Xray...'
             if [[ ${GOARCH} == 'mips' || ${GOARCH} == 'mipsle' ]]; then
@@ -207,14 +225,40 @@ jobs:
           fi
 
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-geodat-
 
+      - name: Restore Wintun Cache
+        if: matrix.goos == 'windows'
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-wintun-
+
+      - name: Add additional assets into package
+        run: |
+          mv -f resources/geo* build_assets/
+          if [[ ${GOOS} == 'windows' ]]; then
+            cp .github/build/windows/* build_assets/
+          fi
+          if [[ ${GOOS} == 'windows' ]]; then
+            echo 'Adding Wintun into packages'
+            if [[ ${GOARCH} == 'amd64' ]]; then
+              mv resources/wintun/bin/amd64/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == '386' ]]; then
+              mv resources/wintun/bin/x86/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == 'arm64' ]]; then
+              mv resources/wintun/bin/arm64/wintun.dll build_assets/
+            fi
+            mv resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
+          fi
+
       - name: Copy README.md & LICENSE
         run: |
-          mv -f resources/* build_assets
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
 
@@ -233,17 +277,6 @@ jobs:
             openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
           done
 
-      - name: Change the name
-        run: |
-          mv build_assets Xray-${{ env.ASSET_NAME }}
-
-      - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v5
-        with:
-          name: Xray-${{ env.ASSET_NAME }}
-          path: |
-            ./Xray-${{ env.ASSET_NAME }}/*
-
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         if: github.event_name == 'release'
@@ -252,3 +285,10 @@ jobs:
           file: ./Xray-${{ env.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true
+
+      - name: Upload files to Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Xray-${{ env.ASSET_NAME }}
+          path: |
+            ./build_assets/*

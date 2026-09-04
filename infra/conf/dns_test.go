@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/app/dns"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	. "github.com/xtls/xray-core/infra/conf"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestDNSConfigParsing(t *testing.T) {
@@ -22,7 +25,7 @@ func TestDNSConfigParsing(t *testing.T) {
 	}
 	expectedServeStale := true
 	expectedServeExpiredTTL := uint32(172800)
-	runMultiTestCase(t, []TestCase{
+	testCases := []TestCase{
 		{
 			Input: `{
 				"servers": [{
@@ -61,16 +64,9 @@ func TestDNSConfigParsing(t *testing.T) {
 							Port:    5353,
 						},
 						SkipFallback: true,
-						PrioritizedDomain: []*dns.NameServer_PriorityDomain{
+						Domain: []*geodata.DomainRule{
 							{
-								Type:   dns.DomainMatchingType_Subdomain,
-								Domain: "example.com",
-							},
-						},
-						OriginalRules: []*dns.NameServer_OriginalRule{
-							{
-								Rule: "domain:example.com",
-								Size: 1,
+								Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "example.com"}},
 							},
 						},
 						ServeStale:      &expectedServeStale,
@@ -80,28 +76,23 @@ func TestDNSConfigParsing(t *testing.T) {
 				},
 				StaticHosts: []*dns.Config_HostMapping{
 					{
-						Type:          dns.DomainMatchingType_Subdomain,
-						Domain:        "example.com",
+						Domain:        &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Domain, Value: "example.com"}}},
 						ProxiedDomain: "google.com",
 					},
 					{
-						Type:   dns.DomainMatchingType_Full,
-						Domain: "example.com",
+						Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "example.com"}}},
 						Ip:     [][]byte{{127, 0, 0, 1}},
 					},
 					{
-						Type:   dns.DomainMatchingType_Keyword,
-						Domain: "google",
+						Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Substr, Value: "google"}}},
 						Ip:     [][]byte{{8, 8, 8, 8}, {8, 8, 4, 4}},
 					},
 					{
-						Type:   dns.DomainMatchingType_Regex,
-						Domain: ".*\\.com",
+						Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Regex, Value: ".*\\.com"}}},
 						Ip:     [][]byte{{8, 8, 4, 4}},
 					},
 					{
-						Type:   dns.DomainMatchingType_Full,
-						Domain: "www.example.org",
+						Domain: &geodata.DomainRule{Value: &geodata.DomainRule_Custom{Custom: &geodata.Domain{Type: geodata.Domain_Full, Value: "www.example.org"}}},
 						Ip:     [][]byte{{127, 0, 0, 1}, {127, 0, 0, 2}},
 					},
 				},
@@ -113,5 +104,21 @@ func TestDNSConfigParsing(t *testing.T) {
 				DisableFallback: true,
 			},
 		},
-	})
+	}
+
+	for _, testCase := range testCases {
+		actual, err := testCase.Parser(testCase.Input)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if diff := cmp.Diff(
+			testCase.Output,
+			actual,
+			protocmp.Transform(),
+			protocmp.SortRepeatedFields(&dns.Config{}, "static_hosts"),
+		); diff != "" {
+			t.Fatalf("Failed in test case:\n%s\nDiff (-want +got):\n%s", testCase.Input, diff)
+		}
+	}
 }

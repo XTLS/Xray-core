@@ -104,6 +104,17 @@ message RemoveRuleRequest {
 
 message RemoveRuleResponse {}
 
+message ListRuleRequest {}
+
+message ListRuleItem {
+  string tag = 1;
+  string ruleTag = 2;
+}
+
+message ListRuleResponse{
+  repeated ListRuleItem rules = 1;
+}
+
 service RoutingService {
   rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
       returns (stream RoutingContext) {}
@@ -114,6 +125,8 @@ service RoutingService {
   
   rpc AddRule(AddRuleRequest) returns (AddRuleResponse) {}
   rpc RemoveRule(RemoveRuleRequest) returns (RemoveRuleResponse) {}
+
+  rpc ListRule(ListRuleRequest) returns (ListRuleResponse) {}
 }
 
 message Config {}

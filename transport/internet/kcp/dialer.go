@@ -3,6 +3,7 @@ package kcp
 import (
 	"context"
 	"io"
+	reflect "reflect"
 	"sync/atomic"
 
 	"github.com/xtls/xray-core/common"
@@ -10,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -49,39 +51,48 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 	dest.Network = net.Network_UDP
 	errors.LogInfo(ctx, "dialing mKCP to ", dest)
 
-	rawConn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+	conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 	if err != nil {
 		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
 	}
 
+	if streamSettings.UdpmaskManager != nil {
+		var pktConn net.PacketConn
+		var udpAddr *net.UDPAddr
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn = c.PacketConn
+			udpAddr = c.RemoteAddr().(*net.UDPAddr)
+		case *cnc.Connection:
+			pktConn = &internet.FakePacketConn{Conn: c}
+			udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
+		default:
+			panic(reflect.TypeOf(c))
+		}
+		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
+		if err != nil {
+			pktConn.Close()
+			return nil, errors.New("mask err").Base(err)
+		}
+		pktConn = newConn
+		conn = &internet.PacketConnWrapper{
+			PacketConn: pktConn,
+			Dest:       udpAddr,
+		}
+	}
+
 	kcpSettings := streamSettings.ProtocolSettings.(*Config)
 
-	header, err := kcpSettings.GetPackerHeader()
-	if err != nil {
-		return nil, errors.New("failed to create packet header").Base(err)
-	}
-	security, err := kcpSettings.GetSecurity()
-	if err != nil {
-		return nil, errors.New("failed to create security").Base(err)
-	}
-	reader := &KCPPacketReader{
-		Header:   header,
-		Security: security,
-	}
-	writer := &KCPPacketWriter{
-		Header:   header,
-		Security: security,
-		Writer:   rawConn,
-	}
+	reader := &KCPPacketReader{}
 
 	conv := uint16(atomic.AddUint32(&globalConv, 1))
 	session := NewConnection(ConnMetadata{
-		LocalAddr:    rawConn.LocalAddr(),
-		RemoteAddr:   rawConn.RemoteAddr(),
+		LocalAddr:    conn.LocalAddr(),
+		RemoteAddr:   conn.RemoteAddr(),
 		Conversation: conv,
-	}, writer, rawConn, kcpSettings)
+	}, conn, conn, kcpSettings)
 
-	go fetchInput(ctx, rawConn, reader, session)
+	go fetchInput(ctx, conn, reader, session)
 
 	var iConn stat.Connection = session
 
@@ -93,5 +104,5 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 }
 
 func init() {
-	common.Must(internet.RegisterTransportDialer(protocolName, DialKCP))
+	common.Must(internet.RegisterTransportDialer(ProtocolName, DialKCP))
 }

@@ -79,7 +79,7 @@ func (i *ClientInstance) Handshake(conn net.Conn) (*CommonConn, error) {
 	var nfsKey []byte
 	var lastCTR cipher.Stream
 	for j, k := range i.NfsPKeys {
-		var index = 32
+		index := 32
 		if k, ok := k.(*ecdh.PublicKey); ok {
 			privateKey, _ := ecdh.X25519().GenerateKey(rand.Reader)
 			copy(relays, privateKey.PublicKey().Bytes())

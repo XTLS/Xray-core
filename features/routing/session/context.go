@@ -34,7 +34,6 @@ func (ctx *Context) GetSourceIPs() []net.IP {
 	}
 
 	return nil
-
 }
 
 // GetSourcePort implements routing.Context.

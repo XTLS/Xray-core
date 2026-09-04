@@ -68,12 +68,12 @@ func (aidd *AuthIDDecoder) Decode(data [16]byte) (int64, uint32, int32, []byte) 
 }
 
 func NewAuthIDDecoderHolder() *AuthIDDecoderHolder {
-	return &AuthIDDecoderHolder{make(map[string]*AuthIDDecoderItem), antireplay.NewReplayFilter(120)}
+	return &AuthIDDecoderHolder{make(map[string]*AuthIDDecoderItem), antireplay.NewMapFilter[[16]byte](120)}
 }
 
 type AuthIDDecoderHolder struct {
 	decoders map[string]*AuthIDDecoderItem
-	filter   *antireplay.ReplayFilter
+	filter   *antireplay.ReplayFilter[[16]byte]
 }
 
 type AuthIDDecoderItem struct {
@@ -111,7 +111,7 @@ func (a *AuthIDDecoderHolder) Match(authID [16]byte) (interface{}, error) {
 			return nil, ErrInvalidTime
 		}
 
-		if !a.filter.Check(authID[:]) {
+		if !a.filter.Check(authID) {
 			return nil, ErrReplay
 		}
 

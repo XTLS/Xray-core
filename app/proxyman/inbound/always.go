@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/stats"
@@ -25,7 +26,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.InboundUplink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "inbound>>>" + tag + ">>>traffic>>>uplink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			uplinkCounter = c
 		}
@@ -33,7 +34,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.InboundDownlink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "inbound>>>" + tag + ">>>traffic>>>downlink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			downlinkCounter = c
 		}
@@ -52,7 +53,27 @@ type AlwaysOnInboundHandler struct {
 }
 
 func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *proxyman.ReceiverConfig, proxyConfig interface{}) (*AlwaysOnInboundHandler, error) {
-	rawProxy, err := common.CreateObject(ctx, proxyConfig)
+	sniffingRequest, err := proxyman.BuildSniffingRequest(receiverConfig.SniffingSettings)
+	if err != nil {
+		return nil, err
+	}
+	src := net.TCPDestination(net.AnyIP, 0)
+	if receiverConfig.Listen != nil {
+		src.Address = receiverConfig.Listen.AsAddress()
+	}
+	if receiverConfig.PortList != nil && len(receiverConfig.PortList.Range) > 0 {
+		src.Port = net.Port(receiverConfig.PortList.Range[0].From)
+	}
+	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
+	if err != nil {
+		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
+	}
+
+	newCtx := session.ContextWithInbound(ctx, &session.Inbound{Tag: tag, Source: src})
+	newCtx = session.ContextWithContent(newCtx, &session.Content{SniffingRequest: sniffingRequest})
+	newCtx = session.ContextWithStreamSettings(newCtx, mss)
+
+	rawProxy, err := common.CreateObject(newCtx, proxyConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +99,6 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		address = net.AnyIP
 	}
 
-	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
-	if err != nil {
-		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
-	}
-
 	if receiverConfig.ReceiveOriginalDestination {
 		if mss.SocketSettings == nil {
 			mss.SocketSettings = &internet.SocketConfig{}
@@ -102,7 +118,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 				stream:          mss,
 				tag:             tag,
 				dispatcher:      h.mux,
-				sniffingConfig:  receiverConfig.SniffingSettings,
+				sniffingRequest: sniffingRequest,
 				uplinkCounter:   uplinkCounter,
 				downlinkCounter: downlinkCounter,
 				ctx:             ctx,
@@ -124,7 +140,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						recvOrigDest:    receiverConfig.ReceiveOriginalDestination,
 						tag:             tag,
 						dispatcher:      h.mux,
-						sniffingConfig:  receiverConfig.SniffingSettings,
+						sniffingRequest: sniffingRequest,
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,
 						ctx:             ctx,
@@ -139,7 +155,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						address:         address,
 						port:            net.Port(port),
 						dispatcher:      h.mux,
-						sniffingConfig:  receiverConfig.SniffingSettings,
+						sniffingRequest: sniffingRequest,
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,
 						stream:          mss,
@@ -156,6 +172,12 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 
 // Start implements common.Runnable.
 func (h *AlwaysOnInboundHandler) Start() error {
+	// for inbound without worker (TUN)
+	if run, ok := h.proxy.(common.Runnable); ok {
+		if err := run.Start(); err != nil {
+			return errors.New("failed to start proxy").Base(err)
+		}
+	}
 	for _, worker := range h.workers {
 		if err := worker.Start(); err != nil {
 			return err
@@ -171,6 +193,7 @@ func (h *AlwaysOnInboundHandler) Close() error {
 		errs = append(errs, worker.Close())
 	}
 	errs = append(errs, h.mux.Close())
+	errs = append(errs, common.Close(h.proxy))
 	if err := errors.Combine(errs...); err != nil {
 		return errors.New("failed to close all resources").Base(err)
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
@@ -172,15 +173,18 @@ func fillRequestHeader(ctx context.Context, header []*Header) ([]*Header, error)
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 
-	if inbound == nil || ob == nil {
-		return nil, errors.New("missing inbound or outbound metadata from context")
+	var src net.Destination
+	if inbound != nil {
+		src = inbound.Source
+	} else {
+		src = net.TCPDestination(net.AnyIP, 0)
 	}
 
 	data := struct {
 		Source net.Destination
 		Target net.Destination
 	}{
-		Source: inbound.Source,
+		Source: src,
 		Target: ob.Target,
 	}
 
@@ -219,6 +223,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 	for _, h := range header {
 		req.Header.Set(h.Key, h.Value)
 	}
+	utils.TryDefaultHeadersWith(req.Header, "nav")
 
 	connectHTTP1 := func(rawConn net.Conn) (net.Conn, error) {
 		req.Header.Set("Proxy-Connection", "Keep-Alive")
@@ -296,10 +301,7 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 		return nil, err
 	}
 
-	iConn := rawConn
-	if statConn, ok := iConn.(*stat.CounterConnection); ok {
-		iConn = statConn.Connection
-	}
+	iConn := stat.TryUnwrapStatsConn(rawConn)
 
 	nextProto := ""
 	if tlsConn, ok := iConn.(*tls.Conn); ok {

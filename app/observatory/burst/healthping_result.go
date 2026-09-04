@@ -59,7 +59,7 @@ func (h *HealthPingRTTS) Put(d time.Duration) {
 	if h.rtts == nil {
 		h.rtts = make([]*pingRTT, h.cap)
 		for i := 0; i < h.cap; i++ {
-			h.rtts[i] = &pingRTT{}
+			h.rtts[i] = &pingRTT{value: rttUntested}
 		}
 		h.idx = -1
 	}
@@ -88,7 +88,7 @@ func (h *HealthPingRTTS) getStatistics() *HealthPingStats {
 	validRTTs := make([]time.Duration, 0)
 	for _, rtt := range h.rtts {
 		switch {
-		case rtt.value == 0 || time.Since(rtt.time) > h.validity:
+		case rtt.value == rttUntested || time.Since(rtt.time) > h.validity:
 			continue
 		case rtt.value == rttFailed:
 			stats.Fail++

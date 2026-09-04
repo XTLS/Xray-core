@@ -5,11 +5,11 @@ import (
 	"crypto/cipher"
 	"crypto/md5"
 	"crypto/sha1"
-	"google.golang.org/protobuf/proto"
 	"io"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
@@ -24,8 +24,6 @@ type MemoryAccount struct {
 	CipherType CipherType
 	Key        []byte
 	Password   string
-
-	replayFilter antireplay.GeneralizedReplayFilter
 }
 
 var ErrIVNotUnique = errors.New("IV is not unique")
@@ -42,18 +40,7 @@ func (a *MemoryAccount) ToProto() proto.Message {
 	return &Account{
 		CipherType: a.CipherType,
 		Password:   a.Password,
-		IvCheck:    a.replayFilter != nil,
 	}
-}
-
-func (a *MemoryAccount) CheckIV(iv []byte) error {
-	if a.replayFilter == nil {
-		return nil
-	}
-	if a.replayFilter.Check(iv) {
-		return nil
-	}
-	return ErrIVNotUnique
 }
 
 func createAesGcm(key []byte) cipher.AEAD {
@@ -98,8 +85,6 @@ func (a *Account) getCipher() (Cipher, error) {
 			IVBytes:         32,
 			AEADAuthCreator: createXChaCha20Poly1305,
 		}, nil
-	case CipherType_NONE:
-		return NoneCipher{}, nil
 	default:
 		return nil, errors.New("Unsupported cipher.")
 	}
@@ -116,12 +101,6 @@ func (a *Account) AsAccount() (protocol.Account, error) {
 		CipherType: a.CipherType,
 		Key:        passwordToCipherKey([]byte(a.Password), Cipher.KeySize()),
 		Password:   a.Password,
-		replayFilter: func() antireplay.GeneralizedReplayFilter {
-			if a.IvCheck {
-				return antireplay.NewBloomRing()
-			}
-			return nil
-		}(),
 	}, nil
 }
 
@@ -202,30 +181,6 @@ func (c *AEADCipher) DecodePacket(key []byte, b *buf.Buffer) error {
 		return err
 	}
 	b.Resize(ivLen, int32(len(bbb)))
-	return nil
-}
-
-type NoneCipher struct{}
-
-func (NoneCipher) KeySize() int32 { return 0 }
-func (NoneCipher) IVSize() int32  { return 0 }
-func (NoneCipher) IsAEAD() bool {
-	return false
-}
-
-func (NoneCipher) NewDecryptionReader(key []byte, iv []byte, reader io.Reader) (buf.Reader, error) {
-	return buf.NewReader(reader), nil
-}
-
-func (NoneCipher) NewEncryptionWriter(key []byte, iv []byte, writer io.Writer) (buf.Writer, error) {
-	return buf.NewWriter(writer), nil
-}
-
-func (NoneCipher) EncodePacket(key []byte, b *buf.Buffer) error {
-	return nil
-}
-
-func (NoneCipher) DecodePacket(key []byte, b *buf.Buffer) error {
 	return nil
 }
 

@@ -136,5 +136,4 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 		base.Fatalf("failed to perform AddRule: %s", err)
 	}
 	showJSONResponse(resp)
-
 }

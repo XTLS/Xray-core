@@ -1,7 +1,6 @@
 package fakedns
 
 import (
-	gonet "net"
 	"strconv"
 	"testing"
 
@@ -130,15 +129,16 @@ func TestFakeDnsHolderCreateMappingAndRollOver(t *testing.T) {
 }
 
 func TestFakeDNSMulti(t *testing.T) {
-	fakeMulti, err := NewFakeDNSHolderMulti(&FakeDnsPoolMulti{
-		Pools: []*FakeDnsPool{{
-			IpPool:  "240.0.0.0/12",
-			LruSize: 256,
-		}, {
-			IpPool:  "fddd:c5b4:ff5f:f4f0::/64",
-			LruSize: 256,
-		}},
-	},
+	fakeMulti, err := NewFakeDNSHolderMulti(
+		&FakeDnsPoolMulti{
+			Pools: []*FakeDnsPool{{
+				IpPool:  "240.0.0.0/12",
+				LruSize: 256,
+			}, {
+				IpPool:  "fddd:c5b4:ff5f:f4f0::/64",
+				LruSize: 256,
+			}},
+		},
 	)
 	common.Must(err)
 
@@ -155,7 +155,7 @@ func TestFakeDNSMulti(t *testing.T) {
 			assert.True(t, inPool)
 		})
 		t.Run("ipv6", func(t *testing.T) {
-			ip, err := gonet.ResolveIPAddr("ip", "fddd:c5b4:ff5f:f4f0::5")
+			ip, err := net.ResolveIPAddr("ip", "fddd:c5b4:ff5f:f4f0::5")
 			assert.Nil(t, err)
 			inPool := fakeMulti.IsIPInIPPool(net.IPAddress(ip.IP))
 			assert.True(t, inPool)
@@ -165,7 +165,7 @@ func TestFakeDNSMulti(t *testing.T) {
 			assert.False(t, inPool)
 		})
 		t.Run("ipv6_inverse", func(t *testing.T) {
-			ip, err := gonet.ResolveIPAddr("ip", "fcdd:c5b4:ff5f:f4f0::5")
+			ip, err := net.ResolveIPAddr("ip", "fcdd:c5b4:ff5f:f4f0::5")
 			assert.Nil(t, err)
 			inPool := fakeMulti.IsIPInIPPool(net.IPAddress(ip.IP))
 			assert.False(t, inPool)

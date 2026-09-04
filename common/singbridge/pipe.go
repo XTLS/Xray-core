@@ -9,6 +9,7 @@ import (
 	"github.com/sagernet/sing/common/bufio"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/transport"
 )
 
@@ -22,6 +23,11 @@ func CopyConn(ctx context.Context, inboundConn net.Conn, link *transport.Link, s
 	} else {
 		conn.R = &buf.BufferedReader{Reader: link.Reader}
 	}
+	cancel := func() {
+		common.Interrupt(link.Reader)
+		common.Interrupt(serverConn)
+	}
+	conn.T = signal.CancelAfterInactivity(ctx, cancel, 300*time.Second)
 	return ReturnError(bufio.CopyConn(ctx, conn, serverConn))
 }
 
@@ -29,35 +35,27 @@ type PipeConnWrapper struct {
 	R io.Reader
 	W buf.Writer
 	net.Conn
+
+	// A simple patch to avoid goroutine leak since sing infra cannot awake read block by write err
+	T *signal.ActivityTimer
 }
 
 func (w *PipeConnWrapper) Close() error {
 	return nil
 }
 
-// This Read implemented a timeout to avoid goroutine leak.
-// as a temporarily solution
 func (w *PipeConnWrapper) Read(b []byte) (n int, err error) {
-	type readResult struct {
-		n   int
-		err error
+	w.T.Update()
+	n, err = w.R.Read(b)
+	if err != nil {
+		// uplinkonly
+		w.T.SetTimeout(2 * time.Second)
 	}
-	c := make(chan readResult, 1)
-	go func() {
-		n, err := w.R.Read(b)
-		c <- readResult{n: n, err: err}
-	}()
-	select {
-	case result := <-c:
-		return result.n, result.err
-	case <-time.After(300 * time.Second):
-		common.Close(w.R)
-		common.Interrupt(w.R)
-		return 0, buf.ErrReadTimeout
-	}
+	return
 }
 
 func (w *PipeConnWrapper) Write(p []byte) (n int, err error) {
+	w.T.Update()
 	n = len(p)
 	var mb buf.MultiBuffer
 	pLen := len(p)
@@ -76,6 +74,8 @@ func (w *PipeConnWrapper) Write(p []byte) (n int, err error) {
 	if err != nil {
 		n = 0
 		buf.ReleaseMulti(mb)
+		// downlinkonly
+		w.T.SetTimeout(5 * time.Second)
 	}
 	return
 }

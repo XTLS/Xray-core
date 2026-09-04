@@ -23,6 +23,7 @@ func (v *HTTPAccount) Build() *http.Account {
 }
 
 type HTTPServerConfig struct {
+	Users       []*HTTPAccount `json:"users"`
 	Accounts    []*HTTPAccount `json:"accounts"`
 	Transparent bool           `json:"allowTransparent"`
 	UserLevel   uint32         `json:"userLevel"`
@@ -34,9 +35,13 @@ func (c *HTTPServerConfig) Build() (proto.Message, error) {
 		UserLevel:        c.UserLevel,
 	}
 
-	if len(c.Accounts) > 0 {
+	if c.Accounts != nil {
+		c.Users = c.Accounts
+	}
+	// TODO: PB
+	if len(c.Users) > 0 {
 		config.Accounts = make(map[string]string)
-		for _, account := range c.Accounts {
+		for _, account := range c.Users {
 			config.Accounts[account.Username] = account.Password
 		}
 	}
@@ -51,8 +56,8 @@ type HTTPRemoteConfig struct {
 }
 
 type HTTPClientConfig struct {
-	Address  *Address          	 `json:"address"`
-	Port     uint16            	 `json:"port"`
+	Address  *Address            `json:"address"`
+	Port     uint16              `json:"port"`
 	Level    uint32              `json:"level"`
 	Email    string              `json:"email"`
 	Username string              `json:"user"`

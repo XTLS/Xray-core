@@ -11,7 +11,7 @@ import (
 )
 
 func TestInterface(t *testing.T) {
-	_ = (stats.Manager)(new(Manager))
+	_ = stats.Manager(new(Manager))
 }
 
 func TestStatsChannelRunnable(t *testing.T) {

@@ -44,6 +44,11 @@ func TestParseString(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expect error but nil")
 	}
+
+	_, err = ParseString("2418d087-648d-4990-86e8-19dca1d0")
+	if err == nil {
+		t.Fatal("Expect error but nil")
+	}
 }
 
 func TestNewUUID(t *testing.T) {

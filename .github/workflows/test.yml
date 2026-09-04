@@ -1,4 +1,4 @@
-name: Test
+name: Tests and Checkings
 
 on:
   push:
@@ -8,9 +8,10 @@ on:
 jobs:
   check-assets:
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     steps:
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-geodat-
@@ -34,8 +35,45 @@ jobs:
         if: steps.check-assets.outputs.missing == 'true'
         run: sleep 90
 
+  check-proto:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v7
+      - name: Check Proto Version Header
+        run: |
+          head -n 4 core/config.pb.go > ref.txt
+          find . -name "*.pb.go" ! -name "*_grpc.pb.go" -print0 | while IFS= read -r -d '' file; do
+            if ! cmp -s ref.txt <(head -n 4 "$file"); then
+              echo "Error: Header mismatch in $file"
+              head -n 4 "$file"
+              exit 1
+            fi
+          done
+
+  check-format:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: false
+      - name: Check Format
+        run: |
+          go install -v mvdan.cc/gofumpt@latest
+          go run ./infra/vformat/main.go -mode check -pwd ./
+
   test:
     needs: check-assets
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     permissions:
       contents: read
     runs-on: ${{ matrix.os }}
@@ -45,14 +83,14 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
     steps:
       - name: Checkout codebase
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           check-latest: true
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-geodat-

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package xray.app.geodata;
+option csharp_namespace = "Xray.App.Geodata";
+option go_package = "github.com/xtls/xray-core/app/geodata";
+option java_package = "com.xray.app.geodata";
+option java_multiple_files = true;
+
+message Asset {
+  string url = 1;
+
+  string file = 2;
+}
+
+message Config {
+  string cron = 1;
+
+  string outbound = 2;
+
+  repeated Asset assets = 3;
+}

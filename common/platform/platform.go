@@ -8,10 +8,8 @@ import (
 )
 
 const (
-	PluginLocation  = "xray.location.plugin"
 	ConfigLocation  = "xray.location.config"
 	ConfdirLocation = "xray.location.confdir"
-	ToolLocation    = "xray.location.tool"
 	AssetLocation   = "xray.location.asset"
 	CertLocation    = "xray.location.cert"
 
@@ -19,11 +17,14 @@ const (
 	UseFreedomSplice = "xray.buf.splice"
 	UseVmessPadding  = "xray.vmess.padding"
 	UseCone          = "xray.cone.disabled"
+	UseStrictJSON    = "xray.json.strict"
 
 	BufferSize           = "xray.ray.buffer.size"
 	BrowserDialerAddress = "xray.browser.dialer"
 	XUDPLog              = "xray.xudp.show"
 	XUDPBaseKey          = "xray.xudp.basekey"
+
+	TunFdKey = "xray.tun.fd"
 )
 
 type EnvFlag struct {
@@ -77,17 +78,6 @@ func getExecutableDir() string {
 		return ""
 	}
 	return filepath.Dir(exec)
-}
-
-func getExecutableSubDir(dir string) func() string {
-	return func() string {
-		return filepath.Join(getExecutableDir(), dir)
-	}
-}
-
-func GetPluginDirectory() string {
-	pluginDir := NewEnvFlag(PluginLocation).GetValue(getExecutableSubDir("plugins"))
-	return pluginDir
 }
 
 func GetConfigurationPath() string {

@@ -25,7 +25,8 @@ func HubReceiveOriginalDestination(r bool) HubOption {
 }
 
 type Hub struct {
-	conn         *net.UDPConn
+	conn         net.PacketConn
+	udpConn      *net.UDPConn
 	cache        chan *udp.Packet
 	capacity     int
 	recvOrigDest bool
@@ -56,15 +57,27 @@ func ListenUDP(ctx context.Context, address net.Address, port net.Port, streamSe
 		hub.recvOrigDest = true
 	}
 
-	udpConn, err := internet.ListenSystemPacket(ctx, &net.UDPAddr{
+	var err error
+	hub.conn, err = internet.ListenSystemPacket(ctx, &net.UDPAddr{
 		IP:   address.IP(),
 		Port: int(port),
 	}, sockopt)
 	if err != nil {
 		return nil, err
 	}
+
+	raw := hub.conn
+
+	if streamSettings.UdpmaskManager != nil {
+		hub.conn, err = streamSettings.UdpmaskManager.WrapPacketConnServer(raw)
+		if err != nil {
+			raw.Close()
+			return nil, errors.New("mask err").Base(err)
+		}
+	}
+
 	errors.LogInfo(ctx, "listening UDP on ", address, ":", port)
-	hub.conn = udpConn.(*net.UDPConn)
+	hub.udpConn, _ = hub.conn.(*net.UDPConn)
 	hub.cache = make(chan *udp.Packet, hub.capacity)
 
 	go hub.start()
@@ -78,7 +91,7 @@ func (h *Hub) Close() error {
 }
 
 func (h *Hub) WriteTo(payload []byte, dest net.Destination) (int, error) {
-	return h.conn.WriteToUDP(payload, &net.UDPAddr{
+	return h.conn.WriteTo(payload, &net.UDPAddr{
 		IP:   dest.Address.IP(),
 		Port: int(dest.Port),
 	})
@@ -93,10 +106,21 @@ func (h *Hub) start() {
 	for {
 		buffer := buf.New()
 		var noob int
-		var addr *net.UDPAddr
+		var udpAddr *net.UDPAddr
 		rawBytes := buffer.Extend(buf.Size)
 
-		n, noob, _, addr, err := ReadUDPMsg(h.conn, rawBytes, oobBytes)
+		var n int
+		var err error
+		if h.udpConn != nil {
+			n, noob, _, udpAddr, err = ReadUDPMsg(h.udpConn, rawBytes, oobBytes)
+		} else {
+			var addr net.Addr
+			n, addr, err = h.conn.ReadFrom(rawBytes)
+			if err == nil {
+				udpAddr = addr.(*net.UDPAddr)
+			}
+		}
+
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to read UDP msg")
 			buffer.Release()
@@ -111,7 +135,7 @@ func (h *Hub) start() {
 
 		payload := &udp.Packet{
 			Payload: buffer,
-			Source:  net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)),
+			Source:  net.UDPDestination(net.IPAddress(udpAddr.IP), net.Port(udpAddr.Port)),
 		}
 		if h.recvOrigDest && noob > 0 {
 			payload.Target = RetrieveOriginalDest(oobBytes[:noob])

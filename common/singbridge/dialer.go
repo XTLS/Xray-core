@@ -26,7 +26,11 @@ func NewDialer(dialer internet.Dialer) *XrayDialer {
 }
 
 func (d *XrayDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
-	return d.Dialer.Dial(ctx, ToDestination(destination, ToNetwork(network)))
+	dest, err := ToDestination(destination, ToNetwork(network))
+	if err != nil {
+		return nil, err
+	}
+	return d.Dialer.Dial(ctx, dest)
 }
 
 func (d *XrayDialer) ListenPacket(ctx context.Context, destination M.Socksaddr) (net.PacketConn, error) {
@@ -43,13 +47,17 @@ func NewOutboundDialer(outbound proxy.Outbound, dialer internet.Dialer) *XrayOut
 }
 
 func (d *XrayOutboundDialer) DialContext(ctx context.Context, network string, destination M.Socksaddr) (net.Conn, error) {
+	dest, err := ToDestination(destination, ToNetwork(network))
+	if err != nil {
+		return nil, err
+	}
 	outbounds := session.OutboundsFromContext(ctx)
 	if len(outbounds) == 0 {
 		outbounds = []*session.Outbound{{}}
 		ctx = session.ContextWithOutbounds(ctx, outbounds)
 	}
 	ob := outbounds[len(outbounds)-1]
-	ob.Target = ToDestination(destination, ToNetwork(network))
+	ob.Target = dest
 
 	opts := []pipe.Option{pipe.WithSizeLimit(64 * 1024)}
 	uplinkReader, uplinkWriter := pipe.New(opts...)

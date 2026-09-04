@@ -2,7 +2,6 @@ package stats
 
 import (
 	"context"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -21,18 +20,20 @@ type Counter interface {
 	Add(int64) int64
 }
 
-// OnlineMap is the interface for stats.
+// OnlineMap is the interface for tracking online IP addresses.
 //
 // xray:api:stable
 type OnlineMap interface {
-	// Count is the current value of the OnlineMap.
+	// Count returns the number of unique online IPs.
 	Count() int
-	// AddIP adds a ip to the current OnlineMap.
+	// AddIP increments the reference count for the given IP.
 	AddIP(string)
-	// List is the current OnlineMap ip list.
-	List() []string
-	// IpTimeMap return client ips and their last access time.
-	IpTimeMap() map[string]time.Time
+	// RemoveIP decrements the reference count for the given IP. Deletes at zero.
+	RemoveIP(string)
+	// ForEach calls fn for each online IP with its last-seen Unix timestamp.
+	// If fn returns false, iteration stops.
+	// The callback must not call AddIP/RemoveIP on the same OnlineMap (would deadlock).
+	ForEach(func(string, int64) bool)
 }
 
 // Channel is the interface for stats channel.
@@ -80,54 +81,39 @@ type Manager interface {
 
 	// RegisterCounter registers a new counter to the manager. The identifier string must not be empty, and unique among other counters.
 	RegisterCounter(string) (Counter, error)
+	// GetOrRegisterCounter returns the counter by its identifier, atomically creating and registering it if absent.
+	GetOrRegisterCounter(string) (Counter, error)
 	// UnregisterCounter unregisters a counter from the manager by its identifier.
 	UnregisterCounter(string) error
 	// GetCounter returns a counter by its identifier.
 	GetCounter(string) Counter
+	// VisitCounters calls visitor on all managed counters.
+	// The visitor runs under a read lock; it must not call RegisterCounter or UnregisterCounter (would deadlock).
+	VisitCounters(func(string, Counter) bool)
 
-	// RegisterOnlineMap registers a new onlinemap to the manager. The identifier string must not be empty, and unique among other onlinemaps.
+	// RegisterOnlineMap registers a new OnlineMap to the manager. The identifier string must not be empty, and unique among other OnlineMaps.
 	RegisterOnlineMap(string) (OnlineMap, error)
-	// UnregisterOnlineMap unregisters a onlinemap from the manager by its identifier.
+	// GetOrRegisterOnlineMap returns the OnlineMap by its identifier, atomically creating and registering it if absent.
+	GetOrRegisterOnlineMap(string) (OnlineMap, error)
+	// UnregisterOnlineMap unregisters an OnlineMap from the manager by its identifier.
 	UnregisterOnlineMap(string) error
-	// GetOnlineMap returns a onlinemap by its identifier.
+	// GetOnlineMap returns an OnlineMap by its identifier.
 	GetOnlineMap(string) OnlineMap
+	// VisitOnlineMaps calls visitor on all managed online maps.
+	// The visitor runs under a read lock; it must not call RegisterOnlineMap or UnregisterOnlineMap (would deadlock).
+	VisitOnlineMaps(func(string, OnlineMap) bool)
 
 	// RegisterChannel registers a new channel to the manager. The identifier string must not be empty, and unique among other channels.
 	RegisterChannel(string) (Channel, error)
+	// GetOrRegisterChannel returns the channel by its identifier, atomically creating and registering it if absent.
+	GetOrRegisterChannel(string) (Channel, error)
 	// UnregisterChannel unregisters a channel from the manager by its identifier.
 	UnregisterChannel(string) error
 	// GetChannel returns a channel by its identifier.
 	GetChannel(string) Channel
-}
 
-// GetOrRegisterCounter tries to get the StatCounter first. If not exist, it then tries to create a new counter.
-func GetOrRegisterCounter(m Manager, name string) (Counter, error) {
-	counter := m.GetCounter(name)
-	if counter != nil {
-		return counter, nil
-	}
-
-	return m.RegisterCounter(name)
-}
-
-// GetOrRegisterOnlineMap tries to get the OnlineMap first. If not exist, it then tries to create a new onlinemap.
-func GetOrRegisterOnlineMap(m Manager, name string) (OnlineMap, error) {
-	onlineMap := m.GetOnlineMap(name)
-	if onlineMap != nil {
-		return onlineMap, nil
-	}
-
-	return m.RegisterOnlineMap(name)
-}
-
-// GetOrRegisterChannel tries to get the StatChannel first. If not exist, it then tries to create a new channel.
-func GetOrRegisterChannel(m Manager, name string) (Channel, error) {
-	channel := m.GetChannel(name)
-	if channel != nil {
-		return channel, nil
-	}
-
-	return m.RegisterChannel(name)
+	// GetAllOnlineUsers returns all online users from all OnlineMaps.
+	GetAllOnlineUsers() []string
 }
 
 // ManagerType returns the type of Manager interface. Can be used to implement common.HasType.
@@ -137,7 +123,7 @@ func ManagerType() interface{} {
 	return (*Manager)(nil)
 }
 
-// NoopManager is an implementation of Manager, which doesn't has actual functionalities.
+// NoopManager is an implementation of Manager, which doesn't have actual functionality.
 type NoopManager struct{}
 
 // Type implements common.HasType.
@@ -147,6 +133,11 @@ func (NoopManager) Type() interface{} {
 
 // RegisterCounter implements Manager.
 func (NoopManager) RegisterCounter(string) (Counter, error) {
+	return nil, errors.New("not implemented")
+}
+
+// GetOrRegisterCounter implements Manager.
+func (NoopManager) GetOrRegisterCounter(string) (Counter, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -160,8 +151,16 @@ func (NoopManager) GetCounter(string) Counter {
 	return nil
 }
 
+// VisitCounters implements Manager.
+func (NoopManager) VisitCounters(func(string, Counter) bool) {}
+
 // RegisterOnlineMap implements Manager.
 func (NoopManager) RegisterOnlineMap(string) (OnlineMap, error) {
+	return nil, errors.New("not implemented")
+}
+
+// GetOrRegisterOnlineMap implements Manager.
+func (NoopManager) GetOrRegisterOnlineMap(string) (OnlineMap, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -175,8 +174,16 @@ func (NoopManager) GetOnlineMap(string) OnlineMap {
 	return nil
 }
 
+// VisitOnlineMaps implements Manager.
+func (NoopManager) VisitOnlineMaps(func(string, OnlineMap) bool) {}
+
 // RegisterChannel implements Manager.
 func (NoopManager) RegisterChannel(string) (Channel, error) {
+	return nil, errors.New("not implemented")
+}
+
+// GetOrRegisterChannel implements Manager.
+func (NoopManager) GetOrRegisterChannel(string) (Channel, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -187,6 +194,11 @@ func (NoopManager) UnregisterChannel(string) error {
 
 // GetChannel implements Manager.
 func (NoopManager) GetChannel(string) Channel {
+	return nil
+}
+
+// GetAllOnlineUsers implements Manager.
+func (NoopManager) GetAllOnlineUsers() []string {
 	return nil
 }
 

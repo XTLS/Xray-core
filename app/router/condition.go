@@ -1,13 +1,19 @@
 package router
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/strmatcher"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/features/routing/dns"
 )
 
 type Condition interface {
@@ -40,37 +46,18 @@ func (v *ConditionChan) Len() int {
 	return len(*v)
 }
 
-var matcherTypeMap = map[Domain_Type]strmatcher.Type{
-	Domain_Plain:  strmatcher.Substr,
-	Domain_Regex:  strmatcher.Regex,
-	Domain_Domain: strmatcher.Domain,
-	Domain_Full:   strmatcher.Full,
-}
+type DomainMatcher struct{ geodata.DomainMatcher }
 
-type DomainMatcher struct {
-	matchers strmatcher.IndexMatcher
-}
-
-func NewMphMatcherGroup(domains []*Domain) (*DomainMatcher, error) {
-	g := strmatcher.NewMphMatcherGroup()
-	for _, d := range domains {
-		matcherType, f := matcherTypeMap[d.Type]
-		if !f {
-			return nil, errors.New("unsupported domain type", d.Type)
-		}
-		_, err := g.AddPattern(d.Value, matcherType)
-		if err != nil {
-			return nil, err
-		}
+func NewDomainMatcher(rules []*geodata.DomainRule) (*DomainMatcher, error) {
+	m, err := geodata.DomainReg.BuildDomainMatcher(rules)
+	if err != nil {
+		return nil, err
 	}
-	g.Build()
-	return &DomainMatcher{
-		matchers: g,
-	}, nil
+	return &DomainMatcher{DomainMatcher: m}, nil
 }
 
 func (m *DomainMatcher) ApplyDomain(domain string) bool {
-	return len(m.matchers.Match(strings.ToLower(domain))) > 0
+	return m.DomainMatcher.MatchAny(strings.ToLower(domain))
 }
 
 // Apply implements Condition.
@@ -79,7 +66,7 @@ func (m *DomainMatcher) Apply(ctx routing.Context) bool {
 	if len(domain) == 0 {
 		return false
 	}
-	return m.ApplyDomain(domain)
+	return m.DomainMatcher.MatchAny(strings.ToLower(domain))
 }
 
 type MatcherAsType byte
@@ -92,16 +79,16 @@ const (
 )
 
 type IPMatcher struct {
-	matcher GeoIPMatcher
+	matcher geodata.IPMatcher
 	asType  MatcherAsType
 }
 
-func NewIPMatcher(geoips []*GeoIP, asType MatcherAsType) (*IPMatcher, error) {
-	matcher, err := BuildOptimizedGeoIPMatcher(geoips...)
+func NewIPMatcher(rules []*geodata.IPRule, asType MatcherAsType) (*IPMatcher, error) {
+	m, err := geodata.IPReg.BuildIPMatcher(rules)
 	if err != nil {
 		return nil, err
 	}
-	return &IPMatcher{matcher: matcher, asType: asType}, nil
+	return &IPMatcher{matcher: m, asType: asType}, nil
 }
 
 // Apply implements Condition.
@@ -301,4 +288,128 @@ func (m *AttributeMatcher) Apply(ctx routing.Context) bool {
 		return false
 	}
 	return m.Match(attributes)
+}
+
+type ProcessNameMatcher struct {
+	ProcessNames  []string
+	AbsPaths      []string
+	Folders       []string
+	MatchXraySelf bool
+}
+
+func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
+	processNames := []string{}
+	folders := []string{}
+	absPaths := []string{}
+	matchXraySelf := false
+	for _, name := range names {
+		if name == "self/" {
+			matchXraySelf = true
+			continue
+		}
+		// replace xray/ with self executable path
+		if name == "xray/" {
+			xrayPath, err := os.Executable()
+			if err != nil {
+				errors.LogError(context.Background(), "Failed to get xray executable path: ", err)
+				continue
+			}
+			name = xrayPath
+		}
+		name := filepath.ToSlash(name)
+		// /usr/bin/
+		if strings.HasSuffix(name, "/") {
+			folders = append(folders, name)
+			continue
+		}
+		// /usr/bin/curl
+		if strings.Contains(name, "/") {
+			absPaths = append(absPaths, name)
+			continue
+		}
+		// curl.exe or curl
+		processNames = append(processNames, strings.TrimSuffix(name, ".exe"))
+	}
+	return &ProcessNameMatcher{
+		ProcessNames:  processNames,
+		AbsPaths:      absPaths,
+		Folders:       folders,
+		MatchXraySelf: matchXraySelf,
+	}
+}
+
+func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+	if len(ctx.GetSourceIPs()) == 0 {
+		return false
+	}
+
+	srcPort := uint16(ctx.GetSourcePort())
+	srcIP := ctx.GetSourceIPs()[0].String()
+
+	var network string
+	switch ctx.GetNetwork() {
+	case net.Network_TCP:
+		network = "tcp"
+	case net.Network_UDP:
+		network = "udp"
+	default:
+		return false
+	}
+
+	var dstIP string
+	var dstPort uint16 = 0
+
+	// do not use resolved IP because Android process lookup needs original dst ip
+	resolvableContext, ok := ctx.(*dns.ResolvableContext)
+	if ok && len(resolvableContext.Context.GetTargetIPs()) > 0 {
+		dstIP = resolvableContext.Context.GetTargetIPs()[0].String()
+		dstPort = uint16(resolvableContext.Context.GetTargetPort())
+	} else if len(ctx.GetTargetIPs()) > 0 {
+		dstIP = ctx.GetTargetIPs()[0].String()
+		dstPort = uint16(ctx.GetTargetPort())
+	}
+
+	pid, name, absPath, err := net.FindProcess(network, srcIP, uint16(srcPort), dstIP, uint16(dstPort))
+	if err != nil {
+		if err != net.ErrNotLocal {
+			errors.LogError(context.Background(), "Unables to find local process name: ", err)
+		}
+		return false
+	}
+	if m.MatchXraySelf {
+		if pid == os.Getpid() {
+			return true
+		}
+	}
+	if slices.Contains(m.ProcessNames, name) {
+		return true
+	}
+	if slices.Contains(m.AbsPaths, absPath) {
+		return true
+	}
+	for _, f := range m.Folders {
+		if strings.HasPrefix(absPath, f) {
+			return true
+		}
+	}
+	return false
+}
+
+// LocalOSMatcher matches the operating system Xray itself is running on. That never
+// changes while Xray is running, so the result is resolved when the rule is built.
+type LocalOSMatcher struct {
+	matched bool
+}
+
+func NewLocalOSMatcher(names []string) *LocalOSMatcher {
+	return &LocalOSMatcher{
+		matched: slices.ContainsFunc(names, func(name string) bool {
+			return strings.EqualFold(name, runtime.GOOS)
+		}),
+	}
+}
+
+// Apply implements Condition.
+func (m *LocalOSMatcher) Apply(_ routing.Context) bool {
+	return m.matched
 }

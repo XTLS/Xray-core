@@ -229,10 +229,6 @@ func (w *BridgeWorker) DispatchLink(ctx context.Context, dest net.Destination, l
 		}
 		return w.Dispatcher.DispatchLink(ctx, dest, link)
 	}
-
-	if d, ok := w.Dispatcher.(routing.WrapLinkDispatcher); ok {
-		link = d.WrapLink(ctx, link)
-	}
 	w.handleInternalConn(link)
 
 	return nil

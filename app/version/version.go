@@ -2,10 +2,11 @@ package version
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
 	"strconv"
 	"strings"
+
+	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 )
 
 type Version struct {
