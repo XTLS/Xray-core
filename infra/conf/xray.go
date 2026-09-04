@@ -211,14 +211,15 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 }
 
 type OutboundDetourConfig struct {
-	Protocol       string           `json:"protocol"`
-	SendThrough    *string          `json:"sendThrough"`
-	Tag            string           `json:"tag"`
-	Settings       *json.RawMessage `json:"settings"`
-	StreamSetting  *StreamConfig    `json:"streamSettings"`
-	ProxySettings  *ProxyConfig     `json:"proxySettings"`
-	MuxSettings    *MuxConfig       `json:"mux"`
-	TargetStrategy string           `json:"targetStrategy"`
+	Protocol                   string           `json:"protocol"`
+	SendThrough                *string          `json:"sendThrough"`
+	Tag                        string           `json:"tag"`
+	Settings                   *json.RawMessage `json:"settings"`
+	StreamSetting              *StreamConfig    `json:"streamSettings"`
+	ProxySettings              *ProxyConfig     `json:"proxySettings"`
+	MuxSettings                *MuxConfig       `json:"mux"`
+	TargetStrategy             string           `json:"targetStrategy"`
+	AllowInsecureVlessOutbound bool             `json:"allowInsecureVlessOutbound"`
 }
 
 func (c *OutboundDetourConfig) checkChainProxyConfig() error {
@@ -242,13 +243,20 @@ func requiresTransportSecurity(address *Address) bool {
 	return !geodata.GetPrivateDomainMatcher().MatchAny(domain)
 }
 
-func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *proxyman.SenderConfig) error {
+func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *proxyman.SenderConfig, allowInsecureVlessOutbound bool) error {
 	if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.GetSecurityType() != "" {
 		return nil
 	}
 
 	if vlessCfg, ok := rawConfig.(*VLessOutboundConfig); ok {
 		if vlessCfg.Encryption != "" && vlessCfg.Encryption != "none" {
+			return nil
+		}
+		// VLESS/TCP/none is a legacy trusted-egress transport in some
+		// deployments. Keep the upstream public-address guard by default;
+		// this opt-in is intentionally VLESS-only and must be set on the
+		// concrete outbound rather than globally.
+		if allowInsecureVlessOutbound {
 			return nil
 		}
 		if requiresTransportSecurity(vlessCfg.Vnext[0].Address) {
@@ -362,7 +370,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
-	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
+	if err := validateOutboundTransportSecurity(rawConfig, senderSettings, c.AllowInsecureVlessOutbound); err != nil {
 		return nil, err
 	}
 
