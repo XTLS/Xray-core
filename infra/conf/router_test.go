@@ -236,3 +236,35 @@ func TestRouterConfig(t *testing.T) {
 		},
 	})
 }
+
+func TestRouterConfigAsyncDNSRoute(t *testing.T) {
+	config := new(RouterConfig)
+	if err := json.Unmarshal([]byte(`{
+		"rules": [{
+			"outboundTag": "direct-ru-egress-mark",
+			"asyncDnsRoute": {
+				"endpoint": "https://dns-route-cache.tailnet.example/v1/classify",
+				"requestTimeoutMillis": 150,
+				"cacheCapacity": 4096,
+				"queueCapacity": 256,
+				"workers": 3,
+				"minTtlMillis": 1000,
+				"maxTtlMillis": 60000
+			}
+		}]
+	}`), config); err != nil {
+		t.Fatal(err)
+	}
+
+	built, err := config.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(built.Rule) != 1 || built.Rule[0].AsyncDnsRoute == nil {
+		t.Fatal("asyncDnsRoute was not compiled into the routing rule")
+	}
+	got := built.Rule[0].AsyncDnsRoute
+	if got.GetEndpoint() != "https://dns-route-cache.tailnet.example/v1/classify" || got.GetWorkers() != 3 || got.GetMaxTtlMillis() != 60000 {
+		t.Fatalf("unexpected async DNS route config: %+v", got)
+	}
+}

@@ -46,6 +46,17 @@ func (v *ConditionChan) Len() int {
 	return len(*v)
 }
 
+func (v *ConditionChan) Close() error {
+	for _, cond := range *v {
+		if closer, ok := cond.(interface{ Close() error }); ok {
+			if err := closer.Close(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 type DomainMatcher struct{ geodata.DomainMatcher }
 
 func NewDomainMatcher(rules []*geodata.DomainRule) (*DomainMatcher, error) {

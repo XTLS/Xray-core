@@ -224,11 +224,14 @@ func (r *Router) Start() error {
 	return nil
 }
 
-// closeWebhooks closes all webhook notifiers in the given rule set.
+// closeRuleResources closes all background resources in the given rule set.
 func closeWebhooks(rules []*Rule) {
 	for _, rule := range rules {
 		if rule.Webhook != nil {
 			rule.Webhook.Close()
+		}
+		if closer, ok := rule.Condition.(interface{ Close() error }); ok {
+			_ = closer.Close()
 		}
 	}
 }

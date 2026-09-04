@@ -110,6 +110,14 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 		conds.Add(cond)
 	}
 
+	if rr.AsyncDnsRoute != nil {
+		cond, err := NewAsyncDNSRouteMatcher(rr.AsyncDnsRoute)
+		if err != nil {
+			return nil, err
+		}
+		conds.Add(cond)
+	}
+
 	if len(rr.Process) > 0 {
 		conds.Add(NewProcessNameMatcher(rr.Process))
 	}

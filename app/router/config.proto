@@ -59,6 +59,24 @@ message RoutingRule {
 
   // List of operating systems for matching the one Xray itself is running on.
   repeated string local_os = 23;
+
+  // Matches only after an asynchronously populated shared DNS route cache
+  // classifies the target domain as RU. A cache miss never blocks routing.
+  AsyncDnsRouteConfig async_dns_route = 24;
+}
+
+// AsyncDnsRouteConfig is an opt-in Evasionlab extension used by an edge
+// process to project shared DNS route classifications locally. The classifier
+// endpoint is queried only by bounded background workers; it is never on the
+// route-selection critical path.
+message AsyncDnsRouteConfig {
+  string endpoint = 1;
+  uint32 request_timeout_millis = 2;
+  uint32 cache_capacity = 3;
+  uint32 queue_capacity = 4;
+  uint32 workers = 5;
+  uint32 min_ttl_millis = 6;
+  uint32 max_ttl_millis = 7;
 }
 
 message WebhookConfig {

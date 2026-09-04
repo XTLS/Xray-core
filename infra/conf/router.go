@@ -129,27 +129,38 @@ type WebhookRuleConfig struct {
 	Headers       map[string]string `json:"headers"`
 }
 
+type AsyncDNSRouteRuleConfig struct {
+	Endpoint             string `json:"endpoint"`
+	RequestTimeoutMillis uint32 `json:"requestTimeoutMillis"`
+	CacheCapacity        uint32 `json:"cacheCapacity"`
+	QueueCapacity        uint32 `json:"queueCapacity"`
+	Workers              uint32 `json:"workers"`
+	MinTTLMillis         uint32 `json:"minTtlMillis"`
+	MaxTTLMillis         uint32 `json:"maxTtlMillis"`
+}
+
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 	type RawFieldRule struct {
 		RouterRule
-		Domain     *StringList        `json:"domain"`
-		Domains    *StringList        `json:"domains"`
-		IP         *StringList        `json:"ip"`
-		Port       *PortList          `json:"port"`
-		Network    *NetworkList       `json:"network"`
-		SourceIP   *StringList        `json:"sourceIP"`
-		Source     *StringList        `json:"source"`
-		SourcePort *PortList          `json:"sourcePort"`
-		User       *StringList        `json:"user"`
-		VlessRoute *PortList          `json:"vlessRoute"`
-		InboundTag *StringList        `json:"inboundTag"`
-		Protocols  *StringList        `json:"protocol"`
-		Attributes map[string]string  `json:"attrs"`
-		LocalIP    *StringList        `json:"localIP"`
-		LocalPort  *PortList          `json:"localPort"`
-		Process    *StringList        `json:"process"`
-		LocalOS    *StringList        `json:"localOS"`
-		Webhook    *WebhookRuleConfig `json:"webhook"`
+		Domain        *StringList              `json:"domain"`
+		Domains       *StringList              `json:"domains"`
+		IP            *StringList              `json:"ip"`
+		Port          *PortList                `json:"port"`
+		Network       *NetworkList             `json:"network"`
+		SourceIP      *StringList              `json:"sourceIP"`
+		Source        *StringList              `json:"source"`
+		SourcePort    *PortList                `json:"sourcePort"`
+		User          *StringList              `json:"user"`
+		VlessRoute    *PortList                `json:"vlessRoute"`
+		InboundTag    *StringList              `json:"inboundTag"`
+		Protocols     *StringList              `json:"protocol"`
+		Attributes    map[string]string        `json:"attrs"`
+		LocalIP       *StringList              `json:"localIP"`
+		LocalPort     *PortList                `json:"localPort"`
+		Process       *StringList              `json:"process"`
+		LocalOS       *StringList              `json:"localOS"`
+		Webhook       *WebhookRuleConfig       `json:"webhook"`
+		AsyncDNSRoute *AsyncDNSRouteRuleConfig `json:"asyncDnsRoute"`
 	}
 	rawFieldRule := new(RawFieldRule)
 	err := json.Unmarshal(msg, rawFieldRule)
@@ -271,6 +282,18 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 			Url:           rawFieldRule.Webhook.URL,
 			Deduplication: rawFieldRule.Webhook.Deduplication,
 			Headers:       rawFieldRule.Webhook.Headers,
+		}
+	}
+
+	if rawFieldRule.AsyncDNSRoute != nil {
+		rule.AsyncDnsRoute = &router.AsyncDnsRouteConfig{
+			Endpoint:             rawFieldRule.AsyncDNSRoute.Endpoint,
+			RequestTimeoutMillis: rawFieldRule.AsyncDNSRoute.RequestTimeoutMillis,
+			CacheCapacity:        rawFieldRule.AsyncDNSRoute.CacheCapacity,
+			QueueCapacity:        rawFieldRule.AsyncDNSRoute.QueueCapacity,
+			Workers:              rawFieldRule.AsyncDNSRoute.Workers,
+			MinTtlMillis:         rawFieldRule.AsyncDNSRoute.MinTTLMillis,
+			MaxTtlMillis:         rawFieldRule.AsyncDNSRoute.MaxTTLMillis,
 		}
 	}
 
