@@ -347,6 +347,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" || sessionId == "" { // stream-down, stream-one
+		responsePrelude := h.config.ExtractResponsePreludeFromRequest(request, h.path)
+		if responsePrelude != "" && !h.config.IsResponsePreludeValid(responsePrelude) {
+			errors.LogInfo(context.Background(), "invalid response prelude")
+			writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		if sessionId != "" {
 			// after GET is done, the connection is finished. disable automatic
 			// session reaping, and handle it in defer
@@ -367,6 +374,12 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		writer.WriteHeader(http.StatusOK)
+		if responsePrelude != "" {
+			if _, err := writer.Write([]byte(responsePrelude)); err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to write response prelude")
+				return
+			}
+		}
 		writer.(http.Flusher).Flush()
 
 		httpSC := &httpServerConn{

@@ -68,6 +68,12 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
+	responsePrelude := ""
+	if shouldApplyResponsePrelude(c.transportConfig, body, uploadOnly) {
+		responsePrelude = c.transportConfig.GenerateResponsePrelude()
+		c.transportConfig.ApplyResponsePreludeToRequest(req, responsePrelude)
+	}
+
 	wrc = &WaitReadCloser{Wait: make(chan struct{})}
 	go func() {
 		resp, err := c.client.Do(req)
@@ -91,7 +97,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			wrc.Close()
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+		wrc.(*WaitReadCloser).Set(newResponsePreludeReadCloser(resp.Body, responsePrelude))
 	}()
 
 	<-gotConn.Wait()

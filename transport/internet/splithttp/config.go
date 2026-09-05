@@ -108,7 +108,8 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestMethod s
 	if c.GetNormalizedSessionPlacement() == PlacementCookie ||
 		c.GetNormalizedSeqPlacement() == PlacementCookie ||
 		c.XPaddingPlacement == PlacementCookie ||
-		c.GetNormalizedUplinkDataPlacement() == PlacementCookie {
+		c.GetNormalizedUplinkDataPlacement() == PlacementCookie ||
+		c.GetNormalizedResponsePreludePlacement() == PlacementCookie {
 		writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	}
 

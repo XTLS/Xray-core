@@ -255,36 +255,44 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 }
 
 type SplitHTTPConfig struct {
-	Host                 string            `json:"host"`
-	Path                 string            `json:"path"`
-	Mode                 string            `json:"mode"`
-	Headers              map[string]string `json:"headers"`
-	XPaddingBytes        Int32Range        `json:"xPaddingBytes"`
-	XPaddingObfsMode     bool              `json:"xPaddingObfsMode"`
-	XPaddingKey          string            `json:"xPaddingKey"`
-	XPaddingHeader       string            `json:"xPaddingHeader"`
-	XPaddingPlacement    string            `json:"xPaddingPlacement"`
-	XPaddingMethod       string            `json:"xPaddingMethod"`
-	UplinkHTTPMethod     string            `json:"uplinkHTTPMethod"`
-	SessionIDPlacement   string            `json:"sessionIDPlacement"`
-	SessionIDKey         string            `json:"sessionIDKey"`
-	SessionIDTable       string            `json:"sessionIDTable"`
-	SessionIDLength      Int32Range        `json:"sessionIDLength"`
-	SeqPlacement         string            `json:"seqPlacement"`
-	SeqKey               string            `json:"seqKey"`
-	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
-	UplinkDataKey        string            `json:"uplinkDataKey"`
-	UplinkChunkSize      Int32Range        `json:"uplinkChunkSize"`
-	NoGRPCHeader         bool              `json:"noGRPCHeader"`
-	NoSSEHeader          bool              `json:"noSSEHeader"`
-	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
-	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
-	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
-	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
-	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
-	Xmux                 XmuxConfig        `json:"xmux"`
-	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
-	Extra                json.RawMessage   `json:"extra"`
+	Host                 string                 `json:"host"`
+	Path                 string                 `json:"path"`
+	Mode                 string                 `json:"mode"`
+	Headers              map[string]string      `json:"headers"`
+	XPaddingBytes        Int32Range             `json:"xPaddingBytes"`
+	XPaddingObfsMode     bool                   `json:"xPaddingObfsMode"`
+	XPaddingKey          string                 `json:"xPaddingKey"`
+	XPaddingHeader       string                 `json:"xPaddingHeader"`
+	XPaddingPlacement    string                 `json:"xPaddingPlacement"`
+	XPaddingMethod       string                 `json:"xPaddingMethod"`
+	UplinkHTTPMethod     string                 `json:"uplinkHTTPMethod"`
+	SessionIDPlacement   string                 `json:"sessionIDPlacement"`
+	SessionIDKey         string                 `json:"sessionIDKey"`
+	SessionIDTable       string                 `json:"sessionIDTable"`
+	SessionIDLength      Int32Range             `json:"sessionIDLength"`
+	ResponsePrelude      *ResponsePreludeConfig `json:"responsePrelude"`
+	SeqPlacement         string                 `json:"seqPlacement"`
+	SeqKey               string                 `json:"seqKey"`
+	UplinkDataPlacement  string                 `json:"uplinkDataPlacement"`
+	UplinkDataKey        string                 `json:"uplinkDataKey"`
+	UplinkChunkSize      Int32Range             `json:"uplinkChunkSize"`
+	NoGRPCHeader         bool                   `json:"noGRPCHeader"`
+	NoSSEHeader          bool                   `json:"noSSEHeader"`
+	ScMaxEachPostBytes   Int32Range             `json:"scMaxEachPostBytes"`
+	ScMinPostsIntervalMs Int32Range             `json:"scMinPostsIntervalMs"`
+	ScMaxBufferedPosts   int64                  `json:"scMaxBufferedPosts"`
+	ScStreamUpServerSecs Int32Range             `json:"scStreamUpServerSecs"`
+	ServerMaxHeaderBytes int32                  `json:"serverMaxHeaderBytes"`
+	Xmux                 XmuxConfig             `json:"xmux"`
+	DownloadSettings     *StreamConfig          `json:"downloadSettings"`
+	Extra                json.RawMessage        `json:"extra"`
+}
+
+type ResponsePreludeConfig struct {
+	Placement string     `json:"placement"`
+	Key       string     `json:"key"`
+	Table     string     `json:"table"`
+	Length    Int32Range `json:"length"`
 }
 
 type XmuxConfig struct {
@@ -424,6 +432,52 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		}
 	}
 
+	if c.ResponsePrelude != nil {
+		switch c.ResponsePrelude.Placement {
+		case "":
+			c.ResponsePrelude.Placement = splithttp.PlacementCookie
+		case splithttp.PlacementPath, splithttp.PlacementCookie, splithttp.PlacementHeader, splithttp.PlacementQuery:
+		default:
+			return nil, errors.New("unsupported responsePrelude placement: " + c.ResponsePrelude.Placement)
+		}
+
+		if c.ResponsePrelude.Placement == splithttp.PlacementPath && (c.SessionIDPlacement == splithttp.PlacementPath || c.SeqPlacement == splithttp.PlacementPath) {
+			return nil, errors.New("responsePrelude placement path cannot be combined with sessionIDPlacement or seqPlacement path")
+		}
+
+		if c.ResponsePrelude.Key == "" {
+			switch c.ResponsePrelude.Placement {
+			case splithttp.PlacementCookie, splithttp.PlacementQuery:
+				c.ResponsePrelude.Key = "sample_id"
+			case splithttp.PlacementHeader:
+				c.ResponsePrelude.Key = "X-Sample-ID"
+			}
+		}
+
+		if c.ResponsePrelude.Table == "" {
+			c.ResponsePrelude.Table = "Base62"
+		}
+		if predefined, ok := splithttp.PredefinedTable[c.ResponsePrelude.Table]; ok {
+			c.ResponsePrelude.Table = predefined
+		}
+		if len(c.ResponsePrelude.Table) < 2 {
+			return nil, errors.New("responsePrelude.table must contain at least 2 characters")
+		}
+		for i := 0; i < len(c.ResponsePrelude.Table); i++ {
+			ch := c.ResponsePrelude.Table[i]
+			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '.' || ch == '_' || ch == '~') {
+				return nil, errors.New("responsePrelude.table must contain only URL-safe ASCII characters")
+			}
+		}
+
+		if c.ResponsePrelude.Length == (Int32Range{}) {
+			c.ResponsePrelude.Length = Int32Range{From: 16, To: 32}
+		}
+		if c.ResponsePrelude.Length.From <= 0 || c.ResponsePrelude.Length.To < c.ResponsePrelude.Length.From || c.ResponsePrelude.Length.To > splithttp.MaxResponsePreludeLength {
+			return nil, errors.New("responsePrelude.length must be within 1..4096 and from <= to")
+		}
+	}
+
 	if c.SeqPlacement != "path" && c.SeqKey == "" {
 		switch c.SeqPlacement {
 		case "cookie", "query":
@@ -494,6 +548,15 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 			HMaxReusableSecs: newRangeConfig(c.Xmux.HMaxReusableSecs),
 			HKeepAlivePeriod: c.Xmux.HKeepAlivePeriod,
 		},
+	}
+
+	if c.ResponsePrelude != nil {
+		config.ResponsePrelude = &splithttp.ResponsePreludeConfig{
+			Placement: c.ResponsePrelude.Placement,
+			Key:       c.ResponsePrelude.Key,
+			Table:     c.ResponsePrelude.Table,
+			Length:    newRangeConfig(c.ResponsePrelude.Length),
+		}
 	}
 
 	if c.DownloadSettings != nil {

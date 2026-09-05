@@ -33,13 +33,20 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, sessio
 
 	c.transportConfig.FillStreamRequest(request, sessionId, "")
 
+	responsePrelude := ""
+	if shouldApplyResponsePrelude(c.transportConfig, body, uploadOnly) {
+		responsePrelude = c.transportConfig.GenerateResponsePrelude()
+		c.transportConfig.ApplyResponsePreludeToRequest(request, responsePrelude)
+	}
+
 	conn, err := browser_dialer.DialGet(request.URL.String(), request.Header, request.Cookies())
 	dummyAddr := &net.IPAddr{}
 	if err != nil {
 		return nil, dummyAddr, dummyAddr, err
 	}
 
-	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
+	response := websocket.NewConnection(conn, dummyAddr, nil, 0)
+	return newResponsePreludeReadCloser(response, responsePrelude), conn.RemoteAddr(), conn.LocalAddr(), nil
 }
 
 func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {

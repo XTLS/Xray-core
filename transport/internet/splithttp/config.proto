@@ -52,4 +52,12 @@ message Config {
   int32 serverMaxHeaderBytes = 27;
   string sessionIDTable = 28;
   RangeConfig sessionIDLength = 29;
+  ResponsePreludeConfig responsePrelude = 30;
+}
+
+message ResponsePreludeConfig {
+  string placement = 1;
+  string key = 2;
+  string table = 3;
+  RangeConfig length = 4;
 }

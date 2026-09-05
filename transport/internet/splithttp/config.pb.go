@@ -189,6 +189,7 @@ type Config struct {
 	ServerMaxHeaderBytes int32                  `protobuf:"varint,27,opt,name=serverMaxHeaderBytes,proto3" json:"serverMaxHeaderBytes,omitempty"`
 	SessionIDTable       string                 `protobuf:"bytes,28,opt,name=sessionIDTable,proto3" json:"sessionIDTable,omitempty"`
 	SessionIDLength      *RangeConfig           `protobuf:"bytes,29,opt,name=sessionIDLength,proto3" json:"sessionIDLength,omitempty"`
+	ResponsePrelude      *ResponsePreludeConfig `protobuf:"bytes,30,opt,name=responsePrelude,proto3" json:"responsePrelude,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -426,6 +427,81 @@ func (x *Config) GetSessionIDLength() *RangeConfig {
 	return nil
 }
 
+func (x *Config) GetResponsePrelude() *ResponsePreludeConfig {
+	if x != nil {
+		return x.ResponsePrelude
+	}
+	return nil
+}
+
+type ResponsePreludeConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Placement     string                 `protobuf:"bytes,1,opt,name=placement,proto3" json:"placement,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Table         string                 `protobuf:"bytes,3,opt,name=table,proto3" json:"table,omitempty"`
+	Length        *RangeConfig           `protobuf:"bytes,4,opt,name=length,proto3" json:"length,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResponsePreludeConfig) Reset() {
+	*x = ResponsePreludeConfig{}
+	mi := &file_transport_internet_splithttp_config_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResponsePreludeConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResponsePreludeConfig) ProtoMessage() {}
+
+func (x *ResponsePreludeConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_splithttp_config_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResponsePreludeConfig.ProtoReflect.Descriptor instead.
+func (*ResponsePreludeConfig) Descriptor() ([]byte, []int) {
+	return file_transport_internet_splithttp_config_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ResponsePreludeConfig) GetPlacement() string {
+	if x != nil {
+		return x.Placement
+	}
+	return ""
+}
+
+func (x *ResponsePreludeConfig) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *ResponsePreludeConfig) GetTable() string {
+	if x != nil {
+		return x.Table
+	}
+	return ""
+}
+
+func (x *ResponsePreludeConfig) GetLength() *RangeConfig {
+	if x != nil {
+		return x.Length
+	}
+	return nil
+}
+
 var File_transport_internet_splithttp_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_splithttp_config_proto_rawDesc = "" +
@@ -441,7 +517,7 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x0ecMaxReuseTimes\x18\x03 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0ecMaxReuseTimes\x12Z\n" +
 	"\x10hMaxRequestTimes\x18\x04 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxRequestTimes\x12Z\n" +
 	"\x10hMaxReusableSecs\x18\x05 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxReusableSecs\x12*\n" +
-	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xcc\f\n" +
+	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xb0\r\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -472,10 +548,16 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x0fuplinkChunkSize\x18\x1a \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0fuplinkChunkSize\x122\n" +
 	"\x14serverMaxHeaderBytes\x18\x1b \x01(\x05R\x14serverMaxHeaderBytes\x12&\n" +
 	"\x0esessionIDTable\x18\x1c \x01(\tR\x0esessionIDTable\x12X\n" +
-	"\x0fsessionIDLength\x18\x1d \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0fsessionIDLength\x1a:\n" +
+	"\x0fsessionIDLength\x18\x1d \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0fsessionIDLength\x12b\n" +
+	"\x0fresponsePrelude\x18\x1e \x01(\v28.xray.transport.internet.splithttp.ResponsePreludeConfigR\x0fresponsePrelude\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x85\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa5\x01\n" +
+	"\x15ResponsePreludeConfig\x12\x1c\n" +
+	"\tplacement\x18\x01 \x01(\tR\tplacement\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12\x14\n" +
+	"\x05table\x18\x03 \x01(\tR\x05table\x12F\n" +
+	"\x06length\x18\x04 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x06lengthB\x85\x01\n" +
 	"%com.xray.transport.internet.splithttpP\x01Z6github.com/xtls/xray-core/transport/internet/splithttp\xaa\x02!Xray.Transport.Internet.SplitHttpb\x06proto3"
 
 var (
@@ -490,13 +572,14 @@ func file_transport_internet_splithttp_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_splithttp_config_proto_rawDescData
 }
 
-var file_transport_internet_splithttp_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_transport_internet_splithttp_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_transport_internet_splithttp_config_proto_goTypes = []any{
 	(*RangeConfig)(nil),           // 0: xray.transport.internet.splithttp.RangeConfig
 	(*XmuxConfig)(nil),            // 1: xray.transport.internet.splithttp.XmuxConfig
 	(*Config)(nil),                // 2: xray.transport.internet.splithttp.Config
-	nil,                           // 3: xray.transport.internet.splithttp.Config.HeadersEntry
-	(*internet.StreamConfig)(nil), // 4: xray.transport.internet.StreamConfig
+	(*ResponsePreludeConfig)(nil), // 3: xray.transport.internet.splithttp.ResponsePreludeConfig
+	nil,                           // 4: xray.transport.internet.splithttp.Config.HeadersEntry
+	(*internet.StreamConfig)(nil), // 5: xray.transport.internet.StreamConfig
 }
 var file_transport_internet_splithttp_config_proto_depIdxs = []int32{
 	0,  // 0: xray.transport.internet.splithttp.XmuxConfig.maxConcurrency:type_name -> xray.transport.internet.splithttp.RangeConfig
@@ -504,20 +587,22 @@ var file_transport_internet_splithttp_config_proto_depIdxs = []int32{
 	0,  // 2: xray.transport.internet.splithttp.XmuxConfig.cMaxReuseTimes:type_name -> xray.transport.internet.splithttp.RangeConfig
 	0,  // 3: xray.transport.internet.splithttp.XmuxConfig.hMaxRequestTimes:type_name -> xray.transport.internet.splithttp.RangeConfig
 	0,  // 4: xray.transport.internet.splithttp.XmuxConfig.hMaxReusableSecs:type_name -> xray.transport.internet.splithttp.RangeConfig
-	3,  // 5: xray.transport.internet.splithttp.Config.headers:type_name -> xray.transport.internet.splithttp.Config.HeadersEntry
+	4,  // 5: xray.transport.internet.splithttp.Config.headers:type_name -> xray.transport.internet.splithttp.Config.HeadersEntry
 	0,  // 6: xray.transport.internet.splithttp.Config.xPaddingBytes:type_name -> xray.transport.internet.splithttp.RangeConfig
 	0,  // 7: xray.transport.internet.splithttp.Config.scMaxEachPostBytes:type_name -> xray.transport.internet.splithttp.RangeConfig
 	0,  // 8: xray.transport.internet.splithttp.Config.scMinPostsIntervalMs:type_name -> xray.transport.internet.splithttp.RangeConfig
 	0,  // 9: xray.transport.internet.splithttp.Config.scStreamUpServerSecs:type_name -> xray.transport.internet.splithttp.RangeConfig
 	1,  // 10: xray.transport.internet.splithttp.Config.xmux:type_name -> xray.transport.internet.splithttp.XmuxConfig
-	4,  // 11: xray.transport.internet.splithttp.Config.downloadSettings:type_name -> xray.transport.internet.StreamConfig
+	5,  // 11: xray.transport.internet.splithttp.Config.downloadSettings:type_name -> xray.transport.internet.StreamConfig
 	0,  // 12: xray.transport.internet.splithttp.Config.uplinkChunkSize:type_name -> xray.transport.internet.splithttp.RangeConfig
 	0,  // 13: xray.transport.internet.splithttp.Config.sessionIDLength:type_name -> xray.transport.internet.splithttp.RangeConfig
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	3,  // 14: xray.transport.internet.splithttp.Config.responsePrelude:type_name -> xray.transport.internet.splithttp.ResponsePreludeConfig
+	0,  // 15: xray.transport.internet.splithttp.ResponsePreludeConfig.length:type_name -> xray.transport.internet.splithttp.RangeConfig
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_splithttp_config_proto_init() }
@@ -531,7 +616,7 @@ func file_transport_internet_splithttp_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_splithttp_config_proto_rawDesc), len(file_transport_internet_splithttp_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
