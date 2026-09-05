@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,6 +46,7 @@ type asyncDNSClassifierResponse struct {
 // background request and returns false so the normal fallback rule wins.
 type AsyncDNSRouteMatcher struct {
 	endpoint      string
+	bearerToken   string
 	client        *http.Client
 	cacheCapacity int
 	minTTL        time.Duration
@@ -70,6 +72,13 @@ func NewAsyncDNSRouteMatcher(config *AsyncDnsRouteConfig) (*AsyncDNSRouteMatcher
 	if err != nil || endpoint.Scheme == "" || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
 		return nil, errors.New("async DNS route endpoint must be an absolute HTTP(S) URL")
 	}
+	bearerToken, err := readAsyncDNSBearerToken()
+	if err != nil {
+		return nil, err
+	}
+	if bearerToken != "" && (endpoint.Scheme != "https" || endpoint.User != nil) {
+		return nil, errors.New("authenticated async DNS route endpoint requires HTTPS without URL credentials")
+	}
 
 	requestTimeout := durationOrDefault(config.GetRequestTimeoutMillis(), defaultAsyncDNSRequestTimeout)
 	cacheCapacity := int(config.GetCacheCapacity())
@@ -91,8 +100,13 @@ func NewAsyncDNSRouteMatcher(config *AsyncDnsRouteConfig) (*AsyncDNSRouteMatcher
 	}
 
 	m := &AsyncDNSRouteMatcher{
-		endpoint:      endpoint.String(),
-		client:        &http.Client{Timeout: requestTimeout},
+		endpoint:    endpoint.String(),
+		bearerToken: bearerToken,
+		client: &http.Client{
+			Timeout: requestTimeout,
+			// Never forward service credentials to a redirect destination.
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 		cacheCapacity: cacheCapacity,
 		minTTL:        minTTL,
 		maxTTL:        maxTTL,
@@ -107,6 +121,37 @@ func NewAsyncDNSRouteMatcher(config *AsyncDnsRouteConfig) (*AsyncDNSRouteMatcher
 		go m.runWorker()
 	}
 	return m, nil
+}
+
+// The secret is local process configuration, never part of the owner-delivered
+// routing payload. It is read once during matcher construction (restart/reload
+// after rotation), outside the non-blocking Apply path. An explicitly configured
+// but invalid secret rejects the new matcher instead of falling back anonymously.
+func readAsyncDNSBearerToken() (string, error) {
+	path := os.Getenv("XRAY_ASYNC_DNS_BEARER_TOKEN_FILE")
+	if path == "" {
+		return "", nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", errors.New("cannot read async DNS bearer token file")
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return "", errors.New("async DNS bearer token file must be a regular file")
+	}
+	data, err := io.ReadAll(io.LimitReader(f, 4097))
+	if err != nil || len(data) > 4096 {
+		return "", errors.New("cannot read async DNS bearer token file or token exceeds 4096 bytes")
+	}
+	token := strings.TrimSpace(string(data))
+	if token == "" || strings.IndexFunc(token, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-._~+/=", r))
+	}) >= 0 {
+		return "", errors.New("async DNS bearer token file contains an empty or invalid token")
+	}
+	return token, nil
 }
 
 func durationOrDefault(millis uint32, fallback time.Duration) time.Duration {
@@ -236,6 +281,12 @@ func (m *AsyncDNSRouteMatcher) fetch(domain string) (*asyncDNSClassifierResponse
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if m.bearerToken != "" {
+		if req.URL.Scheme != "https" || req.URL.User != nil {
+			return nil, errors.New("refusing async DNS bearer token over an insecure endpoint")
+		}
+		req.Header.Set("Authorization", "Bearer "+m.bearerToken)
+	}
 	response, err := m.client.Do(req)
 	if err != nil {
 		return nil, err

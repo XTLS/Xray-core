@@ -36,6 +36,22 @@
 `asyncDnsRoute` выключен по умолчанию: отсутствие config message не меняет
 существующий routing.
 
+### Service authentication (2026-09-05)
+
+Для multi-edge public HTTPS classifier core поддерживает bearer из локального
+файла, путь к которому задаётся `XRAY_ASYNC_DNS_BEARER_TOKEN_FILE`. Ansible
+доставляет файл с mode `0600` и read-only mount; секрет не входит в runtime
+payload/БД owner, URL или логи. Файл читается при создании matcher, поэтому
+ротация требует restart/reload. Настроенный, но недоступный/пустой/некорректный
+файл отклоняет новый matcher, а не включает anonymous fallback. Без env
+сохраняется совместимость с первоначальным canary. Token отправляется только
+HTTPS endpoint без URL credentials; redirects не выполняются. Проверка файла
+и HTTP не добавляются в `Apply`, который остаётся nonblocking.
+
+IP allowlist дополняет bearer, но не заменяет service authentication при
+расширении. Секрет в runtime policy или URL отклонён из-за лишнего secret
+distribution surface. mTLS остаётся альтернативой при появлении PKI lifecycle.
+
 ## Альтернативы
 
 - Глобальный `IPOnDemand`: отклонён, так как блокирует route selection DNS.
@@ -48,8 +64,9 @@
 
 ## Последствия
 
-- Нужны HA L2 classifier-cache и два resolver endpoints, доступные edge по
-  private overlay; их outage не влияет на established known-good routing.
+- Нужны HA L2 classifier-cache и два resolver endpoints; edge использует
+  public HTTPS с service authentication, их outage не влияет на established
+  known-good routing. Overlay остаётся management transport.
 - XrayR передаёт только статический `asyncDnsRoute` config/capability. Он не
   владеет DNS-result state и не публикует runtime policy на каждый ответ.
 - Rollout: image с feature OFF, один edge, малая cohort, затем расширение
