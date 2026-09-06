@@ -90,6 +90,17 @@ func (c *fragmentConn) Write(p []byte) (n int, err error) {
 				to = len(data)
 			}
 			l := to - from
+			// if l is 0, don't send empty tls record(will break the connection) but still sleep
+			if l == 0 {
+				if !mergeHello {
+					delayMin, delayMax := c.delayForSegment(int(splitNum))
+					if delayMax > 0 {
+						time.Sleep(time.Duration(crypto.RandBetween(delayMin, delayMax)) * time.Millisecond)
+					}
+				}
+				splitNum++
+				continue
+			}
 			if 5+l > len(buff) {
 				buff = make([]byte, 5+l)
 			}
