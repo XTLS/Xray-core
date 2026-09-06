@@ -325,6 +325,16 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 		return nil, nil
 	}
 
+	// Adapter descriptions are driver-provided and generally survive friendly
+	// name changes. Keep this best-effort so lookup failures do not drop candidates.
+	var descriptions map[int]string
+	if rows, err := winipcfg.GetIfTable2Ex(winipcfg.MibIfEntryNormalWithoutStatistics); err == nil {
+		descriptions = make(map[int]string, len(rows))
+		for i := range rows {
+			descriptions[int(rows[i].InterfaceIndex)] = rows[i].Description()
+		}
+	}
+
 	var candidates []struct {
 		index int
 		score int
@@ -333,7 +343,7 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 		if iface.Index == tunIndex {
 			continue
 		}
-		if strings.Contains(iface.Name, "vEthernet") {
+		if strings.Contains(strings.ToLower(iface.Name), "vethernet") {
 			continue
 		}
 		if iface.Flags&net.FlagUp == 0 {
@@ -349,7 +359,7 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 		candidates = append(candidates, struct {
 			index int
 			score int
-		}{i, scoreWindowsInterface(&iface, addrs)})
+		}{i, scoreWindowsInterface(&iface, descriptions[iface.Index])})
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
@@ -366,20 +376,42 @@ func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, erro
 	return &iface, nil
 }
 
-func scoreWindowsInterface(iface *net.Interface, addrs []net.Addr) int {
-	score := 0
-
+func scoreWindowsInterface(iface *net.Interface, description string) int {
 	name := strings.ToLower(iface.Name)
-	if strings.Contains(name, "wlan") || strings.Contains(name, "wi-fi") {
-		score += 2
+	description = strings.ToLower(description)
+
+	// De-prioritize driver-provided descriptions associated with virtual adapters.
+	if strings.Contains(description, "virtual") ||
+		strings.Contains(description, "zerotier") ||
+		strings.Contains(description, "hyper-v") ||
+		strings.Contains(description, "vmware") ||
+		strings.Contains(description, "virtualbox") ||
+		strings.Contains(description, "tailscale") ||
+		strings.Contains(description, "wireguard") ||
+		strings.Contains(description, "vpn") ||
+		strings.Contains(description, "wintun") {
+		return -1
 	}
 
-	for _, addr := range addrs {
-		if strings.HasPrefix(addr.String(), "192.168.") {
-			score++
-			break
-		}
+	// WiFi adapters.
+	if strings.Contains(name, "wifi") ||
+		strings.Contains(name, "wi-fi") ||
+		strings.Contains(name, "wlan") ||
+		strings.Contains(description, "wifi") ||
+		strings.Contains(description, "wi-fi") ||
+		strings.Contains(description, "wireless") ||
+		strings.Contains(description, "wlan") ||
+		strings.Contains(description, "802.11") {
+		return 1
 	}
 
-	return score
+	// Wired adapters.
+	if strings.Contains(name, "ethernet") ||
+		strings.Contains(description, "gbe") ||
+		strings.Contains(description, "gigabit") ||
+		strings.Contains(description, "fast ethernet") {
+		return 1
+	}
+
+	return 0
 }

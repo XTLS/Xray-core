@@ -42,6 +42,15 @@ Here is simple Xray config snippet to enable the inbound:
 `desc` sets the Windows Wintun adapter tunnel type and defaults to `Wintun`.
 It is ignored on other platforms.
 
+When `autoOutboundsInterface` is set to `auto`, Xray automatically selects an
+active non-loopback interface with an address for its outbound connections.
+On Windows, the selection is heuristic: known virtual adapter descriptions
+are deprioritized, while WiFi and common physical Ethernet descriptions may
+be preferred. This does not inspect or reproduce the Windows routing table.
+For environments with enterprise VPNs, ZeroTier, Hyper-V, or other virtual
+adapters, configure `autoOutboundsInterface` with the exact interface name
+when a specific outbound interface is required.
+
 ## SUPPORTED FEATURES
 
 - IPv4 and IPv6
