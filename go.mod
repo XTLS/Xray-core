@@ -37,6 +37,7 @@ require (
 	gvisor.dev/gvisor v0.0.0-20260122175437-89a5d21be8f0
 	h12.io/socks v1.0.3
 	lukechampine.com/blake3 v1.4.1
+	mvdan.cc/gofumpt v0.12.0
 )
 
 require (
@@ -48,7 +49,6 @@ require (
 	github.com/juju/ratelimit v1.0.2 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/koron/go-ssdp v0.0.4 // indirect
-	github.com/kr/text v0.2.0 // indirect
 	github.com/libp2p/go-netroute v0.2.1 // indirect
 	github.com/pion/dtls/v3 v3.1.5 // indirect
 	github.com/pion/logging v0.2.4 // indirect
@@ -59,6 +59,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
