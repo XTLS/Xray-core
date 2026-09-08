@@ -86,4 +86,16 @@ message Config {
   SocketConfig ech_socket_settings = 21;
 
   repeated bytes pinned_peer_cert_sha256 = 22;
+
+  // SNI to forge in the spoofed ClientHello sent via raw sockets before
+  // the real TLS handshake (sing-box style TLS spoofing).
+  string spoof = 23;
+
+  // How the spoofed ClientHello is corrupted to evade DPI: "wrong-sequence"
+  // (default), "wrong-checksum", "wrong-ack", "wrong-md5" or
+  // "wrong-timestamp".
+  string spoof_method = 24;
+
+  // Number of times to inject the fake ClientHello (0 or 1 = single-shot).
+  int32 spoof_count = 25;
 }
