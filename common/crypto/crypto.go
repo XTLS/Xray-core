@@ -10,11 +10,11 @@ import (
 
 // [,)
 func RandBetween(from int64, to int64) int64 {
-	if from == to {
-		return from
-	}
 	if from > to {
 		from, to = to, from
+	}
+	if d := to - from; d == 0 || d == 1 {
+		return from
 	}
 	bigInt, _ := rand.Int(rand.Reader, big.NewInt(to-from))
 	return from + bigInt.Int64()

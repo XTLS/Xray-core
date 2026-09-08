@@ -39,16 +39,17 @@ type record struct {
 }
 
 type xicmpConnServer struct {
-	conn     net.PacketConn
-	icmp4    *icmp.PacketConn
-	icmp6    *icmp.PacketConn
-	ipv4PC   *ipv4.PacketConn
-	ipv6PC   *ipv6.PacketConn
-	ips      map[netip.Addr]struct{}
-	rec      map[string]record
-	readCh   chan packet
-	closedCh chan struct{}
-	mu       sync.Mutex
+	conn    net.PacketConn
+	icmp4   *icmp.PacketConn
+	icmp6   *icmp.PacketConn
+	ipv4PC  *ipv4.PacketConn
+	ipv6PC  *ipv6.PacketConn
+	ips     map[netip.Addr]struct{}
+	rec     map[string]record
+	readCh  chan packet
+	closeCh chan struct{}
+	wg      sync.WaitGroup
+	mu      sync.Mutex
 }
 
 func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
@@ -67,21 +68,22 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	conn := &xicmpConnServer{
-		conn:     raw,
-		icmp4:    icmp4,
-		icmp6:    icmp6,
-		ipv4PC:   icmp4.IPv4PacketConn(),
-		ipv6PC:   icmp6.IPv6PacketConn(),
-		ips:      ips,
-		rec:      make(map[string]record),
-		readCh:   make(chan packet),
-		closedCh: make(chan struct{}),
+		conn:    raw,
+		icmp4:   icmp4,
+		icmp6:   icmp6,
+		ipv4PC:  icmp4.IPv4PacketConn(),
+		ipv6PC:  icmp6.IPv6PacketConn(),
+		ips:     ips,
+		rec:     make(map[string]record),
+		readCh:  make(chan packet),
+		closeCh: make(chan struct{}),
 	}
 
 	common.Must(conn.ipv4PC.SetControlMessage(ipv4.FlagDst, true))
 	common.Must(conn.ipv6PC.SetControlMessage(ipv6.FlagDst, true))
 
 	go conn.clean()
+	conn.wg.Add(2)
 	go conn.recv4()
 	go conn.recv6()
 
@@ -90,7 +92,7 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 func (c *xicmpConnServer) closed() bool {
 	select {
-	case <-c.closedCh:
+	case <-c.closeCh:
 		return true
 	default:
 		return false
@@ -111,15 +113,16 @@ func (c *xicmpConnServer) clean() {
 				}
 			}
 			c.mu.Unlock()
-		case <-c.closedCh:
+		case <-c.closeCh:
 			return
 		}
 	}
 }
 
 func (c *xicmpConnServer) recv4() {
-	var b [finalmask.UDPSize]byte
+	defer c.wg.Done()
 
+	var b [finalmask.UDPSize]byte
 	for {
 		if c.closed() {
 			return
@@ -133,10 +136,11 @@ func (c *xicmpConnServer) recv4() {
 				case c.readCh <- packet{
 					err: err,
 				}:
-				case <-c.closedCh:
+				case <-c.closeCh:
 					return
 				}
 			}
+			errors.LogErrorInner(context.Background(), err, "recv4 err")
 			continue
 		}
 
@@ -189,7 +193,7 @@ func (c *xicmpConnServer) recv4() {
 			p:    p,
 			addr: cAddr,
 		}:
-		case <-c.closedCh:
+		case <-c.closeCh:
 			pool.Put(p)
 			return
 		}
@@ -197,8 +201,9 @@ func (c *xicmpConnServer) recv4() {
 }
 
 func (c *xicmpConnServer) recv6() {
-	var b [finalmask.UDPSize]byte
+	defer c.wg.Done()
 
+	var b [finalmask.UDPSize]byte
 	for {
 		if c.closed() {
 			return
@@ -212,10 +217,11 @@ func (c *xicmpConnServer) recv6() {
 				case c.readCh <- packet{
 					err: err,
 				}:
-				case <-c.closedCh:
+				case <-c.closeCh:
 					return
 				}
 			}
+			errors.LogErrorInner(context.Background(), err, "recv6 err")
 			continue
 		}
 
@@ -268,7 +274,7 @@ func (c *xicmpConnServer) recv6() {
 			p:    p,
 			addr: cAddr,
 		}:
-		case <-c.closedCh:
+		case <-c.closeCh:
 			pool.Put(p)
 			return
 		}
@@ -276,16 +282,15 @@ func (c *xicmpConnServer) recv6() {
 }
 
 func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	select {
-	case packet := <-c.readCh:
+	packet, ok := <-c.readCh
+	if ok {
 		if packet.p != nil {
 			n = copy(p, packet.p)
 			pool.Put(packet.p)
 		}
 		return n, packet.addr, packet.err
-	case <-c.closedCh:
-		return 0, nil, io.EOF
 	}
+	return 0, nil, io.EOF
 }
 
 func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -321,10 +326,9 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	}
 
 	if err != nil {
-		errors.LogErrorInner(context.Background(), err, "xicmp write")
+		errors.LogErrorInner(context.Background(), err, "send err")
 		return 0, err
 	}
-
 	return len(p), nil
 }
 
@@ -334,10 +338,19 @@ func (c *xicmpConnServer) Close() error {
 	if c.closed() {
 		return nil
 	}
-	close(c.closedCh)
+	close(c.closeCh)
 	_ = c.icmp4.Close()
 	_ = c.icmp6.Close()
 	_ = c.conn.Close()
+	c.wg.Wait()
+	select {
+	case p := <-c.readCh:
+		if p.p != nil {
+			pool.Put(p.p)
+		}
+	default:
+	}
+	close(c.readCh)
 	return nil
 }
 
