@@ -46,6 +46,12 @@ func SniffUTP(b []byte) (*SniffHeader, error) {
 		return nil, errNotBittorrent
 	}
 
+	// ack_nr carries no meaning until the peer replies, and implementations send
+	// a zeroed one. Requiring it rules out DNS queries, whose qclass sits here
+	if binary.BigEndian.Uint16(b[18:20]) != 0 {
+		return nil, errNotBittorrent
+	}
+
 	// Walk the extension chain. Selective ack (1) and extension bits (2)
 	extension, offset := b[1], 20
 	for extension != 0 {
@@ -74,6 +80,33 @@ func SniffUTP(b []byte) (*SniffHeader, error) {
 
 	// extensions should consume all ST_SYN payload
 	if len(b) != offset {
+		return nil, errNotBittorrent
+	}
+
+	return &SniffHeader{}, nil
+}
+
+// udpTrackerMagic opens every BEP 15 connect request.
+const udpTrackerMagic = 0x41727101980
+
+// SniffUDPTracker matches the connect request that opens a session with a UDP
+// tracker (BEP 15). It is the only packet a client sends first, and it is
+// exactly 16 bytes: the magic, action 0, and a transaction id.
+func SniffUDPTracker(b []byte) (*SniffHeader, error) {
+	if len(b) < 16 {
+		return nil, common.ErrNoClue
+	}
+
+	if len(b) != 16 {
+		return nil, errNotBittorrent
+	}
+
+	if binary.BigEndian.Uint64(b[0:8]) != udpTrackerMagic {
+		return nil, errNotBittorrent
+	}
+
+	// action 0 is connect
+	if binary.BigEndian.Uint32(b[8:12]) != 0 {
 		return nil, errNotBittorrent
 	}
 
