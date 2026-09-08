@@ -242,7 +242,7 @@ func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *pr
 		if vlessCfg.Encryption != "" && vlessCfg.Encryption != "none" {
 			return nil
 		}
-		if requiresTransportSecurity(vlessCfg.Vnext[0].Address) {
+		if requiresTransportSecurity(vlessCfg.Address) {
 			return errors.New("vless without TLS or other encryption is prohibited unless the server address is a private IP or domain")
 		}
 	}
