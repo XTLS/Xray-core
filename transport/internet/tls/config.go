@@ -19,7 +19,11 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
+	"google.golang.org/protobuf/proto"
 )
+
+// certificateAccess protects publication; published certificate values are immutable.
+var certificateAccess sync.RWMutex
 
 var globalSessionCache = tls.NewLRUClientSessionCache(128)
 
@@ -47,8 +51,11 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 
 // BuildCertificates builds a list of TLS certificates from proto definition.
 func (c *Config) BuildCertificates() []*tls.Certificate {
+	certificateAccess.Lock()
+	defer certificateAccess.Unlock()
 	certs := make([]*tls.Certificate, 0, len(c.Certificate))
 	for _, entry := range c.Certificate {
+		entry = proto.Clone(entry).(*Certificate)
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
 		}
@@ -72,7 +79,10 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 		}
 		index := len(certs) - 1
 		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {
-			cert := certs[index]
+			certificateAccess.RLock()
+			snapshot := *certs[index]
+			certificateAccess.RUnlock()
+			cert := &snapshot
 			if isReloaded {
 				if newKeyPair := getX509KeyPair(); newKeyPair != nil {
 					cert = newKeyPair
@@ -87,7 +97,9 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 					cert.OCSPStaple = newOCSPData
 				}
 			}
+			certificateAccess.Lock()
 			certs[index] = cert
+			certificateAccess.Unlock()
 		})
 	}
 	return certs
@@ -245,6 +257,8 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 
 func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		certificateAccess.RLock()
+		defer certificateAccess.RUnlock()
 		if len(certs) == 0 {
 			return nil, errNoCertificates
 		}
