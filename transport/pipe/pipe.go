@@ -63,8 +63,8 @@ func New(opts ...Option) (*Reader, *Writer) {
 	}
 
 	return &Reader{
-			pipe: p,
-		}, &Writer{
-			pipe: p,
-		}
+		pipe: p,
+	}, &Writer{
+		pipe: p,
+	}
 }
