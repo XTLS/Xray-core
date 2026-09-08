@@ -928,11 +928,11 @@ func (c *UDPHop) Build() (proto.Message, error) {
 	var local, remote, remoteOnce bool
 	for _, mode := range strings.Split(c.Mode, ",") {
 		switch strings.ToLower(mode) {
-		case "local":
+		case "intervallocal":
 			local = true
-		case "remote":
+		case "intervalremote":
 			remote = true
-		case "remoteOnce":
+		case "perconnremote":
 			remoteOnce = true
 		default:
 			return nil, errors.New("invalid mode ", mode)
