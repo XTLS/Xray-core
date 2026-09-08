@@ -190,6 +190,12 @@ func (h *Handler) matchFinalRule(network net.Network, address net.Address, port 
 func (h *Handler) Init(config *Config, pm policy.Manager) error {
 	h.config = config
 	h.policyManager = pm
+	if h.usesDialerProxy { // freedom is not the final outbound, final rules do not apply
+		if len(config.FinalRules) > 0 {
+			errors.LogWarning(context.Background(), `The "finalRules" setting is ignored when "sockopt.dialerProxy" is set, since freedom is not the final outbound.`)
+		}
+		return nil
+	}
 	h.finalRules = make([]*FinalRule, 0, len(config.FinalRules))
 	for _, rc := range config.FinalRules {
 		rule, err := buildFinalRule(rc)
@@ -253,7 +259,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
 	inbound := session.InboundFromContext(ctx)
-	defaultRule := getDefaultFinalRule(inbound)
+	var defaultRule *FinalRule
+	if !h.usesDialerProxy { // freedom is not the final outbound, final rules do not apply (and the domain is not resolved)
+		defaultRule = getDefaultFinalRule(inbound)
+	}
 
 	destination := ob.Target
 	origTargetAddr := ob.OriginalTarget.Address
@@ -342,15 +351,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return h.blackhole(ctx, input, output, blockedRule, blockedDest)
 	}
 	if destination.Address.Family().IsDomain() && (defaultRule != nil || len(h.finalRules) > 0) {
-		if h.usesDialerProxy {
-			errors.LogInfo(ctx, "skipping final rule check for proxied remote endpoint, original target: ", destination)
-		} else {
-			// pre-check may fail or dialer may select another IP
-			remoteDest := net.DestinationFromAddr(conn.RemoteAddr())
-			if rule := h.matchFinalRule(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-				conn.Close()
-				return h.blackhole(ctx, input, output, rule, &remoteDest)
-			}
+		// pre-check may fail or dialer may select another IP
+		remoteDest := net.DestinationFromAddr(conn.RemoteAddr())
+		if rule := h.matchFinalRule(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
+			conn.Close()
+			return h.blackhole(ctx, input, output, rule, &remoteDest)
 		}
 	}
 
