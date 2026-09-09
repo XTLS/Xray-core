@@ -1,5 +1,4 @@
 //go:build !windows && !darwin && !linux && !android && !ios && !freebsd && !openbsd
-// +build !windows,!darwin,!linux,!android,!ios,!freebsd,!openbsd
 
 package internet
 
