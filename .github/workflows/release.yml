@@ -80,13 +80,9 @@ jobs:
     strategy:
       matrix:
         # Include x86-64 and ARM64 on all platforms.
-        goos: [windows, freebsd, linux, darwin, android]
+        goos: [windows, freebsd, openbsd, linux, darwin, android]
         goarch: [amd64, arm64]
         patch-assetname: [""]
-        # Building for OpenBSD has been suspended unless there are active
-        # contributors that uses OpenBSD actively.
-        # PRs for OpenBSD compatibility are welcome.
-        # Building for BSDs will be add back when there is active maintenance.
         include:
           # BEGIN RISCV & LoongArch
           - goos: linux
@@ -114,14 +110,18 @@ jobs:
           # END x86
           # BEGIN MIPS
           # MIPS64 BE/LE will be removed in v27
+          # todo evaluate in the future
           - goos: linux
             goarch: mips64
           - goos: linux
             goarch: mips64le
-          # MIPS32 BE/LE will be back-seated in v27.
           # This is a long tail architecture due to router productions.
+          # MIPS32 LE will be back-seated in v27.
+          # todo evaluate in the future
           - goos: linux
             goarch: mipsle
+          # MIPS32 BE will be back-seated/removed in v27.
+          # todo evaluate in the future
           - goos: linux
             goarch: mips
           # END MIPS
@@ -130,14 +130,10 @@ jobs:
           - goos: linux
             goarch: arm
             goarm: 7
-          # ARMv6 will be removed in v27
+          # ARMv6 will be back-seated in v27/v28
           - goos: linux
             goarch: arm
             goarm: 6
-          # ARMv5 will be removed in v27
-          - goos: linux
-            goarch: arm
-            goarm: 5
           # END Linux ARM
       fail-fast: false
 

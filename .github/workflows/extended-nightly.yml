@@ -23,12 +23,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - goos: openbsd
-            goarch: amd64
-            assetname: openbsd-64
-          - goos: openbsd
-            goarch: arm64
-            assetname: openbsd-arm64-v8a
+          - goos: linux
+            goarch: arm
+            goarm: 5
+            assetname: linux-arm32-v5
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -36,6 +34,7 @@ jobs:
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
+      GOARM: ${{ matrix.goarm }}
       CGO_ENABLED: 0
     steps:
       - name: Checkout codebase
@@ -58,9 +57,6 @@ jobs:
 
       - name: Build Xray
         run: |
-          if [[ ${GOARCH} == 'arm' ]]; then
-            GOARM="7"
-          fi
           # Building
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)
