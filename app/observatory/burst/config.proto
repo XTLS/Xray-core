@@ -28,5 +28,7 @@ message HealthPingConfig {
   int64 timeout = 5;
   // http method to make request
   string httpMethod = 6;
+  // limits how many matched outbounds are health-checked at startup.
+  int32 startupChecks = 7;
 
 }

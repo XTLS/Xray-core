@@ -21,6 +21,7 @@ type HealthPingSettings struct {
 	SamplingCount int           `json:"sampling"`
 	Timeout       time.Duration `json:"timeout"`
 	HttpMethod    string        `json:"httpMethod"`
+	StartupChecks int           `json:"startupChecks"`
 }
 
 // HealthPing is the health checker for balancers
@@ -55,6 +56,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 			SamplingCount: int(config.SamplingCount),
 			Timeout:       time.Duration(config.Timeout),
 			HttpMethod:    httpMethod,
+			StartupChecks: int(config.StartupChecks),
 		}
 	}
 	if settings.Destination == "" {
@@ -102,6 +104,10 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 		if err != nil {
 			errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
 			return
+		}
+		if n := h.Settings.StartupChecks; n > 0 && n < len(tags) {
+			errors.LogInfo(h.ctx, "initial health check limited to ", n, " of ", len(tags), " matched outbounds, picked at random")
+			tags = pickRandomTags(tags, n)
 		}
 		h.Check(tags)
 	}()
@@ -152,6 +158,18 @@ func (h *HealthPing) Check(tags []string) error {
 	errors.LogInfo(h.ctx, "perform one-time health check for tags ", tags)
 	h.doCheck(h.ctx, tags, 0, 1)
 	return nil
+}
+
+// Pick n random elements from tags
+// n must be > 0 and <= len(tags)
+func pickRandomTags(tags []string, n int) []string {
+	shuffled := make([]string, len(tags))
+	copy(shuffled, tags)
+	for i := len(shuffled) - 1; i > 0; i-- {
+		j := dice.Roll(i + 1)
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	}
+	return shuffled[:n]
 }
 
 type rtt struct {
