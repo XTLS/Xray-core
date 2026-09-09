@@ -37,6 +37,7 @@ RUN echo '{}' >/tmp/usr/local/etc/xray/08_fakedns.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/09_metrics.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/10_observatory.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/11_geodata.json
+RUN echo '{}' >/tmp/usr/local/etc/xray/12_env.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/99_version.json
 
 # Create log files

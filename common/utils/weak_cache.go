@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"maps"
 	"runtime"
 	"sync"
 	"weak"
@@ -42,4 +43,17 @@ func (c *WeakCacheMap[K, V]) Store(key K, value *V) {
 			delete(c.m, key)
 		}
 	}, struct{}{})
+}
+
+func (c *WeakCacheMap[K, V]) Range(f func(K, *V) bool) {
+	c.mu.Lock()
+	snapshot := maps.Clone(c.m)
+	c.mu.Unlock()
+	for k, v := range snapshot {
+		if value := v.Value(); value != nil {
+			if !f(k, value) {
+				break
+			}
+		}
+	}
 }

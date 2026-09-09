@@ -72,7 +72,7 @@ func (e *packedEncoder) maybePad(out []byte, layout *byteLayout) []byte {
 		return append(out, layout.paddingPool[0])
 	}
 	for {
-		b := layout.paddingPool[e.codec.rng.Intn(len(layout.paddingPool))]
+		b := layout.paddingPool[e.codec.rng.IntN(len(layout.paddingPool))]
 		if b != layout.padMarker {
 			return append(out, b)
 		}

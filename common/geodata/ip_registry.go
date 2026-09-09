@@ -7,25 +7,27 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/common/uuid"
 )
 
 type IPRegistry struct {
-	mu           sync.Mutex
-	ipsetFactory *IPSetFactory
-	matchers     []*DynamicIPMatcher
+	mu       sync.Mutex
+	factory  *IPSetFactory
+	matchers *utils.WeakCacheMap[uuid.UUID, DynamicIPMatcher]
 }
 
 func (r *IPRegistry) BuildIPMatcher(rules []*IPRule) (IPMatcher, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	m, err := buildOptimizedIPMatcher(r.ipsetFactory, rules)
+	m, err := buildOptimizedIPMatcher(r.factory, rules)
 	if err != nil {
 		return nil, err
 	}
 
 	d := NewDynamicIPMatcher(rules, m)
-	r.matchers = append(r.matchers, d)
+	r.matchers.Store(uuid.New(), d)
 	return d, nil
 }
 
@@ -33,15 +35,20 @@ func (r *IPRegistry) Reload() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	errors.LogInfo(context.Background(), "reloading GeoIP data for ", len(r.matchers), " IP matcher(s)")
+	var matchers []*DynamicIPMatcher
+	r.matchers.Range(func(_ uuid.UUID, matcher *DynamicIPMatcher) bool {
+		matchers = append(matchers, matcher)
+		return true
+	})
+	errors.LogInfo(context.Background(), "reloading GeoIP data for ", len(matchers), " IP matcher(s)")
 
 	factory := newIPSetFactory()
 	type reloadEntry struct {
 		dynamic *DynamicIPMatcher
 		matcher IPMatcher
 	}
-	reloaded := make([]reloadEntry, len(r.matchers))
-	for i, d := range r.matchers {
+	reloaded := make([]reloadEntry, len(matchers))
+	for i, d := range matchers {
 		m, err := buildOptimizedIPMatcher(factory, d.rules)
 		if err != nil {
 			errors.LogErrorInner(context.Background(), err, "failed to reload GeoIP data for IP matcher ", i)
@@ -52,14 +59,15 @@ func (r *IPRegistry) Reload() error {
 	for _, entry := range reloaded {
 		entry.dynamic.Reload(entry.matcher)
 	}
-	r.ipsetFactory = factory
-	errors.LogInfo(context.Background(), "reloaded GeoIP data for ", len(r.matchers), " IP matcher(s)")
+	r.factory = factory
+	errors.LogInfo(context.Background(), "reloaded GeoIP data for ", len(matchers), " IP matcher(s)")
 	return nil
 }
 
 func newIPRegistry() *IPRegistry {
 	return &IPRegistry{
-		ipsetFactory: newIPSetFactory(),
+		factory:  newIPSetFactory(),
+		matchers: utils.NewWeakCacheMap[uuid.UUID, DynamicIPMatcher](),
 	}
 }
 

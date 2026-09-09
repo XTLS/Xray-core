@@ -177,8 +177,7 @@ func (x *Certificate) GetBuildChain() bool {
 }
 
 type Config struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AllowInsecure bool                   `protobuf:"varint,1,opt,name=allow_insecure,json=allowInsecure,proto3" json:"allow_insecure,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// List of certificates to be served on server.
 	Certificate []*Certificate `protobuf:"bytes,2,rep,name=certificate,proto3" json:"certificate,omitempty"`
 	// Override server name.
@@ -205,7 +204,6 @@ type Config struct {
 	VerifyPeerCertByName []string               `protobuf:"bytes,17,rep,name=verify_peer_cert_by_name,json=verifyPeerCertByName,proto3" json:"verify_peer_cert_by_name,omitempty"`
 	EchServerKeys        []byte                 `protobuf:"bytes,18,opt,name=ech_server_keys,json=echServerKeys,proto3" json:"ech_server_keys,omitempty"`
 	EchConfigList        string                 `protobuf:"bytes,19,opt,name=ech_config_list,json=echConfigList,proto3" json:"ech_config_list,omitempty"`
-	EchForceQuery        string                 `protobuf:"bytes,20,opt,name=ech_force_query,json=echForceQuery,proto3" json:"ech_force_query,omitempty"`
 	EchSocketSettings    *internet.SocketConfig `protobuf:"bytes,21,opt,name=ech_socket_settings,json=echSocketSettings,proto3" json:"ech_socket_settings,omitempty"`
 	PinnedPeerCertSha256 [][]byte               `protobuf:"bytes,22,rep,name=pinned_peer_cert_sha256,json=pinnedPeerCertSha256,proto3" json:"pinned_peer_cert_sha256,omitempty"`
 	unknownFields        protoimpl.UnknownFields
@@ -240,13 +238,6 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_tls_config_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *Config) GetAllowInsecure() bool {
-	if x != nil {
-		return x.AllowInsecure
-	}
-	return false
 }
 
 func (x *Config) GetCertificate() []*Certificate {
@@ -354,13 +345,6 @@ func (x *Config) GetEchConfigList() string {
 	return ""
 }
 
-func (x *Config) GetEchForceQuery() string {
-	if x != nil {
-		return x.EchForceQuery
-	}
-	return ""
-}
-
 func (x *Config) GetEchSocketSettings() *internet.SocketConfig {
 	if x != nil {
 		return x.EchSocketSettings
@@ -393,9 +377,8 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\x05Usage\x12\x10\n" +
 	"\fENCIPHERMENT\x10\x00\x12\x14\n" +
 	"\x10AUTHORITY_VERIFY\x10\x01\x12\x13\n" +
-	"\x0fAUTHORITY_ISSUE\x10\x02\"\xf5\x06\n" +
-	"\x06Config\x12%\n" +
-	"\x0eallow_insecure\x18\x01 \x01(\bR\rallowInsecure\x12J\n" +
+	"\x0fAUTHORITY_ISSUE\x10\x02\"\xa6\x06\n" +
+	"\x06Config\x12J\n" +
 	"\vcertificate\x18\x02 \x03(\v2(.xray.transport.internet.tls.CertificateR\vcertificate\x12\x1f\n" +
 	"\vserver_name\x18\x03 \x01(\tR\n" +
 	"serverName\x12#\n" +
@@ -413,8 +396,7 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\x11curve_preferences\x18\x10 \x03(\tR\x10curvePreferences\x126\n" +
 	"\x18verify_peer_cert_by_name\x18\x11 \x03(\tR\x14verifyPeerCertByName\x12&\n" +
 	"\x0fech_server_keys\x18\x12 \x01(\fR\rechServerKeys\x12&\n" +
-	"\x0fech_config_list\x18\x13 \x01(\tR\rechConfigList\x12&\n" +
-	"\x0fech_force_query\x18\x14 \x01(\tR\rechForceQuery\x12U\n" +
+	"\x0fech_config_list\x18\x13 \x01(\tR\rechConfigList\x12U\n" +
 	"\x13ech_socket_settings\x18\x15 \x01(\v2%.xray.transport.internet.SocketConfigR\x11echSocketSettings\x125\n" +
 	"\x17pinned_peer_cert_sha256\x18\x16 \x03(\fR\x14pinnedPeerCertSha256Bs\n" +
 	"\x1fcom.xray.transport.internet.tlsP\x01Z0github.com/xtls/xray-core/transport/internet/tls\xaa\x02\x1bXray.Transport.Internet.Tlsb\x06proto3"

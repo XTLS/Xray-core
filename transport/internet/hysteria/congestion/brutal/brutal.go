@@ -33,6 +33,8 @@ type BrutalSender struct {
 	pktInfoSlots [pktInfoSlotCount]pktInfo
 	ackRate      float64
 
+	disableLossCompensation bool
+
 	debug                 bool
 	lastAckPrintTimestamp int64
 }
@@ -43,13 +45,14 @@ type pktInfo struct {
 	LossCount uint64
 }
 
-func NewBrutalSender(bps uint64) *BrutalSender {
+func NewBrutalSender(bps uint64, disableLossCompensation bool) *BrutalSender {
 	debug, _ := strconv.ParseBool(os.Getenv(debugEnv))
 	bs := &BrutalSender{
-		bps:             congestion.ByteCount(bps),
-		maxDatagramSize: congestion.InitialPacketSize,
-		ackRate:         1,
-		debug:           debug,
+		bps:                     congestion.ByteCount(bps),
+		maxDatagramSize:         congestion.InitialPacketSize,
+		ackRate:                 1,
+		disableLossCompensation: disableLossCompensation,
+		debug:                   debug,
 	}
 	bs.pacer = common.NewPacer(func() congestion.ByteCount {
 		return congestion.ByteCount(float64(bs.bps) / bs.ackRate)
@@ -127,6 +130,10 @@ func (b *BrutalSender) SetMaxDatagramSize(size congestion.ByteCount) {
 }
 
 func (b *BrutalSender) updateAckRate(currentTimestamp int64) {
+	if b.disableLossCompensation {
+		b.ackRate = 1
+		return
+	}
 	minTimestamp := currentTimestamp - pktInfoSlotCount
 	var ackCount, lossCount uint64
 	for _, info := range b.pktInfoSlots {

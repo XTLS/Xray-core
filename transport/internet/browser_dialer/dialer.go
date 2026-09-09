@@ -27,9 +27,10 @@ type task struct {
 }
 
 var (
-	conns  chan *websocket.Conn
-	server *http.Server
-	mu     sync.Mutex
+	conns       chan *websocket.Conn
+	server      *http.Server
+	currentAddr string
+	mu          sync.Mutex
 )
 
 var upgrader = &websocket.Upgrader{
@@ -47,8 +48,13 @@ func Reload() {
 	mu.Lock()
 	defer mu.Unlock()
 
+	if addr == currentAddr && (addr == "" || server != nil) {
+		return
+	}
+
 	if server != nil {
 		server.Close()
+		server = nil
 	}
 	if HasBrowserDialer() {
 		for len(conns) > 0 {
@@ -60,6 +66,7 @@ func Reload() {
 		}
 		conns = nil
 	}
+	currentAddr = addr
 	if addr != "" {
 		token := uuid.New()
 		csrfToken := token.String()
@@ -220,5 +227,8 @@ func CheckOK(conn *websocket.Conn) error {
 }
 
 func init() {
-	Reload()
+	platform.RegisterEnvReload(func() error {
+		Reload()
+		return nil
+	})
 }

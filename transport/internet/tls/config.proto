@@ -38,7 +38,7 @@ message Certificate {
 }
 
 message Config {
-  bool allow_insecure = 1;
+  // Number 1 was assigned and used by an legacy option.
 
   // List of certificates to be served on server.
   repeated Certificate certificate = 2;
@@ -81,8 +81,7 @@ message Config {
 
   string ech_config_list = 19;
 
-  // Deprecated
-  string ech_force_query = 20;
+  // Number 20 was assigned and used by an legacy option.
 
   SocketConfig ech_socket_settings = 21;
 

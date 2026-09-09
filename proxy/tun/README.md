@@ -14,11 +14,12 @@ Plainly enabling it in the config probably will result nothing, or lock your rou
 
 ## DETAILS
 
-Current implementation does not contain options to configure network level addresses, routing or rules.
-Enabling the feature will result only tun interface up, and that's it. \
-This is explicit decision, significantly simplifying implementation, and allowing any number of custom configurations, consumers could come up with. Network interface is OS level entity, and OS is what should manage it. \
-Working configuration, is tun enabled in Xray config with specific name (e.g. xray0), and OS level configuration to manage "xray0" interface, applying routing and rules on interface up.
-This way consistency of system level routing and rules is ensured from single place of responsibility - the OS itself. \
+By default, enabling the feature will only bring the tun interface up. \
+When configured explicitly, Windows and Linux can apply interface addresses from `gateway`, while macOS uses the first IPv4 prefix from `gateway` to configure the utun point-to-point address. \
+Windows, Linux and macOS can also apply system routes from `autoSystemRoutingTable`.
+Linux and macOS do not configure system DNS from the `dns` field; system DNS remains managed by the OS or distribution-specific network services. \
+For more advanced routing policies or rules, OS level configuration can still manage the named interface (e.g. xray0) when it appears.
+This keeps complex system level routing and rules in a single place of responsibility - the OS itself. \
 Examples of how to achieve this on a simple Linux system (Ubuntu with systemd-networkd) can be found at the end of this README.
 
 Due to this inbound not actually being a proxy, the configuration ignore required listen and port options, and never listen on any port. \
@@ -30,12 +31,16 @@ Here is simple Xray config snippet to enable the inbound:
       "port": 0,
       "protocol": "tun",
       "settings": {
-        "name": "xray0",
-        "MTU": 1492
+        "name": "utun10",
+        "desc": "Wintun",
+        "mtu": 1500
       }
     }
   ],
 ```
+
+`desc` sets the Windows Wintun adapter tunnel type and defaults to `Wintun`.
+It is ignored on other platforms.
 
 ## SUPPORTED FEATURES
 
@@ -206,6 +211,11 @@ ifconfig
 Produced list will have all system interfaces listed, from which you will see how many "utun" ones already exists.
 It's not required to select next available number, e.g. if you have utun1-utun7 interfaces, it's not required to have "utun8" in the config. You can choose any available name, even utun20, to get surely available interface number.
 
+macOS requires the utun interface to have a point-to-point IPv4 address before IPv4 routes can use it. \
+By default Xray uses `169.254.10.1/30` as the remote gateway address and assigns the next address in the prefix to the local utun side. \
+You can override this by setting `gateway`; macOS uses the first IPv4 prefix in the list. IPv6 `gateway` entries are not used for utun addressing, and IPv6 routes use the interface route instead. \
+The `dns` field does not change macOS system DNS.
+
 To attach routing to the interface, route command like following can be executed:
 ```
 sudo route add -net 1.1.1.0/24 -iface utun10
@@ -214,6 +224,7 @@ sudo route add -net 1.1.1.0/24 -iface utun10
 sudo route add -inet6 -host 2606:4700:4700::1111 -iface utun10
 sudo route add -inet6 -host 2606:4700:4700::1001 -iface utun10
 ```
+Alternatively, configure `autoSystemRoutingTable` and Xray will add and remove those system routes while it is running.
 Important to remember that everything written above about Linux routing concept, also apply to Mac OS X. If you simply route default route through utun interface, that will result network loop and immediate network failure.
 
 ## ANDROID SUPPORT

@@ -2,7 +2,7 @@ package sudoku
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 )
 
 var perm4 = [24][4]byte{
@@ -67,7 +67,7 @@ func pickPaddingChance(rng *rand.Rand, pMin, pMax int) int {
 	if pMax == pMin {
 		return pMin
 	}
-	return pMin + rng.Intn(pMax-pMin+1)
+	return pMin + rng.IntN(pMax-pMin+1)
 }
 
 func (c *codec) shouldPad() bool {
@@ -77,7 +77,7 @@ func (c *codec) shouldPad() bool {
 	if c.paddingChance >= 100 {
 		return true
 	}
-	return c.rng.Intn(100) < c.paddingChance
+	return c.rng.IntN(100) < c.paddingChance
 }
 
 func (c *codec) currentTable() *table {
@@ -89,7 +89,7 @@ func (c *codec) currentTable() *table {
 
 func (c *codec) randomPadding(t *table) byte {
 	pool := t.layout.paddingPool
-	return pool[c.rng.Intn(len(pool))]
+	return pool[c.rng.IntN(len(pool))]
 }
 
 func (c *codec) encode(in []byte) ([]byte, error) {
@@ -112,8 +112,8 @@ func (c *codec) encode(in []byte) ([]byte, error) {
 			return nil, fmt.Errorf("sudoku encode table missing for byte %d", b)
 		}
 
-		hints := enc[c.rng.Intn(len(enc))]
-		perm := perm4[c.rng.Intn(len(perm4))]
+		hints := enc[c.rng.IntN(len(enc))]
+		perm := perm4[c.rng.IntN(len(perm4))]
 		for _, idx := range perm {
 			if c.shouldPad() {
 				out = append(out, c.randomPadding(t))

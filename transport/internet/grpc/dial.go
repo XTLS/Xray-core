@@ -62,7 +62,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 		if err != nil {
 			return nil, errors.New("Cannot dial gRPC").Base(err)
 		}
-		return encoding.NewMultiHunkConn(grpcService, nil), nil
+		return encoding.NewMultiHunkConn(grpcService, nil, nil), nil
 	}
 
 	errors.LogDebug(ctx, "using gRPC tun mode service name: `"+grpcSettings.getServiceName()+"` stream name: `"+grpcSettings.getTunStreamName()+"`")
@@ -71,7 +71,7 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 		return nil, errors.New("Cannot dial gRPC").Base(err)
 	}
 
-	return encoding.NewHunkConn(grpcService, nil), nil
+	return encoding.NewHunkConn(grpcService, nil, nil), nil
 }
 
 func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, error) {
@@ -136,10 +136,7 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 				}
 
 				if tlsConfig != nil {
-					config := tlsConfig.GetTLSConfig()
-					if config.ServerName == "" && address.Family().IsDomain() {
-						config.ServerName = address.Domain()
-					}
+					config := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
 					if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 						return tls.UClient(c, config, fingerprint), nil
 					} else { // Fallback to normal gRPC TLS

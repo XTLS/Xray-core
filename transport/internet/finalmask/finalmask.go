@@ -3,14 +3,13 @@ package finalmask
 import (
 	"context"
 	"net"
+	"slices"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 )
 
 type Udpmask interface {
-	UDP()
-
 	WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
 	WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
 }
@@ -20,9 +19,8 @@ type UdpmaskManager struct {
 }
 
 func NewUdpmaskManager(udpmasks []Udpmask) *UdpmaskManager {
-	return &UdpmaskManager{
-		udpmasks: udpmasks,
-	}
+	slices.Reverse(udpmasks)
+	return &UdpmaskManager{udpmasks: udpmasks}
 }
 
 func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
@@ -124,7 +122,7 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 		if err != nil {
 			return n, addr, err
 		}
-		b = b[:n]
+		buf := b[:n]
 
 		sum := 0
 		for _, size := range c.sizes {
@@ -132,24 +130,24 @@ func (c *headerManagerConn) ReadFrom(p []byte) (n int, addr net.Addr, err error)
 		}
 
 		if n < sum {
-			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", len(b))
+			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", n)
 			continue
 		}
 
 		for i := range c.conns {
-			n, _, err = c.conns[i].ReadFrom(b)
+			n, _, err = c.conns[i].ReadFrom(buf)
 			if err != nil {
-				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", len(b))
+				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", n)
 				break
 			}
-			b = b[c.sizes[i] : n+c.sizes[i]]
+			buf = buf[c.sizes[i] : n+c.sizes[i]]
 		}
 
 		if err != nil {
 			continue
 		}
 
-		return copy(p, b), addr, nil
+		return copy(p, buf), addr, nil
 	}
 }
 
@@ -194,8 +192,6 @@ func (c *headerManagerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) 
 }
 
 type Tcpmask interface {
-	TCP()
-
 	WrapConnClient(net.Conn) (net.Conn, error)
 	WrapConnServer(net.Conn) (net.Conn, error)
 }
@@ -205,9 +201,8 @@ type TcpmaskManager struct {
 }
 
 func NewTcpmaskManager(tcpmasks []Tcpmask) *TcpmaskManager {
-	return &TcpmaskManager{
-		tcpmasks: tcpmasks,
-	}
+	slices.Reverse(tcpmasks)
+	return &TcpmaskManager{tcpmasks: tcpmasks}
 }
 
 func (m *TcpmaskManager) WrapConnClient(raw net.Conn) (net.Conn, error) {

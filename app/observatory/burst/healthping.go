@@ -96,6 +96,16 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 	ticker := time.NewTicker(interval)
 	h.ticker = ticker
 
+	// init run to get a fast check result
+	go func() {
+		tags, err := selector()
+		if err != nil {
+			errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
+			return
+		}
+		h.Check(tags)
+	}()
+
 	go func() {
 		for {
 			go func() {

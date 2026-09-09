@@ -25,12 +25,12 @@ type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PacketsFrom   int64                  `protobuf:"varint,1,opt,name=packets_from,json=packetsFrom,proto3" json:"packets_from,omitempty"`
 	PacketsTo     int64                  `protobuf:"varint,2,opt,name=packets_to,json=packetsTo,proto3" json:"packets_to,omitempty"`
-	LengthMin     int64                  `protobuf:"varint,3,opt,name=length_min,json=lengthMin,proto3" json:"length_min,omitempty"`
-	LengthMax     int64                  `protobuf:"varint,4,opt,name=length_max,json=lengthMax,proto3" json:"length_max,omitempty"`
-	DelayMin      int64                  `protobuf:"varint,5,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
-	DelayMax      int64                  `protobuf:"varint,6,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
 	MaxSplitMin   int64                  `protobuf:"varint,7,opt,name=max_split_min,json=maxSplitMin,proto3" json:"max_split_min,omitempty"`
 	MaxSplitMax   int64                  `protobuf:"varint,8,opt,name=max_split_max,json=maxSplitMax,proto3" json:"max_split_max,omitempty"`
+	LengthsMin    []int64                `protobuf:"varint,9,rep,packed,name=lengths_min,json=lengthsMin,proto3" json:"lengths_min,omitempty"`
+	LengthsMax    []int64                `protobuf:"varint,10,rep,packed,name=lengths_max,json=lengthsMax,proto3" json:"lengths_max,omitempty"`
+	DelaysMin     []int64                `protobuf:"varint,11,rep,packed,name=delays_min,json=delaysMin,proto3" json:"delays_min,omitempty"`
+	DelaysMax     []int64                `protobuf:"varint,12,rep,packed,name=delays_max,json=delaysMax,proto3" json:"delays_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -79,34 +79,6 @@ func (x *Config) GetPacketsTo() int64 {
 	return 0
 }
 
-func (x *Config) GetLengthMin() int64 {
-	if x != nil {
-		return x.LengthMin
-	}
-	return 0
-}
-
-func (x *Config) GetLengthMax() int64 {
-	if x != nil {
-		return x.LengthMax
-	}
-	return 0
-}
-
-func (x *Config) GetDelayMin() int64 {
-	if x != nil {
-		return x.DelayMin
-	}
-	return 0
-}
-
-func (x *Config) GetDelayMax() int64 {
-	if x != nil {
-		return x.DelayMax
-	}
-	return 0
-}
-
 func (x *Config) GetMaxSplitMin() int64 {
 	if x != nil {
 		return x.MaxSplitMin
@@ -121,23 +93,54 @@ func (x *Config) GetMaxSplitMax() int64 {
 	return 0
 }
 
+func (x *Config) GetLengthsMin() []int64 {
+	if x != nil {
+		return x.LengthsMin
+	}
+	return nil
+}
+
+func (x *Config) GetLengthsMax() []int64 {
+	if x != nil {
+		return x.LengthsMax
+	}
+	return nil
+}
+
+func (x *Config) GetDelaysMin() []int64 {
+	if x != nil {
+		return x.DelaysMin
+	}
+	return nil
+}
+
+func (x *Config) GetDelaysMax() []int64 {
+	if x != nil {
+		return x.DelaysMax
+	}
+	return nil
+}
+
 var File_transport_internet_finalmask_fragment_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_fragment_config_proto_rawDesc = "" +
 	"\n" +
-	"2transport/internet/finalmask/fragment/config.proto\x12*xray.transport.internet.finalmask.fragment\"\x8a\x02\n" +
+	"2transport/internet/finalmask/fragment/config.proto\x12*xray.transport.internet.finalmask.fragment\"\x92\x02\n" +
 	"\x06Config\x12!\n" +
 	"\fpackets_from\x18\x01 \x01(\x03R\vpacketsFrom\x12\x1d\n" +
 	"\n" +
-	"packets_to\x18\x02 \x01(\x03R\tpacketsTo\x12\x1d\n" +
-	"\n" +
-	"length_min\x18\x03 \x01(\x03R\tlengthMin\x12\x1d\n" +
-	"\n" +
-	"length_max\x18\x04 \x01(\x03R\tlengthMax\x12\x1b\n" +
-	"\tdelay_min\x18\x05 \x01(\x03R\bdelayMin\x12\x1b\n" +
-	"\tdelay_max\x18\x06 \x01(\x03R\bdelayMax\x12\"\n" +
+	"packets_to\x18\x02 \x01(\x03R\tpacketsTo\x12\"\n" +
 	"\rmax_split_min\x18\a \x01(\x03R\vmaxSplitMin\x12\"\n" +
-	"\rmax_split_max\x18\b \x01(\x03R\vmaxSplitMaxB\xa0\x01\n" +
+	"\rmax_split_max\x18\b \x01(\x03R\vmaxSplitMax\x12\x1f\n" +
+	"\vlengths_min\x18\t \x03(\x03R\n" +
+	"lengthsMin\x12\x1f\n" +
+	"\vlengths_max\x18\n" +
+	" \x03(\x03R\n" +
+	"lengthsMax\x12\x1d\n" +
+	"\n" +
+	"delays_min\x18\v \x03(\x03R\tdelaysMin\x12\x1d\n" +
+	"\n" +
+	"delays_max\x18\f \x03(\x03R\tdelaysMaxB\xa0\x01\n" +
 	".com.xray.transport.internet.finalmask.fragmentP\x01Z?github.com/xtls/xray-core/transport/internet/finalmask/fragment\xaa\x02*Xray.Transport.Internet.Finalmask.Fragmentb\x06proto3"
 
 var (

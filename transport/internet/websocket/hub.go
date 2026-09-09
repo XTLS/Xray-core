@@ -65,24 +65,12 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	var forwardedAddrs []net.Address
-	if h.socketSettings != nil && len(h.socketSettings.TrustedXForwardedFor) > 0 {
-		for _, key := range h.socketSettings.TrustedXForwardedFor {
-			if len(request.Header.Values(key)) > 0 {
-				forwardedAddrs = http_proto.ParseXForwardedFor(request.Header)
-				break
-			}
-		}
-	} else {
-		forwardedAddrs = http_proto.ParseXForwardedFor(request.Header)
-	}
 	remoteAddr := conn.RemoteAddr()
-	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
-		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddrs[0].IP(),
-			Port: int(0),
-		}
+	var trustedXFF []string
+	if h.socketSettings != nil {
+		trustedXFF = h.socketSettings.TrustedXForwardedFor
 	}
+	remoteAddr = http_proto.ApplyTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
 
 	h.ln.addConn(NewConnection(conn, remoteAddr, extraReader, h.ln.config.HeartbeatPeriod))
 }

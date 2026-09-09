@@ -82,9 +82,14 @@ func TestResolveIP(t *testing.T) {
 			},
 			{
 				Tag: "direct",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					DomainStrategy: internet.DomainStrategy_USE_IP,
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
+					StreamSettings: &internet.StreamConfig{
+						SocketSettings: &internet.SocketConfig{
+							DomainStrategy: internet.DomainStrategy_USE_IP,
+						},
+					},
 				}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{}),
 			},
 		},
 	}

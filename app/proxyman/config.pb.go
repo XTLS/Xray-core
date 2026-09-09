@@ -330,7 +330,6 @@ type SenderConfig struct {
 	// Send traffic through the given IP. Only IP is allowed.
 	Via               *net.IPOrDomain         `protobuf:"bytes,1,opt,name=via,proto3" json:"via,omitempty"`
 	StreamSettings    *internet.StreamConfig  `protobuf:"bytes,2,opt,name=stream_settings,json=streamSettings,proto3" json:"stream_settings,omitempty"`
-	ProxySettings     *internet.ProxyConfig   `protobuf:"bytes,3,opt,name=proxy_settings,json=proxySettings,proto3" json:"proxy_settings,omitempty"`
 	MultiplexSettings *MultiplexingConfig     `protobuf:"bytes,4,opt,name=multiplex_settings,json=multiplexSettings,proto3" json:"multiplex_settings,omitempty"`
 	ViaCidr           string                  `protobuf:"bytes,5,opt,name=via_cidr,json=viaCidr,proto3" json:"via_cidr,omitempty"`
 	TargetStrategy    internet.DomainStrategy `protobuf:"varint,6,opt,name=target_strategy,json=targetStrategy,proto3,enum=xray.transport.internet.DomainStrategy" json:"target_strategy,omitempty"`
@@ -378,13 +377,6 @@ func (x *SenderConfig) GetVia() *net.IPOrDomain {
 func (x *SenderConfig) GetStreamSettings() *internet.StreamConfig {
 	if x != nil {
 		return x.StreamSettings
-	}
-	return nil
-}
-
-func (x *SenderConfig) GetProxySettings() *internet.ProxyConfig {
-	if x != nil {
-		return x.ProxySettings
 	}
 	return nil
 }
@@ -506,14 +498,13 @@ const file_app_proxyman_config_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12M\n" +
 	"\x11receiver_settings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\x10receiverSettings\x12G\n" +
 	"\x0eproxy_settings\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\rproxySettings\"\x10\n" +
-	"\x0eOutboundConfig\"\x9d\x03\n" +
+	"\x0eOutboundConfig\"\xd6\x02\n" +
 	"\fSenderConfig\x12-\n" +
 	"\x03via\x18\x01 \x01(\v2\x1b.xray.common.net.IPOrDomainR\x03via\x12N\n" +
-	"\x0fstream_settings\x18\x02 \x01(\v2%.xray.transport.internet.StreamConfigR\x0estreamSettings\x12K\n" +
-	"\x0eproxy_settings\x18\x03 \x01(\v2$.xray.transport.internet.ProxyConfigR\rproxySettings\x12T\n" +
+	"\x0fstream_settings\x18\x02 \x01(\v2%.xray.transport.internet.StreamConfigR\x0estreamSettings\x12T\n" +
 	"\x12multiplex_settings\x18\x04 \x01(\v2%.xray.app.proxyman.MultiplexingConfigR\x11multiplexSettings\x12\x19\n" +
 	"\bvia_cidr\x18\x05 \x01(\tR\aviaCidr\x12P\n" +
-	"\x0ftarget_strategy\x18\x06 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0etargetStrategy\"\xa4\x01\n" +
+	"\x0ftarget_strategy\x18\x06 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0etargetStrategyJ\x04\b\x03\x10\x04\"\xa4\x01\n" +
 	"\x12MultiplexingConfig\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12 \n" +
 	"\vconcurrency\x18\x02 \x01(\x05R\vconcurrency\x12(\n" +
@@ -548,8 +539,7 @@ var file_app_proxyman_config_proto_goTypes = []any{
 	(*net.IPOrDomain)(nil),        // 10: xray.common.net.IPOrDomain
 	(*internet.StreamConfig)(nil), // 11: xray.transport.internet.StreamConfig
 	(*serial.TypedMessage)(nil),   // 12: xray.common.serial.TypedMessage
-	(*internet.ProxyConfig)(nil),  // 13: xray.transport.internet.ProxyConfig
-	(internet.DomainStrategy)(0),  // 14: xray.transport.internet.DomainStrategy
+	(internet.DomainStrategy)(0),  // 13: xray.transport.internet.DomainStrategy
 }
 var file_app_proxyman_config_proto_depIdxs = []int32{
 	7,  // 0: xray.app.proxyman.SniffingConfig.domains_excluded:type_name -> xray.common.geodata.DomainRule
@@ -562,14 +552,13 @@ var file_app_proxyman_config_proto_depIdxs = []int32{
 	12, // 7: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
 	10, // 8: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
 	11, // 9: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
-	13, // 10: xray.app.proxyman.SenderConfig.proxy_settings:type_name -> xray.transport.internet.ProxyConfig
-	6,  // 11: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
-	14, // 12: xray.app.proxyman.SenderConfig.target_strategy:type_name -> xray.transport.internet.DomainStrategy
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	6,  // 10: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
+	13, // 11: xray.app.proxyman.SenderConfig.target_strategy:type_name -> xray.transport.internet.DomainStrategy
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_app_proxyman_config_proto_init() }

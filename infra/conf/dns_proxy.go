@@ -12,8 +12,9 @@ import (
 
 type DNSOutboundRuleConfig struct {
 	Action string      `json:"action"`
-	QType  *PortList   `json:"qtype"`
+	QType  *PortList   `json:"qType"`
 	Domain *StringList `json:"domain"`
+	RCode  uint32      `json:"rCode"`
 }
 
 func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
@@ -24,8 +25,8 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		rule.Action = dns.RuleAction_Direct
 	case "drop":
 		rule.Action = dns.RuleAction_Drop
-	case "reject":
-		rule.Action = dns.RuleAction_Reject
+	case "return":
+		rule.Action = dns.RuleAction_Return
 	case "hijack":
 		rule.Action = dns.RuleAction_Hijack
 	default:
@@ -34,14 +35,8 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 
 	if c.QType != nil {
 		for _, r := range c.QType.Range {
-			if r.From > r.To {
-				return nil, errors.New("invalid qtype range: ", r.String())
-			}
-			if r.To > 65535 {
-				return nil, errors.New("dns rule qtype out of range: ", r.String())
-			}
-			for qtype := r.From; qtype <= r.To; qtype++ {
-				rule.Qtype = append(rule.Qtype, int32(qtype))
+			for qType := r.From; qType <= r.To; qType++ {
+				rule.QType = append(rule.QType, int32(qType))
 			}
 		}
 	}
@@ -53,6 +48,11 @@ func (c *DNSOutboundRuleConfig) Build() (*dns.DNSRuleConfig, error) {
 		}
 		rule.Domain = rules
 	}
+
+	if c.RCode > 65535 {
+		return nil, errors.New("rCode out of range: ", c.RCode)
+	}
+	rule.RCode = c.RCode
 
 	return rule, nil
 }
@@ -133,28 +133,30 @@ func (c *DNSOutboundConfig) buildLegacyDNSPolicy() ([]*dns.DNSRuleConfig, error)
 	if c.BlockTypes != nil && len(*c.BlockTypes) > 0 {
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Drop}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Reject
+			rule.Action = dns.RuleAction_Return
+			rule.RCode = 5
 		}
-		for _, qtype := range *c.BlockTypes {
-			if qtype < 0 || qtype > 65535 {
-				return nil, errors.New("legacy blockTypes qtype out of range: ", qtype)
+		for _, qType := range *c.BlockTypes {
+			if qType < 0 || qType > 65535 {
+				return nil, errors.New("legacy blockTypes qType out of range: ", qType)
 			}
-			rule.Qtype = append(rule.Qtype, qtype)
+			rule.QType = append(rule.QType, qType)
 		}
 		rules = append(rules, rule)
 	}
 
 	{
 		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Hijack}
-		rule.Qtype = append(rule.Qtype, 1)
-		rule.Qtype = append(rule.Qtype, 28)
+		rule.QType = append(rule.QType, 1)
+		rule.QType = append(rule.QType, 28)
 		rules = append(rules, rule)
 	}
 
 	{
-		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Reject}
+		rule := &dns.DNSRuleConfig{Action: dns.RuleAction_Return}
 		if mode == "reject" {
-			rule.Action = dns.RuleAction_Reject
+			rule.Action = dns.RuleAction_Return
+			rule.RCode = 5
 		} else if mode == "drop" {
 			rule.Action = dns.RuleAction_Drop
 		} else if mode == "skip" {

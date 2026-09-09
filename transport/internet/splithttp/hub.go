@@ -3,6 +3,7 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	gotls "crypto/tls"
 	"encoding/base64"
 	"fmt"
@@ -146,6 +147,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		writer.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	obfsPaddingAccepted := h.config.XPaddingObfsMode && paddingValue != ""
 
 	sessionId, seqStr := h.config.ExtractMetaFromRequest(request, h.path)
 
@@ -155,17 +157,6 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		return
 	}
 
-	var forwardedAddrs []net.Address
-	if h.socketSettings != nil && len(h.socketSettings.TrustedXForwardedFor) > 0 {
-		for _, key := range h.socketSettings.TrustedXForwardedFor {
-			if len(request.Header.Values(key)) > 0 {
-				forwardedAddrs = http_proto.ParseXForwardedFor(request.Header)
-				break
-			}
-		}
-	} else {
-		forwardedAddrs = http_proto.ParseXForwardedFor(request.Header)
-	}
 	var remoteAddr net.Addr
 	var err error
 	remoteAddr, err = net.ResolveTCPAddr("tcp", request.RemoteAddr)
@@ -181,12 +172,11 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Port: remoteAddr.(*net.TCPAddr).Port,
 		}
 	}
-	if len(forwardedAddrs) > 0 && forwardedAddrs[0].Family().IsIP() {
-		remoteAddr = &net.TCPAddr{
-			IP:   forwardedAddrs[0].IP(),
-			Port: 0,
-		}
+	var trustedXFF []string
+	if h.socketSettings != nil {
+		trustedXFF = h.socketSettings.TrustedXForwardedFor
 	}
+	remoteAddr = http_proto.ApplyTrustedXForwardedFor(request.Header, trustedXFF, remoteAddr)
 
 	var currentSession *httpSession
 	if sessionId != "" {
@@ -227,8 +217,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				writer.Header().Set("Cache-Control", "no-store")
 				writer.WriteHeader(http.StatusOK)
 				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
-				referrer := request.Header.Get("Referer")
-				if referrer != "" && scStreamUpServerSecs.To > 0 {
+				hasLegacyRefererCompatMarker := request.Header.Get("Referer") != ""
+				if (hasLegacyRefererCompatMarker || obfsPaddingAccepted) && scStreamUpServerSecs.To > 0 {
 					go func() {
 						for {
 							_, err := httpSC.Write(bytes.Repeat([]byte{'X'}, int(h.config.GetNormalizedXPaddingBytes().rand())))
@@ -384,11 +374,15 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Reader:         request.Body,
 			ResponseWriter: writer,
 		}
+		localAddr := h.localAddr
+		if la, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && la != nil {
+			localAddr = la
+		}
 		conn := splitConn{
 			writer:     httpSC,
 			reader:     httpSC,
 			remoteAddr: remoteAddr,
-			localAddr:  h.localAddr,
+			localAddr:  localAddr,
 		}
 		if sessionId != "" { // if not stream-one
 			conn.reader = currentSession.uploadQueue
@@ -499,7 +493,6 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		if quicParams == nil {
 			quicParams = &internet.QuicParams{
 				BbrProfile: string(bbr.ProfileStandard),
-				UdpHop:     &internet.UdpHop{},
 			}
 		}
 
@@ -513,7 +506,15 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
 		}
 
-		l.h3listener, err = quic.ListenEarly(Conn, tlsConfig, quicConfig)
+		var k *quic.StatelessResetKey
+		if !quicParams.DisableStatelessReset {
+			k = &quic.StatelessResetKey{}
+			common.Must2(rand.Read((*k)[:]))
+		}
+
+		tr := &quic.Transport{Conn: Conn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: k}
+
+		l.h3listener, err = tr.ListenEarly(tlsConfig, quicConfig)
 		if err != nil {
 			return nil, errors.New("failed to listen QUIC for XHTTP/3 on ", address, ":", port).Base(err)
 		}
@@ -532,6 +533,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			if err := l.h3server.ServeListener(l.h3listener); err != nil {
 				errors.LogErrorInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
 			}
+			_ = tr.Close()
+			_ = Conn.Close()
 		}()
 	} else { // tcp
 		l.listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
@@ -595,9 +598,7 @@ func (ln *Listener) Addr() net.Addr {
 // Close implements net.Listener.Close().
 func (ln *Listener) Close() error {
 	if ln.h3server != nil {
-		if err := ln.h3server.Close(); err != nil {
-			return err
-		}
+		return ln.h3server.Close()
 	} else if ln.listener != nil {
 		return ln.listener.Close()
 	}
@@ -631,7 +632,7 @@ func (l *QListener) Accept(ctx context.Context) (*quic.Conn, error) {
 	case "", "bbr":
 		congestion.UseBBR(conn, bbr.Profile(l.quicParams.BbrProfile))
 	case "force-brutal":
-		congestion.UseBrutal(conn, l.quicParams.BrutalUp)
+		congestion.UseBrutal(conn, l.quicParams.BrutalUp, l.quicParams.BrutalDisableLossCompensation)
 	default:
 		panic(l.quicParams.Congestion)
 	}

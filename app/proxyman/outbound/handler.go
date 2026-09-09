@@ -6,7 +6,6 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
-	"os"
 
 	"github.com/xtls/xray-core/common/dice"
 
@@ -16,7 +15,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
@@ -27,8 +25,6 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/pipe"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -40,7 +36,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.OutboundUplink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "outbound>>>" + tag + ">>>traffic>>>uplink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			uplinkCounter = c
 		}
@@ -48,7 +44,7 @@ func getStatCounter(v *core.Instance, tag string) (stats.Counter, stats.Counter)
 	if len(tag) > 0 && policy.ForSystem().Stats.OutboundDownlink {
 		statsManager := v.GetFeature(stats.ManagerType()).(stats.Manager)
 		name := "outbound>>>" + tag + ">>>traffic>>>downlink"
-		c, _ := stats.GetOrRegisterCounter(statsManager, name)
+		c, _ := statsManager.GetOrRegisterCounter(name)
 		if c != nil {
 			downlinkCounter = c
 		}
@@ -64,7 +60,6 @@ type Handler struct {
 	streamSettings  *internet.MemoryStreamConfig
 	proxyConfig     proto.Message
 	proxy           proxy.Outbound
-	outboundManager outbound.Manager
 	mux             *mux.ClientManager
 	xudp            *mux.ClientManager
 	udp443          string
@@ -78,7 +73,6 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	uplinkCounter, downlinkCounter := getStatCounter(v, config.Tag)
 	h := &Handler{
 		tag:             config.Tag,
-		outboundManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
 	}
@@ -108,6 +102,10 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	h.proxyConfig = proxyConfig
 
 	ctx = session.ContextWithFullHandler(ctx, h)
+
+	if h.streamSettings != nil {
+		ctx = session.ContextWithStreamSettings(ctx, h.streamSettings)
+	}
 
 	rawProxyHandler, err := common.CreateObject(ctx, proxyConfig)
 	if err != nil {
@@ -196,7 +194,6 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 				common.Interrupt(link.Reader)
 				return
 			}
-
 		} else {
 			unchangedDomain := ob.Target.Address.Domain()
 			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
@@ -269,71 +266,26 @@ func (h *Handler) DestIpAddress() net.IP {
 
 // Dial implements internet.Dialer.
 func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
-	if h.senderSettings != nil {
-
-		if h.senderSettings.ProxySettings.HasTag() {
-
-			tag := h.senderSettings.ProxySettings.Tag
-			handler := h.outboundManager.GetHandler(tag)
-			if handler != nil {
-				errors.LogDebug(ctx, "proxying to ", tag, " for dest ", dest)
-				outbounds := session.OutboundsFromContext(ctx)
-				ctx = session.ContextWithOutbounds(ctx, append(outbounds, &session.Outbound{
-					Target: dest,
-					Tag:    tag,
-				})) // add another outbound in session ctx
-				opts := pipe.OptionsFromContext(ctx)
-				uplinkReader, uplinkWriter := pipe.New(opts...)
-				downlinkReader, downlinkWriter := pipe.New(opts...)
-
-				go handler.Dispatch(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
-				conn := cnc.NewConnection(cnc.ConnectionInputMulti(uplinkWriter), cnc.ConnectionOutputMulti(downlinkReader))
-
-				if config := tls.ConfigFromStreamSettings(h.streamSettings); config != nil {
-					tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
-					conn = tls.Client(conn, tlsConfig)
-				}
-
-				return h.getStatCouterConnection(conn), nil
-			}
-
-			errors.LogError(ctx, "failed to get outbound handler with tag: ", tag)
-			return nil, errors.New("failed to get outbound handler with tag: " + tag)
-		}
-
-		if h.senderSettings.Via != nil {
-			outbounds := session.OutboundsFromContext(ctx)
-			ob := outbounds[len(outbounds)-1]
-			h.SetOutboundGateway(ctx, ob)
-		}
-
-	}
-
-	if conn, err := h.getUoTConnection(ctx, dest); err != os.ErrInvalid {
-		return conn, err
+	if h.senderSettings != nil && h.senderSettings.Via != nil {
+		outbounds := session.OutboundsFromContext(ctx)
+		ob := outbounds[len(outbounds)-1]
+		h.SetOutboundGateway(ctx, ob)
 	}
 
 	conn, err := internet.Dial(ctx, dest, h.streamSettings)
 	conn = h.getStatCouterConnection(conn)
-	outbounds := session.OutboundsFromContext(ctx)
-	if outbounds != nil {
-		ob := outbounds[len(outbounds)-1]
-		ob.Conn = conn
-	} else {
-		// for Vision's pre-connect
-	}
 	return conn, err
 }
 
 func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) {
-	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil && !h.senderSettings.ProxySettings.HasTag() && (h.streamSettings.SocketSettings == nil || len(h.streamSettings.SocketSettings.DialerProxy) == 0) {
+	if ob.Gateway == nil && h.senderSettings != nil && h.senderSettings.Via != nil &&
+		(h.streamSettings.SocketSettings == nil || len(h.streamSettings.SocketSettings.DialerProxy) == 0) {
 		var domain string
 		addr := h.senderSettings.Via.AsAddress()
 		domain = h.senderSettings.Via.GetDomain()
 		switch {
 		case h.senderSettings.ViaCidr != "":
 			ob.Gateway = ParseRandomIP(addr, h.senderSettings.ViaCidr)
-
 		case domain == "origin":
 			if inbound := session.InboundFromContext(ctx); inbound != nil {
 				if inbound.Local.IsValid() && inbound.Local.Address.Family().IsIP() {
@@ -348,12 +300,9 @@ func (h *Handler) SetOutboundGateway(ctx context.Context, ob *session.Outbound) 
 					errors.LogDebug(ctx, "use inbound source ip as sendthrough: ", inbound.Source.Address.String())
 				}
 			}
-		// case addr.Family().IsDomain():
-		default:
+		default: // case addr.Family().IsDomain():
 			ob.Gateway = addr
-
 		}
-
 	}
 }
 

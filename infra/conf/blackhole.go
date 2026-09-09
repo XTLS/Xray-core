@@ -1,52 +1,42 @@
 package conf
 
 import (
-	"encoding/json"
+	"encoding/base64"
+	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/blackhole"
 	"google.golang.org/protobuf/proto"
 )
 
-type NoneResponse struct{}
-
-func (*NoneResponse) Build() (proto.Message, error) {
-	return new(blackhole.NoneResponse), nil
-}
-
-type HTTPResponse struct{}
-
-func (*HTTPResponse) Build() (proto.Message, error) {
-	return new(blackhole.HTTPResponse), nil
+type ResponseConfig struct {
+	Type               string `json:"type"`
+	CustomResponseData string `json:"customResponseData"`
 }
 
 type BlackholeConfig struct {
-	Response json.RawMessage `json:"response"`
+	Response *ResponseConfig `json:"response"`
 }
 
 func (v *BlackholeConfig) Build() (proto.Message, error) {
 	config := new(blackhole.Config)
 	if v.Response != nil {
-		response, _, err := configLoader.Load(v.Response)
-		if err != nil {
-			return nil, errors.New("Config: Failed to parse Blackhole response config.").Base(err)
+		responseName := strings.ToLower(v.Response.Type)
+		switch responseName {
+		case "none", "":
+			config.Response = &blackhole.Response{Type: "none"}
+		case "http":
+			config.Response = &blackhole.Response{Type: "http"}
+		case "custom":
+			data, err := base64.StdEncoding.DecodeString(v.Response.CustomResponseData)
+			if err != nil {
+				return nil, errors.New("failed to decode custom response data: " + err.Error())
+			}
+			config.Response = &blackhole.Response{Type: "custom", CustomResponseData: data}
+		default:
+			return nil, errors.New("unknown blackhole response: " + responseName)
 		}
-		responseSettings, err := response.(Buildable).Build()
-		if err != nil {
-			return nil, err
-		}
-		config.Response = serial.ToTypedMessage(responseSettings)
 	}
 
 	return config, nil
 }
-
-var configLoader = NewJSONConfigLoader(
-	ConfigCreatorCache{
-		"none": func() interface{} { return new(NoneResponse) },
-		"http": func() interface{} { return new(HTTPResponse) },
-	},
-	"type",
-	"",
-)

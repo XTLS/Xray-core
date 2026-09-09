@@ -2,7 +2,6 @@ package finalmask_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"io"
 	"net"
@@ -10,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	singM "github.com/sagernet/sing/common/metadata"
-	singN "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
@@ -133,24 +130,6 @@ func (c *scriptedPacketConn) SetWriteDeadline(t time.Time) error {
 	c.deadline.Store(t.UnixNano())
 	return nil
 }
-
-type captureUDPHandler struct {
-	gotMetadata chan singM.Metadata
-}
-
-func (h *captureUDPHandler) NewConnection(_ context.Context, _ net.Conn, _ singM.Metadata) error {
-	return nil
-}
-
-func (h *captureUDPHandler) NewPacketConnection(_ context.Context, _ singN.PacketConn, metadata singM.Metadata) error {
-	select {
-	case h.gotMetadata <- metadata:
-	default:
-	}
-	return nil
-}
-
-func (h *captureUDPHandler) NewError(_ context.Context, _ error) {}
 
 func newStandaloneEchoUDPConfig() *custom.UDPStandaloneConfig {
 	return &custom.UDPStandaloneConfig{

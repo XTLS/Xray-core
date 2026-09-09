@@ -107,8 +107,10 @@ type RoutingRule struct {
 	VlessRouteList *net.PortList  `protobuf:"bytes,20,opt,name=vless_route_list,json=vlessRouteList,proto3" json:"vless_route_list,omitempty"`
 	Process        []string       `protobuf:"bytes,21,rep,name=process,proto3" json:"process,omitempty"`
 	Webhook        *WebhookConfig `protobuf:"bytes,22,opt,name=webhook,proto3" json:"webhook,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// List of operating systems for matching the one Xray itself is running on.
+	LocalOs       []string `protobuf:"bytes,23,rep,name=local_os,json=localOs,proto3" json:"local_os,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RoutingRule) Reset() {
@@ -274,6 +276,13 @@ func (x *RoutingRule) GetProcess() []string {
 func (x *RoutingRule) GetWebhook() *WebhookConfig {
 	if x != nil {
 		return x.Webhook
+	}
+	return nil
+}
+
+func (x *RoutingRule) GetLocalOs() []string {
+	if x != nil {
+		return x.LocalOs
 	}
 	return nil
 }
@@ -637,7 +646,7 @@ var File_app_router_config_proto protoreflect.FileDescriptor
 
 const file_app_router_config_proto_rawDesc = "" +
 	"\n" +
-	"\x17app/router/config.proto\x12\x0fxray.app.router\x1a!common/serial/typed_message.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\"\xc1\a\n" +
+	"\x17app/router/config.proto\x12\x0fxray.app.router\x1a!common/serial/typed_message.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\"\xdc\a\n" +
 	"\vRoutingRule\x12\x12\n" +
 	"\x03tag\x18\x01 \x01(\tH\x00R\x03tag\x12%\n" +
 	"\rbalancing_tag\x18\f \x01(\tH\x00R\fbalancingTag\x12\x19\n" +
@@ -661,7 +670,8 @@ const file_app_router_config_proto_rawDesc = "" +
 	"\x0flocal_port_list\x18\x12 \x01(\v2\x19.xray.common.net.PortListR\rlocalPortList\x12C\n" +
 	"\x10vless_route_list\x18\x14 \x01(\v2\x19.xray.common.net.PortListR\x0evlessRouteList\x12\x18\n" +
 	"\aprocess\x18\x15 \x03(\tR\aprocess\x128\n" +
-	"\awebhook\x18\x16 \x01(\v2\x1e.xray.app.router.WebhookConfigR\awebhook\x1a=\n" +
+	"\awebhook\x18\x16 \x01(\v2\x1e.xray.app.router.WebhookConfigR\awebhook\x12\x19\n" +
+	"\blocal_os\x18\x17 \x03(\tR\alocalOs\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\f\n" +

@@ -19,8 +19,7 @@ func TestECHDial(t *testing.T) {
 	// test concurrent Dial(to test cache problem)
 	wg := sync.WaitGroup{}
 	for range 10 {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			TLSConfig := config.GetTLSConfig()
 			TLSConfig.NextProtos = []string{"http/1.1"}
 			client := &http.Client{
@@ -36,8 +35,7 @@ func TestECHDial(t *testing.T) {
 			if !strings.Contains(string(body), "sni=encrypted") {
 				t.Error("ECH Dial success but SNI is not encrypted")
 			}
-			wg.Done()
-		}()
+		})
 	}
 	wg.Wait()
 	// check cache

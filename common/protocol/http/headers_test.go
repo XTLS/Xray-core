@@ -2,23 +2,48 @@ package http_test
 
 import (
 	"bufio"
+	gonet "net"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 	. "github.com/xtls/xray-core/common/protocol/http"
 )
 
-func TestParseXForwardedFor(t *testing.T) {
-	header := http.Header{}
-	header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
-	addrs := ParseXForwardedFor(header)
-	if r := cmp.Diff(addrs, []net.Address{net.ParseAddress("129.78.138.66"), net.ParseAddress("129.78.64.103")}); r != "" {
-		t.Error(r)
-	}
+func TestApplyTrustedXForwardedFor(t *testing.T) {
+	remoteAddr := &gonet.TCPAddr{IP: gonet.ParseIP("127.0.0.1"), Port: 12345}
+
+	t.Run("ignore X-Forwarded-For without trusted header", func(t *testing.T) {
+		header := http.Header{}
+		header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
+
+		if addr := ApplyTrustedXForwardedFor(header, nil, remoteAddr); addr != remoteAddr {
+			t.Fatalf("unexpected remote address: %v", addr)
+		}
+	})
+
+	t.Run("trust X-Forwarded-For", func(t *testing.T) {
+		header := http.Header{}
+		header.Add("X-Forwarded-For", "129.78.138.66, 129.78.64.103")
+		header.Add("X-Trusted-CDN", "")
+
+		addr := ApplyTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, remoteAddr)
+		if addr.String() != "129.78.138.66:0" {
+			t.Fatalf("unexpected remote address: %v", addr)
+		}
+	})
+
+	t.Run("ignore non-IP X-Forwarded-For", func(t *testing.T) {
+		header := http.Header{}
+		header.Add("X-Forwarded-For", "example.com")
+		header.Add("X-Trusted-CDN", "")
+
+		if addr := ApplyTrustedXForwardedFor(header, []string{"X-Trusted-CDN"}, remoteAddr); addr != remoteAddr {
+			t.Fatalf("unexpected remote address: %v", addr)
+		}
+	})
 }
 
 func TestHopByHopHeadersRemoving(t *testing.T) {

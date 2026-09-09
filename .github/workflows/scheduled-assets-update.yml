@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Restore Geodat Cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-geodat-
@@ -59,7 +59,7 @@ jobs:
             done
 
       - name: Save Geodat Cache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: ${{ steps.update.outputs.unhit }}
         with:
           path: resources
@@ -68,9 +68,12 @@ jobs:
   wintun:
     if: github.event.schedule == '30 22 * * *' || github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      ASSETVER: 0.14.1
+      ASSETHASH: 07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51
     steps:
       - name: Restore Wintun Cache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: resources
           key: xray-wintun-
@@ -96,7 +99,6 @@ jobs:
               echo -e "Checking if wintun.dll for ${ARCHITECTURE} exists..."
               if [ -s "./resources/wintun/bin/${ARCHITECTURE}/wintun.dll" ]; then
                   echo -e "wintun.dll for ${ARCHITECTURE} exists"
-                  continue
               else
                   echo -e "wintun.dll for ${ARCHITECTURE} is missing"
                   missing=true
@@ -113,16 +115,21 @@ jobs:
             fi
             if [[ "$missing" == true ]]; then
               FILENAME=wintun.zip
-              DOWNLOAD_FILE=wintun-0.14.1.zip
+              DOWNLOAD_FILE=wintun-${ASSETVER}.zip
               echo -e "Downloading https://www.wintun.net/builds/${DOWNLOAD_FILE}..."
               curl -L "https://www.wintun.net/builds/${DOWNLOAD_FILE}" -o "${FILENAME}"
-              echo -e "Unpacking wintun..."
-              unzip -u ${FILENAME} -d resources/
-              echo "unhit=true" >> $GITHUB_OUTPUT
+              if [[ "$(sha256sum "./${FILENAME}" | awk -F ' ' '{print $1}')" == "${ASSETHASH}" ]]; then
+                echo -e "Unpacking wintun..."
+                unzip -u ${FILENAME} -d resources/
+                echo "unhit=true" >> $GITHUB_OUTPUT
+              else
+                echo -e "Digest of ${FILENAME} mismatch."
+                exit 1
+              fi
             fi
 
       - name: Save Wintun Cache
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         if: ${{ steps.update.outputs.unhit }}
         with:
           path: resources

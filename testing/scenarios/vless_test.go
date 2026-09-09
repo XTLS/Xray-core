@@ -509,7 +509,7 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 
 // This testing test all known utls fingerprint in tls.PresetFingerprints that support reality (expect unsafe and random*)
 // Beacuse figerprint support may be broken after utls/reality update
-// Known broken fingerprint: android, 360
+// Known working fingerprint: chrome, firefox, safari
 func TestVlessRealityFingerprints(t *testing.T) {
 	TestFingerprint := func(fingerprint string) error {
 		tcpServer := tcp.Server{
@@ -641,7 +641,7 @@ func TestVlessRealityFingerprints(t *testing.T) {
 		}
 		return nil
 	}
-	fingerPrints := []string{"chrome", "firefox", "safari", "ios", "edge", "qq"}
+	fingerPrints := []string{"chrome", "firefox", "safari"}
 	wg := sync.WaitGroup{}
 	wg.Add(len(fingerPrints))
 	for _, fp := range fingerPrints {

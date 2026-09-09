@@ -262,21 +262,6 @@ func (s *ServerSession) DecodeRequestBody(request *protocol.RequestHeader, reade
 	}
 
 	switch request.Security {
-	case protocol.SecurityType_NONE:
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			if request.Command.TransferType() == protocol.TransferTypeStream {
-				return crypto.NewChunkStreamReader(sizeParser, reader), nil
-			}
-
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(NoOpAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationReader(auth, sizeParser, reader, protocol.TransferTypePacket, padding), nil
-		}
-		return buf.NewReader(reader), nil
-
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(s.requestBodyKey[:])
 		auth := &crypto.AEADAuthenticator{
@@ -384,21 +369,6 @@ func (s *ServerSession) EncodeResponseBody(request *protocol.RequestHeader, writ
 	}
 
 	switch request.Security {
-	case protocol.SecurityType_NONE:
-		if request.Option.Has(protocol.RequestOptionChunkStream) {
-			if request.Command.TransferType() == protocol.TransferTypeStream {
-				return crypto.NewChunkStreamWriter(sizeParser, writer), nil
-			}
-
-			auth := &crypto.AEADAuthenticator{
-				AEAD:                    new(NoOpAuthenticator),
-				NonceGenerator:          crypto.GenerateEmptyBytes(),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			return crypto.NewAuthenticationWriter(auth, sizeParser, writer, protocol.TransferTypePacket, padding), nil
-		}
-		return buf.NewWriter(writer), nil
-
 	case protocol.SecurityType_AES128_GCM:
 		aead := crypto.NewAesGcm(s.responseBodyKey[:])
 		auth := &crypto.AEADAuthenticator{

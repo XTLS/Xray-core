@@ -5,6 +5,7 @@ package buf
 
 import (
 	"io"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/xtls/xray-core/common/platform"
@@ -143,13 +144,24 @@ func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
 	return mb, nil
 }
 
-var useReadv bool
+var useReadv atomic.Bool
 
-func init() {
+func useReadV() bool {
+	return useReadv.Load()
+}
+
+func reloadEnvSettings() error {
 	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
 	value := platform.NewEnvFlag(platform.UseReadV).GetValue(func() string { return defaultFlagValue })
+	enabled := false
 	switch value {
 	case defaultFlagValue, "auto", "enable":
-		useReadv = true
+		enabled = true
 	}
+	useReadv.Store(enabled)
+	return nil
+}
+
+func init() {
+	platform.RegisterEnvReload(reloadEnvSettings)
 }
