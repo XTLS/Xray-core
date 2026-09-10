@@ -104,7 +104,7 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 	m.access.Lock()
 	defer m.access.Unlock()
 
-	m.tagsCache = &sync.Map{}
+	m.tagsCache.Clear()
 
 	if m.defaultHandler == nil {
 		m.defaultHandler = handler
@@ -135,7 +135,7 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	m.access.Lock()
 	defer m.access.Unlock()
 
-	m.tagsCache = &sync.Map{}
+	m.tagsCache.Clear()
 
 	delete(m.taggedHandler, tag)
 	if m.defaultHandler != nil && m.defaultHandler.Tag() == tag {
