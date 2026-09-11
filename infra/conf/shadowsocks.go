@@ -27,10 +27,10 @@ func cipherFromString(c string) shadowsocks.CipherType {
 }
 
 type ShadowsocksUserConfig struct {
-	Cipher   string   `json:"method"`
-	Password string   `json:"password"`
-	Level    byte     `json:"level"`
-	Email    string   `json:"email"`
+	Cipher   string `json:"method"`
+	Password string `json:"password"`
+	Level    byte   `json:"level"`
+	Email    string `json:"email"`
 }
 
 type ShadowsocksServerConfig struct {
