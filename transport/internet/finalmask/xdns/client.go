@@ -34,12 +34,6 @@ var pool4K = sync.Pool{
 	},
 }
 
-var pool256 = sync.Pool{
-	New: func() any {
-		return make([]byte, 256)
-	},
-}
-
 type packet struct {
 	p    []byte
 	addr net.Addr
@@ -88,7 +82,6 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 	addrs := make([]*net.UDPAddr, 0, len(c.Addrs))
 	conns := make([]net.PacketConn, 0, len(c.Addrs))
-	sends := make([]atomic.Uint32, len(c.Addrs))
 	for i := range c.Addrs {
 		addr, err := net.ResolveUDPAddr("udp", c.Addrs[i])
 		if err != nil {
@@ -122,7 +115,7 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		addrs: addrs,
 		conns: conns,
-		sends: sends,
+		sends: make([]atomic.Uint32, len(c.Addrs)),
 
 		poolCh:  make(chan struct{}, pollLimit),
 		readCh:  make(chan packet),
@@ -404,6 +397,16 @@ func (c *xdnsClient) run() {
 	}
 
 	c.wg.Wait()
+
+	select {
+	case packet := <-c.readCh:
+		pool4K.Put(packet.p[:cap(packet.p)])
+	default:
+	}
+
+	c.fragManager.Close()
+	close(c.poolCh)
+	close(c.readCh)
 }
 
 func (c *xdnsClient) poll() {
