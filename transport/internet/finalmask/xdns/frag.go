@@ -20,6 +20,7 @@ type FragKey struct {
 type FragEntry struct {
 	data     [][]byte
 	size     int
+	len      int
 	total    byte
 	deadline time.Time
 }
@@ -91,7 +92,7 @@ func (m *FragManager) gc() {
 	}
 }
 
-func (m *FragManager) Feed(p []byte, key FragKey, fragIdx, fragN byte, data []byte) int {
+func (m *FragManager) Feed(b []byte, key FragKey, fragIdx, fragN byte, data []byte) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -120,7 +121,7 @@ func (m *FragManager) Feed(p []byte, key FragKey, fragIdx, fragN byte, data []by
 	if entry.size+len(data) > fragSize {
 		return 0
 	}
-	if len(entry.data) < int(entry.total)-1 {
+	if entry.len < int(entry.total)-1 {
 		if entry.size+len(data) == fragSize {
 			m.removeEntey(key, entry)
 			return 0
@@ -135,16 +136,17 @@ func (m *FragManager) Feed(p []byte, key FragKey, fragIdx, fragN byte, data []by
 
 	entry.data[fragIdx] = cp
 	entry.size += len(data)
+	entry.len++
 	entry.deadline = now.Add(fragTTL)
 	m.clientIDSize[key.clientID] += len(data)
 
-	if len(entry.data) < int(entry.total) {
+	if entry.len < int(entry.total) {
 		return 0
 	}
 
 	off := 0
 	for i := range entry.data {
-		copy(p[off:], entry.data[i])
+		copy(b[off:], entry.data[i])
 		off += len(entry.data[i])
 	}
 	m.removeEntey(key, entry)
