@@ -161,7 +161,7 @@ func (c *xdnsClient) send(p []byte) {
 				RecursionDesired: true,
 			},
 			Questions: []dnsmessage.Question{
-				dnsmessage.Question{
+				{
 					Name:  domain.Encode(p),
 					Type:  dnsmessage.Type(qtype),
 					Class: dnsmessage.ClassINET,
@@ -170,7 +170,7 @@ func (c *xdnsClient) send(p []byte) {
 		}
 		if domain.edns0 > 0 {
 			msg.Additionals = []dnsmessage.Resource{
-				dnsmessage.Resource{
+				{
 					Header: dnsmessage.ResourceHeader{
 						Name:  dnsmessage.MustNewName("."),
 						Type:  dnsmessage.TypeOPT,

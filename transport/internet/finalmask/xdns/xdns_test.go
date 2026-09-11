@@ -14,12 +14,12 @@ import (
 func TestXxx(t *testing.T) {
 	m1 := dnsmessage.Message{
 		Questions: []dnsmessage.Question{
-			dnsmessage.Question{
+			{
 				Name: dnsmessage.MustNewName("a.example.com."),
 			},
 		},
 		Answers: []dnsmessage.Resource{
-			dnsmessage.Resource{
+			{
 				Header: dnsmessage.ResourceHeader{
 					Name:  dnsmessage.MustNewName("a.example.com."),
 					Type:  dnsmessage.TypeA,
@@ -30,7 +30,7 @@ func TestXxx(t *testing.T) {
 			},
 		},
 		Additionals: []dnsmessage.Resource{
-			dnsmessage.Resource{
+			{
 				Header: dnsmessage.ResourceHeader{
 					Name:  dnsmessage.MustNewName("."),
 					Type:  dnsmessage.TypeOPT,
@@ -43,12 +43,12 @@ func TestXxx(t *testing.T) {
 	}
 	m2 := dnsmessage.Message{
 		Questions: []dnsmessage.Question{
-			dnsmessage.Question{
+			{
 				Name: dnsmessage.MustNewName("a.example.com."),
 			},
 		},
 		Answers: []dnsmessage.Resource{
-			dnsmessage.Resource{
+			{
 				Header: dnsmessage.ResourceHeader{
 					Name:   dnsmessage.MustNewName("a.example.com."),
 					Type:   dnsmessage.TypeA,
@@ -60,7 +60,7 @@ func TestXxx(t *testing.T) {
 			},
 		},
 		Additionals: []dnsmessage.Resource{
-			dnsmessage.Resource{
+			{
 				Header: dnsmessage.ResourceHeader{
 					Name:   dnsmessage.MustNewName("."),
 					Type:   dnsmessage.TypeOPT,
