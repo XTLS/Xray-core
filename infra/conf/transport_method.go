@@ -794,3 +794,9 @@ func readFileOrString(f string, s []string) ([]byte, error) {
 	}
 	return nil, errors.New("both file and bytes are empty.")
 }
+
+type XDriveConfig struct {
+	RemoteFolder string   `json:"remoteFolder"`
+	Service      string   `json:"service"`
+	Secrets      []string `json:"secrets"`
+}
