@@ -61,6 +61,7 @@ type xdnsClient struct {
 	poolCh  chan struct{}
 	readCh  chan packet
 	closeCh chan struct{}
+	wg      sync.WaitGroup
 	mu      sync.Mutex
 }
 
@@ -262,7 +263,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	if err != nil {
 		return
 	}
-	if !msg.Header.Response || msg.Header.RCode != dnsmessage.RCodeSuccess {
+	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess {
 		return
 	}
 	if len(msg.Questions) != 1 || len(msg.Answers) == 0 {
@@ -394,20 +395,20 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 }
 
 func (c *xdnsClient) run() {
-	var wg sync.WaitGroup
-
-	wg.Add(1)
+	c.wg.Add(1)
 	go c.poll()
 
 	for i := range len(c.addrs) {
-		wg.Add(1)
+		c.wg.Add(1)
 		go c.recv(i)
 	}
 
-	wg.Wait()
+	c.wg.Wait()
 }
 
 func (c *xdnsClient) poll() {
+	defer c.wg.Done()
+
 	select {
 	case <-c.closeCh:
 		return
@@ -438,6 +439,8 @@ func (c *xdnsClient) poll() {
 }
 
 func (c *xdnsClient) recv(i int) {
+	defer c.wg.Done()
+
 	var buf [4096]byte
 	for {
 		n, addr, err := c.conns[i].ReadFrom(buf[:])
