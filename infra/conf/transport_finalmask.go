@@ -24,7 +24,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 	"github.com/xtls/xray-core/transport/internet/finalmask/udphop"
-	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xmc"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -716,10 +715,7 @@ func (c *Xdns) Build() (proto.Message, error) {
 		}
 	}
 
-	return &xdns.Config{
-		Domains:   c.Domains,
-		Resolvers: c.Resolvers,
-	}, nil
+	return nil, nil
 }
 
 type XMC struct {
