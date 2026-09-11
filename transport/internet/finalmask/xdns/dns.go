@@ -140,11 +140,11 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 	if cap < 16 {
 		return nil, errors.New("cap < 16")
 	}
-	realTotal := table_[cap]
+	total = table_[cap]
 	cap -= 11
-	capFrags := 255 * (cap - 14)
-	lenMax := int(name.Length) + 1 + realTotal + realTotal/labelLimit
-	if realTotal%labelLimit > 0 {
+	capFrags := 255 * (cap - 3)
+	lenMax := int(name.Length) + 1 + total + total/labelLimit
+	if total%labelLimit > 0 {
 		lenMax += 1
 	}
 	return &Domain{
@@ -190,8 +190,8 @@ func (d *Domain) Encode(data []byte) dnsmessage.Name {
 		b2 = b2[size:]
 	}
 	b1 = append(b1, d.name.Data[:d.name.Length]...)
-	if len(b1) > 255 {
-		panic("len(b1) > 255")
+	if len(b1) > 254 {
+		panic("len(b1) > 254")
 	}
 	name.Length = byte(len(b1))
 	return name
