@@ -92,7 +92,7 @@ func (m *FragManager) gc() {
 	}
 }
 
-func (m *FragManager) Feed(b []byte, key FragKey, fragIdx, fragN byte, data []byte) int {
+func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []byte) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -113,21 +113,21 @@ func (m *FragManager) Feed(b []byte, key FragKey, fragIdx, fragN byte, data []by
 	}
 
 	if fragN == 0 || fragN != entry.total {
-		return 0
+		return -1
 	}
 	if fragIdx >= entry.total || entry.data[fragIdx] != nil {
-		return 0
+		return -1
 	}
 	if entry.size+len(data) > fragSize {
-		return 0
+		return -1
 	}
 	if entry.len < int(entry.total)-1 {
 		if entry.size+len(data) == fragSize {
 			m.removeEntey(key, entry)
-			return 0
+			return -1
 		}
 		if m.clientIDSize[key.clientID]+len(data) > fragClientIDSize {
-			return 0
+			return -1
 		}
 	}
 
@@ -146,7 +146,7 @@ func (m *FragManager) Feed(b []byte, key FragKey, fragIdx, fragN byte, data []by
 
 	off := 0
 	for i := range entry.data {
-		copy(b[off:], entry.data[i])
+		copy(out[off:], entry.data[i])
 		off += len(entry.data[i])
 	}
 	m.removeEntey(key, entry)
