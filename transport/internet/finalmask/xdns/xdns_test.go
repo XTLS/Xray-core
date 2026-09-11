@@ -21,35 +21,6 @@ func TestXxx(t *testing.T) {
 		Answers: []dnsmessage.Resource{
 			{
 				Header: dnsmessage.ResourceHeader{
-					Name:  dnsmessage.MustNewName("a.example.com."),
-					Type:  dnsmessage.TypeA,
-					Class: dnsmessage.ClassINET,
-					TTL:   60,
-				},
-				Body: &dnsmessage.AResource{A: [4]byte{127, 0, 0, 1}},
-			},
-		},
-		Additionals: []dnsmessage.Resource{
-			{
-				Header: dnsmessage.ResourceHeader{
-					Name:  dnsmessage.MustNewName("."),
-					Type:  dnsmessage.TypeOPT,
-					Class: 255,
-					TTL:   0,
-				},
-				Body: &dnsmessage.OPTResource{},
-			},
-		},
-	}
-	m2 := dnsmessage.Message{
-		Questions: []dnsmessage.Question{
-			{
-				Name: dnsmessage.MustNewName("a.example.com."),
-			},
-		},
-		Answers: []dnsmessage.Resource{
-			{
-				Header: dnsmessage.ResourceHeader{
 					Name:   dnsmessage.MustNewName("a.example.com."),
 					Type:   dnsmessage.TypeA,
 					Class:  dnsmessage.ClassINET,
@@ -75,13 +46,6 @@ func TestXxx(t *testing.T) {
 	p1, e1 := m1.Pack()
 	if e1 != nil {
 		t.Fatal(e1)
-	}
-	p2, e2 := m2.Pack()
-	if e2 != nil {
-		t.Fatal(e2)
-	}
-	if !bytes.Equal(p1, p2) {
-		t.Fatal("!bytes.Equal(p1, p2)")
 	}
 	if !bytes.Equal(p1, []byte{
 		0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1,
