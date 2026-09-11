@@ -10,12 +10,14 @@ func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount 
 	// if level != 0 || ok1 || ok2 {
 	// 	return nil, errors.New("xdns requires being at the outermost level")
 	// }
-	return NewConnClient(c, raw)
+	return nil, nil
+	// return NewClient(c, raw)
 }
 
 func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
 	// if level != 0 {
 	// 	return nil, errors.New("xdns requires being at the outermost level")
 	// }
-	return NewConnServer(c, raw)
+	return nil, nil
+	// return NewServer(c, raw)
 }

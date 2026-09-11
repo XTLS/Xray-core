@@ -7,6 +7,7 @@
 package xdns
 
 import (
+	internet "github.com/xtls/xray-core/transport/internet"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -21,17 +22,94 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type DomainProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	LenLimit      int32                  `protobuf:"varint,2,opt,name=len_limit,json=lenLimit,proto3" json:"len_limit,omitempty"`
+	LabelLimit    int32                  `protobuf:"varint,3,opt,name=label_limit,json=labelLimit,proto3" json:"label_limit,omitempty"`
+	Types         []int32                `protobuf:"varint,4,rep,packed,name=types,proto3" json:"types,omitempty"`
+	Edns0         int32                  `protobuf:"varint,5,opt,name=edns0,proto3" json:"edns0,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DomainProto) Reset() {
+	*x = DomainProto{}
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DomainProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DomainProto) ProtoMessage() {}
+
+func (x *DomainProto) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DomainProto.ProtoReflect.Descriptor instead.
+func (*DomainProto) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *DomainProto) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DomainProto) GetLenLimit() int32 {
+	if x != nil {
+		return x.LenLimit
+	}
+	return 0
+}
+
+func (x *DomainProto) GetLabelLimit() int32 {
+	if x != nil {
+		return x.LabelLimit
+	}
+	return 0
+}
+
+func (x *DomainProto) GetTypes() []int32 {
+	if x != nil {
+		return x.Types
+	}
+	return nil
+}
+
+func (x *DomainProto) GetEdns0() int32 {
+	if x != nil {
+		return x.Edns0
+	}
+	return 0
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Domains       []string               `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
-	Resolvers     []string               `protobuf:"bytes,2,rep,name=resolvers,proto3" json:"resolvers,omitempty"`
+	Domains       []*DomainProto         `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
+	Addrs         []string               `protobuf:"bytes,2,rep,name=addrs,proto3" json:"addrs,omitempty"`
+	Sockopt       *internet.SocketConfig `protobuf:"bytes,3,opt,name=sockopt,proto3" json:"sockopt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[0]
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -43,7 +121,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[0]
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -56,19 +134,26 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{0}
+	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Config) GetDomains() []string {
+func (x *Config) GetDomains() []*DomainProto {
 	if x != nil {
 		return x.Domains
 	}
 	return nil
 }
 
-func (x *Config) GetResolvers() []string {
+func (x *Config) GetAddrs() []string {
 	if x != nil {
-		return x.Resolvers
+		return x.Addrs
+	}
+	return nil
+}
+
+func (x *Config) GetSockopt() *internet.SocketConfig {
+	if x != nil {
+		return x.Sockopt
 	}
 	return nil
 }
@@ -77,10 +162,18 @@ var File_transport_internet_finalmask_xdns_config_proto protoreflect.FileDescrip
 
 const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\n" +
-	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\"@\n" +
-	"\x06Config\x12\x18\n" +
-	"\adomains\x18\x01 \x03(\tR\adomains\x12\x1c\n" +
-	"\tresolvers\x18\x02 \x03(\tR\tresolversB\x94\x01\n" +
+	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\x1a\x1ftransport/internet/config.proto\"\x8b\x01\n" +
+	"\vDomainProto\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
+	"\tlen_limit\x18\x02 \x01(\x05R\blenLimit\x12\x1f\n" +
+	"\vlabel_limit\x18\x03 \x01(\x05R\n" +
+	"labelLimit\x12\x14\n" +
+	"\x05types\x18\x04 \x03(\x05R\x05types\x12\x14\n" +
+	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"\xae\x01\n" +
+	"\x06Config\x12M\n" +
+	"\adomains\x18\x01 \x03(\v23.xray.transport.internet.finalmask.xdns.DomainProtoR\adomains\x12\x14\n" +
+	"\x05addrs\x18\x02 \x03(\tR\x05addrs\x12?\n" +
+	"\asockopt\x18\x03 \x01(\v2%.xray.transport.internet.SocketConfigR\asockoptB\x94\x01\n" +
 	"*com.xray.transport.internet.finalmask.xdnsP\x01Z;github.com/xtls/xray-core/transport/internet/finalmask/xdns\xaa\x02&Xray.Transport.Internet.Finalmask.Xdnsb\x06proto3"
 
 var (
@@ -95,16 +188,20 @@ func file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_finalmask_xdns_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_xdns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_transport_internet_finalmask_xdns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_transport_internet_finalmask_xdns_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.transport.internet.finalmask.xdns.Config
+	(*DomainProto)(nil),           // 0: xray.transport.internet.finalmask.xdns.DomainProto
+	(*Config)(nil),                // 1: xray.transport.internet.finalmask.xdns.Config
+	(*internet.SocketConfig)(nil), // 2: xray.transport.internet.SocketConfig
 }
 var file_transport_internet_finalmask_xdns_config_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: xray.transport.internet.finalmask.xdns.Config.domains:type_name -> xray.transport.internet.finalmask.xdns.DomainProto
+	2, // 1: xray.transport.internet.finalmask.xdns.Config.sockopt:type_name -> xray.transport.internet.SocketConfig
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_xdns_config_proto_init() }
@@ -118,7 +215,7 @@ func file_transport_internet_finalmask_xdns_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_xdns_config_proto_rawDesc), len(file_transport_internet_finalmask_xdns_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
