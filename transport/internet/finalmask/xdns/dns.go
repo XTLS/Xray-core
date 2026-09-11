@@ -112,8 +112,8 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 			return nil, errors.New("unknown types")
 		}
 	}
-	if edns0 < 0 || edns0 > 4096 {
-		return nil, errors.New("edns0 < 0 || edns0 > 4096")
+	if edns0 != 0 && (edns0 < 512 || edns0 > 4096) {
+		return nil, errors.New("edns0 != 0 && (edns0 < 512 || edns0 > 4096)")
 	}
 
 	ascii, err := idna.ToASCII(domain)
@@ -142,7 +142,7 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 	}
 	realTotal := table_[cap]
 	cap -= 11
-	capFrags := 256 * (cap - 14)
+	capFrags := 255 * (cap - 14)
 	lenMax := int(name.Length) + 1 + realTotal + realTotal/labelLimit
 	if realTotal%labelLimit > 0 {
 		lenMax += 1

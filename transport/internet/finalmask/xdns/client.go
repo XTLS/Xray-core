@@ -1,11 +1,14 @@
 package xdns
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"io"
 	mrand "math/rand"
 	"reflect"
+	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +25,7 @@ const (
 	initPollDelay       = 500 * time.Millisecond
 	maxPollDelay        = 10 * time.Second
 	pollDelayMultiplier = 2.0
+	pollLimit           = 16
 )
 
 var pool4K = sync.Pool{
@@ -119,7 +123,7 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		conns: conns,
 		sends: sends,
 
-		poolCh:  make(chan struct{}, 16),
+		poolCh:  make(chan struct{}, pollLimit),
 		readCh:  make(chan packet),
 		closeCh: make(chan struct{}),
 	}
@@ -134,6 +138,13 @@ func (c *xdnsClient) closed() bool {
 	default:
 		return false
 	}
+}
+
+func (c *xdnsClient) isClientID(id [8]byte) bool {
+	if c.clientID[0]&0x3C != id[0]&0x3C {
+		return false
+	}
+	return bytes.Equal(c.clientID[1:], id[1:])
 }
 
 func (c *xdnsClient) send(p []byte) {
@@ -216,7 +227,7 @@ func (c *xdnsClient) send(p []byte) {
 	if len(p) <= domain.capFrags {
 		copy(data[:], c.clientID[:])
 		data[0] &= 0x3C
-		data[0] |= 0x40
+		data[0] |= 1 << 6
 		data[0] |= TypeMap[qtype]
 
 		fragID := byte(c.fragID.Add(1))
@@ -289,17 +300,143 @@ func (c *xdnsClient) poll() {
 	}
 }
 
-func (c *xdnsClient) recv(i_ int) {
-	var p [4096]byte
+func (c *xdnsClient) recv(index int) {
+	read := func(buf []byte, addr net.Addr) {
+		msg := dnsmessage.Message{}
+		err := msg.Unpack(buf)
+		if err != nil {
+			return
+		}
+		if !msg.Header.Response || msg.Header.RCode != dnsmessage.RCodeSuccess {
+			return
+		}
+		if len(msg.Questions) != 1 || len(msg.Answers) == 0 {
+			return
+		}
+		var domain *Domain
+		for i := range c.domains {
+			if c.domains[i].IsDomain(msg.Questions[0].Name) {
+				domain = c.domains[i]
+				break
+			}
+		}
+		for i := range domain.types {
+			if domain.types[i] == uint16(msg.Questions[0].Type) {
+				break
+			}
+			if i == len(domain.types)-1 {
+				return
+			}
+		}
+
+		var frags [][]byte
+		for i := range msg.Answers {
+			if domain.IsDomain(msg.Answers[i].Header.Name) && msg.Questions[0].Type == msg.Answers[i].Header.Type {
+				switch msg.Questions[0].Type {
+				case dnsmessage.TypeA:
+					frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
+				case dnsmessage.TypeCNAME:
+					var decoded [255]byte
+					n, err := domain.Decode(decoded[:], msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
+					if err != nil || n == 0 {
+						continue
+					}
+					frags = append(frags, decoded[:n])
+				case dnsmessage.TypeTXT:
+					txt := []byte(strings.Join(msg.Answers[i].Body.(*dnsmessage.TXTResource).TXT, ""))
+					if len(txt) == 0 {
+						continue
+					}
+					if len(frags) > 0 {
+						return
+					}
+					frags = append(frags, txt)
+				case dnsmessage.TypeAAAA:
+					frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AAAAResource).AAAA[:])
+				}
+				if len(frags) > 255 {
+					return
+				}
+			}
+		}
+		sort.Slice(frags, func(i, j int) bool {
+			return frags[i][0] < frags[j][0]
+		})
+		for i := range frags {
+			if i > 0 && frags[i][0] == frags[i-1][0] {
+				return
+			}
+			if frags[i][0] == 0 {
+				if len(frags[i]) < 2 {
+					return
+				}
+				if frags[i][1] != byte(len(frags)) {
+					return
+				}
+			}
+		}
+		p := pool4K.Get().([]byte)
+		p = p[:0]
+		for i := range frags {
+			if i == 0 {
+				p = append(p, frags[0][2:]...)
+				continue
+			}
+			p = append(p, frags[i][1:]...)
+		}
+		if len(p) < 8 {
+			pool4K.Put(p[:cap(p)])
+			return
+		}
+		if !c.isClientID([8]byte(p[:8])) {
+			pool4K.Put(p[:cap(p)])
+			return
+		}
+		if TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) {
+			pool4K.Put(p[:cap(p)])
+			return
+		}
+		isFrag := (p[0]>>6)&1 == 1
+		if isFrag {
+			if len(p) < 12 {
+				pool4K.Put(p[:cap(p)])
+				return
+			}
+			b := pool4K.Get().([]byte)
+			n := c.fragManager.Feed(b, FragKey{clientID: c.clientID, fragID: p[8]}, p[9], p[10], p[11:])
+			pool4K.Put(p[:cap(p)])
+			if n == 0 {
+				pool4K.Put(b[:cap(b)])
+				return
+			}
+			p = b[:n]
+		} else {
+			copy(p, p[8:])
+			p = p[:len(p)-8]
+		}
+		packet := packet{
+			p:    p,
+			addr: addr,
+		}
+		select {
+		case <-c.closeCh:
+			pool4K.Put(p[:cap(p)])
+			return
+		case c.readCh <- packet:
+		}
+	}
+
+	var buf [4096]byte
 	for {
-		_, _, err := c.conns[i_].ReadFrom(p[:])
+		n, addr, err := c.conns[index].ReadFrom(buf[:])
 		if err != nil {
 			if c.closed() {
 				return
 			}
-			errors.LogErrorInner(context.Background(), err, "recv err ", i_)
+			errors.LogErrorInner(context.Background(), err, "recv err ", index)
 			return
 		}
+		read(buf[:n], addr)
 	}
 }
 
