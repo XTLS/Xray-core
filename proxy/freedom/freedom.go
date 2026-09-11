@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -164,12 +163,9 @@ func getDefaultFinalRule(inbound *session.Inbound) *FinalRule {
 	switch inbound.Name {
 	case "vless-reverse":
 		return defaultBlockAllRule
-	case "vless", "vmess", "trojan", "hysteria", "wireguard":
+	case "vless", "vmess", "trojan", "hysteria", "wireguard", "shadowsocks":
 		return defaultBlockPrivateRule
 	default:
-		if strings.HasPrefix(inbound.Name, "shadowsocks") {
-			return defaultBlockPrivateRule
-		}
 	}
 	return nil
 }
