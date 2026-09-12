@@ -1,7 +1,6 @@
 package xdns
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"io"
@@ -42,7 +41,7 @@ type packet struct {
 type xdnsClient struct {
 	net.PacketConn
 
-	clientID    [8]byte
+	clientID    ClientID
 	fragID      atomic.Uint32
 	domains     []*Domain
 	fragManager *FragManager
@@ -66,8 +65,6 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	if len(c.Addrs) == 0 {
 		return nil, errors.New("empty addrs")
 	}
-	var clientID [8]byte
-	common.Must2(rand.Read(clientID[:]))
 	domains := make([]*Domain, 0, len(c.Domains))
 	for i := range c.Domains {
 		types := make([]uint16, 0, len(c.Domains[i].Types))
@@ -109,7 +106,7 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	client := &xdnsClient{
 		PacketConn: raw,
 
-		clientID:    clientID,
+		clientID:    NewClientID(),
 		domains:     domains,
 		fragManager: NewFragManager(),
 
@@ -132,13 +129,6 @@ func (c *xdnsClient) closed() bool {
 	default:
 		return false
 	}
-}
-
-func (c *xdnsClient) is_client_id(id [8]byte) bool {
-	if c.clientID[0]&0x3C != id[0]&0x3C {
-		return false
-	}
-	return bytes.Equal(c.clientID[1:], id[1:])
 }
 
 func (c *xdnsClient) send(p []byte) {
@@ -269,13 +259,8 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 			break
 		}
 	}
-	for i := range domain.types {
-		if domain.types[i] == uint16(msg.Questions[0].Type) {
-			break
-		}
-		if i == len(domain.types)-1 {
-			return
-		}
+	if !domain.HasType(uint16(msg.Questions[0].Type)) {
+		return
 	}
 
 	var frags [][]byte
@@ -340,7 +325,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 		pool4K.Put(p[:cap(p)])
 		return
 	}
-	if !c.is_client_id([8]byte(p[:8])) {
+	if c.clientID != ClientIDFromRaw([8]byte(p[:8])) {
 		pool4K.Put(p[:cap(p)])
 		return
 	}
@@ -494,3 +479,28 @@ func (c *xdnsClient) SetDeadline(t time.Time) error { return nil }
 func (c *xdnsClient) SetReadDeadline(t time.Time) error { return nil }
 
 func (c *xdnsClient) SetWriteDeadline(t time.Time) error { return nil }
+
+type ClientID [8]byte
+
+func NewClientID() ClientID {
+	var id ClientID
+	common.Must2(rand.Read(id[:]))
+	id[0] &= 0x3C
+	return id
+}
+
+func ClientIDFromRaw(id [8]byte) ClientID {
+	id[0] &= 0x3C
+	return id
+}
+
+func ClientIDFromAddr(addr *net.UDPAddr) ClientID {
+	return ClientID(addr.IP[8:])
+}
+
+func (id ClientID) Addr() *net.UDPAddr {
+	var ip [16]byte
+	ip[0] = 0xFD
+	copy(ip[8:], id[:])
+	return &net.UDPAddr{IP: ip[:]}
+}

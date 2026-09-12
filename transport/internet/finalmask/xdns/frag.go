@@ -13,7 +13,7 @@ const (
 )
 
 type FragKey struct {
-	clientID [8]byte
+	clientID ClientID
 	fragID   byte
 }
 
@@ -27,7 +27,7 @@ type FragEntry struct {
 
 type FragManager struct {
 	m            map[FragKey]*FragEntry
-	clientIDSize map[[8]byte]int
+	clientIDSize map[ClientID]int
 	closeCh      chan struct{}
 	mu           sync.Mutex
 }
@@ -35,7 +35,7 @@ type FragManager struct {
 func NewFragManager() *FragManager {
 	m := &FragManager{
 		m:            make(map[FragKey]*FragEntry),
-		clientIDSize: make(map[[8]byte]int),
+		clientIDSize: make(map[ClientID]int),
 		closeCh:      make(chan struct{}),
 	}
 	go m.gc()
