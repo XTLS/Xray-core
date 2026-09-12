@@ -74,9 +74,8 @@ type Domain struct {
 	types      []uint16
 	edns0      uint16
 
-	cap      int
-	capFrags int
-	lenMax   int
+	cap    int
+	lenMax int
 }
 
 func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns0 uint16) (*Domain, error) {
@@ -128,8 +127,6 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 		return nil, errors.New("cap < 16")
 	}
 	total = table_[cap]
-	cap -= 11
-	capFrags := 255 * (cap - 3)
 	lenMax := int(name.Length) + 1 + total + total/labelLimit
 	if total%labelLimit > 0 {
 		lenMax += 1
@@ -141,9 +138,8 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 		types:      types,
 		edns0:      edns0,
 
-		cap:      cap,
-		capFrags: capFrags,
-		lenMax:   lenMax,
+		cap:    cap,
+		lenMax: lenMax,
 	}, nil
 }
 

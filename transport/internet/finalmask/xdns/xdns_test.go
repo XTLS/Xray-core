@@ -68,9 +68,9 @@ func TestXxx(t *testing.T) {
 	}
 
 	domain, _ := NewDomain("a.example.com", 200, 1, []uint16{1}, 0)
-	fmt.Println(domain.cap, domain.capFrags, domain.lenMax)
+	fmt.Println(domain.cap, domain.lenMax)
 	lenMax := domain.lenMax
-	data := make([]byte, domain.cap+11)
+	data := make([]byte, domain.cap)
 	msg := dnsmessage.Message{}
 	msg.Unpack(p1)
 	for range 3 {

@@ -111,6 +111,7 @@ func (r *TCPResolver) Send(p []byte) {
 	if conn == nil {
 		return
 	}
+	_ = binary.Write(conn, binary.BigEndian, len(p))
 	_, _ = conn.Write(p)
 }
 
