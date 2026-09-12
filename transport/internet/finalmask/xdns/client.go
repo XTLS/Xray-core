@@ -174,7 +174,7 @@ func (c *xdnsClient) send(p []byte) {
 		return
 	}
 
-	if len(p) <= domain.cap {
+	if len(p) <= domain.cap-11 {
 		copy(data[:], c.clientID[:])
 		common.Must2(rand.Read(data[8:11]))
 		copy(data[11:], p)
@@ -185,7 +185,7 @@ func (c *xdnsClient) send(p []byte) {
 		return
 	}
 
-	if len(p) <= domain.capFrags {
+	if len(p) <= 255*(domain.cap-14) {
 		copy(data[:], c.clientID[:])
 		data[0] &= 0x3C
 		data[0] |= 0x40
@@ -193,14 +193,14 @@ func (c *xdnsClient) send(p []byte) {
 
 		fragID := byte(c.fragID.Add(1))
 		fragIdx := byte(0)
-		fragN := len(p) / (domain.cap - 3)
-		if len(p)%(domain.cap-3) != 0 {
+		fragN := len(p) / (domain.cap - 14)
+		if len(p)%(domain.cap-14) != 0 {
 			fragN++
 		}
 
 		b := p
 		for len(b) > 0 {
-			size := min(len(b), domain.cap-3)
+			size := min(len(b), domain.cap-14)
 			common.Must2(rand.Read(data[8:11]))
 			data[11] = fragID
 			data[12] = fragIdx
@@ -243,7 +243,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 
 	var frags [][]byte
 	for i := range msg.Answers {
-		if domain.IsDomain(msg.Answers[i].Header.Name) && msg.Questions[0].Type == msg.Answers[i].Header.Type {
+		if msg.Answers[i].Header.Name == msg.Questions[0].Name && msg.Answers[i].Header.Type == msg.Questions[0].Type {
 			switch msg.Questions[0].Type {
 			case dnsmessage.TypeA:
 				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
