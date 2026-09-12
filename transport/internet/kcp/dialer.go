@@ -97,7 +97,14 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 	var iConn stat.Connection = session
 
 	if config := tls.ConfigFromStreamSettings(streamSettings); config != nil {
-		iConn = tls.Client(iConn, config.GetTLSConfig(tls.WithDestination(dest)))
+		tlsConfig := config.GetTLSConfig(tls.WithDestination(dest))
+		if spoofConn, err := tls.WrapWithSpoof(iConn, config.Spoof, config.SpoofMethod, config.SpoofCount, tlsConfig.ServerName); err != nil {
+			iConn.Close()
+			return nil, err
+		} else {
+			iConn = spoofConn.(stat.Connection)
+		}
+		iConn = tls.Client(iConn, tlsConfig)
 	}
 
 	return iConn, nil
