@@ -1,11 +1,9 @@
 package xdns
 
 import (
-	"context"
 	"encoding/base32"
 	"errors"
 	"strings"
-	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
 	"golang.org/x/net/idna"
@@ -31,17 +29,6 @@ func ToLower(b []byte) {
 		if c >= 'A' && c <= 'Z' {
 			b[i] = c - 'A' + 'a'
 		}
-	}
-}
-
-func WaitCtx(ctx context.Context, t time.Duration) bool {
-	timer := time.NewTimer(t)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return false
-	case <-ctx.Done():
-		return true
 	}
 }
 
@@ -174,6 +161,15 @@ func (d *Domain) IsDomain(name dnsmessage.Name) bool {
 		}
 	}
 	return true
+}
+
+func (d *Domain) HasType(qtype uint16) bool {
+	for i := range d.types {
+		if d.types[i] == qtype {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *Domain) Encode(data []byte) dnsmessage.Name {
