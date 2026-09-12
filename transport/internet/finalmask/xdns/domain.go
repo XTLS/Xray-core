@@ -193,7 +193,7 @@ func (d *Domain) Encode(data []byte) dnsmessage.Name {
 	return name
 }
 
-func (d *Domain) Decode(decoded []byte, name dnsmessage.Name) (int, error) {
+func (d *Domain) Decode(decoded *[255]byte, name dnsmessage.Name) (int, error) {
 	if !d.IsDomain(name) {
 		return 0, errors.New("incorrect domain")
 	}

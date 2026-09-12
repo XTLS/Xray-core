@@ -7,6 +7,7 @@ option java_package = "com.xray.transport.internet.finalmask.xdns";
 option java_multiple_files = true;
 
 import "transport/internet/config.proto";
+import "common/serial/typed_message.proto";
 
 message DomainProto {
   string name = 1;
@@ -18,6 +19,15 @@ message DomainProto {
 
 message Config {
   repeated DomainProto domains = 1;
-  repeated string addrs = 2;
-  xray.transport.internet.SocketConfig sockopt = 3;
+  repeated xray.common.serial.TypedMessage resolvers = 2;
+}
+
+message TCPResolverProto {
+  string addr = 1;
+  xray.transport.internet.SocketConfig sockopt = 2;
+}
+
+message UDPResolverProto {
+  string addr = 1;
+  xray.transport.internet.SocketConfig sockopt = 2;
 }
