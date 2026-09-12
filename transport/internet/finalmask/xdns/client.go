@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"io"
 	mrand "math/rand"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -15,8 +14,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/transport/internet"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
@@ -46,10 +43,9 @@ type xdnsClient struct {
 	domains     []*Domain
 	fragManager *FragManager
 
-	addrs []*net.UDPAddr
-	conns []net.PacketConn
-	sends []atomic.Uint32
-	index atomic.Uint32
+	resolvers     []Resolver
+	resolverSends []atomic.Uint32
+	resolverIndex atomic.Uint32
 
 	poolCh  chan struct{}
 	readCh  chan packet
@@ -62,8 +58,8 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	if len(c.Domains) == 0 {
 		return nil, errors.New("empty domains")
 	}
-	if len(c.Addrs) == 0 {
-		return nil, errors.New("empty addrs")
+	if len(c.Resolvers) == 0 {
+		return nil, errors.New("empty resolvers")
 	}
 	domains := make([]*Domain, 0, len(c.Domains))
 	for i := range c.Domains {
@@ -77,31 +73,13 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		}
 		domains = append(domains, domain)
 	}
-	addrs := make([]*net.UDPAddr, 0, len(c.Addrs))
-	conns := make([]net.PacketConn, 0, len(c.Addrs))
-	for i := range c.Addrs {
-		addr, err := net.ResolveUDPAddr("udp", c.Addrs[i])
+	resolvers := make([]Resolver, 0, len(c.Resolvers))
+	for i := range c.Resolvers {
+		resolver, err := NewResolver(c.Resolvers[i])
 		if err != nil {
 			return nil, err
 		}
-		conn, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(addr.IP), net.Port(addr.Port)), c.Sockopt)
-		if err != nil {
-			for j := range conns {
-				_ = conns[j].Close()
-			}
-			return nil, err
-		}
-		var newConn net.PacketConn
-		switch c := conn.(type) {
-		case *internet.PacketConnWrapper:
-			newConn = c.PacketConn
-		case *cnc.Connection:
-			newConn = &internet.FakePacketConn{Conn: c}
-		default:
-			panic(reflect.TypeOf(c))
-		}
-		addrs = append(addrs, addr)
-		conns = append(conns, newConn)
+		resolvers = append(resolvers, resolver)
 	}
 	client := &xdnsClient{
 		PacketConn: raw,
@@ -110,9 +88,8 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		domains:     domains,
 		fragManager: NewFragManager(),
 
-		addrs: addrs,
-		conns: conns,
-		sends: make([]atomic.Uint32, len(c.Addrs)),
+		resolvers:     resolvers,
+		resolverSends: make([]atomic.Uint32, len(c.Resolvers)),
 
 		poolCh:  make(chan struct{}, pollLimit),
 		readCh:  make(chan packet),
@@ -167,23 +144,23 @@ func (c *xdnsClient) send(p []byte) {
 		pack := common.Must2(msg.AppendPack(buf[:0]))
 		common.Must2(rand.Read(pack[:2]))
 
-		index := c.index.Load()
-		cur := c.sends[index].Add(1)
+		index := c.resolverIndex.Load()
+		cur := c.resolverSends[index].Add(1)
 		i := index
 		for {
 			i++
-			if i == uint32(len(c.addrs)) {
+			if i == uint32(len(c.resolvers)) {
 				i = 0
 			}
 			if i == index {
 				break
 			}
-			if cur > c.sends[i].Load() {
+			if cur > c.resolverSends[i].Load() {
 				break
 			}
 		}
-		c.index.Store(i)
-		_, _ = c.conns[index].WriteTo(pack, c.addrs[index])
+		c.resolverIndex.Store(i)
+		c.resolvers[index].Send(pack)
 	}
 
 	if len(p) == 0 {
@@ -252,6 +229,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	if len(msg.Questions) != 1 || len(msg.Answers) == 0 {
 		return
 	}
+
 	var domain *Domain
 	for i := range c.domains {
 		if c.domains[i].IsDomain(msg.Questions[0].Name) {
@@ -271,7 +249,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
 			case dnsmessage.TypeCNAME:
 				var decoded [255]byte
-				n, err := domain.Decode(decoded[:], msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
+				n, err := domain.Decode(&decoded, msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
 				if err != nil || n == 0 {
 					continue
 				}
@@ -325,11 +303,9 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 		pool4K.Put(p[:cap(p)])
 		return
 	}
-	if c.clientID != ClientIDFromRaw([8]byte(p[:8])) {
-		pool4K.Put(p[:cap(p)])
-		return
-	}
-	if TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) {
+	if c.clientID != ClientIDFromRaw([8]byte(p[:8])) ||
+		p[0]&0x80 != 0x80 ||
+		TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) {
 		pool4K.Put(p[:cap(p)])
 		return
 	}
@@ -376,7 +352,7 @@ func (c *xdnsClient) run() {
 	c.wg.Add(1)
 	go c.poll()
 
-	for i := range len(c.addrs) {
+	for i := range len(c.resolvers) {
 		c.wg.Add(1)
 		go c.recv(i)
 	}
@@ -431,7 +407,7 @@ func (c *xdnsClient) recv(i int) {
 
 	var buf [4096]byte
 	for {
-		n, addr, err := c.conns[i].ReadFrom(buf[:])
+		n, err := c.resolvers[i].Read(buf[:])
 		if err != nil {
 			if c.closed() {
 				return
@@ -439,7 +415,7 @@ func (c *xdnsClient) recv(i int) {
 			errors.LogErrorInner(context.Background(), err, "recv err ", i)
 			return
 		}
-		c.read(buf[:n], addr)
+		c.read(buf[:n], c.resolvers[i].Addr())
 	}
 }
 
@@ -468,8 +444,9 @@ func (c *xdnsClient) Close() error {
 		return nil
 	}
 	close(c.closeCh)
-	for i := range c.conns {
-		_ = c.conns[i].Close()
+	c.PacketConn.Close()
+	for i := range c.resolvers {
+		c.resolvers[i].Close()
 	}
 	return nil
 }
