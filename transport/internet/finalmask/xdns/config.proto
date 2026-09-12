@@ -6,7 +6,28 @@ option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/xdns
 option java_package = "com.xray.transport.internet.finalmask.xdns";
 option java_multiple_files = true;
 
+import "transport/internet/config.proto";
+import "common/serial/typed_message.proto";
+
+message DomainProto {
+  string name = 1;
+  int32 len_limit = 2;
+  int32 label_limit = 3;
+  repeated int32 types = 4;
+  int32 edns0 = 5;
+}
+
 message Config {
-  repeated string domains = 1;
-  repeated string resolvers = 2;
+  repeated DomainProto domains = 1;
+  repeated xray.common.serial.TypedMessage resolvers = 2;
+}
+
+message TCPResolverProto {
+  string addr = 1;
+  xray.transport.internet.SocketConfig sockopt = 2;
+}
+
+message UDPResolverProto {
+  string addr = 1;
+  xray.transport.internet.SocketConfig sockopt = 2;
 }
