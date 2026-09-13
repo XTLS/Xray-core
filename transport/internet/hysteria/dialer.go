@@ -5,7 +5,7 @@ import (
 	gotls "crypto/tls"
 	"net/http"
 	"net/url"
-	"reflect"
+	reflect "reflect"
 	"runtime"
 	"strconv"
 	"sync"

@@ -269,13 +269,13 @@ func (s *Server) Start() error {
 			return nil, err
 		}
 		if s.uplinkCounter != nil || s.downlinkCounter != nil {
-			pktConn = &PacketCounterConnection{
-				PacketConn:   pktConn,
+			conn = &PacketCounterConnection{
+				PacketConn:   conn,
 				ReadCounter:  s.uplinkCounter,
 				WriteCounter: s.downlinkCounter,
 			}
 		}
-		return pktConn, nil
+		return conn, nil
 	}
 	bind := &bind{
 		listenFunc: listenFunc,

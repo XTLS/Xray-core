@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	"reflect"
+	reflect "reflect"
 	"strings"
 	"sync"
 	"time"
@@ -280,13 +280,13 @@ func (h *Handler) init(ctx context.Context) error {
 			}
 		}
 		if h.uplinkCounter != nil || h.downlinkCounter != nil {
-			pktConn = &PacketCounterConnection{
-				PacketConn:   pktConn,
+			conn = &PacketCounterConnection{
+				PacketConn:   conn,
 				ReadCounter:  h.downlinkCounter,
 				WriteCounter: h.uplinkCounter,
 			}
 		}
-		return pktConn, nil
+		return conn, nil
 	}
 	bind := &bind{}
 	logger := &device.Logger{
