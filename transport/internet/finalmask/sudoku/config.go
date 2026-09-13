@@ -3,17 +3,17 @@ package sudoku
 import (
 	"net"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 // Sudoku in finalmask mode is a pure appearance transform with no standalone handshake.
 // TCP always keeps classic sudoku on uplink and uses packed downlink optimization on server writes.
-func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
-	return newPackedDirectionalConn(raw, c, true)
+func (c *Config) WrapConnClient(conn net.Conn, dialer *finalmask.Dialer) (net.Conn, error) {
+	return newPackedDirectionalConn(conn, c, true)
 }
 
-func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
-	return newPackedDirectionalConn(raw, c, false)
+func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
+	return newPackedDirectionalConn(conn, c, false)
 }
 
 func newPackedDirectionalConn(raw net.Conn, config *Config, readPacked bool) (net.Conn, error) {
@@ -36,16 +36,10 @@ func newPackedDirectionalConn(raw net.Conn, config *Config, readPacked bool) (ne
 	return newWrappedConn(raw, reader, writer), nil
 }
 
-func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
-	if level != levelCount {
-		return nil, errors.New("sudoku udp mask must be the innermost mask in chain")
-	}
-	return NewUDPConn(raw, c)
+func (c *Config) WrapPacketConnClient(conn net.PacketConn, dialer *finalmask.Dialer) (net.PacketConn, error) {
+	return NewUDPConn(conn, c)
 }
 
-func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
-	if level != levelCount {
-		return nil, errors.New("sudoku udp mask must be the innermost mask in chain")
-	}
-	return NewUDPConn(raw, c)
+func (c *Config) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+	return NewUDPConn(conn, c)
 }

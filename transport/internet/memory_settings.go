@@ -1,7 +1,12 @@
 package internet
 
 import (
+	"context"
+	reflect "reflect"
+
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
@@ -12,8 +17,7 @@ type MemoryStreamConfig struct {
 	ProtocolSettings interface{}
 	SecurityType     string
 	SecuritySettings interface{}
-	TcpmaskManager   *finalmask.TcpmaskManager
-	UdpmaskManager   *finalmask.UdpmaskManager
+	FinalMask        *finalmask.FinalMask
 	QuicParams       *QuicParams
 	SocketSettings   *SocketConfig
 	DownloadSettings *MemoryStreamConfig
@@ -51,32 +55,51 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		mss.SecuritySettings = ess
 	}
 
-	if s != nil && len(s.Tcpmasks) > 0 {
-		var masks []finalmask.Tcpmask
-		for _, msg := range s.Tcpmasks {
-			instance, err := msg.GetInstance()
-			if err != nil {
-				return nil, err
-			}
-			masks = append(masks, instance.(finalmask.Tcpmask))
+	var tcpMasks []finalmask.TCPMask
+	var udpMasks []finalmask.UDPMask
+	var sockopt *SocketConfig
+
+	if s != nil {
+		for i := range s.Tcpmasks {
+			instance := common.Must2(s.Tcpmasks[i].GetInstance())
+			tcpMasks = append(tcpMasks, instance.(finalmask.TCPMask))
 		}
-		mss.TcpmaskManager = finalmask.NewTcpmaskManager(masks)
+		for i := range s.Udpmasks {
+			instance := common.Must2(s.Udpmasks[i].GetInstance())
+			udpMasks = append(udpMasks, instance.(finalmask.UDPMask))
+		}
+		sockopt = s.SocketSettings
 	}
+
+	dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
+		return DialSystem(ctx, dest, sockopt)
+	}
+	listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
+		return ListenSystem(ctx, addr, sockopt)
+	}
+	dialUDP := func(ctx context.Context, dest net.Destination) (net.PacketConn, error) {
+		conn, err := DialSystem(ctx, dest, sockopt)
+		if err != nil {
+			return nil, err
+		}
+		var newConn net.PacketConn
+		switch c := conn.(type) {
+		case *PacketConnWrapper:
+			newConn = c.PacketConn
+		case *cnc.Connection:
+			newConn = &FakePacketConn{Conn: c}
+		default:
+			panic(reflect.TypeOf(c))
+		}
+		return newConn, nil
+	}
+	listenPacket := func(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
+		return ListenSystemPacket(ctx, addr, sockopt)
+	}
+	mss.FinalMask = finalmask.NewFinalMask(tcpMasks, udpMasks, dialTCP, listen, dialUDP, listenPacket)
 
 	if s != nil && s.QuicParams != nil {
 		mss.QuicParams = s.QuicParams
-	}
-
-	if s != nil && len(s.Udpmasks) > 0 {
-		var masks []finalmask.Udpmask
-		for _, msg := range s.Udpmasks {
-			instance, err := msg.GetInstance()
-			if err != nil {
-				return nil, err
-			}
-			masks = append(masks, instance.(finalmask.Udpmask))
-		}
-		mss.UdpmaskManager = finalmask.NewUdpmaskManager(masks)
 	}
 
 	return mss, nil

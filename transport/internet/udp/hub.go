@@ -58,22 +58,9 @@ func ListenUDP(ctx context.Context, address net.Address, port net.Port, streamSe
 	}
 
 	var err error
-	hub.conn, err = internet.ListenSystemPacket(ctx, &net.UDPAddr{
-		IP:   address.IP(),
-		Port: int(port),
-	}, sockopt)
+	hub.conn, err = streamSettings.FinalMask.ListenPacket(ctx, &net.UDPAddr{IP: address.IP(), Port: int(port)})
 	if err != nil {
 		return nil, err
-	}
-
-	raw := hub.conn
-
-	if streamSettings.UdpmaskManager != nil {
-		hub.conn, err = streamSettings.UdpmaskManager.WrapPacketConnServer(raw)
-		if err != nil {
-			raw.Close()
-			return nil, errors.New("mask err").Base(err)
-		}
 	}
 
 	errors.LogInfo(ctx, "listening UDP on ", address, ":", port)

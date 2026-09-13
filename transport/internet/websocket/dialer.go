@@ -48,20 +48,10 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	dialer := &websocket.Dialer{
 		NetDial: func(network, addr string) (net.Conn, error) {
-			conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+			conn, err := streamSettings.FinalMask.DialTCP(ctx, dest)
 			if err != nil {
 				return nil, err
 			}
-
-			if streamSettings.TcpmaskManager != nil {
-				newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
-				if err != nil {
-					conn.Close()
-					return nil, errors.New("mask err").Base(err)
-				}
-				conn = newConn
-			}
-
 			return conn, err
 		},
 		ReadBufferSize:   4 * 1024,
@@ -79,19 +69,10 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		if fingerprint := tls.GetFingerprint(tConfig.Fingerprint); fingerprint != nil {
 			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (net.Conn, error) {
 				// Like the NetDial in the dialer
-				pconn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+				pconn, err := streamSettings.FinalMask.DialTCP(ctx, dest)
 				if err != nil {
 					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 					return nil, err
-				}
-
-				if streamSettings.TcpmaskManager != nil {
-					newConn, err := streamSettings.TcpmaskManager.WrapConnClient(pconn)
-					if err != nil {
-						pconn.Close()
-						return nil, errors.New("mask err").Base(err)
-					}
-					pconn = newConn
 				}
 
 				// TLS and apply the handshake

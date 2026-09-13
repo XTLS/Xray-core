@@ -2,104 +2,221 @@ package finalmask
 
 import (
 	"context"
-	"net"
+	"fmt"
 	"slices"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 )
 
-type Udpmask interface {
-	WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
-	WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error)
+type Dialer struct {
+	DialTCP func(net.Destination) (net.Conn, error)
+	DialUDP func(net.Destination) (net.PacketConn, error)
 }
 
-type UdpmaskManager struct {
-	udpmasks []Udpmask
+type TCPMask interface {
+	WrapConnClient(net.Conn, *Dialer) (net.Conn, error)
+	WrapConnServer(net.Conn) (net.Conn, error)
 }
 
-func NewUdpmaskManager(udpmasks []Udpmask) *UdpmaskManager {
-	slices.Reverse(udpmasks)
-	return &UdpmaskManager{udpmasks: udpmasks}
+type UDPMask interface {
+	WrapPacketConnClient(net.PacketConn, *Dialer) (net.PacketConn, error)
+	WrapPacketConnServer(net.PacketConn) (net.PacketConn, error)
 }
 
-func (m *UdpmaskManager) WrapPacketConnClient(raw net.PacketConn) (net.PacketConn, error) {
-	var sizes []int
-	var conns []net.PacketConn
-	for i, mask := range m.udpmasks {
-		if _, ok := mask.(headerConn); ok {
-			conn, err := mask.WrapPacketConnClient(nil, i, len(m.udpmasks)-1)
-			if err != nil {
-				return nil, err
-			}
-			sizes = append(sizes, conn.(headerSize).Size())
-			conns = append(conns, conn)
-		} else {
-			if len(conns) > 0 {
-				raw = &headerManagerConn{sizes: sizes, conns: conns, PacketConn: raw}
-				sizes = nil
-				conns = nil
-			}
-			var err error
-			raw, err = mask.WrapPacketConnClient(raw, i, len(m.udpmasks)-1)
-			if err != nil {
-				return nil, err
+type FinalMask struct {
+	tcpMasks     []TCPMask
+	udpMasks     []UDPMask
+	dialTCP      func(context.Context, net.Destination) (net.Conn, error)
+	listen       func(context.Context, net.Addr) (net.Listener, error)
+	dialUDP      func(context.Context, net.Destination) (net.PacketConn, error)
+	listenPacket func(context.Context, net.Addr) (net.PacketConn, error)
+}
+
+func NewFinalMask(tcpMasks []TCPMask, udpMasks []UDPMask, dialTCP func(context.Context, net.Destination) (net.Conn, error), listen func(context.Context, net.Addr) (net.Listener, error), dialUDP func(context.Context, net.Destination) (net.PacketConn, error), listenPacket func(context.Context, net.Addr) (net.PacketConn, error)) *FinalMask {
+	slices.Reverse(tcpMasks)
+	slices.Reverse(udpMasks)
+	return &FinalMask{
+		tcpMasks:     tcpMasks,
+		udpMasks:     udpMasks,
+		dialTCP:      dialTCP,
+		dialUDP:      dialUDP,
+		listen:       listen,
+		listenPacket: listenPacket,
+	}
+}
+
+func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Conn, error) {
+	if len(fm.tcpMasks) == 0 {
+		return fm.dialTCP(ctx, dest)
+	}
+	for i := range fm.tcpMasks {
+		if i > 0 {
+			if _, ok := fm.tcpMasks[i].(interface{ HandleDial() }); ok {
+				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.tcpMasks[i])
 			}
 		}
 	}
-
-	if len(conns) > 0 {
-		raw = &headerManagerConn{sizes: sizes, conns: conns, PacketConn: raw}
-		sizes = nil
-		conns = nil
+	var conn net.Conn
+	var err error
+	if _, ok := fm.tcpMasks[0].(interface{ HandleDial() }); !ok {
+		conn, err = fm.dialTCP(ctx, dest)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return raw, nil
+	dialer := &Dialer{
+		DialTCP: func(dest net.Destination) (net.Conn, error) {
+			return fm.dialTCP(ctx, dest)
+		},
+		DialUDP: func(dest net.Destination) (net.PacketConn, error) {
+			return fm.dialUDP(ctx, dest)
+		},
+	}
+	for i := range fm.tcpMasks {
+		var newConn net.Conn
+		newConn, err = fm.tcpMasks[i].WrapConnClient(conn, dialer)
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		conn = newConn
+	}
+	return conn, nil
 }
 
-func (m *UdpmaskManager) WrapPacketConnServer(raw net.PacketConn) (net.PacketConn, error) {
-	var sizes []int
-	var conns []net.PacketConn
-	for i, mask := range m.udpmasks {
-		if _, ok := mask.(headerConn); ok {
-			conn, err := mask.WrapPacketConnServer(nil, i, len(m.udpmasks)-1)
-			if err != nil {
-				return nil, err
-			}
-			sizes = append(sizes, conn.(headerSize).Size())
-			conns = append(conns, conn)
-		} else {
-			if len(conns) > 0 {
-				raw = &headerManagerConn{sizes: sizes, conns: conns, PacketConn: raw}
-				sizes = nil
-				conns = nil
-			}
-			var err error
-			raw, err = mask.WrapPacketConnServer(raw, i, len(m.udpmasks)-1)
-			if err != nil {
-				return nil, err
+func (fm *FinalMask) Listen(ctx context.Context, addr net.Addr) (net.Listener, error) {
+	if len(fm.tcpMasks) == 0 {
+		return fm.listen(ctx, addr)
+	}
+	for i := range fm.tcpMasks {
+		if i > 0 {
+			if _, ok := fm.tcpMasks[i].(interface{ HandleDial() }); ok {
+				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.tcpMasks[i])
 			}
 		}
 	}
+	listener, err := fm.listen(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+	return &TCPListener{Listener: listener, tcpMasks: fm.tcpMasks}, nil
+}
 
+func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.PacketConn, error) {
+	if len(fm.udpMasks) == 0 {
+		return fm.dialUDP(ctx, dest)
+	}
+	for i := range fm.udpMasks {
+		if i > 0 {
+			if _, ok := fm.udpMasks[i].(interface{ HandleDial() }); ok {
+				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.udpMasks[i])
+			}
+		}
+	}
+	var conn net.PacketConn
+	var err error
+	if _, ok := fm.udpMasks[0].(interface{ HandleDial() }); !ok {
+		conn, err = fm.dialUDP(ctx, dest)
+		if err != nil {
+			return nil, err
+		}
+	}
+	dialer := &Dialer{
+		DialTCP: func(dest net.Destination) (net.Conn, error) {
+			return fm.dialTCP(ctx, dest)
+		},
+		DialUDP: func(dest net.Destination) (net.PacketConn, error) {
+			return fm.dialUDP(ctx, dest)
+		},
+	}
+	var sizes []int
+	var conns []net.PacketConn
+	for i := range fm.udpMasks {
+		var newConn net.PacketConn
+		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {
+			newConn, err = fm.udpMasks[i].WrapPacketConnClient(nil, nil)
+			if err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			sizes = append(sizes, newConn.(interface{ Size() int }).Size())
+			conns = append(conns, newConn)
+		} else {
+			if len(conns) > 0 {
+				conn = &headerManagerConn{PacketConn: conn, sizes: sizes, conns: conns}
+				sizes = nil
+				conns = nil
+			}
+			newConn, err = fm.udpMasks[i].WrapPacketConnClient(conn, dialer)
+			if err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			conn = newConn
+		}
+	}
 	if len(conns) > 0 {
-		raw = &headerManagerConn{sizes: sizes, conns: conns, PacketConn: raw}
+		conn = &headerManagerConn{PacketConn: conn, sizes: sizes, conns: conns}
 		sizes = nil
 		conns = nil
 	}
-	return raw, nil
+	return conn, nil
+}
+
+func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
+	if len(fm.udpMasks) == 0 {
+		return fm.listenPacket(ctx, addr)
+	}
+	for i := range fm.udpMasks {
+		if i > 0 {
+			if _, ok := fm.udpMasks[i].(interface{ HandleDial() }); ok {
+				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.udpMasks[i])
+			}
+		}
+	}
+	conn, err := fm.listenPacket(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+	var sizes []int
+	var conns []net.PacketConn
+	for i := range fm.udpMasks {
+		var newConn net.PacketConn
+		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {
+			newConn, err = fm.udpMasks[i].WrapPacketConnServer(nil)
+			if err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			sizes = append(sizes, newConn.(interface{ Size() int }).Size())
+			conns = append(conns, newConn)
+		} else {
+			if len(conns) > 0 {
+				conn = &headerManagerConn{PacketConn: conn, sizes: sizes, conns: conns}
+				sizes = nil
+				conns = nil
+			}
+			newConn, err = fm.udpMasks[i].WrapPacketConnServer(conn)
+			if err != nil {
+				_ = conn.Close()
+				return nil, err
+			}
+			conn = newConn
+		}
+	}
+	if len(conns) > 0 {
+		conn = &headerManagerConn{PacketConn: conn, sizes: sizes, conns: conns}
+		sizes = nil
+		conns = nil
+	}
+	return conn, nil
 }
 
 const (
 	UDPSize = 4096
 )
-
-type headerConn interface {
-	HeaderConn()
-}
-
-type headerSize interface {
-	Size() int
-}
 
 type headerManagerConn struct {
 	net.PacketConn
@@ -191,72 +308,27 @@ func (c *headerManagerConn) WriteTo(p []byte, addr net.Addr) (n int, err error) 
 	return len(p), nil
 }
 
-type Tcpmask interface {
-	WrapConnClient(net.Conn) (net.Conn, error)
-	WrapConnServer(net.Conn) (net.Conn, error)
-}
-
-type TcpmaskManager struct {
-	tcpmasks []Tcpmask
-}
-
-func NewTcpmaskManager(tcpmasks []Tcpmask) *TcpmaskManager {
-	slices.Reverse(tcpmasks)
-	return &TcpmaskManager{tcpmasks: tcpmasks}
-}
-
-func (m *TcpmaskManager) WrapConnClient(raw net.Conn) (net.Conn, error) {
-	var err error
-	for _, mask := range m.tcpmasks {
-		raw, err = mask.WrapConnClient(raw)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return raw, nil
-}
-
-func (m *TcpmaskManager) WrapConnServer(raw net.Conn) (net.Conn, error) {
-	var err error
-	for _, mask := range m.tcpmasks {
-		raw, err = mask.WrapConnServer(raw)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return raw, nil
-}
-
-func (m *TcpmaskManager) WrapListener(l net.Listener) (net.Listener, error) {
-	return NewTcpListener(m, l)
-}
-
-type tcpListener struct {
-	m *TcpmaskManager
+type TCPListener struct {
 	net.Listener
+	tcpMasks []TCPMask
 }
 
-func NewTcpListener(m *TcpmaskManager, l net.Listener) (net.Listener, error) {
-	return &tcpListener{
-		m:        m,
-		Listener: l,
-	}, nil
-}
-
-func (l *tcpListener) Accept() (net.Conn, error) {
+func (l *TCPListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
 		return conn, err
 	}
 
-	newConn, err := l.m.WrapConnServer(conn)
-	if err != nil {
-		errors.LogDebugInner(context.Background(), err, "mask err")
-		_ = conn.Close()
-		return nil, err
+	for i := range l.tcpMasks {
+		var newConn net.Conn
+		newConn, err = l.tcpMasks[i].WrapConnServer(conn)
+		if err != nil {
+			_ = conn.Close()
+			return nil, err
+		}
+		conn = newConn
 	}
-
-	return newConn, nil
+	return conn, nil
 }
 
 type TcpMaskConn interface {

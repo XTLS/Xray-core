@@ -105,27 +105,23 @@ func Listen(ctx context.Context, address net.Address, port net.Port, settings *i
 		var streamListener net.Listener
 		var err error
 		if port == net.Port(0) { // unix
-			streamListener, err = internet.ListenSystem(ctx, &net.UnixAddr{
+			streamListener, err = settings.FinalMask.Listen(ctx, &net.UnixAddr{
 				Name: address.Domain(),
 				Net:  "unix",
-			}, settings.SocketSettings)
+			})
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to listen on ", address)
 				return
 			}
 		} else { // tcp
-			streamListener, err = internet.ListenSystem(ctx, &net.TCPAddr{
+			streamListener, err = settings.FinalMask.Listen(ctx, &net.TCPAddr{
 				IP:   address.IP(),
 				Port: int(port),
-			}, settings.SocketSettings)
+			})
 			if err != nil {
 				errors.LogErrorInner(ctx, err, "failed to listen on ", address, ":", port)
 				return
 			}
-		}
-
-		if settings.TcpmaskManager != nil {
-			streamListener, _ = settings.TcpmaskManager.WrapListener(streamListener)
 		}
 
 		errors.LogDebug(ctx, "gRPC listen for service name `"+grpcSettings.getServiceName()+"` tun `"+grpcSettings.getTunStreamName()+"` multi tun `"+grpcSettings.getTunMultiStreamName()+"`")

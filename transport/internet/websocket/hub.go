@@ -98,27 +98,23 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 	var listener net.Listener
 	var err error
 	if port == net.Port(0) { // unix
-		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
+		listener, err = streamSettings.FinalMask.Listen(ctx, &net.UnixAddr{
 			Name: address.Domain(),
 			Net:  "unix",
-		}, streamSettings.SocketSettings)
+		})
 		if err != nil {
 			return nil, errors.New("failed to listen unix domain socket(for WS) on ", address).Base(err)
 		}
 		errors.LogInfo(ctx, "listening unix domain socket(for WS) on ", address)
 	} else { // tcp
-		listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
+		listener, err = streamSettings.FinalMask.Listen(ctx, &net.TCPAddr{
 			IP:   address.IP(),
 			Port: int(port),
-		}, streamSettings.SocketSettings)
+		})
 		if err != nil {
 			return nil, errors.New("failed to listen TCP(for WS) on ", address, ":", port).Base(err)
 		}
 		errors.LogInfo(ctx, "listening TCP(for WS) on ", address, ":", port)
-	}
-
-	if streamSettings.TcpmaskManager != nil {
-		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
 	}
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {

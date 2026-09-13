@@ -3,21 +3,15 @@ package xicmp
 import (
 	"net"
 
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
-func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
-	_, ok1 := raw.(*internet.FakePacketConn)
-	if level != 0 || ok1 {
-		return nil, errors.New("xicmp requires being at the outermost level")
-	}
-	return NewConnClient(c, raw)
+func (c *Config) HandleDial() {}
+
+func (c *Config) WrapPacketConnClient(conn net.PacketConn, dialer *finalmask.Dialer) (net.PacketConn, error) {
+	return NewConnClient(c, conn)
 }
 
-func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
-	if level != 0 {
-		return nil, errors.New("xicmp requires being at the outermost level")
-	}
-	return NewConnServer(c, raw)
+func (c *Config) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+	return NewConnServer(c, conn)
 }
