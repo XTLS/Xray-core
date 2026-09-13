@@ -1,12 +1,11 @@
 package custom
 
 import (
-	"net"
-
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
-func (c *TCPConfig) WrapConnClient(conn net.Conn, dialer *finalmask.Dialer) (net.Conn, error) {
+func (c *TCPConfig) WrapConnClient(conn net.Conn, dest net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	return NewConnClientTCP(c, conn)
 }
 
@@ -14,7 +13,7 @@ func (c *TCPConfig) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	return NewConnServerTCP(c, conn)
 }
 
-func (c *UDPConfig) WrapPacketConnClient(conn net.PacketConn, dialer *finalmask.Dialer) (net.PacketConn, error) {
+func (c *UDPConfig) WrapPacketConnClient(conn net.PacketConn, dest net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	return NewConnClientUDP(c, conn)
 }
 
