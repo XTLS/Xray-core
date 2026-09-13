@@ -138,7 +138,7 @@ func (c *client) dial(ctx context.Context) error {
 		}
 	}
 
-	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
+	tr := &quic.Transport{Conn: udpConn.(*finalmask.PacketConnWrapper).PacketConn, DisableGSO: quicParams.DisableGSO}
 
 	if !quicParams.DisableChromeParrot {
 		tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
@@ -177,13 +177,13 @@ func (c *client) dial(ctx context.Context) error {
 			_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		}
 		_ = tr.Close()
-		_ = pktConn.Close()
+		_ = udpConn.Close()
 		return err
 	}
 	if resp.StatusCode != StatusAuthOK {
 		_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		_ = tr.Close()
-		_ = pktConn.Close()
+		_ = udpConn.Close()
 		return errors.New("auth failed code ", resp.StatusCode)
 	}
 	_ = resp.Body.Close()
@@ -208,7 +208,7 @@ func (c *client) dial(ctx context.Context) error {
 		panic(quicParams.Congestion)
 	}
 
-	c.pktConn = pktConn
+	c.pktConn = udpConn.(*finalmask.PacketConnWrapper).PacketConn
 	c.tr = tr
 	c.conn = conn
 	c.udpSM = &udpSessionManager{

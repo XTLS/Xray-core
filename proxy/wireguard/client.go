@@ -279,6 +279,7 @@ func (h *Handler) init(ctx context.Context) error {
 				panic(reflect.TypeOf(c))
 			}
 		}
+		conn := udpConn.(*finalmask.PacketConnWrapper).PacketConn
 		if h.uplinkCounter != nil || h.downlinkCounter != nil {
 			conn = &PacketCounterConnection{
 				PacketConn:   conn,

@@ -219,18 +219,18 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					}
 				}
 
-				tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
+				tr := &quic.Transport{Conn: udpConn.(*finalmask.PacketConnWrapper).PacketConn, DisableGSO: quicParams.DisableGSO}
 
 				if !quicParams.DisableChromeParrot {
 					tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
 					tlsCfg.GetCertificate = nil
 				}
 
-				conn, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
+				conn, err := tr.DialEarly(ctx, udpConn.RemoteAddr(), tlsCfg, cfg)
 				if err != nil {
 					return nil, err
 				}
-				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
+				context.AfterFunc(conn.Context(), func() { tr.Close(); udpConn.Close() })
 
 				switch quicParams.Congestion {
 				case "reno":
