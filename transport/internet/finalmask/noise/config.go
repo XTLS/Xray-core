@@ -1,12 +1,11 @@
 package noise
 
 import (
-	"net"
-
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
-func (c *Config) WrapPacketConnClient(conn net.PacketConn, dialer *finalmask.Dialer) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	return NewConnClient(c, conn)
 }
 
