@@ -77,21 +77,24 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 	listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
 		return ListenSystem(ctx, addr, sockopt)
 	}
-	dialUDP := func(ctx context.Context, dest net.Destination) (net.PacketConn, error) {
+	dialUDP := func(ctx context.Context, dest net.Destination) (net.PacketConn, net.Addr, error) {
 		conn, err := DialSystem(ctx, dest, sockopt)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var newConn net.PacketConn
+		var udpAddr net.Addr
 		switch c := conn.(type) {
 		case *PacketConnWrapper:
 			newConn = c.PacketConn
+			udpAddr = conn.RemoteAddr()
 		case *cnc.Connection:
 			newConn = &FakePacketConn{Conn: c}
+			udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
 		default:
 			panic(reflect.TypeOf(c))
 		}
-		return newConn, nil
+		return newConn, udpAddr, nil
 	}
 	listenPacket := func(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
 		return ListenSystemPacket(ctx, addr, sockopt)

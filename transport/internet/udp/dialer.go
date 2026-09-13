@@ -12,13 +12,6 @@ import (
 func init() {
 	common.Must(internet.RegisterTransportDialer(protocolName,
 		func(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
-			conn, err := streamSettings.FinalMask.DialUDP(ctx, dest)
-			if err != nil {
-				return nil, err
-			}
-			return &internet.PacketConnWrapper{
-				PacketConn: conn,
-				Dest:       common.Must2(net.ResolveUDPAddr("udp", dest.NetAddr())),
-			}, nil
+			return streamSettings.FinalMask.DialUDP(ctx, dest)
 		}))
 }
