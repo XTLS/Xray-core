@@ -281,6 +281,10 @@ type SplitHTTPConfig struct {
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
+	ScDownlinkResume     bool              `json:"scDownlinkResume"`
+	ScMaxReplayBytes     int64             `json:"scMaxReplayBytes"`
+	DownlinkResumeKey    string            `json:"downlinkResumeKey"`
+	ScMaxDownlinkSecs    Int32Range        `json:"scMaxDownlinkSecs"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
@@ -445,6 +449,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		return nil, errors.New("invalid negative value of maxHeaderBytes")
 	}
 
+	if c.ScMaxReplayBytes < 0 {
+		return nil, errors.New("invalid negative value of scMaxReplayBytes")
+	}
+
 	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
@@ -483,6 +491,10 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
+		ScDownlinkResume:     c.ScDownlinkResume,
+		ScMaxReplayBytes:     c.ScMaxReplayBytes,
+		DownlinkResumeKey:    c.DownlinkResumeKey,
+		ScMaxDownlinkSecs:    newRangeConfig(c.ScMaxDownlinkSecs),
 		SessionIDTable:       c.SessionIDTable,
 		SessionIDLength:      newRangeConfig(c.SessionIDLength),
 		Xmux: &splithttp.XmuxConfig{

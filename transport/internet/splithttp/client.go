@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -25,8 +26,8 @@ type DialerClient interface {
 	// ctx, url, sessionId, body, uploadOnly
 	OpenStream(context.Context, string, string, io.Reader, bool) (io.ReadCloser, net.Addr, net.Addr, error)
 
-	// ctx, url, sessionId, seqStr, body, contentLength
-	PostPacket(context.Context, string, string, string, buf.MultiBuffer) error
+	// ctx, url, sessionId, seqStr, downlinkAck, body
+	PostPacket(context.Context, string, string, string, string, buf.MultiBuffer) error
 }
 
 // implements splithttp.DialerClient in terms of direct network connections
@@ -44,7 +45,20 @@ func (c *DefaultDialerClient) IsClosed() bool {
 	return c.closed.Load()
 }
 
-func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
+// downlinkResumer is not implemented by BrowserDialerClient.
+type downlinkResumer interface {
+	OpenDownlink(ctx context.Context, url string, sessionId string, resumeOffset uint64) (io.ReadCloser, net.Addr, net.Addr, error)
+}
+
+func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (io.ReadCloser, net.Addr, net.Addr, error) {
+	return c.openStream(ctx, url, sessionId, body, uploadOnly, "")
+}
+
+func (c *DefaultDialerClient) OpenDownlink(ctx context.Context, url string, sessionId string, resumeOffset uint64) (io.ReadCloser, net.Addr, net.Addr, error) {
+	return c.openStream(ctx, url, sessionId, nil, false, strconv.FormatUint(resumeOffset, 10))
+}
+
+func (c *DefaultDialerClient) openStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool, resumeValue string) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
 	// this is done when the TCP/UDP connection to the server was established,
 	// and we can unblock the Dial function and print correct net addresses in
 	// logs
@@ -67,6 +81,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 		return nil, nil, nil, err
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
+	c.transportConfig.ApplyDownlinkResumeToRequest(req, resumeValue)
 
 	wrc = &WaitReadCloser{wait: done.New()}
 	go func() {
@@ -81,8 +96,22 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			wrc.Close()
 			return
 		}
-		if resp.StatusCode != 200 && !uploadOnly {
+		if resp.StatusCode != 200 && resp.StatusCode != http.StatusNoContent && !uploadOnly {
 			errors.LogInfo(ctx, "unexpected status ", resp.StatusCode)
+		}
+		if resp.StatusCode == http.StatusNoContent {
+			wrc.(*WaitReadCloser).finished.Store(true)
+		} else if resp.StatusCode != 200 {
+			wrc.(*WaitReadCloser).rejected.Store(true)
+		} else if v := resp.Header.Get(c.transportConfig.GetNormalizedDownlinkResumeKey()); v != "" {
+			// The offset comes back as the server read it, so a middlebox that
+			// drops it on the way is caught here rather than by a stream that
+			// resumes in the wrong place.
+			if v == resumeValue {
+				wrc.(*WaitReadCloser).supported.Store(true)
+			} else {
+				errors.LogWarning(ctx, "XHTTP: the path changed the downlink offset from ", resumeValue, " to ", v)
+			}
 		}
 		if resp.StatusCode != 200 || uploadOnly { // stream-up
 			io.Copy(io.Discard, resp.Body)
@@ -98,13 +127,14 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	return
 }
 
-func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {
+func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, downlinkAck string, payload buf.MultiBuffer) error {
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
 	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, nil)
 	if err != nil {
 		return err
 	}
 	c.transportConfig.FillPacketRequest(req, sessionId, seqStr, payload)
+	c.transportConfig.ApplyDownlinkResumeToRequest(req, downlinkAck)
 
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)
@@ -188,8 +218,30 @@ func (c *DefaultDialerClient) Close() error {
 }
 
 type WaitReadCloser struct {
-	wait   *done.Instance
-	reader atomic.Pointer[io.ReadCloser]
+	wait      *done.Instance
+	reader    atomic.Pointer[io.ReadCloser]
+	rejected  atomic.Bool
+	supported atomic.Bool
+	finished  atomic.Bool
+}
+
+// Finished reports that the server has nothing left to send, which ends the
+// connection the way a complete stream-down response would.
+func (w *WaitReadCloser) Finished() bool {
+	return w.finished.Load()
+}
+
+// Supported reports that the server echoed the offset it resumed from, which
+// is how it acknowledges the feature and proves the offset survived the path.
+func (w *WaitReadCloser) Supported() bool {
+	return w.supported.Load()
+}
+
+// Rejected reports that the server answered the stream-down request with a
+// status other than 200, which for a resume means the offset can never be
+// served again.
+func (w *WaitReadCloser) Rejected() bool {
+	return w.rejected.Load()
 }
 
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {

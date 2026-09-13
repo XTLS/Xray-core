@@ -344,6 +344,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}
 
+	var downlinkAck func() string
+
 	sessionId := ""
 	if mode != "stream-one" {
 		sessionId = transportConfiguration.GenerateSessionID()
@@ -438,9 +440,46 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if xmuxClient2 != nil {
 			xmuxClient2.LeftRequests.Add(-1)
 		}
-		conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient2.OpenStream(ctx, requestURL2.String(), sessionId, nil, false)
-		if err != nil { // browser dialer only
-			return nil, err
+		resumer, canResume := httpClient2.(downlinkResumer)
+		if transportConfiguration.ScDownlinkResume && canResume {
+			downURL := requestURL2.String()
+			first := true
+			opener := func(openCtx context.Context, offset uint64) (io.ReadCloser, error) {
+				reader, rAddr, lAddr, openErr := resumer.OpenDownlink(openCtx, downURL, sessionId, offset)
+				if openErr != nil {
+					return nil, openErr
+				}
+				if first {
+					conn.remoteAddr, conn.localAddr = rAddr, lAddr
+					first = false
+				}
+				return reader, nil
+			}
+
+			rotate := func() time.Duration {
+				secs := transportConfiguration.GetNormalizedScMaxDownlinkSecs()
+				if secs.To <= 0 {
+					return 0
+				}
+				return time.Duration(secs.rand()) * time.Second
+			}
+
+			resumable := newResumableDownlink(ctx, rotate, opener)
+			if openErr := resumable.reconnect(); openErr != nil {
+				return nil, openErr
+			}
+			conn.reader = resumable
+			downlinkAck = func() string {
+				return strconv.FormatUint(resumable.Offset(), 10)
+			}
+		} else {
+			if transportConfiguration.ScDownlinkResume && !canResume {
+				errors.LogWarning(ctx, "XHTTP: scDownlinkResume is not supported by this dialer, falling back")
+			}
+			conn.reader, conn.remoteAddr, conn.localAddr, err = httpClient2.OpenStream(ctx, requestURL2.String(), sessionId, nil, false)
+			if err != nil { // browser dialer only
+				return nil, err
+			}
 		}
 	}
 	if mode == "stream-up" {
@@ -519,11 +558,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 
 				go func(hClient DialerClient) {
+					ack := ""
+					if downlinkAck != nil {
+						ack = downlinkAck()
+					}
 					err := hClient.PostPacket(
 						ctx,
 						requestURL.String(),
 						sessionId,
 						seqStr,
+						ack,
 						chunk,
 					)
 					wroteRequest.Close()

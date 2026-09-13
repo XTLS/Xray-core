@@ -52,4 +52,9 @@ message Config {
   int32 serverMaxHeaderBytes = 27;
   string sessionIDTable = 28;
   RangeConfig sessionIDLength = 29;
+
+  bool scDownlinkResume = 30;
+  int64 scMaxReplayBytes = 31;
+  string downlinkResumeKey = 32;
+  RangeConfig scMaxDownlinkSecs = 33;
 }

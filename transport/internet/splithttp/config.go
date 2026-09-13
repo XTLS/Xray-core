@@ -427,6 +427,81 @@ func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (session
 	return sessionId, seqStr
 }
 
+// The resume value follows the session placement, except for PlacementPath,
+// where sessionID and seq already consume the positional segments.
+func (c *Config) GetNormalizedDownlinkResumePlacement() string {
+	switch p := c.GetNormalizedSessionPlacement(); p {
+	case PlacementQuery, PlacementCookie:
+		return p
+	default:
+		return PlacementHeader
+	}
+}
+
+func (c *Config) GetNormalizedDownlinkResumeKey() string {
+	if c.DownlinkResumeKey != "" {
+		return c.DownlinkResumeKey
+	}
+	switch c.GetNormalizedDownlinkResumePlacement() {
+	case PlacementCookie, PlacementQuery:
+		return "x_offset"
+	default:
+		return "X-Offset"
+	}
+}
+
+// Retention only has to cover what a cut can lose, which for the idling
+// downlink this is meant for is close to nothing. A transfer running at full
+// rate outruns any window a server can afford per session, so it is not worth
+// sizing for.
+func (c *Config) GetNormalizedScMaxReplayBytes() int32 {
+	if c.ScMaxReplayBytes <= 0 {
+		return 256 << 10
+	}
+	return int32(c.ScMaxReplayBytes)
+}
+
+func (c *Config) GetNormalizedScMaxDownlinkSecs() *RangeConfig {
+	if c.ScMaxDownlinkSecs == nil || c.ScMaxDownlinkSecs.To == 0 {
+		return &RangeConfig{From: 0, To: 0}
+	}
+	return c.ScMaxDownlinkSecs
+}
+
+// ApplyDownlinkResumeToRequest carries how many downlink bytes the client has
+// received: a resume offset on stream-down, an ack on uplink requests.
+func (c *Config) ApplyDownlinkResumeToRequest(req *http.Request, value string) {
+	if value == "" {
+		return
+	}
+	key := c.GetNormalizedDownlinkResumeKey()
+	switch c.GetNormalizedDownlinkResumePlacement() {
+	case PlacementQuery:
+		q := req.URL.Query()
+		q.Set(key, value)
+		req.URL.RawQuery = q.Encode()
+	case PlacementCookie:
+		req.AddCookie(&http.Cookie{Name: key, Value: value})
+	default:
+		req.Header.Set(key, value)
+	}
+}
+
+func (c *Config) ExtractDownlinkResumeFromRequest(req *http.Request) string {
+	key := c.GetNormalizedDownlinkResumeKey()
+	switch c.GetNormalizedDownlinkResumePlacement() {
+	case PlacementQuery:
+		return req.URL.Query().Get(key)
+	case PlacementCookie:
+		if cookie, e := req.Cookie(key); e == nil {
+			return cookie.Value
+		}
+		return ""
+	default:
+		return req.Header.Get(key)
+	}
+}
+
 func (m *XmuxConfig) GetNormalizedMaxConcurrency() *RangeConfig {
 	if m.MaxConcurrency == nil {
 		return &RangeConfig{

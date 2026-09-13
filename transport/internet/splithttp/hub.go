@@ -51,6 +51,39 @@ type httpSession struct {
 	// after the client connects, this becomes "done" and the session lives as
 	// long as the GET request.
 	isFullyConnected *done.Instance
+
+	downlinkMu sync.Mutex
+	// downlink outlives individual stream-down requests when resume is enabled.
+	downlink *downlinkBuffer
+	// graceGen invalidates a reap armed by an earlier detach.
+	graceGen uint64
+}
+
+// Long enough to outlive a client that notices its stream was cut late: the
+// same window the session reaper already allows.
+const downlinkGraceDuration = 30 * time.Second
+
+func (h *requestHandler) armDownlinkGrace(sessionId string, s *httpSession) {
+	s.downlinkMu.Lock()
+	s.graceGen++
+	gen := s.graceGen
+	s.downlinkMu.Unlock()
+
+	time.AfterFunc(downlinkGraceDuration, func() {
+		s.downlinkMu.Lock()
+		stale := s.graceGen != gen
+		downlink := s.downlink
+		s.downlinkMu.Unlock()
+		if stale || (downlink != nil && downlink.Attached()) {
+			return
+		}
+		h.sessions.Delete(sessionId)
+		s.uploadQueue.Close()
+		if downlink != nil {
+			downlink.Close()
+			downlink.Release()
+		}
+	})
 }
 
 func (h *requestHandler) upsertSession(sessionId string) *httpSession {
@@ -181,6 +214,18 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 	var currentSession *httpSession
 	if sessionId != "" {
 		currentSession = h.upsertSession(sessionId)
+		if h.config.ScDownlinkResume {
+			if value := h.config.ExtractDownlinkResumeFromRequest(request); value != "" {
+				if received, err := strconv.ParseUint(value, 10, 64); err == nil {
+					currentSession.downlinkMu.Lock()
+					downlink := currentSession.downlink
+					currentSession.downlinkMu.Unlock()
+					if downlink != nil {
+						downlink.Ack(received)
+					}
+				}
+			}
+		}
 	}
 	scMaxEachPostBytes := int(h.ln.config.GetNormalizedScMaxEachPostBytes().To)
 	isUplinkRequest := false
@@ -347,7 +392,72 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" || sessionId == "" { // stream-down, stream-one
-		if sessionId != "" {
+		resumeEnabled := h.config.ScDownlinkResume && sessionId != ""
+		var resumeOffset uint64
+		isResume := false
+		if resumeEnabled {
+			if value := h.config.ExtractDownlinkResumeFromRequest(request); value != "" {
+				parsed, err := strconv.ParseUint(value, 10, 64)
+				if err != nil {
+					errors.LogInfoInner(context.Background(), err, "invalid downlink resume offset")
+					writer.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				resumeOffset = parsed
+				isResume = true
+			}
+		}
+
+		var downlink *downlinkBuffer
+		startTunnel, finished := false, false
+		if resumeEnabled {
+			currentSession.downlinkMu.Lock()
+			if currentSession.downlink == nil {
+				// A zero offset is indistinguishable from a first attachment.
+				if isResume && resumeOffset > 0 {
+					currentSession.downlinkMu.Unlock()
+					errors.LogInfo(context.Background(), "downlink resume requested for unknown session")
+					writer.WriteHeader(http.StatusGone)
+					return
+				}
+				currentSession.downlink = newDownlinkBuffer(h.config.GetNormalizedScMaxReplayBytes())
+				startTunnel = true
+			}
+			downlink = currentSession.downlink
+			currentSession.graceGen++
+			currentSession.downlinkMu.Unlock()
+
+			// Reject before committing to a 200 so the client stops retrying.
+			if !startTunnel {
+				if err := downlink.CanAttach(resumeOffset); err != nil {
+					errors.LogInfoInner(context.Background(), err, "rejecting downlink resume")
+					h.armDownlinkGrace(sessionId, currentSession)
+					writer.WriteHeader(http.StatusGone)
+					return
+				}
+				ended, sent := downlink.Finished()
+				// A stream-down request for a session that has already sent
+				// something, but carrying no offset, means a middlebox dropped
+				// it. Replaying from zero would corrupt the stream.
+				if !isResume && sent > 0 {
+					errors.LogInfo(context.Background(), "downlink resume offset missing from the request")
+					h.armDownlinkGrace(sessionId, currentSession)
+					writer.WriteHeader(http.StatusGone)
+					return
+				}
+				// The tunnel ended and the client has all of it: say so, instead
+				// of letting it mistake the ending for a cut stream.
+				if ended {
+					finished = true
+					if resumeOffset == sent {
+						h.armDownlinkGrace(sessionId, currentSession)
+						writer.WriteHeader(http.StatusNoContent)
+						return
+					}
+				}
+			}
+			currentSession.isFullyConnected.Close()
+		} else if sessionId != "" {
 			// after GET is done, the connection is finished. disable automatic
 			// session reaping, and handle it in defer
 			currentSession.isFullyConnected.Close()
@@ -360,6 +470,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		// Should be able to prevent overloading the cache, or stop CDNs from
 		// teeing the response stream into their cache, causing slowdowns.
 		writer.Header().Set("Cache-Control", "no-store")
+
+		// Echoed only when it actually arrived, so a path that drops it looks
+		// to the client exactly like a server without the feature.
+		if isResume {
+			writer.Header().Set(h.config.GetNormalizedDownlinkResumeKey(),
+				strconv.FormatUint(resumeOffset, 10))
+		}
 
 		if !h.config.NoSSEHeader {
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
@@ -378,6 +495,53 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		if la, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && la != nil {
 			localAddr = la
 		}
+		if resumeEnabled {
+			if !startTunnel {
+				errors.LogDebug(context.Background(), "XHTTP downlink reattached at offset ", resumeOffset)
+			}
+			if err := downlink.Attach(httpSC, resumeOffset); err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to attach stream-down request")
+				httpSC.Close()
+				// The regular reaper is already disarmed, so the session would
+				// otherwise be left behind.
+				h.armDownlinkGrace(sessionId, currentSession)
+				return
+			}
+			if startTunnel {
+				conn := splitConn{
+					writer:     downlink,
+					reader:     currentSession.uploadQueue,
+					remoteAddr: remoteAddr,
+					localAddr:  localAddr,
+					onClose: func() {
+						// The session outlives the tunnel so a client that
+						// reconnects after the last bytes can be told the
+						// downlink is complete instead of cut.
+						h.armDownlinkGrace(sessionId, currentSession)
+					},
+				}
+				h.ln.addConn(stat.Connection(&conn))
+			}
+
+			if finished {
+				downlink.Detach(httpSC)
+				httpSC.Close()
+				h.armDownlinkGrace(sessionId, currentSession)
+				return
+			}
+
+			// "A ResponseWriter may not be used after [Handler.ServeHTTP] has returned."
+			select {
+			case <-request.Context().Done():
+			case <-httpSC.Wait():
+			}
+
+			if downlink.Detach(httpSC) {
+				h.armDownlinkGrace(sessionId, currentSession)
+			}
+			return
+		}
+
 		conn := splitConn{
 			writer:     httpSC,
 			reader:     httpSC,

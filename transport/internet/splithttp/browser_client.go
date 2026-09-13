@@ -42,7 +42,7 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, sessio
 	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
 }
 
-func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {
+func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, downlinkAck string, payload buf.MultiBuffer) error {
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
 	request, err := http.NewRequest(method, url, nil)
 	if err != nil {
