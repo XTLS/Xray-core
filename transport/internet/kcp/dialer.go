@@ -49,13 +49,9 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 	dest.Network = net.Network_UDP
 	errors.LogInfo(ctx, "dialing mKCP to ", dest)
 
-	pktConn, err := streamSettings.FinalMask.DialUDP(ctx, dest)
+	conn, err := streamSettings.FinalMask.DialUDP(ctx, dest)
 	if err != nil {
 		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
-	}
-	conn := &internet.PacketConnWrapper{
-		PacketConn: pktConn,
-		Dest:       common.Must2(net.ResolveUDPAddr("udp", dest.NetAddr())),
 	}
 
 	kcpSettings := streamSettings.ProtocolSettings.(*Config)

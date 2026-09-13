@@ -26,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.zx2c4.com/wireguard/device"
 )
 
@@ -291,10 +292,11 @@ func (h *Handler) init(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		conn, err := h.streamSettings.FinalMask.DialUDP(ctx, dest)
+		udpConn, err := h.streamSettings.FinalMask.DialUDP(ctx, dest)
 		if err != nil {
 			return nil, err
 		}
+		conn := udpConn.(*finalmask.PacketConnWrapper).PacketConn
 		if h.uplinkCounter != nil || h.downlinkCounter != nil {
 			conn = &PacketCounterConnection{
 				PacketConn:   conn,

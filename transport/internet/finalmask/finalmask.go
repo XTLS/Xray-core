@@ -30,11 +30,11 @@ type FinalMask struct {
 	udpMasks     []UDPMask
 	dialTCP      func(context.Context, net.Destination) (net.Conn, error)
 	listen       func(context.Context, net.Addr) (net.Listener, error)
-	dialUDP      func(context.Context, net.Destination) (net.PacketConn, error)
+	dialUDP      func(context.Context, net.Destination) (net.PacketConn, net.Addr, error)
 	listenPacket func(context.Context, net.Addr) (net.PacketConn, error)
 }
 
-func NewFinalMask(tcpMasks []TCPMask, udpMasks []UDPMask, dialTCP func(context.Context, net.Destination) (net.Conn, error), listen func(context.Context, net.Addr) (net.Listener, error), dialUDP func(context.Context, net.Destination) (net.PacketConn, error), listenPacket func(context.Context, net.Addr) (net.PacketConn, error)) *FinalMask {
+func NewFinalMask(tcpMasks []TCPMask, udpMasks []UDPMask, dialTCP func(context.Context, net.Destination) (net.Conn, error), listen func(context.Context, net.Addr) (net.Listener, error), dialUDP func(context.Context, net.Destination) (net.PacketConn, net.Addr, error), listenPacket func(context.Context, net.Addr) (net.PacketConn, error)) *FinalMask {
 	slices.Reverse(tcpMasks)
 	slices.Reverse(udpMasks)
 	return &FinalMask{
@@ -71,7 +71,8 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 			return fm.dialTCP(ctx, dest)
 		},
 		DialUDP: func(dest net.Destination) (net.PacketConn, error) {
-			return fm.dialUDP(ctx, dest)
+			conn, _, err := fm.dialUDP(ctx, dest)
+			return conn, err
 		},
 	}
 	for i := range fm.tcpMasks {
@@ -104,9 +105,13 @@ func (fm *FinalMask) Listen(ctx context.Context, addr net.Addr) (net.Listener, e
 	return &TCPListener{Listener: listener, tcpMasks: fm.tcpMasks}, nil
 }
 
-func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.PacketConn, error) {
+func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Conn, error) {
 	if len(fm.udpMasks) == 0 {
-		return fm.dialUDP(ctx, dest)
+		conn, addr, err := fm.dialUDP(ctx, dest)
+		if err != nil {
+			return nil, err
+		}
+		return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, nil
 	}
 	for i := range fm.udpMasks {
 		if i > 0 {
@@ -116,9 +121,10 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Pac
 		}
 	}
 	var conn net.PacketConn
+	var addr net.Addr
 	var err error
 	if _, ok := fm.udpMasks[0].(interface{ HandleDial() }); !ok {
-		conn, err = fm.dialUDP(ctx, dest)
+		conn, addr, err = fm.dialUDP(ctx, dest)
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +134,8 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Pac
 			return fm.dialTCP(ctx, dest)
 		},
 		DialUDP: func(dest net.Destination) (net.PacketConn, error) {
-			return fm.dialUDP(ctx, dest)
+			conn, _, err := fm.dialUDP(ctx, dest)
+			return conn, err
 		},
 	}
 	var sizes []int
@@ -162,7 +169,10 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Pac
 		sizes = nil
 		conns = nil
 	}
-	return conn, nil
+	if addr == nil {
+		addr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
+	}
+	return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, nil
 }
 
 func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
@@ -217,6 +227,24 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 const (
 	UDPSize = 4096
 )
+
+type PacketConnWrapper struct {
+	net.PacketConn
+	udpAddr net.Addr
+}
+
+func (c *PacketConnWrapper) RemoteAddr() net.Addr {
+	return c.udpAddr
+}
+
+func (c *PacketConnWrapper) Read(b []byte) (n int, err error) {
+	n, _, err = c.PacketConn.ReadFrom(b)
+	return
+}
+
+func (c *PacketConnWrapper) Write(b []byte) (n int, err error) {
+	return c.PacketConn.WriteTo(b, c.udpAddr)
+}
 
 type headerManagerConn struct {
 	net.PacketConn
