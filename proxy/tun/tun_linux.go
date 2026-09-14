@@ -6,6 +6,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"os/exec"
 	"strconv"
 	"sync"
 
@@ -30,6 +31,120 @@ type LinuxTun struct {
 	systemRoutes       []netlink.Route
 	routeMonitorStop   chan struct{}
 	routeMonitorOnce   sync.Once
+
+	systemDNSSet bool
+}
+
+// resolvectlRunner runs a resolvectl command. Overridable for tests.
+var resolvectlRunner = func(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).CombinedOutput()
+}
+
+// systemDNSAddress derives the address handed to systemd-resolved as this
+// interface's DNS server. It is the first IPv4 gateway address incremented by
+// one, which the OS routes into the TUN and Xray answers internally. Returning
+// the configured public resolvers instead would leave the system querying them
+// directly over the physical link, defeating the point of the TUN.
+func systemDNSAddress(gateway []string) (string, bool) {
+	for _, address := range gateway {
+		prefix, err := netip.ParsePrefix(address)
+		if err != nil {
+			continue
+		}
+		addr := prefix.Addr()
+		if !addr.Is4() {
+			continue
+		}
+		return addr.Next().String(), true
+	}
+	return "", false
+}
+
+func buildResolvectlArgs(action, iface string, extra ...string) []string {
+	args := make([]string, 0, 2+len(extra))
+	args = append(args, action, iface)
+	args = append(args, extra...)
+	return args
+}
+
+func runResolvectl(action, iface string, extra ...string) error {
+	args := buildResolvectlArgs(action, iface, extra...)
+	if _, err := resolvectlRunner("resolvectl", args...); err != nil {
+		return errors.New("resolvectl ", action, " failed").Base(err)
+	}
+	return nil
+}
+
+// ifaceName returns the TUN interface name, or empty when the link is not
+// available. Callers must treat empty as "nothing to configure".
+func (t *LinuxTun) ifaceName() string {
+	if t.tunLink == nil {
+		return ""
+	}
+	attrs := t.tunLink.Attrs()
+	if attrs == nil {
+		return ""
+	}
+	return attrs.Name
+}
+
+// setSystemDNS points systemd-resolved at the TUN interface, so name lookups
+// resolve through Xray instead of leaking to the physical link. Failures are
+// non-fatal: a missing resolvectl or a non-systemd host must not stop the TUN
+// from coming up.
+func (t *LinuxTun) setSystemDNS() error {
+	if t.systemDNSSet {
+		return nil
+	}
+
+	address, ok := systemDNSAddress(t.options.Gateway)
+	if !ok {
+		errors.LogInfo(context.Background(), "[tun] no IPv4 gateway, skipping system DNS configuration")
+		return nil
+	}
+
+	iface := t.ifaceName()
+	if iface == "" {
+		errors.LogInfo(context.Background(), "[tun] interface not available, skipping system DNS configuration")
+		return nil
+	}
+
+	if _, err := resolvectlRunner("resolvectl", "dns", iface, address); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to set system DNS")
+		return nil
+	}
+
+	if err := runResolvectl("domain", iface, "~."); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to set DNS domain")
+	}
+
+	if err := runResolvectl("default-route", iface, "true"); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to set DNS default route")
+	}
+
+	t.systemDNSSet = true
+	errors.LogInfo(context.Background(), "[tun] system DNS set to ", address, " on ", iface)
+	return nil
+}
+
+// unsetSystemDNS hands DNS back to the OS. Only meaningful when setSystemDNS
+// actually took over, hence the flag.
+func (t *LinuxTun) unsetSystemDNS() error {
+	if !t.systemDNSSet {
+		return nil
+	}
+
+	iface := t.ifaceName()
+	if iface == "" {
+		t.systemDNSSet = false
+		return nil
+	}
+	if err := runResolvectl("revert", iface); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to revert system DNS")
+	}
+
+	t.systemDNSSet = false
+	return nil
 }
 
 // LinuxTun implements Tun
@@ -184,6 +299,13 @@ func (t *LinuxTun) Start() error {
 		return err
 	}
 
+	if err := t.setSystemDNS(); err != nil {
+		_ = t.unsetSystemRoutes()
+		_ = t.unsetInterfaceAddresses()
+		_ = netlink.LinkSetDown(t.tunLink)
+		return err
+	}
+
 	if updater != nil {
 		t.routeMonitorStop = make(chan struct{})
 		go t.monitorRouteChanges()
@@ -200,6 +322,7 @@ func (t *LinuxTun) Close() error {
 		}
 	})
 
+	_ = t.unsetSystemDNS()
 	_ = t.unsetSystemRoutes()
 	_ = t.unsetInterfaceAddresses()
 
