@@ -6,9 +6,7 @@ import (
 	goerrors "errors"
 	"io"
 	mrand "math/rand"
-	gonet "net"
 	"net/netip"
-	"reflect"
 	"sync"
 	"time"
 
@@ -16,8 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
@@ -34,16 +30,14 @@ type packet struct {
 }
 
 type udpHopConn struct {
-	conn       net.PacketConn
-	sockopt    *internet.SocketConfig
-	local      bool
-	remote     bool
-	remoteOnce bool
+	dialer *finalmask.Dialer
+	local  bool
+	remote bool
 
 	intervalMin int64
 	intervalMax int64
-	remotePorts []uint32
 	remoteIPs   []netip.Prefix
+	remotePorts []uint32
 
 	deadline      time.Time
 	readDeadline  time.Time
@@ -58,7 +52,7 @@ type udpHopConn struct {
 	mu      sync.Mutex
 }
 
-func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewUDPHopConn(c *Config, dest *net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	if c.IntervalMin < 5 || c.IntervalMax < 5 {
 		return nil, errors.New("invalid interval")
 	}
@@ -66,22 +60,40 @@ func NewUDPHopConn(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	for _, ip := range c.RemoteIPs {
 		remoteIPs = append(remoteIPs, netip.MustParsePrefix(ip))
 	}
-	conn := &udpHopConn{
-		conn:       raw,
-		sockopt:    c.Sockopt,
-		local:      c.Local,
-		remote:     c.Remote,
-		remoteOnce: c.RemoteOnce,
+	remotePorts := c.RemotePorts
+	if c.Remote || c.RemoteOnce {
+		if len(remoteIPs) > 0 {
+			dest.Address = net.IPAddress(randPrefix(remoteIPs[mrand.Intn(len(remoteIPs))]))
+		}
+		if len(remotePorts) > 0 {
+			dest.Port = net.Port(remotePorts[mrand.Intn(len(remotePorts))])
+		}
+	}
+	conn, err := dialer.DialUDP(*dest)
+	if err != nil {
+		return nil, err
+	}
+	cur := conn.(*finalmask.PacketConnWrapper).PacketConn
+	addr := conn.RemoteAddr().(*net.UDPAddr)
+	client := &udpHopConn{
+		dialer: dialer,
+		local:  c.Local,
+		remote: c.Remote,
 
 		intervalMin: c.IntervalMin,
 		intervalMax: c.IntervalMax,
-		remotePorts: c.RemotePorts,
 		remoteIPs:   remoteIPs,
+		remotePorts: remotePorts,
 
+		cur:     cur,
+		addr:    addr,
 		readCh:  make(chan packet),
 		closeCh: make(chan struct{}),
 	}
-	return conn, nil
+	go client.run()
+	client.wg.Add(1)
+	go client.recv(client.cur)
+	return client, nil
 }
 
 func (c *udpHopConn) closed() bool {
@@ -93,61 +105,63 @@ func (c *udpHopConn) closed() bool {
 	}
 }
 
-func (c *udpHopConn) hop(addr *net.UDPAddr) {
+func (c *udpHopConn) run() {
+	ticker := time.NewTicker(time.Second * time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.closeCh:
+			return
+		case <-ticker.C:
+			ticker.Reset(time.Second * time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
+			c.hop()
+		}
+	}
+}
+
+func (c *udpHopConn) hop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed() {
 		return
 	}
-	newAddr := &net.UDPAddr{IP: addr.IP, Port: addr.Port}
-	newConn := c.conn
-	if c.remote || c.remoteOnce && c.addr == nil {
-		if len(c.remotePorts) > 0 {
-			newAddr.Port = int(c.remotePorts[mrand.Intn(len(c.remotePorts))])
-		}
+	if c.remote {
 		if len(c.remoteIPs) > 0 {
-			newAddr.IP = randPrefix(c.remoteIPs[mrand.Intn(len(c.remoteIPs))])
+			c.addr.IP = randPrefix(c.remoteIPs[mrand.Intn(len(c.remoteIPs))])
+		}
+		if len(c.remotePorts) > 0 {
+			c.addr.Port = int(c.remotePorts[mrand.Intn(len(c.remotePorts))])
 		}
 	}
 	if c.local {
-		raw, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(newAddr.IP), net.Port(newAddr.Port)), c.sockopt)
+		conn, err := c.dialer.DialUDP(net.UDPDestination(net.IPAddress(c.addr.IP), net.Port(c.addr.Port)))
 		if err != nil {
 			errors.LogErrorInner(context.Background(), err, "hop err")
 			return
 		}
-		switch c := raw.(type) {
-		case *internet.PacketConnWrapper:
-			newConn = c.PacketConn
-		case *cnc.Connection:
-			newConn = &internet.FakePacketConn{Conn: c}
-		default:
-			panic(reflect.TypeOf(c))
-		}
-		newConn.SetDeadline(c.deadline)
-		newConn.SetReadDeadline(c.readDeadline)
-		newConn.SetWriteDeadline(c.writeDeadline)
+		conn.SetDeadline(c.deadline)
+		conn.SetReadDeadline(c.readDeadline)
+		conn.SetWriteDeadline(c.writeDeadline)
 		if c.pre != nil {
 			_ = c.pre.Close()
 		}
 		c.pre = c.cur
+		c.cur = conn.(*finalmask.PacketConnWrapper).PacketConn
 		c.wg.Add(1)
-		go c.recv(newConn)
+		go c.recv(c.cur)
 	}
-	c.addr = newAddr
-	c.cur = newConn
 }
 
 func (c *udpHopConn) recv(conn net.PacketConn) {
 	defer c.wg.Done()
 
 	for {
-		if c.closed() {
-			return
-		}
 		p := pool.Get().([]byte)
 		n, addr, err := conn.ReadFrom(p)
 		if err != nil {
 			pool.Put(p[:cap(p)])
-			if goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) || goerrors.Is(err, gonet.ErrClosed) {
-				break
+			if c.closed() {
+				return
 			}
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
@@ -156,30 +170,15 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 				case <-c.closeCh:
 					return
 				}
+				continue
 			}
 			errors.LogErrorInner(context.Background(), err, "recv err")
-			continue
+			return
 		}
 		select {
 		case c.readCh <- packet{p: p[:n], addr: addr}:
 		case <-c.closeCh:
 			pool.Put(p[:cap(p)])
-			return
-		}
-	}
-}
-
-func (c *udpHopConn) hopLoop() {
-	ticker := time.NewTicker(time.Second * time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			ticker.Reset(time.Second * time.Duration(crypto.RandBetween(c.intervalMin, c.intervalMax+1)))
-			c.mu.Lock()
-			c.hop(c.addr)
-			c.mu.Unlock()
-		case <-c.closeCh:
 			return
 		}
 	}
@@ -194,25 +193,16 @@ func (c *udpHopConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		}
 		return n, packet.addr, packet.err
 	}
-	return 0, nil, io.EOF
+	return 0, nil, io.ErrClosedPipe
 }
 
 func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.cur == nil {
-		c.hop(addr.(*net.UDPAddr))
-		if c.cur == nil {
-			return 0, nil
-		}
-		go c.hopLoop()
-	}
-
 	_, err = c.cur.WriteTo(p, c.addr)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "send err")
-		return 0, err
 	}
 	return len(p), nil
 }
@@ -230,12 +220,11 @@ func (c *udpHopConn) Close() error {
 	if c.cur != nil {
 		_ = c.cur.Close()
 	}
-	_ = c.conn.Close()
 	c.wg.Wait()
 	select {
-	case p := <-c.readCh:
-		if p.p != nil {
-			pool.Put(p.p[:cap(p.p)])
+	case packet := <-c.readCh:
+		if packet.p != nil {
+			pool.Put(packet.p[:cap(packet.p)])
 		}
 	default:
 	}
@@ -244,7 +233,7 @@ func (c *udpHopConn) Close() error {
 }
 
 func (c *udpHopConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
+	return c.cur.LocalAddr()
 }
 
 func (c *udpHopConn) SetDeadline(t time.Time) error {
