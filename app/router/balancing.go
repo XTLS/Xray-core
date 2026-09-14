@@ -165,3 +165,11 @@ func (r *Router) GetOverrideTarget(tag string) (string, error) {
 	}
 	return "", errors.New("cannot find tag")
 }
+
+// PickOutbound implements routing.BalancerPicker
+func (r *Router) GetBalancerOutboundTag(balancerTag string) (string, error) {
+	if b, ok := (*r.balancers.Load())[balancerTag]; ok {
+		return b.PickOutbound()
+	}
+	return "", errors.New("cannot find tag")
+}

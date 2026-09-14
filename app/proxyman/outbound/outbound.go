@@ -2,33 +2,43 @@ package outbound
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
-	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/features/routing"
 )
 
 // Manager is to manage all outbound handlers.
 type Manager struct {
-	access           sync.RWMutex
-	defaultHandler   outbound.Handler
-	taggedHandler    map[string]outbound.Handler
-	untaggedHandlers []outbound.Handler
-	running          bool
-	tagsCache        *sync.Map
+	defaultHandler   atomic.Pointer[outbound.Handler]
+	taggedHandler    *utils.TypedSyncMap[string, outbound.Handler]
+	untaggedHandlers atomic.Pointer[[]outbound.Handler]
+	running          atomic.Bool
+	tagsCache        *utils.TypedSyncMap[string, []string]
+	balancerPicker   routing.BalancerPicker
 }
 
 // New creates a new Manager.
 func New(ctx context.Context, config *proxyman.OutboundConfig) (*Manager, error) {
 	m := &Manager{
-		taggedHandler: make(map[string]outbound.Handler),
-		tagsCache:     &sync.Map{},
+		taggedHandler: utils.NewTypedSyncMap[string, outbound.Handler](),
 	}
+	m.tagsCache = utils.NewTypedSyncMap[string, []string]()
+	empty := make([]outbound.Handler, 0)
+	m.untaggedHandlers.Store(&empty)
+	_ = core.OptionalFeatures(ctx, func(router routing.Router) {
+		if picker, ok := router.(routing.BalancerPicker); ok {
+			m.balancerPicker = picker
+		}
+	})
 	return m, nil
 }
 
@@ -39,20 +49,25 @@ func (m *Manager) Type() interface{} {
 
 // Start implements core.Feature
 func (m *Manager) Start() error {
-	m.access.Lock()
-	defer m.access.Unlock()
+	m.running.Store(true)
 
-	m.running = true
-
-	for _, h := range m.taggedHandler {
+	var startErr error
+	m.taggedHandler.Range(func(_ string, h outbound.Handler) bool {
 		if err := h.Start(); err != nil {
-			return err
+			startErr = err
+			return false
 		}
+		return true
+	})
+	if startErr != nil {
+		return startErr
 	}
 
-	for _, h := range m.untaggedHandlers {
-		if err := h.Start(); err != nil {
-			return err
+	if untagged := m.untaggedHandlers.Load(); untagged != nil {
+		for _, h := range *untagged {
+			if err := h.Start(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -61,18 +76,18 @@ func (m *Manager) Start() error {
 
 // Close implements core.Feature
 func (m *Manager) Close() error {
-	m.access.Lock()
-	defer m.access.Unlock()
-
-	m.running = false
+	m.running.Store(false)
 
 	var errs []error
-	for _, h := range m.taggedHandler {
+	m.taggedHandler.Range(func(_ string, h outbound.Handler) bool {
 		errs = append(errs, h.Close())
-	}
+		return true
+	})
 
-	for _, h := range m.untaggedHandlers {
-		errs = append(errs, h.Close())
+	if untagged := m.untaggedHandlers.Load(); untagged != nil {
+		for _, h := range *untagged {
+			errs = append(errs, h.Close())
+		}
 	}
 
 	return errors.Combine(errs...)
@@ -80,47 +95,70 @@ func (m *Manager) Close() error {
 
 // GetDefaultHandler implements outbound.Manager.
 func (m *Manager) GetDefaultHandler() outbound.Handler {
-	m.access.RLock()
-	defer m.access.RUnlock()
-
-	if m.defaultHandler == nil {
-		return nil
-	}
-	return m.defaultHandler
-}
-
-// GetHandler implements outbound.Manager.
-func (m *Manager) GetHandler(tag string) outbound.Handler {
-	m.access.RLock()
-	defer m.access.RUnlock()
-	if handler, found := m.taggedHandler[tag]; found {
-		return handler
+	if h := m.defaultHandler.Load(); h != nil {
+		return *h
 	}
 	return nil
 }
 
+// GetHandler implements outbound.Manager.
+func (m *Manager) GetHandler(tag string) outbound.Handler {
+	if handler, found := m.taggedHandler.Load(tag); found {
+		return handler
+	}
+	if strings.HasPrefix(tag, "balancer:") && m.balancerPicker != nil {
+		targetTag := m.tryGetOutboundTagWithBalancer(tag, nil)
+		if targetTag == "" {
+			return nil
+		}
+		if handler, found := m.taggedHandler.Load(targetTag); found {
+			return handler
+		}
+	}
+	return nil
+}
+
+func (m *Manager) tryGetOutboundTagWithBalancer(tag string, parents []string) string {
+	balancerTag := tag[len("balancer:"):]
+	targetTag, err := m.balancerPicker.GetBalancerOutboundTag(balancerTag)
+	if err != nil {
+		errors.LogWarning(context.Background(), "failed to pick outbound from balancer [", balancerTag, "]: ", err)
+		return ""
+	}
+	if strings.HasPrefix(targetTag, "balancer:") {
+		if slices.Contains(parents, balancerTag) {
+			errors.LogWarning(context.Background(), "detected balancer loop for [", balancerTag, "]")
+			return ""
+		}
+		return m.tryGetOutboundTagWithBalancer(targetTag, append(parents, balancerTag))
+	}
+	return targetTag
+}
+
 // AddHandler implements outbound.Manager.
 func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) error {
-	m.access.Lock()
-	defer m.access.Unlock()
+	m.tagsCache.Clear()
 
-	m.tagsCache = &sync.Map{}
-
-	if m.defaultHandler == nil {
-		m.defaultHandler = handler
-	}
+	m.defaultHandler.CompareAndSwap(nil, &handler)
 
 	tag := handler.Tag()
 	if len(tag) > 0 {
-		if _, found := m.taggedHandler[tag]; found {
+		if _, found := m.taggedHandler.LoadOrStore(tag, handler); found {
 			return errors.New("existing tag found: " + tag)
 		}
-		m.taggedHandler[tag] = handler
 	} else {
-		m.untaggedHandlers = append(m.untaggedHandlers, handler)
+		for {
+			oldUntagged := m.untaggedHandlers.Load()
+			newUntagged := make([]outbound.Handler, 0, len(*oldUntagged)+1)
+			newUntagged = append(newUntagged, *oldUntagged...)
+			newUntagged = append(newUntagged, handler)
+			if m.untaggedHandlers.CompareAndSwap(oldUntagged, &newUntagged) {
+				break
+			}
+		}
 	}
 
-	if m.running {
+	if m.running.Load() {
 		return handler.Start()
 	}
 
@@ -132,14 +170,12 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 	if tag == "" {
 		return common.ErrNoClue
 	}
-	m.access.Lock()
-	defer m.access.Unlock()
 
-	m.tagsCache = &sync.Map{}
+	m.tagsCache.Clear()
 
-	delete(m.taggedHandler, tag)
-	if m.defaultHandler != nil && m.defaultHandler.Tag() == tag {
-		m.defaultHandler = nil
+	m.taggedHandler.Delete(tag)
+	if cur := m.defaultHandler.Load(); cur != nil && (*cur).Tag() == tag {
+		m.defaultHandler.CompareAndSwap(cur, nil)
 	}
 
 	return nil
@@ -147,15 +183,15 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 
 // ListHandlers implements outbound.Manager.
 func (m *Manager) ListHandlers(ctx context.Context) []outbound.Handler {
-	m.access.RLock()
-	defer m.access.RUnlock()
-
-	response := make([]outbound.Handler, len(m.untaggedHandlers))
-	copy(response, m.untaggedHandlers)
-
-	for _, v := range m.taggedHandler {
-		response = append(response, v)
+	var response []outbound.Handler
+	if untagged := m.untaggedHandlers.Load(); untagged != nil {
+		response = slices.Clone(*untagged)
 	}
+
+	m.taggedHandler.Range(func(_ string, v outbound.Handler) bool {
+		response = append(response, v)
+		return true
+	})
 
 	return response
 }
@@ -163,23 +199,21 @@ func (m *Manager) ListHandlers(ctx context.Context) []outbound.Handler {
 // Select implements outbound.HandlerSelector.
 func (m *Manager) Select(selectors []string) []string {
 	key := strings.Join(selectors, ",")
-	if cache, ok := m.tagsCache.Load(key); ok {
-		return cache.([]string)
+	if result, ok := m.tagsCache.Load(key); ok {
+		return result
 	}
-
-	m.access.RLock()
-	defer m.access.RUnlock()
 
 	tags := make([]string, 0, len(selectors))
 
-	for tag := range m.taggedHandler {
+	m.taggedHandler.Range(func(tag string, _ outbound.Handler) bool {
 		for _, selector := range selectors {
 			if strings.HasPrefix(tag, selector) {
 				tags = append(tags, tag)
 				break
 			}
 		}
-	}
+		return true
+	})
 
 	sort.Strings(tags)
 	m.tagsCache.Store(key, tags)
