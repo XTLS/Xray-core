@@ -279,15 +279,14 @@ func (h *Handler) init(ctx context.Context) error {
 				panic(reflect.TypeOf(c))
 			}
 		}
-		conn := udpConn.(*finalmask.PacketConnWrapper).PacketConn
 		if h.uplinkCounter != nil || h.downlinkCounter != nil {
-			conn = &PacketCounterConnection{
-				PacketConn:   conn,
+			pktConn = &PacketCounterConnection{
+				PacketConn:   pktConn,
 				ReadCounter:  h.downlinkCounter,
 				WriteCounter: h.uplinkCounter,
 			}
 		}
-		return conn, nil
+		return pktConn, nil
 	}
 	bind := &bind{}
 	logger := &device.Logger{
