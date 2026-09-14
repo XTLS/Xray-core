@@ -13,7 +13,7 @@ func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination
 	if dest.Address.Family().IsDomain() && len(c.IPs) == 0 {
 		return nil, errors.New("empty ip addresses")
 	}
-	return NewConnClient(c, conn)
+	return NewConnClient(c, dest)
 }
 
 func (c *Config) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
