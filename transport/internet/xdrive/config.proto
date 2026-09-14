@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package xray.transport.internet.xdrive;
+option go_package = "github.com/xtls/xray-core/transport/internet/xdrive";
+
+message Config {
+  string remote_folder = 1;
+  string service = 2;
+  repeated string secrets = 3;
+  uint32 segment_bytes = 4;
+  uint32 flush_interval_ms = 5;
+  uint32 poll_interval_ms = 6;
+  uint32 max_poll_interval_ms = 7;
+  uint32 session_ttl_seconds = 8;
+  uint32 concurrency = 9;
+  uint32 eager_window_ms = 10;
+  uint32 hole_timeout_ms = 11;
+}
