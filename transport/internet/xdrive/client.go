@@ -42,30 +42,32 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.
 	overHTTP2 := allowsHTTP2(tlsConfig, realityConfig)
 
 	dial := func(ctx context.Context, addr string) (net.Conn, net.Destination, error) {
-		dest := net.Destination{}
-		if fronting != nil {
-			dest = *fronting
-		} else {
-			parsed, err := net.ParseDestination("tcp:" + addr)
-			if err != nil {
-				return nil, dest, errors.New("bad address: ", addr).Base(err)
-			}
-			dest = parsed
+		host, err := net.ParseDestination("tcp:" + addr)
+		if err != nil {
+			return nil, host, errors.New("bad address: ", addr).Base(err)
 		}
 
-		conn, err := internet.DialSystem(ctx, dest, sockopt)
+		target := host
+		if fronting != nil {
+			target.Address = fronting.Address
+			if fronting.Port != 0 {
+				target.Port = fronting.Port
+			}
+		}
+
+		conn, err := internet.DialSystem(ctx, target, sockopt)
 		if err != nil {
-			return nil, dest, err
+			return nil, host, err
 		}
 		if streamSettings != nil && streamSettings.TcpmaskManager != nil {
 			masked, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
 			if err != nil {
 				conn.Close()
-				return nil, dest, errors.New("mask err").Base(err)
+				return nil, host, errors.New("mask err").Base(err)
 			}
 			conn = masked
 		}
-		return conn, dest, nil
+		return conn, host, nil
 	}
 
 	dialPlain := func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -74,18 +76,18 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.
 	}
 
 	dialTLS := func(ctx context.Context, addr string) (net.Conn, error) {
-		conn, dest, err := dial(ctx, addr)
+		conn, host, err := dial(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
 
 		if realityConfig != nil {
-			return reality.UClient(conn, realityConfig, ctx, dest)
+			return reality.UClient(conn, realityConfig, ctx, host)
 		}
 
-		gotlsConfig := &gotls.Config{ServerName: dest.Address.String()}
+		gotlsConfig := &gotls.Config{ServerName: host.Address.String()}
 		if tlsConfig != nil {
-			gotlsConfig = tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+			gotlsConfig = tlsConfig.GetTLSConfig(tls.WithDestination(host))
 		}
 		if len(gotlsConfig.NextProtos) != 1 {
 			if overHTTP2 {
