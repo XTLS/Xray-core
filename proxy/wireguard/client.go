@@ -5,7 +5,7 @@ import (
 	"fmt"
 	gonet "net"
 	"net/netip"
-	reflect "reflect"
+	"reflect"
 	"strings"
 	"sync"
 	"time"

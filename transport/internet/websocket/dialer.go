@@ -48,9 +48,15 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	dialer := &websocket.Dialer{
 		NetDial: func(network, addr string) (net.Conn, error) {
-			conn, err := streamSettings.FinalMask.DialTCP(ctx, dest)
+			var conn net.Conn
+			var err error
+			if streamSettings.FinalMask != nil {
+				conn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
+			} else {
+				conn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+			}
 			if err != nil {
-				return nil, err
+				return nil, errors.New("failed to dial to dest").Base(err)
 			}
 			return conn, err
 		},
