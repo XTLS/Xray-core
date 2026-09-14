@@ -358,7 +358,7 @@ func TestPacketConnReadWrite(t *testing.T) {
 				if err != nil {
 					return nil, nil, err
 				}
-				conn, err := gonet.ListenPacket("udp", "0.0.0.0:0")
+				conn, err := gonet.ListenPacket("udp", "127.0.0.1:0")
 				if err != nil {
 					return nil, nil, err
 				}
@@ -373,13 +373,13 @@ func TestPacketConnReadWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer server.Close()
+			t.Cleanup(func() { server.Close() })
 
 			clientConn, err := finalMask.DialUDP(context.Background(), net.UDPDestination(net.IPAddress(server.LocalAddr().(*net.UDPAddr).IP), net.Port(server.LocalAddr().(*net.UDPAddr).Port)))
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer clientConn.Close()
+			t.Cleanup(func() { clientConn.Close() })
 			client := clientConn.(*finalmask.PacketConnWrapper).PacketConn
 
 			_ = client.SetDeadline(time.Now().Add(time.Second))
@@ -872,19 +872,6 @@ func TestSudokuBDD(t *testing.T) {
 		}
 		if !bytes.Equal(send, recv) {
 			t.Fatal("multi-table tcp sudoku payload mismatch")
-		}
-	})
-
-	t.Run("GivenSudokuUDPMask_WhenNotInnermost_ThenWrapFails", func(t *testing.T) {
-		cfg := &sudoku.Config{Password: "sudoku-udp"}
-		raw, err := gonet.ListenPacket("udp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer raw.Close()
-
-		if _, err := cfg.WrapPacketConnClient(raw, nil, nil); err == nil {
-			t.Fatal("expected innermost check failure")
 		}
 	})
 

@@ -109,19 +109,19 @@ func TestConnReadWrite(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer listener.Close()
+			t.Cleanup(func() { listener.Close() })
 
 			client, err := finalMask.DialTCP(context.Background(), net.TCPDestination(net.IPAddress(listener.Addr().(*net.TCPAddr).IP), net.Port(listener.Addr().(*net.TCPAddr).Port)))
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer client.Close()
+			t.Cleanup(func() { client.Close() })
 
 			server, err := listener.Accept()
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer server.Close()
+			t.Cleanup(func() { server.Close() })
 
 			_ = client.SetDeadline(time.Now().Add(time.Second))
 			_ = server.SetDeadline(time.Now().Add(time.Second))
