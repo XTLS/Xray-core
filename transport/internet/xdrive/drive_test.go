@@ -36,6 +36,7 @@ type fakeDrive struct {
 	failStatus map[string]int
 	failBody   map[string]string
 	tokens     int
+	hosts      map[string]bool
 }
 
 func newFakeDrive(t *testing.T) *fakeDrive {
@@ -46,12 +47,24 @@ func newFakeDrive(t *testing.T) *fakeDrive {
 		failOnce:   make(map[string]bool),
 		failStatus: make(map[string]int),
 		failBody:   make(map[string]string),
+		hosts:      make(map[string]bool),
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/token", drive.handleToken)
-	mux.HandleFunc("/upload", drive.handleUpload)
-	mux.HandleFunc("/files", drive.handleFiles)
-	mux.HandleFunc("/files/", drive.handleFile)
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	record := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			drive.mu.Lock()
+			drive.hosts[r.Host] = true
+			drive.mu.Unlock()
+			next(w, r)
+		}
+	}
+	mux.HandleFunc("/token", record(drive.handleToken))
+	mux.HandleFunc("/upload", record(drive.handleUpload))
+	mux.HandleFunc("/files", record(drive.handleFiles))
+	mux.HandleFunc("/files/", record(drive.handleFile))
 	drive.server = httptest.NewServer(mux)
 
 	resetSharedStorage()
@@ -193,7 +206,8 @@ func (d *fakeDrive) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 		if match {
 			result.Files = append(result.Files, entry{
-				ID: file.id, Name: file.name, Description: file.description})
+				ID: file.id, Name: file.name, Description: file.description,
+			})
 		}
 	}
 	d.mu.Unlock()
@@ -257,6 +271,16 @@ func (d *fakeDrive) failNext(kind string) {
 	d.mu.Lock()
 	d.failOnce[kind] = true
 	d.mu.Unlock()
+}
+
+func (d *fakeDrive) seenHosts() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]string, 0, len(d.hosts))
+	for h := range d.hosts {
+		out = append(out, h)
+	}
+	return out
 }
 
 func (d *fakeDrive) count() int {
@@ -656,5 +680,11 @@ func TestDriveFronting(t *testing.T) {
 	}
 	if drive.count() != 1 {
 		t.Fatalf("fake drive holds %d files, want 1", drive.count())
+	}
+
+	for _, host := range drive.seenHosts() {
+		if host != "www.googleapis.com" {
+			t.Fatalf("inner host was %q, want www.googleapis.com regardless of address", host)
+		}
 	}
 }
