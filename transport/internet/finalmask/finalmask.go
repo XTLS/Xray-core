@@ -23,7 +23,7 @@ type ListenConfig struct {
 type TCPMask interface {
 	WrapConnClient(net.Conn, *net.Destination, *Dialer) (net.Conn, error)
 	WrapConnServer(net.Conn) (net.Conn, error)
-	// Listen(net.Addr, *Listener) (net.Listener, error)
+	// Listen(net.Listener) (net.Listener, error)
 }
 
 type UDPMask interface {
@@ -100,35 +100,41 @@ func (fm *FinalMask) Listen(ctx context.Context, addr net.Addr) (net.Listener, e
 	if len(fm.tcpMasks) == 0 {
 		return fm.listen(ctx, addr)
 	}
-	for i := range fm.tcpMasks {
-		if i > 0 {
-			if _, ok := fm.tcpMasks[i].(interface {
-				Listen(net.Addr, *ListenConfig) (net.Listener, error)
-			}); ok {
-				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.tcpMasks[i])
-			}
-		}
-	}
-	if _, ok := fm.tcpMasks[0].(interface {
-		Listen(net.Addr, *ListenConfig) (net.Listener, error)
-	}); ok {
-		lc := &ListenConfig{
-			Listen:       func(addr net.Addr) (net.Listener, error) { return fm.listen(ctx, addr) },
-			ListenPacket: func(addr net.Addr) (net.PacketConn, error) { return fm.listenPacket(ctx, addr) },
-		}
-		listener, err := fm.tcpMasks[0].(interface {
-			Listen(net.Addr, *ListenConfig) (net.Listener, error)
-		}).Listen(addr, lc)
-		if err != nil {
-			return nil, err
-		}
-		return &TCPListener{Listener: listener, tcpMasks: fm.tcpMasks[1:]}, nil
-	}
+	off := 0
 	listener, err := fm.listen(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
-	return &TCPListener{Listener: listener, tcpMasks: fm.tcpMasks}, nil
+	for i := range fm.tcpMasks {
+		if _, ok := fm.tcpMasks[i].(interface {
+			Listen(net.Listener) (net.Listener, error)
+		}); ok {
+			if i-off == 0 {
+				l, err := fm.tcpMasks[i].(interface {
+					Listen(net.Listener) (net.Listener, error)
+				}).Listen(listener)
+				if err != nil {
+					listener.Close()
+					return nil, err
+				}
+				listener = l
+			} else {
+				l, err := fm.tcpMasks[i].(interface {
+					Listen(net.Listener) (net.Listener, error)
+				}).Listen(&TCPListener{Listener: listener, tcpMasks: fm.tcpMasks[off:i]})
+				if err != nil {
+					listener.Close()
+					return nil, err
+				}
+				listener = l
+			}
+			off = i + 1
+		}
+	}
+	if off < len(fm.tcpMasks) {
+		return &TCPListener{Listener: listener, tcpMasks: fm.tcpMasks[off:]}, nil
+	}
+	return listener, nil
 }
 
 func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Conn, error) {
