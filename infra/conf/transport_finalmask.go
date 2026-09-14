@@ -14,7 +14,6 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -909,22 +908,13 @@ func (c *Realm) Build() (proto.Message, error) {
 }
 
 type UDPHop struct {
-	Sockopt     *SocketConfig `json:"sockopt"`
-	Mode        string        `json:"mode"`
-	Interval    Int32Range    `json:"interval"`
-	RemotePorts PortList      `json:"remotePorts"`
-	RemoteIPs   []string      `json:"remoteIPs"`
+	Mode        string     `json:"mode"`
+	Interval    Int32Range `json:"interval"`
+	RemoteIPs   []string   `json:"remoteIPs"`
+	RemotePorts PortList   `json:"remotePorts"`
 }
 
 func (c *UDPHop) Build() (proto.Message, error) {
-	var sockopt *internet.SocketConfig
-	if c.Sockopt != nil {
-		var err error
-		sockopt, err = c.Sockopt.Build()
-		if err != nil {
-			return nil, err
-		}
-	}
 	var local, remote, remoteOnce bool
 	for _, mode := range strings.Split(c.Mode, ",") {
 		switch strings.ToLower(mode) {
@@ -953,14 +943,13 @@ func (c *UDPHop) Build() (proto.Message, error) {
 		return nil, errors.New("invalid ip ", ip)
 	}
 	return &udphop.Config{
-		Sockopt:     sockopt,
 		Local:       local,
 		Remote:      remote,
 		RemoteOnce:  remoteOnce,
 		IntervalMin: int64(c.Interval.From),
 		IntervalMax: int64(c.Interval.To),
-		RemotePorts: c.RemotePorts.Build().Ports(),
 		RemoteIPs:   remoteIPs,
+		RemotePorts: c.RemotePorts.Build().Ports(),
 	}, nil
 }
 
