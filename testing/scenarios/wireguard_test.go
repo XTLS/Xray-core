@@ -65,6 +65,7 @@ func TestWireguard(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
 					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{}),
 			},
 		},
 	}
@@ -104,6 +105,7 @@ func TestWireguard(t *testing.T) {
 						AllowedIps: []string{"0.0.0.0/0", "::0/0"},
 					}},
 				}),
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{}),
 			},
 		},
 	}
