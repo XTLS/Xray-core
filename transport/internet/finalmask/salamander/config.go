@@ -11,7 +11,7 @@ func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination
 	return NewSalamanderConnClient(c, conn)
 }
 
-func (c *Config) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
 	return NewSalamanderConnServer(c, conn)
 }
 
@@ -19,6 +19,6 @@ func (c *GeckoConfig) WrapPacketConnClient(conn net.PacketConn, dest *net.Destin
 	return NewGeckoConnClient(c, conn)
 }
 
-func (c *GeckoConfig) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+func (c *GeckoConfig) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
 	return NewGeckoConnServer(c, conn)
 }

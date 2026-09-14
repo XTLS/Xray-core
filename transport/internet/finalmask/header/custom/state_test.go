@@ -63,7 +63,7 @@ func TestStateUDPResponseReusesPriorCapturedValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := cfg.WrapPacketConnServer(serverRaw)
+	server, err := cfg.WrapPacketConnServer(serverRaw, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ func (c *UDPConfig) WrapPacketConnClient(conn net.PacketConn, dest *net.Destinat
 	return NewConnClientUDP(c, conn)
 }
 
-func (c *UDPConfig) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+func (c *UDPConfig) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
 	return NewConnServerUDP(c, conn)
 }
 
@@ -25,6 +25,6 @@ func (c *UDPStandaloneConfig) WrapPacketConnClient(conn net.PacketConn, dest *ne
 	return NewConnClientUDPStandalone(c, conn)
 }
 
-func (c *UDPStandaloneConfig) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+func (c *UDPStandaloneConfig) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
 	return NewConnServerUDPStandalone(c, conn)
 }

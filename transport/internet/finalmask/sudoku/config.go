@@ -39,6 +39,6 @@ func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination
 	return NewUDPConn(conn, c)
 }
 
-func (c *Config) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
 	return NewUDPConn(conn, c)
 }

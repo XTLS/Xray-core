@@ -15,14 +15,20 @@ type Dialer struct {
 	DialUDP func(net.Destination) (net.Conn, error)
 }
 
+type ListenConfig struct {
+	Listen       func(net.Addr) (net.Listener, error)
+	ListenPacket func(net.Addr) (net.PacketConn, error)
+}
+
 type TCPMask interface {
 	WrapConnClient(net.Conn, *net.Destination, *Dialer) (net.Conn, error)
 	WrapConnServer(net.Conn) (net.Conn, error)
+	// Listen(net.Addr, *Listener) (net.Listener, error)
 }
 
 type UDPMask interface {
 	WrapPacketConnClient(net.PacketConn, *net.Destination, *Dialer) (net.PacketConn, error)
-	WrapPacketConnServer(net.PacketConn) (net.PacketConn, error)
+	WrapPacketConnServer(net.PacketConn, net.Addr, *ListenConfig) (net.PacketConn, error)
 }
 
 type FinalMask struct {
@@ -96,10 +102,27 @@ func (fm *FinalMask) Listen(ctx context.Context, addr net.Addr) (net.Listener, e
 	}
 	for i := range fm.tcpMasks {
 		if i > 0 {
-			if _, ok := fm.tcpMasks[i].(interface{ HandleDial() }); ok {
+			if _, ok := fm.tcpMasks[i].(interface {
+				Listen(net.Addr, *ListenConfig) (net.Listener, error)
+			}); ok {
 				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.tcpMasks[i])
 			}
 		}
+	}
+	if _, ok := fm.tcpMasks[0].(interface {
+		Listen(net.Addr, *ListenConfig) (net.Listener, error)
+	}); ok {
+		lc := &ListenConfig{
+			Listen:       func(addr net.Addr) (net.Listener, error) { return fm.listen(ctx, addr) },
+			ListenPacket: func(addr net.Addr) (net.PacketConn, error) { return fm.listenPacket(ctx, addr) },
+		}
+		listener, err := fm.tcpMasks[0].(interface {
+			Listen(net.Addr, *ListenConfig) (net.Listener, error)
+		}).Listen(addr, lc)
+		if err != nil {
+			return nil, err
+		}
+		return &TCPListener{Listener: listener, tcpMasks: fm.tcpMasks[1:]}, nil
 	}
 	listener, err := fm.listen(ctx, addr)
 	if err != nil {
@@ -187,21 +210,29 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 	}
 	for i := range fm.udpMasks {
 		if i > 0 {
-			if _, ok := fm.udpMasks[i].(interface{ HandleDial() }); ok {
+			if _, ok := fm.udpMasks[i].(interface{ HandleListen() }); ok {
 				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.udpMasks[i])
 			}
 		}
 	}
-	conn, err := fm.listenPacket(ctx, addr)
-	if err != nil {
-		return nil, err
+	var conn net.PacketConn
+	var err error
+	if _, ok := fm.udpMasks[0].(interface{ HandleListen() }); !ok {
+		conn, err = fm.listenPacket(ctx, addr)
+		if err != nil {
+			return nil, err
+		}
+	}
+	lc := &ListenConfig{
+		Listen:       func(addr net.Addr) (net.Listener, error) { return fm.listen(ctx, addr) },
+		ListenPacket: func(addr net.Addr) (net.PacketConn, error) { return fm.listenPacket(ctx, addr) },
 	}
 	var sizes []int
 	var conns []net.PacketConn
 	for i := range fm.udpMasks {
 		var newConn net.PacketConn
 		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {
-			newConn, err = fm.udpMasks[i].WrapPacketConnServer(nil)
+			newConn, err = fm.udpMasks[i].WrapPacketConnServer(nil, nil, nil)
 			if err != nil {
 				_ = conn.Close()
 				return nil, err
@@ -214,7 +245,7 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 				sizes = nil
 				conns = nil
 			}
-			newConn, err = fm.udpMasks[i].WrapPacketConnServer(conn)
+			newConn, err = fm.udpMasks[i].WrapPacketConnServer(conn, addr, lc)
 			if err != nil {
 				_ = conn.Close()
 				return nil, err
