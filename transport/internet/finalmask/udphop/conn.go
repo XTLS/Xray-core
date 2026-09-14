@@ -206,7 +206,6 @@ func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	_, err = c.cur.WriteTo(p, c.addr)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "send err")
-		return 0, err
 	}
 	return len(p), nil
 }
