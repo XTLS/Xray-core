@@ -233,6 +233,7 @@ func initInstanceWithConfig(config *Config, server *Instance) (bool, error) {
 			obm, _ := server.GetFeature(outbound.ManagerType()).(outbound.Manager)
 			return obm
 		}(),
+		server.GetFeature(routing.RouterType()).(routing.Router),
 	)
 
 	server.resolveLock.Lock()

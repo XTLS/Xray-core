@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -80,8 +81,9 @@ func DestIpAddress() net.IP {
 }
 
 var (
-	dnsClient dns.Client
-	obm       outbound.Manager
+	dnsClient      dns.Client
+	obm            outbound.Manager
+	balancerPicker routing.BalancerPicker
 )
 
 func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
@@ -271,17 +273,36 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		if obm == nil {
 			return nil, errors.New("there is no outbound manager for dialerProxy").AtError()
 		}
-		h := obm.GetHandler(sockopt.DialerProxy)
-		if h == nil {
-			return nil, errors.New("there is no outbound handler for dialerProxy").AtError()
+		// Preserve outbound-tag precedence. A balancer is only consulted when no
+		// outbound has this name, and only when a new connection is dialed.
+		tag := sockopt.DialerProxy
+		h := obm.GetHandler(tag)
+		if h == nil && balancerPicker != nil {
+			var err error
+			tag, err = balancerPicker.PickOutbound(tag)
+			if err != nil {
+				return nil, errors.New("failed to select outbound for dialerProxy ", sockopt.DialerProxy).Base(err)
+			}
+			if tag != "" {
+				h = obm.GetHandler(tag)
+			}
 		}
-		return redirect(ctx, dest, sockopt.DialerProxy, h), nil
+		if h == nil {
+			return nil, errors.New("there is no outbound handler for dialerProxy ", sockopt.DialerProxy, ": ", tag).AtError()
+		}
+		for _, ob := range outbounds {
+			if ob.Tag == tag {
+				return nil, errors.New("dialerProxy cycle: ", tag).AtError()
+			}
+		}
+		return redirect(ctx, dest, tag, h), nil
 	}
 
 	return effectiveSystemDialer.Dial(ctx, src, dest, sockopt)
 }
 
-func InitSystemDialer(dc dns.Client, om outbound.Manager) {
+func InitSystemDialer(dc dns.Client, om outbound.Manager, r routing.Router) {
 	dnsClient = dc
 	obm = om
+	balancerPicker, _ = r.(routing.BalancerPicker)
 }
