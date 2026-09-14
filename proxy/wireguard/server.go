@@ -258,18 +258,24 @@ func (s *Server) Start() error {
 		return errors.New("address is domain")
 	}
 	listenFunc := func() (net.PacketConn, error) {
-		conn, err := s.streamSettings.FinalMask.ListenPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)})
+		var pktConn net.PacketConn
+		var err error
+		if s.streamSettings.FinalMask != nil {
+			pktConn, err = s.streamSettings.FinalMask.ListenPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)})
+		} else {
+			pktConn, err = internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)}, s.streamSettings.SocketSettings)
+		}
 		if err != nil {
 			return nil, err
 		}
 		if s.uplinkCounter != nil || s.downlinkCounter != nil {
-			conn = &PacketCounterConnection{
-				PacketConn:   conn,
+			pktConn = &PacketCounterConnection{
+				PacketConn:   pktConn,
 				ReadCounter:  s.uplinkCounter,
 				WriteCounter: s.downlinkCounter,
 			}
 		}
-		return conn, nil
+		return pktConn, nil
 	}
 	bind := &bind{
 		listenFunc: listenFunc,
