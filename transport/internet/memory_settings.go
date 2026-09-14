@@ -57,7 +57,6 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 
 	var tcpMasks []finalmask.TCPMask
 	var udpMasks []finalmask.UDPMask
-	var sockopt *SocketConfig
 
 	if s != nil {
 		for i := range s.Tcpmasks {
@@ -68,17 +67,16 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 			instance := common.Must2(s.Udpmasks[i].GetInstance())
 			udpMasks = append(udpMasks, instance.(finalmask.UDPMask))
 		}
-		sockopt = s.SocketSettings
 	}
 
 	dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
-		return DialSystem(ctx, dest, sockopt)
+		return DialSystem(ctx, dest, mss.SocketSettings)
 	}
 	listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
-		return ListenSystem(ctx, addr, sockopt)
+		return ListenSystem(ctx, addr, mss.SocketSettings)
 	}
 	dialUDP := func(ctx context.Context, dest net.Destination) (net.PacketConn, net.Addr, error) {
-		conn, err := DialSystem(ctx, dest, sockopt)
+		conn, err := DialSystem(ctx, dest, mss.SocketSettings)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -97,7 +95,7 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		return newConn, udpAddr, nil
 	}
 	listenPacket := func(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
-		return ListenSystemPacket(ctx, addr, sockopt)
+		return ListenSystemPacket(ctx, addr, mss.SocketSettings)
 	}
 	mss.FinalMask = finalmask.NewFinalMask(tcpMasks, udpMasks, dialTCP, listen, dialUDP, listenPacket)
 
