@@ -125,6 +125,8 @@ func (c *udpHopConn) hop() {
 	if c.closed() {
 		return
 	}
+	oldIP := c.addr.IP
+	oldPort := c.addr.Port
 	if c.remote {
 		if len(c.remoteIPs) > 0 {
 			c.addr.IP = randPrefix(c.remoteIPs[mrand.Intn(len(c.remoteIPs))])
@@ -136,6 +138,8 @@ func (c *udpHopConn) hop() {
 	if c.local {
 		conn, err := c.dialer.DialUDP(net.UDPDestination(net.IPAddress(c.addr.IP), net.Port(c.addr.Port)))
 		if err != nil {
+			c.addr.IP = oldIP
+			c.addr.Port = oldPort
 			errors.LogErrorInner(context.Background(), err, "hop err")
 			return
 		}
