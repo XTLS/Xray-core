@@ -2,7 +2,7 @@ package internet
 
 import (
 	"context"
-	reflect "reflect"
+	"reflect"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"

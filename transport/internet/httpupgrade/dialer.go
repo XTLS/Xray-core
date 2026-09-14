@@ -46,7 +46,13 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (net.Conn, error) {
 	transportConfiguration := streamSettings.ProtocolSettings.(*Config)
 
-	pconn, err := streamSettings.FinalMask.DialTCP(ctx, dest)
+	var pconn net.Conn
+	var err error
+	if streamSettings.FinalMask != nil {
+		pconn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
+	} else {
+		pconn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+	}
 	if err != nil {
 		errors.LogErrorInner(ctx, err, "failed to dial to ", dest)
 		return nil, err
