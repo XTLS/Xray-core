@@ -213,7 +213,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 						udpAddr = c.RemoteAddr()
 					case *cnc.Connection:
 						pktConn = &internet.FakePacketConn{Conn: c}
-						udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
+						udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
 					default:
 						panic(reflect.TypeOf(c))
 					}
