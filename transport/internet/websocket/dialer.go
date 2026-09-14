@@ -69,10 +69,15 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		if fingerprint := tls.GetFingerprint(tConfig.Fingerprint); fingerprint != nil {
 			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (net.Conn, error) {
 				// Like the NetDial in the dialer
-				pconn, err := streamSettings.FinalMask.DialTCP(ctx, dest)
+				var pconn net.Conn
+				var err error
+				if streamSettings.FinalMask != nil {
+					pconn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
+				} else {
+					pconn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+				}
 				if err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
-					return nil, err
+					return nil, errors.New("failed to dial to dest").Base(err)
 				}
 
 				// TLS and apply the handshake

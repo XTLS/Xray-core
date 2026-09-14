@@ -5,6 +5,7 @@ import (
 	"fmt"
 	gonet "net"
 	"net/netip"
+	reflect "reflect"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
@@ -292,19 +294,35 @@ func (h *Handler) init(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		udpConn, err := h.streamSettings.FinalMask.DialUDP(ctx, dest)
-		if err != nil {
-			return nil, err
+		var pktConn net.PacketConn
+		if h.streamSettings.FinalMask != nil {
+			conn, err := h.streamSettings.FinalMask.DialUDP(ctx, dest)
+			if err != nil {
+				return nil, errors.New("failed to dial to dest").Base(err)
+			}
+			pktConn = conn.(*finalmask.PacketConnWrapper).PacketConn
+		} else {
+			conn, err := internet.DialSystem(ctx, dest, h.streamSettings.SocketSettings)
+			if err != nil {
+				return nil, errors.New("failed to dial to dest").Base(err)
+			}
+			switch c := conn.(type) {
+			case *internet.PacketConnWrapper:
+				pktConn = c.PacketConn
+			case *cnc.Connection:
+				pktConn = &internet.FakePacketConn{Conn: c}
+			default:
+				panic(reflect.TypeOf(c))
+			}
 		}
-		conn := udpConn.(*finalmask.PacketConnWrapper).PacketConn
 		if h.uplinkCounter != nil || h.downlinkCounter != nil {
-			conn = &PacketCounterConnection{
-				PacketConn:   conn,
+			pktConn = &PacketCounterConnection{
+				PacketConn:   pktConn,
 				ReadCounter:  h.downlinkCounter,
 				WriteCounter: h.uplinkCounter,
 			}
 		}
-		return conn, nil
+		return pktConn, nil
 	}
 	bind := &bind{}
 	logger := &device.Logger{
