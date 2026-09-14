@@ -2,12 +2,14 @@ package finalmask_test
 
 import (
 	"bytes"
+	"context"
 	"io"
-	"net"
+	gonet "net"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 )
@@ -44,14 +46,16 @@ func mustSendRecvTcp(
 
 type layerMaskTcp struct {
 	name string
-	mask finalmask.Tcpmask
+	mask finalmask.TCPMask
 }
 
 type failingWrapMask struct{}
 
-func (failingWrapMask) TCP()                                            {}
-func (f failingWrapMask) WrapConnClient(raw net.Conn) (net.Conn, error) { return raw, nil }
-func (f failingWrapMask) WrapConnServer(raw net.Conn) (net.Conn, error) {
+func (failingWrapMask) TCP() {}
+func (f failingWrapMask) WrapConnClient(conn net.Conn, dest net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
+	return conn, nil
+}
+func (f failingWrapMask) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	return nil, io.ErrClosedPipe
 }
 
@@ -92,32 +96,31 @@ func TestConnReadWrite(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			mask := c.mask
 
-			maskManager := finalmask.NewTcpmaskManager([]finalmask.Tcpmask{mask})
+			dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
+				return net.Dial("tcp", dest.NetAddr())
+			}
+			listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
+				return net.Listen("tcp", addr.String())
+			}
+			finalMask := finalmask.NewFinalMask([]finalmask.TCPMask{mask}, nil, dialTCP, listen, nil, nil)
 
-			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			listener, err := finalMask.Listen(context.Background(), &net.TCPAddr{IP: net.LocalHostIP.IP()})
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer listener.Close()
 
-			client, err := net.Dial("tcp", ln.Addr().String())
+			client, err := finalMask.DialTCP(context.Background(), net.TCPDestination(net.IPAddress(listener.Addr().(*net.TCPAddr).IP), net.Port(listener.Addr().(*net.TCPAddr).Port)))
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer client.Close()
 
-			client, err = maskManager.WrapConnClient(client)
+			server, err := listener.Accept()
 			if err != nil {
 				t.Fatal(err)
 			}
-
-			server, err := ln.Accept()
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			server, err = maskManager.WrapConnServer(server)
-			if err != nil {
-				t.Fatal(err)
-			}
+			defer server.Close()
 
 			_ = client.SetDeadline(time.Now().Add(time.Second))
 			_ = server.SetDeadline(time.Now().Add(time.Second))
@@ -150,34 +153,32 @@ func TestTCPcustomStaticHandshakeRoundTrip(t *testing.T) {
 			},
 		},
 	}
-	maskManager := finalmask.NewTcpmaskManager([]finalmask.Tcpmask{cfg})
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
+		return net.Dial("tcp", dest.NetAddr())
 	}
-	defer ln.Close()
+	listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
+		return net.Listen("tcp", addr.String())
+	}
+	finalMask := finalmask.NewFinalMask([]finalmask.TCPMask{cfg}, nil, dialTCP, listen, nil, nil)
 
-	clientRaw, err := net.Dial("tcp", ln.Addr().String())
+	listener, err := finalMask.Listen(context.Background(), &net.TCPAddr{IP: net.LocalHostIP.IP()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clientRaw.Close()
+	defer listener.Close()
 
-	serverRaw, err := ln.Accept()
+	client, err := finalMask.DialTCP(context.Background(), net.TCPDestination(net.IPAddress(listener.Addr().(*net.TCPAddr).IP), net.Port(listener.Addr().(*net.TCPAddr).Port)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer serverRaw.Close()
+	defer client.Close()
 
-	client, err := maskManager.WrapConnClient(clientRaw)
+	server, err := listener.Accept()
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := maskManager.WrapConnServer(serverRaw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	defer server.Close()
 
 	_ = client.SetDeadline(time.Now().Add(time.Second))
 	_ = server.SetDeadline(time.Now().Add(time.Second))
@@ -220,11 +221,11 @@ func TestTCPcustomClientRejectsMismatchedServerSequence(t *testing.T) {
 		},
 	}
 
-	clientRaw, serverRaw := net.Pipe()
+	clientRaw, serverRaw := gonet.Pipe()
 	defer clientRaw.Close()
 	defer serverRaw.Close()
 
-	client, err := clientCfg.WrapConnClient(clientRaw)
+	client, err := clientCfg.WrapConnClient(clientRaw, net.Destination{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,42 +258,37 @@ func TestTCPcustomClientRejectsMismatchedServerSequence(t *testing.T) {
 }
 
 func TestTCPWrapListenerRejectsImmediateWrapErrors(t *testing.T) {
-	clientManager := finalmask.NewTcpmaskManager([]finalmask.Tcpmask{failingWrapMask{}})
-	serverManager := finalmask.NewTcpmaskManager([]finalmask.Tcpmask{failingWrapMask{}})
+	dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
+		return net.Dial("tcp", dest.NetAddr())
+	}
+	listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
+		return net.Listen("tcp", addr.String())
+	}
+	finalMask := finalmask.NewFinalMask([]finalmask.TCPMask{failingWrapMask{}}, nil, dialTCP, listen, nil, nil)
 
-	rawLn, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := finalMask.Listen(context.Background(), &net.TCPAddr{IP: net.LocalHostIP.IP()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rawLn.Close()
-
-	ln, err := serverManager.WrapListener(rawLn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	defer listener.Close()
 
 	accepted := make(chan struct {
 		conn net.Conn
 		err  error
 	}, 1)
 	go func() {
-		conn, err := ln.Accept()
+		conn, err := listener.Accept()
 		accepted <- struct {
 			conn net.Conn
 			err  error
 		}{conn: conn, err: err}
 	}()
 
-	clientRaw, err := net.Dial("tcp", rawLn.Addr().String())
+	client, err := finalMask.DialTCP(context.Background(), net.TCPDestination(net.IPAddress(listener.Addr().(*net.TCPAddr).IP), net.Port(listener.Addr().(*net.TCPAddr).Port)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer clientRaw.Close()
-
-	client, err := clientManager.WrapConnClient(clientRaw)
-	if err != nil {
-		t.Fatal(err)
-	}
+	defer client.Close()
 
 	_ = client.SetDeadline(time.Now().Add(time.Second))
 

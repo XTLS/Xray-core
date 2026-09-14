@@ -16,12 +16,12 @@ type Dialer struct {
 }
 
 type TCPMask interface {
-	WrapConnClient(net.Conn, net.Destination, *Dialer) (net.Conn, error)
+	WrapConnClient(net.Conn, *net.Destination, *Dialer) (net.Conn, error)
 	WrapConnServer(net.Conn) (net.Conn, error)
 }
 
 type UDPMask interface {
-	WrapPacketConnClient(net.PacketConn, net.Destination, *Dialer) (net.PacketConn, error)
+	WrapPacketConnClient(net.PacketConn, *net.Destination, *Dialer) (net.PacketConn, error)
 	WrapPacketConnServer(net.PacketConn) (net.PacketConn, error)
 }
 
@@ -77,7 +77,7 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 	}
 	for i := range fm.tcpMasks {
 		var newConn net.Conn
-		newConn, err = fm.tcpMasks[i].WrapConnClient(conn, dest, dialer)
+		newConn, err = fm.tcpMasks[i].WrapConnClient(conn, &dest, dialer)
 		if err != nil {
 			_ = conn.Close()
 			return nil, err
@@ -143,7 +143,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 	for i := range fm.udpMasks {
 		var newConn net.PacketConn
 		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {
-			newConn, err = fm.udpMasks[i].WrapPacketConnClient(conn, dest, dialer)
+			newConn, err = fm.udpMasks[i].WrapPacketConnClient(nil, nil, nil)
 			if err != nil {
 				_ = conn.Close()
 				return nil, err
@@ -156,7 +156,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 				sizes = nil
 				conns = nil
 			}
-			newConn, err = fm.udpMasks[i].WrapPacketConnClient(conn, dest, dialer)
+			newConn, err = fm.udpMasks[i].WrapPacketConnClient(conn, &dest, dialer)
 			if err != nil {
 				_ = conn.Close()
 				return nil, err

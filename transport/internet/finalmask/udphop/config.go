@@ -8,7 +8,7 @@ import (
 
 func (c *Config) HandleDial() {}
 
-func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	return NewUDPHopConn(c, conn)
 }
 

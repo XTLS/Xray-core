@@ -7,7 +7,7 @@ import (
 
 // Sudoku in finalmask mode is a pure appearance transform with no standalone handshake.
 // TCP always keeps classic sudoku on uplink and uses packed downlink optimization on server writes.
-func (c *Config) WrapConnClient(conn net.Conn, dest net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
+func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	return newPackedDirectionalConn(conn, c, true)
 }
 
@@ -35,7 +35,7 @@ func newPackedDirectionalConn(raw net.Conn, config *Config, readPacked bool) (ne
 	return newWrappedConn(raw, reader, writer), nil
 }
 
-func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	return NewUDPConn(conn, c)
 }
 
