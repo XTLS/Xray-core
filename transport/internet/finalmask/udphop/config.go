@@ -12,6 +12,6 @@ func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination
 	return NewUDPHopConn(c, dest, dialer)
 }
 
-func (c *Config) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
 	return nil, errors.New("udphop: client only")
 }

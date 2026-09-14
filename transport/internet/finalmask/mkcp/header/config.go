@@ -11,6 +11,6 @@ func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination
 	return NewConnClient(c, conn)
 }
 
-func (c *Config) WrapPacketConnServer(conn net.PacketConn) (net.PacketConn, error) {
+func (c *Config) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
 	return NewConnServer(c, conn)
 }
