@@ -52,7 +52,7 @@ type layerMaskTcp struct {
 type failingWrapMask struct{}
 
 func (failingWrapMask) TCP() {}
-func (f failingWrapMask) WrapConnClient(conn net.Conn, dest net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
+func (f failingWrapMask) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	return conn, nil
 }
 func (f failingWrapMask) WrapConnServer(conn net.Conn) (net.Conn, error) {
@@ -225,7 +225,7 @@ func TestTCPcustomClientRejectsMismatchedServerSequence(t *testing.T) {
 	defer clientRaw.Close()
 	defer serverRaw.Close()
 
-	client, err := clientCfg.WrapConnClient(clientRaw, net.Destination{}, nil)
+	client, err := clientCfg.WrapConnClient(clientRaw, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
