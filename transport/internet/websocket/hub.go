@@ -97,29 +97,21 @@ func ListenWS(ctx context.Context, address net.Address, port net.Port, streamSet
 	}
 	var listener net.Listener
 	var err error
+	var addr net.Addr
 	if port == net.Port(0) { // unix
-		listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
-			Name: address.Domain(),
-			Net:  "unix",
-		}, streamSettings.SocketSettings)
-		if err != nil {
-			return nil, errors.New("failed to listen unix domain socket(for WS) on ", address).Base(err)
-		}
-		errors.LogInfo(ctx, "listening unix domain socket(for WS) on ", address)
+		addr = &net.UnixAddr{Name: address.Domain(), Net: "unix"}
 	} else { // tcp
-		listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
-			IP:   address.IP(),
-			Port: int(port),
-		}, streamSettings.SocketSettings)
-		if err != nil {
-			return nil, errors.New("failed to listen TCP(for WS) on ", address, ":", port).Base(err)
-		}
-		errors.LogInfo(ctx, "listening TCP(for WS) on ", address, ":", port)
+		addr = &net.TCPAddr{IP: address.IP(), Port: int(port)}
 	}
-
-	if streamSettings.TcpmaskManager != nil {
-		listener, _ = streamSettings.TcpmaskManager.WrapListener(listener)
+	if streamSettings.FinalMask != nil {
+		listener, err = streamSettings.FinalMask.Listen(ctx, addr)
+	} else {
+		listener, err = internet.ListenSystem(ctx, addr, streamSettings.SocketSettings)
 	}
+	if err != nil {
+		return nil, errors.New("failed to listen ", addr.Network(), "(for WS) on ", address, ":", port).Base(err)
+	}
+	errors.LogInfo(ctx, "listening ", addr.Network(), "(for WS) on ", address, ":", port)
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
 		errors.LogWarning(ctx, "accepting PROXY protocol")
