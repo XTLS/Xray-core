@@ -123,7 +123,12 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 			gctx = session.ContextWithOutbounds(gctx, session.OutboundsFromContext(ctx))
 			gctx = session.ContextWithTimeoutOnly(gctx, true)
 
-			c, err := streamSettings.FinalMask.DialTCP(gctx, net.TCPDestination(address, port))
+			var c net.Conn
+			if streamSettings.FinalMask != nil {
+				c, err = streamSettings.FinalMask.DialTCP(gctx, net.TCPDestination(address, port))
+			} else {
+				c, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+			}
 			if err == nil {
 				if tlsConfig != nil {
 					config := tlsConfig.GetTLSConfig(tls.WithDestination(dest))

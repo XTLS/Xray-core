@@ -12,7 +12,7 @@ import (
 
 type Dialer struct {
 	DialTCP func(net.Destination) (net.Conn, error)
-	DialUDP func(net.Destination) (net.PacketConn, error)
+	DialUDP func(net.Destination) (net.Conn, error)
 }
 
 type TCPMask interface {
@@ -70,9 +70,12 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},
-		DialUDP: func(dest net.Destination) (net.PacketConn, error) {
-			conn, _, err := fm.dialUDP(ctx, dest)
-			return conn, err
+		DialUDP: func(dest net.Destination) (net.Conn, error) {
+			conn, addr, err := fm.dialUDP(ctx, dest)
+			if err != nil {
+				return nil, err
+			}
+			return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, err
 		},
 	}
 	for i := range fm.tcpMasks {
@@ -133,9 +136,12 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},
-		DialUDP: func(dest net.Destination) (net.PacketConn, error) {
-			conn, _, err := fm.dialUDP(ctx, dest)
-			return conn, err
+		DialUDP: func(dest net.Destination) (net.Conn, error) {
+			conn, addr, err := fm.dialUDP(ctx, dest)
+			if err != nil {
+				return nil, err
+			}
+			return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, err
 		},
 	}
 	var sizes []int

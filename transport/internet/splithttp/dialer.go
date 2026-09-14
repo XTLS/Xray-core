@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"reflect"
 	"runtime"
 	"strconv"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
@@ -115,7 +117,13 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
 	dialContext := func(ctxInner context.Context) (net.Conn, error) {
-		conn, err := streamSettings.FinalMask.DialTCP(ctxInner, dest)
+		var conn net.Conn
+		var err error
+		if streamSettings.FinalMask != nil {
+			conn, err = streamSettings.FinalMask.DialTCP(ctxInner, dest)
+		} else {
+			conn, err = internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -185,23 +193,44 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			QUICConfig:      quicConfig,
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
-				udpConn, err := streamSettings.FinalMask.DialUDP(ctx, dest)
-				if err != nil {
-					return nil, errors.New("failed to dial to dest").Base(err)
+				var pktConn net.PacketConn
+				var udpAddr net.Addr
+				if streamSettings.FinalMask != nil {
+					conn, err := streamSettings.FinalMask.DialUDP(ctx, dest)
+					if err != nil {
+						return nil, errors.New("failed to dial to dest").Base(err)
+					}
+					pktConn = conn.(*finalmask.PacketConnWrapper).PacketConn
+					udpAddr = conn.RemoteAddr()
+				} else {
+					conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+					if err != nil {
+						return nil, errors.New("failed to dial to dest").Base(err)
+					}
+					switch c := conn.(type) {
+					case *internet.PacketConnWrapper:
+						pktConn = c.PacketConn
+						udpAddr = c.RemoteAddr()
+					case *cnc.Connection:
+						pktConn = &internet.FakePacketConn{Conn: c}
+						udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
+					default:
+						panic(reflect.TypeOf(c))
+					}
 				}
 
-				tr := &quic.Transport{Conn: udpConn.(*finalmask.PacketConnWrapper).PacketConn, DisableGSO: quicParams.DisableGSO}
+				tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
 
 				if !quicParams.DisableChromeParrot {
 					tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
 					tlsCfg.GetCertificate = nil
 				}
 
-				conn, err := tr.DialEarly(ctx, udpConn.RemoteAddr(), tlsCfg, cfg)
+				conn, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 				if err != nil {
 					return nil, err
 				}
-				context.AfterFunc(conn.Context(), func() { tr.Close(); udpConn.Close() })
+				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
 
 				switch quicParams.Congestion {
 				case "reno":

@@ -2,9 +2,10 @@ package hysteria
 
 import (
 	"context"
-	go_tls "crypto/tls"
+	gotls "crypto/tls"
 	"net/http"
 	"net/url"
+	"reflect"
 	"runtime"
 	"strconv"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
@@ -26,11 +28,12 @@ import (
 type client struct {
 	sync.Mutex
 
-	dest       net.Destination
-	config     *Config
-	tlsConfig  *go_tls.Config
-	finalMask  *finalmask.FinalMask
-	quicParams *internet.QuicParams
+	dest         net.Destination
+	config       *Config
+	tlsConfig    *gotls.Config
+	socketConfig *internet.SocketConfig
+	finalMask    *finalmask.FinalMask
+	quicParams   *internet.QuicParams
 
 	conn    *quic.Conn
 	tr      *quic.Transport
@@ -109,12 +112,33 @@ func (c *client) dial(ctx context.Context) error {
 	// 	quicConfig.KeepAlivePeriod = 10 * time.Second
 	// }
 
-	udpConn, err := c.finalMask.DialUDP(ctx, c.dest)
-	if err != nil {
-		return errors.New("failed to dial to dest").Base(err)
+	var pktConn net.PacketConn
+	var udpAddr net.Addr
+	if c.finalMask != nil {
+		conn, err := c.finalMask.DialUDP(ctx, c.dest)
+		if err != nil {
+			return errors.New("failed to dial to dest").Base(err)
+		}
+		pktConn = conn.(*finalmask.PacketConnWrapper).PacketConn
+		udpAddr = conn.RemoteAddr()
+	} else {
+		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
+		if err != nil {
+			return errors.New("failed to dial to dest").Base(err)
+		}
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn = c.PacketConn
+			udpAddr = c.RemoteAddr()
+		case *cnc.Connection:
+			pktConn = &internet.FakePacketConn{Conn: c}
+			udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
+		default:
+			panic(reflect.TypeOf(c))
+		}
 	}
 
-	tr := &quic.Transport{Conn: udpConn.(*finalmask.PacketConnWrapper).PacketConn, DisableGSO: quicParams.DisableGSO}
+	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
 
 	if !quicParams.DisableChromeParrot {
 		tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
@@ -125,8 +149,8 @@ func (c *client) dial(ctx context.Context) error {
 	rt := &http3.Transport{
 		TLSClientConfig: c.tlsConfig,
 		QUICConfig:      quicConfig,
-		Dial: func(ctx context.Context, _ string, tlsCfg *go_tls.Config, cfg *quic.Config) (*quic.Conn, error) {
-			qc, err := tr.DialEarly(ctx, udpConn.RemoteAddr(), tlsCfg, cfg)
+		Dial: func(ctx context.Context, _ string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
+			qc, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 			if err != nil {
 				return nil, err
 			}
@@ -153,13 +177,13 @@ func (c *client) dial(ctx context.Context) error {
 			_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		}
 		_ = tr.Close()
-		_ = udpConn.Close()
+		_ = pktConn.Close()
 		return err
 	}
 	if resp.StatusCode != StatusAuthOK {
 		_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		_ = tr.Close()
-		_ = udpConn.Close()
+		_ = pktConn.Close()
 		return errors.New("auth failed code ", resp.StatusCode)
 	}
 	_ = resp.Body.Close()
@@ -184,7 +208,7 @@ func (c *client) dial(ctx context.Context) error {
 		panic(quicParams.Congestion)
 	}
 
-	c.pktConn = udpConn.(*finalmask.PacketConnWrapper).PacketConn
+	c.pktConn = pktConn
 	c.tr = tr
 	c.conn = conn
 	c.udpSM = &udpSessionManager{
@@ -291,11 +315,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		c = manager.m[dialerConf{dest, streamSettings}]
 		if c == nil {
 			c = &client{
-				dest:       dest,
-				config:     streamSettings.ProtocolSettings.(*Config),
-				tlsConfig:  tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
-				finalMask:  streamSettings.FinalMask,
-				quicParams: streamSettings.QuicParams,
+				dest:         dest,
+				config:       streamSettings.ProtocolSettings.(*Config),
+				tlsConfig:    tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
+				socketConfig: streamSettings.SocketSettings,
+				finalMask:    streamSettings.FinalMask,
+				quicParams:   streamSettings.QuicParams,
 			}
 			manager.m[dialerConf{dest, streamSettings}] = c
 		}

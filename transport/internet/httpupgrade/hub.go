@@ -124,25 +124,21 @@ func ListenHTTPUpgrade(ctx context.Context, address net.Address, port net.Port, 
 	}
 	var listener net.Listener
 	var err error
+	var addr net.Addr
 	if port == net.Port(0) { // unix
-		listener, err = streamSettings.FinalMask.Listen(ctx, &net.UnixAddr{
-			Name: address.Domain(),
-			Net:  "unix",
-		})
-		if err != nil {
-			return nil, errors.New("failed to listen unix domain socket(for HttpUpgrade) on ", address).Base(err)
-		}
-		errors.LogInfo(ctx, "listening unix domain socket(for HttpUpgrade) on ", address)
+		addr = &net.UnixAddr{Name: address.Domain(), Net: "unix"}
 	} else { // tcp
-		listener, err = streamSettings.FinalMask.Listen(ctx, &net.TCPAddr{
-			IP:   address.IP(),
-			Port: int(port),
-		})
-		if err != nil {
-			return nil, errors.New("failed to listen TCP(for HttpUpgrade) on ", address, ":", port).Base(err)
-		}
-		errors.LogInfo(ctx, "listening TCP(for HttpUpgrade) on ", address, ":", port)
+		addr = &net.TCPAddr{IP: address.IP(), Port: int(port)}
 	}
+	if streamSettings.FinalMask != nil {
+		listener, err = streamSettings.FinalMask.Listen(ctx, addr)
+	} else {
+		listener, err = internet.ListenSystem(ctx, addr, streamSettings.SocketSettings)
+	}
+	if err != nil {
+		return nil, errors.New("failed to listen ", addr.Network(), "(for HttpUpgrade) on ", address, ":", port).Base(err)
+	}
+	errors.LogInfo(ctx, "listening ", addr.Network(), "(for HttpUpgrade) on ", address, ":", port)
 
 	if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.AcceptProxyProtocol {
 		errors.LogWarning(ctx, "accepting PROXY protocol")
