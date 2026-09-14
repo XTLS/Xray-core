@@ -22,11 +22,14 @@ func mustSendRecvTcp(
 ) {
 	t.Helper()
 
+	waitCh := make(chan error)
+
 	go func() {
 		_, err := from.Write(msg)
 		if err != nil {
-			t.Error(err)
+			t.Fatal(err)
 		}
+		close(waitCh)
 	}()
 
 	buf := make([]byte, 1024)
@@ -42,6 +45,8 @@ func mustSendRecvTcp(
 	if !bytes.Equal(buf[:n], msg) {
 		t.Fatalf("unexpected data %q", buf[:n])
 	}
+
+	<-waitCh
 }
 
 type layerMaskTcp struct {
