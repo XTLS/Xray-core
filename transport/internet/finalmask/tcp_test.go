@@ -55,6 +55,7 @@ func (failingWrapMask) TCP() {}
 func (f failingWrapMask) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	return conn, nil
 }
+
 func (f failingWrapMask) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	return nil, io.ErrClosedPipe
 }
