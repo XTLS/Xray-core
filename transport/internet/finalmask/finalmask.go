@@ -176,7 +176,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 		conns = nil
 	}
 	if addr == nil {
-		addr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
+		addr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
 	}
 	return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, nil
 }
