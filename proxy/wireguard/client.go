@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
-	reflect "reflect"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
