@@ -104,7 +104,7 @@ func (t *Handler) Start() error {
 			iface := updater.Get()
 			if iface == nil {
 				errors.LogInfo(context.Background(), "[tun] falied to set interface > iface == nil")
-				return nil
+				return errors.New("iface not found")
 			}
 			return c.Control(func(fd uintptr) {
 				addrPort, _ := netip.ParseAddrPort(address)
