@@ -402,7 +402,11 @@ func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for i, b := range mb {
 		dst := c.dest
 		if b.UDP != nil {
-			if b.UDP.Address.Family().IsIP() {
+			if b.UDP.Address.Family().IsDomain() {
+				if b.UDP.Port != net.Port(dst.Port) {
+					dst = &net.UDPAddr{IP: dst.IP, Port: int(b.UDP.Port)}
+				}
+			} else {
 				dst = b.UDP.RawNetAddr().(*net.UDPAddr)
 			}
 		}
