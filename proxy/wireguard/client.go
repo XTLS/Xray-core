@@ -200,7 +200,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		defer conn.Close()
 		c := &udpConnClient{
 			PacketConn: conn.(*internet.PacketConnWrapper).PacketConn,
-			tnet:       h.tnet,
 			dest:       conn.RemoteAddr().(*net.UDPAddr),
 		}
 		reader = c
@@ -377,7 +376,6 @@ func (h *Handler) resolveLocal(host string) (net.IP, error) {
 
 type udpConnClient struct {
 	net.PacketConn
-	tnet *Net
 	dest *net.UDPAddr
 }
 
@@ -404,18 +402,7 @@ func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for i, b := range mb {
 		dst := c.dest
 		if b.UDP != nil {
-			if b.UDP.Address.Family().IsDomain() {
-				ips, err := c.tnet.LookupHost(b.UDP.NetAddr())
-				if err != nil {
-					errors.LogErrorInner(context.Background(), err, "drop packet to ", b.UDP, " with size ", len(b.Bytes()))
-					b.Release()
-					continue
-				}
-				dst = &net.UDPAddr{
-					IP:   net.ParseIP(ips[0]),
-					Port: int(b.UDP.Port),
-				}
-			} else {
+			if b.UDP.Address.Family().IsIP() {
 				dst = b.UDP.RawNetAddr().(*net.UDPAddr)
 			}
 		}
