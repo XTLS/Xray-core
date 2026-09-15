@@ -3,7 +3,6 @@ package wireguard
 import (
 	"context"
 	"fmt"
-	gonet "net"
 	"net/netip"
 	"reflect"
 	"strings"
@@ -31,11 +30,6 @@ import (
 	"golang.zx2c4.com/wireguard/device"
 )
 
-type entry struct {
-	got  []net.IP
-	time time.Time
-}
-
 type Handler struct {
 	conf          *DeviceConfig
 	policyManager policy.Manager
@@ -49,11 +43,6 @@ type Handler struct {
 	tnet *Net
 	dev  *device.Device
 	mu   sync.Mutex
-
-	// TODO: cache cleanup loop
-	local   bool
-	cache   map[string]entry
-	cacheMu sync.Mutex
 }
 
 func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
@@ -109,14 +98,9 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		return nil, err
 	}
 
-	local := false
 	dns := conf.DNS
 	if len(dns) == 0 {
 		dns = []string{"1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001"}
-	}
-	if len(dns) == 1 && dns[0] == "local" {
-		local = true
-		dns = nil
 	}
 	dnses := make([]netip.Addr, 0, len(dns))
 	for _, dns := range dns {
@@ -151,9 +135,6 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 
 		tun:  tun,
 		tnet: tnet,
-
-		local: local,
-		cache: make(map[string]entry),
 	}, nil
 }
 
@@ -170,22 +151,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	if err := h.init(ctx); err != nil {
 		return err
-	}
-
-	var addr netip.Addr
-	if ob.Target.Address.Family().IsDomain() {
-		ip, err := h.resolveRemote(ob.Target.Address.String())
-		if err != nil {
-			return errors.New("failed to resolve domain").Base(err)
-		}
-		addr, _ = netip.AddrFromSlice(ip)
-	} else {
-		addr, _ = netip.AddrFromSlice(ob.Target.Address.IP())
-	}
-
-	addrPort := netip.AddrPortFrom(addr, ob.Target.Port.Value())
-	if !addrPort.IsValid() {
-		return errors.New("invalid target ", ob.Target)
 	}
 
 	var newCtx context.Context
@@ -216,10 +181,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		var err error
 		if sessionPolicy.Timeouts.Handshake != 0 {
 			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, sessionPolicy.Timeouts.Handshake)
-			conn, err = h.tnet.DialContextTCPAddrPort(timeoutCtx, addrPort)
+			conn, err = h.tnet.DialContext(timeoutCtx, "tcp", ob.Target.NetAddr())
 			timeoutCancel()
 		} else {
-			conn, err = h.tnet.DialContextTCPAddrPort(ctx, addrPort)
+			conn, err = h.tnet.Dial("tcp", ob.Target.NetAddr())
 		}
 		if err != nil {
 			return errors.New("failed to create TCP connection").Base(err)
@@ -228,15 +193,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		reader = buf.NewReader(conn)
 		writer = buf.NewWriter(conn)
 	case net.Network_UDP:
-		conn, err := h.tnet.DialUDPAddrPort(netip.AddrPort{}, addrPort)
+		conn, err := h.tnet.Dial("udp", ob.Target.NetAddr())
 		if err != nil {
 			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer conn.Close()
 		c := &udpConnClient{
-			PacketConn:  conn.(*internet.PacketConnWrapper).PacketConn,
-			resolveFunc: h.resolveRemote,
-			dest:        gonet.UDPAddrFromAddrPort(addrPort),
+			PacketConn: conn.(*internet.PacketConnWrapper).PacketConn,
+			tnet:       h.tnet,
+			dest:       conn.RemoteAddr().(*net.UDPAddr),
 		}
 		reader = c
 		writer = c
@@ -371,39 +336,9 @@ func (h *Handler) init(ctx context.Context) error {
 }
 
 func (h *Handler) resolveLocal(host string) (net.IP, error) {
-	return h.resolveDomain(host, h.conf.DomainStrategy, func(host string) ([]net.IP, uint32, error) {
-		return h.dns.LookupIP(host, dns.IPOption{IPv4Enable: true, IPv6Enable: true})
-	})
-}
-
-func (h *Handler) resolveRemote(host string) (net.IP, error) {
-	return h.resolveDomain(host, h.conf.DomainStrategy, func(host string) ([]net.IP, uint32, error) {
-		if h.local {
-			return h.dns.LookupIP(host, dns.IPOption{IPv4Enable: true, IPv6Enable: true})
-		}
-		return h.tnet.LookupHost(host)
-	})
-}
-
-func (h *Handler) resolveDomain(host string, strategy DeviceConfig_DomainStrategy, lookupIP func(host string) ([]net.IP, uint32, error)) (net.IP, error) {
-	if ip := net.ParseIP(host); ip != nil {
-		return ip, nil
-	}
-	h.cacheMu.Lock()
-	if entry, ok := h.cache[host]; ok {
-		if time.Now().Before(entry.time) {
-			h.cacheMu.Unlock()
-			return entry.got[dice.Roll(len(entry.got))], nil
-		}
-		delete(h.cache, host)
-	}
-	h.cacheMu.Unlock()
-	ips, ttl, err := lookupIP(host)
+	ips, _, err := h.dns.LookupIP(host, dns.IPOption{IPv4Enable: true, IPv6Enable: true})
 	if err != nil {
 		return nil, err
-	}
-	if len(ips) == 0 {
-		return nil, dns.ErrEmptyResponse
 	}
 	var got4, got6 []net.IP
 	for _, ip := range ips {
@@ -413,45 +348,37 @@ func (h *Handler) resolveDomain(host string, strategy DeviceConfig_DomainStrateg
 			got6 = append(got6, ip)
 		}
 	}
-	var got []net.IP
-	switch strategy {
-	case DeviceConfig_FORCE_IP:
-		got = ips
-		return ips[dice.Roll(len(ips))], nil
-	case DeviceConfig_FORCE_IP4:
-		got = got4
-	case DeviceConfig_FORCE_IP6:
-		got = got6
-	case DeviceConfig_FORCE_IP46:
-		got = got4
-		if len(got) == 0 {
-			got = got6
-		}
-	case DeviceConfig_FORCE_IP64:
-		got = got6
-		if len(got) == 0 {
+	got := ips
+	if h.streamSettings.SocketSettings != nil {
+		switch h.streamSettings.SocketSettings.DomainStrategy {
+		case internet.DomainStrategy_AS_IS, internet.DomainStrategy_USE_IP, internet.DomainStrategy_FORCE_IP:
+			got = ips
+		case internet.DomainStrategy_USE_IP4, internet.DomainStrategy_FORCE_IP4:
 			got = got4
+		case internet.DomainStrategy_USE_IP6, internet.DomainStrategy_FORCE_IP6:
+			got = got6
+		case internet.DomainStrategy_USE_IP46, internet.DomainStrategy_FORCE_IP46:
+			got = got4
+			if len(got) == 0 {
+				got = got6
+			}
+		case internet.DomainStrategy_USE_IP64, internet.DomainStrategy_FORCE_IP64:
+			got = got6
+			if len(got) == 0 {
+				got = got4
+			}
 		}
-	default:
-		panic(strategy)
+		if len(got) == 0 {
+			return nil, dns.ErrEmptyResponse
+		}
 	}
-	if len(got) == 0 {
-		return nil, dns.ErrEmptyResponse
-	}
-	entry := entry{
-		got:  got,
-		time: time.Now().Add(time.Duration(ttl) * time.Second),
-	}
-	h.cacheMu.Lock()
-	h.cache[host] = entry
-	h.cacheMu.Unlock()
 	return got[dice.Roll(len(got))], nil
 }
 
 type udpConnClient struct {
 	net.PacketConn
-	resolveFunc func(host string) (net.IP, error)
-	dest        *net.UDPAddr
+	tnet *Net
+	dest *net.UDPAddr
 }
 
 func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -478,14 +405,14 @@ func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		dst := c.dest
 		if b.UDP != nil {
 			if b.UDP.Address.Family().IsDomain() {
-				ip, err := c.resolveFunc(b.UDP.Address.String())
+				ips, err := c.tnet.LookupHost(b.UDP.NetAddr())
 				if err != nil {
 					errors.LogErrorInner(context.Background(), err, "drop packet to ", b.UDP, " with size ", len(b.Bytes()))
 					b.Release()
 					continue
 				}
 				dst = &net.UDPAddr{
-					IP:   ip,
+					IP:   net.ParseIP(ips[0]),
 					Port: int(b.UDP.Port),
 				}
 			} else {
@@ -522,4 +449,60 @@ func (c *PacketCounterConnection) WriteTo(p []byte, addr net.Addr) (n int, err e
 		c.WriteCounter.Add(int64(n))
 	}
 	return
+}
+
+type entry struct {
+	saddr    []string
+	deadline time.Time
+}
+
+type cache struct {
+	running bool
+	m       map[string]entry
+	mu      sync.Mutex
+}
+
+func (c *cache) run() {
+	if c.running {
+		return
+	}
+	c.running = true
+	c.m = make(map[string]entry)
+	go c.gc()
+}
+
+func (c *cache) gc() {
+	ticker := time.NewTicker(time.Minute)
+	for {
+		now := <-ticker.C
+		c.mu.Lock()
+		for key, entry := range c.m {
+			if now.After(entry.deadline) {
+				delete(c.m, key)
+			}
+		}
+		c.mu.Unlock()
+	}
+}
+
+func (c *cache) LookupHost(host string) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.run()
+	if entry, ok := c.m[host]; ok {
+		if time.Now().Before(entry.deadline) {
+			return entry.saddr
+		}
+		delete(c.m, host)
+	}
+	return nil
+}
+
+func (c *cache) Cache(host string, saddr []string, ttl uint32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m[host] = entry{
+		saddr:    saddr,
+		deadline: time.Now().Add(time.Second * time.Duration(ttl)),
+	}
 }
