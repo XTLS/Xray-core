@@ -340,16 +340,16 @@ func (h *Handler) resolveLocal(host string) (net.IP, error) {
 	if err != nil {
 		return nil, err
 	}
-	var got4, got6 []net.IP
-	for _, ip := range ips {
-		if ip.To4() != nil {
-			got4 = append(got4, ip)
-		} else {
-			got6 = append(got6, ip)
-		}
-	}
 	got := ips
 	if h.streamSettings.SocketSettings != nil {
+		var got4, got6 []net.IP
+		for _, ip := range ips {
+			if ip.To4() != nil {
+				got4 = append(got4, ip)
+			} else {
+				got6 = append(got6, ip)
+			}
+		}
 		switch h.streamSettings.SocketSettings.DomainStrategy {
 		case internet.DomainStrategy_AS_IS, internet.DomainStrategy_USE_IP, internet.DomainStrategy_FORCE_IP:
 			got = ips
