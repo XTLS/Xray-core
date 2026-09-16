@@ -366,6 +366,21 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
 
+		// scDownlinkKeepAliveHeader is empty unless the server operator explicitly
+		// sets it -- that's the entire opt-in for downlink keepalive/framing.
+		// An unconfigured server never negotiates it with any client, so
+		// upgrading the binary without touching the config changes nothing.
+		kaHeader := h.config.ScDownlinkKeepAliveHeader
+		var keepAlive time.Duration
+		if kaHeader != "" {
+			// honor whatever interval the client asks for, uncapped -- only
+			// the client knows what its own network path needs.
+			keepAlive = requestedDownlinkKeepAlive(request.Header.Get(kaHeader))
+		}
+		if keepAlive > 0 {
+			writer.Header().Set(kaHeader, strconv.Itoa(int(keepAlive/time.Second)))
+		}
+
 		writer.WriteHeader(http.StatusOK)
 		writer.(http.Flusher).Flush()
 
@@ -373,6 +388,16 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Instance:       done.New(),
 			Reader:         request.Body,
 			ResponseWriter: writer,
+			framed:         keepAlive > 0,
+		}
+		if keepAlive > 0 {
+			httpSC.activity = make(chan struct{}, 1)
+			// an empty frame right away also pushes the response headers through
+			// proxies that hold them back until the first body byte; only start
+			// the pacer if the connection is still alive after that
+			if httpSC.writeDownlinkPadding(0) == nil {
+				go httpSC.runDownlinkPacer(keepAlive, h.config.GetNormalizedScDownlinkFlushBytes(), h.config.GetNormalizedScDownlinkFlushDelayMs())
+			}
 		}
 		localAddr := h.localAddr
 		if la, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && la != nil {
@@ -408,6 +433,8 @@ type httpServerConn struct {
 	*done.Instance
 	io.Reader // no need to Close request.Body
 	http.ResponseWriter
+	framed   bool          // downlink keepalive/flush framing, see downlink_keepalive.go
+	activity chan struct{} // signalled (non-blocking) on every real write; nil unless framed
 }
 
 func (c *httpServerConn) Write(b []byte) (int, error) {
@@ -416,9 +443,21 @@ func (c *httpServerConn) Write(b []byte) (int, error) {
 	if c.Done() {
 		return 0, io.ErrClosedPipe
 	}
-	n, err := c.ResponseWriter.Write(b)
+	var n int
+	var err error
+	if c.framed {
+		n, err = writeFramed(c.ResponseWriter, b)
+	} else {
+		n, err = c.ResponseWriter.Write(b)
+	}
 	if err == nil {
 		c.ResponseWriter.(http.Flusher).Flush()
+		if c.activity != nil {
+			select {
+			case c.activity <- struct{}{}:
+			default:
+			}
+		}
 	}
 	return n, err
 }

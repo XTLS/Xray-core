@@ -167,6 +167,53 @@ func (c *Config) GetNormalizedScMaxBufferedPosts() int {
 	return int(c.ScMaxBufferedPosts)
 }
 
+// GetNormalizedScDownlinkKeepAliveSecs is the client's requested downlink
+// keepalive interval; To <= 0 means disabled. Client-side only -- the
+// server doesn't consult this field at all, it just honors whatever
+// interval a negotiating client asks for as-is (see
+// requestedDownlinkKeepAlive); only the client knows what idle-timeout its
+// own network path (NAT, firewall, CDN) needs to beat. Whether the server
+// negotiates downlink keepalive/framing at all is controlled entirely by
+// ScDownlinkKeepAliveHeader being non-empty (see hub.go).
+func (c *Config) GetNormalizedScDownlinkKeepAliveSecs() *RangeConfig {
+	if c.ScDownlinkKeepAliveSecs == nil || c.ScDownlinkKeepAliveSecs.To <= 0 {
+		return &RangeConfig{}
+	}
+	return &RangeConfig{
+		From: max(1, c.ScDownlinkKeepAliveSecs.From),
+		To:   c.ScDownlinkKeepAliveSecs.To,
+	}
+}
+
+// GetNormalizedScDownlinkFlushBytes is the size of the one-shot padding
+// frame the server writes into the downlink the first time it goes idle
+// after a real write -- sized to force a buffering CDN to release whatever
+// real data it was holding rather than sit on it until an unrelated timeout
+// fires. Server-side only, opt-in: nil (unset, i.e. To == 0) leaves the
+// feature off entirely.
+func (c *Config) GetNormalizedScDownlinkFlushBytes() *RangeConfig {
+	if c.ScDownlinkFlushBytes == nil || c.ScDownlinkFlushBytes.To == 0 {
+		return nil
+	}
+	return c.ScDownlinkFlushBytes
+}
+
+// GetNormalizedScDownlinkFlushDelayMs is how long the downlink must sit idle
+// after a real write before the one-shot padding flush fires, jittered so
+// it isn't a fixed, fingerprintable timing. Only consulted when
+// GetNormalizedScDownlinkFlushBytes is non-nil. Unset (To == 0) applies a
+// short jittered default; an explicit 0 in the resolved range waits with no
+// debounce (fires as soon as the connection is idle); a negative value
+// leaves that idle period's flush un-armed, falling back to the plain
+// keepalive interval instead (see runDownlinkPacer) -- it never stops
+// keepalive itself.
+func (c *Config) GetNormalizedScDownlinkFlushDelayMs() *RangeConfig {
+	if c.ScDownlinkFlushDelayMs == nil || c.ScDownlinkFlushDelayMs.To == 0 {
+		return &RangeConfig{From: 150, To: 400}
+	}
+	return c.ScDownlinkFlushDelayMs
+}
+
 func (c *Config) GetNormalizedScStreamUpServerSecs() *RangeConfig {
 	if c.ScStreamUpServerSecs == nil || c.ScStreamUpServerSecs.To == 0 {
 		return &RangeConfig{

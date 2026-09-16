@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -67,6 +68,15 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 		return nil, nil, nil, err
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
+	// scDownlinkKeepAliveHeader is empty unless explicitly configured -- that's the
+	// entire opt-in for downlink keepalive/framing, matching the server
+	// (see hub.go); an empty name is never sent as a header.
+	kaHeader := c.transportConfig.ScDownlinkKeepAliveHeader
+	if !uploadOnly && kaHeader != "" {
+		if secs := c.transportConfig.GetNormalizedScDownlinkKeepAliveSecs().rand(); secs > 0 {
+			req.Header.Set(kaHeader, strconv.Itoa(int(secs)))
+		}
+	}
 
 	wrc = &WaitReadCloser{wait: done.New()}
 	go func() {
@@ -91,7 +101,11 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			wrc.Close()
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+		body := resp.Body
+		if req.Header.Get(kaHeader) != "" && resp.Header.Get(kaHeader) != "" {
+			body = newFramedReader(body)
+		}
+		wrc.(*WaitReadCloser).Set(body)
 	}()
 
 	<-gotConn.Wait()
