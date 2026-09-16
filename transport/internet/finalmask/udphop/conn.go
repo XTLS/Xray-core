@@ -49,7 +49,7 @@ type udpHopConn struct {
 	readCh  chan packet
 	closeCh chan struct{}
 	wg      sync.WaitGroup
-	mu      sync.Mutex
+	mu      sync.RWMutex
 }
 
 func NewUDPHopConn(c *Config, dest *net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
@@ -201,12 +201,12 @@ func (c *udpHopConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *udpHopConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	_, err = c.cur.WriteTo(p, c.addr)
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "send err")
+		return 0, err
 	}
 	return len(p), nil
 }
@@ -221,9 +221,7 @@ func (c *udpHopConn) Close() error {
 	if c.pre != nil {
 		_ = c.pre.Close()
 	}
-	if c.cur != nil {
-		_ = c.cur.Close()
-	}
+	_ = c.cur.Close()
 	c.wg.Wait()
 	select {
 	case packet := <-c.readCh:
@@ -237,6 +235,8 @@ func (c *udpHopConn) Close() error {
 }
 
 func (c *udpHopConn) LocalAddr() net.Addr {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.cur.LocalAddr()
 }
 
@@ -247,10 +247,7 @@ func (c *udpHopConn) SetDeadline(t time.Time) error {
 	if c.pre != nil {
 		_ = c.pre.SetDeadline(t)
 	}
-	if c.cur != nil {
-		_ = c.cur.SetDeadline(t)
-	}
-	return nil
+	return c.cur.SetDeadline(t)
 }
 
 func (c *udpHopConn) SetReadDeadline(t time.Time) error {
@@ -260,10 +257,7 @@ func (c *udpHopConn) SetReadDeadline(t time.Time) error {
 	if c.pre != nil {
 		_ = c.pre.SetReadDeadline(t)
 	}
-	if c.cur != nil {
-		_ = c.cur.SetReadDeadline(t)
-	}
-	return nil
+	return c.cur.SetReadDeadline(t)
 }
 
 func (c *udpHopConn) SetWriteDeadline(t time.Time) error {
@@ -273,10 +267,7 @@ func (c *udpHopConn) SetWriteDeadline(t time.Time) error {
 	if c.pre != nil {
 		_ = c.pre.SetWriteDeadline(t)
 	}
-	if c.cur != nil {
-		_ = c.cur.SetWriteDeadline(t)
-	}
-	return nil
+	return c.cur.SetWriteDeadline(t)
 }
 
 func randPrefix(p netip.Prefix) []byte {
