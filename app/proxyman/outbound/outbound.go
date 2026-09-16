@@ -137,8 +137,6 @@ func (m *Manager) tryGetOutboundTagWithBalancer(tag string, parents []string) st
 
 // AddHandler implements outbound.Manager.
 func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) error {
-	m.tagsCache.Clear()
-
 	m.defaultHandler.CompareAndSwap(nil, &handler)
 
 	tag := handler.Tag()
@@ -153,6 +151,7 @@ func (m *Manager) AddHandler(ctx context.Context, handler outbound.Handler) erro
 			newUntagged = append(newUntagged, *oldUntagged...)
 			newUntagged = append(newUntagged, handler)
 			if m.untaggedHandlers.CompareAndSwap(oldUntagged, &newUntagged) {
+				m.tagsCache.Clear()
 				break
 			}
 		}
@@ -171,12 +170,11 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 		return common.ErrNoClue
 	}
 
-	m.tagsCache.Clear()
-
 	m.taggedHandler.Delete(tag)
 	if cur := m.defaultHandler.Load(); cur != nil && (*cur).Tag() == tag {
 		m.defaultHandler.CompareAndSwap(cur, nil)
 	}
+	m.tagsCache.Clear()
 
 	return nil
 }
