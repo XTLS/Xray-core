@@ -147,7 +147,7 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 		if total > 255 {
 			panic(len(data))
 		}
-		for (len(data)) > 0 {
+		for len(data) > 0 {
 			DATA := make([]byte, r.domain.cap)
 			DATA[0] = byte(i)
 			DATAN := 0
