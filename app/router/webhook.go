@@ -43,6 +43,7 @@ type WebhookNotifier struct {
 	seen          sync.Map
 	lastSweep     atomic.Int64
 	done          chan struct{}
+	lifecycleMu   sync.Mutex
 	wg            sync.WaitGroup
 	closeOnce     sync.Once
 }
@@ -83,6 +84,17 @@ func NewWebhookNotifier(cfg *WebhookConfig) (*WebhookNotifier, error) {
 }
 
 func (h *WebhookNotifier) Fire(ctx routing.Context, outboundTag string) {
+	// Register accepted work before Close can begin waiting for it.
+	h.lifecycleMu.Lock()
+	select {
+	case <-h.done:
+		h.lifecycleMu.Unlock()
+		return
+	default:
+	}
+	h.wg.Add(1)
+	h.lifecycleMu.Unlock()
+
 	ev := buildEvent(ctx, outboundTag)
 
 	email := ""
@@ -90,16 +102,10 @@ func (h *WebhookNotifier) Fire(ctx routing.Context, outboundTag string) {
 		email = *ev.Email
 	}
 	if h.isDuplicate(email) {
+		h.wg.Done()
 		return
 	}
 
-	h.wg.Add(1)
-	select {
-	case <-h.done:
-		h.wg.Done()
-		return
-	default:
-	}
 	go func() {
 		defer h.wg.Done()
 		h.post(ev)
@@ -227,7 +233,9 @@ func (h *WebhookNotifier) maybeSweep(now time.Time, ttl time.Duration) {
 // Only need to call if the Notifier is really used, otherwise GC can clean it
 func (h *WebhookNotifier) Close() error {
 	h.closeOnce.Do(func() {
+		h.lifecycleMu.Lock()
 		close(h.done)
+		h.lifecycleMu.Unlock()
 	})
 	h.wg.Wait()
 	h.client.CloseIdleConnections()
