@@ -115,21 +115,15 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 	msg := r.msg
 	switch r.msg.Questions[0].Type {
 	case dnsmessage.TypeA:
-		i := 0
-		total := len(data) / (2 + 2 + 2 + 4 + 2 + 4)
-		if total > 255 {
-			panic(len(data))
-		}
+		msg.Answers = append(msg.Answers, dnsmessage.Resource{})
+		size := min(len(data), 4-2)
+		firstData := data[:size]
+		data = data[size:]
+		fragN := 1
+		A := [4]byte{}
 		for len(data) > 0 {
-			A := [4]byte{byte(i)}
-			if i == 0 {
-				A[1] = byte(total)
-				n := copy(A[2:], data)
-				data = data[n:]
-			} else {
-				n := copy(A[1:], data)
-				data = data[n:]
-			}
+			A[0] = byte(fragN)
+			n := copy(A[1:], data)
 			msg.Answers = append(msg.Answers, dnsmessage.Resource{
 				Header: dnsmessage.ResourceHeader{
 					Name:  msg.Questions[0].Name,
@@ -139,28 +133,31 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 				},
 				Body: &dnsmessage.AResource{A: A},
 			})
-			i++
+			data = data[n:]
+			fragN++
+		}
+		A[0] = 0
+		A[1] = byte(fragN)
+		copy(A[2:], firstData)
+		msg.Answers[0] = dnsmessage.Resource{
+			Header: dnsmessage.ResourceHeader{
+				Name:  msg.Questions[0].Name,
+				Type:  msg.Questions[0].Type,
+				Class: dnsmessage.ClassINET,
+				TTL:   60,
+			},
+			Body: &dnsmessage.AResource{A: A},
 		}
 	case dnsmessage.TypeCNAME:
-		i := 0
-		total := len(data) / (2 + 2 + 2 + 4 + 2 + int(r.domain.lenMax))
-		if total > 255 {
-			panic(len(data))
-		}
+		msg.Answers = append(msg.Answers, dnsmessage.Resource{})
+		size := min(len(data), r.domain.cap-2)
+		firstData := data[:size]
+		data = data[size:]
+		fragN := 1
+		DATA := make([]byte, r.domain.cap)
 		for len(data) > 0 {
-			DATA := make([]byte, r.domain.cap)
-			DATA[0] = byte(i)
-			DATAN := 0
-			if i == 0 {
-				DATA[1] = byte(total)
-				n := copy(DATA[2:], data)
-				data = data[n:]
-				DATAN = n + 2
-			} else {
-				n := copy(DATA[1:], data)
-				data = data[n:]
-				DATAN = n + 1
-			}
+			DATA[0] = byte(fragN)
+			n := copy(DATA[1:], data)
 			msg.Answers = append(msg.Answers, dnsmessage.Resource{
 				Header: dnsmessage.ResourceHeader{
 					Name:  msg.Questions[0].Name,
@@ -168,16 +165,29 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 					Class: dnsmessage.ClassINET,
 					TTL:   60,
 				},
-				Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:DATAN])},
+				Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+1])},
 			})
-			i++
+			data = data[n:]
+			fragN++
+		}
+		DATA[0] = 0
+		DATA[1] = byte(fragN)
+		n := copy(DATA[2:], firstData)
+		msg.Answers[0] = dnsmessage.Resource{
+			Header: dnsmessage.ResourceHeader{
+				Name:  msg.Questions[0].Name,
+				Type:  msg.Questions[0].Type,
+				Class: dnsmessage.ClassINET,
+				TTL:   60,
+			},
+			Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+2])},
 		}
 	case dnsmessage.TypeTXT:
 		var txt []string
 		for len(data) > 0 {
-			n := min(len(data), 255)
-			txt = append(txt, string(data[:n]))
-			data = data[n:]
+			size := min(len(data), 255)
+			txt = append(txt, string(data[:size]))
+			data = data[size:]
 		}
 		msg.Answers = append(msg.Answers, dnsmessage.Resource{
 			Header: dnsmessage.ResourceHeader{
@@ -189,21 +199,15 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 			Body: &dnsmessage.TXTResource{TXT: txt},
 		})
 	case dnsmessage.TypeAAAA:
-		i := 0
-		total := len(data) / (2 + 2 + 2 + 4 + 2 + 16)
-		if total > 255 {
-			panic(len(data))
-		}
+		msg.Answers = append(msg.Answers, dnsmessage.Resource{})
+		size := min(len(data), 16-2)
+		firstData := data[:size]
+		data = data[size:]
+		fragN := 1
+		AAAA := [16]byte{}
 		for len(data) > 0 {
-			AAAA := [16]byte{byte(i)}
-			if i == 0 {
-				AAAA[1] = byte(total)
-				n := copy(AAAA[2:], data)
-				data = data[n:]
-			} else {
-				n := copy(AAAA[1:], data)
-				data = data[n:]
-			}
+			AAAA[0] = byte(fragN)
+			n := copy(AAAA[1:], data)
 			msg.Answers = append(msg.Answers, dnsmessage.Resource{
 				Header: dnsmessage.ResourceHeader{
 					Name:  msg.Questions[0].Name,
@@ -213,7 +217,20 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 				},
 				Body: &dnsmessage.AAAAResource{AAAA: AAAA},
 			})
-			i++
+			data = data[n:]
+			fragN++
+		}
+		AAAA[0] = 0
+		AAAA[1] = byte(fragN)
+		copy(AAAA[2:], firstData)
+		msg.Answers[0] = dnsmessage.Resource{
+			Header: dnsmessage.ResourceHeader{
+				Name:  msg.Questions[0].Name,
+				Type:  msg.Questions[0].Type,
+				Class: dnsmessage.ClassINET,
+				TTL:   60,
+			},
+			Body: &dnsmessage.AAAAResource{AAAA: AAAA},
 		}
 	}
 	if r.edns0 > 0 {
