@@ -26,7 +26,7 @@ func (t *serviceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return t.plain.RoundTrip(r)
 }
 
-func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.Duration) *http.Client {
+func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.Duration, maxConns int) *http.Client {
 	var (
 		tlsConfig     *tls.Config
 		realityConfig *reality.Config
@@ -123,13 +123,22 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.
 			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialTLS(ctx, addr)
 			},
-			IdleConnTimeout: net.ConnIdleTimeout,
+			IdleConnTimeout:     net.ConnIdleTimeout,
+			MaxIdleConns:        maxConns,
+			MaxIdleConnsPerHost: maxConns,
+			MaxConnsPerHost:     maxConns,
 		}
 	}
 
 	return &http.Client{
 		Transport: &serviceTransport{
-			plain:  &http.Transport{DialContext: dialPlain, IdleConnTimeout: net.ConnIdleTimeout},
+			plain: &http.Transport{
+				DialContext:         dialPlain,
+				IdleConnTimeout:     net.ConnIdleTimeout,
+				MaxIdleConns:        maxConns,
+				MaxIdleConnsPerHost: maxConns,
+				MaxConnsPerHost:     maxConns,
+			},
 			secure: secure,
 		},
 		Timeout: timeout,
@@ -141,7 +150,7 @@ func allowsHTTP2(tlsConfig *tls.Config, realityConfig *reality.Config) bool {
 		return true
 	}
 	if tlsConfig == nil {
-		return true
+		return false
 	}
-	return !(len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "http/1.1")
+	return len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h2"
 }
