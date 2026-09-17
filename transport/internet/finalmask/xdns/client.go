@@ -451,11 +451,11 @@ func (c *xdnsClient) Close() error {
 	return nil
 }
 
-func (c *xdnsClient) SetDeadline(t time.Time) error { return nil }
+func (c *xdnsClient) SetDeadline(t time.Time) error { return errors.New("not support") }
 
-func (c *xdnsClient) SetReadDeadline(t time.Time) error { return nil }
+func (c *xdnsClient) SetReadDeadline(t time.Time) error { return errors.New("not support") }
 
-func (c *xdnsClient) SetWriteDeadline(t time.Time) error { return nil }
+func (c *xdnsClient) SetWriteDeadline(t time.Time) error { return errors.New("not support") }
 
 type ClientID [8]byte
 
