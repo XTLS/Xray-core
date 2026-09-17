@@ -51,7 +51,7 @@ func NewResp(msg dnsmessage.Message, addr net.Addr, clientID ClientID, domain *D
 	if edns0 > 0 && edns0 < 512 {
 		edns0 = 512
 	}
-	size := max(int(edns0), 512)
+	size := min(max(int(edns0), 512), max(int(domain.edns0), 512))
 
 	left := size - 12 - int(msg.Questions[0].Name.Length) - 1 - 2 - 2
 	if edns0 > 0 {
@@ -104,6 +104,118 @@ func NewResp(msg dnsmessage.Message, addr net.Addr, clientID ClientID, domain *D
 		cap:     cap,
 		capFrag: cap - 3,
 	}
+}
+
+// TODO: use dnsmessage.Builder
+func (r *Resp) Append(out []byte, data []byte) {
+	if len(data) == 0 || len(data) > r.cap {
+		panic(len(data))
+	}
+	msg := r.msg
+	switch r.msg.Questions[0].Type {
+	case dnsmessage.TypeA:
+		i := 0
+		total := len(data) / (2 + 2 + 2 + 4 + 2 + 4)
+		if total > 255 {
+			panic(len(data))
+		}
+		for len(data) > 0 {
+			A := [4]byte{byte(i)}
+			if i == 0 {
+				A[1] = byte(total)
+				n := copy(A[2:], data)
+				data = data[n:]
+			} else {
+				n := copy(A[1:], data)
+				data = data[n:]
+			}
+			msg.Answers = append(msg.Answers, dnsmessage.Resource{
+				Header: dnsmessage.ResourceHeader{
+					Name:  msg.Questions[0].Name,
+					Type:  msg.Questions[0].Type,
+					Class: dnsmessage.ClassINET,
+					TTL:   60,
+				},
+				Body: &dnsmessage.AResource{A: A},
+			})
+			i++
+		}
+	case dnsmessage.TypeCNAME:
+		i := 0
+		total := len(data) / (2 + 2 + 2 + 4 + 2 + int(r.domain.lenMax))
+		if total > 255 {
+			panic(len(data))
+		}
+		for (len(data)) > 0 {
+			DATA := make([]byte, r.domain.cap)
+			DATA[0] = byte(i)
+			DATAN := 0
+			if i == 0 {
+				DATA[1] = byte(total)
+				n := copy(DATA[2:], data)
+				data = data[n:]
+				DATAN = n + 2
+			} else {
+				n := copy(DATA[1:], data)
+				data = data[n:]
+				DATAN = n + 1
+			}
+			msg.Answers = append(msg.Answers, dnsmessage.Resource{
+				Header: dnsmessage.ResourceHeader{
+					Name:  msg.Questions[0].Name,
+					Type:  msg.Questions[0].Type,
+					Class: dnsmessage.ClassINET,
+					TTL:   60,
+				},
+				Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:DATAN])},
+			})
+			i++
+		}
+	case dnsmessage.TypeTXT:
+		var txt []string
+		for len(data) > 0 {
+			n := min(len(data), 255)
+			txt = append(txt, string(data[:n]))
+			data = data[n:]
+		}
+		msg.Answers = append(msg.Answers, dnsmessage.Resource{
+			Header: dnsmessage.ResourceHeader{
+				Name:  msg.Questions[0].Name,
+				Type:  msg.Questions[0].Type,
+				Class: dnsmessage.ClassINET,
+				TTL:   60,
+			},
+			Body: &dnsmessage.TXTResource{TXT: txt},
+		})
+	case dnsmessage.TypeAAAA:
+		i := 0
+		total := len(data) / (2 + 2 + 2 + 4 + 2 + 16)
+		if total > 255 {
+			panic(len(data))
+		}
+		for len(data) > 0 {
+			AAAA := [16]byte{byte(i)}
+			if i == 0 {
+				AAAA[1] = byte(total)
+				n := copy(AAAA[2:], data)
+				data = data[n:]
+			} else {
+				n := copy(AAAA[1:], data)
+				data = data[n:]
+			}
+			msg.Answers = append(msg.Answers, dnsmessage.Resource{
+				Header: dnsmessage.ResourceHeader{
+					Name:  msg.Questions[0].Name,
+					Type:  msg.Questions[0].Type,
+					Class: dnsmessage.ClassINET,
+					TTL:   60,
+				},
+				Body: &dnsmessage.AAAAResource{AAAA: AAAA},
+			})
+			i++
+		}
+	}
+	_, _ = msg.AppendPack(out)
 }
 
 type RespInfo struct {
@@ -191,11 +303,11 @@ func (c *xdnsServer) push(clientID ClientID, resp *Resp) {
 	c.m[clientID] = info
 }
 
-func (c *xdnsServer) pop(clientID ClientID, len int) []*Resp {
+func (c *xdnsServer) pop(clientID ClientID, len int) ([]*Resp, byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed() {
-		return nil
+		return nil, 0
 	}
 	now := time.Now()
 	info, ok := c.m[clientID]
@@ -203,10 +315,10 @@ func (c *xdnsServer) pop(clientID ClientID, len int) []*Resp {
 		if ok {
 			delete(c.m, clientID)
 		}
-		return nil
+		return nil, 0
 	}
 	if info.capFrags < len {
-		return nil
+		return nil, 0
 	}
 	var resp []*Resp
 	size := 0
@@ -214,12 +326,14 @@ func (c *xdnsServer) pop(clientID ClientID, len int) []*Resp {
 		r := <-info.resp
 		info.capFrags -= r.capFrag
 		if size == 0 && r.cap > len {
-			return []*Resp{r}
+			return []*Resp{r}, 0
 		}
 		resp = append(resp, r)
 		size += r.capFrag
 		if size > len {
-			return resp
+			fragID := info.fragID
+			info.fragID++
+			return resp, fragID
 		}
 	}
 }
@@ -291,7 +405,27 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 }
 
 func (c *xdnsServer) send(p []byte, addr net.Addr) {
-
+	clientID := ClientIDFromAddr(addr.(*net.UDPAddr))
+	resps, fragID := c.pop(clientID, len(p))
+	if len(resps) == 0 {
+		return
+	}
+	buf := pool4K.Get().([]byte)
+	defer pool4K.Put(buf[:cap(buf)])
+	if len(resps) > 1 {
+		fragIdx := byte(0)
+		fragN := byte(len(resps))
+		i := 0
+		for len(p) > 0 {
+			size := min(len(p), resps[i].capFrag)
+			resps[i].Append(buf[:0], append([]byte{fragID, fragIdx, fragN}, p[:size]...))
+			_, _ = c.PacketConn.WriteTo(buf, resps[i].addr)
+			p = p[size:]
+		}
+	} else {
+		resps[0].Append(buf[:0], p)
+		_, _ = c.PacketConn.WriteTo(buf, resps[0].addr)
+	}
 }
 
 func (c *xdnsServer) run() {
@@ -305,9 +439,12 @@ func (c *xdnsServer) run() {
 		pool4K.Put(packet.p[:cap(packet.p)])
 	default:
 	}
+	close(c.readCh)
 
 	c.fragManager.Close()
-	close(c.readCh)
+	for key := range c.m {
+		delete(c.m, key)
+	}
 }
 
 func (c *xdnsServer) gc() {
@@ -357,10 +494,13 @@ func (c *xdnsServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *xdnsServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	// if c.closed() {
-	// 	return 0, io.ErrClosedPipe
-	// }
-	// c.send(p)
+	if c.closed() {
+		return 0, io.ErrClosedPipe
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	c.send(p, addr)
 	return len(p), nil
 }
 
@@ -371,6 +511,7 @@ func (c *xdnsServer) Close() error {
 		return nil
 	}
 	close(c.closeCh)
+	_ = c.PacketConn.Close()
 	return nil
 }
 
