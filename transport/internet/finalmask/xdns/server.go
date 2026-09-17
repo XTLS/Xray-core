@@ -168,6 +168,9 @@ func (c *xdnsServer) closed() bool {
 func (c *xdnsServer) push(clientID ClientID, resp *Resp) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed() {
+		return
+	}
 	now := time.Now()
 	info, ok := c.m[clientID]
 	if !ok || now.After(info.deadline) {
@@ -191,6 +194,9 @@ func (c *xdnsServer) push(clientID ClientID, resp *Resp) {
 func (c *xdnsServer) pop(clientID ClientID, len int) []*Resp {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed() {
+		return nil
+	}
 	now := time.Now()
 	info, ok := c.m[clientID]
 	if !ok || now.After(info.deadline) {
@@ -368,8 +374,8 @@ func (c *xdnsServer) Close() error {
 	return nil
 }
 
-func (c *xdnsServer) SetDeadline(t time.Time) error { return nil }
+func (c *xdnsServer) SetDeadline(t time.Time) error { return errors.New("not support") }
 
-func (c *xdnsServer) SetReadDeadline(t time.Time) error { return nil }
+func (c *xdnsServer) SetReadDeadline(t time.Time) error { return errors.New("not support") }
 
-func (c *xdnsServer) SetWriteDeadline(t time.Time) error { return nil }
+func (c *xdnsServer) SetWriteDeadline(t time.Time) error { return errors.New("not support") }
