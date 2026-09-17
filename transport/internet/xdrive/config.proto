@@ -15,4 +15,5 @@ message Config {
   uint32 concurrency = 9;
   uint32 eager_window_ms = 10;
   uint32 hole_timeout_ms = 11;
+  string template = 12;
 }

@@ -39,6 +39,10 @@ func newStorage(streamSettings *internet.MemoryStreamConfig) (Storage, error) {
 		return sharedStorage(streamSettings, config, func() (Storage, error) {
 			return newDriveStorage(streamSettings, config)
 		})
+	case "template":
+		return sharedStorage(streamSettings, config, func() (Storage, error) {
+			return newTemplateStorage(streamSettings, config)
+		})
 	default:
 		return nil, errors.New("unsupported service: ", config.Service)
 	}

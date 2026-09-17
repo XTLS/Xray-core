@@ -34,6 +34,7 @@ type Config struct {
 	Concurrency       uint32                 `protobuf:"varint,9,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
 	EagerWindowMs     uint32                 `protobuf:"varint,10,opt,name=eager_window_ms,json=eagerWindowMs,proto3" json:"eager_window_ms,omitempty"`
 	HoleTimeoutMs     uint32                 `protobuf:"varint,11,opt,name=hole_timeout_ms,json=holeTimeoutMs,proto3" json:"hole_timeout_ms,omitempty"`
+	Template          string                 `protobuf:"bytes,12,opt,name=template,proto3" json:"template,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -145,11 +146,18 @@ func (x *Config) GetHoleTimeoutMs() uint32 {
 	return 0
 }
 
+func (x *Config) GetTemplate() string {
+	if x != nil {
+		return x.Template
+	}
+	return ""
+}
+
 var File_transport_internet_xdrive_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_xdrive_config_proto_rawDesc = "" +
 	"\n" +
-	"&transport/internet/xdrive/config.proto\x12\x1exray.transport.internet.xdrive\"\xaf\x03\n" +
+	"&transport/internet/xdrive/config.proto\x12\x1exray.transport.internet.xdrive\"\xcb\x03\n" +
 	"\x06Config\x12#\n" +
 	"\rremote_folder\x18\x01 \x01(\tR\fremoteFolder\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x18\n" +
@@ -162,7 +170,8 @@ const file_transport_internet_xdrive_config_proto_rawDesc = "" +
 	"\vconcurrency\x18\t \x01(\rR\vconcurrency\x12&\n" +
 	"\x0feager_window_ms\x18\n" +
 	" \x01(\rR\reagerWindowMs\x12&\n" +
-	"\x0fhole_timeout_ms\x18\v \x01(\rR\rholeTimeoutMsB5Z3github.com/xtls/xray-core/transport/internet/xdriveb\x06proto3"
+	"\x0fhole_timeout_ms\x18\v \x01(\rR\rholeTimeoutMs\x12\x1a\n" +
+	"\btemplate\x18\f \x01(\tR\btemplateB5Z3github.com/xtls/xray-core/transport/internet/xdriveb\x06proto3"
 
 var (
 	file_transport_internet_xdrive_config_proto_rawDescOnce sync.Once

@@ -76,7 +76,7 @@ func newDriveStorage(streamSettings *internet.MemoryStreamConfig, config *Config
 		clientID:     config.Secrets[0],
 		clientSecret: config.Secrets[1],
 		refreshToken: config.Secrets[2],
-		client:       newServiceClient(streamSettings, driveTimeout),
+		client:       newServiceClient(streamSettings, driveTimeout, driveMaxInflight),
 		tokenURL:     driveTokenURL,
 		filesURL:     driveFilesURL,
 		uploadURL:    driveUploadURL,

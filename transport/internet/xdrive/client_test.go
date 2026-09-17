@@ -68,7 +68,7 @@ func sniForSettings(t *testing.T, serverName string) string {
 	driveFilesURL = "https://www.googleapis.com/drive/v3/files"
 	defer func() { driveFilesURL = prev }()
 
-	client := newServiceClient(settings, 5*time.Second)
+	client := newServiceClient(settings, 5*time.Second, 8)
 	req, err := http.NewRequest(http.MethodGet, driveFilesURL, nil)
 	if err != nil {
 		t.Fatalf("request: %v", err)
