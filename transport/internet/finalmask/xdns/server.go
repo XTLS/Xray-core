@@ -379,10 +379,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if err != nil || n < 11+1 {
 		return
 	}
-	if decoded[0]&0x80 == 0x80 || (decoded[0]&0x40 == 0x40 && n < 14+1) || (decoded[8]&0x80 == 0x80 && n != 16) {
-		return
-	}
-	if TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) {
+	if decoded[0]&0x80 == 0x80 || (decoded[0]&0x40 == 0x40 && n < 14+1) || TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x80 == 0x80 && n != 16) {
 		return
 	}
 
