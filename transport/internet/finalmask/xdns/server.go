@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"golang.org/x/net/dns/dnsmessage"
@@ -107,7 +108,7 @@ func NewResp(msg dnsmessage.Message, addr net.Addr, clientID ClientID, domain *D
 }
 
 // TODO: use dnsmessage.Builder
-func (r *Resp) Append(out []byte, data []byte) {
+func (r *Resp) Append(out []byte, data []byte) []byte {
 	if len(data) == 0 || len(data) > r.cap {
 		panic(len(data))
 	}
@@ -215,7 +216,7 @@ func (r *Resp) Append(out []byte, data []byte) {
 			i++
 		}
 	}
-	_, _ = msg.AppendPack(out)
+	return common.Must2(msg.AppendPack(out))
 }
 
 type RespInfo struct {
@@ -418,13 +419,11 @@ func (c *xdnsServer) send(p []byte, addr net.Addr) {
 		i := 0
 		for len(p) > 0 {
 			size := min(len(p), resps[i].capFrag)
-			resps[i].Append(buf[:0], append([]byte{fragID, fragIdx, fragN}, p[:size]...))
-			_, _ = c.PacketConn.WriteTo(buf, resps[i].addr)
+			_, _ = c.PacketConn.WriteTo(resps[i].Append(buf[:0], append([]byte{fragID, fragIdx, fragN}, p[:size]...)), resps[i].addr)
 			p = p[size:]
 		}
 	} else {
-		resps[0].Append(buf[:0], p)
-		_, _ = c.PacketConn.WriteTo(buf, resps[0].addr)
+		_, _ = c.PacketConn.WriteTo(resps[0].Append(buf[:0], p), resps[0].addr)
 	}
 }
 
