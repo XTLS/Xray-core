@@ -429,8 +429,8 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.closed() {
 		return 0, io.ErrClosedPipe
 	}
-	if len(p) == 0 {
-		return 0, nil
+	if len(p) == 0 || len(p) > 4096 {
+		return 0, errors.New("not support size")
 	}
 	c.send(p)
 	return len(p), nil
