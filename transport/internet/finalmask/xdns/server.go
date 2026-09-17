@@ -114,9 +114,11 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 	switch r.msg.Questions[0].Type {
 	case dnsmessage.TypeA:
 		fragN := 1
-		fragN += (len(data) - (4 - 2)) / (4 - 1)
-		if (len(data)-(4-2))%(4-1) > 0 {
-			fragN++
+		if (len(data) - (4 - 2)) > 0 {
+			fragN += (len(data) - (4 - 2)) / (4 - 1)
+			if (len(data)-(4-2))%(4-1) > 0 {
+				fragN++
+			}
 		}
 
 		for i := range fragN {
@@ -141,9 +143,11 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 		}
 	case dnsmessage.TypeCNAME:
 		fragN := 1
-		fragN += (len(data) - (r.domain.cap - 2)) / (r.domain.cap - 1)
-		if (len(data)-(r.domain.cap-2))%(r.domain.cap-1) > 0 {
-			fragN++
+		if (len(data) - (r.domain.cap - 2)) > 0 {
+			fragN += (len(data) - (r.domain.cap - 2)) / (r.domain.cap - 1)
+			if (len(data)-(r.domain.cap-2))%(r.domain.cap-1) > 0 {
+				fragN++
+			}
 		}
 
 		DATA := make([]byte, r.domain.cap)
@@ -194,9 +198,11 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 		})
 	case dnsmessage.TypeAAAA:
 		fragN := 1
-		fragN += (len(data) - (16 - 2)) / (16 - 1)
-		if (len(data)-(16-2))%(16-1) > 0 {
-			fragN++
+		if (len(data) - (16 - 2)) > 0 {
+			fragN += (len(data) - (16 - 2)) / (16 - 1)
+			if (len(data)-(16-2))%(16-1) > 0 {
+				fragN++
+			}
 		}
 
 		for i := range fragN {
