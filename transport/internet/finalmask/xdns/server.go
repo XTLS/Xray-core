@@ -216,6 +216,17 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 			i++
 		}
 	}
+	if r.edns0 > 0 {
+		msg.Additionals = append(msg.Additionals, dnsmessage.Resource{
+			Header: dnsmessage.ResourceHeader{
+				Name:  dnsmessage.MustNewName("."),
+				Type:  dnsmessage.TypeOPT,
+				Class: dnsmessage.Class(r.edns0),
+				TTL:   0,
+			},
+			Body: &dnsmessage.OPTResource{},
+		})
+	}
 	return common.Must2(msg.AppendPack(out))
 }
 
