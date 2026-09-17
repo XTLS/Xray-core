@@ -425,12 +425,15 @@ func (c *xdnsServer) send(p []byte, addr net.Addr) {
 	buf := pool4K.Get().([]byte)
 	defer pool4K.Put(buf[:cap(buf)])
 	if len(resps) > 1 {
-		fragIdx := byte(0)
+		data := pool4K.Get().([]byte)
+		defer pool4K.Put(data[:cap(data)])
 		fragN := byte(len(resps))
-		i := 0
-		for len(p) > 0 {
+		for i := range len(resps) {
+			data[0] = fragID
+			data[1] = byte(i)
+			data[2] = fragN
 			size := min(len(p), resps[i].capFrag)
-			_, _ = c.PacketConn.WriteTo(resps[i].Append(buf[:0], append([]byte{fragID, fragIdx, fragN}, p[:size]...)), resps[i].addr)
+			_, _ = c.PacketConn.WriteTo(resps[i].Append(buf[:0], append(data[:3], p[:size]...)), resps[i].addr)
 			p = p[size:]
 		}
 	} else {
@@ -507,8 +510,8 @@ func (c *xdnsServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.closed() {
 		return 0, io.ErrClosedPipe
 	}
-	if len(p) == 0 {
-		return 0, nil
+	if len(p) == 0 || len(p) > 4096-8 {
+		return 0, errors.New("not support size")
 	}
 	c.send(p, addr)
 	return len(p), nil
