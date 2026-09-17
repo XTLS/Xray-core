@@ -22,9 +22,8 @@ type Resp struct {
 	clientID ClientID
 	domain   *Domain
 
-	edns0   uint16
-	cap     int
-	capFrag int
+	edns0 uint16
+	cap   int
 }
 
 func NewResp(msg dnsmessage.Message, addr net.Addr, clientID ClientID, domain *Domain) *Resp {
@@ -82,7 +81,7 @@ func NewResp(msg dnsmessage.Message, addr net.Addr, clientID ClientID, domain *D
 		n := left / single
 		cap = 16*n - n - 1
 	}
-	if cap < 3+1 {
+	if cap < 11+1 {
 		return nil
 	}
 
@@ -101,9 +100,8 @@ func NewResp(msg dnsmessage.Message, addr net.Addr, clientID ClientID, domain *D
 		clientID: clientID,
 		domain:   domain,
 
-		edns0:   edns0,
-		cap:     cap,
-		capFrag: cap - 3,
+		edns0: edns0,
+		cap:   cap,
 	}
 }
 
@@ -115,15 +113,22 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 	msg := r.msg
 	switch r.msg.Questions[0].Type {
 	case dnsmessage.TypeA:
-		msg.Answers = append(msg.Answers, dnsmessage.Resource{})
-		size := min(len(data), 4-2)
-		firstData := data[:size]
-		data = data[size:]
 		fragN := 1
-		A := [4]byte{}
-		for len(data) > 0 {
-			A[0] = byte(fragN)
-			n := copy(A[1:], data)
+		fragN += (len(data) - (4 - 2)) / (4 - 1)
+		if (len(data)-(4-2))%(4-1) > 0 {
+			fragN++
+		}
+
+		for i := range fragN {
+			A := [4]byte{byte(i)}
+			if i == 0 {
+				A[1] = byte(fragN)
+				n := copy(A[2:], data)
+				data = data[n:]
+			} else {
+				n := copy(A[1:], data)
+				data = data[n:]
+			}
 			msg.Answers = append(msg.Answers, dnsmessage.Resource{
 				Header: dnsmessage.ResourceHeader{
 					Name:  msg.Questions[0].Name,
@@ -133,54 +138,43 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 				},
 				Body: &dnsmessage.AResource{A: A},
 			})
-			data = data[n:]
-			fragN++
-		}
-		A[0] = 0
-		A[1] = byte(fragN)
-		copy(A[2:], firstData)
-		msg.Answers[0] = dnsmessage.Resource{
-			Header: dnsmessage.ResourceHeader{
-				Name:  msg.Questions[0].Name,
-				Type:  msg.Questions[0].Type,
-				Class: dnsmessage.ClassINET,
-				TTL:   60,
-			},
-			Body: &dnsmessage.AResource{A: A},
 		}
 	case dnsmessage.TypeCNAME:
-		msg.Answers = append(msg.Answers, dnsmessage.Resource{})
-		size := min(len(data), r.domain.cap-2)
-		firstData := data[:size]
-		data = data[size:]
 		fragN := 1
-		DATA := make([]byte, r.domain.cap)
-		for len(data) > 0 {
-			DATA[0] = byte(fragN)
-			n := copy(DATA[1:], data)
-			msg.Answers = append(msg.Answers, dnsmessage.Resource{
-				Header: dnsmessage.ResourceHeader{
-					Name:  msg.Questions[0].Name,
-					Type:  msg.Questions[0].Type,
-					Class: dnsmessage.ClassINET,
-					TTL:   60,
-				},
-				Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+1])},
-			})
-			data = data[n:]
+		fragN += (len(data) - (r.domain.cap - 2)) / (r.domain.cap - 1)
+		if (len(data)-(r.domain.cap-2))%(r.domain.cap-1) > 0 {
 			fragN++
 		}
-		DATA[0] = 0
-		DATA[1] = byte(fragN)
-		n := copy(DATA[2:], firstData)
-		msg.Answers[0] = dnsmessage.Resource{
-			Header: dnsmessage.ResourceHeader{
-				Name:  msg.Questions[0].Name,
-				Type:  msg.Questions[0].Type,
-				Class: dnsmessage.ClassINET,
-				TTL:   60,
-			},
-			Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+2])},
+
+		DATA := make([]byte, r.domain.cap)
+		for i := range fragN {
+			DATA[0] = byte(i)
+			if i == 0 {
+				DATA[1] = byte(fragN)
+				n := copy(DATA[2:], data)
+				data = data[n:]
+				msg.Answers = append(msg.Answers, dnsmessage.Resource{
+					Header: dnsmessage.ResourceHeader{
+						Name:  msg.Questions[0].Name,
+						Type:  msg.Questions[0].Type,
+						Class: dnsmessage.ClassINET,
+						TTL:   60,
+					},
+					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+2])},
+				})
+			} else {
+				n := copy(DATA[1:], data)
+				data = data[n:]
+				msg.Answers = append(msg.Answers, dnsmessage.Resource{
+					Header: dnsmessage.ResourceHeader{
+						Name:  msg.Questions[0].Name,
+						Type:  msg.Questions[0].Type,
+						Class: dnsmessage.ClassINET,
+						TTL:   60,
+					},
+					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+1])},
+				})
+			}
 		}
 	case dnsmessage.TypeTXT:
 		var txt []string
@@ -199,15 +193,22 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 			Body: &dnsmessage.TXTResource{TXT: txt},
 		})
 	case dnsmessage.TypeAAAA:
-		msg.Answers = append(msg.Answers, dnsmessage.Resource{})
-		size := min(len(data), 16-2)
-		firstData := data[:size]
-		data = data[size:]
 		fragN := 1
-		AAAA := [16]byte{}
-		for len(data) > 0 {
-			AAAA[0] = byte(fragN)
-			n := copy(AAAA[1:], data)
+		fragN += (len(data) - (16 - 2)) / (16 - 1)
+		if (len(data)-(16-2))%(16-1) > 0 {
+			fragN++
+		}
+
+		for i := range fragN {
+			AAAA := [16]byte{byte(i)}
+			if i == 0 {
+				AAAA[1] = byte(fragN)
+				n := copy(AAAA[2:], data)
+				data = data[n:]
+			} else {
+				n := copy(AAAA[1:], data)
+				data = data[n:]
+			}
 			msg.Answers = append(msg.Answers, dnsmessage.Resource{
 				Header: dnsmessage.ResourceHeader{
 					Name:  msg.Questions[0].Name,
@@ -217,20 +218,6 @@ func (r *Resp) Append(out []byte, data []byte) []byte {
 				},
 				Body: &dnsmessage.AAAAResource{AAAA: AAAA},
 			})
-			data = data[n:]
-			fragN++
-		}
-		AAAA[0] = 0
-		AAAA[1] = byte(fragN)
-		copy(AAAA[2:], firstData)
-		msg.Answers[0] = dnsmessage.Resource{
-			Header: dnsmessage.ResourceHeader{
-				Name:  msg.Questions[0].Name,
-				Type:  msg.Questions[0].Type,
-				Class: dnsmessage.ClassINET,
-				TTL:   60,
-			},
-			Body: &dnsmessage.AAAAResource{AAAA: AAAA},
 		}
 	}
 	if r.edns0 > 0 {
@@ -322,17 +309,17 @@ func (c *xdnsServer) push(clientID ClientID, resp *Resp) {
 	}
 	select {
 	case info.resp <- resp:
-		info.capFrags += resp.capFrag
+		info.capFrags += resp.cap - 11
 	default:
 		r := <-info.resp
-		info.capFrags -= r.capFrag
+		info.capFrags -= r.cap - 11
 		info.resp <- resp
-		info.capFrags += resp.capFrag
+		info.capFrags += resp.cap - 11
 	}
 	c.m[clientID] = info
 }
 
-func (c *xdnsServer) pop(clientID ClientID, len int) ([]*Resp, byte) {
+func (c *xdnsServer) pop(clientID ClientID, lenp int) ([]*Resp, byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed() {
@@ -346,23 +333,23 @@ func (c *xdnsServer) pop(clientID ClientID, len int) ([]*Resp, byte) {
 		}
 		return nil, 0
 	}
-	if info.capFrags < len {
+	if info.capFrags < lenp {
 		return nil, 0
 	}
-	var resp []*Resp
+	var resps []*Resp
 	size := 0
 	for {
 		r := <-info.resp
-		info.capFrags -= r.capFrag
-		if size == 0 && r.cap > len {
+		info.capFrags -= r.cap - 11
+		if len(resps) == 0 && lenp <= r.cap-8 {
 			return []*Resp{r}, 0
 		}
-		resp = append(resp, r)
-		size += r.capFrag
-		if size > len {
+		resps = append(resps, r)
+		size += r.cap - 11
+		if lenp <= size {
 			fragID := info.fragID
 			info.fragID++
-			return resp, fragID
+			return resps, fragID
 		}
 	}
 }
@@ -441,20 +428,26 @@ func (c *xdnsServer) send(p []byte, addr net.Addr) {
 	}
 	buf := pool4K.Get().([]byte)
 	defer pool4K.Put(buf[:cap(buf)])
+	data := pool4K.Get().([]byte)
+	defer pool4K.Put(data[:cap(data)])
 	if len(resps) > 1 {
-		data := pool4K.Get().([]byte)
-		defer pool4K.Put(data[:cap(data)])
 		fragN := byte(len(resps))
 		for i := range len(resps) {
-			data[0] = fragID
-			data[1] = byte(i)
-			data[2] = fragN
-			size := min(len(p), resps[i].capFrag)
-			_, _ = c.PacketConn.WriteTo(resps[i].Append(buf[:0], append(data[:3], p[:size]...)), resps[i].addr)
+			copy(data[:], resps[i].clientID[:])
+			size := min(len(p), resps[i].cap-11)
+			copy(data[8:], p[:size])
+			data[0] |= 0x40 | TypeMap[uint16(resps[i].msg.Questions[0].Type)]
+			data[8] = fragID
+			data[9] = byte(i)
+			data[10] = fragN
+			_, _ = c.PacketConn.WriteTo(resps[i].Append(buf[:0], data[:11+size]), resps[i].addr)
 			p = p[size:]
 		}
 	} else {
-		_, _ = c.PacketConn.WriteTo(resps[0].Append(buf[:0], p), resps[0].addr)
+		copy(data[:], resps[0].clientID[:])
+		copy(data[8:], p)
+		data[0] |= TypeMap[uint16(resps[0].msg.Questions[0].Type)]
+		_, _ = c.PacketConn.WriteTo(resps[0].Append(buf[:0], data[:8+len(p)]), resps[0].addr)
 	}
 }
 
@@ -527,7 +520,7 @@ func (c *xdnsServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.closed() {
 		return 0, io.ErrClosedPipe
 	}
-	if len(p) == 0 || len(p) > 4096-8 {
+	if len(p) == 0 || len(p) > 4096 {
 		return 0, errors.New("not support size")
 	}
 	c.send(p, addr)

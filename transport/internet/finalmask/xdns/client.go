@@ -6,7 +6,6 @@ import (
 	"io"
 	mrand "math/rand"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -184,7 +183,9 @@ func (c *xdnsClient) send(p []byte) {
 
 	if len(p) <= 255*(domain.cap-14) {
 		copy(data[:], c.clientID[:])
+		common.Must2(rand.Read(data[8:11]))
 		data[0] |= 0x40 | TypeMap[qtype]
+		data[8] &= 0x7F
 
 		fragID := byte(c.fragID.Add(1))
 		fragN := len(p) / (domain.cap - 14)
@@ -194,9 +195,7 @@ func (c *xdnsClient) send(p []byte) {
 
 		for i := range fragN {
 			size := min(len(p), domain.cap-14)
-			common.Must2(rand.Read(data[8:11]))
 			copy(data[14:], p[:size])
-			data[8] &= 0x7F
 			data[11] = fragID
 			data[12] = byte(i)
 			data[13] = byte(fragN)
@@ -225,72 +224,63 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 			break
 		}
 	}
-	if !domain.HasType(uint16(msg.Questions[0].Type)) {
+	if domain == nil || !domain.HasType(uint16(msg.Questions[0].Type)) {
 		return
 	}
 
-	var frags [][]byte
-	for i := range msg.Answers {
-		if msg.Answers[i].Header.Name == msg.Questions[0].Name && msg.Answers[i].Header.Type == msg.Questions[0].Type {
+	p := pool4K.Get().([]byte)
+	p = p[:0]
+	if msg.Questions[0].Type == dnsmessage.TypeTXT {
+		if len(msg.Answers) == 1 && domain.IsDomain(msg.Answers[0].Header.Name) && msg.Answers[0].Header.Type == dnsmessage.TypeTXT {
+			for i := range msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT {
+				p = append(p, msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT[i]...)
+			}
+		}
+		pool4K.Put(p[:cap(p)])
+		return
+	} else {
+		var frags [][]byte
+		for i := range msg.Answers {
+			if !domain.IsDomain(msg.Answers[i].Header.Name) || msg.Answers[i].Header.Type != msg.Questions[0].Type {
+				continue
+			}
 			switch msg.Questions[0].Type {
 			case dnsmessage.TypeA:
 				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
 			case dnsmessage.TypeCNAME:
 				var decoded [255]byte
 				n, err := domain.Decode(&decoded, msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
-				if err != nil || n == 0 {
+				if err != nil || n < 2 {
 					continue
 				}
 				frags = append(frags, decoded[:n])
-			case dnsmessage.TypeTXT:
-				txt := []byte(strings.Join(msg.Answers[i].Body.(*dnsmessage.TXTResource).TXT, ""))
-				if len(txt) == 0 {
-					continue
-				}
-				if len(frags) > 0 {
-					return
-				}
-				frags = append(frags, txt)
 			case dnsmessage.TypeAAAA:
 				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AAAAResource).AAAA[:])
 			}
-			if len(frags) > 255 {
-				return
-			}
 		}
-	}
-	if len(frags) == 0 {
-		return
-	}
-	sort.Slice(frags, func(i, j int) bool {
-		return frags[i][0] < frags[j][0]
-	})
-	for i := range frags {
-		if i > 0 && frags[i][0] == frags[i-1][0] {
+		if len(frags) == 0 || len(frags) > 255 {
+			pool4K.Put(p[:cap(p)])
 			return
 		}
-		if frags[i][0] == 0 {
-			if len(frags[i]) < 2 {
-				return
-			}
-			if frags[i][1] != byte(len(frags)) {
-				return
+		sort.Slice(frags, func(i, j int) bool {
+			return frags[i][0] < frags[j][0]
+		})
+		if frags[0][1] != byte(len(frags)) {
+			pool4K.Put(p[:cap(p)])
+			return
+		}
+		p = append(p, frags[0][2:]...)
+		for i := range frags {
+			if i > 0 {
+				if frags[i][0] == frags[i-1][0] {
+					pool4K.Put(p[:cap(p)])
+					return
+				}
+				p = append(p, frags[i][1:]...)
 			}
 		}
 	}
-	p := pool4K.Get().([]byte)
-	p = p[:0]
-	for i := range frags {
-		if i == 0 {
-			p = append(p, frags[0][2:]...)
-			continue
-		}
-		p = append(p, frags[i][1:]...)
-	}
-	if len(p) < 8+1 {
-		pool4K.Put(p[:cap(p)])
-		return
-	}
+
 	if c.clientID != ClientIDFromRaw([8]byte(p[:8])) ||
 		p[0]&0x80 != 0x80 ||
 		TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) {
