@@ -219,14 +219,10 @@ func (c *xdnsClient) send(p []byte) {
 
 func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	msg := dnsmessage.Message{}
-	err := msg.Unpack(buf)
-	if err != nil {
+	if err := msg.Unpack(buf); err != nil {
 		return
 	}
-	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess {
-		return
-	}
-	if len(msg.Questions) != 1 || len(msg.Answers) == 0 {
+	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess || len(msg.Questions) != 1 || len(msg.Answers) == 0 {
 		return
 	}
 
@@ -364,10 +360,10 @@ func (c *xdnsClient) run() {
 		pool4K.Put(packet.p[:cap(packet.p)])
 	default:
 	}
+	close(c.readCh)
 
 	c.fragManager.Close()
 	close(c.poolCh)
-	close(c.readCh)
 }
 
 func (c *xdnsClient) poll() {
@@ -432,6 +428,9 @@ func (c *xdnsClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	if c.closed() {
 		return 0, io.ErrClosedPipe
+	}
+	if len(p) == 0 {
+		return 0, nil
 	}
 	c.send(p)
 	return len(p), nil
