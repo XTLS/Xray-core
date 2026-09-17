@@ -280,22 +280,22 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 			}
 		}
 	}
+	if len(p) < 8+1 {
+		pool4K.Put(p[:cap(p)])
+		return
+	}
 
-	if c.clientID != ClientIDFromRaw([8]byte(p[:8])) ||
-		p[0]&0x80 != 0x80 ||
-		TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) {
+	if p[0]&0x80 == 0x80 || (p[0]&0x40 == 0x40 && len(p) < 11+1) || TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) || c.clientID != ClientIDFromRaw([8]byte(p[:8])) {
 		pool4K.Put(p[:cap(p)])
 		return
 	}
 	if p[0]&0x40 == 0x40 {
-		if len(p) < 11+1 {
-			pool4K.Put(p[:cap(p)])
-			return
-		}
 		out := pool4K.Get().([]byte)
 		n := c.fragManager.Feed(out, FragKey{clientID: c.clientID, fragID: p[8]}, p[9], p[10], p[11:])
 		pool4K.Put(p[:cap(p)])
-		if n <= 0 {
+		if n > 0 {
+			p = out[:n]
+		} else {
 			if n == 0 {
 				select {
 				case c.poolCh <- struct{}{}:
@@ -305,14 +305,9 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 			pool4K.Put(out[:cap(out)])
 			return
 		}
-		p = out[:n]
 	} else {
 		copy(p, p[8:])
 		p = p[:len(p)-8]
-	}
-	packet := packet{
-		p:    p,
-		addr: addr,
 	}
 	select {
 	case c.poolCh <- struct{}{}:
@@ -322,7 +317,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	case <-c.closeCh:
 		pool4K.Put(p[:cap(p)])
 		return
-	case c.readCh <- packet:
+	case c.readCh <- packet{p: p, addr: addr}:
 	}
 }
 
