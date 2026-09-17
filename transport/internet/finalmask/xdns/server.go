@@ -285,12 +285,12 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	case <-c.closeCh:
 		pool4K.Put(p[:cap(p)])
 		return
-	case c.readCh <- packet{p: p, addr: addr}:
+	case c.readCh <- packet{p: p, addr: clientID.Addr()}:
 		return
 	}
 }
 
-func (c *xdnsServer) send(p []byte) {
+func (c *xdnsServer) send(p []byte, addr net.Addr) {
 
 }
 
