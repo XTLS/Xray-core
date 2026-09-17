@@ -166,9 +166,7 @@ func (c *xdnsClient) send(p []byte) {
 	if len(p) == 0 {
 		copy(data[:], c.clientID[:])
 		common.Must2(rand.Read(data[8:16]))
-		data[0] &= 0x3C
 		data[0] |= TypeMap[qtype]
-		data[8] &= 0x7F
 		data[8] |= 0x80
 		send(data[:16])
 		return
@@ -178,7 +176,6 @@ func (c *xdnsClient) send(p []byte) {
 		copy(data[:], c.clientID[:])
 		common.Must2(rand.Read(data[8:11]))
 		copy(data[11:], p)
-		data[0] &= 0x3C
 		data[0] |= TypeMap[qtype]
 		data[8] &= 0x7F
 		send(data[:11+len(p)])
@@ -187,29 +184,24 @@ func (c *xdnsClient) send(p []byte) {
 
 	if len(p) <= 255*(domain.cap-14) {
 		copy(data[:], c.clientID[:])
-		data[0] &= 0x3C
-		data[0] |= 0x40
-		data[0] |= TypeMap[qtype]
+		data[0] |= 0x40 | TypeMap[qtype]
 
 		fragID := byte(c.fragID.Add(1))
-		fragIdx := byte(0)
 		fragN := len(p) / (domain.cap - 14)
-		if len(p)%(domain.cap-14) != 0 {
+		if len(p)%(domain.cap-14) > 0 {
 			fragN++
 		}
 
-		b := p
-		for len(b) > 0 {
-			size := min(len(b), domain.cap-14)
+		for i := range fragN {
+			size := min(len(p), domain.cap-14)
 			common.Must2(rand.Read(data[8:11]))
-			data[11] = fragID
-			data[12] = fragIdx
-			data[13] = byte(fragN)
-			copy(data[14:], b[:size])
+			copy(data[14:], p[:size])
 			data[8] &= 0x7F
+			data[11] = fragID
+			data[12] = byte(i)
+			data[13] = byte(fragN)
 			send(data[:14+size])
-			fragIdx++
-			b = b[size:]
+			p = p[size:]
 		}
 		return
 	}
