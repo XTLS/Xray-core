@@ -1,6 +1,7 @@
 package xdns
 
 import (
+	"errors"
 	"io"
 	"sync"
 
@@ -9,10 +10,12 @@ import (
 )
 
 type UDPResolver struct {
-	udpAddr *net.UDPAddr
-	dialer  *finalmask.Dialer
+	dest   net.Destination
+	dialer *finalmask.Dialer
 
 	conn    net.PacketConn
+	udpAddr *net.UDPAddr
+
 	readCh  chan []byte
 	closeCh chan struct{}
 	wg      sync.WaitGroup
@@ -20,11 +23,21 @@ type UDPResolver struct {
 }
 
 func NewUDPResolver(config *UDPResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", config.Addr)
+	dest, err := net.ParseDestination(config.Addr)
 	if err != nil {
 		return nil, err
 	}
-	return &UDPResolver{udpAddr: udpAddr, dialer: dialer, readCh: make(chan []byte), closeCh: make(chan struct{})}, nil
+	r := &UDPResolver{
+		dest:    dest,
+		dialer:  dialer,
+		readCh:  make(chan []byte),
+		closeCh: make(chan struct{}),
+	}
+	if err := r.dial(); err != nil {
+		r.Close()
+		return nil, err
+	}
+	return r, nil
 }
 
 func (r *UDPResolver) closed() bool {
@@ -36,21 +49,22 @@ func (r *UDPResolver) closed() bool {
 	}
 }
 
-func (r *UDPResolver) dial() net.PacketConn {
+func (r *UDPResolver) dial() error {
 	if r.closed() {
-		return nil
+		return errors.New("closed")
 	}
 	if r.conn != nil {
-		return r.conn
+		return nil
 	}
-	conn, err := r.dialer.DialUDP(net.UDPDestination(net.IPAddress(r.udpAddr.IP), net.Port(r.udpAddr.Port)))
+	conn, err := r.dialer.DialUDP(r.dest)
 	if err != nil {
 		return nil
 	}
 	r.conn = conn.(*finalmask.PacketConnWrapper).PacketConn
+	r.udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 	r.wg.Add(1)
 	go r.recv(conn.(*finalmask.PacketConnWrapper).PacketConn)
-	return r.conn
+	return nil
 }
 
 func (r *UDPResolver) recv(conn net.PacketConn) {
@@ -74,7 +88,7 @@ func (r *UDPResolver) recv(conn net.PacketConn) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	conn.Close()
+	_ = conn.Close()
 	r.conn = nil
 }
 
@@ -95,11 +109,10 @@ func (r *UDPResolver) Read(p []byte) (n int, err error) {
 func (r *UDPResolver) Send(p []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	conn := r.dial()
-	if conn == nil {
+	if err := r.dial(); err != nil {
 		return
 	}
-	_, _ = conn.WriteTo(p, r.udpAddr)
+	_, _ = r.conn.WriteTo(p, r.udpAddr)
 }
 
 func (r *UDPResolver) Close() {
@@ -110,13 +123,8 @@ func (r *UDPResolver) Close() {
 	}
 	close(r.closeCh)
 	if r.conn != nil {
-		r.conn.Close()
+		_ = r.conn.Close()
 	}
 	r.wg.Wait()
-	select {
-	case p := <-r.readCh:
-		pool4K.Put(p[:cap(p)])
-	default:
-	}
 	close(r.readCh)
 }
