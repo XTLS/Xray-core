@@ -281,7 +281,7 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		PacketConn: raw,
 
 		domains:      domains,
-		minAvailable: 3,
+		minAvailable: int(c.MinAvailable),
 		fragManager:  NewFragManager(),
 		m:            make(map[ClientID]RespInfo),
 

@@ -730,8 +730,9 @@ type XDNSResolver struct {
 }
 
 type XDNS struct {
-	Domains   []XDNSDomain   `json:"domains"`
-	Resolvers []XDNSResolver `json:"resolvers"`
+	Domains      []XDNSDomain   `json:"domains"`
+	Resolvers    []XDNSResolver `json:"resolvers"`
+	MinAvailable int32          `json:"minAvailable"`
 }
 
 func (c *XDNS) Build() (proto.Message, error) {
@@ -763,7 +764,10 @@ func (c *XDNS) Build() (proto.Message, error) {
 		}
 		resolvers = append(resolvers, serial.ToTypedMessage(pm))
 	}
-	return &xdns.Config{Domains: domains, Resolvers: resolvers}, nil
+	if c.MinAvailable == 0 {
+		c.MinAvailable = 3
+	}
+	return &xdns.Config{Domains: domains, Resolvers: resolvers, MinAvailable: c.MinAvailable}, nil
 }
 
 type XMC struct {
