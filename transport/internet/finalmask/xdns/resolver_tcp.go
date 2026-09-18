@@ -25,7 +25,7 @@ type TCPResolver struct {
 }
 
 func NewTCPResolver(config *TCPResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
-	dest, err := net.ParseDestination(config.Addr)
+	dest, err := net.ParseDestination("tcp:" + config.Addr)
 	if err != nil {
 		return nil, err
 	}
