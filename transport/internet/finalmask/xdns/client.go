@@ -340,12 +340,6 @@ func (c *xdnsClient) run() {
 func (c *xdnsClient) poll() {
 	defer c.wg.Done()
 
-	select {
-	case <-c.closeCh:
-		return
-	case <-c.poolCh:
-	}
-
 	delay := initPollDelay
 	ticker := time.NewTicker(delay)
 	defer ticker.Stop()

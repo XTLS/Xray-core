@@ -19,6 +19,7 @@ message DomainProto {
 message Config {
   repeated DomainProto domains = 1;
   repeated xray.common.serial.TypedMessage resolvers = 2;
+  int32 available_min_cap = 3;
 }
 
 message TCPResolverProto {
