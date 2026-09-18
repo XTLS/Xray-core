@@ -99,12 +99,12 @@ func (x *DomainProto) GetEdns0() int32 {
 }
 
 type Config struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Domains         []*DomainProto         `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
-	Resolvers       []*serial.TypedMessage `protobuf:"bytes,2,rep,name=resolvers,proto3" json:"resolvers,omitempty"`
-	AvailableMinCap int32                  `protobuf:"varint,3,opt,name=available_min_cap,json=availableMinCap,proto3" json:"available_min_cap,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domains       []*DomainProto         `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
+	Resolvers     []*serial.TypedMessage `protobuf:"bytes,2,rep,name=resolvers,proto3" json:"resolvers,omitempty"`
+	MinAvailable  int32                  `protobuf:"varint,3,opt,name=min_available,json=minAvailable,proto3" json:"min_available,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -151,9 +151,9 @@ func (x *Config) GetResolvers() []*serial.TypedMessage {
 	return nil
 }
 
-func (x *Config) GetAvailableMinCap() int32 {
+func (x *Config) GetMinAvailable() int32 {
 	if x != nil {
-		return x.AvailableMinCap
+		return x.MinAvailable
 	}
 	return 0
 }
@@ -257,11 +257,11 @@ const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\vlabel_limit\x18\x03 \x01(\x05R\n" +
 	"labelLimit\x12\x14\n" +
 	"\x05types\x18\x04 \x03(\x05R\x05types\x12\x14\n" +
-	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"\xc3\x01\n" +
+	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"\xbc\x01\n" +
 	"\x06Config\x12M\n" +
 	"\adomains\x18\x01 \x03(\v23.xray.transport.internet.finalmask.xdns.DomainProtoR\adomains\x12>\n" +
-	"\tresolvers\x18\x02 \x03(\v2 .xray.common.serial.TypedMessageR\tresolvers\x12*\n" +
-	"\x11available_min_cap\x18\x03 \x01(\x05R\x0favailableMinCap\"&\n" +
+	"\tresolvers\x18\x02 \x03(\v2 .xray.common.serial.TypedMessageR\tresolvers\x12#\n" +
+	"\rmin_available\x18\x03 \x01(\x05R\fminAvailable\"&\n" +
 	"\x10TCPResolverProto\x12\x12\n" +
 	"\x04addr\x18\x01 \x01(\tR\x04addr\"&\n" +
 	"\x10UDPResolverProto\x12\x12\n" +
