@@ -26,7 +26,7 @@ func NewTCPResolver(config *TCPResolverProto, dialer *finalmask.Dialer) (Resolve
 	if err != nil {
 		return nil, err
 	}
-	return &TCPResolver{tcpAddr: tcpAddr, udpAddr: &net.UDPAddr{IP: tcpAddr.IP, Port: tcpAddr.Port}, dialer: dialer}, nil
+	return &TCPResolver{tcpAddr: tcpAddr, udpAddr: &net.UDPAddr{IP: tcpAddr.IP, Port: tcpAddr.Port}, dialer: dialer, readCh: make(chan []byte), closeCh: make(chan struct{})}, nil
 }
 
 func (r *TCPResolver) closed() bool {
