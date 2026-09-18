@@ -250,9 +250,10 @@ type RespInfo struct {
 type xdnsServer struct {
 	net.PacketConn
 
-	domains     []*Domain
-	fragManager *FragManager
-	m           map[ClientID]RespInfo
+	domains         []*Domain
+	availableMinCap int
+	fragManager     *FragManager
+	m               map[ClientID]RespInfo
 
 	readCh  chan packet
 	closeCh chan struct{}
@@ -279,9 +280,10 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	server := &xdnsServer{
 		PacketConn: raw,
 
-		domains:     domains,
-		fragManager: NewFragManager(),
-		m:           make(map[ClientID]RespInfo),
+		domains:         domains,
+		availableMinCap: int(c.AvailableMinCap),
+		fragManager:     NewFragManager(),
+		m:               make(map[ClientID]RespInfo),
 
 		readCh:  make(chan packet),
 		closeCh: make(chan struct{}),
@@ -339,7 +341,7 @@ func (c *xdnsServer) pop(clientID ClientID, lenp int) ([]*Resp, byte) {
 		}
 		return nil, 0
 	}
-	if info.capFrags < lenp {
+	if info.capFrags < c.availableMinCap || info.capFrags < lenp {
 		return nil, 0
 	}
 	var resps []*Resp
