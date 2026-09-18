@@ -24,7 +24,7 @@ func NewUDPResolver(config *UDPResolverProto, dialer *finalmask.Dialer) (Resolve
 	if err != nil {
 		return nil, err
 	}
-	return &UDPResolver{udpAddr: udpAddr, dialer: dialer}, nil
+	return &UDPResolver{udpAddr: udpAddr, dialer: dialer, readCh: make(chan []byte), closeCh: make(chan struct{})}, nil
 }
 
 func (r *UDPResolver) closed() bool {
