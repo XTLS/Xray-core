@@ -1,19 +1,18 @@
 package xdns
 
 import (
-	"context"
 	"encoding/binary"
 	"io"
 	"sync"
 
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type TCPResolver struct {
 	tcpAddr *net.TCPAddr
 	udpAddr *net.UDPAddr
-	sockopt *internet.SocketConfig
+	dialer  *finalmask.Dialer
 
 	conn    net.Conn
 	readCh  chan []byte
@@ -22,12 +21,12 @@ type TCPResolver struct {
 	mu      sync.Mutex
 }
 
-func NewTCPResolver(config *TCPResolverProto) (Resolver, error) {
+func NewTCPResolver(config *TCPResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", config.Addr)
 	if err != nil {
 		return nil, err
 	}
-	return &TCPResolver{tcpAddr: tcpAddr, udpAddr: &net.UDPAddr{IP: tcpAddr.IP, Port: tcpAddr.Port}, sockopt: config.Sockopt}, nil
+	return &TCPResolver{tcpAddr: tcpAddr, udpAddr: &net.UDPAddr{IP: tcpAddr.IP, Port: tcpAddr.Port}, dialer: dialer}, nil
 }
 
 func (r *TCPResolver) closed() bool {
@@ -46,7 +45,7 @@ func (r *TCPResolver) dial() net.Conn {
 	if r.conn != nil {
 		return r.conn
 	}
-	conn, err := internet.DialSystem(context.Background(), net.TCPDestination(net.IPAddress(r.tcpAddr.IP), net.Port(r.tcpAddr.Port)), r.sockopt)
+	conn, err := r.dialer.DialTCP(net.TCPDestination(net.IPAddress(r.tcpAddr.IP), net.Port(r.tcpAddr.Port)))
 	if err != nil {
 		return nil
 	}

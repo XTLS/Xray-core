@@ -13,6 +13,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
@@ -35,7 +36,7 @@ type packet struct {
 }
 
 type xdnsClient struct {
-	net.PacketConn
+	dialer *finalmask.Dialer
 
 	clientID    ClientID
 	fragID      atomic.Uint32
@@ -53,7 +54,7 @@ type xdnsClient struct {
 	mu      sync.Mutex
 }
 
-func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	if len(c.Domains) == 0 {
 		return nil, errors.New("empty domains")
 	}
@@ -74,14 +75,14 @@ func NewClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 	resolvers := make([]Resolver, 0, len(c.Resolvers))
 	for i := range c.Resolvers {
-		resolver, err := NewResolver(c.Resolvers[i])
+		resolver, err := NewResolver(c.Resolvers[i], dialer)
 		if err != nil {
 			return nil, err
 		}
 		resolvers = append(resolvers, resolver)
 	}
 	client := &xdnsClient{
-		PacketConn: raw,
+		dialer: dialer,
 
 		clientID:    NewClientID(),
 		domains:     domains,
@@ -420,12 +421,13 @@ func (c *xdnsClient) Close() error {
 		return nil
 	}
 	close(c.closeCh)
-	c.PacketConn.Close()
 	for i := range c.resolvers {
 		c.resolvers[i].Close()
 	}
 	return nil
 }
+
+func (c *xdnsClient) LocalAddr() net.Addr { return &net.UDPAddr{IP: []byte{0, 0, 0, 0}} }
 
 func (c *xdnsClient) SetDeadline(t time.Time) error { return errors.New("not support") }
 

@@ -6,7 +6,6 @@ option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/xdns
 option java_package = "com.xray.transport.internet.finalmask.xdns";
 option java_multiple_files = true;
 
-import "transport/internet/config.proto";
 import "common/serial/typed_message.proto";
 
 message DomainProto {
@@ -24,10 +23,8 @@ message Config {
 
 message TCPResolverProto {
   string addr = 1;
-  xray.transport.internet.SocketConfig sockopt = 2;
 }
 
 message UDPResolverProto {
   string addr = 1;
-  xray.transport.internet.SocketConfig sockopt = 2;
 }
