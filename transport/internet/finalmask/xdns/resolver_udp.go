@@ -23,7 +23,7 @@ type UDPResolver struct {
 }
 
 func NewUDPResolver(config *UDPResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
-	dest, err := net.ParseDestination(config.Addr)
+	dest, err := net.ParseDestination("udp:" + config.Addr)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (r *UDPResolver) dial() error {
 	}
 	conn, err := r.dialer.DialUDP(r.dest)
 	if err != nil {
-		return nil
+		return err
 	}
 	r.conn = conn.(*finalmask.PacketConnWrapper).PacketConn
 	r.udpAddr = conn.RemoteAddr().(*net.UDPAddr)
