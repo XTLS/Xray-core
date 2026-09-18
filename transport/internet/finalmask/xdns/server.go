@@ -309,7 +309,7 @@ func (c *xdnsServer) push(clientID ClientID, resp *Resp) {
 	info, ok := c.m[clientID]
 	if !ok || now.After(info.deadline) {
 		info = RespInfo{
-			resp:     make(chan *Resp),
+			resp:     make(chan *Resp, 255),
 			deadline: now.Add(respTTL),
 		}
 	}
@@ -455,6 +455,8 @@ func (c *xdnsServer) send(p []byte, addr net.Addr) {
 }
 
 func (c *xdnsServer) run() {
+	go c.gc()
+
 	c.wg.Add(1)
 	go c.recv()
 
