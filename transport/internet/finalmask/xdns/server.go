@@ -361,6 +361,7 @@ func (c *xdnsServer) pop(clientID ClientID, lenp int) ([]*Resp, byte) {
 		fragID = info.fragID
 		info.fragID++
 	}
+	info.deadline = now.Add(respTTL)
 	c.m[clientID] = info
 	return resps, fragID
 }
