@@ -2,6 +2,7 @@ package xdns
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 	"sync"
 
@@ -10,11 +11,13 @@ import (
 )
 
 type TCPResolver struct {
-	tcpAddr *net.TCPAddr
-	udpAddr *net.UDPAddr
-	dialer  *finalmask.Dialer
+	dest   net.Destination
+	dialer *finalmask.Dialer
 
 	conn    net.Conn
+	tcpAddr *net.TCPAddr
+	udpAddr *net.UDPAddr
+
 	readCh  chan []byte
 	closeCh chan struct{}
 	wg      sync.WaitGroup
@@ -22,11 +25,21 @@ type TCPResolver struct {
 }
 
 func NewTCPResolver(config *TCPResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", config.Addr)
+	dest, err := net.ParseDestination(config.Addr)
 	if err != nil {
 		return nil, err
 	}
-	return &TCPResolver{tcpAddr: tcpAddr, udpAddr: &net.UDPAddr{IP: tcpAddr.IP, Port: tcpAddr.Port}, dialer: dialer, readCh: make(chan []byte), closeCh: make(chan struct{})}, nil
+	r := &TCPResolver{
+		dest:    dest,
+		dialer:  dialer,
+		readCh:  make(chan []byte),
+		closeCh: make(chan struct{}),
+	}
+	if err := r.dial(); err != nil {
+		r.Close()
+		return nil, err
+	}
+	return r, nil
 }
 
 func (r *TCPResolver) closed() bool {
@@ -38,21 +51,23 @@ func (r *TCPResolver) closed() bool {
 	}
 }
 
-func (r *TCPResolver) dial() net.Conn {
+func (r *TCPResolver) dial() error {
 	if r.closed() {
-		return nil
+		return errors.New("closed")
 	}
 	if r.conn != nil {
-		return r.conn
-	}
-	conn, err := r.dialer.DialTCP(net.TCPDestination(net.IPAddress(r.tcpAddr.IP), net.Port(r.tcpAddr.Port)))
-	if err != nil {
 		return nil
 	}
+	conn, err := r.dialer.DialTCP(r.dest)
+	if err != nil {
+		return err
+	}
 	r.conn = conn
+	r.tcpAddr = conn.RemoteAddr().(*net.TCPAddr)
+	r.udpAddr = &net.UDPAddr{IP: r.tcpAddr.IP, Port: r.tcpAddr.Port}
 	r.wg.Add(1)
 	go r.recv(conn)
-	return r.conn
+	return nil
 }
 
 func (r *TCPResolver) recv(conn net.Conn) {
@@ -85,7 +100,7 @@ func (r *TCPResolver) recv(conn net.Conn) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	conn.Close()
+	_ = conn.Close()
 	r.conn = nil
 }
 
@@ -106,12 +121,11 @@ func (r *TCPResolver) Read(p []byte) (n int, err error) {
 func (r *TCPResolver) Send(p []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	conn := r.dial()
-	if conn == nil {
+	if r.dial() != nil {
 		return
 	}
-	_ = binary.Write(conn, binary.BigEndian, len(p))
-	_, _ = conn.Write(p)
+	_ = binary.Write(r.conn, binary.BigEndian, len(p))
+	_, _ = r.conn.Write(p)
 }
 
 func (r *TCPResolver) Close() {
@@ -122,13 +136,8 @@ func (r *TCPResolver) Close() {
 	}
 	close(r.closeCh)
 	if r.conn != nil {
-		r.conn.Close()
+		_ = r.conn.Close()
 	}
 	r.wg.Wait()
-	select {
-	case p := <-r.readCh:
-		pool4K.Put(p[:cap(p)])
-	default:
-	}
 	close(r.readCh)
 }
