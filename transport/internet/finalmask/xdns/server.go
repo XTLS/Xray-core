@@ -461,14 +461,7 @@ func (c *xdnsServer) run() {
 	go c.recv()
 
 	c.wg.Wait()
-
-	select {
-	case packet := <-c.readCh:
-		pool4K.Put(packet.p[:cap(packet.p)])
-	default:
-	}
 	close(c.readCh)
-
 	c.fragManager.Close()
 	for key := range c.m {
 		delete(c.m, key)
