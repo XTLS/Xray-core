@@ -347,17 +347,22 @@ func (c *xdnsServer) pop(clientID ClientID, lenp int) ([]*Resp, byte) {
 	for {
 		r := <-info.resp
 		info.capFrags -= r.cap - 11
-		if len(resps) == 0 && lenp <= r.cap-8 {
-			return []*Resp{r}, 0
-		}
 		resps = append(resps, r)
 		size += r.cap - 11
+		if len(resps) == 0 && lenp <= r.cap-8 {
+			break
+		}
 		if lenp <= size {
-			fragID := info.fragID
-			info.fragID++
-			return resps, fragID
+			break
 		}
 	}
+	fragID := byte(0)
+	if len(resps) > 0 {
+		fragID = info.fragID
+		info.fragID++
+	}
+	c.m[clientID] = info
+	return resps, fragID
 }
 
 func (c *xdnsServer) read(buf []byte, addr net.Addr) {
