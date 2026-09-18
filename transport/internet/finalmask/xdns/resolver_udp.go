@@ -1,19 +1,16 @@
 package xdns
 
 import (
-	"context"
 	"io"
-	"reflect"
 	"sync"
 
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type UDPResolver struct {
 	udpAddr *net.UDPAddr
-	sockopt *internet.SocketConfig
+	dialer  *finalmask.Dialer
 
 	conn    net.PacketConn
 	readCh  chan []byte
@@ -22,12 +19,12 @@ type UDPResolver struct {
 	mu      sync.Mutex
 }
 
-func NewUDPResolver(config *UDPResolverProto) (Resolver, error) {
+func NewUDPResolver(config *UDPResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
 	udpAddr, err := net.ResolveUDPAddr("udp", config.Addr)
 	if err != nil {
 		return nil, err
 	}
-	return &UDPResolver{udpAddr: udpAddr, sockopt: config.Sockopt}, nil
+	return &UDPResolver{udpAddr: udpAddr, dialer: dialer}, nil
 }
 
 func (r *UDPResolver) closed() bool {
@@ -46,22 +43,13 @@ func (r *UDPResolver) dial() net.PacketConn {
 	if r.conn != nil {
 		return r.conn
 	}
-	conn, err := internet.DialSystem(context.Background(), net.UDPDestination(net.IPAddress(r.udpAddr.IP), net.Port(r.udpAddr.Port)), r.sockopt)
+	conn, err := r.dialer.DialUDP(net.UDPDestination(net.IPAddress(r.udpAddr.IP), net.Port(r.udpAddr.Port)))
 	if err != nil {
 		return nil
 	}
-	var newConn net.PacketConn
-	switch c := conn.(type) {
-	case *internet.PacketConnWrapper:
-		newConn = c.PacketConn
-	case *cnc.Connection:
-		newConn = &internet.FakePacketConn{Conn: c}
-	default:
-		panic(reflect.TypeOf(c))
-	}
-	r.conn = newConn
+	r.conn = conn.(*finalmask.PacketConnWrapper).PacketConn
 	r.wg.Add(1)
-	go r.recv(newConn)
+	go r.recv(conn.(*finalmask.PacketConnWrapper).PacketConn)
 	return r.conn
 }
 

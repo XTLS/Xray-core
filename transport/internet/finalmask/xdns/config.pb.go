@@ -8,7 +8,6 @@ package xdns
 
 import (
 	serial "github.com/xtls/xray-core/common/serial"
-	internet "github.com/xtls/xray-core/transport/internet"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -154,7 +153,6 @@ func (x *Config) GetResolvers() []*serial.TypedMessage {
 type TCPResolverProto struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Addr          string                 `protobuf:"bytes,1,opt,name=addr,proto3" json:"addr,omitempty"`
-	Sockopt       *internet.SocketConfig `protobuf:"bytes,2,opt,name=sockopt,proto3" json:"sockopt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -196,17 +194,9 @@ func (x *TCPResolverProto) GetAddr() string {
 	return ""
 }
 
-func (x *TCPResolverProto) GetSockopt() *internet.SocketConfig {
-	if x != nil {
-		return x.Sockopt
-	}
-	return nil
-}
-
 type UDPResolverProto struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Addr          string                 `protobuf:"bytes,1,opt,name=addr,proto3" json:"addr,omitempty"`
-	Sockopt       *internet.SocketConfig `protobuf:"bytes,2,opt,name=sockopt,proto3" json:"sockopt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -248,18 +238,11 @@ func (x *UDPResolverProto) GetAddr() string {
 	return ""
 }
 
-func (x *UDPResolverProto) GetSockopt() *internet.SocketConfig {
-	if x != nil {
-		return x.Sockopt
-	}
-	return nil
-}
-
 var File_transport_internet_finalmask_xdns_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\n" +
-	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\x1a\x1ftransport/internet/config.proto\x1a!common/serial/typed_message.proto\"\x8b\x01\n" +
+	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\x1a!common/serial/typed_message.proto\"\x8b\x01\n" +
 	"\vDomainProto\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tlen_limit\x18\x02 \x01(\x05R\blenLimit\x12\x1f\n" +
@@ -269,13 +252,11 @@ const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"\x97\x01\n" +
 	"\x06Config\x12M\n" +
 	"\adomains\x18\x01 \x03(\v23.xray.transport.internet.finalmask.xdns.DomainProtoR\adomains\x12>\n" +
-	"\tresolvers\x18\x02 \x03(\v2 .xray.common.serial.TypedMessageR\tresolvers\"g\n" +
+	"\tresolvers\x18\x02 \x03(\v2 .xray.common.serial.TypedMessageR\tresolvers\"&\n" +
 	"\x10TCPResolverProto\x12\x12\n" +
-	"\x04addr\x18\x01 \x01(\tR\x04addr\x12?\n" +
-	"\asockopt\x18\x02 \x01(\v2%.xray.transport.internet.SocketConfigR\asockopt\"g\n" +
+	"\x04addr\x18\x01 \x01(\tR\x04addr\"&\n" +
 	"\x10UDPResolverProto\x12\x12\n" +
-	"\x04addr\x18\x01 \x01(\tR\x04addr\x12?\n" +
-	"\asockopt\x18\x02 \x01(\v2%.xray.transport.internet.SocketConfigR\asockoptB\x94\x01\n" +
+	"\x04addr\x18\x01 \x01(\tR\x04addrB\x94\x01\n" +
 	"*com.xray.transport.internet.finalmask.xdnsP\x01Z;github.com/xtls/xray-core/transport/internet/finalmask/xdns\xaa\x02&Xray.Transport.Internet.Finalmask.Xdnsb\x06proto3"
 
 var (
@@ -292,23 +273,20 @@ func file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP() []byte {
 
 var file_transport_internet_finalmask_xdns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_transport_internet_finalmask_xdns_config_proto_goTypes = []any{
-	(*DomainProto)(nil),           // 0: xray.transport.internet.finalmask.xdns.DomainProto
-	(*Config)(nil),                // 1: xray.transport.internet.finalmask.xdns.Config
-	(*TCPResolverProto)(nil),      // 2: xray.transport.internet.finalmask.xdns.TCPResolverProto
-	(*UDPResolverProto)(nil),      // 3: xray.transport.internet.finalmask.xdns.UDPResolverProto
-	(*serial.TypedMessage)(nil),   // 4: xray.common.serial.TypedMessage
-	(*internet.SocketConfig)(nil), // 5: xray.transport.internet.SocketConfig
+	(*DomainProto)(nil),         // 0: xray.transport.internet.finalmask.xdns.DomainProto
+	(*Config)(nil),              // 1: xray.transport.internet.finalmask.xdns.Config
+	(*TCPResolverProto)(nil),    // 2: xray.transport.internet.finalmask.xdns.TCPResolverProto
+	(*UDPResolverProto)(nil),    // 3: xray.transport.internet.finalmask.xdns.UDPResolverProto
+	(*serial.TypedMessage)(nil), // 4: xray.common.serial.TypedMessage
 }
 var file_transport_internet_finalmask_xdns_config_proto_depIdxs = []int32{
 	0, // 0: xray.transport.internet.finalmask.xdns.Config.domains:type_name -> xray.transport.internet.finalmask.xdns.DomainProto
 	4, // 1: xray.transport.internet.finalmask.xdns.Config.resolvers:type_name -> xray.common.serial.TypedMessage
-	5, // 2: xray.transport.internet.finalmask.xdns.TCPResolverProto.sockopt:type_name -> xray.transport.internet.SocketConfig
-	5, // 3: xray.transport.internet.finalmask.xdns.UDPResolverProto.sockopt:type_name -> xray.transport.internet.SocketConfig
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_xdns_config_proto_init() }
