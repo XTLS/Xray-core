@@ -357,7 +357,7 @@ func (c *xdnsServer) pop(clientID ClientID, lenp int) ([]*Resp, byte) {
 		}
 	}
 	fragID := byte(0)
-	if len(resps) > 0 {
+	if len(resps) > 1 {
 		fragID = info.fragID
 		info.fragID++
 	}
