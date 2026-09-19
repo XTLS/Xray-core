@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
-	reflect "reflect"
+	"reflect"
 	"runtime"
 	"strconv"
 	"sync"
@@ -25,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -116,18 +117,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 	transportConfig := streamSettings.ProtocolSettings.(*Config)
 
 	dialContext := func(ctxInner context.Context) (net.Conn, error) {
-		conn, err := internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
+		var conn net.Conn
+		var err error
+		if streamSettings.FinalMask != nil {
+			conn, err = streamSettings.FinalMask.DialTCP(ctxInner, dest)
+		} else {
+			conn, err = internet.DialSystem(ctxInner, dest, streamSettings.SocketSettings)
+		}
 		if err != nil {
 			return nil, err
-		}
-
-		if streamSettings.TcpmaskManager != nil {
-			newConn, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
-			if err != nil {
-				conn.Close()
-				return nil, errors.New("mask err").Base(err)
-			}
-			conn = newConn
 		}
 
 		if realityConfig != nil {
@@ -196,30 +194,29 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			TLSClientConfig: gotlsConfig,
 			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
 				var pktConn net.PacketConn
-				var udpAddr *net.UDPAddr
-
-				raw, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-				if err != nil {
-					return nil, errors.New("failed to dial to dest").Base(err)
-				}
-				switch c := raw.(type) {
-				case *internet.PacketConnWrapper:
-					pktConn = c.PacketConn
-					udpAddr = raw.RemoteAddr().(*net.UDPAddr)
-				case *cnc.Connection:
-					pktConn = &internet.FakePacketConn{Conn: c}
-					udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
-				default:
-					panic(reflect.TypeOf(c))
-				}
-
-				if streamSettings.UdpmaskManager != nil {
-					newConn, err := streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
+				var udpAddr net.Addr
+				if streamSettings.FinalMask != nil {
+					conn, err := streamSettings.FinalMask.DialUDP(ctx, dest)
 					if err != nil {
-						pktConn.Close()
-						return nil, errors.New("mask err").Base(err)
+						return nil, errors.New("failed to dial to dest").Base(err)
 					}
-					pktConn = newConn
+					pktConn = conn.(*finalmask.PacketConnWrapper).PacketConn
+					udpAddr = conn.RemoteAddr()
+				} else {
+					conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+					if err != nil {
+						return nil, errors.New("failed to dial to dest").Base(err)
+					}
+					switch c := conn.(type) {
+					case *internet.PacketConnWrapper:
+						pktConn = c.PacketConn
+						udpAddr = c.RemoteAddr()
+					case *cnc.Connection:
+						pktConn = &internet.FakePacketConn{Conn: c}
+						udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
+					default:
+						panic(reflect.TypeOf(c))
+					}
 				}
 
 				tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}

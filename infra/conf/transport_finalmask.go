@@ -14,7 +14,7 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -82,7 +82,7 @@ var (
 		"noise":         func() interface{} { return new(NoiseMask) },
 		"salamander":    func() interface{} { return new(Salamander) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
-		"xdns":          func() interface{} { return new(Xdns) },
+		"xdns":          func() interface{} { return new(XDNS) },
 		"xicmp":         func() interface{} { return new(Xicmp) },
 		"realm":         func() interface{} { return new(Realm) },
 		"udphop":        func() interface{} { return new(UDPHop) },
@@ -695,32 +695,83 @@ func (c *Sudoku) Build() (proto.Message, error) {
 	}, nil
 }
 
-type Xdns struct {
-	Domain json.RawMessage `json:"domain"`
-
-	Domains   []string `json:"domains"`
-	Resolvers []string `json:"resolvers"`
+type XDNSDomain struct {
+	Name       string  `json:"name"`
+	LenLimit   int32   `json:"lenLimit"`
+	LabelLimit int32   `json:"labelLimit"`
+	Types      []int32 `json:"types"`
+	Edns0      int32   `json:"edns0"`
 }
 
-func (c *Xdns) Build() (proto.Message, error) {
-	if c.Domain != nil {
-		return nil, errors.PrintRemovedFeatureError("domain", "domains(server) & resolvers(client)")
-	}
+type XDNSResolverTCP struct {
+	Addr string `json:"addr"`
+}
 
-	if len(c.Domains) == 0 && len(c.Resolvers) == 0 {
-		return nil, errors.New("empty domains & empty resolvers")
-	}
+func (c *XDNSResolverTCP) Build() (proto.Message, error) {
+	return &xdns.TCPResolverProto{Addr: c.Addr}, nil
+}
 
-	for _, r := range c.Resolvers {
-		if !strings.Contains(r, "+udp://") {
-			return nil, errors.New("invalid resolver ", r)
+type XDNSResolverUDP struct {
+	Addr string `json:"addr"`
+}
+
+func (c *XDNSResolverUDP) Build() (proto.Message, error) {
+	return &xdns.UDPResolverProto{Addr: c.Addr}, nil
+}
+
+var xdnsLoader = NewJSONConfigLoader(ConfigCreatorCache{
+	"tcp": func() interface{} { return new(XDNSResolverTCP) },
+	"udp": func() interface{} { return new(XDNSResolverUDP) },
+}, "type", "settings")
+
+type XDNSResolver struct {
+	Type     string          `json:"type"`
+	Settings json.RawMessage `json:"settings"`
+}
+
+type XDNS struct {
+	Domains      []XDNSDomain   `json:"domains"`
+	Resolvers    []XDNSResolver `json:"resolvers"`
+	ExtraPoll    int32          `json:"extraPoll"`
+	MinAvailable int32          `json:"minAvailable"`
+}
+
+func (c *XDNS) Build() (proto.Message, error) {
+	var domains []*xdns.DomainProto
+	var resolvers []*serial.TypedMessage
+	for i := range c.Domains {
+		if c.Domains[i].LenLimit == 0 {
+			c.Domains[i].LenLimit = 255
 		}
+		if c.Domains[i].LabelLimit == 0 {
+			c.Domains[i].LabelLimit = 63
+		}
+		domains = append(domains, &xdns.DomainProto{
+			Name:       c.Domains[i].Name,
+			LenLimit:   c.Domains[i].LenLimit,
+			LabelLimit: c.Domains[i].LabelLimit,
+			Types:      c.Domains[i].Types,
+			Edns0:      c.Domains[i].Edns0,
+		})
 	}
-
-	return &xdns.Config{
-		Domains:   c.Domains,
-		Resolvers: c.Resolvers,
-	}, nil
+	for i := range c.Resolvers {
+		config, err := xdnsLoader.LoadWithID(c.Resolvers[i].Settings, c.Resolvers[i].Type)
+		if err != nil {
+			return nil, err
+		}
+		pm, err := config.(interface{ Build() (proto.Message, error) }).Build()
+		if err != nil {
+			return nil, err
+		}
+		resolvers = append(resolvers, serial.ToTypedMessage(pm))
+	}
+	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
+		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")
+	}
+	if c.MinAvailable < 0 || c.MinAvailable > 8 {
+		return nil, errors.New("c.MinAvailable < 0 || c.MinAvailable > 8")
+	}
+	return &xdns.Config{Domains: domains, Resolvers: resolvers, ExtraPoll: c.ExtraPoll, MinAvailable: c.MinAvailable}, nil
 }
 
 type XMC struct {
@@ -909,22 +960,13 @@ func (c *Realm) Build() (proto.Message, error) {
 }
 
 type UDPHop struct {
-	Sockopt     *SocketConfig `json:"sockopt"`
-	Mode        string        `json:"mode"`
-	Interval    Int32Range    `json:"interval"`
-	RemotePorts PortList      `json:"remotePorts"`
-	RemoteIPs   []string      `json:"remoteIPs"`
+	Mode        string     `json:"mode"`
+	Interval    Int32Range `json:"interval"`
+	RemoteIPs   []string   `json:"remoteIPs"`
+	RemotePorts PortList   `json:"remotePorts"`
 }
 
 func (c *UDPHop) Build() (proto.Message, error) {
-	var sockopt *internet.SocketConfig
-	if c.Sockopt != nil {
-		var err error
-		sockopt, err = c.Sockopt.Build()
-		if err != nil {
-			return nil, err
-		}
-	}
 	var local, remote, remoteOnce bool
 	for _, mode := range strings.Split(c.Mode, ",") {
 		switch strings.ToLower(mode) {
@@ -953,14 +995,13 @@ func (c *UDPHop) Build() (proto.Message, error) {
 		return nil, errors.New("invalid ip ", ip)
 	}
 	return &udphop.Config{
-		Sockopt:     sockopt,
 		Local:       local,
 		Remote:      remote,
 		RemoteOnce:  remoteOnce,
 		IntervalMin: int64(c.Interval.From),
 		IntervalMax: int64(c.Interval.To),
-		RemotePorts: c.RemotePorts.Build().Ports(),
 		RemoteIPs:   remoteIPs,
+		RemotePorts: c.RemotePorts.Build().Ports(),
 	}, nil
 }
 

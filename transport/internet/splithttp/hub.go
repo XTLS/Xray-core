@@ -463,30 +463,16 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 	l.isH3 = len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "h3"
 
 	var err error
-	if port == net.Port(0) { // unix
-		l.listener, err = internet.ListenSystem(ctx, &net.UnixAddr{
-			Name: address.Domain(),
-			Net:  "unix",
-		}, streamSettings.SocketSettings)
-		if err != nil {
-			return nil, errors.New("failed to listen UNIX domain socket for XHTTP on ", address).Base(err)
+	if l.isH3 {
+		var pktConn net.PacketConn
+		var err error
+		if streamSettings.FinalMask != nil {
+			pktConn, err = streamSettings.FinalMask.ListenPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)})
+		} else {
+			pktConn, err = internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)}, streamSettings.SocketSettings)
 		}
-		errors.LogInfo(ctx, "listening UNIX domain socket for XHTTP on ", address)
-	} else if l.isH3 { // quic
-		Conn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{
-			IP:   address.IP(),
-			Port: int(port),
-		}, streamSettings.SocketSettings)
 		if err != nil {
 			return nil, errors.New("failed to listen UDP for XHTTP/3 on ", address, ":", port).Base(err)
-		}
-		if streamSettings.UdpmaskManager != nil {
-			newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(Conn)
-			if err != nil {
-				Conn.Close()
-				return nil, errors.New("mask err").Base(err)
-			}
-			Conn = newConn
 		}
 
 		quicParams := streamSettings.QuicParams
@@ -512,7 +498,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			common.Must2(rand.Read((*k)[:]))
 		}
 
-		tr := &quic.Transport{Conn: Conn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: k}
+		tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO, StatelessResetKey: k}
 
 		l.h3listener, err = tr.ListenEarly(tlsConfig, quicConfig)
 		if err != nil {
@@ -534,21 +520,24 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 				errors.LogErrorInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
 			}
 			_ = tr.Close()
-			_ = Conn.Close()
+			_ = pktConn.Close()
 		}()
-	} else { // tcp
-		l.listener, err = internet.ListenSystem(ctx, &net.TCPAddr{
-			IP:   address.IP(),
-			Port: int(port),
-		}, streamSettings.SocketSettings)
-		if err != nil {
-			return nil, errors.New("failed to listen TCP for XHTTP on ", address, ":", port).Base(err)
+	} else {
+		var addr net.Addr
+		if port == net.Port(0) { // unix
+			addr = &net.UnixAddr{Name: address.Domain(), Net: "unix"}
+		} else { // tcp
+			addr = &net.TCPAddr{IP: address.IP(), Port: int(port)}
 		}
-		errors.LogInfo(ctx, "listening TCP for XHTTP on ", address, ":", port)
-	}
-
-	if !l.isH3 && streamSettings.TcpmaskManager != nil {
-		l.listener, _ = streamSettings.TcpmaskManager.WrapListener(l.listener)
+		if streamSettings.FinalMask != nil {
+			l.listener, err = streamSettings.FinalMask.Listen(ctx, addr)
+		} else {
+			l.listener, err = internet.ListenSystem(ctx, addr, streamSettings.SocketSettings)
+		}
+		if err != nil {
+			return nil, errors.New("failed to listen ", addr.Network(), " for XHTTP on ", address, ":", port).Base(err)
+		}
+		errors.LogInfo(ctx, "listening ", addr.Network(), " for XHTTP on ", address, ":", port)
 	}
 
 	// tcp/unix (h1/h2)

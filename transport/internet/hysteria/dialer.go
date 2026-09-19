@@ -2,7 +2,7 @@ package hysteria
 
 import (
 	"context"
-	go_tls "crypto/tls"
+	gotls "crypto/tls"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -28,12 +28,12 @@ import (
 type client struct {
 	sync.Mutex
 
-	dest           net.Destination
-	config         *Config
-	tlsConfig      *go_tls.Config
-	socketConfig   *internet.SocketConfig
-	udpmaskManager *finalmask.UdpmaskManager
-	quicParams     *internet.QuicParams
+	dest         net.Destination
+	config       *Config
+	tlsConfig    *gotls.Config
+	socketConfig *internet.SocketConfig
+	finalMask    *finalmask.FinalMask
+	quicParams   *internet.QuicParams
 
 	conn    *quic.Conn
 	tr      *quic.Transport
@@ -113,30 +113,29 @@ func (c *client) dial(ctx context.Context) error {
 	// }
 
 	var pktConn net.PacketConn
-	var udpAddr *net.UDPAddr
-
-	raw, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
-	if err != nil {
-		return errors.New("failed to dial to dest").Base(err)
-	}
-	switch c := raw.(type) {
-	case *internet.PacketConnWrapper:
-		pktConn = c.PacketConn
-		udpAddr = raw.RemoteAddr().(*net.UDPAddr)
-	case *cnc.Connection:
-		pktConn = &internet.FakePacketConn{Conn: c}
-		udpAddr = &net.UDPAddr{IP: c.RemoteAddr().(*net.TCPAddr).IP, Port: c.RemoteAddr().(*net.TCPAddr).Port}
-	default:
-		panic(reflect.TypeOf(c))
-	}
-
-	if c.udpmaskManager != nil {
-		newConn, err := c.udpmaskManager.WrapPacketConnClient(pktConn)
+	var udpAddr net.Addr
+	if c.finalMask != nil {
+		conn, err := c.finalMask.DialUDP(ctx, c.dest)
 		if err != nil {
-			pktConn.Close()
-			return errors.New("mask err").Base(err)
+			return errors.New("failed to dial to dest").Base(err)
 		}
-		pktConn = newConn
+		pktConn = conn.(*finalmask.PacketConnWrapper).PacketConn
+		udpAddr = conn.RemoteAddr()
+	} else {
+		conn, err := internet.DialSystem(ctx, c.dest, c.socketConfig)
+		if err != nil {
+			return errors.New("failed to dial to dest").Base(err)
+		}
+		switch c := conn.(type) {
+		case *internet.PacketConnWrapper:
+			pktConn = c.PacketConn
+			udpAddr = c.RemoteAddr()
+		case *cnc.Connection:
+			pktConn = &internet.FakePacketConn{Conn: c}
+			udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
+		default:
+			panic(reflect.TypeOf(c))
+		}
 	}
 
 	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
@@ -150,7 +149,7 @@ func (c *client) dial(ctx context.Context) error {
 	rt := &http3.Transport{
 		TLSClientConfig: c.tlsConfig,
 		QUICConfig:      quicConfig,
-		Dial: func(ctx context.Context, _ string, tlsCfg *go_tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+		Dial: func(ctx context.Context, _ string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
 			qc, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 			if err != nil {
 				return nil, err
@@ -316,12 +315,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		c = manager.m[dialerConf{dest, streamSettings}]
 		if c == nil {
 			c = &client{
-				dest:           dest,
-				config:         streamSettings.ProtocolSettings.(*Config),
-				tlsConfig:      tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
-				socketConfig:   streamSettings.SocketSettings,
-				udpmaskManager: streamSettings.UdpmaskManager,
-				quicParams:     streamSettings.QuicParams,
+				dest:         dest,
+				config:       streamSettings.ProtocolSettings.(*Config),
+				tlsConfig:    tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
+				socketConfig: streamSettings.SocketSettings,
+				finalMask:    streamSettings.FinalMask,
+				quicParams:   streamSettings.QuicParams,
 			}
 			manager.m[dialerConf{dest, streamSettings}] = c
 		}

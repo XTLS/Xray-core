@@ -316,18 +316,15 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		quicConfig.MaxIncomingStreams = 1024
 	}
 
-	pktConn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)}, streamSettings.SocketSettings)
+	var pktConn net.PacketConn
+	var err error
+	if streamSettings.FinalMask != nil {
+		pktConn, err = streamSettings.FinalMask.ListenPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)})
+	} else {
+		pktConn, err = internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)}, streamSettings.SocketSettings)
+	}
 	if err != nil {
 		return nil, err
-	}
-
-	if streamSettings.UdpmaskManager != nil {
-		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(pktConn)
-		if err != nil {
-			pktConn.Close()
-			return nil, errors.New("mask err").Base(err)
-		}
-		pktConn = newConn
 	}
 
 	var k *quic.StatelessResetKey
