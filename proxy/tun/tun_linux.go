@@ -12,7 +12,15 @@ import (
 
 	"github.com/vishvananda/netlink"
 	"github.com/xtls/xray-core/common/errors"
+	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/features/routing"
+	routingsession "github.com/xtls/xray-core/features/routing/session"
+	"github.com/xtls/xray-core/proxy/dns"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -88,63 +96,115 @@ func (t *LinuxTun) ifaceName() string {
 	return attrs.Name
 }
 
-// setSystemDNS points systemd-resolved at the TUN interface, so name lookups
-// resolve through Xray instead of leaking to the physical link. Failures are
-// non-fatal: a missing resolvectl or a non-systemd host must not stop the TUN
-// from coming up.
-func (t *LinuxTun) setSystemDNS() error {
+// verifyDNSRouting reports whether a DNS query to address would actually be
+// handled. Redirecting the system resolver at an address nothing answers would
+// break name resolution outright, so the takeover only proceeds when routing
+// hands such a query to a DNS-capable outbound.
+//
+// Overridable for tests.
+var verifyDNSRouting = func(ctx context.Context, inboundTag, address string) error {
+	ip, err := netip.ParseAddr(address)
+	if err != nil || !ip.Is4() {
+		return errors.New("invalid DNS address ", address).Base(err)
+	}
+
+	instance := core.MustFromContext(ctx)
+
+	router, ok := instance.GetFeature(routing.RouterType()).(routing.Router)
+	if !ok {
+		return errors.New("router feature unavailable")
+	}
+
+	queryCtx := session.ContextWithInbound(ctx, &session.Inbound{Name: "tun", Tag: inboundTag})
+	queryCtx = session.ContextWithOutbounds(queryCtx, []*session.Outbound{{
+		Target: xnet.UDPDestination(xnet.IPAddress(ip.AsSlice()), 53),
+	}})
+
+	route, err := router.PickRoute(routingsession.AsRoutingContext(queryCtx))
+	if err != nil {
+		return errors.New("no route for ", address, ":53").Base(err)
+	}
+
+	manager, ok := instance.GetFeature(outbound.ManagerType()).(outbound.Manager)
+	if !ok {
+		return errors.New("outbound manager unavailable")
+	}
+
+	handler := manager.GetHandler(route.GetOutboundTag())
+	if handler == nil {
+		return errors.New("outbound ", route.GetOutboundTag(), " does not exist")
+	}
+	if settings := handler.ProxySettings(); settings == nil || settings.Type != serial.GetMessageType(&dns.Config{}) {
+		return errors.New("outbound ", route.GetOutboundTag(), " does not handle DNS")
+	}
+	return nil
+}
+
+// ConfigureSystemDNS points systemd-resolved at this interface so name lookups
+// resolve through Xray instead of leaking to the physical link.
+//
+// It acts only when the config opts in, and it verifies the data path first:
+// unless a query to the advertised address would actually be handled, host-wide
+// resolution is left to the OS, which is the documented default. Errors are
+// returned to the caller, which treats them as non-fatal.
+func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) error {
+	if !t.options.AutoSystemDns {
+		return nil
+	}
 	if t.systemDNSSet {
 		return nil
 	}
 
 	address, ok := systemDNSAddress(t.options.Gateway)
 	if !ok {
-		errors.LogInfo(context.Background(), "[tun] no IPv4 gateway, skipping system DNS configuration")
-		return nil
+		return errors.New("no IPv4 gateway, cannot derive a system DNS address")
 	}
 
 	iface := t.ifaceName()
 	if iface == "" {
-		errors.LogInfo(context.Background(), "[tun] interface not available, skipping system DNS configuration")
-		return nil
+		return errors.New("interface not available")
 	}
 
-	if _, err := resolvectlRunner("resolvectl", "dns", iface, address); err != nil {
-		errors.LogInfoInner(context.Background(), err, "[tun] failed to set system DNS")
-		return nil
+	if err := verifyDNSRouting(ctx, inboundTag, address); err != nil {
+		return errors.New("no DNS path at ", address, ":53").Base(err)
 	}
 
+	// Applied as a sequence with rollback: a half-configured resolver would be
+	// worse than none at all.
+	if err := runResolvectl("dns", iface, address); err != nil {
+		return errors.New("resolvectl dns failed").Base(err)
+	}
 	if err := runResolvectl("domain", iface, "~."); err != nil {
-		errors.LogInfoInner(context.Background(), err, "[tun] failed to set DNS domain")
+		_ = runResolvectl("revert", iface)
+		return errors.New("resolvectl domain failed").Base(err)
 	}
-
 	if err := runResolvectl("default-route", iface, "true"); err != nil {
-		errors.LogInfoInner(context.Background(), err, "[tun] failed to set DNS default route")
+		_ = runResolvectl("revert", iface)
+		return errors.New("resolvectl default-route failed").Base(err)
 	}
 
 	t.systemDNSSet = true
-	errors.LogInfo(context.Background(), "[tun] system DNS set to ", address, " on ", iface)
+	errors.LogInfo(ctx, "[tun] system DNS set to ", address, " on ", iface)
 	return nil
 }
 
-// unsetSystemDNS hands DNS back to the OS. Only meaningful when setSystemDNS
-// actually took over, hence the flag.
-func (t *LinuxTun) unsetSystemDNS() error {
+// unsetSystemDNS hands DNS back to the OS. Only meaningful when
+// ConfigureSystemDNS actually took over, hence the flag.
+func (t *LinuxTun) unsetSystemDNS() {
 	if !t.systemDNSSet {
-		return nil
+		return
 	}
 
 	iface := t.ifaceName()
 	if iface == "" {
 		t.systemDNSSet = false
-		return nil
+		return
 	}
 	if err := runResolvectl("revert", iface); err != nil {
 		errors.LogInfoInner(context.Background(), err, "[tun] failed to revert system DNS")
 	}
 
 	t.systemDNSSet = false
-	return nil
 }
 
 // LinuxTun implements Tun
@@ -299,13 +359,6 @@ func (t *LinuxTun) Start() error {
 		return err
 	}
 
-	if err := t.setSystemDNS(); err != nil {
-		_ = t.unsetSystemRoutes()
-		_ = t.unsetInterfaceAddresses()
-		_ = netlink.LinkSetDown(t.tunLink)
-		return err
-	}
-
 	if updater != nil {
 		t.routeMonitorStop = make(chan struct{})
 		go t.monitorRouteChanges()
@@ -322,7 +375,7 @@ func (t *LinuxTun) Close() error {
 		}
 	})
 
-	_ = t.unsetSystemDNS()
+	t.unsetSystemDNS()
 	_ = t.unsetSystemRoutes()
 	_ = t.unsetInterfaceAddresses()
 
