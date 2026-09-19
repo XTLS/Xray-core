@@ -218,7 +218,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	if err := msg.Unpack(buf); err != nil {
 		return
 	}
-	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess || len(msg.Questions) != 1 || len(msg.Answers) == 0 {
+	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess || len(msg.Questions) != 1 {
 		return
 	}
 
@@ -233,8 +233,10 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 		return
 	}
 
+	resp := NewResp(msg, domain, nil)
+
 	p := pool4K.Get().([]byte)
-	n := RespDecode(p[:0], msg, domain)
+	n := resp.Decode(p)
 	p = p[:n]
 	if len(p) < 8+1 {
 		pool4K.Put(p[:cap(p)])

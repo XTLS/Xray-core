@@ -96,9 +96,9 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if decoded[0]&0x80 == 0x80 || (decoded[0]&0x40 == 0x40 && n < 14+1) || TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x80 == 0x80 && n != 16) {
 		return
 	}
-
 	clientID := ClientIDFromRaw([8]byte(decoded[:8]))
-	resp := NewResp(msg, addr, clientID, domain)
+
+	resp := NewResp(msg, domain, addr)
 	if resp == nil {
 		return
 	}
@@ -134,31 +134,34 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 func (c *xdnsServer) send(p []byte, addr net.Addr) {
 	clientID := ClientIDFromAddr(addr.(*net.UDPAddr))
 	resps, fragID := c.respManager.Pop(clientID, len(p), c.minAvailable)
-	if len(resps) == 0 {
-		return
-	}
+
 	buf := pool4K.Get().([]byte)
 	defer pool4K.Put(buf[:cap(buf)])
 	data := pool4K.Get().([]byte)
 	defer pool4K.Put(data[:cap(data)])
+
+	if len(resps) == 1 {
+		copy(data[:], clientID[:])
+		copy(data[8:], p)
+		data[0] |= TypeMap[uint16(resps[0].msg.Questions[0].Type)]
+		_, _ = c.PacketConn.WriteTo(resps[0].Encode(buf, data[:8+len(p)]), resps[0].addr)
+		return
+	}
+
 	if len(resps) > 1 {
 		fragN := byte(len(resps))
 		for i := range len(resps) {
-			copy(data[:], resps[i].clientID[:])
+			copy(data[:], clientID[:])
 			size := min(len(p), resps[i].cap-11)
 			copy(data[11:], p[:size])
 			data[0] |= 0x40 | TypeMap[uint16(resps[i].msg.Questions[0].Type)]
 			data[8] = fragID
 			data[9] = byte(i)
 			data[10] = fragN
-			_, _ = c.PacketConn.WriteTo(resps[i].Append(buf[:0], data[:11+size]), resps[i].addr)
+			_, _ = c.PacketConn.WriteTo(resps[i].Encode(buf, data[:11+size]), resps[i].addr)
 			p = p[size:]
 		}
-	} else {
-		copy(data[:], resps[0].clientID[:])
-		copy(data[8:], p)
-		data[0] |= TypeMap[uint16(resps[0].msg.Questions[0].Type)]
-		_, _ = c.PacketConn.WriteTo(resps[0].Append(buf[:0], data[:8+len(p)]), resps[0].addr)
+		return
 	}
 }
 
