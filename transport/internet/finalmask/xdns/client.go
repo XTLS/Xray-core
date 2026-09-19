@@ -41,6 +41,7 @@ type xdnsClient struct {
 	clientID    ClientID
 	fragID      atomic.Uint32
 	domains     []*Domain
+	extraPoll   int
 	fragManager *FragManager
 
 	resolvers     []Resolver
@@ -60,6 +61,9 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	}
 	if len(c.Resolvers) == 0 {
 		return nil, errors.New("empty resolvers")
+	}
+	if c.ExtraPoll > 8 {
+		return nil, errors.New("ExtraPoll > 8")
 	}
 	domains := make([]*Domain, 0, len(c.Domains))
 	for i := range c.Domains {
@@ -86,6 +90,7 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 
 		clientID:    NewClientID(),
 		domains:     domains,
+		extraPoll:   int(c.ExtraPoll),
 		fragManager: NewFragManager(),
 
 		resolvers:     resolvers,
@@ -360,6 +365,9 @@ func (c *xdnsClient) poll() {
 		}
 		ticker.Reset(delay)
 		c.send(nil)
+		for range c.extraPoll {
+			c.send(nil)
+		}
 	}
 }
 
@@ -398,6 +406,9 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, errors.New("not support size")
 	}
 	c.send(p)
+	for range c.extraPoll {
+		c.send(nil)
+	}
 	return len(p), nil
 }
 
