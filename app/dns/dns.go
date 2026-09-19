@@ -212,6 +212,22 @@ func (s *DNS) IsOwnLink(ctx context.Context) bool {
 	return false
 }
 
+// UsesSystemResolver reports whether every configured name server resolves
+// through the system resolver. That is what happens when no name server is
+// configured at all. Callers that are about to redirect the system resolver need
+// to know, because resolving through it would then loop back to them.
+func (s *DNS) UsesSystemResolver() bool {
+	if len(s.clients) == 0 {
+		return true
+	}
+	for _, client := range s.clients {
+		if _, isLocal := client.server.(*LocalNameServer); !isLocal {
+			return false
+		}
+	}
+	return true
+}
+
 // LookupIP implements dns.Client.
 func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
 	// Normalize the FQDN form query

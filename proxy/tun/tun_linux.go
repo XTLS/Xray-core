@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/vishvananda/netlink"
+	appdns "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/common/errors"
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
@@ -124,11 +125,18 @@ var verifyDNSRouting = func(ctx context.Context, inboundTag, source, address str
 
 	instance := core.MustFromContext(ctx)
 
-	// Without a DNS section Core installs a resolver that forwards to the system
-	// resolver. Pointing the system resolver at the TUN would then close a loop
-	// through the DNS outbound, so refuse instead of breaking resolution.
-	if _, isSystemResolver := instance.GetFeature(feature_dns.ClientType()).(*localdns.Client); isSystemResolver {
+	// Two shapes mean the same thing: with no `dns` section Core installs a
+	// client that forwards to the system resolver, and with a `dns` section that
+	// has no name servers app/dns falls back to one. Either way, pointing the
+	// system resolver at the TUN would close a loop through the DNS outbound, so
+	// refuse instead of breaking resolution.
+	switch dnsFeature := instance.GetFeature(feature_dns.ClientType()).(type) {
+	case *localdns.Client:
 		return errors.New("DNS feature is the system resolver, takeover would loop")
+	case *appdns.DNS:
+		if dnsFeature.UsesSystemResolver() {
+			return errors.New("DNS feature is the system resolver, takeover would loop")
+		}
 	}
 
 	router, ok := instance.GetFeature(routing.RouterType()).(routing.Router)
