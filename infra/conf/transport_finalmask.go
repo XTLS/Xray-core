@@ -765,9 +765,6 @@ func (c *XDNS) Build() (proto.Message, error) {
 		}
 		resolvers = append(resolvers, serial.ToTypedMessage(pm))
 	}
-	if c.MinAvailable == 0 {
-		c.MinAvailable = 3
-	}
 	return &xdns.Config{Domains: domains, Resolvers: resolvers, ExtraPoll: c.ExtraPoll, MinAvailable: c.MinAvailable}, nil
 }
 

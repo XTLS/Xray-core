@@ -113,21 +113,21 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 	}
 
 	if fragN == 0 || fragN != entry.total {
-		return -1
+		return 0
 	}
 	if fragIdx >= entry.total || entry.data[fragIdx] != nil {
-		return -1
+		return 0
 	}
 	if entry.size+len(data) > fragSize {
-		return -1
+		return 0
 	}
 	if entry.len < int(entry.total)-1 {
 		if entry.size+len(data) == fragSize {
 			m.removeEntey(key, entry)
-			return -1
+			return 0
 		}
 		if m.clientIDSize[key.clientID]+len(data) > fragClientIDSize {
-			return -1
+			return 0
 		}
 	}
 
@@ -144,13 +144,12 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 		return 0
 	}
 
-	off := 0
+	out = out[:0]
 	for i := range entry.data {
-		copy(out[off:], entry.data[i])
-		off += len(entry.data[i])
+		out = append(out, entry.data[i]...)
 	}
 	m.removeEntey(key, entry)
-	return off
+	return len(out)
 }
 
 func (m *FragManager) Close() {

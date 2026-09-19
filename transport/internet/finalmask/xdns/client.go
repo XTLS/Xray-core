@@ -302,12 +302,6 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 		if n > 0 {
 			p = out[:n]
 		} else {
-			if n == 0 {
-				select {
-				case c.poolCh <- struct{}{}:
-				default:
-				}
-			}
 			pool4K.Put(out[:cap(out)])
 			return
 		}
