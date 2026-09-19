@@ -50,6 +50,7 @@ var (
 		"hysteria":    func() interface{} { return new(HysteriaClientConfig) },
 		"dns":         func() interface{} { return new(DNSOutboundConfig) },
 		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
+		"plugin":      func() interface{} { return new(PluginOutboundConfig) },
 	}, "protocol", "settings")
 )
 
