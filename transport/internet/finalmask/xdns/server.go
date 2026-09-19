@@ -449,7 +449,7 @@ func (c *xdnsServer) send(p []byte, addr net.Addr) {
 		for i := range len(resps) {
 			copy(data[:], resps[i].clientID[:])
 			size := min(len(p), resps[i].cap-11)
-			copy(data[8:], p[:size])
+			copy(data[11:], p[:size])
 			data[0] |= 0x40 | TypeMap[uint16(resps[i].msg.Questions[0].Type)]
 			data[8] = fragID
 			data[9] = byte(i)
