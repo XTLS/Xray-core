@@ -89,8 +89,8 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	}
 
 	var decoded [255]byte
-	n, err := domain.Decode(&decoded, msg.Questions[0].Name)
-	if err != nil || n < 11+1 {
+	n := domain.Decode(&decoded, msg.Questions[0].Name)
+	if n < 11+1 {
 		return
 	}
 	if decoded[0]&0x80 == 0x80 || (decoded[0]&0x40 == 0x40 && n < 14+1) || TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x80 == 0x80 && n != 16) {

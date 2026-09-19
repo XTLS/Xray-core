@@ -1,6 +1,7 @@
 package xdns
 
 import (
+	"sort"
 	"sync"
 	"time"
 
@@ -372,5 +373,56 @@ func (m *RespManager) Close() {
 	close(m.closeCh)
 	for k := range m.m {
 		delete(m.m, k)
+	}
+}
+
+func RespDecode(out []byte, msg dnsmessage.Message, domain *Domain) int {
+	out = out[:0]
+	if msg.Questions[0].Type == dnsmessage.TypeTXT {
+		if len(msg.Answers) == 1 && domain.IsDomain(msg.Answers[0].Header.Name) && msg.Answers[0].Header.Type == dnsmessage.TypeTXT {
+			for i := range msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT {
+				out = append(out, msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT[i]...)
+			}
+		}
+		return len(out)
+	} else {
+		var frags [][]byte
+		for i := range msg.Answers {
+			if !domain.IsDomain(msg.Answers[i].Header.Name) || msg.Answers[i].Header.Type != msg.Questions[0].Type {
+				continue
+			}
+			switch msg.Questions[0].Type {
+			case dnsmessage.TypeA:
+				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
+			case dnsmessage.TypeCNAME:
+				var decoded [255]byte
+				n := domain.Decode(&decoded, msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
+				if n < 2 {
+					continue
+				}
+				frags = append(frags, decoded[:n])
+			case dnsmessage.TypeAAAA:
+				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AAAAResource).AAAA[:])
+			}
+		}
+		if len(frags) == 0 || len(frags) > 255 {
+			return 0
+		}
+		sort.Slice(frags, func(i, j int) bool {
+			return frags[i][0] < frags[j][0]
+		})
+		if frags[0][1] != byte(len(frags)) {
+			return 0
+		}
+		out = append(out, frags[0][2:]...)
+		for i := range frags {
+			if i > 0 {
+				if frags[i][0] == frags[i-1][0] {
+					return 0
+				}
+				out = append(out, frags[i][1:]...)
+			}
+		}
+		return len(out)
 	}
 }
