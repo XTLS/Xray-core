@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/xtls/xray-core/app/log"
@@ -91,12 +92,13 @@ func TestLogEnabled(t *testing.T) {
 			common.Must(log.RegisterHandlerCreator(log.LogType_Event, func(log.LogType, log.HandlerCreatorOptions) (clog.Handler, error) {
 				return handler, nil
 			}))
-			logger, err := log.New(context.Background(), &log.Config{
+			config := &log.Config{
 				ErrorLogType: tc.logType, ErrorLogLevel: clog.Severity_Warning, AccessLogType: log.LogType_None,
-			})
+			}
+			logger, err := log.New(context.Background(), config)
 			common.Must(err)
 			defer logger.Close()
-			for _, severity := range []clog.Severity{clog.Severity_Debug, clog.Severity_Info, clog.Severity_Warning, clog.Severity_Error} {
+			for _, severity := range []clog.Severity{clog.Severity_Debug, clog.Severity_Info, clog.Severity_Warning, clog.Severity_Error, clog.Severity_Unknown, -1} {
 				want := tc.logType != log.LogType_None && severity <= clog.Severity_Warning
 				if logger.Enabled(severity) != want || clog.Enabled(severity) != want {
 					t.Fatalf("Enabled(%v) != %v", severity, want)
@@ -105,13 +107,25 @@ func TestLogEnabled(t *testing.T) {
 			// Direct records still need the final check in Handle.
 			clog.Record(&clog.GeneralMessage{Severity: clog.Severity_Debug, Content: "disabled"})
 			clog.Record(&clog.GeneralMessage{Severity: clog.Severity_Warning, Content: "warning"})
+			common.Must(logger.Close())
+			if clog.Enabled(-1) {
+				t.Fatal("closed logger is enabled")
+			}
+			config.ErrorLogLevel = clog.Severity_Error
+			common.Must(logger.Start())
+			if clog.Enabled(clog.Severity_Warning) || clog.Enabled(clog.Severity_Error) != (tc.logType != log.LogType_None) {
+				t.Fatal("restarted logger did not pick up the new level")
+			}
 		})
 	}
 }
 
 func TestLogConcurrentRestart(t *testing.T) {
+	common.Must(log.RegisterHandlerCreator(log.LogType_Event, func(log.LogType, log.HandlerCreatorOptions) (clog.Handler, error) {
+		return discardHandler{}, nil
+	}))
 	logger, err := log.New(context.Background(), &log.Config{
-		ErrorLogType: log.LogType_None, AccessLogType: log.LogType_None,
+		ErrorLogType: log.LogType_Event, ErrorLogLevel: clog.Severity_Warning, AccessLogType: log.LogType_None,
 	})
 	common.Must(err)
 	defer logger.Close()
@@ -126,6 +140,48 @@ func TestLogConcurrentRestart(t *testing.T) {
 		common.Must(logger.Start())
 	}
 	wg.Wait()
+}
+
+func TestLogEnabledDuringStart(t *testing.T) {
+	starting, resume := make(chan struct{}), make(chan struct{})
+	common.Must(log.RegisterHandlerCreator(log.LogType_Event, func(log.LogType, log.HandlerCreatorOptions) (clog.Handler, error) {
+		close(starting)
+		<-resume
+		return discardHandler{}, nil
+	}))
+	started := make(chan *log.Instance, 1)
+	go func() {
+		logger, err := log.New(context.Background(), &log.Config{
+			ErrorLogType: log.LogType_Event, ErrorLogLevel: clog.Severity_Warning, AccessLogType: log.LogType_None,
+		})
+		common.Must(err)
+		started <- logger
+	}()
+	<-starting
+	enabled := make(chan bool, 1)
+	go func() { enabled <- clog.Enabled(clog.Severity_Error) }()
+	select {
+	case ok := <-enabled:
+		if !ok {
+			t.Error("logs during startup must reach the final check in Handle")
+		}
+	case <-time.After(time.Second):
+		t.Error("Enabled blocked on logger startup")
+	}
+	close(resume)
+	common.Must((<-started).Close())
+}
+
+func TestLogEnabledAfterStartFailure(t *testing.T) {
+	_, err := log.New(context.Background(), &log.Config{
+		ErrorLogType: log.LogType_File, ErrorLogLevel: clog.Severity_Debug, ErrorLogPath: t.TempDir(),
+	})
+	if err == nil {
+		t.Fatal("expected an error opening a directory as a log file")
+	}
+	if clog.Enabled(-1) {
+		t.Fatal("failed logger is enabled")
+	}
 }
 
 func TestMaskAddress(t *testing.T) {

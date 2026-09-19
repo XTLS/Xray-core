@@ -2,6 +2,7 @@ package log // import "github.com/xtls/xray-core/common/log"
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/serial"
 )
@@ -36,23 +37,29 @@ func Record(msg Message) {
 // Handlers may implement Enabled(Severity) bool to allow early filtering.
 // Handlers without it are always enabled.
 func Enabled(severity Severity) bool {
-	logHandler.RLock()
-	defer logHandler.RUnlock()
-
-	if h, ok := logHandler.Handler.(interface{ Enabled(Severity) bool }); ok {
-		return h.Enabled(severity)
+	if handler := handlerSnapshot.Load(); handler != nil {
+		if h, ok := (*handler).(interface{ Enabled(Severity) bool }); ok {
+			return h.Enabled(severity)
+		}
 	}
 	return true
 }
 
-var logHandler syncHandler
+var (
+	logHandler      syncHandler
+	handlerSnapshot atomic.Pointer[Handler]
+)
 
 // RegisterHandler registers a new handler as current log handler. Previous registered handler will be discarded.
 func RegisterHandler(handler Handler) {
 	if handler == nil {
 		panic("Log handler is nil")
 	}
-	logHandler.Set(handler)
+	logHandler.Lock()
+	defer logHandler.Unlock()
+
+	logHandler.Handler = handler
+	handlerSnapshot.Store(&handler)
 }
 
 type syncHandler struct {
@@ -67,11 +74,4 @@ func (h *syncHandler) Handle(msg Message) {
 	if h.Handler != nil {
 		h.Handler.Handle(msg)
 	}
-}
-
-func (h *syncHandler) Set(handler Handler) {
-	h.Lock()
-	defer h.Unlock()
-
-	h.Handler = handler
 }

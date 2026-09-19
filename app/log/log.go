@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -19,6 +20,7 @@ type Instance struct {
 	config       *Config
 	accessLogger log.Handler
 	errorLogger  log.Handler
+	errorLevel   atomic.Pointer[log.Severity]
 	active       bool
 	dns          bool
 	mask4        int
@@ -87,6 +89,14 @@ func (g *Instance) startInternal() error {
 	}
 
 	g.active = true
+	// Let logs reach Handle while startup is in progress; its lock waits for us.
+	level := g.config.ErrorLogLevel
+	g.errorLevel.Store(&level)
+	defer func() {
+		if g.errorLogger == nil {
+			g.errorLevel.Store(nil)
+		}
+	}()
 
 	if err := g.initAccessLogger(); err != nil {
 		return errors.New("failed to initialize access logger").Base(err).AtWarning()
@@ -105,10 +115,8 @@ func (g *Instance) Start() error {
 
 // Enabled reports whether error logging is enabled at severity.
 func (g *Instance) Enabled(severity log.Severity) bool {
-	g.RLock()
-	defer g.RUnlock()
-
-	return g.active && g.errorLogger != nil && severity <= g.config.ErrorLogLevel
+	level := g.errorLevel.Load()
+	return level != nil && severity <= *level
 }
 
 // Handle implements log.Handler.
@@ -161,6 +169,7 @@ func (g *Instance) Close() error {
 	}
 
 	g.active = false
+	g.errorLevel.Store(nil)
 
 	common.Close(g.accessLogger)
 	g.accessLogger = nil
