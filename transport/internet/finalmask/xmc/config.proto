@@ -23,4 +23,11 @@ message Config {
     bytes rsa_public_key = 9;
     string hostname = 10;
     repeated Profile profiles = 11;
+    // Alternating startup padding turns, client first. Empty uses the built-in preset.
+    repeated Padding padding = 12;
+}
+
+message Padding {
+    int64 length_min = 1;
+    int64 length_max = 2;
 }
