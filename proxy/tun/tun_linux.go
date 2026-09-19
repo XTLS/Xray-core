@@ -6,12 +6,24 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"os/exec"
 	"strconv"
 	"sync"
 
 	"github.com/vishvananda/netlink"
+	appdns "github.com/xtls/xray-core/app/dns"
 	"github.com/xtls/xray-core/common/errors"
+	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
+	feature_dns "github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/dns/localdns"
+	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/features/routing"
+	routingsession "github.com/xtls/xray-core/features/routing/session"
+	"github.com/xtls/xray-core/proxy/dns"
 	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
@@ -30,6 +42,233 @@ type LinuxTun struct {
 	systemRoutes       []netlink.Route
 	routeMonitorStop   chan struct{}
 	routeMonitorOnce   sync.Once
+
+	systemDNSSet   bool
+	systemDNSDirty bool
+}
+
+// resolvectlRunner runs a resolvectl command. Overridable for tests.
+var resolvectlRunner = func(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).CombinedOutput()
+}
+
+// systemDNSAddrs derives the addresses used for the system DNS takeover from the
+// first IPv4 gateway: the gateway address itself is what a query from this
+// interface appears to come from, and the next address is what the resolver is
+// pointed at. The latter belongs to the TUN and is answered inside Xray;
+// handing the configured public resolvers to resolvectl instead would leave the
+// system querying them directly over the physical link, defeating the point of
+// the TUN.
+func systemDNSAddrs(gateway []string) (source, dns netip.Addr, ok bool) {
+	for _, address := range gateway {
+		prefix, err := netip.ParsePrefix(address)
+		if err != nil {
+			continue
+		}
+		addr := prefix.Addr()
+		if !addr.Is4() {
+			continue
+		}
+		return addr, addr.Next(), true
+	}
+	return netip.Addr{}, netip.Addr{}, false
+}
+
+func buildResolvectlArgs(action, iface string, extra ...string) []string {
+	args := make([]string, 0, 2+len(extra))
+	args = append(args, action, iface)
+	args = append(args, extra...)
+	return args
+}
+
+func runResolvectl(action, iface string, extra ...string) error {
+	args := buildResolvectlArgs(action, iface, extra...)
+	if _, err := resolvectlRunner("resolvectl", args...); err != nil {
+		return errors.New("resolvectl ", action, " failed").Base(err)
+	}
+	return nil
+}
+
+// ifaceName returns the TUN interface name, or empty when the link is not
+// available. Callers must treat empty as "nothing to configure".
+func (t *LinuxTun) ifaceName() string {
+	if t.tunLink == nil {
+		return ""
+	}
+	attrs := t.tunLink.Attrs()
+	if attrs == nil {
+		return ""
+	}
+	return attrs.Name
+}
+
+// probeSourcePort is a representative client port for the routing probe. A real
+// query arrives from an ephemeral port that cannot be known in advance, so this
+// only matters for a rule that matches on a source port.
+const probeSourcePort = 49152
+
+// verifyDNSRouting reports whether a DNS query to address would actually be
+// handled. Redirecting the system resolver at an address nothing answers would
+// break name resolution outright, so the takeover only proceeds when routing
+// hands such a query to a DNS-capable outbound.
+//
+// Overridable for tests.
+var verifyDNSRouting = func(ctx context.Context, inboundTag, source, address string) error {
+	ip, err := netip.ParseAddr(address)
+	if err != nil || !ip.Is4() {
+		return errors.New("invalid DNS address ", address).Base(err)
+	}
+	src, err := netip.ParseAddr(source)
+	if err != nil || !src.Is4() {
+		return errors.New("invalid source address ", source).Base(err)
+	}
+
+	instance := core.MustFromContext(ctx)
+
+	// Two shapes mean the same thing: with no `dns` section Core installs a
+	// client that forwards to the system resolver, and with a `dns` section that
+	// has no name servers app/dns falls back to one. Either way, pointing the
+	// system resolver at the TUN would close a loop through the DNS outbound, so
+	// refuse instead of breaking resolution.
+	switch dnsFeature := instance.GetFeature(feature_dns.ClientType()).(type) {
+	case *localdns.Client:
+		return errors.New("DNS feature is the system resolver, takeover would loop")
+	case *appdns.DNS:
+		if dnsFeature.UsesSystemResolver() {
+			return errors.New("DNS feature is the system resolver, takeover would loop")
+		}
+	}
+
+	router, ok := instance.GetFeature(routing.RouterType()).(routing.Router)
+	if !ok {
+		return errors.New("router feature unavailable")
+	}
+
+	// A real query from this interface carries a source address, and rules may
+	// match on it, so the probe has to carry one too.
+	queryCtx := session.ContextWithInbound(ctx, &session.Inbound{
+		Name:   "tun",
+		Tag:    inboundTag,
+		Source: xnet.UDPDestination(xnet.IPAddress(src.AsSlice()), probeSourcePort),
+	})
+	queryCtx = session.ContextWithOutbounds(queryCtx, []*session.Outbound{{
+		Target: xnet.UDPDestination(xnet.IPAddress(ip.AsSlice()), 53),
+	}})
+
+	route, err := router.PickRoute(routingsession.AsRoutingContext(queryCtx))
+	if err != nil {
+		return errors.New("no route for ", address, ":53").Base(err)
+	}
+
+	manager, ok := instance.GetFeature(outbound.ManagerType()).(outbound.Manager)
+	if !ok {
+		return errors.New("outbound manager unavailable")
+	}
+
+	handler := manager.GetHandler(route.GetOutboundTag())
+	if handler == nil {
+		return errors.New("outbound ", route.GetOutboundTag(), " does not exist")
+	}
+	if settings := handler.ProxySettings(); settings == nil || settings.Type != serial.GetMessageType(&dns.Config{}) {
+		return errors.New("outbound ", route.GetOutboundTag(), " does not handle DNS")
+	}
+	return nil
+}
+
+// ConfigureSystemDNS points systemd-resolved at this interface so name lookups
+// resolve through Xray instead of leaking to the physical link.
+//
+// It acts only when the config opts in, and it verifies the data path first:
+// unless a query to the advertised address would actually be handled, host-wide
+// resolution is left to the OS, which is the documented default. Errors are
+// returned to the caller, which treats them as non-fatal.
+func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) error {
+	if !t.options.AutoSystemDns {
+		return nil
+	}
+	if t.systemDNSSet {
+		return nil
+	}
+
+	// A previous revert may have failed. Retry before applying anything, so a
+	// dirty resolver does not silently outlive the attempt to clean it up.
+	if t.systemDNSDirty {
+		if err := t.revertSystemDNS(); err != nil {
+			return errors.New("previous system DNS revert still failing").Base(err)
+		}
+	}
+
+	source, address, ok := systemDNSAddrs(t.options.Gateway)
+	if !ok {
+		return errors.New("no IPv4 gateway, cannot derive a system DNS address")
+	}
+
+	iface := t.ifaceName()
+	if iface == "" {
+		return errors.New("interface not available")
+	}
+
+	if err := verifyDNSRouting(ctx, inboundTag, source.String(), address.String()); err != nil {
+		return errors.New("no DNS path at ", address.String(), ":53").Base(err)
+	}
+
+	// Applied as a sequence with rollback: a half-configured resolver would be
+	// worse than none at all.
+	if err := runResolvectl("dns", iface, address.String()); err != nil {
+		return errors.New("resolvectl dns failed").Base(err)
+	}
+	if err := runResolvectl("domain", iface, "~."); err != nil {
+		return t.rollbackSystemDNS(iface, errors.New("resolvectl domain failed").Base(err))
+	}
+	if err := runResolvectl("default-route", iface, "true"); err != nil {
+		return t.rollbackSystemDNS(iface, errors.New("resolvectl default-route failed").Base(err))
+	}
+
+	t.systemDNSSet = true
+	errors.LogInfo(ctx, "[tun] system DNS set to ", address.String(), " on ", iface)
+	return nil
+}
+
+// rollbackSystemDNS undoes a partially applied takeover. A failed revert is
+// recorded so the next attempt retries it, and is reported rather than
+// swallowed.
+func (t *LinuxTun) rollbackSystemDNS(iface string, cause error) error {
+	if err := runResolvectl("revert", iface); err != nil {
+		t.systemDNSDirty = true
+		return errors.New("revert failed, per-link DNS settings may remain").Base(err).Base(cause)
+	}
+	return cause
+}
+
+// revertSystemDNS issues the revert and keeps the dirty flag in step with the
+// outcome.
+func (t *LinuxTun) revertSystemDNS() error {
+	err := runResolvectl("revert", t.ifaceName())
+	t.systemDNSDirty = err != nil
+	if err != nil {
+		return err
+	}
+	t.systemDNSSet = false
+	return nil
+}
+
+// unsetSystemDNS hands DNS back to the OS. Only meaningful when
+// ConfigureSystemDNS applied something, or a previous revert failed.
+func (t *LinuxTun) unsetSystemDNS() {
+	if !t.systemDNSSet && !t.systemDNSDirty {
+		return
+	}
+
+	if t.ifaceName() == "" {
+		// The link is gone, and its per-link settings went with it.
+		t.systemDNSSet = false
+		t.systemDNSDirty = false
+		return
+	}
+
+	if err := t.revertSystemDNS(); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to revert system DNS; per-link settings may remain until revert succeeds")
+	}
 }
 
 // LinuxTun implements Tun
@@ -200,6 +439,7 @@ func (t *LinuxTun) Close() error {
 		}
 	})
 
+	t.unsetSystemDNS()
 	_ = t.unsetSystemRoutes()
 	_ = t.unsetInterfaceAddresses()
 
