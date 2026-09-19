@@ -180,7 +180,7 @@ func TestTXT(t *testing.T) {
 	}
 	m1 := dnsmessage.Message{
 		Answers: []dnsmessage.Resource{
-			dnsmessage.Resource{
+			{
 				Header: dnsmessage.ResourceHeader{
 					Name:  dnsmessage.MustNewName("."),
 					Type:  dnsmessage.TypeTXT,

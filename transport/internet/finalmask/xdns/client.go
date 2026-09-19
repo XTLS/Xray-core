@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"io"
 	mrand "math/rand"
-	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -235,57 +234,8 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	}
 
 	p := pool4K.Get().([]byte)
-	p = p[:0]
-	if msg.Questions[0].Type == dnsmessage.TypeTXT {
-		if len(msg.Answers) == 1 && domain.IsDomain(msg.Answers[0].Header.Name) && msg.Answers[0].Header.Type == dnsmessage.TypeTXT {
-			for i := range msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT {
-				p = append(p, msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT[i]...)
-			}
-		}
-		pool4K.Put(p[:cap(p)])
-		return
-	} else {
-		var frags [][]byte
-		for i := range msg.Answers {
-			if !domain.IsDomain(msg.Answers[i].Header.Name) || msg.Answers[i].Header.Type != msg.Questions[0].Type {
-				continue
-			}
-			switch msg.Questions[0].Type {
-			case dnsmessage.TypeA:
-				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
-			case dnsmessage.TypeCNAME:
-				var decoded [255]byte
-				n, err := domain.Decode(&decoded, msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
-				if err != nil || n < 2 {
-					continue
-				}
-				frags = append(frags, decoded[:n])
-			case dnsmessage.TypeAAAA:
-				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AAAAResource).AAAA[:])
-			}
-		}
-		if len(frags) == 0 || len(frags) > 255 {
-			pool4K.Put(p[:cap(p)])
-			return
-		}
-		sort.Slice(frags, func(i, j int) bool {
-			return frags[i][0] < frags[j][0]
-		})
-		if frags[0][1] != byte(len(frags)) {
-			pool4K.Put(p[:cap(p)])
-			return
-		}
-		p = append(p, frags[0][2:]...)
-		for i := range frags {
-			if i > 0 {
-				if frags[i][0] == frags[i-1][0] {
-					pool4K.Put(p[:cap(p)])
-					return
-				}
-				p = append(p, frags[i][1:]...)
-			}
-		}
-	}
+	n := RespDecode(p[:0], msg, domain)
+	p = p[:n]
 	if len(p) < 8+1 {
 		pool4K.Put(p[:cap(p)])
 		return

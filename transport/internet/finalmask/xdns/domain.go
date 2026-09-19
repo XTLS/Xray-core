@@ -189,9 +189,9 @@ func (d *Domain) Encode(data []byte) dnsmessage.Name {
 	return name
 }
 
-func (d *Domain) Decode(decoded *[255]byte, name dnsmessage.Name) (int, error) {
+func (d *Domain) Decode(decoded *[255]byte, name dnsmessage.Name) int {
 	if !d.IsDomain(name) {
-		return 0, errors.New("incorrect domain")
+		return 0
 	}
 	var encoded [255]byte
 	b1 := encoded[:0]
@@ -202,5 +202,9 @@ func (d *Domain) Decode(decoded *[255]byte, name dnsmessage.Name) (int, error) {
 		}
 	}
 	ToUpper(b1)
-	return base32Encoding.Decode(decoded[:], b1)
+	n, err := base32Encoding.Decode(decoded[:], b1)
+	if err != nil {
+		return 0
+	}
+	return n
 }
