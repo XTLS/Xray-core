@@ -167,3 +167,42 @@ func TestXxx(t *testing.T) {
 		}
 	}
 }
+
+func TestTXT(t *testing.T) {
+	txt := [][]byte{{}, {}}
+	for i := range 255 {
+		txt[0] = append(txt[0], byte(i))
+	}
+	txt[1] = []byte{255}
+	str := []string{}
+	for i := range txt {
+		str = append(str, string(txt[i]))
+	}
+	m1 := dnsmessage.Message{
+		Answers: []dnsmessage.Resource{
+			dnsmessage.Resource{
+				Header: dnsmessage.ResourceHeader{
+					Name:  dnsmessage.MustNewName("."),
+					Type:  dnsmessage.TypeTXT,
+					Class: dnsmessage.ClassINET,
+					TTL:   60,
+				},
+				Body: &dnsmessage.TXTResource{
+					TXT: str,
+				},
+			},
+		},
+	}
+	p1 := common.Must2(m1.Pack())
+
+	m2 := dnsmessage.Message{}
+	common.Must(m2.Unpack(p1))
+	if len(m2.Answers[0].Body.(*dnsmessage.TXTResource).TXT) != len(txt) {
+		t.Fatal("fatal txt")
+	}
+	for i := range txt {
+		if !bytes.Equal(txt[i], []byte(m2.Answers[0].Body.(*dnsmessage.TXTResource).TXT[i])) {
+			t.Fatal("fatal txt")
+		}
+	}
+}
