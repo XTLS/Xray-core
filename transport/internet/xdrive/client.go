@@ -55,17 +55,14 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.
 			}
 		}
 
-		conn, err := internet.DialSystem(ctx, target, sockopt)
-		if err != nil {
-			return nil, host, err
+		var conn net.Conn
+		if streamSettings.FinalMask != nil {
+			conn, err = streamSettings.FinalMask.DialTCP(ctx, target)
+		} else {
+			conn, err = internet.DialSystem(ctx, target, sockopt)
 		}
-		if streamSettings != nil && streamSettings.TcpmaskManager != nil {
-			masked, err := streamSettings.TcpmaskManager.WrapConnClient(conn)
-			if err != nil {
-				conn.Close()
-				return nil, host, errors.New("mask err").Base(err)
-			}
-			conn = masked
+		if err != nil {
+			return nil, host, errors.New("failed to dial to dest").Base(err)
 		}
 		return conn, host, nil
 	}
