@@ -62,8 +62,8 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	if len(c.Resolvers) == 0 {
 		return nil, errors.New("empty resolvers")
 	}
-	if c.ExtraPoll > 8 {
-		return nil, errors.New("ExtraPoll > 8")
+	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
+		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")
 	}
 	domains := make([]*Domain, 0, len(c.Domains))
 	for i := range c.Domains {
