@@ -7,7 +7,6 @@
 package udphop
 
 import (
-	internet "github.com/xtls/xray-core/transport/internet"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -24,14 +23,13 @@ const (
 
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Sockopt       *internet.SocketConfig `protobuf:"bytes,1,opt,name=sockopt,proto3" json:"sockopt,omitempty"`
 	Local         bool                   `protobuf:"varint,2,opt,name=local,proto3" json:"local,omitempty"`
 	Remote        bool                   `protobuf:"varint,3,opt,name=remote,proto3" json:"remote,omitempty"`
 	RemoteOnce    bool                   `protobuf:"varint,4,opt,name=remote_once,json=remoteOnce,proto3" json:"remote_once,omitempty"`
 	IntervalMin   int64                  `protobuf:"varint,5,opt,name=interval_min,json=intervalMin,proto3" json:"interval_min,omitempty"`
 	IntervalMax   int64                  `protobuf:"varint,6,opt,name=interval_max,json=intervalMax,proto3" json:"interval_max,omitempty"`
-	RemotePorts   []uint32               `protobuf:"varint,7,rep,packed,name=remote_ports,json=remotePorts,proto3" json:"remote_ports,omitempty"`
-	RemoteIPs     []string               `protobuf:"bytes,8,rep,name=remoteIPs,proto3" json:"remoteIPs,omitempty"`
+	RemoteIPs     []string               `protobuf:"bytes,7,rep,name=remoteIPs,proto3" json:"remoteIPs,omitempty"`
+	RemotePorts   []uint32               `protobuf:"varint,8,rep,packed,name=remote_ports,json=remotePorts,proto3" json:"remote_ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -64,13 +62,6 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_finalmask_udphop_config_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *Config) GetSockopt() *internet.SocketConfig {
-	if x != nil {
-		return x.Sockopt
-	}
-	return nil
 }
 
 func (x *Config) GetLocal() bool {
@@ -108,16 +99,16 @@ func (x *Config) GetIntervalMax() int64 {
 	return 0
 }
 
-func (x *Config) GetRemotePorts() []uint32 {
+func (x *Config) GetRemoteIPs() []string {
 	if x != nil {
-		return x.RemotePorts
+		return x.RemoteIPs
 	}
 	return nil
 }
 
-func (x *Config) GetRemoteIPs() []string {
+func (x *Config) GetRemotePorts() []uint32 {
 	if x != nil {
-		return x.RemoteIPs
+		return x.RemotePorts
 	}
 	return nil
 }
@@ -126,17 +117,16 @@ var File_transport_internet_finalmask_udphop_config_proto protoreflect.FileDescr
 
 const file_transport_internet_finalmask_udphop_config_proto_rawDesc = "" +
 	"\n" +
-	"0transport/internet/finalmask/udphop/config.proto\x12(xray.transport.internet.finalmask.udphop\x1a\x1ftransport/internet/config.proto\"\x9f\x02\n" +
-	"\x06Config\x12?\n" +
-	"\asockopt\x18\x01 \x01(\v2%.xray.transport.internet.SocketConfigR\asockopt\x12\x14\n" +
+	"0transport/internet/finalmask/udphop/config.proto\x12(xray.transport.internet.finalmask.udphop\"\xe4\x01\n" +
+	"\x06Config\x12\x14\n" +
 	"\x05local\x18\x02 \x01(\bR\x05local\x12\x16\n" +
 	"\x06remote\x18\x03 \x01(\bR\x06remote\x12\x1f\n" +
 	"\vremote_once\x18\x04 \x01(\bR\n" +
 	"remoteOnce\x12!\n" +
 	"\finterval_min\x18\x05 \x01(\x03R\vintervalMin\x12!\n" +
-	"\finterval_max\x18\x06 \x01(\x03R\vintervalMax\x12!\n" +
-	"\fremote_ports\x18\a \x03(\rR\vremotePorts\x12\x1c\n" +
-	"\tremoteIPs\x18\b \x03(\tR\tremoteIPsB\x9a\x01\n" +
+	"\finterval_max\x18\x06 \x01(\x03R\vintervalMax\x12\x1c\n" +
+	"\tremoteIPs\x18\a \x03(\tR\tremoteIPs\x12!\n" +
+	"\fremote_ports\x18\b \x03(\rR\vremotePortsJ\x04\b\x01\x10\x02B\x9a\x01\n" +
 	",com.xray.transport.internet.finalmask.udphopP\x01Z=github.com/xtls/xray-core/transport/internet/finalmask/udphop\xaa\x02(Xray.Transport.Internet.Finalmask.Udphopb\x06proto3"
 
 var (
@@ -153,16 +143,14 @@ func file_transport_internet_finalmask_udphop_config_proto_rawDescGZIP() []byte 
 
 var file_transport_internet_finalmask_udphop_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_transport_internet_finalmask_udphop_config_proto_goTypes = []any{
-	(*Config)(nil),                // 0: xray.transport.internet.finalmask.udphop.Config
-	(*internet.SocketConfig)(nil), // 1: xray.transport.internet.SocketConfig
+	(*Config)(nil), // 0: xray.transport.internet.finalmask.udphop.Config
 }
 var file_transport_internet_finalmask_udphop_config_proto_depIdxs = []int32{
-	1, // 0: xray.transport.internet.finalmask.udphop.Config.sockopt:type_name -> xray.transport.internet.SocketConfig
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_udphop_config_proto_init() }

@@ -28,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.zx2c4.com/wireguard/device"
 )
 
@@ -293,26 +294,26 @@ func (h *Handler) init(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		conn, err := internet.DialSystem(ctx, dest, h.streamSettings.SocketSettings)
-		if err != nil {
-			return nil, err
-		}
 		var pktConn net.PacketConn
-		switch c := conn.(type) {
-		case *internet.PacketConnWrapper:
-			pktConn = c.PacketConn
-		case *cnc.Connection:
-			pktConn = &internet.FakePacketConn{Conn: c}
-		default:
-			panic(reflect.TypeOf(c))
-		}
-		if h.streamSettings.UdpmaskManager != nil {
-			newConn, err := h.streamSettings.UdpmaskManager.WrapPacketConnClient(pktConn)
+		if h.streamSettings.FinalMask != nil {
+			conn, err := h.streamSettings.FinalMask.DialUDP(ctx, dest)
 			if err != nil {
-				pktConn.Close()
-				return nil, errors.New("mask err").Base(err)
+				return nil, errors.New("failed to dial to dest").Base(err)
 			}
-			pktConn = newConn
+			pktConn = conn.(*finalmask.PacketConnWrapper).PacketConn
+		} else {
+			conn, err := internet.DialSystem(ctx, dest, h.streamSettings.SocketSettings)
+			if err != nil {
+				return nil, errors.New("failed to dial to dest").Base(err)
+			}
+			switch c := conn.(type) {
+			case *internet.PacketConnWrapper:
+				pktConn = c.PacketConn
+			case *cnc.Connection:
+				pktConn = &internet.FakePacketConn{Conn: c}
+			default:
+				panic(reflect.TypeOf(c))
+			}
 		}
 		if h.uplinkCounter != nil || h.downlinkCounter != nil {
 			pktConn = &PacketCounterConnection{
