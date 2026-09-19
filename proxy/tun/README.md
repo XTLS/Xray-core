@@ -31,10 +31,11 @@ It uses `resolvectl`, which means it applies only when all of these hold:
 - the system runs systemd and `resolvectl` is on `PATH`
 - `systemd-resolved` is enabled and actually managing DNS (installed but not running has no effect)
 - systemd-resolved is version 240 or newer, where `default-route` exists
+- the `dns` section has an upstream that does not resolve through the system resolver
 
 The address handed over is the first IPv4 `gateway` incremented by one (e.g. `192.168.100.1/30` -> `192.168.100.2`). It is not taken from `dns`: handing `1.1.1.1` to `resolvectl dns` would make systemd-resolved query that server directly over the physical link, which is the leak this option exists to close.
 
-Because that address has to actually answer, the takeover is verified before it happens. A query to the address is routed through the configured rules, and host-wide DNS is only changed when the result is a DNS-capable outbound. Otherwise the option does nothing and DNS is left to the OS. In practice this means you also need a routing rule sending the interface's port 53 to a `dns` outbound, for example:
+Because that address has to actually answer, the takeover is checked before it happens. A query from the interface address to that address is routed through the configured rules, and host-wide DNS is only changed when the result is a DNS-capable outbound. Otherwise the option does nothing and DNS is left to the OS. In practice this means you also need a routing rule sending the interface's port 53 to a `dns` outbound, for example:
 
 ```json
 "routing": {
@@ -43,6 +44,8 @@ Because that address has to actually answer, the takeover is verified before it 
   ]
 }
 ```
+
+The upstream requirement in the list above matters as much as the routing rule. With no name servers configured, Core resolves through a client that forwards to the system resolver; pointing the system resolver at the TUN would then close a loop through the DNS outbound, `resolved -> TUN -> DNS outbound -> system resolver -> resolved`, and resolution stops. The takeover is refused in that case.
 
 Where it does not apply, DNS is left alone and the leak described in XTLS/Xray-core#6454 remains:
 
