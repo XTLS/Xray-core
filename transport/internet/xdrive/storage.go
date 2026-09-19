@@ -2,6 +2,10 @@ package xdrive
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet"
@@ -32,8 +36,55 @@ func newStorage(streamSettings *internet.MemoryStreamConfig) (Storage, error) {
 	case "local":
 		return newLocalStorage(config.RemoteFolder)
 	case "Google Drive":
-		return nil, errors.New(`service "Google Drive" is not implemented yet`)
+		return sharedStorage(streamSettings, config, func() (Storage, error) {
+			return newDriveStorage(streamSettings, config)
+		})
+	case "template":
+		return sharedStorage(streamSettings, config, func() (Storage, error) {
+			return newTemplateStorage(streamSettings, config)
+		})
 	default:
 		return nil, errors.New("unsupported service: ", config.Service)
 	}
+}
+
+var (
+	sharedMu sync.Mutex
+	shared   = make(map[string]Storage)
+)
+
+func shareKey(streamSettings *internet.MemoryStreamConfig, config *Config) string {
+	parts := []string{config.Service, config.RemoteFolder}
+	parts = append(parts, config.Secrets...)
+	if streamSettings != nil {
+		parts = append(parts, streamSettings.SecurityType)
+		if streamSettings.Destination != nil {
+			parts = append(parts, streamSettings.Destination.NetAddr())
+		}
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func resetSharedStorage() {
+	sharedMu.Lock()
+	shared = make(map[string]Storage)
+	sharedMu.Unlock()
+}
+
+func sharedStorage(streamSettings *internet.MemoryStreamConfig, config *Config, build func() (Storage, error)) (Storage, error) {
+	key := shareKey(streamSettings, config)
+
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+
+	if storage, ok := shared[key]; ok {
+		return storage, nil
+	}
+	storage, err := build()
+	if err != nil {
+		return nil, err
+	}
+	shared[key] = storage
+	return storage, nil
 }
