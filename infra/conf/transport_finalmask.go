@@ -732,6 +732,7 @@ type XDNSResolver struct {
 type XDNS struct {
 	Domains      []XDNSDomain   `json:"domains"`
 	Resolvers    []XDNSResolver `json:"resolvers"`
+	ExtraPoll    int32          `json:"extraPoll"`
 	MinAvailable int32          `json:"minAvailable"`
 }
 
@@ -767,7 +768,7 @@ func (c *XDNS) Build() (proto.Message, error) {
 	if c.MinAvailable == 0 {
 		c.MinAvailable = 3
 	}
-	return &xdns.Config{Domains: domains, Resolvers: resolvers, MinAvailable: c.MinAvailable}, nil
+	return &xdns.Config{Domains: domains, Resolvers: resolvers, ExtraPoll: c.ExtraPoll, MinAvailable: c.MinAvailable}, nil
 }
 
 type XMC struct {

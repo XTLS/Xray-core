@@ -265,6 +265,9 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	if len(c.Domains) == 0 {
 		return nil, errors.New("empty domains")
 	}
+	if c.MinAvailable > 8 {
+		return nil, errors.New("MinAvailable > 8")
+	}
 	domains := make([]*Domain, 0, len(c.Domains))
 	for i := range c.Domains {
 		types := make([]uint16, 0, len(c.Domains[i].Types))
