@@ -103,6 +103,14 @@ func (g *Instance) Start() error {
 	return g.startInternal()
 }
 
+// Enabled reports whether error logging is enabled at severity.
+func (g *Instance) Enabled(severity log.Severity) bool {
+	g.RLock()
+	defer g.RUnlock()
+
+	return g.active && g.errorLogger != nil && severity <= g.config.ErrorLogLevel
+}
+
 // Handle implements log.Handler.
 func (g *Instance) Handle(msg log.Message) {
 	g.RLock()

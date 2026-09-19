@@ -3,11 +3,13 @@ package log_test
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	clog "github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/testing/mocks"
 )
@@ -33,6 +35,9 @@ func TestCustomLogHandler(t *testing.T) {
 		AccessLogType: log.LogType_None,
 	})
 	common.Must(err)
+	if !logger.Enabled(clog.Severity_Debug) || len(loggedValue) != 1 || loggedValue[0] != "[Debug] app/log: Logger started" {
+		t.Fatalf("unexpected startup state: %v", loggedValue)
+	}
 
 	common.Must(logger.Start())
 
@@ -50,6 +55,77 @@ func TestCustomLogHandler(t *testing.T) {
 	}
 
 	common.Must(logger.Close())
+	count := len(loggedValue)
+	if logger.Enabled(clog.Severity_Error) {
+		t.Fatal("closed logger is enabled")
+	}
+	errors.LogError(context.Background(), "closed")
+	clog.Record(&clog.GeneralMessage{Severity: clog.Severity_Error, Content: "closed"})
+	if len(loggedValue) != count {
+		t.Fatal("closed logger handled a message")
+	}
+	common.Must(logger.Start())
+	if !logger.Enabled(clog.Severity_Debug) {
+		t.Fatal("restarted logger is disabled")
+	}
+	errors.LogDebug(context.Background(), "restarted")
+	if len(loggedValue) != count+1 || loggedValue[count] != "[Debug] app/log_test: restarted" {
+		t.Fatalf("unexpected restart messages: %v", loggedValue[count:])
+	}
+	common.Must(logger.Close())
+}
+
+func TestLogEnabled(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		logType log.LogType
+	}{
+		{"warning", log.LogType_Event},
+		{"none", log.LogType_None},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := mocks.NewLogHandler(gomock.NewController(t))
+			if tc.logType != log.LogType_None {
+				handler.EXPECT().Handle(gomock.Any()).Times(1)
+			}
+			common.Must(log.RegisterHandlerCreator(log.LogType_Event, func(log.LogType, log.HandlerCreatorOptions) (clog.Handler, error) {
+				return handler, nil
+			}))
+			logger, err := log.New(context.Background(), &log.Config{
+				ErrorLogType: tc.logType, ErrorLogLevel: clog.Severity_Warning, AccessLogType: log.LogType_None,
+			})
+			common.Must(err)
+			defer logger.Close()
+			for _, severity := range []clog.Severity{clog.Severity_Debug, clog.Severity_Info, clog.Severity_Warning, clog.Severity_Error} {
+				want := tc.logType != log.LogType_None && severity <= clog.Severity_Warning
+				if logger.Enabled(severity) != want || clog.Enabled(severity) != want {
+					t.Fatalf("Enabled(%v) != %v", severity, want)
+				}
+			}
+			// Direct records still need the final check in Handle.
+			clog.Record(&clog.GeneralMessage{Severity: clog.Severity_Debug, Content: "disabled"})
+			clog.Record(&clog.GeneralMessage{Severity: clog.Severity_Warning, Content: "warning"})
+		})
+	}
+}
+
+func TestLogConcurrentRestart(t *testing.T) {
+	logger, err := log.New(context.Background(), &log.Config{
+		ErrorLogType: log.LogType_None, AccessLogType: log.LogType_None,
+	})
+	common.Must(err)
+	defer logger.Close()
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for range 1000 {
+			errors.LogError(context.Background(), "message")
+		}
+	})
+	for range 1000 {
+		common.Must(logger.Close())
+		common.Must(logger.Start())
+	}
+	wg.Wait()
 }
 
 func TestMaskAddress(t *testing.T) {

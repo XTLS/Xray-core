@@ -32,6 +32,19 @@ func Record(msg Message) {
 	logHandler.Handle(msg)
 }
 
+// Enabled reports whether the current handler accepts general messages at severity.
+// Handlers may implement Enabled(Severity) bool to allow early filtering.
+// Handlers without it are always enabled.
+func Enabled(severity Severity) bool {
+	logHandler.RLock()
+	defer logHandler.RUnlock()
+
+	if h, ok := logHandler.Handler.(interface{ Enabled(Severity) bool }); ok {
+		return h.Enabled(severity)
+	}
+	return true
+}
+
 var logHandler syncHandler
 
 // RegisterHandler registers a new handler as current log handler. Previous registered handler will be discarded.

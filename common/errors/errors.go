@@ -171,6 +171,14 @@ func LogErrorInner(ctx context.Context, inner error, msg ...interface{}) {
 }
 
 func doLog(ctx context.Context, inner error, severity log.Severity, msg ...interface{}) {
+	s := severity
+	if inner, ok := inner.(hasSeverity); ok {
+		s = min(s, inner.Severity())
+	}
+	if !log.Enabled(s) {
+		return
+	}
+
 	pc, _, _, _ := runtime.Caller(2)
 	details := runtime.FuncForPC(pc).Name()
 	if len(details) >= trim {
@@ -193,7 +201,7 @@ func doLog(ctx context.Context, inner error, severity log.Severity, msg ...inter
 		}
 	}
 	log.Record(&log.GeneralMessage{
-		Severity: GetSeverity(err),
+		Severity: s,
 		Content:  err,
 	})
 }
