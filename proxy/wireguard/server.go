@@ -258,17 +258,15 @@ func (s *Server) Start() error {
 		return errors.New("address is domain")
 	}
 	listenFunc := func() (net.PacketConn, error) {
-		pktConn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)}, s.streamSettings.SocketSettings)
+		var pktConn net.PacketConn
+		var err error
+		if s.streamSettings.FinalMask != nil {
+			pktConn, err = s.streamSettings.FinalMask.ListenPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)})
+		} else {
+			pktConn, err = internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)}, s.streamSettings.SocketSettings)
+		}
 		if err != nil {
 			return nil, err
-		}
-		if s.streamSettings.UdpmaskManager != nil {
-			newConn, err := s.streamSettings.UdpmaskManager.WrapPacketConnServer(pktConn)
-			if err != nil {
-				pktConn.Close()
-				return nil, errors.New("mask err").Base(err)
-			}
-			pktConn = newConn
 		}
 		if s.uplinkCounter != nil || s.downlinkCounter != nil {
 			pktConn = &PacketCounterConnection{

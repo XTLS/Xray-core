@@ -8,8 +8,7 @@ import (
 	goerrors "errors"
 	"fmt"
 	"io"
-	mathrand "math/rand"
-	"net"
+	mrand "math/rand"
 	"net/netip"
 	"sync"
 	"time"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
@@ -36,11 +36,11 @@ type packet struct {
 }
 
 type xicmpConnClient struct {
-	conn     net.PacketConn
 	icmp4    *icmp.PacketConn
 	icmp6    *icmp.PacketConn
 	udp      bool
 	ips      []netip.Addr
+	ip       net.IP
 	clientID [8]byte
 	id       int
 	seq      int
@@ -50,7 +50,7 @@ type xicmpConnClient struct {
 	mu       sync.Mutex
 }
 
-func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnClient(c *Config, dest *net.Destination) (net.PacketConn, error) {
 	var icmp4, icmp6 *icmp.PacketConn
 	var err4, err6 error
 	if c.DGRAM {
@@ -69,17 +69,24 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		ips = append(ips, netip.MustParseAddr(ip))
 	}
 
+	var ip net.IP
+	if len(ips) > 0 {
+		ip = ips[mrand.Intn(len(ips))].AsSlice()
+	} else {
+		ip = dest.Address.IP()
+	}
+
 	var clientID [8]byte
 	common.Must2(rand.Read(clientID[:]))
 
 	conn := &xicmpConnClient{
-		conn:     raw,
 		icmp4:    icmp4,
 		icmp6:    icmp6,
 		udp:      c.DGRAM,
 		ips:      ips,
+		ip:       ip,
 		clientID: clientID,
-		id:       mathrand.Intn(65536),
+		id:       mrand.Intn(65536),
 		seq:      1,
 		readCh:   make(chan packet),
 		closeCh:  make(chan struct{}),
@@ -90,10 +97,6 @@ func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	go conn.recv6()
 
 	return conn, nil
-}
-
-func (c *xicmpConnClient) ring(a, b uint16) uint16 {
-	return min(a-b, b-a)
 }
 
 func (c *xicmpConnClient) closed() bool {
@@ -110,12 +113,11 @@ func (c *xicmpConnClient) recv4() {
 
 	var b [finalmask.UDPSize]byte
 	for {
-		if c.closed() {
-			return
-		}
-
 		n, addr, err := c.icmp4.ReadFrom(b[:])
 		if err != nil {
+			if c.closed() {
+				return
+			}
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
 				select {
@@ -125,9 +127,10 @@ func (c *xicmpConnClient) recv4() {
 				case <-c.closeCh:
 					return
 				}
+				continue
 			}
-			errors.LogErrorInner(context.Background(), err, "recv4 err")
-			continue
+			errors.LogErrorInner(context.Background(), err, "recv err 4")
+			return
 		}
 
 		msg, err := icmp.ParseMessage(1, b[:n])
@@ -147,10 +150,6 @@ func (c *xicmpConnClient) recv4() {
 		// errors.LogDebug(context.Background(), "id ", echo.ID, " seq ", echo.Seq, " addr ", addr)
 
 		if !c.udp && echo.ID != c.id {
-			continue
-		}
-
-		if c.ring(uint16(echo.Seq), uint16(c.seq)) > 1000 {
 			continue
 		}
 
@@ -182,12 +181,11 @@ func (c *xicmpConnClient) recv6() {
 
 	var b [finalmask.UDPSize]byte
 	for {
-		if c.closed() {
-			return
-		}
-
 		n, addr, err := c.icmp6.ReadFrom(b[:])
 		if err != nil {
+			if c.closed() {
+				return
+			}
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
 				select {
@@ -197,9 +195,10 @@ func (c *xicmpConnClient) recv6() {
 				case <-c.closeCh:
 					return
 				}
+				continue
 			}
-			errors.LogErrorInner(context.Background(), err, "recv6 err")
-			continue
+			errors.LogErrorInner(context.Background(), err, "recv err 6")
+			return
 		}
 
 		msg, err := icmp.ParseMessage(58, b[:n])
@@ -219,10 +218,6 @@ func (c *xicmpConnClient) recv6() {
 		// errors.LogDebug(context.Background(), "id ", echo.ID, " seq ", echo.Seq, " addr ", addr)
 
 		if !c.udp && echo.ID != c.id {
-			continue
-		}
-
-		if c.ring(uint16(echo.Seq), uint16(c.seq)) > 1000 {
 			continue
 		}
 
@@ -273,9 +268,9 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.seq %= 65536
 	c.mu.Unlock()
 
-	ip := addr.(*net.UDPAddr).IP
+	ip := c.ip
 	if len(c.ips) > 0 {
-		ip = c.ips[mathrand.Intn(len(c.ips))].AsSlice()
+		ip = c.ips[mrand.Intn(len(c.ips))].AsSlice()
 	}
 
 	if c.udp {
@@ -314,7 +309,6 @@ func (c *xicmpConnClient) Close() error {
 	close(c.closeCh)
 	_ = c.icmp4.Close()
 	_ = c.icmp6.Close()
-	_ = c.conn.Close()
 	c.wg.Wait()
 	select {
 	case p := <-c.readCh:
@@ -328,7 +322,7 @@ func (c *xicmpConnClient) Close() error {
 }
 
 func (c *xicmpConnClient) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
+	return &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
 }
 
 func (c *xicmpConnClient) SetDeadline(t time.Time) error {
