@@ -69,7 +69,14 @@ type dnsRequest struct {
 	msg     *dnsmessage.Message
 }
 
-func genEDNS0Options(clientIP net.IP, padding int) *dnsmessage.Resource {
+func legacyClientIPPrefix(ip net.IP) int {
+	if len(ip) == net.IPv4len {
+		return 24
+	}
+	return 96
+}
+
+func genEDNS0Options(clientIP net.IP, prefix int, padding int) *dnsmessage.Resource {
 	if len(clientIP) == 0 && padding == 0 {
 		return nil
 	}
@@ -83,31 +90,16 @@ func genEDNS0Options(clientIP net.IP, padding int) *dnsmessage.Resource {
 	opt.Body = &body
 
 	if len(clientIP) != 0 {
-		var netmask int
-		var family uint16
-
-		if len(clientIP) == 4 {
+		family := uint16(2)
+		if len(clientIP) == net.IPv4len {
 			family = 1
-			netmask = 24 // 24 for IPV4, 96 for IPv6
-		} else {
-			family = 2
-			netmask = 96
 		}
 
 		b := make([]byte, 4)
 		binary.BigEndian.PutUint16(b[0:], family)
-		b[2] = byte(netmask)
-		b[3] = 0
-		switch family {
-		case 1:
-			ip := clientIP.To4().Mask(net.CIDRMask(netmask, net.IPv4len*8))
-			needLength := (netmask + 8 - 1) / 8 // division rounding up
-			b = append(b, ip[:needLength]...)
-		case 2:
-			ip := clientIP.Mask(net.CIDRMask(netmask, net.IPv6len*8))
-			needLength := (netmask + 8 - 1) / 8 // division rounding up
-			b = append(b, ip[:needLength]...)
-		}
+		b[2] = byte(prefix)
+		ip := clientIP.Mask(net.CIDRMask(prefix, len(clientIP)*8))
+		b = append(b, ip[:(prefix+7)/8]...)
 
 		body.Options = append(body.Options,
 			dnsmessage.Option{

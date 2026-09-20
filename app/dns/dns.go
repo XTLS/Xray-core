@@ -41,12 +41,9 @@ type DomainMatcherInfo struct {
 
 // New creates a new DNS server with given configuration.
 func New(ctx context.Context, config *Config) (*DNS, error) {
-	var clientIP net.IP
-	switch len(config.ClientIp) {
-	case 0, net.IPv4len, net.IPv6len:
-		clientIP = net.IP(config.ClientIp)
-	default:
-		return nil, errors.New("unexpected client IP length ", len(config.ClientIp))
+	clientIP := net.IP(config.ClientIp)
+	if _, err := resolveClientIPPrefix(clientIP, config.ClientIpPrefix); err != nil {
+		return nil, err
 	}
 
 	var ipOption dns.IPOption
@@ -118,10 +115,9 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			}
 		}
 
-		myClientIP := clientIP
-		switch len(ns.ClientIp) {
-		case net.IPv4len, net.IPv6len:
-			myClientIP = net.IP(ns.ClientIp)
+		myClientIP, prefix, err := clientIPForNameServer(clientIP, config.ClientIpPrefix, ns)
+		if err != nil {
+			return nil, err
 		}
 
 		disableCache := config.DisableCache
@@ -149,7 +145,7 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 			return nil, errors.New("no QueryStrategy available for ", ns.Address)
 		}
 
-		client, err := NewClient(ctx, ns, myClientIP, disableCache, serveStale, serveExpiredTTL, tag, clientIPOption, updateRules)
+		client, err := newClient(ctx, ns, myClientIP, prefix, disableCache, serveStale, serveExpiredTTL, tag, clientIPOption, updateRules)
 		if err != nil {
 			return nil, errors.New("failed to create client").Base(err)
 		}
@@ -181,6 +177,39 @@ func New(ctx context.Context, config *Config) (*DNS, error) {
 		enableParallelQuery:    config.EnableParallelQuery,
 		checkSystem:            checkSystem,
 	}, nil
+}
+
+func clientIPForNameServer(ip net.IP, prefix *uint32, ns *NameServer) (net.IP, int, error) {
+	switch len(ns.ClientIp) {
+	case net.IPv4len, net.IPv6len:
+		ip, prefix = net.IP(ns.ClientIp), ns.ClientIpPrefix
+	default:
+		if ns.ClientIpPrefix != nil {
+			return nil, 0, errors.New("client IP prefix specified without valid nameserver client IP")
+		}
+	}
+	bits, err := resolveClientIPPrefix(ip, prefix)
+	return ip, bits, err
+}
+
+func resolveClientIPPrefix(ip net.IP, prefix *uint32) (int, error) {
+	if len(ip) == 0 {
+		if prefix != nil {
+			return 0, errors.New("client IP prefix specified without client IP")
+		}
+		return 0, nil
+	}
+	if len(ip) != net.IPv4len && len(ip) != net.IPv6len {
+		return 0, errors.New("unexpected client IP length ", len(ip))
+	}
+	defaultPrefix, maxPrefix := legacyClientIPPrefix(ip), uint32(len(ip)*8)
+	if prefix == nil {
+		return defaultPrefix, nil
+	}
+	if *prefix > maxPrefix {
+		return 0, errors.New("invalid client IP prefix ", *prefix)
+	}
+	return int(*prefix), nil
 }
 
 // Type implements common.HasType.

@@ -1,7 +1,9 @@
 package conf_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -119,6 +121,72 @@ func TestDNSConfigParsing(t *testing.T) {
 			protocmp.SortRepeatedFields(&dns.Config{}, "static_hosts"),
 		); diff != "" {
 			t.Fatalf("Failed in test case:\n%s\nDiff (-want +got):\n%s", testCase.Input, diff)
+		}
+	}
+}
+
+func TestDNSClientIPPrefix(t *testing.T) {
+	var config DNSConfig
+	input := `{"clientIp":"0.0.0.0/0","servers":["8.8.8.8",{"address":"1.1.1.1","clientIp":"1.2.3.4"},{"address":"9.9.9.9","clientIp":"2001:db8::1234/56"},{"address":"4.4.4.4","clientIp":"::/0"}]}`
+	if err := json.Unmarshal([]byte(input), &config); err != nil {
+		t.Fatal(err)
+	}
+	built, err := config.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(built.ClientIp, []byte{0, 0, 0, 0}) || built.ClientIpPrefix == nil || *built.ClientIpPrefix != 0 {
+		t.Fatalf("global clientIp = %v/%v", built.ClientIp, built.ClientIpPrefix)
+	}
+	if built.NameServer[0].ClientIpPrefix != nil || built.NameServer[1].ClientIpPrefix != nil || !bytes.Equal(built.NameServer[1].ClientIp, []byte{1, 2, 3, 4}) {
+		t.Fatalf("bare nameserver clientIp values changed: %v", built.NameServer)
+	}
+	if built.NameServer[2].ClientIpPrefix == nil || *built.NameServer[2].ClientIpPrefix != 56 || !bytes.Equal(built.NameServer[2].ClientIp, net.ParseIP("2001:db8::1234")) {
+		t.Fatalf("IPv6 nameserver clientIp = %v/%v", built.NameServer[2].ClientIp, built.NameServer[2].ClientIpPrefix)
+	}
+	if built.NameServer[3].ClientIpPrefix == nil || *built.NameServer[3].ClientIpPrefix != 0 || !bytes.Equal(built.NameServer[3].ClientIp, net.ParseIP("::")) {
+		t.Fatalf("IPv6 wildcard clientIp = %v/%v", built.NameServer[3].ClientIp, built.NameServer[3].ClientIpPrefix)
+	}
+	wire, err := proto.Marshal(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip dns.Config
+	if err := proto.Unmarshal(wire, &roundTrip); err != nil || roundTrip.ClientIpPrefix == nil || *roundTrip.ClientIpPrefix != 0 {
+		t.Fatalf("lost explicit /0 in protobuf: %v, %v", roundTrip.ClientIpPrefix, err)
+	}
+	for _, tc := range []struct {
+		value string
+		ip    []byte
+		bits  uint32
+	}{
+		{"1.2.3.4/24", []byte{1, 2, 3, 4}, 24},
+		{"1.2.3.4/20", []byte{1, 2, 3, 4}, 20},
+		{"2001:db8::1/96", net.ParseIP("2001:db8::1"), 96},
+	} {
+		var explicit DNSConfig
+		if err := json.Unmarshal([]byte(`{"clientIp":`+strconv.Quote(tc.value)+`}`), &explicit); err != nil {
+			t.Fatal(err)
+		}
+		got, err := explicit.Build()
+		if err != nil || !bytes.Equal(got.ClientIp, tc.ip) || got.ClientIpPrefix == nil || *got.ClientIpPrefix != tc.bits {
+			t.Fatalf("clientIp %q: got %v, %v", tc.value, got, err)
+		}
+	}
+
+	for _, value := range []string{"1.2.3.4/33", "2001:db8::1/129", "example.com"} {
+		for _, server := range []bool{false, true} {
+			input := `{"clientIp":` + strconv.Quote(value) + `}`
+			if server {
+				input = `{"servers":[{"address":"8.8.8.8","clientIp":` + strconv.Quote(value) + `}]}`
+			}
+			var invalid DNSConfig
+			if err := json.Unmarshal([]byte(input), &invalid); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := invalid.Build(); err == nil {
+				t.Errorf("accepted invalid clientIp %q (server=%t)", value, server)
+			}
 		}
 	}
 }

@@ -34,10 +34,15 @@ type DoHNameServer struct {
 	httpClient      *http.Client
 	dohURL          string
 	clientIP        net.IP
+	clientIPPrefix  int
 }
 
 // NewDoHNameServer creates DOH/DOHL client object for remote/local resolving.
 func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *DoHNameServer {
+	return newDoHNameServer(url, dispatcher, h2c, disableCache, serveStale, serveExpiredTTL, clientIP, legacyClientIPPrefix(clientIP))
+}
+
+func newDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP, clientIPPrefix int) *DoHNameServer {
 	url.Scheme = "https"
 	mode := "DOH"
 	if dispatcher == nil {
@@ -48,6 +53,7 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, dis
 		cacheController: NewCacheController(mode+"//"+url.Host, disableCache, serveStale, serveExpiredTTL),
 		dohURL:          url.String(),
 		clientIP:        clientIP,
+		clientIPPrefix:  clientIPPrefix,
 	}
 	s.httpClient = &http.Client{
 		Transport: &http2.Transport{
@@ -150,7 +156,7 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 
 	// As we don't want our traffic pattern looks like DoH, we use Random-Length Padding instead of Block-Length Padding recommended in RFC 8467
 	// Although DoH server like 1.1.1.1 will pad the response to Block-Length 468, at least it is better than no padding for response at all
-	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, int(crypto.RandBetween(100, 300))))
+	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, s.clientIPPrefix, int(crypto.RandBetween(100, 300))))
 	if err != nil {
 		errors.LogErrorInner(ctx, err, "failed to build dns query for ", fqdn)
 		if noResponseErrCh != nil {

@@ -29,6 +29,7 @@ type ClassicNameServer struct {
 	requestsCleanup *task.Periodic
 	reqID           uint32
 	clientIP        net.IP
+	clientIPPrefix  int
 }
 
 type udpDnsRequest struct {
@@ -38,6 +39,10 @@ type udpDnsRequest struct {
 
 // NewClassicNameServer creates udp server object for remote resolving.
 func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *ClassicNameServer {
+	return newClassicNameServer(address, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP, legacyClientIPPrefix(clientIP))
+}
+
+func newClassicNameServer(address net.Destination, dispatcher routing.Dispatcher, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP, clientIPPrefix int) *ClassicNameServer {
 	// default to 53 if unspecific
 	if address.Port == 0 {
 		address.Port = net.Port(53)
@@ -48,6 +53,7 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 		address:         &address,
 		requests:        make(map[uint16]*udpDnsRequest),
 		clientIP:        clientIP,
+		clientIPPrefix:  clientIPPrefix,
 	}
 	s.requestsCleanup = &task.Periodic{
 		Interval: time.Minute,
@@ -161,7 +167,7 @@ func (s *ClassicNameServer) getCacheController() *CacheController {
 func (s *ClassicNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.Name(), " querying DNS for: ", fqdn)
 
-	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, s.clientIPPrefix, 0))
 	if err != nil {
 		errors.LogErrorInner(ctx, err, "failed to build dns query for ", fqdn)
 		if noResponseErrCh != nil {

@@ -33,10 +33,15 @@ type QUICNameServer struct {
 	destination     *net.Destination
 	connection      *quic.Conn
 	clientIP        net.IP
+	clientIPPrefix  int
 }
 
 // NewQUICNameServer creates DNS-over-QUIC client object for local resolving
 func NewQUICNameServer(url *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*QUICNameServer, error) {
+	return newQUICNameServer(url, disableCache, serveStale, serveExpiredTTL, clientIP, legacyClientIPPrefix(clientIP))
+}
+
+func newQUICNameServer(url *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP, clientIPPrefix int) (*QUICNameServer, error) {
 	var err error
 	port := net.Port(853)
 	if url.Port() != "" {
@@ -51,6 +56,7 @@ func NewQUICNameServer(url *url.URL, disableCache bool, serveStale bool, serveEx
 		cacheController: NewCacheController(url.String(), disableCache, serveStale, serveExpiredTTL),
 		destination:     &dest,
 		clientIP:        clientIP,
+		clientIPPrefix:  clientIPPrefix,
 	}
 
 	errors.LogInfo(context.Background(), "DNS: created Local DNS-over-QUIC client for ", url.String())
@@ -78,7 +84,7 @@ func (s *QUICNameServer) getCacheController() *CacheController { return s.cacheC
 func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.Name(), " querying: ", fqdn)
 
-	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, s.clientIPPrefix, 0))
 	if err != nil {
 		errors.LogErrorInner(ctx, err, "failed to build dns query for ", fqdn)
 		if noResponseErrCh != nil {

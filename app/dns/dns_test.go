@@ -22,20 +22,23 @@ import (
 	"github.com/xtls/xray-core/testing/servers/udp"
 )
 
-type staticHandler struct{}
+type staticHandler struct{ ecs chan *dns.EDNS0_SUBNET }
 
-func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
+func (h *staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	ans := new(dns.Msg)
 	ans.Id = r.Id
 
-	var clientIP net.IP
+	var hasECS bool
 
 	opt := r.IsEdns0()
 	if opt != nil {
 		for _, o := range opt.Option {
 			if o.Option() == dns.EDNS0SUBNET {
 				subnet := o.(*dns.EDNS0_SUBNET)
-				clientIP = subnet.Address
+				hasECS = true
+				if h.ecs != nil {
+					h.ecs <- subnet
+				}
 			}
 		}
 	}
@@ -43,7 +46,7 @@ func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	for _, q := range r.Question {
 		switch {
 		case q.Name == "google.com." && q.Qtype == dns.TypeA:
-			if clientIP == nil {
+			if !hasECS {
 				rr, _ := dns.NewRR("google.com. IN A 8.8.8.8")
 				ans.Answer = append(ans.Answer, rr)
 			} else {
@@ -112,12 +115,22 @@ func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 }
 
 func TestUDPServerSubnet(t *testing.T) {
+	testUDPServerSubnet(t, nil, 24)
+}
+
+func TestUDPServerSubnetWildcard(t *testing.T) {
+	prefix := uint32(0)
+	testUDPServerSubnet(t, &prefix, 0)
+}
+
+func testUDPServerSubnet(t *testing.T, prefix *uint32, want uint8) {
 	port := udp.PickPort()
+	ecs := make(chan *dns.EDNS0_SUBNET, 2)
 
 	dnsServer := dns.Server{
 		Addr:    "127.0.0.1:" + port.String(),
 		Net:     "udp",
-		Handler: &staticHandler{},
+		Handler: &staticHandler{ecs: ecs},
 		UDPSize: 1200,
 	}
 	go dnsServer.ListenAndServe()
@@ -139,7 +152,8 @@ func TestUDPServerSubnet(t *testing.T) {
 						},
 					},
 				},
-				ClientIp: []byte{7, 8, 9, 10},
+				ClientIp:       []byte{7, 8, 9, 10},
+				ClientIpPrefix: prefix,
 			}),
 			serial.ToTypedMessage(&dispatcher.Config{}),
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
@@ -170,6 +184,14 @@ func TestUDPServerSubnet(t *testing.T) {
 
 	if r := cmp.Diff(ips, []net.IP{{8, 8, 4, 4}}); r != "" {
 		t.Fatal(r)
+	}
+	select {
+	case subnet := <-ecs:
+		if subnet.Family != 1 || subnet.SourceNetmask != want {
+			t.Fatalf("unexpected ECS: %v", subnet)
+		}
+	default:
+		t.Fatal("missing ECS")
 	}
 }
 

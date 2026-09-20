@@ -27,6 +27,9 @@ message NameServer {
   repeated xray.common.geodata.IPRule unexpected_ip = 13;
   bool actUnprior = 14;
   uint32 policyID = 17;
+  // ECS source prefix for client_ip. When unset, a configured client_ip
+  // uses the legacy /24 (IPv4) or /96 (IPv6) default.
+  optional uint32 client_ip_prefix = 18;
 }
 
 enum QueryStrategy {
@@ -73,4 +76,7 @@ message Config {
   bool disableFallbackIfMatch = 11;
 
   bool enableParallelQuery = 14;
+  // ECS source prefix for client_ip. When unset, a configured client_ip
+  // uses the legacy /24 (IPv4) or /96 (IPv6) default.
+  optional uint32 client_ip_prefix = 15;
 }

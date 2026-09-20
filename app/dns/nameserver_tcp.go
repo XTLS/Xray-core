@@ -26,6 +26,7 @@ type TCPNameServer struct {
 	reqID           uint32
 	dial            func(context.Context) (net.Conn, error)
 	clientIP        net.IP
+	clientIPPrefix  int
 }
 
 // NewTCPNameServer creates DNS over TCP server object for remote resolving.
@@ -35,7 +36,17 @@ func NewTCPNameServer(
 	disableCache bool, serveStale bool, serveExpiredTTL uint32,
 	clientIP net.IP,
 ) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCP", disableCache, serveStale, serveExpiredTTL, clientIP)
+	return newTCPNameServer(url, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP, legacyClientIPPrefix(clientIP))
+}
+
+func newTCPNameServer(
+	url *url.URL,
+	dispatcher routing.Dispatcher,
+	disableCache bool, serveStale bool, serveExpiredTTL uint32,
+	clientIP net.IP,
+	clientIPPrefix int,
+) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCP", disableCache, serveStale, serveExpiredTTL, clientIP, clientIPPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +69,11 @@ func NewTCPNameServer(
 
 // NewTCPLocalNameServer creates DNS over TCP client object for local resolving
 func NewTCPLocalNameServer(url *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*TCPNameServer, error) {
-	s, err := baseTCPNameServer(url, "TCPL", disableCache, serveStale, serveExpiredTTL, clientIP)
+	return newTCPLocalNameServer(url, disableCache, serveStale, serveExpiredTTL, clientIP, legacyClientIPPrefix(clientIP))
+}
+
+func newTCPLocalNameServer(url *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP, clientIPPrefix int) (*TCPNameServer, error) {
+	s, err := baseTCPNameServer(url, "TCPL", disableCache, serveStale, serveExpiredTTL, clientIP, clientIPPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +86,7 @@ func NewTCPLocalNameServer(url *url.URL, disableCache bool, serveStale bool, ser
 	return s, nil
 }
 
-func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*TCPNameServer, error) {
+func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP, clientIPPrefix int) (*TCPNameServer, error) {
 	port := net.Port(53)
 	if url.Port() != "" {
 		var err error
@@ -85,6 +100,7 @@ func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, serveStal
 		cacheController: NewCacheController(prefix+"//"+dest.NetAddr(), disableCache, serveStale, serveExpiredTTL),
 		destination:     &dest,
 		clientIP:        clientIP,
+		clientIPPrefix:  clientIPPrefix,
 	}
 
 	return s, nil
@@ -113,7 +129,7 @@ func (s *TCPNameServer) getCacheController() *CacheController {
 func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- error, fqdn string, option dns_feature.IPOption) {
 	errors.LogInfo(ctx, s.Name(), " querying DNS for: ", fqdn)
 
-	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, 0))
+	reqs, err := buildReqMsgs(fqdn, option, s.newReqID, genEDNS0Options(s.clientIP, s.clientIPPrefix, 0))
 	if err != nil {
 		errors.LogErrorInner(ctx, err, "failed to build dns query for ", fqdn)
 		if noResponseErrCh != nil {

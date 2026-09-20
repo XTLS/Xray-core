@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -125,12 +126,9 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 		return nil, err
 	}
 
-	var myClientIP []byte
-	if c.ClientIP != nil {
-		if !c.ClientIP.Family().IsIP() {
-			return nil, errors.New("not an IP address:", c.ClientIP.String())
-		}
-		myClientIP = []byte(c.ClientIP.IP())
+	myClientIP, myClientIPPrefix, err := parseClientIP(c.ClientIP)
+	if err != nil {
+		return nil, err
 	}
 
 	return &dns.NameServer{
@@ -140,6 +138,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 			Port:    uint32(c.Port),
 		},
 		ClientIp:        myClientIP,
+		ClientIpPrefix:  myClientIPPrefix,
 		SkipFallback:    c.SkipFallback,
 		Domain:          domainRules,
 		ExpectedIp:      expectedIPRules,
@@ -170,6 +169,22 @@ type DNSConfig struct {
 	DisableFallbackIfMatch bool                `json:"disableFallbackIfMatch"`
 	EnableParallelQuery    bool                `json:"enableParallelQuery"`
 	UseSystemHosts         bool                `json:"useSystemHosts"`
+}
+
+func parseClientIP(address *Address) ([]byte, *uint32, error) {
+	if address == nil {
+		return nil, nil, nil
+	}
+	if address.Family().IsIP() {
+		return []byte(address.IP()), nil, nil
+	}
+	// Address parsing treats CIDR values as domains.
+	prefix, err := netip.ParsePrefix(address.String())
+	if err != nil {
+		return nil, nil, errors.New("invalid clientIp: ", address.String()).Base(err)
+	}
+	bits := uint32(prefix.Bits())
+	return prefix.Addr().AsSlice(), &bits, nil
 }
 
 type HostAddress struct {
@@ -278,11 +293,10 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
 	}
 
-	if c.ClientIP != nil {
-		if !c.ClientIP.Family().IsIP() {
-			return nil, errors.New("not an IP address:", c.ClientIP.String())
-		}
-		config.ClientIp = []byte(c.ClientIP.IP())
+	var err error
+	config.ClientIp, config.ClientIpPrefix, err = parseClientIP(c.ClientIP)
+	if err != nil {
+		return nil, err
 	}
 
 	// Build PolicyID

@@ -93,8 +93,11 @@ type NameServer struct {
 	UnexpectedIp    []*geodata.IPRule      `protobuf:"bytes,13,rep,name=unexpected_ip,json=unexpectedIp,proto3" json:"unexpected_ip,omitempty"`
 	ActUnprior      bool                   `protobuf:"varint,14,opt,name=actUnprior,proto3" json:"actUnprior,omitempty"`
 	PolicyID        uint32                 `protobuf:"varint,17,opt,name=policyID,proto3" json:"policyID,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// ECS source prefix for client_ip. When unset, a configured client_ip
+	// uses the legacy /24 (IPv4) or /96 (IPv6) default.
+	ClientIpPrefix *uint32 `protobuf:"varint,18,opt,name=client_ip_prefix,json=clientIpPrefix,proto3,oneof" json:"client_ip_prefix,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *NameServer) Reset() {
@@ -239,6 +242,13 @@ func (x *NameServer) GetPolicyID() uint32 {
 	return 0
 }
 
+func (x *NameServer) GetClientIpPrefix() uint32 {
+	if x != nil && x.ClientIpPrefix != nil {
+		return *x.ClientIpPrefix
+	}
+	return 0
+}
+
 type Config struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// NameServer list used by this DNS client.
@@ -258,8 +268,11 @@ type Config struct {
 	DisableFallback        bool          `protobuf:"varint,10,opt,name=disableFallback,proto3" json:"disableFallback,omitempty"`
 	DisableFallbackIfMatch bool          `protobuf:"varint,11,opt,name=disableFallbackIfMatch,proto3" json:"disableFallbackIfMatch,omitempty"`
 	EnableParallelQuery    bool          `protobuf:"varint,14,opt,name=enableParallelQuery,proto3" json:"enableParallelQuery,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// ECS source prefix for client_ip. When unset, a configured client_ip
+	// uses the legacy /24 (IPv4) or /96 (IPv6) default.
+	ClientIpPrefix *uint32 `protobuf:"varint,15,opt,name=client_ip_prefix,json=clientIpPrefix,proto3,oneof" json:"client_ip_prefix,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -369,6 +382,13 @@ func (x *Config) GetEnableParallelQuery() bool {
 	return false
 }
 
+func (x *Config) GetClientIpPrefix() uint32 {
+	if x != nil && x.ClientIpPrefix != nil {
+		return *x.ClientIpPrefix
+	}
+	return 0
+}
+
 type Config_HostMapping struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Domain *geodata.DomainRule    `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
@@ -435,7 +455,7 @@ var File_app_dns_config_proto protoreflect.FileDescriptor
 
 const file_app_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xde\x05\n" +
+	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xa2\x06\n" +
 	"\n" +
 	"NameServer\x123\n" +
 	"\aaddress\x18\x01 \x01(\v2\x19.xray.common.net.EndpointR\aaddress\x12\x1b\n" +
@@ -461,10 +481,12 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\n" +
 	"actUnprior\x18\x0e \x01(\bR\n" +
 	"actUnprior\x12\x1a\n" +
-	"\bpolicyID\x18\x11 \x01(\rR\bpolicyIDB\x0f\n" +
+	"\bpolicyID\x18\x11 \x01(\rR\bpolicyID\x12-\n" +
+	"\x10client_ip_prefix\x18\x12 \x01(\rH\x03R\x0eclientIpPrefix\x88\x01\x01B\x0f\n" +
 	"\r_disableCacheB\r\n" +
 	"\v_serveStaleB\x12\n" +
-	"\x10_serveExpiredTTLJ\x04\b\x04\x10\x05\"\x82\x05\n" +
+	"\x10_serveExpiredTTLB\x13\n" +
+	"\x11_client_ip_prefixJ\x04\b\x04\x10\x05\"\xc6\x05\n" +
 	"\x06Config\x129\n" +
 	"\vname_server\x18\x05 \x03(\v2\x18.xray.app.dns.NameServerR\n" +
 	"nameServer\x12\x1b\n" +
@@ -480,11 +502,13 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\x0fdisableFallback\x18\n" +
 	" \x01(\bR\x0fdisableFallback\x126\n" +
 	"\x16disableFallbackIfMatch\x18\v \x01(\bR\x16disableFallbackIfMatch\x120\n" +
-	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x1a}\n" +
+	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x12-\n" +
+	"\x10client_ip_prefix\x18\x0f \x01(\rH\x00R\x0eclientIpPrefix\x88\x01\x01\x1a}\n" +
 	"\vHostMapping\x127\n" +
 	"\x06domain\x18\x02 \x01(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x0e\n" +
 	"\x02ip\x18\x03 \x03(\fR\x02ip\x12%\n" +
-	"\x0eproxied_domain\x18\x04 \x01(\tR\rproxiedDomainJ\x04\b\a\x10\b*B\n" +
+	"\x0eproxied_domain\x18\x04 \x01(\tR\rproxiedDomainB\x13\n" +
+	"\x11_client_ip_prefixJ\x04\b\a\x10\b*B\n" +
 	"\rQueryStrategy\x12\n" +
 	"\n" +
 	"\x06USE_IP\x10\x00\x12\v\n" +
@@ -539,6 +563,7 @@ func file_app_dns_config_proto_init() {
 		return
 	}
 	file_app_dns_config_proto_msgTypes[0].OneofWrappers = []any{}
+	file_app_dns_config_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
