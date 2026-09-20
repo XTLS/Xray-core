@@ -1,11 +1,13 @@
 package xdns
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -369,6 +371,7 @@ func (m *RespManager) Push(clientID ClientID, resp *Resp) {
 		info.capFrags += resp.cap - 11
 	}
 	m.m[clientID] = info
+	errors.LogDebug(context.Background(), len(info.resp), " ", info.capFrags, " +", resp.cap)
 }
 
 func (m *RespManager) Pop(clientID ClientID, lenp int, minAvailable int) ([]*Resp, byte) {
