@@ -236,7 +236,7 @@ type UDPReader struct {
 
 func (r *UDPReader) ReadFrom(p []byte) (n int, addr *net.Destination, err error) {
 	for {
-		var packet [buf.Size]byte
+		var packet [1500]byte
 
 		n, err := r.reader.Read(packet[:])
 		if err != nil {
