@@ -18,7 +18,6 @@ type hasInnerError interface {
 	Unwrap() error
 }
 
-
 // Error is an error object with underlying error.
 type Error struct {
 	prefix  []interface{}
@@ -174,4 +173,3 @@ L:
 	}
 	return err
 }
-
