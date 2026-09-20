@@ -53,7 +53,7 @@ func DialKCP(ctx context.Context, dest net.Destination, streamSettings *internet
 
 	conn, err := internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
 	if err != nil {
-		return nil, errors.New("failed to dial to dest: ", err).AtWarning().Base(err)
+		return nil, errors.New("failed to dial to dest: ", err).Base(err)
 	}
 
 	if streamSettings.UdpmaskManager != nil {

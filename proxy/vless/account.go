@@ -12,7 +12,7 @@ import (
 func (a *Account) AsAccount() (protocol.Account, error) {
 	id, err := uuid.ParseString(a.Id)
 	if err != nil {
-		return nil, errors.New("failed to parse ID").Base(err).AtError()
+		return nil, errors.New("failed to parse ID").Base(err)
 	}
 	return &MemoryAccount{
 		ID:         protocol.NewID(id),

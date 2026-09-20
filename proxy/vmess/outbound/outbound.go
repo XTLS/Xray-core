@@ -60,7 +60,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return errors.New("target not specified").AtError()
+		return errors.New("target not specified")
 	}
 	ob.Name = "vmess"
 	ob.CanSpliceCopy = 3
@@ -78,7 +78,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return nil
 	})
 	if err != nil {
-		return errors.New("failed to find an available destination").Base(err).AtWarning()
+		return errors.New("failed to find an available destination").Base(err)
 	}
 	defer conn.Close()
 
@@ -154,7 +154,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 		writer := buf.NewBufferedWriter(buf.NewWriter(conn))
 		if err := session.EncodeRequestHeader(request, writer); err != nil {
-			return errors.New("failed to encode request").Base(err).AtWarning()
+			return errors.New("failed to encode request").Base(err)
 		}
 
 		bodyWriter, err := session.EncodeRequestBody(request, writer)

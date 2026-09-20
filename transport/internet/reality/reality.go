@@ -132,7 +132,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	uConn.ServerName = utlsConfig.ServerName
 	fingerprint := tls.GetFingerprint(config.Fingerprint)
 	if fingerprint == nil {
-		return nil, errors.New("REALITY: failed to get fingerprint").AtError()
+		return nil, errors.New("REALITY: failed to get fingerprint")
 	}
 	uConn.UConn = utls.UClient(c, utlsConfig, *fingerprint)
 	{
@@ -271,7 +271,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 			// Do not close the connection
 		}()
 		time.Sleep(time.Duration(crypto.RandBetween(config.SpiderY[8], config.SpiderY[9])) * time.Millisecond) // return
-		return nil, errors.New("REALITY: processed invalid connection").AtWarning()
+		return nil, errors.New("REALITY: processed invalid connection")
 	}
 	return uConn, nil
 }

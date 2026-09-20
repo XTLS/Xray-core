@@ -97,7 +97,7 @@ func (v *HTTPClientConfig) Build() (proto.Message, error) {
 				user.Email = v.Email
 			} else {
 				if err := json.Unmarshal(rawUser, user); err != nil {
-					return nil, errors.New("failed to parse HTTP user").Base(err).AtError()
+					return nil, errors.New("failed to parse HTTP user").Base(err)
 				}
 			}
 			account := new(HTTPAccount)
@@ -106,7 +106,7 @@ func (v *HTTPClientConfig) Build() (proto.Message, error) {
 				account.Password = v.Password
 			} else {
 				if err := json.Unmarshal(rawUser, account); err != nil {
-					return nil, errors.New("failed to parse HTTP account").Base(err).AtError()
+					return nil, errors.New("failed to parse HTTP account").Base(err)
 				}
 			}
 			user.Account = serial.ToTypedMessage(account.Build())

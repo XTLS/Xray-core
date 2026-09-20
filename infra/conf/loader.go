@@ -13,7 +13,7 @@ type ConfigCreatorCache map[string]ConfigCreator
 
 func (v ConfigCreatorCache) RegisterCreator(id string, creator ConfigCreator) error {
 	if _, found := v[id]; found {
-		return errors.New(id, " already registered.").AtError()
+		return errors.New(id, " already registered.")
 	}
 
 	v[id] = creator
@@ -61,7 +61,7 @@ func (v *JSONConfigLoader) Load(raw []byte) (interface{}, string, error) {
 	}
 	rawID, found := obj[v.idKey]
 	if !found {
-		return nil, "", errors.New(v.idKey, " not found in JSON context").AtError()
+		return nil, "", errors.New(v.idKey, " not found in JSON context")
 	}
 	var id string
 	if err := json.Unmarshal(rawID, &id); err != nil {

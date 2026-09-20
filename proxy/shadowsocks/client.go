@@ -71,7 +71,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return nil
 	})
 	if err != nil {
-		return errors.New("failed to find an available destination").AtWarning().Base(err)
+		return errors.New("failed to find an available destination").Base(err)
 	}
 	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", network, ":", server.Destination.NetAddr())
 
@@ -124,7 +124,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			}
 
 			if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-				return errors.New("failed to write A request payload").Base(err).AtWarning()
+				return errors.New("failed to write A request payload").Base(err)
 			}
 
 			if err := bufferedWriter.SetBuffered(false); err != nil {

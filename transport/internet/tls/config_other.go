@@ -44,11 +44,11 @@ func (c *Config) getCertPool() (*x509.CertPool, error) {
 
 	pool, err := x509.SystemCertPool()
 	if err != nil {
-		return nil, errors.New("system root").AtWarning().Base(err)
+		return nil, errors.New("system root").Base(err)
 	}
 	for _, cert := range c.Certificate {
 		if !pool.AppendCertsFromPEM(cert.Certificate) {
-			return nil, errors.New("append cert to root").AtWarning().Base(err)
+			return nil, errors.New("append cert to root").Base(err)
 		}
 	}
 	return pool, nil

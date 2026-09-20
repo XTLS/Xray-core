@@ -121,7 +121,7 @@ func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
 		for _, key := range headerNames {
 			value := v.Headers[key]
 			if value == nil {
-				return nil, errors.New("empty HTTP header value: " + key).AtError()
+				return nil, errors.New("empty HTTP header value: " + key)
 			}
 			config.Header = append(config.Header, &http.Header{
 				Name:  key,
@@ -189,7 +189,7 @@ func (v *AuthenticatorResponse) Build() (*http.ResponseConfig, error) {
 		for _, key := range headerNames {
 			value := v.Headers[key]
 			if value == nil {
-				return nil, errors.New("empty HTTP header value: " + key).AtError()
+				return nil, errors.New("empty HTTP header value: " + key)
 			}
 			config.Header = append(config.Header, &http.Header{
 				Name:  key,
@@ -239,11 +239,11 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 	if len(c.HeaderConfig) > 0 {
 		headerConfig, _, err := tcpHeaderLoader.Load(c.HeaderConfig)
 		if err != nil {
-			return nil, errors.New("invalid TCP header config").Base(err).AtError()
+			return nil, errors.New("invalid TCP header config").Base(err)
 		}
 		ts, err := headerConfig.(Buildable).Build()
 		if err != nil {
-			return nil, errors.New("invalid TCP header config").Base(err).AtError()
+			return nil, errors.New("invalid TCP header config").Base(err)
 		}
 		config.HeaderSettings = serial.ToTypedMessage(ts)
 	}

@@ -351,7 +351,7 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 		err = w.handleStatusKeep(&meta, reader)
 	default:
 		status := meta.SessionStatus
-		return errors.New("unknown status: ", status).AtError()
+		return errors.New("unknown status: ", status)
 	}
 
 	if err != nil {

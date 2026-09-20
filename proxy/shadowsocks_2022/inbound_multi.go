@@ -59,7 +59,7 @@ func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiU
 		}
 		u, err := user.ToMemoryUser()
 		if err != nil {
-			return nil, errors.New("failed to get shadowsocks user").Base(err).AtError()
+			return nil, errors.New("failed to get shadowsocks user").Base(err)
 		}
 		memUsers = append(memUsers, u)
 	}

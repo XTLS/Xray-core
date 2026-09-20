@@ -7,7 +7,7 @@ import (
 
 func (u *User) GetTypedAccount() (Account, error) {
 	if u.GetAccount() == nil {
-		return nil, errors.New("Account is missing").AtWarning()
+		return nil, errors.New("Account is missing")
 	}
 
 	rawAccount, err := u.Account.GetInstance()

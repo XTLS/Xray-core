@@ -82,11 +82,11 @@ func ListenTCP(ctx context.Context, address net.Address, port net.Port, streamSe
 	if tcpSettings.HeaderSettings != nil {
 		headerConfig, err := tcpSettings.HeaderSettings.GetInstance()
 		if err != nil {
-			return nil, errors.New("invalid header settings").Base(err).AtError()
+			return nil, errors.New("invalid header settings").Base(err)
 		}
 		auth, err := internet.CreateConnectionAuthenticator(headerConfig)
 		if err != nil {
-			return nil, errors.New("invalid header settings.").Base(err).AtError()
+			return nil, errors.New("invalid header settings.").Base(err)
 		}
 		l.authConfig = auth
 	}

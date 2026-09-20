@@ -86,14 +86,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		if err != nil {
 			if isFromMitmVerify {
-				return nil, errors.New("MITM freedom RAW TLS: failed to verify Domain Fronting certificate from " + mitmServerName).Base(err).AtWarning()
+				return nil, errors.New("MITM freedom RAW TLS: failed to verify Domain Fronting certificate from " + mitmServerName).Base(err)
 			}
 			return nil, err
 		}
 		negotiatedProtocol := conn.(tls.Interface).NegotiatedProtocol()
 		if isFromMitmAlpn && !mitmAlpn11 && negotiatedProtocol != "h2" {
 			conn.Close()
-			return nil, errors.New("MITM freedom RAW TLS: unexpected Negotiated Protocol (" + negotiatedProtocol + ") with " + mitmServerName).AtWarning()
+			return nil, errors.New("MITM freedom RAW TLS: unexpected Negotiated Protocol (" + negotiatedProtocol + ") with " + mitmServerName)
 		}
 	} else if config := reality.ConfigFromStreamSettings(streamSettings); config != nil {
 		if conn, err = reality.UClient(conn, config, ctx, dest); err != nil {
@@ -105,11 +105,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if tcpSettings.HeaderSettings != nil {
 		headerConfig, err := tcpSettings.HeaderSettings.GetInstance()
 		if err != nil {
-			return nil, errors.New("failed to get header settings").Base(err).AtError()
+			return nil, errors.New("failed to get header settings").Base(err)
 		}
 		auth, err := internet.CreateConnectionAuthenticator(headerConfig)
 		if err != nil {
-			return nil, errors.New("failed to create header authenticator").Base(err).AtError()
+			return nil, errors.New("failed to create header authenticator").Base(err)
 		}
 		conn = auth.Client(conn)
 	}
