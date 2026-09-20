@@ -17,13 +17,41 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
-const (
-	protocolName = "xdrive"
-	sessionsDir  = "sessions"
-	streamsDir   = "streams"
-	uplinkDir    = "c2s"
-	downlinkDir  = "s2c"
-)
+const protocolName = "xdrive"
+
+type names struct {
+	sessionsDir, streamsDir, uplinkDir, downlinkDir string
+	segSuffix, endSuffix, errSuffix                 string
+}
+
+func namesFromConfig(c *Config) names {
+	n := names{
+		sessionsDir: "sessions",
+		streamsDir:  "streams",
+		uplinkDir:   "c2s",
+		downlinkDir: "s2c",
+		segSuffix:   ".seg",
+		endSuffix:   ".end",
+		errSuffix:   ".err",
+	}
+	cfg := c.GetNaming()
+	if cfg == nil {
+		return n
+	}
+	set := func(dst *string, v string) {
+		if v != "" {
+			*dst = v
+		}
+	}
+	set(&n.sessionsDir, cfg.SessionsDir)
+	set(&n.streamsDir, cfg.StreamsDir)
+	set(&n.uplinkDir, cfg.UplinkDir)
+	set(&n.downlinkDir, cfg.DownlinkDir)
+	set(&n.segSuffix, cfg.SegSuffix)
+	set(&n.endSuffix, cfg.EndSuffix)
+	set(&n.errSuffix, cfg.ErrSuffix)
+	return n
+}
 
 func init() {
 	common.Must(internet.RegisterProtocolConfigCreator(protocolName, func() interface{} {
@@ -41,8 +69,8 @@ func newSessionID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-func announceName(session string, at time.Time) string {
-	return fmt.Sprintf("%s/%d-%s", sessionsDir, at.UnixNano(), session)
+func (n names) announceName(session string, at time.Time) string {
+	return fmt.Sprintf("%s/%d-%s", n.sessionsDir, at.UnixNano(), session)
 }
 
 func parseAnnounce(entry string) (string, time.Time, bool) {
@@ -57,16 +85,16 @@ func parseAnnounce(entry string) (string, time.Time, bool) {
 	return entry[dash+1:], time.Unix(0, nanos), true
 }
 
-func sessionPrefix(session string) string {
-	return streamsDir + "/" + session
+func (n names) sessionPrefix(session string) string {
+	return n.streamsDir + "/" + session
 }
 
-func uplinkPrefix(session string) string {
-	return sessionPrefix(session) + "/" + uplinkDir
+func (n names) uplinkPrefix(session string) string {
+	return n.sessionPrefix(session) + "/" + n.uplinkDir
 }
 
-func downlinkPrefix(session string) string {
-	return sessionPrefix(session) + "/" + downlinkDir
+func (n names) downlinkPrefix(session string) string {
+	return n.sessionPrefix(session) + "/" + n.downlinkDir
 }
 
 func streamConfig(streamSettings *internet.MemoryStreamConfig) (*Config, error) {
@@ -94,7 +122,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, err
 	}
 
-	if err := storage.Put(ctx, announceName(session, time.Now()), nil); err != nil {
+	p := paramsFromConfig(config)
+	if err := storage.Put(ctx, p.announceName(session, time.Now()), nil); err != nil {
 		storage.Close()
 		return nil, errors.New("failed to announce session ", session).Base(err)
 	}
@@ -102,7 +131,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	errors.LogInfo(ctx, "opened session ", session)
 
 	return newConn(context.Background(), storage,
-		uplinkPrefix(session), downlinkPrefix(session), paramsFromConfig(config), func() {
+		p.uplinkPrefix(session), p.downlinkPrefix(session), p, func() {
 			storage.Close()
 		}), nil
 }
@@ -180,7 +209,7 @@ func (l *Listener) acceptLoop(logCtx context.Context) {
 }
 
 func (l *Listener) acceptPending(logCtx context.Context) (bool, error) {
-	sessions, err := l.storage.List(l.ctx, sessionsDir)
+	sessions, err := l.storage.List(l.ctx, l.sessionsDir)
 	if err != nil {
 		return false, err
 	}
@@ -188,7 +217,7 @@ func (l *Listener) acceptPending(logCtx context.Context) (bool, error) {
 	accepted := false
 	for _, listed := range sessions {
 		entry := listed.Name
-		full := sessionsDir + "/" + entry
+		full := l.sessionsDir + "/" + entry
 
 		session, at, ok := parseAnnounce(entry)
 		if !ok {
@@ -198,7 +227,7 @@ func (l *Listener) acceptPending(logCtx context.Context) (bool, error) {
 		if time.Since(at) > l.sessionTTL {
 			errors.LogInfo(logCtx, "dropping the stale announcement of session ", session)
 			go l.drop(full)
-			go l.drop(sessionPrefix(session))
+			go l.drop(l.sessionPrefix(session))
 			continue
 		}
 		if !l.claim(session) {
@@ -229,7 +258,7 @@ func (l *Listener) claim(session string) bool {
 
 func (l *Listener) newSessionConn(session string) *Conn {
 	return newConn(l.ctx, l.storage,
-		downlinkPrefix(session), uplinkPrefix(session), l.params, func() {
+		l.downlinkPrefix(session), l.uplinkPrefix(session), l.params, func() {
 			l.mu.Lock()
 			delete(l.active, session)
 			l.mu.Unlock()
@@ -251,7 +280,7 @@ func (l *Listener) collectLoop(logCtx context.Context) {
 }
 
 func (l *Listener) collect() error {
-	sessions, err := l.storage.List(l.ctx, streamsDir)
+	sessions, err := l.storage.List(l.ctx, l.streamsDir)
 	if err != nil {
 		return err
 	}
@@ -291,7 +320,7 @@ func (l *Listener) collect() error {
 	l.mu.Unlock()
 
 	for _, session := range expired {
-		if err := l.storage.Delete(l.ctx, sessionPrefix(session)); err != nil {
+		if err := l.storage.Delete(l.ctx, l.sessionPrefix(session)); err != nil {
 			return err
 		}
 	}

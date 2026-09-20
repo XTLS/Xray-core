@@ -809,6 +809,20 @@ type XDriveConfig struct {
 	EagerWindowMs     uint32          `json:"eagerWindowMs"`
 	HoleTimeoutMs     uint32          `json:"holeTimeoutMs"`
 	Template          json.RawMessage `json:"template"`
+	Naming            *XDriveNaming   `json:"naming"`
+}
+
+// XDriveNaming overrides the object names kept in the storage. Empty fields keep
+// the upstream defaults (sessions/streams/c2s/s2c/.seg/.end/.err). Both peers
+// must configure identical values.
+type XDriveNaming struct {
+	SessionsDir string `json:"sessionsDir"`
+	StreamsDir  string `json:"streamsDir"`
+	UplinkDir   string `json:"uplinkDir"`
+	DownlinkDir string `json:"downlinkDir"`
+	SegSuffix   string `json:"segSuffix"`
+	EndSuffix   string `json:"endSuffix"`
+	ErrSuffix   string `json:"errSuffix"`
 }
 
 // Build implements Buildable.
@@ -839,6 +853,17 @@ func (c *XDriveConfig) Build() (proto.Message, error) {
 		EagerWindowMs:     c.EagerWindowMs,
 		HoleTimeoutMs:     c.HoleTimeoutMs,
 		Template:          string(c.Template),
+	}
+	if n := c.Naming; n != nil {
+		config.Naming = &xdrive.Naming{
+			SessionsDir: n.SessionsDir,
+			StreamsDir:  n.StreamsDir,
+			UplinkDir:   n.UplinkDir,
+			DownlinkDir: n.DownlinkDir,
+			SegSuffix:   n.SegSuffix,
+			EndSuffix:   n.EndSuffix,
+			ErrSuffix:   n.ErrSuffix,
+		}
 	}
 	return config, nil
 }

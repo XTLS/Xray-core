@@ -228,6 +228,35 @@ func TestResumeAfterIdle(t *testing.T) {
 	expectRead(t, server, "second")
 }
 
+var tn = namesFromConfig(&Config{})
+
+func TestNamesFromConfig(t *testing.T) {
+	if tn.sessionsDir != "sessions" || tn.streamsDir != "streams" ||
+		tn.uplinkDir != "c2s" || tn.downlinkDir != "s2c" ||
+		tn.segSuffix != ".seg" || tn.endSuffix != ".end" || tn.errSuffix != ".err" {
+		t.Fatalf("defaults drifted from upstream: %+v", tn)
+	}
+
+	// Partial override: empty fields keep their default.
+	n := namesFromConfig(&Config{Naming: &Naming{
+		SessionsDir: "s", UplinkDir: "u", SegSuffix: ".x",
+	}})
+	if n.sessionsDir != "s" || n.uplinkDir != "u" || n.segSuffix != ".x" {
+		t.Fatalf("override not applied: %+v", n)
+	}
+	if n.streamsDir != "streams" || n.downlinkDir != "s2c" || n.endSuffix != ".end" {
+		t.Fatalf("empty fields did not keep defaults: %+v", n)
+	}
+
+	// A custom suffix is what parseEntry accepts; the default one is now foreign.
+	if seq, ok := n.parseEntry("000000003.x"); !ok || seq != 3 {
+		t.Fatalf("parseEntry with custom suffix = %d, %v", seq, ok)
+	}
+	if _, ok := n.parseEntry("000000003.seg"); ok {
+		t.Fatal("parseEntry accepted a suffix outside the configured layout")
+	}
+}
+
 func TestParseEntry(t *testing.T) {
 	cases := []struct {
 		name string
@@ -238,11 +267,11 @@ func TestParseEntry(t *testing.T) {
 		{"000000042.seg", 42, true},
 		{"000000007.end", 7, true},
 		{"000000001.tmp", 0, false},
-		{"notanumber.seg", 0, false},
+		{"notanumber" + tn.segSuffix, 0, false},
 		{"000000001", 0, false},
 	}
 	for _, c := range cases {
-		seq, ok := parseEntry(c.name)
+		seq, ok := tn.parseEntry(c.name)
 		if ok != c.ok || (ok && seq != c.seq) {
 			t.Fatalf("parseEntry(%q) = %d, %v; want %d, %v", c.name, seq, ok, c.seq, c.ok)
 		}
@@ -298,14 +327,14 @@ func TestCollectAbandoned(t *testing.T) {
 	folder := t.TempDir()
 	listener := newTestListener(t, folder)
 
-	if err := listener.storage.Put(context.Background(), uplinkPrefix("dead")+"/000000000.seg", []byte("x")); err != nil {
+	if err := listener.storage.Put(context.Background(), objectName(tn.uplinkPrefix("dead"), 0, tn.segSuffix), []byte("x")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
 	if err := listener.collect(); err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	names, _ := listener.storage.List(context.Background(), streamsDir)
+	names, _ := listener.storage.List(context.Background(), tn.streamsDir)
 	if len(names) != 1 {
 		t.Fatalf("first pass removed the session, got %v", names)
 	}
@@ -314,7 +343,7 @@ func TestCollectAbandoned(t *testing.T) {
 	if err := listener.collect(); err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	names, _ = listener.storage.List(context.Background(), streamsDir)
+	names, _ = listener.storage.List(context.Background(), tn.streamsDir)
 	if len(names) != 0 {
 		t.Fatalf("abandoned session still there, got %v", names)
 	}
@@ -325,7 +354,7 @@ func TestCollectKeepsActive(t *testing.T) {
 	listener := newTestListener(t, folder)
 	listener.active["live"] = true
 
-	if err := listener.storage.Put(context.Background(), uplinkPrefix("live")+"/000000000.seg", []byte("x")); err != nil {
+	if err := listener.storage.Put(context.Background(), objectName(tn.uplinkPrefix("live"), 0, tn.segSuffix), []byte("x")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -333,7 +362,7 @@ func TestCollectKeepsActive(t *testing.T) {
 	if err := listener.collect(); err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	names, _ := listener.storage.List(context.Background(), streamsDir)
+	names, _ := listener.storage.List(context.Background(), tn.streamsDir)
 	if len(names) != 1 {
 		t.Fatalf("collected an active session, got %v", names)
 	}
@@ -356,11 +385,11 @@ func TestStaleAnnounce(t *testing.T) {
 	listener := newTestListener(t, folder)
 
 	ctx := context.Background()
-	stale := announceName("ghost", time.Now().Add(-time.Hour))
+	stale := tn.announceName("ghost", time.Now().Add(-time.Hour))
 	if err := listener.storage.Put(ctx, stale, nil); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	if err := listener.storage.Put(ctx, uplinkPrefix("ghost")+"/000000000.seg", []byte("x")); err != nil {
+	if err := listener.storage.Put(ctx, objectName(tn.uplinkPrefix("ghost"), 0, tn.segSuffix), []byte("x")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -373,11 +402,11 @@ func TestStaleAnnounce(t *testing.T) {
 	}
 
 	waitFor(t, "the stale announcement to be removed", func() bool {
-		names, _ := listener.storage.List(ctx, sessionsDir)
+		names, _ := listener.storage.List(ctx, tn.sessionsDir)
 		return len(names) == 0
 	})
 	waitFor(t, "the stale session data to be removed", func() bool {
-		names, _ := listener.storage.List(ctx, streamsDir)
+		names, _ := listener.storage.List(ctx, tn.streamsDir)
 		return len(names) == 0
 	})
 }
@@ -388,7 +417,7 @@ func TestFreshAnnounce(t *testing.T) {
 	listener.addConn = func(conn stat.Connection) { conn.Close() }
 
 	ctx := context.Background()
-	if err := listener.storage.Put(ctx, announceName("fresh", time.Now()), nil); err != nil {
+	if err := listener.storage.Put(ctx, tn.announceName("fresh", time.Now()), nil); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -403,7 +432,7 @@ func TestFreshAnnounce(t *testing.T) {
 
 func TestAnnouncePrecision(t *testing.T) {
 	at := time.Unix(1757000000, int64(900*time.Millisecond))
-	entry := strings.TrimPrefix(announceName("abc123", at), sessionsDir+"/")
+	entry := strings.TrimPrefix(tn.announceName("abc123", at), tn.sessionsDir+"/")
 
 	session, parsed, ok := parseAnnounce(entry)
 	if !ok || session != "abc123" {
@@ -421,7 +450,7 @@ func TestRecentAnnounceTTL(t *testing.T) {
 
 	ctx := context.Background()
 	recent := time.Now().Add(-900 * time.Millisecond)
-	if err := listener.storage.Put(ctx, announceName("recent", recent), nil); err != nil {
+	if err := listener.storage.Put(ctx, tn.announceName("recent", recent), nil); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -444,7 +473,7 @@ func TestMissingSegment(t *testing.T) {
 	defer cancel()
 
 	p := paramsFromConfig(&Config{PollIntervalMs: 5, MaxPollIntervalMs: 20, HoleTimeoutMs: 200})
-	if err := storage.Put(ctx, objectName("hole", 1, segSuffix), []byte("second")); err != nil {
+	if err := storage.Put(ctx, objectName("hole", 1, tn.segSuffix), []byte("second")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -477,7 +506,7 @@ func TestIdleStreamWaits(t *testing.T) {
 	reader := newWALReader(ctx, storage, "idle", p)
 
 	time.Sleep(400 * time.Millisecond)
-	if err := storage.Put(ctx, objectName("idle", 0, segSuffix), []byte("late")); err != nil {
+	if err := storage.Put(ctx, objectName("idle", 0, tn.segSuffix), []byte("late")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -504,10 +533,10 @@ func TestFailureMarker(t *testing.T) {
 	defer cancel()
 
 	p := paramsFromConfig(&Config{PollIntervalMs: 5, MaxPollIntervalMs: 20})
-	if err := storage.Put(ctx, objectName("broken", 0, segSuffix), []byte("first")); err != nil {
+	if err := storage.Put(ctx, objectName("broken", 0, tn.segSuffix), []byte("first")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
-	if err := storage.Put(ctx, objectName("broken", 1, errSuffix), nil); err != nil {
+	if err := storage.Put(ctx, objectName("broken", 1, tn.errSuffix), nil); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
 
@@ -542,7 +571,7 @@ type inlineOnlyStorage struct {
 }
 
 func (s *inlineOnlyStorage) List(ctx context.Context, prefix string) ([]Entry, error) {
-	return []Entry{{Name: "000000000" + segSuffix, Inline: []byte("carried by the listing")}}, nil
+	return []Entry{{Name: "000000000" + tn.segSuffix, Inline: []byte("carried by the listing")}}, nil
 }
 
 func (s *inlineOnlyStorage) Get(ctx context.Context, name string) ([]byte, error) {

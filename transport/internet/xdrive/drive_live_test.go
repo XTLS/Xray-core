@@ -62,7 +62,7 @@ func liveDriveConfig(t *testing.T) *Config {
 		t.Fatalf("newDriveStorage: %v", err)
 	}
 	defer storage.Close()
-	for _, dir := range []string{sessionsDir, streamsDir} {
+	for _, dir := range []string{tn.sessionsDir, tn.streamsDir} {
 		if err := storage.Delete(context.Background(), dir); err != nil {
 			t.Fatalf("clearing %s: %v", dir, err)
 		}

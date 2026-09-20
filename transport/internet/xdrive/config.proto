@@ -16,4 +16,15 @@ message Config {
   uint32 eager_window_ms = 10;
   uint32 hole_timeout_ms = 11;
   string template = 12;
+  Naming naming = 13;
+}
+
+message Naming {
+  string sessions_dir = 1;
+  string streams_dir = 2;
+  string uplink_dir = 3;
+  string downlink_dir = 4;
+  string seg_suffix = 5;
+  string end_suffix = 6;
+  string err_suffix = 7;
 }

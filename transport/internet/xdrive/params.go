@@ -17,6 +17,7 @@ const (
 )
 
 type params struct {
+	names
 	segmentBytes    int
 	flushInterval   time.Duration
 	minPollInterval time.Duration
@@ -53,6 +54,7 @@ func capped(value uint32, fallback, limit int) int {
 
 func paramsFromConfig(c *Config) params {
 	p := params{
+		names:           namesFromConfig(c),
 		segmentBytes:    capped(c.SegmentBytes, defaultSegmentBytes, maxSegmentBytes),
 		flushInterval:   millis(c.FlushIntervalMs, defaultFlushInterval),
 		minPollInterval: millis(c.PollIntervalMs, defaultMinPollInterval),

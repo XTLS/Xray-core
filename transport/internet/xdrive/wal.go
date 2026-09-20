@@ -12,25 +12,19 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-const (
-	maxCoalescedTicks = 8
-
-	segSuffix = ".seg"
-	endSuffix = ".end"
-	errSuffix = ".err"
-)
+const maxCoalescedTicks = 8
 
 func objectName(prefix string, seq int64, suffix string) string {
 	return fmt.Sprintf("%s/%09d%s", prefix, seq, suffix)
 }
 
-func parseEntry(name string) (int64, bool) {
+func (n names) parseEntry(name string) (int64, bool) {
 	dot := strings.LastIndexByte(name, '.')
 	if dot < 0 {
 		return 0, false
 	}
 	switch name[dot:] {
-	case segSuffix, endSuffix, errSuffix:
+	case n.segSuffix, n.endSuffix, n.errSuffix:
 	default:
 		return 0, false
 	}
@@ -165,13 +159,13 @@ func (w *walWriter) upload(seq int64, chunk []byte) {
 	}
 	defer func() { <-w.sem }()
 
-	if err := w.storage.Put(w.ctx, objectName(w.prefix, seq, segSuffix), chunk); err != nil {
+	if err := w.storage.Put(w.ctx, objectName(w.prefix, seq, w.segSuffix), chunk); err != nil {
 		w.mu.Lock()
 		if w.err == nil {
 			w.err = errors.New("failed to store segment").Base(err)
 		}
 		w.mu.Unlock()
-		w.storage.Put(w.ctx, objectName(w.prefix, seq, errSuffix), nil)
+		w.storage.Put(w.ctx, objectName(w.prefix, seq, w.errSuffix), nil)
 	}
 }
 
@@ -196,7 +190,7 @@ func (w *walWriter) Close() error {
 	if err != nil {
 		return err
 	}
-	return w.storage.Put(w.ctx, objectName(w.prefix, seq, endSuffix), nil)
+	return w.storage.Put(w.ctx, objectName(w.prefix, seq, w.endSuffix), nil)
 }
 
 type walReader struct {
@@ -299,7 +293,7 @@ func (r *walReader) poll() (advanced, eof bool, err error) {
 	pending := make(map[int64]Entry, len(listed))
 	ahead := false
 	for _, entry := range listed {
-		seq, ok := parseEntry(entry.Name)
+		seq, ok := r.parseEntry(entry.Name)
 		if !ok {
 			continue
 		}
@@ -321,7 +315,7 @@ func (r *walReader) poll() (advanced, eof bool, err error) {
 	}
 
 	for {
-		if entry, ok := pending[r.seq]; ok && strings.HasSuffix(entry.Name, errSuffix) {
+		if entry, ok := pending[r.seq]; ok && strings.HasSuffix(entry.Name, r.errSuffix) {
 			r.discard(r.prefix + "/" + entry.Name)
 			return advanced, false, errors.New("the peer could not store segment ", r.seq)
 		}
@@ -361,8 +355,8 @@ func (r *walReader) nextBatch(pending map[int64]Entry) (batch []Entry, done bool
 		if !ok {
 			break
 		}
-		if !strings.HasSuffix(entry.Name, segSuffix) {
-			if i == 0 && strings.HasSuffix(entry.Name, endSuffix) {
+		if !strings.HasSuffix(entry.Name, r.segSuffix) {
+			if i == 0 && strings.HasSuffix(entry.Name, r.endSuffix) {
 				r.discard(r.prefix + "/" + entry.Name)
 				return nil, true
 			}
