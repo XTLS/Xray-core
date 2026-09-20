@@ -284,8 +284,8 @@ func (c *xdnsClient) run() {
 
 	c.wg.Wait()
 	close(c.readCh)
-	c.fragManager.Close()
 	close(c.poolCh)
+	c.fragManager.Close()
 }
 
 func (c *xdnsClient) poll() {

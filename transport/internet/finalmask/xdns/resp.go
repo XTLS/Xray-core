@@ -303,15 +303,15 @@ type RespInfo struct {
 }
 
 type RespManager struct {
-	m       map[ClientID]RespInfo
-	closeCh chan struct{}
-	mu      sync.Mutex
+	m  map[ClientID]RespInfo
+	ch chan struct{}
+	mu sync.Mutex
 }
 
 func NewRespManager() *RespManager {
 	m := &RespManager{
-		m:       make(map[ClientID]RespInfo),
-		closeCh: make(chan struct{}),
+		m:  make(map[ClientID]RespInfo),
+		ch: make(chan struct{}),
 	}
 	go m.gc()
 	return m
@@ -319,7 +319,7 @@ func NewRespManager() *RespManager {
 
 func (m *RespManager) closed() bool {
 	select {
-	case <-m.closeCh:
+	case <-m.ch:
 		return true
 	default:
 		return false
@@ -331,7 +331,7 @@ func (m *RespManager) gc() {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-m.closeCh:
+		case <-m.ch:
 			return
 		case now := <-ticker.C:
 			m.mu.Lock()
@@ -418,7 +418,7 @@ func (m *RespManager) Close() {
 	if m.closed() {
 		return
 	}
-	close(m.closeCh)
+	close(m.ch)
 	for k := range m.m {
 		delete(m.m, k)
 	}

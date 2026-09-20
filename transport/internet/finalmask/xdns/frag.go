@@ -26,17 +26,17 @@ type FragEntry struct {
 }
 
 type FragManager struct {
-	m            map[FragKey]*FragEntry
-	clientIDSize map[ClientID]int
-	closeCh      chan struct{}
-	mu           sync.Mutex
+	m     map[FragKey]*FragEntry
+	sizem map[ClientID]int
+	ch    chan struct{}
+	mu    sync.Mutex
 }
 
 func NewFragManager() *FragManager {
 	m := &FragManager{
-		m:            make(map[FragKey]*FragEntry),
-		clientIDSize: make(map[ClientID]int),
-		closeCh:      make(chan struct{}),
+		m:     make(map[FragKey]*FragEntry),
+		sizem: make(map[ClientID]int),
+		ch:    make(chan struct{}),
 	}
 	go m.gc()
 	return m
@@ -44,7 +44,7 @@ func NewFragManager() *FragManager {
 
 func (m *FragManager) closed() bool {
 	select {
-	case <-m.closeCh:
+	case <-m.ch:
 		return true
 	default:
 		return false
@@ -52,7 +52,7 @@ func (m *FragManager) closed() bool {
 }
 
 func (m *FragManager) removeEntey(k FragKey, e *FragEntry) {
-	m.clientIDSize[k.clientID] -= e.size
+	m.sizem[k.clientID] -= e.size
 	delete(m.m, k)
 }
 
@@ -78,7 +78,7 @@ func (m *FragManager) gc() {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-m.closeCh:
+		case <-m.ch:
 			return
 		case now := <-ticker.C:
 			m.mu.Lock()
@@ -126,7 +126,7 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 			m.removeEntey(key, entry)
 			return 0
 		}
-		if m.clientIDSize[key.clientID]+len(data) > fragClientIDSize {
+		if m.sizem[key.clientID]+len(data) > fragClientIDSize {
 			return 0
 		}
 	}
@@ -138,7 +138,7 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 	entry.size += len(data)
 	entry.len++
 	entry.deadline = now.Add(fragTTL)
-	m.clientIDSize[key.clientID] += len(data)
+	m.sizem[key.clientID] += len(data)
 
 	if entry.len < int(entry.total) {
 		return 0
@@ -158,7 +158,7 @@ func (m *FragManager) Close() {
 	if m.closed() {
 		return
 	}
-	close(m.closeCh)
+	close(m.ch)
 	for k := range m.m {
 		delete(m.m, k)
 	}
