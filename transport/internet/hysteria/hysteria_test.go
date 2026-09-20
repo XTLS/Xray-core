@@ -52,10 +52,16 @@ func TestDatagram(t *testing.T) {
 		l := common.Must2(tr.Listen(tlsConf, quicConf))
 
 		go func() {
+			defer l.Close()
 			conn := common.Must2(l.Accept(context.Background()))
+			defer conn.CloseWithError(0, "")
+			var buf [1500]byte
+			err := conn.SendDatagram(buf[:])
+			var qErr *quic.DatagramTooLargeError
+			if !errors.As(err, &qErr) || qErr.MaxDatagramPayloadSize != 1197 {
+				t.Fatal(err)
+			}
 			<-done
-			_ = conn.CloseWithError(0, "")
-			_ = l.Close()
 		}()
 
 		return l.Addr(), done
