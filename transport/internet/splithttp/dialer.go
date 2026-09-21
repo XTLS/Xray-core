@@ -219,7 +219,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 					}
 				}
 
-				tr := &quic.Transport{Conn: udpConn.(*finalmask.PacketConnWrapper).PacketConn, DisableGSO: quicParams.DisableGSO}
+				tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
 
 				if !quicParams.DisableChromeParrot {
 					tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
