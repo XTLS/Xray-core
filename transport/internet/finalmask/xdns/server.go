@@ -103,7 +103,6 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		return
 	}
 	c.respManager.Push(clientID, resp)
-	errors.LogDebug(context.Background(), addr, " edns0 ", resp.edns0)
 
 	if decoded[8]&0x80 == 0x80 {
 		return

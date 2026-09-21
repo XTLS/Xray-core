@@ -26,6 +26,22 @@ type Resp struct {
 }
 
 func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr) *Resp {
+	opt := 0
+	ver := uint32(0)
+	edns0 := uint16(0)
+	for i := range msg.Additionals {
+		if msg.Additionals[i].Header.Type == dnsmessage.TypeOPT {
+			if opt > 0 {
+				opt++
+				break
+			}
+			opt++
+			ver = (msg.Additionals[i].Header.TTL >> 16) & 0xFF
+			edns0 = uint16(msg.Additionals[i].Header.Class)
+		}
+	}
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0)
+
 	if msg.Header.Response {
 		return &Resp{
 			msg:    msg,
@@ -33,19 +49,8 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr) *Resp {
 		}
 	}
 
-	opt := false
-	var edns0 uint16
-	for i := range msg.Additionals {
-		if msg.Additionals[i].Header.Type == dnsmessage.TypeOPT {
-			if (msg.Additionals[i].Header.TTL>>16)&0xFF != 0 {
-				return nil
-			}
-			if opt {
-				return nil
-			}
-			opt = true
-			edns0 = uint16(msg.Additionals[i].Header.Class)
-		}
+	if ver != 0 || opt > 1 {
+		return nil
 	}
 	if edns0 > 4096 {
 		return nil

@@ -233,7 +233,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 		return
 	}
 
-	resp := NewResp(msg, domain, nil)
+	resp := NewResp(msg, domain, addr)
 
 	p := pool4K.Get().([]byte)
 	n := resp.Decode(p)
