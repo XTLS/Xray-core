@@ -33,7 +33,10 @@ type stackSystem struct {
 	device      GVisorDevice
 	mtu         uint32
 	idleTimeout time.Duration
-	handler     *Handler
+	// handler is stored as the narrower ConnectionHandler interface (which
+	// *Handler satisfies) rather than *Handler itself, so the stack can be
+	// exercised in tests with a lightweight fake, the same way stack_system_test.go does.
+	handler ConnectionHandler
 
 	udp *udpConnectionHandler
 
