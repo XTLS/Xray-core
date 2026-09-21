@@ -53,8 +53,8 @@ func TestDatagram(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		go func() {
-			defer pktConn.Close()
 			defer tr.Close()
+			defer pktConn.Close()
 			defer l.Close()
 			defer close(recv)
 
@@ -106,8 +106,8 @@ func TestDatagram(t *testing.T) {
 		tr := &quic.Transport{Conn: pktConn, ConnectionIDGenerator: quic.ZeroLengthConnectionIDGenerator{}}
 		conn := common.Must2(tr.DialEarly(context.Background(), addr, tlsConf, quicConf))
 
-		defer pktConn.Close()
 		defer tr.Close()
+		defer pktConn.Close()
 		defer conn.CloseWithError(0, "")
 
 		var buf [1500]byte
@@ -146,8 +146,8 @@ func TestDatagram(t *testing.T) {
 		tr := &quic.Transport{Conn: pktConn}
 		conn := common.Must2(tr.DialEarly(context.Background(), addr, tlsConf, quicConf))
 
-		defer pktConn.Close()
 		defer tr.Close()
+		defer pktConn.Close()
 		defer conn.CloseWithError(0, "")
 
 		var buf [1500]byte

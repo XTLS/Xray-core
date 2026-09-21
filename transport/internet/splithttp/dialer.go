@@ -230,7 +230,7 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 				if err != nil {
 					return nil, err
 				}
-				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
+				context.AfterFunc(conn.Context(), func() { pktConn.Close(); tr.Close() })
 
 				switch quicParams.Congestion {
 				case "reno":

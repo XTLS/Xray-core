@@ -519,8 +519,8 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			if err := l.h3server.ServeListener(l.h3listener); err != nil {
 				errors.LogErrorInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
 			}
-			_ = tr.Close()
 			_ = pktConn.Close()
+			_ = tr.Close()
 		}()
 	} else {
 		var addr net.Addr
