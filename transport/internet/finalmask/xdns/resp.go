@@ -327,6 +327,7 @@ func (info *RespInfo) push(r *Resp) {
 		info.capFrags += r.cap - 11
 	default:
 		resp := <-info.rs
+		resp.DecRef()
 		info.capFrags -= resp.cap - 11
 		info.rs <- r
 		info.capFrags += r.cap - 11
@@ -366,6 +367,7 @@ func (info *RespInfo) flush(now time.Time) {
 	for {
 		select {
 		case r := <-info.rs:
+			r.DecRef()
 			info.capFrags -= r.cap - 11
 			if now.Before(r.deadline) {
 				goto end
