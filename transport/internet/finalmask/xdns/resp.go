@@ -313,9 +313,7 @@ func (r *Resp) Decode(decoded []byte) int {
 
 type RespInfo struct {
 	clientID ClientID
-	rs       [255]*Resp
-	off      int
-	len      int
+	rs       chan *Resp
 	fragID   byte
 	capFrags int
 	mu       sync.Mutex
@@ -324,46 +322,30 @@ type RespInfo struct {
 func (info *RespInfo) push(r *Resp) {
 	info.mu.Lock()
 	defer info.mu.Unlock()
-	if info.len < 255 {
-		info.len++
-		i := info.len
-		if i == 255 {
-			i = 0
-		}
-		info.rs[i] = r
-		return
+	select {
+	case info.rs <- r:
+		info.capFrags += r.cap - 11
+	default:
+		resp := <-info.rs
+		info.capFrags -= resp.cap - 11
+		info.rs <- r
+		info.capFrags += r.cap - 11
 	}
-	i := info.off
-	info.off++
-	if info.off == 255 {
-		info.off = 0
-	}
-	info.rs[i].DecRef()
-	info.rs[i] = r
+	errors.LogDebug(context.Background(), len(info.rs), " ", info.capFrags, " +", r.cap)
 }
 
 func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
 	info.mu.Lock()
 	defer info.mu.Unlock()
-	if info.len < minAvailable || info.capFrags < lenp {
+	if len(info.rs) < minAvailable || info.capFrags < lenp {
 		return nil, 0
 	}
 	var rs []*Resp
 	size := 0
-	newOff := info.off
-	newLen := info.len
-	for i, j := info.off, 0; j < info.len; {
-		r := info.rs[i]
+	for {
+		r := <-info.rs
 		rs = append(rs, r)
 		size += r.cap - 11
-
-		info.rs[i] = nil
-		info.capFrags -= r.cap - 11
-		newOff++
-		if newOff == 255 {
-			newOff = 0
-		}
-		newLen--
 
 		if len(rs) == 1 && lenp <= r.cap-8 {
 			break
@@ -381,32 +363,18 @@ func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
 }
 
 func (info *RespInfo) flush(now time.Time) {
-	if info.len == 0 {
-		return
-	}
-	newOff := info.off
-	newLen := info.len
-	for i, j := info.off, 0; j < info.len; {
-		if r := info.rs[i]; now.After(r.deadline) {
-			r.DecRef()
-			info.rs[i] = nil
+	for {
+		select {
+		case r := <-info.rs:
 			info.capFrags -= r.cap - 11
-			newOff++
-			if newOff == 255 {
-				newOff = 0
+			if now.Before(r.deadline) {
+				goto end
 			}
-			newLen--
-		} else {
-			break
+		default:
+			goto end
 		}
-		i++
-		if i == 255 {
-			i = 0
-		}
-		j--
 	}
-	info.off = newOff
-	info.len = newLen
+end:
 }
 
 type RespManager struct {
@@ -451,7 +419,7 @@ func (m *RespManager) gc() {
 			for _, info := range infos {
 				info.mu.Lock()
 				info.flush(now)
-				if info.len == 0 {
+				if info.capFrags == 0 {
 					m.mu.Lock()
 					delete(m.m, info.clientID)
 					m.mu.Unlock()
@@ -484,10 +452,10 @@ func (m *RespManager) Push(clientID ClientID, r *Resp) {
 	}
 	info = &RespInfo{
 		clientID: clientID,
+		rs:       make(chan *Resp, 255),
 	}
 	info.push(r)
 	m.m[clientID] = info
-	errors.LogDebug(context.Background(), info.len, " ", info.capFrags, " +", r.cap)
 }
 
 func (m *RespManager) Pop(clientID ClientID, minAvailable int, lenp int) ([]*Resp, byte) {

@@ -192,7 +192,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 
 func (c *xdnsServer) send(p []byte, addr net.Addr) {
 	clientID := ClientIDFromAddr(addr.(*net.UDPAddr))
-	resps, fragID := c.respManager.Pop(clientID, len(p), c.minAvailable)
+	resps, fragID := c.respManager.Pop(clientID, c.minAvailable, len(p))
 
 	buf := pool4K.Get().([]byte)
 	defer pool4K.Put(buf[:cap(buf)])
