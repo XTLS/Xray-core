@@ -97,7 +97,7 @@ func (r *Resp) DecRef() {
 		RCode:         dnsmessage.RCodeSuccess,
 	}
 	msg.Answers = []dnsmessage.Resource{
-		dnsmessage.Resource{
+		{
 			Header: dnsmessage.ResourceHeader{
 				Name:  msg.Questions[0].Name,
 				Type:  msg.Questions[0].Type,
