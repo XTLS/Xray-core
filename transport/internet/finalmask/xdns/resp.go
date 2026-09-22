@@ -101,7 +101,7 @@ func (r *Resp) DecRef() {
 			Header: dnsmessage.ResourceHeader{
 				Name:  msg.Questions[0].Name,
 				Type:  msg.Questions[0].Type,
-				Class: msg.Questions[0].Class,
+				Class: dnsmessage.ClassINET,
 				TTL:   60,
 			},
 		},
@@ -187,7 +187,7 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 						Class: dnsmessage.ClassINET,
 						TTL:   60,
 					},
-					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+2])},
+					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+4])},
 				})
 			} else {
 				n := copy(DATA[1:], data)
@@ -328,7 +328,7 @@ func (r *Resp) Decode(decoded []byte) int {
 		if msg.Questions[0].Type == dnsmessage.TypeCNAME && len(decoded)-l > 0 {
 			return 0
 		}
-		if msg.Questions[0].Type == dnsmessage.TypeAAAA && len(decoded)-l > 12 {
+		if msg.Questions[0].Type == dnsmessage.TypeAAAA && len(decoded)-l > 14 {
 			return 0
 		}
 		return l
