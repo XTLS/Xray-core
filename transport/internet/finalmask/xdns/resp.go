@@ -322,6 +322,15 @@ func (r *Resp) Decode(decoded []byte) int {
 		if l > len(decoded) {
 			return 0
 		}
+		if msg.Questions[0].Type == dnsmessage.TypeA && len(decoded)-l > 2 {
+			return 0
+		}
+		if msg.Questions[0].Type == dnsmessage.TypeCNAME && len(decoded)-l > 0 {
+			return 0
+		}
+		if msg.Questions[0].Type == dnsmessage.TypeAAAA && len(decoded)-l > 12 {
+			return 0
+		}
 		return l
 	}
 }
