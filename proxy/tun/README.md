@@ -31,7 +31,7 @@ It uses `resolvectl`, which means it applies only when all of these hold:
 - the system runs systemd and `resolvectl` is on `PATH`
 - `systemd-resolved` is enabled and actually managing DNS (installed but not running has no effect)
 - systemd-resolved is version 240 or newer, where `default-route` exists
-- the `dns` section has an upstream that does not resolve through the system resolver
+- no `dns` upstream resolves through the system resolver (see below)
 
 The address handed over is the first IPv4 `gateway` incremented by one (e.g. `192.168.100.1/30` -> `192.168.100.2`). It is not taken from `dns`: handing `1.1.1.1` to `resolvectl dns` would make systemd-resolved query that server directly over the physical link, which is the leak this option exists to close.
 
@@ -45,7 +45,11 @@ Because that address has to actually answer, the takeover is checked before it h
 }
 ```
 
+The check is a preflight, not a proof for arbitrary rules. It sends its query from the interface address and from a representative ephemeral source port, so a rule that matches on the source port cannot be predicted ahead of time: if the interface's port 53 reaches the `dns` outbound only from some source ports, the takeover is accepted and queries from the other ports fail. Supported configurations are those where the DNS path does not depend on the source port, that is, where the interface's port 53 reaches a `dns` outbound whatever its source.
+
 The upstream requirement in the list above matters as much as the routing rule. With no name servers configured, Core resolves through a client that forwards to the system resolver; pointing the system resolver at the TUN would then close a loop through the DNS outbound, `resolved -> TUN -> DNS outbound -> system resolver -> resolved`, and resolution stops. The takeover is refused in that case.
+
+The same applies to a name server pointed at `localhost`, and to a `dns` section that is present but lists no name servers. One such upstream is enough to refuse the takeover even when independent upstreams are configured alongside it: name servers are selected per domain, so a domain-specific rule can still choose the local one, and the loop then affects whichever domains reach it. The check is deliberately broader than the loop it observed, because the alternative would be to drop a name server the user configured.
 
 Where it does not apply, DNS is left alone and the leak described in XTLS/Xray-core#6454 remains:
 
