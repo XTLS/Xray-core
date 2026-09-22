@@ -66,6 +66,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 		if fingerprint := tls.GetFingerprint(tConfig.Fingerprint); fingerprint != nil {
 			conn = tls.UClient(pconn, tlsConfig, fingerprint)
 			if err := conn.(*tls.UConn).WebsocketHandshakeContext(ctx); err != nil {
+				pconn.Close()
 				return nil, err
 			}
 		} else {
@@ -99,6 +100,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 
 	err = req.Write(conn)
 	if err != nil {
+		pconn.Close()
 		return nil, err
 	}
 
@@ -111,6 +113,7 @@ func dialhttpUpgrade(ctx context.Context, dest net.Destination, streamSettings *
 	if transportConfiguration.Ed == 0 {
 		_, err = connRF.Read([]byte{})
 		if err != nil {
+			pconn.Close()
 			return nil, err
 		}
 	}
