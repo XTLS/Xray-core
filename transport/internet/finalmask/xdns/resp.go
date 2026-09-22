@@ -312,16 +312,32 @@ func (r *Resp) Decode(decoded []byte) int {
 }
 
 type RespInfo struct {
-	clientID ClientID
 	rs       chan *Resp
 	fragID   byte
 	capFrags int
+	closed   bool
 	mu       sync.Mutex
+}
+
+func (info *RespInfo) close() bool {
+	info.mu.Lock()
+	defer info.mu.Unlock()
+	if info.closed {
+		return true
+	}
+	if len(info.rs) == 0 {
+		info.closed = true
+		close(info.rs)
+	}
+	return info.closed
 }
 
 func (info *RespInfo) push(r *Resp) {
 	info.mu.Lock()
 	defer info.mu.Unlock()
+	if info.closed {
+		return
+	}
 	select {
 	case info.rs <- r:
 		info.capFrags += r.cap - 11
@@ -338,7 +354,7 @@ func (info *RespInfo) push(r *Resp) {
 func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
 	info.mu.Lock()
 	defer info.mu.Unlock()
-	if len(info.rs) < minAvailable || info.capFrags < lenp {
+	if info.closed || len(info.rs) < minAvailable || info.capFrags < lenp {
 		return nil, 0
 	}
 	var rs []*Resp
@@ -364,19 +380,23 @@ func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
 }
 
 func (info *RespInfo) flush(now time.Time) {
+	info.mu.Lock()
+	defer info.mu.Unlock()
+	if info.closed {
+		return
+	}
 	for {
 		select {
 		case r := <-info.rs:
 			r.DecRef()
 			info.capFrags -= r.cap - 11
 			if now.Before(r.deadline) {
-				goto end
+				return
 			}
 		default:
-			goto end
+			return
 		}
 	}
-end:
 }
 
 type RespManager struct {
@@ -411,23 +431,20 @@ func (m *RespManager) gc() {
 		case <-m.ch:
 			return
 		case now := <-ticker.C:
-			var infos []*RespInfo
 			m.mu.RLock()
 			for _, info := range m.m {
-				infos = append(infos, info)
+				info.flush(now)
 			}
 			m.mu.RUnlock()
 
-			for _, info := range infos {
-				info.mu.Lock()
-				info.flush(now)
-				if info.capFrags == 0 {
-					m.mu.Lock()
-					delete(m.m, info.clientID)
-					m.mu.Unlock()
+			m.mu.Lock()
+			for key, info := range m.m {
+				if info.close() {
+					delete(m.m, key)
 				}
-				info.mu.Unlock()
 			}
+			m.mu.Unlock()
+
 			ticker.Reset(time.Second)
 		}
 	}
@@ -453,8 +470,7 @@ func (m *RespManager) Push(clientID ClientID, r *Resp) {
 		return
 	}
 	info = &RespInfo{
-		clientID: clientID,
-		rs:       make(chan *Resp, 255),
+		rs: make(chan *Resp, 255),
 	}
 	info.push(r)
 	m.m[clientID] = info

@@ -128,8 +128,15 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 			break
 		}
 	}
-	if domain == nil || !domain.HasType(uint16(msg.Questions[0].Type)) {
+	if domain == nil {
 		msg.Header.Response = true
+		msg.Header.RCode = dnsmessage.RCodeNameError
+		c.push(resp{msg: msg, addr: addr})
+		return
+	}
+	if !domain.HasType(uint16(msg.Questions[0].Type)) {
+		msg.Header.Response = true
+		msg.Header.Authoritative = true
 		msg.Header.RCode = dnsmessage.RCodeNameError
 		c.push(resp{msg: msg, addr: addr})
 		return
