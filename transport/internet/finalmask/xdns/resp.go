@@ -12,6 +12,10 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
+const (
+	respTTL = fragTTL
+)
+
 type Resp struct {
 	msg     dnsmessage.Message
 	domain  *Domain
@@ -84,7 +88,7 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16
 		SendMsg: SendMsg,
 
 		cap:      cap,
-		deadline: time.Now().Add(time.Second),
+		deadline: time.Now().Add(respTTL),
 	}
 }
 
@@ -448,7 +452,7 @@ func (m *RespManager) closed() bool {
 }
 
 func (m *RespManager) gc() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(respTTL / 2)
 	defer ticker.Stop()
 	for {
 		select {
@@ -469,7 +473,7 @@ func (m *RespManager) gc() {
 			}
 			m.mu.Unlock()
 
-			ticker.Reset(time.Second)
+			ticker.Reset(respTTL / 2)
 		}
 	}
 }
