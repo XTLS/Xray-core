@@ -319,10 +319,10 @@ func (r *Resp) Decode(decoded []byte) int {
 		l := int(decoded[0])<<8 | int(decoded[1])
 		copy(decoded, decoded[2:])
 		decoded = decoded[:len(decoded)-2]
-		if l != len(decoded) {
+		if l > len(decoded) {
 			return 0
 		}
-		return len(decoded)
+		return l
 	}
 }
 
