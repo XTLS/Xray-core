@@ -6,10 +6,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"golang.org/x/net/dns/dnsmessage"
 )
+
+type resp struct {
+	msg  dnsmessage.Message
+	addr net.Addr
+}
 
 type xdnsServer struct {
 	net.PacketConn
@@ -20,6 +26,7 @@ type xdnsServer struct {
 	respManager  *RespManager
 
 	readCh  chan packet
+	respCh  chan resp
 	closeCh chan struct{}
 	wg      sync.WaitGroup
 	mu      sync.Mutex
@@ -53,6 +60,7 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		respManager:  NewRespManager(),
 
 		readCh:  make(chan packet),
+		respCh:  make(chan resp),
 		closeCh: make(chan struct{}),
 	}
 	go server.run()
@@ -73,7 +81,43 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if err := msg.Unpack(buf); err != nil {
 		return
 	}
-	if msg.Header.Response || len(msg.Questions) != 1 {
+	if msg.Header.Response {
+		return
+	}
+
+	opt := false
+	edns0 := uint16(0)
+	for i := range msg.Additionals {
+		if msg.Additionals[i].Header.Type == dnsmessage.TypeOPT {
+			if opt {
+				msg.Header.RCode = dnsmessage.RCodeFormatError
+				c.push(resp{msg: msg, addr: addr})
+				return
+			}
+			opt = true
+			edns0 = uint16(msg.Additionals[i].Header.Class)
+			if ver := (msg.Additionals[i].Header.TTL >> 16) & 0xFF; ver != 0 {
+				msg.Header.RCode = dnsmessage.RCodeSuccess
+				msg.Additionals[i].Header.TTL = 1 << 24
+				c.push(resp{msg: msg, addr: addr})
+				return
+			}
+		}
+	}
+	if opt && edns0 < 512 {
+		edns0 = 512
+	}
+
+	if len(msg.Questions) != 1 {
+		msg.Header.Response = true
+		msg.Header.RCode = dnsmessage.RCodeFormatError
+		c.push(resp{msg: msg, addr: addr})
+		return
+	}
+	if msg.Header.OpCode != 0 {
+		msg.Header.Response = true
+		msg.Header.RCode = dnsmessage.RCodeNotImplemented
+		c.push(resp{msg: msg, addr: addr})
 		return
 	}
 
@@ -85,24 +129,39 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		}
 	}
 	if domain == nil || !domain.HasType(uint16(msg.Questions[0].Type)) {
+		msg.Header.Response = true
+		msg.Header.RCode = dnsmessage.RCodeNameError
+		c.push(resp{msg: msg, addr: addr})
 		return
 	}
 
 	var decoded [255]byte
 	n := domain.Decode(&decoded, msg.Questions[0].Name)
 	if n < 11+1 {
+		msg.Header.Response = true
+		msg.Header.Authoritative = true
+		msg.Header.RCode = dnsmessage.RCodeNameError
+		c.push(resp{msg: msg, addr: addr})
 		return
 	}
 	if decoded[0]&0x80 == 0x80 || (decoded[0]&0x40 == 0x40 && n < 14+1) || TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x80 == 0x80 && n != 16) {
+		msg.Header.Response = true
+		msg.Header.Authoritative = true
+		msg.Header.RCode = dnsmessage.RCodeNameError
+		c.push(resp{msg: msg, addr: addr})
 		return
 	}
 	clientID := ClientIDFromRaw([8]byte(decoded[:8]))
 
-	resp := NewResp(msg, domain, addr)
-	if resp == nil {
+	r := NewResp(msg, domain, addr, edns0, c.SendMsg)
+	if r == nil {
+		msg.Header.Response = true
+		msg.Header.Authoritative = true
+		msg.Header.RCode = dnsmessage.RCodeNameError
+		c.push(resp{msg: msg, addr: addr})
 		return
 	}
-	c.respManager.Push(clientID, resp)
+	c.respManager.Push(clientID, r)
 
 	if decoded[8]&0x80 == 0x80 {
 		return
@@ -167,10 +226,14 @@ func (c *xdnsServer) send(p []byte, addr net.Addr) {
 
 func (c *xdnsServer) run() {
 	c.wg.Add(1)
+	go c.loop()
+
+	c.wg.Add(1)
 	go c.recv()
 
 	c.wg.Wait()
 	close(c.readCh)
+	close(c.respCh)
 	c.fragManager.Close()
 	c.respManager.Close()
 }
@@ -190,6 +253,31 @@ func (c *xdnsServer) recv() {
 		}
 		c.read(buf[:n], addr)
 	}
+}
+
+func (c *xdnsServer) push(r resp) {
+	select {
+	case c.respCh <- r:
+	default:
+	}
+}
+
+func (c *xdnsServer) loop() {
+	defer c.wg.Done()
+
+	for {
+		select {
+		case <-c.closeCh:
+			return
+		case r := <-c.respCh:
+			c.SendMsg(r.msg, r.addr)
+		}
+	}
+}
+
+func (c *xdnsServer) SendMsg(msg dnsmessage.Message, addr net.Addr) {
+	var buf [512]byte
+	_, _ = c.PacketConn.WriteTo(common.Must2(msg.AppendPack(buf[:0])), addr)
 }
 
 func (c *xdnsServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {

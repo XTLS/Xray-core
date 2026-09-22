@@ -12,34 +12,18 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-const (
-	respTTL = 8 * time.Second
-)
-
 type Resp struct {
-	msg    dnsmessage.Message
-	domain *Domain
-	addr   net.Addr
+	msg     dnsmessage.Message
+	domain  *Domain
+	addr    net.Addr
+	edns0   uint16
+	SendMsg func(dnsmessage.Message, net.Addr)
 
-	edns0 uint16
-	cap   int
+	cap      int
+	deadline time.Time
 }
 
-func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr) *Resp {
-	opt := 0
-	ver := uint32(0)
-	edns0 := uint16(0)
-	for i := range msg.Additionals {
-		if msg.Additionals[i].Header.Type == dnsmessage.TypeOPT {
-			if opt > 0 {
-				opt++
-				break
-			}
-			opt++
-			ver = (msg.Additionals[i].Header.TTL >> 16) & 0xFF
-			edns0 = uint16(msg.Additionals[i].Header.Class)
-		}
-	}
+func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16, SendMsg func(dnsmessage.Message, net.Addr)) *Resp {
 	errors.LogDebug(context.Background(), addr, " edns0 ", edns0)
 
 	if msg.Header.Response {
@@ -49,15 +33,6 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr) *Resp {
 		}
 	}
 
-	if ver != 0 || opt > 1 {
-		return nil
-	}
-	if edns0 > 4096 {
-		return nil
-	}
-	if edns0 > 0 && edns0 < 512 {
-		edns0 = 512
-	}
 	size := min(max(int(edns0), 512), max(int(domain.edns0), 512))
 
 	left := size - 12 - int(msg.Questions[0].Name.Length) - 1 - 2 - 2
@@ -101,6 +76,51 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr) *Resp {
 		return nil
 	}
 
+	return &Resp{
+		msg:     msg,
+		domain:  domain,
+		addr:    addr,
+		edns0:   edns0,
+		SendMsg: SendMsg,
+
+		cap:      cap,
+		deadline: time.Now().Add(time.Second),
+	}
+}
+
+func (r *Resp) DecRef() {
+	msg := r.msg
+	msg.Header = dnsmessage.Header{
+		ID:            msg.Header.ID,
+		Response:      true,
+		Authoritative: true,
+		RCode:         dnsmessage.RCodeSuccess,
+	}
+	msg.Answers = []dnsmessage.Resource{
+		dnsmessage.Resource{
+			Header: dnsmessage.ResourceHeader{
+				Name:  msg.Questions[0].Name,
+				Type:  msg.Questions[0].Type,
+				Class: msg.Questions[0].Class,
+				TTL:   60,
+			},
+		},
+	}
+	switch msg.Questions[0].Type {
+	case dnsmessage.TypeA:
+		msg.Answers[0].Body = &dnsmessage.AResource{}
+	case dnsmessage.TypeCNAME:
+		msg.Answers[0].Body = &dnsmessage.CNAMEResource{CNAME: dnsmessage.MustNewName(".")}
+	case dnsmessage.TypeTXT:
+		msg.Answers[0].Body = &dnsmessage.TXTResource{}
+	case dnsmessage.TypeAAAA:
+		msg.Answers[0].Body = &dnsmessage.AAAAResource{}
+	}
+	r.SendMsg(msg, r.addr)
+}
+
+func (r *Resp) Encode(encoded []byte, data []byte) []byte {
+	msg := r.msg
 	msg.Header = dnsmessage.Header{
 		ID:            msg.Header.ID,
 		Response:      true,
@@ -110,19 +130,7 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr) *Resp {
 	msg.Answers = nil
 	msg.Authorities = nil
 	msg.Additionals = nil
-	return &Resp{
-		msg:    msg,
-		domain: domain,
-		addr:   addr,
-
-		edns0: edns0,
-		cap:   cap,
-	}
-}
-
-func (r *Resp) Encode(encoded []byte, data []byte) []byte {
-	msg := r.msg
-	switch r.msg.Questions[0].Type {
+	switch msg.Questions[0].Type {
 	case dnsmessage.TypeA:
 		fragN := 1
 		if (len(data) - (4 - 2)) > 0 {
@@ -253,31 +261,32 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 
 func (r *Resp) Decode(decoded []byte) int {
 	decoded = decoded[:0]
-	if r.msg.Questions[0].Type == dnsmessage.TypeTXT {
-		if len(r.msg.Answers) == 1 && r.domain.IsDomain(r.msg.Answers[0].Header.Name) && r.msg.Answers[0].Header.Type == dnsmessage.TypeTXT {
-			for i := range r.msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT {
-				decoded = append(decoded, r.msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT[i]...)
+	msg := r.msg
+	if msg.Questions[0].Type == dnsmessage.TypeTXT {
+		if len(msg.Answers) == 1 && r.domain.IsDomain(msg.Answers[0].Header.Name) && msg.Answers[0].Header.Type == dnsmessage.TypeTXT {
+			for i := range msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT {
+				decoded = append(decoded, msg.Answers[0].Body.(*dnsmessage.TXTResource).TXT[i]...)
 			}
 		}
 		return len(decoded)
 	} else {
 		var frags [][]byte
-		for i := range r.msg.Answers {
-			if !r.domain.IsDomain(r.msg.Answers[i].Header.Name) || r.msg.Answers[i].Header.Type != r.msg.Questions[0].Type {
+		for i := range msg.Answers {
+			if !r.domain.IsDomain(msg.Answers[i].Header.Name) || msg.Answers[i].Header.Type != msg.Questions[0].Type {
 				continue
 			}
-			switch r.msg.Questions[0].Type {
+			switch msg.Questions[0].Type {
 			case dnsmessage.TypeA:
-				frags = append(frags, r.msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
+				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AResource).A[:])
 			case dnsmessage.TypeCNAME:
 				var decoded [255]byte
-				n := r.domain.Decode(&decoded, r.msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
+				n := r.domain.Decode(&decoded, msg.Answers[i].Body.(*dnsmessage.CNAMEResource).CNAME)
 				if n < 2 {
 					continue
 				}
 				frags = append(frags, decoded[:n])
 			case dnsmessage.TypeAAAA:
-				frags = append(frags, r.msg.Answers[i].Body.(*dnsmessage.AAAAResource).AAAA[:])
+				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AAAAResource).AAAA[:])
 			}
 		}
 		if len(frags) == 0 || len(frags) > 255 {
@@ -303,21 +312,112 @@ func (r *Resp) Decode(decoded []byte) int {
 }
 
 type RespInfo struct {
-	resp     chan *Resp
+	clientID ClientID
+	rs       [255]*Resp
+	off      int
+	len      int
 	fragID   byte
 	capFrags int
-	deadline time.Time
+	mu       sync.Mutex
+}
+
+func (info *RespInfo) push(r *Resp) {
+	info.mu.Lock()
+	defer info.mu.Unlock()
+	if info.len < 255 {
+		info.len++
+		i := info.len
+		if i == 255 {
+			i = 0
+		}
+		info.rs[i] = r
+		return
+	}
+	i := info.off
+	info.off++
+	if info.off == 255 {
+		info.off = 0
+	}
+	info.rs[i].DecRef()
+	info.rs[i] = r
+}
+
+func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
+	info.mu.Lock()
+	defer info.mu.Unlock()
+	if info.len < minAvailable || info.capFrags < lenp {
+		return nil, 0
+	}
+	var rs []*Resp
+	size := 0
+	newOff := info.off
+	newLen := info.len
+	for i, j := info.off, 0; j < info.len; {
+		r := info.rs[i]
+		rs = append(rs, r)
+		size += r.cap - 11
+
+		info.rs[i] = nil
+		info.capFrags -= r.cap - 11
+		newOff++
+		if newOff == 255 {
+			newOff = 0
+		}
+		newLen--
+
+		if len(rs) == 1 && lenp <= r.cap-8 {
+			break
+		}
+		if lenp <= size {
+			break
+		}
+	}
+	fragID := byte(0)
+	if len(rs) > 1 {
+		fragID = info.fragID
+		info.fragID++
+	}
+	return rs, fragID
+}
+
+func (info *RespInfo) flush(now time.Time) {
+	if info.len == 0 {
+		return
+	}
+	newOff := info.off
+	newLen := info.len
+	for i, j := info.off, 0; j < info.len; {
+		if r := info.rs[i]; now.After(r.deadline) {
+			r.DecRef()
+			info.rs[i] = nil
+			info.capFrags -= r.cap - 11
+			newOff++
+			if newOff == 255 {
+				newOff = 0
+			}
+			newLen--
+		} else {
+			break
+		}
+		i++
+		if i == 255 {
+			i = 0
+		}
+		j--
+	}
+	info.off = newOff
+	info.len = newLen
 }
 
 type RespManager struct {
-	m  map[ClientID]RespInfo
+	m  map[ClientID]*RespInfo
 	ch chan struct{}
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 func NewRespManager() *RespManager {
 	m := &RespManager{
-		m:  make(map[ClientID]RespInfo),
+		m:  make(map[ClientID]*RespInfo),
 		ch: make(chan struct{}),
 	}
 	go m.gc()
@@ -334,90 +434,70 @@ func (m *RespManager) closed() bool {
 }
 
 func (m *RespManager) gc() {
-	ticker := time.NewTicker(respTTL / 2)
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-m.ch:
 			return
 		case now := <-ticker.C:
-			m.mu.Lock()
-			for key, info := range m.m {
-				if now.After(info.deadline) {
-					delete(m.m, key)
-				}
+			var infos []*RespInfo
+			m.mu.RLock()
+			for _, info := range m.m {
+				infos = append(infos, info)
 			}
-			m.mu.Unlock()
+			m.mu.RUnlock()
+
+			for _, info := range infos {
+				info.mu.Lock()
+				info.flush(now)
+				if info.len == 0 {
+					m.mu.Lock()
+					delete(m.m, info.clientID)
+					m.mu.Unlock()
+				}
+				info.mu.Unlock()
+			}
+			ticker.Reset(time.Second)
 		}
 	}
 }
 
-func (m *RespManager) Push(clientID ClientID, resp *Resp) {
+func (m *RespManager) Push(clientID ClientID, r *Resp) {
+	m.mu.RLock()
+	info := m.m[clientID]
+	if info != nil {
+		info.push(r)
+		m.mu.RUnlock()
+		return
+	}
+	m.mu.RUnlock()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed() {
 		return
 	}
-	now := time.Now()
-	info, ok := m.m[clientID]
-	if !ok || now.After(info.deadline) {
-		info = RespInfo{
-			resp:     make(chan *Resp, 255),
-			deadline: now.Add(respTTL),
-		}
+	if info != nil {
+		info.push(r)
+		return
 	}
-	select {
-	case info.resp <- resp:
-		info.capFrags += resp.cap - 11
-	default:
-		r := <-info.resp
-		info.capFrags -= r.cap - 11
-		info.resp <- resp
-		info.capFrags += resp.cap - 11
+	info = &RespInfo{
+		clientID: clientID,
 	}
+	info.push(r)
 	m.m[clientID] = info
-	errors.LogDebug(context.Background(), len(info.resp), " ", info.capFrags, " +", resp.cap)
+	errors.LogDebug(context.Background(), info.len, " ", info.capFrags, " +", r.cap)
 }
 
-func (m *RespManager) Pop(clientID ClientID, lenp int, minAvailable int) ([]*Resp, byte) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.closed() {
+func (m *RespManager) Pop(clientID ClientID, minAvailable int, lenp int) ([]*Resp, byte) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	info := m.m[clientID]
+	if info == nil {
 		return nil, 0
 	}
-	now := time.Now()
-	info, ok := m.m[clientID]
-	if !ok || now.After(info.deadline) {
-		if ok {
-			delete(m.m, clientID)
-		}
-		return nil, 0
-	}
-	if len(info.resp) < minAvailable || info.capFrags < lenp {
-		return nil, 0
-	}
-	var resps []*Resp
-	size := 0
-	for {
-		r := <-info.resp
-		info.capFrags -= r.cap - 11
-		resps = append(resps, r)
-		size += r.cap - 11
-		if len(resps) == 0 && lenp <= r.cap-8 {
-			break
-		}
-		if lenp <= size {
-			break
-		}
-	}
-	fragID := byte(0)
-	if len(resps) > 1 {
-		fragID = info.fragID
-		info.fragID++
-	}
-	info.deadline = now.Add(respTTL)
-	m.m[clientID] = info
-	return resps, fragID
+	return info.pop(minAvailable, lenp)
 }
 
 func (m *RespManager) Close() {
