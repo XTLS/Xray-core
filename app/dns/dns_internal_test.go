@@ -18,9 +18,10 @@ func (fakeServer) QueryIP(context.Context, string, feature_dns.IPOption) ([]net.
 }
 
 // Callers that are about to redirect the system resolver rely on this to tell
-// "resolves through the system" from "has an independent upstream", so both
-// shapes need to be distinguishable without standing up an instance.
-func TestUsesSystemResolver(t *testing.T) {
+// whether any resolution path could still reach the system resolver, so the
+// mixed shape has to be reported as reachable: a domain-specific rule can
+// select the system resolver even when an independent upstream also exists.
+func TestMayUseSystemResolver(t *testing.T) {
 	tests := []struct {
 		name    string
 		clients []*Client
@@ -36,8 +37,13 @@ func TestUsesSystemResolver(t *testing.T) {
 			want:    true,
 		},
 		{
-			name:    "an independent name server",
-			clients: []*Client{{server: NewLocalNameServer()}, {server: fakeServer{}}},
+			name:    "the system resolver alongside an independent name server",
+			clients: []*Client{{server: fakeServer{}}, {server: NewLocalNameServer()}},
+			want:    true,
+		},
+		{
+			name:    "only independent name servers",
+			clients: []*Client{{server: fakeServer{}}},
 			want:    false,
 		},
 	}
@@ -45,8 +51,8 @@ func TestUsesSystemResolver(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := &DNS{clients: tt.clients}
-			if got := server.UsesSystemResolver(); got != tt.want {
-				t.Errorf("UsesSystemResolver() = %v, want %v", got, tt.want)
+			if got := server.MayUseSystemResolver(); got != tt.want {
+				t.Errorf("MayUseSystemResolver() = %v, want %v", got, tt.want)
 			}
 		})
 	}

@@ -94,6 +94,18 @@ func udpNameServer(ip []byte) []*appdns.NameServer {
 	}}
 }
 
+// localNameServer is a name server pointed at "localhost", which app/dns
+// resolves through the system resolver.
+func localNameServer() *appdns.NameServer {
+	return &appdns.NameServer{
+		Address: &net.Endpoint{
+			Network: net.Network_UDP,
+			Address: &net.IPOrDomain{Address: &net.IPOrDomain_Domain{Domain: "localhost"}},
+			Port:    53,
+		},
+	}
+}
+
 // These drive the real feature lookup and the real router. verifyDNSRouting is
 // the same function ConfigureSystemDNS calls, so a false positive here is a
 // false positive in the takeover decision itself, which is what assertions on
@@ -123,6 +135,16 @@ func TestVerifyDNSRoutingDecisions(t *testing.T) {
 			withDNSApp: true,
 			rules:      []*router.RoutingRule{port53Rule()},
 			wantErr:    "system resolver",
+		},
+		{
+			// An independent upstream is not enough on its own: name servers are
+			// selected per domain, so a local one can still be the one chosen.
+			// The refusal is deliberately domain-agnostic for that reason.
+			name:        "a local name server alongside an independent one",
+			withDNSApp:  true,
+			nameServers: append(udpNameServer([]byte{9, 9, 9, 9}), localNameServer()),
+			rules:       []*router.RoutingRule{port53Rule()},
+			wantErr:     "system resolver",
 		},
 		{
 			name:       "a rule on the interface address diverts the real query",

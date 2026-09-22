@@ -125,17 +125,19 @@ var verifyDNSRouting = func(ctx context.Context, inboundTag, source, address str
 
 	instance := core.MustFromContext(ctx)
 
-	// Two shapes mean the same thing: with no `dns` section Core installs a
-	// client that forwards to the system resolver, and with a `dns` section that
-	// has no name servers app/dns falls back to one. Either way, pointing the
-	// system resolver at the TUN would close a loop through the DNS outbound, so
-	// refuse instead of breaking resolution.
+	// Any resolution path that could still reach the system resolver has to be
+	// refused, because pointing the system resolver at the TUN would close a
+	// loop through the DNS outbound. With no `dns` section Core installs such a
+	// client; with a `dns` section that has no name servers app/dns falls back
+	// to one; and a name server pointed at "localhost" is one even when
+	// independent upstreams are configured alongside it, because name servers
+	// are selected per domain.
 	switch dnsFeature := instance.GetFeature(feature_dns.ClientType()).(type) {
 	case *localdns.Client:
 		return errors.New("DNS feature is the system resolver, takeover would loop")
 	case *appdns.DNS:
-		if dnsFeature.UsesSystemResolver() {
-			return errors.New("DNS feature is the system resolver, takeover would loop")
+		if dnsFeature.MayUseSystemResolver() {
+			return errors.New("DNS configuration may resolve through the system resolver, takeover would loop")
 		}
 	}
 
@@ -235,7 +237,10 @@ func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) er
 func (t *LinuxTun) rollbackSystemDNS(iface string, cause error) error {
 	if err := runResolvectl("revert", iface); err != nil {
 		t.systemDNSDirty = true
-		return errors.New("revert failed, per-link DNS settings may remain").Base(err).Base(cause)
+		// Combine, because Base overwrites: reporting only the cause would hide
+		// the revert failure, and reporting only the revert failure would hide
+		// why the revert was attempted.
+		return errors.New("revert failed, per-link DNS settings may remain").Base(errors.Combine(err, cause))
 	}
 	return cause
 }
