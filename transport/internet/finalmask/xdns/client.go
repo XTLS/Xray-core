@@ -251,10 +251,14 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 		pool4K.Put(p[:cap(p)])
 		return
 	}
-
 	if p[0]&0x80 == 0x80 || (p[0]&0x40 == 0x40 && len(p) < 11+1) || TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) || c.clientID != ClientIDFromRaw([8]byte(p[:8])) {
 		pool4K.Put(p[:cap(p)])
 		return
+	}
+
+	select {
+	case c.poolCh <- struct{}{}:
+	default:
 	}
 	if p[0]&0x40 == 0x40 {
 		out := pool4K.Get().([]byte)
@@ -269,10 +273,6 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	} else {
 		copy(p, p[8:])
 		p = p[:len(p)-8]
-	}
-	select {
-	case c.poolCh <- struct{}{}:
-	default:
 	}
 	select {
 	case <-c.closeCh:

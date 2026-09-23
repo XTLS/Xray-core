@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	respTTL = fragTTL / 2
+	respTTL = 3 * time.Second
 )
 
 type Resp struct {
