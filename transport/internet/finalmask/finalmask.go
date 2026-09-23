@@ -88,7 +88,9 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 		var newConn net.Conn
 		newConn, err = fm.tcpMasks[i].WrapConnClient(conn, &dest, dialer)
 		if err != nil {
-			_ = conn.Close()
+			if conn != nil {
+				_ = conn.Close()
+			}
 			return nil, err
 		}
 		conn = newConn
@@ -193,7 +195,9 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 			}
 			newConn, err = fm.udpMasks[i].WrapPacketConnClient(conn, &dest, dialer)
 			if err != nil {
-				_ = conn.Close()
+				if conn != nil {
+					_ = conn.Close()
+				}
 				return nil, err
 			}
 			conn = newConn
@@ -253,7 +257,9 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 			}
 			newConn, err = fm.udpMasks[i].WrapPacketConnServer(conn, addr, lc)
 			if err != nil {
-				_ = conn.Close()
+				if conn != nil {
+					_ = conn.Close()
+				}
 				return nil, err
 			}
 			conn = newConn
