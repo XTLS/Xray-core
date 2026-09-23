@@ -97,7 +97,7 @@ func NewConnClientWithDialer(c *Config, raw stdnet.PacketConn, dialer *finalmask
 
 	ctx, cancel := context.WithCancel(context.Background())
 	conn := &xdnsConnClient{
-		clientID: make([]byte, 8),
+		clientID:   make([]byte, 8),
 		pollChan:   make(chan struct{}, pollLimit),
 		readQueue:  make(chan *packet, 256),
 		writeQueue: make(chan *packet, 256),
