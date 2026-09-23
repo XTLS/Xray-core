@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -88,9 +89,7 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 		var newConn net.Conn
 		newConn, err = fm.tcpMasks[i].WrapConnClient(conn, &dest, dialer)
 		if err != nil {
-			if conn != nil {
-				_ = conn.Close()
-			}
+			common.CloseIfExists(conn)
 			return nil, err
 		}
 		conn = newConn
@@ -195,9 +194,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 			}
 			newConn, err = fm.udpMasks[i].WrapPacketConnClient(conn, &dest, dialer)
 			if err != nil {
-				if conn != nil {
-					_ = conn.Close()
-				}
+				common.CloseIfExists(conn)
 				return nil, err
 			}
 			conn = newConn
@@ -244,7 +241,7 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {
 			newConn, err = fm.udpMasks[i].WrapPacketConnServer(nil, nil, nil)
 			if err != nil {
-				_ = conn.Close()
+				common.CloseIfExists(conn)
 				return nil, err
 			}
 			sizes = append(sizes, newConn.(interface{ Size() int }).Size())
@@ -257,9 +254,7 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 			}
 			newConn, err = fm.udpMasks[i].WrapPacketConnServer(conn, addr, lc)
 			if err != nil {
-				if conn != nil {
-					_ = conn.Close()
-				}
+				common.CloseIfExists(conn)
 				return nil, err
 			}
 			conn = newConn
