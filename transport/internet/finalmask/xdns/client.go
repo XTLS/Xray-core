@@ -357,7 +357,8 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		return 0, io.ErrClosedPipe
 	}
 	if len(p) == 0 || len(p) > 4096 {
-		return 0, errors.New("not support size")
+		errors.LogError(context.Background(), "err size ", len(p))
+		return 0, errors.New("err size")
 	}
 	c.send(p)
 	for range c.extraPoll {
