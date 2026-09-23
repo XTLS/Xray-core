@@ -1,13 +1,11 @@
 package xdns
 
 import (
-	"context"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -28,8 +26,6 @@ type Resp struct {
 }
 
 func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16, decref func(dnsmessage.Message, net.Addr)) *Resp {
-	errors.LogDebug(context.Background(), addr, " edns0 ", edns0)
-
 	if msg.Header.Response {
 		return &Resp{
 			msg:    msg,

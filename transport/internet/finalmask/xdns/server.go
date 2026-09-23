@@ -107,6 +107,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if opt && edns0 < 512 {
 		edns0 = 512
 	}
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf))
 
 	if len(msg.Questions) != 1 {
 		msg.Header.Response = true

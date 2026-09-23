@@ -240,8 +240,9 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 			break
 		}
 	}
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf))
 
-	resp := NewResp(msg, domain, addr, edns0, nil)
+	resp := NewResp(msg, domain, addr, 0, nil)
 
 	p := pool4K.Get().([]byte)
 	n := resp.Decode(p)
