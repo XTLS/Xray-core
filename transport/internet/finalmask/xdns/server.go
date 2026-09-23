@@ -85,6 +85,20 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		return
 	}
 
+	if msg.Header.OpCode != 0 {
+		msg.Header.Response = true
+		msg.Header.RCode = dnsmessage.RCodeNotImplemented
+		c.decref(msg, addr)
+		return
+	}
+
+	if len(msg.Questions) != 1 {
+		msg.Header.Response = true
+		msg.Header.RCode = dnsmessage.RCodeFormatError
+		c.decref(msg, addr)
+		return
+	}
+
 	opt := false
 	edns0 := uint16(0)
 	for i := range msg.Additionals {
@@ -107,20 +121,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if opt && edns0 < 512 {
 		edns0 = 512
 	}
-	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf))
-
-	if len(msg.Questions) != 1 {
-		msg.Header.Response = true
-		msg.Header.RCode = dnsmessage.RCodeFormatError
-		c.decref(msg, addr)
-		return
-	}
-	if msg.Header.OpCode != 0 {
-		msg.Header.Response = true
-		msg.Header.RCode = dnsmessage.RCodeNotImplemented
-		c.decref(msg, addr)
-		return
-	}
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", string(msg.Questions[0].Name.Data[:msg.Questions[0].Name.Length]))
 
 	var domain *Domain
 	for i := range c.domains {

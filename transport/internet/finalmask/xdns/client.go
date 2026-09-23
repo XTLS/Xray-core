@@ -240,7 +240,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 			break
 		}
 	}
-	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf))
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", string(msg.Questions[0].Name.Data[:msg.Questions[0].Name.Length]))
 
 	resp := NewResp(msg, domain, addr, 0, nil)
 
