@@ -118,8 +118,13 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 			}
 		}
 	}
-	if opt && edns0 < 512 {
-		edns0 = 512
+	if opt {
+		if edns0 < 512 {
+			edns0 = 512
+		}
+		if edns0 > 4096 {
+			edns0 = 4096
+		}
 	}
 	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " type ", msg.Questions[0].Type)
 
