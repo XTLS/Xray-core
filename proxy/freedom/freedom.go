@@ -416,7 +416,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		}
 
-		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
+		visionInbound := inbound != nil && inbound.Name == "vless"
+		directTCP := destination.Network == net.Network_TCP && h.config.Fragment == nil && !h.usesDialerProxy
+		var err error
+		if visionInbound && directTCP && len(outbounds) == 1 && useSplice.Load() {
+			err = copyUplink(input, writer, conn, timer)
+		} else {
+			err = buf.Copy(input, writer, buf.UpdateActivity(timer))
+		}
+		if err != nil {
 			return errors.New("failed to process request").Base(err)
 		}
 

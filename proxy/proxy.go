@@ -185,10 +185,11 @@ type VisionReader struct {
 
 	// internal
 	directReadCounter stats.Counter
+	spliceConn        *net.TCPConn
 }
 
 func NewVisionReader(reader buf.Reader, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, ob *session.Outbound) *VisionReader {
-	return &VisionReader{
+	visionReader := &VisionReader{
 		Reader:       reader,
 		trafficState: trafficState,
 		ctx:          ctx,
@@ -198,6 +199,26 @@ func NewVisionReader(reader buf.Reader, trafficState *TrafficState, isUplink boo
 		rawInput:     rawInput,
 		ob:           ob,
 	}
+	// Snapshot eligibility before DispatchLink starts either copy direction.
+	if inbound := session.InboundFromContext(ctx); isUplink && inbound != nil && inbound.CanSpliceCopy == 2 {
+		switch conn := stat.TryUnwrapStatsConn(conn).(type) {
+		case *tls.Conn:
+			visionReader.spliceConn, _ = conn.NetConn().(*net.TCPConn)
+		case *reality.Conn:
+			visionReader.spliceConn, _ = conn.NetConn().(*net.TCPConn)
+		}
+	}
+	return visionReader
+}
+
+func (w *VisionReader) SpliceSource() (*net.TCPConn, []stats.Counter) {
+	if !w.isUplink || !w.trafficState.Inbound.UplinkReaderDirectCopy || w.input != nil || w.rawInput != nil {
+		return nil, nil
+	}
+	if w.spliceConn != nil && w.directReadCounter != nil {
+		return w.spliceConn, []stats.Counter{w.directReadCounter}
+	}
+	return w.spliceConn, nil
 }
 
 func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -207,18 +228,21 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 
 	var withinPaddingBuffers *bool
+	var remainingCommand *int32
 	var remainingContent *int32
 	var remainingPadding *int32
 	var currentCommand *int
 	var switchToDirectCopy *bool
 	if w.isUplink {
 		withinPaddingBuffers = &w.trafficState.Inbound.WithinPaddingBuffers
+		remainingCommand = &w.trafficState.Inbound.RemainingCommand
 		remainingContent = &w.trafficState.Inbound.RemainingContent
 		remainingPadding = &w.trafficState.Inbound.RemainingPadding
 		currentCommand = &w.trafficState.Inbound.CurrentCommand
 		switchToDirectCopy = &w.trafficState.Inbound.UplinkReaderDirectCopy
 	} else {
 		withinPaddingBuffers = &w.trafficState.Outbound.WithinPaddingBuffers
+		remainingCommand = &w.trafficState.Outbound.RemainingCommand
 		remainingContent = &w.trafficState.Outbound.RemainingContent
 		remainingPadding = &w.trafficState.Outbound.RemainingPadding
 		currentCommand = &w.trafficState.Outbound.CurrentCommand
@@ -241,7 +265,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			}
 		}
 		buffer = mb2
-		if *remainingContent > 0 || *remainingPadding > 0 || *currentCommand == 0 {
+		if *remainingCommand > 0 || *remainingContent > 0 || *remainingPadding > 0 || *currentCommand == 0 {
 			*withinPaddingBuffers = true
 		} else if *currentCommand == 1 {
 			*withinPaddingBuffers = false

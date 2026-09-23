@@ -19,6 +19,13 @@ type Reader interface {
 	ReadMultiBuffer() (MultiBuffer, error)
 }
 
+// SpliceReader exposes a drained uplink source to its current copy goroutine.
+// Call only after writing the previous MultiBuffer and handling its read error.
+// It must not be called concurrently with a read. A nil connection means not ready.
+type SpliceReader interface {
+	SpliceSource() (*net.TCPConn, []stats.Counter)
+}
+
 // ErrReadTimeout is an error that happens with IO timeout.
 var ErrReadTimeout = errors.New("IO timeout")
 
@@ -34,6 +41,21 @@ type TimeoutWrapperReader struct {
 	mb   MultiBuffer
 	err  error
 	done chan struct{}
+}
+
+func (r *TimeoutWrapperReader) SpliceSource() (*net.TCPConn, []stats.Counter) {
+	// A completed timeout read still owns its result until ReadMultiBuffer consumes it.
+	if r.done != nil {
+		return nil, nil
+	}
+	if reader, ok := r.Reader.(SpliceReader); ok {
+		conn, counters := reader.SpliceSource()
+		if conn != nil && r.Counter != nil {
+			counters = append(counters, r.Counter)
+		}
+		return conn, counters
+	}
+	return nil, nil
 }
 
 func (r *TimeoutWrapperReader) ReadMultiBuffer() (MultiBuffer, error) {

@@ -80,6 +80,18 @@ func (r *cachedReader) ReadMultiBufferTimeout(timeout time.Duration) (buf.MultiB
 	return r.reader.ReadMultiBufferTimeout(timeout)
 }
 
+func (r *cachedReader) SpliceSource() (*net.TCPConn, []stats.Counter) {
+	r.Lock()
+	empty := r.cache.IsEmpty()
+	r.Unlock()
+	if empty {
+		if reader, ok := r.reader.(buf.SpliceReader); ok {
+			return reader.SpliceSource()
+		}
+	}
+	return nil, nil
+}
+
 func (r *cachedReader) Interrupt() {
 	r.Lock()
 	if r.cache != nil {
