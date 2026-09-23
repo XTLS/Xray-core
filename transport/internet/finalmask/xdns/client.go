@@ -145,6 +145,7 @@ func (c *xdnsClient) send(p []byte) {
 				},
 			}
 		}
+		errors.LogDebug(context.Background(), " name ", msg.Questions[0].Name.Length, " ", string(msg.Questions[0].Name.Data[:msg.Questions[0].Name.Length]), " type ", msg.Questions[0].Type)
 		pack := common.Must2(msg.AppendPack(buf[:0]))
 		common.Must2(rand.Read(pack[:2]))
 
@@ -240,7 +241,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 			break
 		}
 	}
-	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", string(msg.Questions[0].Name.Data[:msg.Questions[0].Name.Length]))
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", string(msg.Questions[0].Name.Data[:msg.Questions[0].Name.Length]), " type ", msg.Questions[0].Type)
 
 	resp := NewResp(msg, domain, addr, 0, nil)
 
@@ -300,6 +301,10 @@ func (c *xdnsClient) run() {
 func (c *xdnsClient) poll() {
 	defer c.wg.Done()
 
+	select {
+	case <-c.closeCh:
+	case <-c.poolCh:
+	}
 	delay := initPollDelay
 	ticker := time.NewTicker(delay)
 	defer ticker.Stop()

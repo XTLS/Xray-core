@@ -121,7 +121,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if opt && edns0 < 512 {
 		edns0 = 512
 	}
-	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", string(msg.Questions[0].Name.Data[:msg.Questions[0].Name.Length]))
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", string(msg.Questions[0].Name.Data[:msg.Questions[0].Name.Length]), " type ", msg.Questions[0].Type)
 
 	var domain *Domain
 	for i := range c.domains {
