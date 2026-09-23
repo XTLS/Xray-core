@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	respTTL = fragTTL
+	respTTL = fragTTL / 2
 )
 
 type Resp struct {
