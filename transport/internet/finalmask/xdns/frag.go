@@ -95,6 +95,9 @@ func (m *FragManager) gc() {
 func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []byte) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closed() {
+		return 0
+	}
 
 	now := time.Now()
 	entry := m.m[key]
@@ -112,10 +115,16 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 		m.m[key] = entry
 	}
 
-	if fragN == 0 || fragN != entry.total {
+	if fragN == 0 {
 		return 0
 	}
-	if fragIdx >= entry.total || entry.data[fragIdx] != nil {
+	if fragN != entry.total {
+		return 0
+	}
+	if fragIdx >= entry.total {
+		return 0
+	}
+	if entry.data[fragIdx] != nil {
 		return 0
 	}
 	if entry.size+len(data) > fragSize {

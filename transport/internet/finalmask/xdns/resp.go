@@ -17,17 +17,17 @@ const (
 )
 
 type Resp struct {
-	msg     dnsmessage.Message
-	domain  *Domain
-	addr    net.Addr
-	edns0   uint16
-	SendMsg func(dnsmessage.Message, net.Addr)
+	msg    dnsmessage.Message
+	domain *Domain
+	addr   net.Addr
+	edns0  uint16
+	decref func(dnsmessage.Message, net.Addr)
 
 	cap      int
 	deadline time.Time
 }
 
-func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16, SendMsg func(dnsmessage.Message, net.Addr)) *Resp {
+func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16, decref func(dnsmessage.Message, net.Addr)) *Resp {
 	errors.LogDebug(context.Background(), addr, " edns0 ", edns0)
 
 	if msg.Header.Response {
@@ -81,11 +81,11 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16
 	}
 
 	return &Resp{
-		msg:     msg,
-		domain:  domain,
-		addr:    addr,
-		edns0:   edns0,
-		SendMsg: SendMsg,
+		msg:    msg,
+		domain: domain,
+		addr:   addr,
+		edns0:  edns0,
+		decref: decref,
 
 		cap:      cap,
 		deadline: time.Now().Add(respTTL),
@@ -120,7 +120,7 @@ func (r *Resp) DecRef() {
 	case dnsmessage.TypeAAAA:
 		msg.Answers[0].Body = &dnsmessage.AAAAResource{}
 	}
-	r.SendMsg(msg, r.addr)
+	r.decref(msg, r.addr)
 }
 
 func (r *Resp) Encode(encoded []byte, data []byte) []byte {
@@ -371,12 +371,12 @@ func (info *RespInfo) push(r *Resp) {
 		info.capFrags += r.cap - 11
 	default:
 		resp := <-info.rs
-		resp.DecRef()
 		info.capFrags -= resp.cap - 11
+		resp.DecRef()
 		info.rs <- r
 		info.capFrags += r.cap - 11
 	}
-	errors.LogDebug(context.Background(), len(info.rs), " ", info.capFrags, " +", r.cap)
+	// errors.LogDebug(context.Background(), len(info.rs), " ", info.capFrags, " +", r.cap)
 }
 
 func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
@@ -389,6 +389,7 @@ func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
 	size := 0
 	for {
 		r := <-info.rs
+		info.capFrags -= r.cap - 11
 		rs = append(rs, r)
 		size += r.cap - 11
 
@@ -416,8 +417,8 @@ func (info *RespInfo) flush(now time.Time) {
 	for {
 		select {
 		case r := <-info.rs:
-			r.DecRef()
 			info.capFrags -= r.cap - 11
+			r.DecRef()
 			if now.Before(r.deadline) {
 				return
 			}

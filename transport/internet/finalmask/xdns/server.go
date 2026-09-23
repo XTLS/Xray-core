@@ -91,7 +91,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		if msg.Additionals[i].Header.Type == dnsmessage.TypeOPT {
 			if opt {
 				msg.Header.RCode = dnsmessage.RCodeFormatError
-				c.push(resp{msg: msg, addr: addr})
+				c.decref(msg, addr)
 				return
 			}
 			opt = true
@@ -99,7 +99,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 			if ver := (msg.Additionals[i].Header.TTL >> 16) & 0xFF; ver != 0 {
 				msg.Header.RCode = dnsmessage.RCodeSuccess
 				msg.Additionals[i].Header.TTL = 1 << 24
-				c.push(resp{msg: msg, addr: addr})
+				c.decref(msg, addr)
 				return
 			}
 		}
@@ -111,13 +111,13 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if len(msg.Questions) != 1 {
 		msg.Header.Response = true
 		msg.Header.RCode = dnsmessage.RCodeFormatError
-		c.push(resp{msg: msg, addr: addr})
+		c.decref(msg, addr)
 		return
 	}
 	if msg.Header.OpCode != 0 {
 		msg.Header.Response = true
 		msg.Header.RCode = dnsmessage.RCodeNotImplemented
-		c.push(resp{msg: msg, addr: addr})
+		c.decref(msg, addr)
 		return
 	}
 
@@ -131,14 +131,14 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if domain == nil {
 		msg.Header.Response = true
 		msg.Header.RCode = dnsmessage.RCodeNameError
-		c.push(resp{msg: msg, addr: addr})
+		c.decref(msg, addr)
 		return
 	}
 	if !domain.HasType(uint16(msg.Questions[0].Type)) {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
 		msg.Header.RCode = dnsmessage.RCodeNameError
-		c.push(resp{msg: msg, addr: addr})
+		c.decref(msg, addr)
 		return
 	}
 
@@ -148,14 +148,14 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
 		msg.Header.RCode = dnsmessage.RCodeNameError
-		c.push(resp{msg: msg, addr: addr})
+		c.decref(msg, addr)
 		return
 	}
 	if decoded[0]&0x80 == 0x80 || (decoded[0]&0x40 == 0x40 && n < 14+1) || TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x80 == 0x80 && n != 16) {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
 		msg.Header.RCode = dnsmessage.RCodeNameError
-		c.push(resp{msg: msg, addr: addr})
+		c.decref(msg, addr)
 		return
 	}
 	clientID := ClientIDFromRaw([8]byte(decoded[:8]))
@@ -165,7 +165,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
 		msg.Header.RCode = dnsmessage.RCodeNameError
-		c.push(resp{msg: msg, addr: addr})
+		c.decref(msg, addr)
 		return
 	}
 	c.respManager.Push(clientID, r)
@@ -200,6 +200,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 func (c *xdnsServer) send(p []byte, addr net.Addr) {
 	clientID := ClientIDFromAddr(addr.(*net.UDPAddr))
 	resps, fragID := c.respManager.Pop(clientID, c.minAvailable, len(p))
+	errors.LogDebug(context.Background(), "pop ", len(p), " ", len(resps))
 
 	buf := pool4K.Get().([]byte)
 	defer pool4K.Put(buf[:cap(buf)])
@@ -262,9 +263,9 @@ func (c *xdnsServer) recv() {
 	}
 }
 
-func (c *xdnsServer) push(r resp) {
+func (c *xdnsServer) decref(msg dnsmessage.Message, addr net.Addr) {
 	select {
-	case c.respCh <- r:
+	case c.respCh <- resp{msg: msg, addr: addr}:
 	default:
 	}
 }
