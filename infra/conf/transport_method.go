@@ -20,10 +20,12 @@ import (
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
+	"github.com/xtls/xray-core/transport/internet/masque"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/websocket"
 	"github.com/xtls/xray-core/transport/internet/xdrive"
+	"golang.org/x/net/http/httpguts"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -784,6 +786,46 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	}
 
 	return config, nil
+}
+
+type MasqueConfig struct {
+	Host    string            `json:"host"`
+	Path    string            `json:"path"`
+	Headers map[string]string `json:"headers"`
+}
+
+func (c *MasqueConfig) Build() (proto.Message, error) {
+	path := c.Path
+	if path == "" {
+		path = masque.DefaultPath
+	}
+	path = strings.NewReplacer(
+		"{target}", "*", "{ipproto}", "*",
+		"{?target,ipproto}", "?target=*&ipproto=*", "{?ipproto,target}", "?ipproto=*&target=*",
+		"{&target,ipproto}", "&target=*&ipproto=*", "{&ipproto,target}", "&ipproto=*&target=*",
+	).Replace(path)
+	if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, "{}") {
+		return nil, errors.New(`invalid "path": `, path, `, only the variables {target} and {ipproto} are supported`)
+	}
+	if c.Host != "" {
+		if u, err := url.Parse("https://" + c.Host); err != nil || u.Host != c.Host {
+			return nil, errors.New(`invalid "host": `, c.Host)
+		}
+	}
+	for k, v := range c.Headers {
+		if !httpguts.ValidHeaderFieldName(k) || !httpguts.ValidHeaderFieldValue(v) {
+			return nil, errors.New(`invalid header in "headers": `, strconv.Quote(k))
+		}
+		switch strings.ToLower(k) {
+		case "host", "capsule-protocol":
+			return nil, errors.New(`"headers" can't contain "`, k, `"`)
+		}
+	}
+	return &masque.Config{
+		Host:    c.Host,
+		Path:    path,
+		Headers: c.Headers,
+	}, nil
 }
 
 func readFileOrString(f string, s []string) ([]byte, error) {
