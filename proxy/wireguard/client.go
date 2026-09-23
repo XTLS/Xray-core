@@ -336,6 +336,9 @@ func (h *Handler) init(ctx context.Context) error {
 }
 
 func (h *Handler) resolveLocal(host string) (net.IP, error) {
+	if ip := net.ParseIP(host); ip != nil {
+		return ip, nil
+	}
 	ips, _, err := h.dns.LookupIP(host, dns.IPOption{IPv4Enable: true, IPv6Enable: true})
 	if err != nil {
 		return nil, err
