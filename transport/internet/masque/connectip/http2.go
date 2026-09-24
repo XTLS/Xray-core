@@ -171,3 +171,28 @@ func (b *requestBody) SetWriteDeadline(t time.Time) error {
 	}
 	return nil
 }
+
+type http2ResponseStream struct {
+	reader     *bufio.Reader
+	body       io.Closer
+	w          io.Writer
+	controller *http.ResponseController
+}
+
+func (s *http2ResponseStream) Read(b []byte) (int, error) { return s.reader.Read(b) }
+func (s *http2ResponseStream) ReadByte() (byte, error)    { return s.reader.ReadByte() }
+
+func (s *http2ResponseStream) Write(b []byte) (int, error) {
+	n, err := s.w.Write(b)
+	if err == nil {
+		err = s.controller.Flush()
+	}
+	return n, err
+}
+
+func (s *http2ResponseStream) Close() error                     { return nil }
+func (s *http2ResponseStream) CancelRead(quic.StreamErrorCode)  { s.body.Close() }
+func (s *http2ResponseStream) CancelWrite(quic.StreamErrorCode) { s.body.Close() }
+func (s *http2ResponseStream) SetWriteDeadline(t time.Time) error {
+	return s.controller.SetWriteDeadline(t)
+}
