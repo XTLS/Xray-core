@@ -263,8 +263,8 @@ func (c *xdnsServer) recv() {
 func (c *xdnsServer) send() {
 	defer c.wg.Done()
 
-	ticker := time.NewTicker(maxResponseDelay)
-	ticker.Stop()
+	timer := time.NewTimer(maxResponseDelay)
+	timer.Stop()
 	var buf [4096]byte
 	var data [4096]byte
 	var nextRec *Rec
@@ -282,7 +282,7 @@ func (c *xdnsServer) send() {
 
 		ch := c.sendManager.Pop(rec.clientID)
 		left := rec.resp.cap
-		ticker.Reset(maxResponseDelay)
+		timer.Reset(maxResponseDelay)
 		var ps [][]byte
 		for {
 			var p []byte
@@ -291,14 +291,14 @@ func (c *xdnsServer) send() {
 			default:
 				select {
 				case p = <-ch:
-				case <-ticker.C:
+				case <-timer.C:
 				case nextRec = <-c.recCh:
 				}
 			}
 			if len(p) == 0 {
 				break
 			}
-			ticker.Reset(0)
+			timer.Reset(0)
 			left -= 2 + len(p)
 			if left < 0 {
 				if len(ps) == 0 {
@@ -311,7 +311,7 @@ func (c *xdnsServer) send() {
 				break
 			}
 		}
-		ticker.Stop()
+		timer.Stop()
 
 		d := data[:0]
 		for i := range ps {
