@@ -2,6 +2,7 @@ package masque
 
 import (
 	"context"
+	"net/http"
 	"net/netip"
 	"reflect"
 	"runtime"
@@ -112,7 +113,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("unknown congestion control: ", quicParams.Congestion)
 	}
 
-	conn, err := establish(ctx, qconn, config, authority(config, gotlsConfig.ServerName, dest.Port))
+	cc := (&http3.Transport{EnableDatagrams: true, DisableCompression: true}).NewClientConn(qconn)
+	conn, err := establish(ctx, connectip.NewClientConn(cc), quicConn{qconn}, func() {
+		qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeRequestCanceled), "")
+	}, config, authority(config, gotlsConfig.ServerName, dest.Port))
 	if err != nil {
 		qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "")
 		return nil, err
@@ -120,10 +124,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	return conn, nil
 }
 
-func establish(ctx context.Context, qconn *quic.Conn, config *Config, host string) (*Conn, error) {
-	stop := context.AfterFunc(ctx, func() {
-		qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeRequestCanceled), "")
-	})
+type tunnelClient interface {
+	Dial(*connectip.Request) (*connectip.Conn, *http.Response, error)
+}
+
+func establish(ctx context.Context, client tunnelClient, hconn httpConn, abort func(), config *Config, host string) (*Conn, error) {
+	stop := context.AfterFunc(ctx, abort)
 	defer stop()
 
 	req, err := connectip.NewRequest(ctx, "https://"+host+config.Path)
@@ -151,8 +157,7 @@ func establish(ctx context.Context, qconn *quic.Conn, config *Config, host strin
 		header.Del("User-Agent")
 	}
 
-	cc := (&http3.Transport{EnableDatagrams: true, DisableCompression: true}).NewClientConn(qconn)
-	ipConn, _, err := connectip.NewClientConn(cc).Dial(req)
+	ipConn, _, err := client.Dial(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			err = context.Cause(ctx)
@@ -188,7 +193,7 @@ func establish(ctx context.Context, qconn *quic.Conn, config *Config, host strin
 
 	conn := &Conn{
 		ipConn:   ipConn,
-		quicConn: qconn,
+		httpConn: hconn,
 		local:    local,
 	}
 	go conn.serveAddressAssignments()
