@@ -6,6 +6,8 @@ import (
 	"net/netip"
 	"reflect"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/masque/connectip"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/net/http2"
 )
 
 const (
@@ -36,6 +39,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("tls config is nil")
 	}
 	config := streamSettings.ProtocolSettings.(*Config)
+	if usesHTTP2(tlsConfig) {
+		return dialHTTP2(ctx, dest, streamSettings, tlsConfig, config)
+	}
 	dest.Network = net.Network_UDP
 
 	gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
@@ -122,6 +128,52 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, err
 	}
 	return conn, nil
+}
+
+func usesHTTP2(config *tls.Config) bool {
+	return slices.Contains(config.NextProtocol, http2.NextProtoTLS) && !slices.Contains(config.NextProtocol, http3.NextProtoH3)
+}
+
+func dialHTTP2(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig, tlsConfig *tls.Config, config *Config) (stat.Connection, error) {
+	dest.Network = net.Network_TCP
+	gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+
+	var conn net.Conn
+	var err error
+	if streamSettings.FinalMask != nil {
+		conn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
+	} else {
+		conn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+	}
+	if err != nil {
+		return nil, errors.New("failed to dial to dest").Base(err)
+	}
+	if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+		conn = tls.UClient(conn, gotlsConfig, fingerprint)
+	} else {
+		conn = tls.Client(conn, gotlsConfig)
+	}
+	tlsConn := conn.(tls.Interface)
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if protocol := tlsConn.NegotiatedProtocol(); protocol != http2.NextProtoTLS {
+		conn.Close()
+		return nil, errors.New("the server negotiated ", strconv.Quote(protocol), " instead of h2")
+	}
+
+	cc, err := newHTTP2ClientConn(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	mconn, err := establish(ctx, connectip.NewHTTP2ClientConn(cc), cc, func() { cc.Close() }, config, authority(config, gotlsConfig.ServerName, dest.Port))
+	if err != nil {
+		cc.Close()
+		return nil, err
+	}
+	return mconn, nil
 }
 
 type tunnelClient interface {
