@@ -123,8 +123,8 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 		total += left - 1
 	}
 	cap := table[total]
-	if cap < 16 {
-		return nil, errors.New("cap < 16")
+	if cap < 17 {
+		return nil, errors.New("cap < 17")
 	}
 	total = table_[cap]
 	lenMax := int(name.Length) + 1 + total + total/labelLimit
