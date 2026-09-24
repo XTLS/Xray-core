@@ -1,8 +1,11 @@
 package scenarios
 
 import (
+	gotls "crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
+	"io"
 	"sync"
 	"testing"
 	"time"
@@ -367,6 +370,179 @@ func TestVlessXtlsVision(t *testing.T) {
 	}
 	if err := errg.Wait(); err != nil {
 		t.Error(err)
+	}
+}
+
+// After Vision switches to direct copy, closing the proxy connection must not
+// put an outer TLS record (close_notify) into the inner TLS stream.
+func TestVlessXtlsVisionDirectCopyClose(t *testing.T) {
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+	destCert, err := gotls.X509KeyPair(ct.ToPEM())
+	common.Must(err)
+	listener, err := gotls.Listen("tcp", "127.0.0.1:0", &gotls.Config{Certificates: []gotls.Certificate{destCert}})
+	common.Must(err)
+	defer listener.Close()
+	destPort := net.Port(listener.Addr().(*net.TCPAddr).Port)
+
+	payload := make([]byte, 64*1024)
+	uplinkErr := make(chan error, 1)
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer conn.Close()
+				conn.SetDeadline(time.Now().Add(time.Second * 30))
+				mode := make([]byte, 1)
+				if _, err := io.ReadFull(conn, mode); err != nil {
+					return
+				}
+				if mode[0] == 'd' {
+					conn.Write(payload)
+				} else {
+					conn.Write(mode) // let the client's Vision switch before the payload
+					b, err := io.ReadAll(conn)
+					if err == nil && len(b) != len(payload) {
+						err = errors.New("uplink: short read")
+					}
+					uplinkErr <- err
+				}
+				// Close without close_notify, like many real servers do.
+				conn.(*gotls.Conn).NetConn().Close()
+			}()
+		}
+	}()
+
+	userID := protocol.NewID(uuid.New())
+	serverPort := tcp.PickPort()
+	serverConfig := &core.Config{
+		App: []*serial.TypedMessage{
+			serial.ToTypedMessage(&log.Config{
+				ErrorLogLevel: clog.Severity_Debug,
+				ErrorLogType:  log.LogType_Console,
+			}),
+		},
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					StreamSettings: &internet.StreamConfig{
+						ProtocolName: "tcp",
+						SecurityType: serial.GetMessageType(&tls.Config{}),
+						SecuritySettings: []*serial.TypedMessage{
+							serial.ToTypedMessage(&tls.Config{
+								Certificate: []*tls.Certificate{tls.ParseCertificate(ct)},
+							}),
+						},
+					},
+				}),
+				ProxySettings: serial.ToTypedMessage(&inbound.Config{
+					Users: []*protocol.User{
+						{
+							Account: serial.ToTypedMessage(&vless.Account{
+								Id:   userID.String(),
+								Flow: vless.XRV,
+							}),
+						},
+					},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
+			},
+		},
+	}
+
+	clientPort := tcp.PickPort()
+	clientConfig := &core.Config{
+		App: []*serial.TypedMessage{
+			serial.ToTypedMessage(&log.Config{
+				ErrorLogLevel: clog.Severity_Debug,
+				ErrorLogType:  log.LogType_Console,
+			}),
+		},
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(destPort),
+					AllowedNetworks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&outbound.Config{
+					Vnext: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User: &protocol.User{
+							Account: serial.ToTypedMessage(&vless.Account{
+								Id:   userID.String(),
+								Flow: vless.XRV,
+							}),
+						},
+					},
+				}),
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
+					StreamSettings: &internet.StreamConfig{
+						ProtocolName: "tcp",
+						SecurityType: serial.GetMessageType(&tls.Config{}),
+						SecuritySettings: []*serial.TypedMessage{
+							serial.ToTypedMessage(&tls.Config{
+								PinnedPeerCertSha256: [][]byte{ctHash[:]},
+							}),
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	common.Must(err)
+	defer CloseAllServers(servers)
+
+	dial := func(mode byte) *gotls.Conn {
+		conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: []byte{127, 0, 0, 1}, Port: int(clientPort)})
+		common.Must(err)
+		tlsConn := gotls.Client(conn, &gotls.Config{InsecureSkipVerify: true})
+		tlsConn.SetDeadline(time.Now().Add(time.Second * 30))
+		_, err = tlsConn.Write([]byte{mode})
+		common.Must(err)
+		return tlsConn
+	}
+
+	// downlink: the server side closes after the destination does
+	conn := dial('d')
+	b, err := io.ReadAll(conn)
+	conn.Close()
+	if err != nil {
+		t.Error("downlink: ", err)
+	} else if len(b) != len(payload) {
+		t.Error("downlink: short read ", len(b))
+	}
+
+	// uplink: the client side closes after the application does
+	conn = dial('u')
+	_, err = io.ReadFull(conn, make([]byte, 1))
+	common.Must(err)
+	_, err = conn.Write(payload)
+	common.Must(err)
+	conn.NetConn().Close()
+	if err := <-uplinkErr; err != nil {
+		t.Error("uplink: ", err)
 	}
 }
 

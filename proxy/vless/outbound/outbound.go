@@ -310,6 +310,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
+	defer func() {
+		// The server reads the raw conn after CommandPaddingDirect, so close it
+		// first to keep conn.Close() from writing an outer TLS close_notify on it.
+		if trafficState.Outbound.UplinkWriterDirectCopySent {
+			rawConn, _, _ := proxy.UnwrapRawConn(conn)
+			rawConn.Close()
+		}
+	}()
 	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")

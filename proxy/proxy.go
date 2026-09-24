@@ -122,8 +122,9 @@ type InboundState struct {
 	RemainingPadding       int32
 	CurrentCommand         int
 	// write link state
-	IsPadding                bool
-	DownlinkWriterDirectCopy bool
+	IsPadding                    bool
+	DownlinkWriterDirectCopy     bool
+	DownlinkWriterDirectCopySent bool
 }
 
 type OutboundState struct {
@@ -135,8 +136,9 @@ type OutboundState struct {
 	RemainingPadding         int32
 	CurrentCommand           int
 	// write link state
-	IsPadding              bool
-	UplinkWriterDirectCopy bool
+	IsPadding                  bool
+	UplinkWriterDirectCopy     bool
+	UplinkWriterDirectCopySent bool
 }
 
 func NewTrafficState(userUUID []byte) *TrafficState {
@@ -322,13 +324,16 @@ func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink boo
 func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	var isPadding *bool
 	var switchToDirectCopy *bool
+	var directCopySent *bool
 	var spliceReadyInbound *session.Inbound
 	if w.isUplink {
 		isPadding = &w.trafficState.Outbound.IsPadding
 		switchToDirectCopy = &w.trafficState.Outbound.UplinkWriterDirectCopy
+		directCopySent = &w.trafficState.Outbound.UplinkWriterDirectCopySent
 	} else {
 		isPadding = &w.trafficState.Inbound.IsPadding
 		switchToDirectCopy = &w.trafficState.Inbound.DownlinkWriterDirectCopy
+		directCopySent = &w.trafficState.Inbound.DownlinkWriterDirectCopySent
 	}
 
 	if *switchToDirectCopy {
@@ -364,6 +369,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
 					if w.trafficState.EnableXtls {
 						*switchToDirectCopy = true
+						*directCopySent = true // CommandPaddingDirect goes out in this write
 					}
 					var command byte = CommandPaddingContinue
 					if i == len(mb)-1 {

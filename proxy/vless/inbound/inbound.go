@@ -610,6 +610,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	trafficState := proxy.NewTrafficState(userSentID)
+	defer func() {
+		// The client reads the raw conn after CommandPaddingDirect, so close it
+		// first to keep the caller's Close() from writing an outer TLS close_notify on it.
+		if trafficState.Inbound.DownlinkWriterDirectCopySent {
+			rawConn, _, _ := proxy.UnwrapRawConn(connection)
+			rawConn.Close()
+		}
+	}()
 	clientReader := encoding.DecodeBodyAddons(reader, request, requestAddons)
 	if requestAddons.Flow == vless.XRV {
 		clientReader = proxy.NewVisionReader(clientReader, trafficState, true, ctx, connection, input, rawInput, nil)
