@@ -17,6 +17,11 @@ type resp struct {
 	addr net.Addr
 }
 
+type Rec struct {
+	resp     *Resp
+	clientID ClientID
+}
+
 type xdnsServer struct {
 	net.PacketConn
 
@@ -25,7 +30,7 @@ type xdnsServer struct {
 	sendManager *SendManager
 
 	readCh  chan packet
-	respCh  chan *Resp
+	recCh   chan *Rec
 	drCh    chan resp
 	closeCh chan struct{}
 	wg      sync.WaitGroup
@@ -56,7 +61,7 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		sendManager: NewSendManager(),
 
 		readCh:  make(chan packet),
-		respCh:  make(chan *Resp, 255),
+		recCh:   make(chan *Rec, 255),
 		drCh:    make(chan resp),
 		closeCh: make(chan struct{}),
 	}
@@ -78,6 +83,11 @@ func (c *xdnsServer) decref(msg dnsmessage.Message, addr net.Addr) {
 	case c.drCh <- resp{msg: msg, addr: addr}:
 	default:
 	}
+}
+
+func (c *xdnsServer) sendMsg(msg dnsmessage.Message, addr net.Addr) {
+	var buf [512]byte
+	_, _ = c.PacketConn.WriteTo(common.Must2(msg.AppendPack(buf[:0])), addr)
 }
 
 func (c *xdnsServer) read(buf []byte, addr net.Addr) {
@@ -171,7 +181,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	}
 	clientID := ClientIDFromRaw([8]byte(decoded[:8]))
 
-	r := NewResp(msg, domain, addr, edns0, c.decref)
+	r := NewResp(msg, domain, addr, edns0)
 	if r == nil {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
@@ -180,9 +190,12 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		return
 	}
 	select {
-	case c.respCh <- r:
+	case c.recCh <- &Rec{resp: r, clientID: clientID}:
 	default:
-		r.DecRef()
+		msg.Header.Response = true
+		msg.Header.Authoritative = true
+		msg.Header.RCode = dnsmessage.RCodeSuccess
+		c.decref(msg, addr)
 	}
 
 	if decoded[8]&0x3F == 8 {
@@ -253,18 +266,12 @@ func (c *xdnsServer) send() {
 func (c *xdnsServer) dr() {
 	defer c.wg.Done()
 
-	var buf [512]byte
-
-	sendMsg := func(msg dnsmessage.Message, addr net.Addr) {
-		_, _ = c.PacketConn.WriteTo(common.Must2(msg.AppendPack(buf[:0])), addr)
-	}
-
 	for {
 		select {
 		case <-c.closeCh:
 			return
 		case r := <-c.drCh:
-			sendMsg(r.msg, r.addr)
+			c.sendMsg(r.msg, r.addr)
 		}
 	}
 }

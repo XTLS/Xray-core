@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	respTTL = time.Second
 	sendTTL = 4 * time.Second
 )
 
@@ -20,13 +19,11 @@ type Resp struct {
 	domain *Domain
 	addr   net.Addr
 	edns0  uint16
-	decref func(dnsmessage.Message, net.Addr)
 
-	cap      int
-	deadline time.Time
+	cap int
 }
 
-func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16, decref func(dnsmessage.Message, net.Addr)) *Resp {
+func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16) *Resp {
 	if msg.Header.Response {
 		return &Resp{
 			msg:    msg,
@@ -48,14 +45,14 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16
 		if n > 255 {
 			n = 255
 		}
-		cap = 4*n - n - 3
+		cap = 4*n - n - 1
 	case dnsmessage.TypeCNAME:
 		single := 2 + 2 + 2 + 4 + 2 + domain.lenMax
 		n := left / single
 		if n > 255 {
 			n = 255
 		}
-		cap = domain.cap*n - n - 3
+		cap = domain.cap*n - n - 1
 	case dnsmessage.TypeTXT:
 		left -= 2 + 2 + 2 + 4 + 2
 		single := 1 + 255
@@ -71,7 +68,7 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16
 		if n > 255 {
 			n = 255
 		}
-		cap = 16*n - n - 3
+		cap = 16*n - n - 1
 	}
 	if cap < 11+1 {
 		return nil
@@ -82,25 +79,9 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16
 		domain: domain,
 		addr:   addr,
 		edns0:  edns0,
-		decref: decref,
 
-		cap:      cap,
-		deadline: time.Now().Add(respTTL),
+		cap: cap,
 	}
-}
-
-func (r *Resp) DecRef() {
-	msg := r.msg
-	msg.Header = dnsmessage.Header{
-		ID:            msg.Header.ID,
-		Response:      true,
-		Authoritative: true,
-		RCode:         dnsmessage.RCodeSuccess,
-	}
-	msg.Answers = nil
-	msg.Authorities = nil
-	msg.Additionals = nil
-	r.decref(msg, r.addr)
 }
 
 func (r *Resp) Encode(encoded []byte, data []byte) []byte {
@@ -116,10 +97,13 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 	msg.Additionals = nil
 	switch msg.Questions[0].Type {
 	case dnsmessage.TypeA:
-		fragN := 1
-		if (len(data) - (4 - 4)) > 0 {
-			fragN += (len(data) - (4 - 4)) / (4 - 1)
-			if (len(data)-(4-4))%(4-1) > 0 {
+		fragN := 0
+		if len(data) > 0 {
+			fragN = 1
+		}
+		if (len(data) - (4 - 2)) > 0 {
+			fragN += (len(data) - (4 - 2)) / (4 - 1)
+			if (len(data)-(4-2))%(4-1) > 0 {
 				fragN++
 			}
 		}
@@ -128,9 +112,7 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 			A := [4]byte{byte(i)}
 			if i == 0 {
 				A[1] = byte(fragN)
-				A[2] = byte(len(data) >> 8)
-				A[3] = byte(len(data))
-				n := copy(A[4:], data)
+				n := copy(A[2:], data)
 				data = data[n:]
 			} else {
 				n := copy(A[1:], data)
@@ -147,10 +129,13 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 			})
 		}
 	case dnsmessage.TypeCNAME:
-		fragN := 1
-		if (len(data) - (r.domain.cap - 4)) > 0 {
-			fragN += (len(data) - (r.domain.cap - 4)) / (r.domain.cap - 1)
-			if (len(data)-(r.domain.cap-4))%(r.domain.cap-1) > 0 {
+		fragN := 0
+		if len(data) > 0 {
+			fragN = 1
+		}
+		if (len(data) - (r.domain.cap - 2)) > 0 {
+			fragN += (len(data) - (r.domain.cap - 2)) / (r.domain.cap - 1)
+			if (len(data)-(r.domain.cap-2))%(r.domain.cap-1) > 0 {
 				fragN++
 			}
 		}
@@ -160,9 +145,7 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 			DATA[0] = byte(i)
 			if i == 0 {
 				DATA[1] = byte(fragN)
-				DATA[2] = byte(len(data) >> 8)
-				DATA[3] = byte(len(data))
-				n := copy(DATA[4:], data)
+				n := copy(DATA[2:], data)
 				data = data[n:]
 				msg.Answers = append(msg.Answers, dnsmessage.Resource{
 					Header: dnsmessage.ResourceHeader{
@@ -171,7 +154,7 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 						Class: dnsmessage.ClassINET,
 						TTL:   60,
 					},
-					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+4])},
+					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:2+n])},
 				})
 			} else {
 				n := copy(DATA[1:], data)
@@ -183,7 +166,7 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 						Class: dnsmessage.ClassINET,
 						TTL:   60,
 					},
-					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:n+1])},
+					Body: &dnsmessage.CNAMEResource{CNAME: r.domain.Encode(DATA[:1+n])},
 				})
 			}
 		}
@@ -204,10 +187,13 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 			Body: &dnsmessage.TXTResource{TXT: txt},
 		})
 	case dnsmessage.TypeAAAA:
-		fragN := 1
-		if (len(data) - (16 - 4)) > 0 {
-			fragN += (len(data) - (16 - 4)) / (16 - 1)
-			if (len(data)-(16-4))%(16-1) > 0 {
+		fragN := 0
+		if len(data) > 0 {
+			fragN = 1
+		}
+		if (len(data) - (16 - 2)) > 0 {
+			fragN += (len(data) - (16 - 2)) / (16 - 1)
+			if (len(data)-(16-2))%(16-1) > 0 {
 				fragN++
 			}
 		}
@@ -216,9 +202,7 @@ func (r *Resp) Encode(encoded []byte, data []byte) []byte {
 			AAAA := [16]byte{byte(i)}
 			if i == 0 {
 				AAAA[1] = byte(fragN)
-				AAAA[2] = byte(len(data) >> 8)
-				AAAA[3] = byte(len(data))
-				n := copy(AAAA[4:], data)
+				n := copy(AAAA[2:], data)
 				data = data[n:]
 			} else {
 				n := copy(AAAA[1:], data)

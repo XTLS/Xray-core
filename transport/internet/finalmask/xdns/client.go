@@ -136,7 +136,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 	}
 	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " ", msg.Questions[0].Type)
 
-	resp := NewResp(msg, domain, nil, 0, nil)
+	resp := NewResp(msg, domain, nil, 0)
 
 	p := pool4K.Get().([]byte)
 	n := resp.Decode(p)
