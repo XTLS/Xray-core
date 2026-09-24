@@ -38,14 +38,18 @@ const (
 	ipProtoICMPv6 = 58
 )
 
-type http3Stream interface {
+type requestStream interface {
 	io.ReadWriteCloser
-	StreamID() quic.StreamID
-	ReceiveDatagram(context.Context) ([]byte, error)
-	SendDatagram([]byte) error
 	CancelRead(quic.StreamErrorCode)
 	CancelWrite(quic.StreamErrorCode)
 	SetWriteDeadline(time.Time) error
+}
+
+type http3Stream interface {
+	requestStream
+	StreamID() quic.StreamID
+	ReceiveDatagram(context.Context) ([]byte, error)
+	SendDatagram([]byte) error
 }
 
 var (
@@ -63,7 +67,8 @@ type streamWrite struct {
 }
 
 type Conn struct {
-	str         http3Stream
+	str         requestStream
+	h3          http3Stream
 	writeNotify chan struct{}
 	writeDone   chan error
 
@@ -90,6 +95,7 @@ type Conn struct {
 func newProxiedConn(str http3Stream) *Conn {
 	c := &Conn{
 		str:                    str,
+		h3:                     str,
 		writeNotify:            make(chan struct{}, 1),
 		writeDone:              make(chan error, 1),
 		assignedAddressUpdates: make(chan []AssignedAddress, maxQueuedCapsules),
@@ -427,7 +433,7 @@ func (c *Conn) ReadPacket(b []byte) (int, error) {
 			return 0, c.closeErr
 		default:
 		}
-		data, err := c.str.ReceiveDatagram(context.Background())
+		data, err := c.h3.ReceiveDatagram(context.Background())
 		if err != nil {
 			select {
 			case <-c.closeChan:
@@ -525,7 +531,7 @@ func (c *Conn) WritePacket(b []byte) (icmp []byte, err error) {
 		errors.LogDebugInner(context.Background(), err, "dropping proxied packet (", len(b), " bytes) that can't be proxied")
 		return nil, nil
 	}
-	if err := c.str.SendDatagram(data); err != nil {
+	if err := c.h3.SendDatagram(data); err != nil {
 		if tooLarge, ok := goerrors.AsType[*quic.DatagramTooLargeError](err); ok {
 			icmpPacket, err := composeICMPTooLargePacket(b, int(tooLarge.MaxDatagramPayloadSize)-c.datagramOverhead())
 			if err != nil {
@@ -585,7 +591,7 @@ func (c *Conn) composeDatagram(b []byte) ([]byte, error) {
 }
 
 func (c *Conn) datagramOverhead() int {
-	return quicvarint.Len(uint64(c.str.StreamID()/4)) + len(contextIDZero)
+	return quicvarint.Len(uint64(c.h3.StreamID()/4)) + len(contextIDZero)
 }
 
 func (c *Conn) MaxPacketSize() int {
@@ -594,7 +600,7 @@ func (c *Conn) MaxPacketSize() int {
 		return 0
 	default:
 	}
-	err := c.str.SendDatagram(make([]byte, 1<<16))
+	err := c.h3.SendDatagram(make([]byte, 1<<16))
 	tooLarge, ok := goerrors.AsType[*quic.DatagramTooLargeError](err)
 	if !ok {
 		return 0
