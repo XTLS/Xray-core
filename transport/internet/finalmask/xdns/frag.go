@@ -99,7 +99,7 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 		return 0
 	}
 
-	if fragN < 1 {
+	if fragN < 2 {
 		return 0
 	}
 
