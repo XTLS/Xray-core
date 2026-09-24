@@ -189,10 +189,7 @@ func (l *Listener) Addr() net.Addr {
 }
 
 func (l *Listener) Close() error {
-	_ = l.listener.Close()
-	_ = l.pktConn.Close()
-	_ = l.tr.Close()
-	return nil
+	return errors.Combine(l.listener.Close(), l.tr.Close(), l.pktConn.Close())
 }
 
 func Listen(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, handler internet.ConnHandler) (internet.Listener, error) {
@@ -340,8 +337,8 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 
 	listener, err := tr.Listen(tlsConfig.GetTLSConfig(tls.WithNextProto("h3")), quicConfig)
 	if err != nil {
-		_ = pktConn.Close()
 		_ = tr.Close()
+		_ = pktConn.Close()
 		return nil, err
 	}
 

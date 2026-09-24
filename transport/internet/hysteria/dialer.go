@@ -55,11 +55,11 @@ func (c *client) status() status {
 
 func (c *client) close() {
 	c.conn.CloseWithError(closeErrCodeOK, "")
-	c.pktConn.Close()
 	c.tr.Close()
+	c.pktConn.Close()
 	c.conn = nil
-	c.pktConn = nil
 	c.tr = nil
+	c.pktConn = nil
 	c.udpSM = nil
 }
 
@@ -176,14 +176,14 @@ func (c *client) dial(ctx context.Context) error {
 		if conn != nil {
 			_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		}
-		_ = pktConn.Close()
 		_ = tr.Close()
+		_ = pktConn.Close()
 		return err
 	}
 	if resp.StatusCode != StatusAuthOK {
 		_ = conn.CloseWithError(closeErrCodeProtocolError, "")
-		_ = pktConn.Close()
 		_ = tr.Close()
+		_ = pktConn.Close()
 		return errors.New("auth failed code ", resp.StatusCode)
 	}
 	_ = resp.Body.Close()
