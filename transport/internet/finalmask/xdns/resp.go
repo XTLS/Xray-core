@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/net"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
@@ -17,13 +16,12 @@ const (
 type Resp struct {
 	msg    dnsmessage.Message
 	domain *Domain
-	addr   net.Addr
 	edns0  uint16
 
 	cap int
 }
 
-func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16) *Resp {
+func NewResp(msg dnsmessage.Message, domain *Domain, edns0 uint16) *Resp {
 	if msg.Header.Response {
 		return &Resp{
 			msg:    msg,
@@ -77,7 +75,6 @@ func NewResp(msg dnsmessage.Message, domain *Domain, addr net.Addr, edns0 uint16
 	return &Resp{
 		msg:    msg,
 		domain: domain,
-		addr:   addr,
 		edns0:  edns0,
 
 		cap: cap,
@@ -377,7 +374,10 @@ func (m *SendManager) Pop(clientID ClientID) chan []byte {
 	defer m.mu.Unlock()
 	info := m.m[clientID]
 	if info == nil {
-		return nil
+		info = &SendInfo{
+			ch: make(chan []byte, 128),
+		}
+		m.m[clientID] = info
 	}
 	info.deadline = time.Now().Add(sendTTL)
 	return info.ch

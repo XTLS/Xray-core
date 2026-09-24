@@ -12,6 +12,10 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
+const (
+	maxResponseDelay = time.Second
+)
+
 type resp struct {
 	msg  dnsmessage.Message
 	addr net.Addr
@@ -20,6 +24,7 @@ type resp struct {
 type Rec struct {
 	resp     *Resp
 	clientID ClientID
+	addr     net.Addr
 }
 
 type xdnsServer struct {
@@ -83,11 +88,6 @@ func (c *xdnsServer) decref(msg dnsmessage.Message, addr net.Addr) {
 	case c.drCh <- resp{msg: msg, addr: addr}:
 	default:
 	}
-}
-
-func (c *xdnsServer) sendMsg(msg dnsmessage.Message, addr net.Addr) {
-	var buf [512]byte
-	_, _ = c.PacketConn.WriteTo(common.Must2(msg.AppendPack(buf[:0])), addr)
 }
 
 func (c *xdnsServer) read(buf []byte, addr net.Addr) {
@@ -181,7 +181,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	}
 	clientID := ClientIDFromRaw([8]byte(decoded[:8]))
 
-	r := NewResp(msg, domain, addr, edns0)
+	r := NewResp(msg, domain, edns0)
 	if r == nil {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
@@ -190,7 +190,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		return
 	}
 	select {
-	case c.recCh <- &Rec{resp: r, clientID: clientID}:
+	case c.recCh <- &Rec{resp: r, clientID: clientID, addr: addr}:
 	default:
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
@@ -237,6 +237,7 @@ func (c *xdnsServer) run() {
 
 	c.wg.Wait()
 	close(c.readCh)
+	close(c.recCh)
 	close(c.drCh)
 	c.fragManager.Close()
 	c.sendManager.Close()
@@ -260,18 +261,81 @@ func (c *xdnsServer) recv() {
 }
 
 func (c *xdnsServer) send() {
+	defer c.wg.Done()
 
+	ticker := time.NewTicker(maxResponseDelay)
+	ticker.Stop()
+	var buf [4096]byte
+	var data [4096]byte
+	var nextRec *Rec
+	for {
+		rec := nextRec
+		nextRec = nil
+
+		if rec == nil {
+			select {
+			case rec = <-c.recCh:
+			case <-c.closeCh:
+				return
+			}
+		}
+
+		ch := c.sendManager.Pop(rec.clientID)
+		left := rec.resp.cap
+		ticker.Reset(maxResponseDelay)
+		var ps [][]byte
+		for {
+			var p []byte
+			select {
+			case p = <-ch:
+			default:
+				select {
+				case p = <-ch:
+				case <-ticker.C:
+				case nextRec = <-c.recCh:
+				}
+			}
+			if len(p) == 0 {
+				break
+			}
+			ticker.Reset(0)
+			left -= 2 + len(p)
+			if left < 0 {
+				if len(ps) == 0 {
+					errors.LogError(context.Background(), "err size ", len(p))
+				}
+				break
+			}
+			ps = append(ps, p)
+			if left < 2+len(ps[0]) {
+				break
+			}
+		}
+		ticker.Stop()
+
+		d := data[:0]
+		for i := range ps {
+			l := len(ps[i])
+			if i == len(ps[i])-1 {
+				l |= 0xC000
+			}
+			d = append(d, []byte{byte(l >> 8), byte(l)}...)
+			d = append(d, ps[i]...)
+		}
+		_, _ = c.PacketConn.WriteTo(rec.resp.Encode(buf[:0], d), rec.addr)
+	}
 }
 
 func (c *xdnsServer) dr() {
 	defer c.wg.Done()
 
+	var buf [512]byte
 	for {
 		select {
 		case <-c.closeCh:
 			return
 		case r := <-c.drCh:
-			c.sendMsg(r.msg, r.addr)
+			_, _ = c.PacketConn.WriteTo(common.Must2(r.msg.AppendPack(buf[:0])), r.addr)
 		}
 	}
 }
