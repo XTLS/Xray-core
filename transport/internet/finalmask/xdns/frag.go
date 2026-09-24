@@ -99,6 +99,10 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 		return 0
 	}
 
+	if fragN < 1 {
+		return 0
+	}
+
 	now := time.Now()
 	entry := m.m[key]
 	if entry == nil || now.After(entry.deadline) {
@@ -115,9 +119,6 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 		m.m[key] = entry
 	}
 
-	if fragN == 0 {
-		return 0
-	}
 	if fragN != entry.total {
 		return 0
 	}
@@ -131,10 +132,6 @@ func (m *FragManager) Feed(out []byte, key FragKey, fragIdx, fragN byte, data []
 		return 0
 	}
 	if entry.len < int(entry.total)-1 {
-		if entry.size+len(data) == fragSize {
-			m.removeEntey(key, entry)
-			return 0
-		}
 		if m.sizem[key.clientID]+len(data) > fragClientIDSize {
 			return 0
 		}

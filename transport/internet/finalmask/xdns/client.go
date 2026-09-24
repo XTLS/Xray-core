@@ -37,18 +37,17 @@ type packet struct {
 type xdnsClient struct {
 	dialer *finalmask.Dialer
 
-	clientID    ClientID
-	fragID      atomic.Uint32
-	domains     []*Domain
-	extraPoll   int
-	fragManager *FragManager
+	clientID ClientID
+	fragID   atomic.Uint32
+	domains  []*Domain
 
 	resolvers     []Resolver
 	resolverSends []atomic.Uint32
 	resolverIndex atomic.Uint32
 
-	poolCh  chan struct{}
 	readCh  chan packet
+	sendCh  chan []byte
+	poolCh  chan struct{}
 	closeCh chan struct{}
 	wg      sync.WaitGroup
 	mu      sync.Mutex
@@ -60,9 +59,6 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	}
 	if len(c.Resolvers) == 0 {
 		return nil, errors.New("empty resolvers")
-	}
-	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
-		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")
 	}
 	domains := make([]*Domain, 0, len(c.Domains))
 	for i := range c.Domains {
@@ -87,16 +83,15 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	client := &xdnsClient{
 		dialer: dialer,
 
-		clientID:    NewClientID(),
-		domains:     domains,
-		extraPoll:   int(c.ExtraPoll),
-		fragManager: NewFragManager(),
+		clientID: NewClientID(),
+		domains:  domains,
 
 		resolvers:     resolvers,
 		resolverSends: make([]atomic.Uint32, len(c.Resolvers)),
 
 		poolCh:  make(chan struct{}, pollLimit),
 		readCh:  make(chan packet),
+		sendCh:  make(chan []byte, 16),
 		closeCh: make(chan struct{}),
 	}
 	go client.run()
@@ -112,14 +107,118 @@ func (c *xdnsClient) closed() bool {
 	}
 }
 
-func (c *xdnsClient) send(p []byte) {
-	domain := c.domains[mrand.Intn(len(c.domains))]
-	qtype := domain.types[mrand.Intn(len(domain.types))]
+func (c *xdnsClient) read(buf []byte, addr net.Addr) {
+	msg := dnsmessage.Message{}
+	if err := msg.Unpack(buf); err != nil {
+		return
+	}
+	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess || len(msg.Questions) != 1 {
+		return
+	}
+
+	var domain *Domain
+	for i := range c.domains {
+		if c.domains[i].IsDomain(msg.Questions[0].Name) {
+			domain = c.domains[i]
+			break
+		}
+	}
+	if domain == nil || !domain.HasType(uint16(msg.Questions[0].Type)) {
+		return
+	}
+
+	edns0 := uint16(0)
+	for i := range msg.Additionals {
+		if msg.Additionals[i].Header.Type == dnsmessage.TypeOPT {
+			edns0 = uint16(msg.Additionals[i].Header.Class)
+			break
+		}
+	}
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " ", msg.Questions[0].Type)
+
+	resp := NewResp(msg, domain, nil, 0, nil)
+
+	p := pool4K.Get().([]byte)
+	n := resp.Decode(p)
+	p = p[:n]
+
+	b := p
+	var bs [][]byte
+	for len(b) > 1 {
+		length := int(b[0])<<8 | int(b[1])
+		b = b[2:]
+		if length > len(b) {
+			bs = nil
+			break
+		}
+		packet := make([]byte, length)
+		copy(packet, b)
+		bs = append(bs, packet)
+		if length&0xC000 == 0xC000 {
+			break
+		}
+		b = b[length:]
+		if len(b) < 2 {
+			bs = nil
+		}
+	}
+	pool4K.Put(p[:cap(p)])
+
+	if len(bs) > 0 {
+		select {
+		case c.poolCh <- struct{}{}:
+		default:
+		}
+	}
+	for i := range bs {
+		select {
+		case <-c.closeCh:
+			return
+		case c.readCh <- packet{p: bs[i], addr: addr}:
+		}
+	}
+}
+
+func (c *xdnsClient) run() {
+	c.wg.Add(1)
+	go c.send()
+
+	for i := range len(c.resolvers) {
+		c.wg.Add(1)
+		go c.recv(i)
+	}
+
+	c.wg.Wait()
+	close(c.readCh)
+	close(c.sendCh)
+	close(c.poolCh)
+}
+
+func (c *xdnsClient) recv(i int) {
+	defer c.wg.Done()
+
+	var buf [4096]byte
+	for {
+		n, err := c.resolvers[i].Read(buf[:])
+		if err != nil {
+			if c.closed() {
+				return
+			}
+			errors.LogErrorInner(context.Background(), err, "recv err ", i)
+			return
+		}
+		c.read(buf[:n], c.resolvers[i].Addr())
+		c.resolverSends[i].Store(0)
+	}
+}
+
+func (c *xdnsClient) send() {
+	defer c.wg.Done()
 
 	var buf [512]byte
 	var data [255]byte
 
-	send := func(p []byte) {
+	sendMsg := func(p []byte, domain *Domain, qtype uint16) {
 		msg := dnsmessage.Message{
 			Header: dnsmessage.Header{
 				RecursionDesired: true,
@@ -167,197 +266,109 @@ func (c *xdnsClient) send(p []byte) {
 		c.resolvers[index].Send(pack)
 	}
 
-	if len(p) == 0 {
-		copy(data[:], c.clientID[:])
-		common.Must2(rand.Read(data[8:16]))
-		data[0] |= TypeMap[qtype]
-		data[8] |= 0x80
-		send(data[:16])
-		return
-	}
+	send := func(p []byte) {
+		domain := c.domains[mrand.Intn(len(c.domains))]
+		qtype := domain.types[mrand.Intn(len(domain.types))]
 
-	if len(p) <= domain.cap-11 {
-		copy(data[:], c.clientID[:])
-		common.Must2(rand.Read(data[8:11]))
-		copy(data[11:], p)
-		data[0] |= TypeMap[qtype]
-		data[8] &= 0x7F
-		send(data[:11+len(p)])
-		return
-	}
-
-	if len(p) <= 255*(domain.cap-14) {
-		copy(data[:], c.clientID[:])
-		common.Must2(rand.Read(data[8:11]))
-		data[0] |= 0x40 | TypeMap[qtype]
-		data[8] &= 0x7F
-
-		fragID := byte(c.fragID.Add(1))
-		fragN := len(p) / (domain.cap - 14)
-		if len(p)%(domain.cap-14) > 0 {
-			fragN++
-		}
-
-		for i := range fragN {
-			size := min(len(p), domain.cap-14)
-			copy(data[14:], p[:size])
-			data[11] = fragID
-			data[12] = byte(i)
-			data[13] = byte(fragN)
-			send(data[:14+size])
-			p = p[size:]
-		}
-		return
-	}
-
-	errors.LogError(context.Background(), "send err ", len(p))
-}
-
-func (c *xdnsClient) read(buf []byte, addr net.Addr) {
-	msg := dnsmessage.Message{}
-	if err := msg.Unpack(buf); err != nil {
-		return
-	}
-	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess || len(msg.Questions) != 1 {
-		return
-	}
-
-	var domain *Domain
-	for i := range c.domains {
-		if c.domains[i].IsDomain(msg.Questions[0].Name) {
-			domain = c.domains[i]
-			break
-		}
-	}
-	if domain == nil || !domain.HasType(uint16(msg.Questions[0].Type)) {
-		return
-	}
-
-	edns0 := uint16(0)
-	for i := range msg.Additionals {
-		if msg.Additionals[i].Header.Type == dnsmessage.TypeOPT {
-			edns0 = uint16(msg.Additionals[i].Header.Class)
-			break
-		}
-	}
-	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", msg.Questions[0].Type)
-
-	resp := NewResp(msg, domain, addr, 0, nil)
-
-	p := pool4K.Get().([]byte)
-	n := resp.Decode(p)
-	p = p[:n]
-	if len(p) < 8+1 {
-		pool4K.Put(p[:cap(p)])
-		return
-	}
-	if p[0]&0x80 == 0x80 || (p[0]&0x40 == 0x40 && len(p) < 11+1) || TypeMap_[p[0]&3] != uint16(msg.Questions[0].Type) || c.clientID != ClientIDFromRaw([8]byte(p[:8])) {
-		pool4K.Put(p[:cap(p)])
-		return
-	}
-
-	select {
-	case c.poolCh <- struct{}{}:
-	default:
-	}
-	if p[0]&0x40 == 0x40 {
-		out := pool4K.Get().([]byte)
-		n := c.fragManager.Feed(out, FragKey{clientID: c.clientID, fragID: p[8]}, p[9], p[10], p[11:])
-		pool4K.Put(p[:cap(p)])
-		if n > 0 {
-			p = out[:n]
-		} else {
-			pool4K.Put(out[:cap(out)])
+		if len(p) == 0 {
+			copy(data[:], c.clientID[:])
+			data[0] |= TypeMap[qtype]
+			data[8] = 8
+			common.Must2(rand.Read(data[9:17]))
+			sendMsg(data[:17], domain, qtype)
 			return
 		}
-	} else {
-		copy(p, p[8:])
-		p = p[:len(p)-8]
+
+		if len(p) <= domain.cap-12 {
+			copy(data[:], c.clientID[:])
+			data[0] |= TypeMap[qtype]
+			data[8] = 3
+			common.Must2(rand.Read(data[9:12]))
+			copy(data[12:], p)
+			sendMsg(data[:12+len(p)], domain, qtype)
+			return
+		}
+
+		if len(p) <= 255*(domain.cap-15) {
+			copy(data[:], c.clientID[:])
+			data[0] |= TypeMap[qtype]
+			data[8] = 3 | 0xC0
+			common.Must2(rand.Read(data[9:12]))
+
+			fragID := byte(c.fragID.Add(1))
+			fragN := len(p) / (domain.cap - 15)
+			if len(p)%(domain.cap-15) > 0 {
+				fragN++
+			}
+
+			for i := range fragN {
+				data[12] = fragID
+				data[13] = byte(i)
+				data[14] = byte(fragN)
+				size := min(len(p), domain.cap-15)
+				copy(data[15:], p[:size])
+				sendMsg(data[:15+size], domain, qtype)
+				p = p[size:]
+			}
+			return
+		}
+
+		errors.LogError(context.Background(), "send err ", len(p))
 	}
-	select {
-	case <-c.closeCh:
-		pool4K.Put(p[:cap(p)])
-		return
-	case c.readCh <- packet{p: p, addr: addr}:
-	}
-}
 
-func (c *xdnsClient) run() {
-	c.wg.Add(1)
-	go c.poll()
-
-	for i := range len(c.resolvers) {
-		c.wg.Add(1)
-		go c.recv(i)
-	}
-
-	c.wg.Wait()
-	close(c.readCh)
-	close(c.poolCh)
-	c.fragManager.Close()
-}
-
-func (c *xdnsClient) poll() {
-	defer c.wg.Done()
-
-	select {
-	case <-c.closeCh:
-	case <-c.poolCh:
-	}
-	delay := initPollDelay
-	ticker := time.NewTicker(delay)
+	ticker := time.NewTicker(initPollDelay)
 	defer ticker.Stop()
+	delay := initPollDelay
+	p := []byte(nil)
+	timeout := false
 	for {
 		select {
 		case <-c.closeCh:
 			return
-		case <-c.poolCh:
-			delay = initPollDelay
-		case <-ticker.C:
+		default:
+			select {
+			case <-c.closeCh:
+				return
+			case p = <-c.sendCh:
+			case <-c.poolCh:
+			case <-ticker.C:
+				timeout = true
+			}
+		}
+
+		if len(p) > 0 {
+			select {
+			case <-c.poolCh:
+			default:
+			}
+		}
+
+		send(p)
+
+		if timeout {
 			delay *= pollDelayMultiplier
 			if delay > maxPollDelay {
 				delay = maxPollDelay
 			}
-		}
-		if c.closed() {
-			return
+			timeout = false
+		} else {
+			delay = initPollDelay
 		}
 		ticker.Reset(delay)
-		c.send(nil)
-		for range c.extraPoll {
-			c.send(nil)
-		}
-	}
-}
-
-func (c *xdnsClient) recv(i int) {
-	defer c.wg.Done()
-
-	var buf [4096]byte
-	for {
-		n, err := c.resolvers[i].Read(buf[:])
-		if err != nil {
-			if c.closed() {
-				return
-			}
-			errors.LogErrorInner(context.Background(), err, "recv err ", i)
-			return
-		}
-		c.read(buf[:n], c.resolvers[i].Addr())
 	}
 }
 
 func (c *xdnsClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readCh
 	if ok {
-		n = copy(p, packet.p)
-		pool4K.Put(packet.p[:cap(packet.p)])
-		return n, packet.addr, nil
+		return copy(p, packet.p), packet.addr, nil
 	}
 	return 0, nil, io.ErrClosedPipe
 }
 
 func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed() {
 		return 0, io.ErrClosedPipe
 	}
@@ -365,9 +376,11 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		errors.LogError(context.Background(), "err size ", len(p))
 		return 0, errors.New("err size")
 	}
-	c.send(p)
-	for range c.extraPoll {
-		c.send(nil)
+	b := make([]byte, len(p))
+	copy(b, p)
+	select {
+	case c.sendCh <- b:
+	default:
 	}
 	return len(p), nil
 }
@@ -398,12 +411,12 @@ type ClientID [8]byte
 func NewClientID() ClientID {
 	var id ClientID
 	common.Must2(rand.Read(id[:]))
-	id[0] &= 0x3C
+	id[0] &= 0xFC
 	return id
 }
 
 func ClientIDFromRaw(id [8]byte) ClientID {
-	id[0] &= 0x3C
+	id[0] &= 0xFC
 	return id
 }
 
