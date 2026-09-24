@@ -145,7 +145,8 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 	b := p
 	var bs [][]byte
 	for len(b) > 1 {
-		length := int(b[0])<<8 | int(b[1])
+		last := b[0]&0xC0 == 0xC0
+		length := int(b[0]&0x3F)<<8 | int(b[1])
 		b = b[2:]
 		if length > len(b) {
 			bs = nil
@@ -154,7 +155,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 		packet := make([]byte, length)
 		copy(packet, b)
 		bs = append(bs, packet)
-		if length&0xC000 == 0xC000 {
+		if last {
 			break
 		}
 		b = b[length:]

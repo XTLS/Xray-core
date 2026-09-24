@@ -260,13 +260,10 @@ func (r *Resp) Decode(decoded []byte) int {
 				frags = append(frags, msg.Answers[i].Body.(*dnsmessage.AAAAResource).AAAA[:])
 			}
 		}
-		if len(frags) == 0 || len(frags) > 255 {
-			return 0
-		}
 		sort.Slice(frags, func(i, j int) bool {
 			return frags[i][0] < frags[j][0]
 		})
-		if len(frags[0]) < 2 || frags[0][1] != byte(len(frags)) {
+		if len(frags) < 1 || len(frags[0]) < 2 || int(frags[0][1]) > len(frags) {
 			return 0
 		}
 		decoded = append(decoded, frags[0][2:]...)
@@ -278,25 +275,7 @@ func (r *Resp) Decode(decoded []byte) int {
 				decoded = append(decoded, frags[i][1:]...)
 			}
 		}
-		if len(decoded) < 2 {
-			return 0
-		}
-		l := int(decoded[0])<<8 | int(decoded[1])
-		copy(decoded, decoded[2:])
-		decoded = decoded[:len(decoded)-2]
-		if l > len(decoded) {
-			return 0
-		}
-		if msg.Questions[0].Type == dnsmessage.TypeA && len(decoded)-l > 2 {
-			return 0
-		}
-		if msg.Questions[0].Type == dnsmessage.TypeCNAME && len(decoded)-l > 0 {
-			return 0
-		}
-		if msg.Questions[0].Type == dnsmessage.TypeAAAA && len(decoded)-l > 14 {
-			return 0
-		}
-		return l
+		return len(decoded)
 	}
 }
 

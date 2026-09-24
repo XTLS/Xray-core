@@ -316,7 +316,7 @@ func (c *xdnsServer) send() {
 		d := data[:0]
 		for i := range ps {
 			l := len(ps[i])
-			if i == len(ps[i])-1 {
+			if i == len(ps)-1 {
 				l |= 0xC000
 			}
 			d = append(d, []byte{byte(l >> 8), byte(l)}...)
