@@ -266,10 +266,6 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 
 	// 7. Dispatch Connection to Xray routing with matched User
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		inbound = new(session.Inbound)
-		ctx = session.ContextWithInbound(ctx, inbound)
-	}
 	inbound.User = user
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
@@ -442,10 +438,6 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 			if !ok {
 				sessCtx, cancel := context.WithCancel(ctx)
 				inbound := session.InboundFromContext(sessCtx)
-				if inbound == nil {
-					inbound = new(session.Inbound)
-					sessCtx = session.ContextWithInbound(sessCtx, inbound)
-				}
 				inbound.User = currentUser
 
 				sessCtx = log.ContextWithAccessMessage(sessCtx, &log.AccessMessage{

@@ -166,10 +166,6 @@ func (i *RelayInbound) processTCP(ctx context.Context, conn net.Conn, dispatcher
 	_ = conn.SetReadDeadline(time.Time{})
 
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		inbound = new(session.Inbound)
-		ctx = session.ContextWithInbound(ctx, inbound)
-	}
 	inbound.User = &protocol.MemoryUser{
 		Email: targetDest.email,
 		Level: targetDest.level,
@@ -271,10 +267,6 @@ func (i *RelayInbound) processUDP(ctx context.Context, conn stat.Connection, dis
 			if !ok {
 				sessCtx, cancel := context.WithCancel(ctx)
 				inbound := session.InboundFromContext(sessCtx)
-				if inbound == nil {
-					inbound = new(session.Inbound)
-					sessCtx = session.ContextWithInbound(sessCtx, inbound)
-				}
 				inbound.User = &protocol.MemoryUser{
 					Email: targetDest.email,
 					Level: targetDest.level,

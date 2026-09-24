@@ -94,11 +94,6 @@ func (w *StreamWriter) WriteChunk(payload []byte) error {
 		return errors.New("payload exceeds MaxPacketSize")
 	}
 
-	totalSize := 2 + AEADTagSize + payloadLen + AEADTagSize
-	if cap(w.buf) < totalSize {
-		w.buf = make([]byte, 0, totalSize)
-	}
-
 	binary.BigEndian.PutUint16(w.lenBuf[:], uint16(payloadLen))
 	w.buf = w.cipher.Seal(w.buf[:0], w.nonce[:], w.lenBuf[:], nil)
 	IncreaseNonce(w.nonce[:])

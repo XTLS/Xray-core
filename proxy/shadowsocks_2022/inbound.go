@@ -85,6 +85,7 @@ func (i *Inbound) Process(ctx context.Context, network net.Network, connection s
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks-2022"
 	inbound.CanSpliceCopy = 3
+	inbound.User = i.user
 
 	if network == net.Network_TCP {
 		return i.processTCP(ctx, connection, dispatcher)
@@ -129,13 +130,6 @@ func (i *Inbound) processTCP(ctx context.Context, conn net.Conn, dispatcher rout
 	if err != nil {
 		return err
 	}
-
-	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		inbound = new(session.Inbound)
-		ctx = session.ContextWithInbound(ctx, inbound)
-	}
-	inbound.User = i.user
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   conn.RemoteAddr(),
@@ -186,13 +180,6 @@ func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatch
 			return true
 		})
 	}()
-
-	inbound := session.InboundFromContext(ctx)
-	if inbound == nil {
-		inbound = new(session.Inbound)
-		ctx = session.ContextWithInbound(ctx, inbound)
-	}
-	inbound.User = i.user
 
 	reader := buf.NewReader(conn)
 	for {

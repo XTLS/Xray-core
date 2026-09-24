@@ -26,8 +26,10 @@ type UDPCodec struct {
 	sessions         *UDPSessionManager
 }
 
-type UDPPacketCodec = UDPCodec
-type UDPServerCodec = UDPCodec
+type (
+	UDPPacketCodec = UDPCodec
+	UDPServerCodec = UDPCodec
+)
 
 func newUDPCodec(method *CipherMethod, psk []byte) (*UDPCodec, error) {
 	c := &UDPCodec{
@@ -145,15 +147,6 @@ func (c *UDPCodec) EncodeClientPacket(dest net.Destination, payload []byte) (*bu
 	outBuf.Write(encryptedHeader[:])
 
 	bodyAead := c.clientBodyCipher
-	if bodyAead == nil {
-		bodyKey := DeriveSessionSubKey(c.psk, rawHeader[:8], c.method.KeySaltLength)
-		var err error
-		bodyAead, err = c.method.NewAEAD(bodyKey)
-		if err != nil {
-			outBuf.Release()
-			return nil, err
-		}
-	}
 
 	var hdr [1 + 8 + 2]byte
 	hdr[0] = HeaderTypeClient
@@ -353,10 +346,6 @@ func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 	return parsePlainUDPPacket(sessionID, packetID, bodyPlain)
 }
 
-func (c *UDPCodec) Sessions() *UDPSessionManager {
-	return c.sessions
-}
-
 func (s *ServerUDPSession) EnsureServerState(method *CipherMethod, headerBlock cipher.Block, chachaCipher cipher.AEAD, psk []byte) error {
 	s.Lock()
 	defer s.Unlock()
@@ -454,23 +443,12 @@ func (s *ServerUDPSession) EncodeServerPacket(method *CipherMethod, clientSessio
 	return res, nil
 }
 
-func EncodeServerPacket(method *CipherMethod, headerBlock cipher.Block, chachaAEAD cipher.AEAD, psk []byte, clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
-	tempSession := &ServerUDPSession{SessionID: clientSessionID}
-	if err := tempSession.EnsureServerState(method, headerBlock, chachaAEAD, psk); err != nil {
+func (c *UDPCodec) EncodeServerPacket(clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
+	sessionItem, _ := c.sessions.GetOrCreate(clientSessionID)
+	if err := sessionItem.EnsureServerState(c.method, c.blockCipher, c.chachaCipher, c.psk); err != nil {
 		return nil, err
 	}
-	return tempSession.EncodeServerPacket(method, clientSessionID, dest, payload)
-}
-
-func (c *UDPCodec) EncodeServerPacket(clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
-	if c.sessions != nil {
-		sessionItem, _ := c.sessions.GetOrCreate(clientSessionID)
-		if err := sessionItem.EnsureServerState(c.method, c.blockCipher, c.chachaCipher, c.psk); err != nil {
-			return nil, err
-		}
-		return sessionItem.EncodeServerPacket(c.method, clientSessionID, dest, payload)
-	}
-	return EncodeServerPacket(c.method, c.blockCipher, c.chachaCipher, c.psk, clientSessionID, dest, payload)
+	return sessionItem.EncodeServerPacket(c.method, clientSessionID, dest, payload)
 }
 
 func (c *UDPCodec) EncodePacket(clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
