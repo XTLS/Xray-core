@@ -732,6 +732,7 @@ type XDNSResolver struct {
 type XDNS struct {
 	Domains   []XDNSDomain   `json:"domains"`
 	Resolvers []XDNSResolver `json:"resolvers"`
+	ExtraPoll int32          `json:"extraPoll"`
 }
 
 func (c *XDNS) Build() (proto.Message, error) {
@@ -763,7 +764,10 @@ func (c *XDNS) Build() (proto.Message, error) {
 		}
 		resolvers = append(resolvers, serial.ToTypedMessage(pm))
 	}
-	return &xdns.Config{Domains: domains, Resolvers: resolvers}, nil
+	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
+		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")
+	}
+	return &xdns.Config{Domains: domains, Resolvers: resolvers, ExtraPoll: c.ExtraPoll}, nil
 }
 
 type XMC struct {

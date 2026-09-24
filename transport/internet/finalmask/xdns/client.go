@@ -37,9 +37,10 @@ type packet struct {
 type xdnsClient struct {
 	dialer *finalmask.Dialer
 
-	clientID ClientID
-	fragID   atomic.Uint32
-	domains  []*Domain
+	clientID  ClientID
+	fragID    atomic.Uint32
+	domains   []*Domain
+	extraPoll int32
 
 	resolvers     []Resolver
 	resolverSends []atomic.Uint32
@@ -59,6 +60,9 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	}
 	if len(c.Resolvers) == 0 {
 		return nil, errors.New("empty resolvers")
+	}
+	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
+		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")
 	}
 	domains := make([]*Domain, 0, len(c.Domains))
 	for i := range c.Domains {
@@ -83,8 +87,9 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	client := &xdnsClient{
 		dialer: dialer,
 
-		clientID: NewClientID(),
-		domains:  domains,
+		clientID:  NewClientID(),
+		domains:   domains,
+		extraPoll: c.ExtraPoll,
 
 		resolvers:     resolvers,
 		resolverSends: make([]atomic.Uint32, len(c.Resolvers)),
@@ -345,6 +350,9 @@ func (c *xdnsClient) send() {
 		}
 
 		send(p)
+		for range c.extraPoll {
+			send(nil)
+		}
 
 		if timeout {
 			delay *= pollDelayMultiplier
