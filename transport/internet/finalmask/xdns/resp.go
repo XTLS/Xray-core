@@ -68,7 +68,7 @@ func NewResp(msg dnsmessage.Message, domain *Domain, edns0 uint16) *Resp {
 		}
 		cap = 16*n - n - 1
 	}
-	if cap < 11+1 {
+	if cap < 2+1 {
 		return nil
 	}
 
