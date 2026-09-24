@@ -90,11 +90,13 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 				if err := cn.WebsocketHandshakeContext(ctx); err != nil {
 					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
+					pconn.Close()
 					return nil, err
 				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
 						errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
+						pconn.Close()
 						return nil, err
 					}
 				}

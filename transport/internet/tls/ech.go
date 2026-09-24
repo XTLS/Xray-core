@@ -212,10 +212,12 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 					if !h2c {
 						u, err := url.Parse(server)
 						if err != nil {
+							conn.Close()
 							return nil, err
 						}
 						conn = utls.UClient(conn, &utls.Config{ServerName: u.Hostname()}, utls.HelloChrome_Auto)
 						if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
+							conn.Close()
 							return nil, err
 						}
 					}

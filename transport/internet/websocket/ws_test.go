@@ -2,7 +2,10 @@ package websocket_test
 
 import (
 	"context"
+	"errors"
+	"os"
 	"runtime"
+	"runtime/debug"
 	"testing"
 	"time"
 
@@ -154,5 +157,48 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {
 		t.Error("end: ", end, " start: ", start)
+	}
+}
+
+func TestDialClosesConnOnUTLSHandshakeFailure(t *testing.T) {
+	defer debug.SetGCPercent(debug.SetGCPercent(-1))
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	common.Must(err)
+	defer l.Close()
+	result := make(chan error, 1)
+	go func() {
+		conn, err := l.Accept()
+		if err != nil {
+			result <- err
+			return
+		}
+		defer conn.Close()
+		b := make([]byte, 4096)
+		conn.Read(b) // ClientHello
+		conn.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n"))
+		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		for {
+			if _, err := conn.Read(b); err != nil {
+				if !errors.Is(err, os.ErrDeadlineExceeded) {
+					err = nil
+				}
+				result <- err
+				return
+			}
+		}
+	}()
+
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName:     "websocket",
+		ProtocolSettings: &Config{Path: "wss"},
+		SecurityType:     "tls",
+		SecuritySettings: &tls.Config{ServerName: "example.com", Fingerprint: "chrome"},
+	}
+	if _, err := Dial(context.Background(), net.DestinationFromAddr(l.Addr()), streamSettings); err == nil {
+		t.Fatal("expected handshake error")
+	}
+	if err := <-result; err != nil {
+		t.Fatal("client did not close the connection:", err)
 	}
 }

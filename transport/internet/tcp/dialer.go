@@ -82,6 +82,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			err = conn.(*tls.Conn).HandshakeContext(ctx)
 		}
 		if err != nil {
+			conn.Close()
 			if isFromMitmVerify {
 				return nil, errors.New("MITM freedom RAW TLS: failed to verify Domain Fronting certificate from " + mitmServerName).Base(err).AtWarning()
 			}
@@ -102,10 +103,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if tcpSettings.HeaderSettings != nil {
 		headerConfig, err := tcpSettings.HeaderSettings.GetInstance()
 		if err != nil {
+			conn.Close()
 			return nil, errors.New("failed to get header settings").Base(err).AtError()
 		}
 		auth, err := internet.CreateConnectionAuthenticator(headerConfig)
 		if err != nil {
+			conn.Close()
 			return nil, errors.New("failed to create header authenticator").Base(err).AtError()
 		}
 		conn = auth.Client(conn)

@@ -132,6 +132,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	uConn.ServerName = utlsConfig.ServerName
 	fingerprint := tls.GetFingerprint(config.Fingerprint)
 	if fingerprint == nil {
+		c.Close()
 		return nil, errors.New("REALITY: failed to get fingerprint").AtError()
 	}
 	uConn.UConn = utls.UClient(c, utlsConfig, *fingerprint)
@@ -151,6 +152,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		}
 		publicKey, err := ecdh.X25519().NewPublicKey(config.PublicKey)
 		if err != nil {
+			c.Close()
 			return nil, errors.New("REALITY: publicKey == nil")
 		}
 		ecdhe := uConn.HandshakeState.State13.KeyShareKeys.Ecdhe
@@ -158,13 +160,16 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 			ecdhe = uConn.HandshakeState.State13.KeyShareKeys.MlkemEcdhe
 		}
 		if ecdhe == nil {
+			c.Close()
 			return nil, errors.New("Current fingerprint ", uConn.ClientHelloID.Client, uConn.ClientHelloID.Version, " does not support TLS 1.3, REALITY handshake cannot establish.")
 		}
 		uConn.AuthKey, _ = ecdhe.ECDH(publicKey)
 		if uConn.AuthKey == nil {
+			c.Close()
 			return nil, errors.New("REALITY: SharedKey == nil")
 		}
 		if _, err := hkdf.New(sha256.New, uConn.AuthKey, hello.Random[:20], []byte("REALITY")).Read(uConn.AuthKey); err != nil {
+			c.Close()
 			return nil, err
 		}
 		aead := crypto.NewAesGcm(uConn.AuthKey)
@@ -175,6 +180,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		copy(hello.Raw[39:], hello.SessionId)
 	}
 	if err := uConn.HandshakeContext(ctx); err != nil {
+		c.Close()
 		return nil, err
 	}
 	if config.Show {
