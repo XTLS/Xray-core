@@ -3,8 +3,11 @@ package connectip
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"net"
+	"net/http"
 	"net/netip"
 	"os"
 	"slices"
@@ -17,9 +20,79 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 func newTestHTTP2Stream() (*http2Stream, *io.PipeWriter) {
 	pr, pw := io.Pipe()
 	return &http2Stream{reader: bufio.NewReader(pr), body: newRequestBody(), rsp: pr, cancel: func() {}}, pw
+}
+
+func TestHTTP2Request(t *testing.T) {
+	requests := make(chan *http.Request, 1)
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requests <- r
+		return &http.Response{StatusCode: http.StatusOK, Body: pr}, nil
+	})
+	req, err := NewRequest(t.Context(), "https://proxy.example:8443/.well-known/masque/ip/*/*/")
+	require.NoError(t, err)
+	req.Header().Set("Authorization", "Bearer token")
+	conn, _, err := NewHTTP2ClientConn(rt).Dial(req)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	r := <-requests
+	require.Equal(t, http.MethodConnect, r.Method)
+	require.Equal(t, []string{requestProtocol}, r.Header[":protocol"])
+	require.Equal(t, "?1", r.Header.Get("Capsule-Protocol"))
+	require.Equal(t, "Bearer token", r.Header.Get("Authorization"))
+	require.Equal(t, "proxy.example:8443", r.Host)
+	require.Equal(t, "https", r.URL.Scheme)
+	require.Equal(t, "/.well-known/masque/ip/*/*/", r.URL.Path)
+	require.NotNil(t, r.Body)
+	require.Empty(t, req.Header().Values(":protocol"))
+	require.Equal(t, maxCapsulePacketSize, conn.MaxPacketSize())
+}
+
+func TestHTTP2DialErrors(t *testing.T) {
+	newReq := func(ctx context.Context) *Request {
+		req, err := NewRequest(ctx, "https://example.org/connect-ip")
+		require.NoError(t, err)
+		return req
+	}
+
+	t.Run("status", func(t *testing.T) {
+		var streamCtx context.Context
+		rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			streamCtx = r.Context()
+			return &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(bytes.NewReader(nil))}, nil
+		})
+		_, rsp, err := NewHTTP2ClientConn(rt).Dial(newReq(t.Context()))
+		require.EqualError(t, err, "connect-ip: server responded with 403")
+		require.Equal(t, http.StatusForbidden, rsp.StatusCode)
+		require.ErrorIs(t, streamCtx.Err(), context.Canceled)
+	})
+
+	t.Run("round trip", func(t *testing.T) {
+		errRoundTrip := errors.New("extended connect not supported by peer")
+		rt := roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errRoundTrip })
+		_, _, err := NewHTTP2ClientConn(rt).Dial(newReq(t.Context()))
+		require.ErrorIs(t, err, errRoundTrip)
+	})
+
+	t.Run("context", func(t *testing.T) {
+		rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		})
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		defer cancel()
+		_, _, err := NewHTTP2ClientConn(rt).Dial(newReq(ctx))
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	})
 }
 
 func TestHTTP2CloseUnblocksWrites(t *testing.T) {
