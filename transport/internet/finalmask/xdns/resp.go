@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	respTTL = 3 * time.Second
+	respTTL = time.Second
+	sendTTL = 4 * time.Second
 )
 
 type Resp struct {
@@ -96,26 +97,9 @@ func (r *Resp) DecRef() {
 		Authoritative: true,
 		RCode:         dnsmessage.RCodeSuccess,
 	}
-	msg.Answers = []dnsmessage.Resource{
-		{
-			Header: dnsmessage.ResourceHeader{
-				Name:  msg.Questions[0].Name,
-				Type:  msg.Questions[0].Type,
-				Class: dnsmessage.ClassINET,
-				TTL:   60,
-			},
-		},
-	}
-	switch msg.Questions[0].Type {
-	case dnsmessage.TypeA:
-		msg.Answers[0].Body = &dnsmessage.AResource{}
-	case dnsmessage.TypeCNAME:
-		msg.Answers[0].Body = &dnsmessage.CNAMEResource{CNAME: dnsmessage.MustNewName(".")}
-	case dnsmessage.TypeTXT:
-		msg.Answers[0].Body = &dnsmessage.TXTResource{}
-	case dnsmessage.TypeAAAA:
-		msg.Answers[0].Body = &dnsmessage.AAAAResource{}
-	}
+	msg.Answers = nil
+	msg.Authorities = nil
+	msg.Additionals = nil
 	r.decref(msg, r.addr)
 }
 
@@ -335,111 +319,27 @@ func (r *Resp) Decode(decoded []byte) int {
 	}
 }
 
-type RespInfo struct {
-	rs       chan *Resp
-	fragID   byte
-	capFrags int
-	closed   bool
-	mu       sync.Mutex
+type SendInfo struct {
+	ch       chan []byte
+	deadline time.Time
 }
 
-func (info *RespInfo) close() bool {
-	info.mu.Lock()
-	defer info.mu.Unlock()
-	if info.closed {
-		return true
-	}
-	if len(info.rs) == 0 {
-		info.closed = true
-		close(info.rs)
-	}
-	return info.closed
-}
-
-func (info *RespInfo) push(r *Resp) {
-	info.mu.Lock()
-	defer info.mu.Unlock()
-	if info.closed {
-		return
-	}
-	select {
-	case info.rs <- r:
-		info.capFrags += r.cap - 11
-	default:
-		resp := <-info.rs
-		info.capFrags -= resp.cap - 11
-		resp.DecRef()
-		info.rs <- r
-		info.capFrags += r.cap - 11
-	}
-	// errors.LogDebug(context.Background(), len(info.rs), " ", info.capFrags, " +", r.cap)
-}
-
-func (info *RespInfo) pop(minAvailable int, lenp int) ([]*Resp, byte) {
-	info.mu.Lock()
-	defer info.mu.Unlock()
-	if info.closed || len(info.rs) < minAvailable || info.capFrags < lenp {
-		return nil, 0
-	}
-	var rs []*Resp
-	size := 0
-	for {
-		r := <-info.rs
-		info.capFrags -= r.cap - 11
-		rs = append(rs, r)
-		size += r.cap - 11
-
-		if len(rs) == 1 && lenp <= r.cap-8 {
-			break
-		}
-		if lenp <= size {
-			break
-		}
-	}
-	fragID := byte(0)
-	if len(rs) > 1 {
-		fragID = info.fragID
-		info.fragID++
-	}
-	return rs, fragID
-}
-
-func (info *RespInfo) flush(now time.Time) {
-	info.mu.Lock()
-	defer info.mu.Unlock()
-	if info.closed {
-		return
-	}
-	for {
-		select {
-		case r := <-info.rs:
-			info.capFrags -= r.cap - 11
-			r.DecRef()
-			if now.Before(r.deadline) {
-				return
-			}
-		default:
-			return
-		}
-	}
-}
-
-type RespManager struct {
-	m  map[ClientID]*RespInfo
+type SendManager struct {
+	m  map[ClientID]*SendInfo
 	ch chan struct{}
-	mu sync.RWMutex
+	mu sync.Mutex
 }
 
-func NewRespManager() *RespManager {
-	m := &RespManager{
-		m:  make(map[ClientID]*RespInfo),
+func NewSendManager() *SendManager {
+	m := &SendManager{
+		m:  make(map[ClientID]*SendInfo),
 		ch: make(chan struct{}),
 	}
 	go m.gc()
 	return m
 }
 
-func (m *RespManager) closed() bool {
+func (m *SendManager) closed() bool {
 	select {
 	case <-m.ch:
 		return true
@@ -448,77 +348,66 @@ func (m *RespManager) closed() bool {
 	}
 }
 
-func (m *RespManager) gc() {
-	ticker := time.NewTicker(respTTL / 2)
+func (m *SendManager) gc() {
+	ticker := time.NewTicker(sendTTL)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-m.ch:
 			return
 		case now := <-ticker.C:
-			m.mu.RLock()
-			for _, info := range m.m {
-				info.flush(now)
-			}
-			m.mu.RUnlock()
-
 			m.mu.Lock()
 			for key, info := range m.m {
-				if info.close() {
+				if now.After(info.deadline) {
+					close(info.ch)
 					delete(m.m, key)
 				}
 			}
 			m.mu.Unlock()
-
-			ticker.Reset(respTTL / 2)
+			ticker.Reset(sendTTL)
 		}
 	}
 }
 
-func (m *RespManager) Push(clientID ClientID, r *Resp) {
-	m.mu.RLock()
-	info := m.m[clientID]
-	if info != nil {
-		info.push(r)
-		m.mu.RUnlock()
-		return
-	}
-	m.mu.RUnlock()
-
+func (m *SendManager) Push(clientID ClientID, p []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.closed() {
-		return
-	}
-	if info != nil {
-		info.push(r)
-		return
-	}
-	info = &RespInfo{
-		rs: make(chan *Resp, 255),
-	}
-	info.push(r)
-	m.m[clientID] = info
-}
-
-func (m *RespManager) Pop(clientID ClientID, minAvailable int, lenp int) ([]*Resp, byte) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
 	info := m.m[clientID]
 	if info == nil {
-		return nil, 0
+		info = &SendInfo{
+			ch:       make(chan []byte, 128),
+			deadline: time.Now().Add(sendTTL),
+		}
+		m.m[clientID] = info
 	}
-	return info.pop(minAvailable, lenp)
+	b := make([]byte, len(p))
+	copy(b, p)
+	select {
+	case info.ch <- b:
+	default:
+	}
 }
 
-func (m *RespManager) Close() {
+func (m *SendManager) Pop(clientID ClientID) chan []byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	info := m.m[clientID]
+	if info == nil {
+		return nil
+	}
+	info.deadline = time.Now().Add(sendTTL)
+	return info.ch
+}
+
+func (m *SendManager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed() {
 		return
 	}
 	close(m.ch)
-	for k := range m.m {
-		delete(m.m, k)
+	for key, info := range m.m {
+		close(info.ch)
+		delete(m.m, key)
 	}
 }

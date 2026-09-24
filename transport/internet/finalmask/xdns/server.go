@@ -22,13 +22,14 @@ type xdnsServer struct {
 
 	domains     []*Domain
 	fragManager *FragManager
-	respManager *RespManager
+	sendManager *SendManager
 
 	readCh  chan packet
-	respCh  chan resp
+	respCh  chan *Resp
+	drCh    chan resp
 	closeCh chan struct{}
 	wg      sync.WaitGroup
-	mu      sync.Mutex
+	mu      sync.RWMutex
 }
 
 func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
@@ -52,10 +53,11 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 
 		domains:     domains,
 		fragManager: NewFragManager(),
-		respManager: NewRespManager(),
+		sendManager: NewSendManager(),
 
 		readCh:  make(chan packet),
-		respCh:  make(chan resp),
+		respCh:  make(chan *Resp, 255),
+		drCh:    make(chan resp),
 		closeCh: make(chan struct{}),
 	}
 	go server.run()
@@ -68,6 +70,13 @@ func (c *xdnsServer) closed() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (c *xdnsServer) decref(msg dnsmessage.Message, addr net.Addr) {
+	select {
+	case c.drCh <- resp{msg: msg, addr: addr}:
+	default:
 	}
 }
 
@@ -121,7 +130,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 			edns0 = 4096
 		}
 	}
-	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " name ", msg.Questions[0].Name.Length, " ", msg.Questions[0].Type)
+	errors.LogDebug(context.Background(), addr, " edns0 ", edns0, " buf ", len(buf), " ", msg.Questions[0].Type)
 
 	var domain *Domain
 	for i := range c.domains {
@@ -139,47 +148,51 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if !domain.HasType(uint16(msg.Questions[0].Type)) {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
-		msg.Header.RCode = dnsmessage.RCodeNameError
+		msg.Header.RCode = dnsmessage.RCodeSuccess
 		c.decref(msg, addr)
 		return
 	}
 
 	var decoded [255]byte
 	n := domain.Decode(&decoded, msg.Questions[0].Name)
-	if n < 11+1 {
+	if n < 9 {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
-		msg.Header.RCode = dnsmessage.RCodeNameError
+		msg.Header.RCode = dnsmessage.RCodeSuccess
 		c.decref(msg, addr)
 		return
 	}
-	if decoded[0]&0x80 == 0x80 || (decoded[0]&0x40 == 0x40 && n < 14+1) || TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x80 == 0x80 && n != 16) {
+	if TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x3F != 3 && decoded[8]&0x3F != 8) || (decoded[8]&0x3F == 3 && n < 9+3+1) || (decoded[8]&0x3F == 8 && n != 9+8) {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
-		msg.Header.RCode = dnsmessage.RCodeNameError
+		msg.Header.RCode = dnsmessage.RCodeSuccess
 		c.decref(msg, addr)
 		return
 	}
 	clientID := ClientIDFromRaw([8]byte(decoded[:8]))
 
-	r := NewResp(msg, domain, addr, edns0, c.SendMsg)
+	r := NewResp(msg, domain, addr, edns0, c.decref)
 	if r == nil {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
-		msg.Header.RCode = dnsmessage.RCodeNameError
+		msg.Header.RCode = dnsmessage.RCodeSuccess
 		c.decref(msg, addr)
 		return
 	}
-	c.respManager.Push(clientID, r)
+	select {
+	case c.respCh <- r:
+	default:
+		r.DecRef()
+	}
 
-	if decoded[8]&0x80 == 0x80 {
+	if decoded[8]&0x3F == 8 {
 		return
 	}
 	p := pool4K.Get().([]byte)
 	p = p[:0]
-	if decoded[0]&0x40 == 0x40 {
+	if decoded[8]&0xC0 == 0xC0 {
 		out := pool4K.Get().([]byte)
-		n := c.fragManager.Feed(out, FragKey{clientID: clientID, fragID: decoded[11]}, decoded[12], decoded[13], decoded[14:n])
+		n := c.fragManager.Feed(out, FragKey{clientID: clientID, fragID: decoded[12]}, decoded[13], decoded[14], decoded[15:n])
 		pool4K.Put(p[:cap(p)])
 		if n > 0 {
 			p = out[:n]
@@ -188,7 +201,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 			return
 		}
 	} else {
-		p = append(p, decoded[11:n]...)
+		p = append(p, decoded[12:n]...)
 	}
 	select {
 	case <-c.closeCh:
@@ -199,53 +212,21 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	}
 }
 
-// func (c *xdnsServer) send(p []byte, addr net.Addr) {
-// 	clientID := ClientIDFromAddr(addr.(*net.UDPAddr))
-// 	resps, fragID := c.respManager.Pop(clientID, c.minAvailable, len(p))
-// 	errors.LogDebug(context.Background(), "pop ", len(p), " ", len(resps))
-
-// 	buf := pool4K.Get().([]byte)
-// 	defer pool4K.Put(buf[:cap(buf)])
-// 	data := pool4K.Get().([]byte)
-// 	defer pool4K.Put(data[:cap(data)])
-
-// 	if len(resps) == 1 {
-// 		copy(data[:], clientID[:])
-// 		copy(data[8:], p)
-// 		data[0] |= TypeMap[uint16(resps[0].msg.Questions[0].Type)]
-// 		_, _ = c.PacketConn.WriteTo(resps[0].Encode(buf, data[:8+len(p)]), resps[0].addr)
-// 		return
-// 	}
-
-// 	if len(resps) > 1 {
-// 		fragN := byte(len(resps))
-// 		for i := range len(resps) {
-// 			copy(data[:], clientID[:])
-// 			size := min(len(p), resps[i].cap-11)
-// 			copy(data[11:], p[:size])
-// 			data[0] |= 0x40 | TypeMap[uint16(resps[i].msg.Questions[0].Type)]
-// 			data[8] = fragID
-// 			data[9] = byte(i)
-// 			data[10] = fragN
-// 			_, _ = c.PacketConn.WriteTo(resps[i].Encode(buf, data[:11+size]), resps[i].addr)
-// 			p = p[size:]
-// 		}
-// 		return
-// 	}
-// }
-
 func (c *xdnsServer) run() {
-	c.wg.Add(1)
-	go c.loop()
-
 	c.wg.Add(1)
 	go c.recv()
 
+	c.wg.Add(1)
+	go c.send()
+
+	c.wg.Add(1)
+	go c.dr()
+
 	c.wg.Wait()
 	close(c.readCh)
-	close(c.respCh)
+	close(c.drCh)
 	c.fragManager.Close()
-	c.respManager.Close()
+	c.sendManager.Close()
 }
 
 func (c *xdnsServer) recv() {
@@ -265,29 +246,27 @@ func (c *xdnsServer) recv() {
 	}
 }
 
-func (c *xdnsServer) decref(msg dnsmessage.Message, addr net.Addr) {
-	select {
-	case c.respCh <- resp{msg: msg, addr: addr}:
-	default:
-	}
+func (c *xdnsServer) send() {
+
 }
 
-func (c *xdnsServer) loop() {
+func (c *xdnsServer) dr() {
 	defer c.wg.Done()
+
+	var buf [512]byte
+
+	sendMsg := func(msg dnsmessage.Message, addr net.Addr) {
+		_, _ = c.PacketConn.WriteTo(common.Must2(msg.AppendPack(buf[:0])), addr)
+	}
 
 	for {
 		select {
 		case <-c.closeCh:
 			return
-		case r := <-c.respCh:
-			c.SendMsg(r.msg, r.addr)
+		case r := <-c.drCh:
+			sendMsg(r.msg, r.addr)
 		}
 	}
-}
-
-func (c *xdnsServer) SendMsg(msg dnsmessage.Message, addr net.Addr) {
-	var buf [512]byte
-	_, _ = c.PacketConn.WriteTo(common.Must2(msg.AppendPack(buf[:0])), addr)
 }
 
 func (c *xdnsServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
@@ -308,7 +287,7 @@ func (c *xdnsServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		errors.LogError(context.Background(), "err size ", len(p))
 		return 0, errors.New("err size")
 	}
-	// c.send(p, addr)
+	c.sendManager.Push(ClientIDFromAddr(addr.(*net.UDPAddr)), p)
 	return len(p), nil
 }
 

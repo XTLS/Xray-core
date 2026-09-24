@@ -89,9 +89,9 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 		resolvers:     resolvers,
 		resolverSends: make([]atomic.Uint32, len(c.Resolvers)),
 
-		poolCh:  make(chan struct{}, pollLimit),
 		readCh:  make(chan packet),
 		sendCh:  make(chan []byte, 16),
+		poolCh:  make(chan struct{}, pollLimit),
 		closeCh: make(chan struct{}),
 	}
 	go client.run()
@@ -107,13 +107,13 @@ func (c *xdnsClient) closed() bool {
 	}
 }
 
-func (c *xdnsClient) read(buf []byte, addr net.Addr) {
+func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 	msg := dnsmessage.Message{}
 	if err := msg.Unpack(buf); err != nil {
-		return
+		return false
 	}
 	if !msg.Header.Response || msg.Header.Truncated || msg.Header.RCode != dnsmessage.RCodeSuccess || len(msg.Questions) != 1 {
-		return
+		return false
 	}
 
 	var domain *Domain
@@ -124,7 +124,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 		}
 	}
 	if domain == nil || !domain.HasType(uint16(msg.Questions[0].Type)) {
-		return
+		return false
 	}
 
 	edns0 := uint16(0)
@@ -164,29 +164,24 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) {
 	}
 	pool4K.Put(p[:cap(p)])
 
-	if len(bs) > 0 {
-		select {
-		case c.poolCh <- struct{}{}:
-		default:
-		}
-	}
 	for i := range bs {
 		select {
 		case <-c.closeCh:
-			return
+			return true
 		case c.readCh <- packet{p: bs[i], addr: addr}:
 		}
 	}
+	return len(bs) > 0
 }
 
 func (c *xdnsClient) run() {
-	c.wg.Add(1)
-	go c.send()
-
 	for i := range len(c.resolvers) {
 		c.wg.Add(1)
 		go c.recv(i)
 	}
+
+	c.wg.Add(1)
+	go c.send()
 
 	c.wg.Wait()
 	close(c.readCh)
@@ -207,8 +202,13 @@ func (c *xdnsClient) recv(i int) {
 			errors.LogErrorInner(context.Background(), err, "recv err ", i)
 			return
 		}
-		c.read(buf[:n], c.resolvers[i].Addr())
-		c.resolverSends[i].Store(0)
+		if c.read(buf[:n], c.resolvers[i].Addr()) {
+			c.resolverSends[i].Store(0)
+			select {
+			case c.poolCh <- struct{}{}:
+			default:
+			}
+		}
 	}
 }
 
