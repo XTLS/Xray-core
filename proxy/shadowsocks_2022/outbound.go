@@ -2,21 +2,20 @@ package shadowsocks_2022
 
 import (
 	"context"
+	"crypto/rand"
+	"io"
 	"time"
 
-	shadowsocks "github.com/sagernet/sing-shadowsocks"
-	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
-	C "github.com/sagernet/sing/common"
-	B "github.com/sagernet/sing/common/buf"
-	"github.com/sagernet/sing/common/bufio"
-	N "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/singbridge"
+	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -28,42 +27,49 @@ func init() {
 }
 
 type Outbound struct {
-	ctx    context.Context
-	server net.Destination
-	method shadowsocks.Method
+	ctx           context.Context
+	server        net.Destination
+	method        *CipherMethod
+	pskList       [][]byte
+	finalPSK      []byte
+	udpCodec      *UDPPacketCodec
+	policyManager policy.Manager
 }
 
 func NewClient(ctx context.Context, config *ClientConfig) (*Outbound, error) {
-	o := &Outbound{
+	method, err := GetCipherMethod(config.Method)
+	if err != nil {
+		return nil, errors.New("unsupported method: ", config.Method).Base(err)
+	}
+
+	pskList, err := ParsePSKList(config.Key, method.KeySaltLength)
+	if err != nil {
+		return nil, errors.New("invalid key: ", config.Key).Base(err)
+	}
+
+	finalPSK := pskList[len(pskList)-1]
+	udpCodec, err := NewUDPPacketCodec(method, finalPSK)
+	if err != nil {
+		return nil, errors.New("failed to create udp packet codec").Base(err)
+	}
+
+	v := core.MustFromContext(ctx)
+	return &Outbound{
 		ctx: ctx,
 		server: net.Destination{
 			Address: config.Address.AsAddress(),
 			Port:    net.Port(config.Port),
 			Network: net.Network_TCP,
 		},
-	}
-	if C.Contains(shadowaead_2022.List, config.Method) {
-		if config.Key == "" {
-			return nil, errors.New("missing psk")
-		}
-		method, err := shadowaead_2022.NewWithPassword(config.Method, config.Key, nil)
-		if err != nil {
-			return nil, errors.New("create method").Base(err)
-		}
-		o.method = method
-	} else {
-		return nil, errors.New("unknown method ", config.Method)
-	}
-	return o, nil
+		method:        method,
+		pskList:       pskList,
+		finalPSK:      finalPSK,
+		udpCodec:      udpCodec,
+		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+	}, nil
 }
 
 func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	var inboundConn net.Conn
-	inbound := session.InboundFromContext(ctx)
-	if inbound != nil {
-		inboundConn = inbound.Conn
-	}
-
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
@@ -78,70 +84,123 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 
 	serverDestination := o.server
 	serverDestination.Network = network
-	connection, err := dialer.Dial(ctx, serverDestination)
-	if err != nil {
-		return errors.New("failed to connect to server").Base(err)
-	}
-	defer connection.Close()
 
+	var conn net.Conn
+	if err := retry.ExponentialBackoff(5, 100).On(func() error {
+		rawConn, err := dialer.Dial(ctx, serverDestination)
+		if err != nil {
+			return err
+		}
+		conn = rawConn
+		return nil
+	}); err != nil {
+		return errors.New("failed to find an available destination").Base(err).AtWarning()
+	}
+	defer conn.Close()
+
+	var newCtx context.Context
+	var newCancel context.CancelFunc
 	if session.TimeoutOnlyFromContext(ctx) {
-		ctx, _ = context.WithCancel(context.Background())
+		newCtx, newCancel = context.WithCancel(context.Background())
+	}
+
+	sessionPolicy := o.policyManager.ForLevel(0)
+	ctx, cancel := context.WithCancel(ctx)
+	timer := signal.CancelAfterInactivity(ctx, func() {
+		cancel()
+		if newCancel != nil {
+			newCancel()
+		}
+	}, sessionPolicy.Timeouts.ConnectionIdle)
+
+	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+
+	if newCtx != nil {
+		ctx = newCtx
 	}
 
 	if network == net.Network_TCP {
-		serverConn := o.method.DialEarlyConn(connection, singbridge.ToSocksaddr(destination))
-		var handshake bool
-		if timeoutReader, isTimeoutReader := link.Reader.(buf.TimeoutReader); isTimeoutReader {
-			mb, err := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 100)
-			if err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-				return errors.New("read payload").Base(err)
-			}
-			payload := B.New()
-			for {
-				payload.Reset()
-				nb, n := buf.SplitBytes(mb, payload.FreeBytes())
-				if n > 0 {
-					payload.Truncate(n)
-					_, err = serverConn.Write(payload.Bytes())
-					if err != nil {
-						payload.Release()
-						return errors.New("write payload").Base(err)
-					}
-					handshake = true
-				}
-				if nb.IsEmpty() {
-					break
-				}
-				mb = nb
-			}
-			payload.Release()
-		}
-		if !handshake {
-			_, err = serverConn.Write(nil)
-			if err != nil {
-				return errors.New("client handshake").Base(err)
-			}
-		}
-		return singbridge.CopyConn(ctx, inboundConn, link, serverConn)
-	} else {
-		var packetConn N.PacketConn
-		if pc, isPacketConn := inboundConn.(N.PacketConn); isPacketConn {
-			packetConn = pc
-		} else if nc, isNetPacket := inboundConn.(net.PacketConn); isNetPacket {
-			packetConn = bufio.NewPacketConn(nc)
-		} else {
-			packetConn = &singbridge.PacketConnWrapper{
-				Reader: link.Reader,
-				Writer: link.Writer,
-				Conn:   inboundConn,
-				Dest:   destination,
-				T: signal.CancelAfterInactivity(ctx, func() {
-					common.Interrupt(link.Reader)
-				}, 300*time.Second),
-			}
+		var clientSalt [32]byte
+		clientSaltSlice := clientSalt[:o.method.KeySaltLength]
+		if _, err := io.ReadFull(rand.Reader, clientSaltSlice); err != nil {
+			return errors.New("failed to generate client salt").Base(err)
 		}
 
-		serverConn := o.method.DialPacketConn(connection)
-		return singbridge.ReturnError(bufio.CopyPacketConn(ctx, packetConn, serverConn))
+		requestDone := func() error {
+			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
+			bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+			bodyWriter, err := WriteTCPRequest(bufferedWriter, o.method, o.pskList, destination, clientSaltSlice, nil)
+			if err != nil {
+				return errors.New("failed to write request").Base(err)
+			}
+
+			if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
+				return errors.New("failed to write A request payload").Base(err).AtWarning()
+			}
+
+			if err := bufferedWriter.SetBuffered(false); err != nil {
+				return err
+			}
+
+			return buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer))
+		}
+
+		responseDone := func() error {
+			defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
+
+			responseReader, err := ReadTCPResponse(conn, o.method, o.finalPSK, clientSaltSlice)
+			if err != nil {
+				return err
+			}
+
+			return buf.Copy(responseReader, link.Writer, buf.UpdateActivity(timer))
+		}
+
+		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
+		if err := task.Run(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
+			return errors.New("connection ends").Base(err)
+		}
+
+		return nil
 	}
+
+	if network == net.Network_UDP {
+		requestDone := func() error {
+			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
+
+			writer := &UDPWriter{
+				Writer:      conn,
+				Destination: destination,
+				Codec:       o.udpCodec,
+			}
+
+			if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
+				return errors.New("failed to transport all UDP request").Base(err)
+			}
+			return nil
+		}
+
+		responseDone := func() error {
+			defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
+
+			reader := &UDPReader{
+				Reader: conn,
+				Codec:  o.udpCodec,
+			}
+
+			if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {
+				return errors.New("failed to transport all UDP response").Base(err)
+			}
+			return nil
+		}
+
+		responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
+		if err := task.Run(ctx, requestDone, responseDoneAndCloseWriter); err != nil {
+			return errors.New("connection ends").Base(err)
+		}
+
+		return nil
+	}
+
+	return errors.New("unsupported network: ", network)
 }

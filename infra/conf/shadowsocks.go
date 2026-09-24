@@ -3,8 +3,6 @@ package conf
 import (
 	"strings"
 
-	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
-	C "github.com/sagernet/sing/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
@@ -55,7 +53,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 		v.Users = v.Clients
 	}
 
-	if C.Contains(shadowaead_2022.List, v.Cipher) {
+	if shadowsocks_2022.IsSupportedMethod(v.Cipher) {
 		return buildShadowsocks2022(v)
 	}
 
@@ -216,7 +214,7 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 
 	if len(v.Servers) == 1 {
 		server := v.Servers[0]
-		if C.Contains(shadowaead_2022.List, server.Cipher) {
+		if shadowsocks_2022.IsSupportedMethod(server.Cipher) {
 			if server.Address == nil {
 				return nil, errors.New("Shadowsocks server address is not set.")
 			}
@@ -238,7 +236,7 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 
 	config := new(shadowsocks.ClientConfig)
 	for _, server := range v.Servers {
-		if C.Contains(shadowaead_2022.List, server.Cipher) {
+		if shadowsocks_2022.IsSupportedMethod(server.Cipher) {
 			return nil, errors.New("Shadowsocks 2022 accept no multi servers")
 		}
 		if server.Address == nil {
