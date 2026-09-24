@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package xray.proxy.masque;
+option csharp_namespace = "Xray.Proxy.Masque";
+option go_package = "github.com/xtls/xray-core/proxy/masque";
+option java_package = "com.xray.proxy.masque";
+option java_multiple_files = true;
+
+import "common/protocol/server_spec.proto";
+
+message ClientConfig {
+  xray.common.protocol.ServerEndpoint server = 1;
+  repeated string remote_dns = 2;
+}
