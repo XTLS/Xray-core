@@ -315,9 +315,6 @@ func (c *xdnsServer) send() {
 				break
 			}
 			ps = append(ps, p)
-			if left < 2+len(ps[0]) {
-				break
-			}
 		}
 		timer.Stop()
 

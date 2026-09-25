@@ -53,7 +53,7 @@ func NewResp(msg dnsmessage.Message, domain *Domain, edns0 uint16) *Resp {
 		cap = domain.cap*n - n - 1
 	case dnsmessage.TypeTXT:
 		left -= 2 + 2 + 2 + 4 + 2
-		single := 1 + 255
+		single := 255
 		n := left / single
 		m := left % single
 		cap = 255*n - n
