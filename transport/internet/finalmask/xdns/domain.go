@@ -3,6 +3,7 @@ package xdns
 import (
 	"encoding/base32"
 	"errors"
+	"fmt"
 	"strings"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -141,6 +142,10 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 		cap:    cap,
 		lenMax: lenMax,
 	}, nil
+}
+
+func (d *Domain) Show() string {
+	return fmt.Sprint(d.name, d.cap)
 }
 
 func (d *Domain) IsDomain(name dnsmessage.Name) bool {

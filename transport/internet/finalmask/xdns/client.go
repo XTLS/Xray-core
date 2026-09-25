@@ -319,7 +319,7 @@ func (c *xdnsClient) send() {
 			return
 		}
 
-		errors.LogError(context.Background(), "send err ", len(p))
+		errors.LogError(context.Background(), "err size ", len(p))
 	}
 
 	ticker := time.NewTicker(initPollDelay)

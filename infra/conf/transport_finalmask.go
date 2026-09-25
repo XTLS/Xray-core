@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -745,6 +746,15 @@ func (c *XDNS) Build() (proto.Message, error) {
 		if c.Domains[i].LabelLimit == 0 {
 			c.Domains[i].LabelLimit = 63
 		}
+		types := make([]uint16, 0, len(c.Domains[i].Types))
+		for j := range c.Domains[i].Types {
+			types = append(types, uint16(c.Domains[i].Types[j]))
+		}
+		domain, err := xdns.NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
+		if err != nil {
+			return nil, err
+		}
+		errors.LogInfo(context.Background(), domain.Show())
 		domains = append(domains, &xdns.DomainProto{
 			Name:       c.Domains[i].Name,
 			LenLimit:   c.Domains[i].LenLimit,
