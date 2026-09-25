@@ -115,6 +115,15 @@ func NewReader(reader io.Reader) Reader {
 		return mr
 	}
 
+	if statConn, ok := reader.(*stat.CounterConnection); ok {
+		if mr, ok := statConn.Connection.(Reader); ok {
+			if statConn.ReadCounter == nil {
+				return mr
+			}
+			return &counterReader{Reader: mr, counter: statConn.ReadCounter}
+		}
+	}
+
 	if isPacketReader(reader) {
 		return &PacketReader{
 			Reader: reader,
@@ -174,8 +183,17 @@ func NewWriter(writer io.Writer) Writer {
 	}
 
 	iConn := writer
+	var counter stats.Counter
 	if statConn, ok := writer.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
+		counter = statConn.WriteCounter
+	}
+
+	if mw, ok := iConn.(Writer); ok {
+		if counter == nil {
+			return mw
+		}
+		return &counterWriter{Writer: mw, counter: counter}
 	}
 
 	if isPacketWriter(iConn) {
@@ -184,13 +202,29 @@ func NewWriter(writer io.Writer) Writer {
 		}
 	}
 
-	var counter stats.Counter
-
-	if statConn, ok := writer.(*stat.CounterConnection); ok {
-		counter = statConn.WriteCounter
-	}
 	return &BufferToBytesWriter{
 		Writer:  iConn,
 		counter: counter,
 	}
+}
+
+type counterReader struct {
+	Reader
+	counter stats.Counter
+}
+
+func (r *counterReader) ReadMultiBuffer() (MultiBuffer, error) {
+	mb, err := r.Reader.ReadMultiBuffer()
+	r.counter.Add(int64(mb.Len()))
+	return mb, err
+}
+
+type counterWriter struct {
+	Writer
+	counter stats.Counter
+}
+
+func (w *counterWriter) WriteMultiBuffer(mb MultiBuffer) error {
+	w.counter.Add(int64(mb.Len()))
+	return w.Writer.WriteMultiBuffer(mb)
 }
