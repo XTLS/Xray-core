@@ -429,7 +429,7 @@ func Test_maxUpload(t *testing.T) {
 		},
 	}
 
-	uploadReceived := make([]byte, 10001)
+	uploadReceived := make([]byte, 20002)
 	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func(c stat.Connection) {
 			defer c.Close()
@@ -445,11 +445,12 @@ func Test_maxUpload(t *testing.T) {
 	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
 	common.Must(err)
 
-	// send a slightly too large upload
-	upload := make([]byte, 10001)
+	// send a slightly too large upload, once with Write and once as a single Buffer
+	upload := make([]byte, 20002)
 	rand.Read(upload)
-	_, err = conn.Write(upload)
+	_, err = conn.Write(upload[:10001])
 	common.Must(err)
+	common.Must(buf.NewWriter(conn).WriteMultiBuffer(buf.MultiBuffer{buf.NewExisted(upload[10001:])}))
 
 	var b [10240]byte
 	n, _ := io.ReadFull(conn, b[:])
@@ -464,4 +465,57 @@ func Test_maxUpload(t *testing.T) {
 	}
 
 	common.Must(listen.Close())
+}
+
+func Test_ListenXHAndDial_MultiBuffer(t *testing.T) {
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+	for _, mode := range []string{"stream-one", "stream-up", "packet-up"} {
+		t.Run(mode, func(t *testing.T) {
+			listenPort := tcp.PickPort()
+			streamSettings := &internet.MemoryStreamConfig{
+				ProtocolName:     "splithttp",
+				ProtocolSettings: &Config{Path: "shs", Mode: mode},
+				SecurityType:     "tls",
+				SecuritySettings: &tls.Config{
+					Certificate:          []*tls.Certificate{tls.ParseCertificate(ct)},
+					PinnedPeerCertSha256: [][]byte{ctHash[:]},
+				},
+			}
+			listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+				go func() {
+					defer conn.Close()
+					buf.Copy(buf.NewReader(conn), buf.NewWriter(conn))
+				}()
+			})
+			common.Must(err)
+			defer listen.Close()
+
+			conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+			common.Must(err)
+			defer conn.Close()
+
+			sizes := []int{8192, 1, 5000, 8191, 3333, 8192, 777} // 33686 bytes per MultiBuffer
+			data := make([]byte, 3*33686)
+			rand.Read(data)
+			go func() {
+				w := buf.NewWriter(conn)
+				for p := data; len(p) > 0; {
+					var mb buf.MultiBuffer
+					for _, n := range sizes {
+						mb = append(mb, buf.New())
+						common.Must2(mb[len(mb)-1].Write(p[:n]))
+						p = p[n:]
+					}
+					common.Must(w.WriteMultiBuffer(mb))
+				}
+			}()
+
+			got := make([]byte, len(data))
+			_, err = io.ReadFull(&buf.BufferedReader{Reader: buf.NewReader(conn)}, got)
+			common.Must(err)
+			if !bytes.Equal(got, data) {
+				t.Error("echo does not match")
+			}
+		})
+	}
 }
