@@ -3,6 +3,7 @@ package strmatcher
 import (
 	"errors"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -73,7 +74,43 @@ func (m SubstrMatcher) Match(s string) bool {
 
 // RegexMatcher is an implementation of Matcher.
 type RegexMatcher struct {
-	pattern *regexp.Regexp
+	pattern  *regexp.Regexp
+	literals []string // every match contains all of them, longest first
+}
+
+func newRegexMatcher(pattern string) (Matcher, error) {
+	regex, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	m := &RegexMatcher{pattern: regex}
+	if re, err := syntax.Parse(pattern, syntax.Perl); err == nil { // same flags as regexp.Compile
+		m.literals = requiredLiterals(re, nil)
+		slices.SortStableFunc(m.literals, func(a, b string) int { return len(b) - len(a) })
+	}
+	return m, nil
+}
+
+// requiredLiterals appends to dst the case-sensitive strings that every match of re contains.
+func requiredLiterals(re *syntax.Regexp, dst []string) []string {
+	switch re.Op {
+	case syntax.OpLiteral:
+		// regexp matches U+FFFD against invalid UTF-8 bytes, strings.Contains does not
+		if re.Flags&syntax.FoldCase == 0 && !slices.Contains(re.Rune, utf8.RuneError) {
+			dst = append(dst, string(re.Rune))
+		}
+	case syntax.OpCapture, syntax.OpPlus:
+		dst = requiredLiterals(re.Sub[0], dst)
+	case syntax.OpRepeat:
+		if re.Min > 0 {
+			dst = requiredLiterals(re.Sub[0], dst)
+		}
+	case syntax.OpConcat:
+		for _, sub := range re.Sub {
+			dst = requiredLiterals(sub, dst)
+		}
+	}
+	return dst
 }
 
 func (*RegexMatcher) Type() Type {
@@ -89,6 +126,11 @@ func (m *RegexMatcher) String() string {
 }
 
 func (m *RegexMatcher) Match(s string) bool {
+	for _, l := range m.literals {
+		if !strings.Contains(s, l) {
+			return false
+		}
+	}
 	return m.pattern.MatchString(s)
 }
 
@@ -102,11 +144,7 @@ func (t Type) New(pattern string) (Matcher, error) {
 	case Domain:
 		return DomainMatcher(pattern), nil
 	case Regex: // 1. regex matching is case-sensitive
-		regex, err := regexp.Compile(pattern)
-		if err != nil {
-			return nil, err
-		}
-		return &RegexMatcher{pattern: regex}, nil
+		return newRegexMatcher(pattern)
 	default:
 		return nil, errors.New("unknown matcher type")
 	}
@@ -135,11 +173,7 @@ func (t Type) NewDomainPattern(pattern string) (Matcher, error) {
 		}
 		return DomainMatcher(pattern), nil
 	case Regex: // Regex's charset not in LDH subset
-		regex, err := regexp.Compile(pattern)
-		if err != nil {
-			return nil, err
-		}
-		return &RegexMatcher{pattern: regex}, nil
+		return newRegexMatcher(pattern)
 	default:
 		return nil, errors.New("unknown matcher type")
 	}
