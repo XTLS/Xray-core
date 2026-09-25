@@ -2,6 +2,8 @@ package conf_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -120,5 +122,53 @@ func TestDNSConfigParsing(t *testing.T) {
 		); diff != "" {
 			t.Fatalf("Failed in test case:\n%s\nDiff (-want +got):\n%s", testCase.Input, diff)
 		}
+	}
+}
+
+func TestDNSScriptConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("xray.location.confdir", dir)
+	path := filepath.Join(dir, "lookup.lua")
+	if err := os.WriteFile(path, []byte("function handleDNSQuery(q) end"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name      string
+		script    string
+		wantError bool
+	}{
+		{"relative", "lookup.lua", false},
+		{"absolute", path, false},
+		{"missing", "missing.lua", true},
+		{"directory", dir, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			built, err := (&DNSConfig{Script: tc.script}).Build()
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("Build accepted an invalid script path")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if built.Script != path {
+				t.Fatalf("script path = %q, want %q", built.Script, path)
+			}
+		})
+	}
+
+	var parsed DNSConfig
+	if err := json.Unmarshal([]byte(`{"servers":[{"id":"primary","address":"1.1.1.1"}]}`), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	built, err := parsed.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(built.NameServer) != 1 || built.NameServer[0].Id != "primary" {
+		t.Fatalf("nameserver IDs = %v, want primary", built.NameServer)
 	}
 }

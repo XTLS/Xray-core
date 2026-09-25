@@ -40,3 +40,22 @@ func TestLuaDomainMatcherUsesNativeMatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLuaMatchersRejectInvalidRules(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		script string
+	}{
+		{"IP rule", `require("xray.geodata").ipMatcher({"not-an-ip"})`},
+		{"non-string domain rule", `require("xray.geodata").domainMatcher({true})`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+			RegisterLua(L)
+			if err := L.DoString(tc.script); err == nil {
+				t.Fatal("invalid geodata rule was accepted")
+			}
+		})
+	}
+}
