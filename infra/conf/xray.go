@@ -52,6 +52,7 @@ var (
 		"masque":      func() interface{} { return new(MasqueClientConfig) },
 		"dns":         func() interface{} { return new(DNSOutboundConfig) },
 		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
+		"plugin":      func() interface{} { return new(PluginOutboundConfig) },
 	}, "protocol", "settings")
 )
 
