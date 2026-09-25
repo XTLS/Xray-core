@@ -87,7 +87,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 			h.senderSettings = s
 			mss, err := internet.ToMemoryStreamConfig(s.StreamSettings)
 			if err != nil {
-				return nil, errors.New("failed to parse stream settings").Base(err).AtWarning()
+				return nil, errors.New("failed to parse stream settings").Base(err)
 			}
 			h.streamSettings = mss
 		default:
@@ -217,7 +217,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		if ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 {
 			switch h.udp443 {
 			case "reject":
-				test(errors.New("XUDP rejected UDP/443 traffic").AtInfo())
+				test(errors.New("XUDP rejected UDP/443 traffic"))
 				return
 			case "skip":
 				goto out

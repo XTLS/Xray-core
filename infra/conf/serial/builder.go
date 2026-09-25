@@ -30,7 +30,7 @@ func MergeConfigFromFiles(files []*core.ConfigSource) (string, error) {
 	if j, ok := creflect.MarshalToJson(c, true); ok {
 		return j, nil
 	}
-	return "", errors.New("marshal to json failed.").AtError()
+	return "", errors.New("marshal to json failed.")
 }
 
 func mergeConfigs(files []*core.ConfigSource) (*conf.Config, error) {

@@ -69,7 +69,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return nil
 	})
 	if err != nil {
-		return errors.New("failed to find an available destination").AtWarning().Base(err)
+		return errors.New("failed to find an available destination").Base(err)
 	}
 	errors.LogInfo(ctx, "tunneling request to ", destination, " via ", server.Destination.NetAddr())
 
@@ -116,21 +116,21 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 		// write some request payload to buffer
 		if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-			return errors.New("failed to write A request payload").Base(err).AtWarning()
+			return errors.New("failed to write A request payload").Base(err)
 		}
 
 		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
 		if err = bufferWriter.SetBuffered(false); err != nil {
-			return errors.New("failed to flush payload").Base(err).AtWarning()
+			return errors.New("failed to flush payload").Base(err)
 		}
 
 		// Send header if not sent yet
 		if _, err = connWriter.Write([]byte{}); err != nil {
-			return err.(*errors.Error).AtWarning()
+			return err
 		}
 
 		if err = buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to transfer request payload").Base(err).AtInfo()
+			return errors.New("failed to transfer request payload").Base(err)
 		}
 
 		return nil

@@ -105,7 +105,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 	udpRequest, err := ClientHandshake(request, conn, conn)
 	if err != nil {
-		return errors.New("failed to establish connection to server").AtWarning().Base(err)
+		return errors.New("failed to establish connection to server").Base(err)
 	}
 	if udpRequest != nil {
 		if udpRequest.Address == net.AnyIP || udpRequest.Address == net.AnyIPv6 {

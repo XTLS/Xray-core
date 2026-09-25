@@ -39,7 +39,7 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 	root := x509.NewCertPool()
 	for _, cert := range c.Certificate {
 		if !root.AppendCertsFromPEM(cert.Certificate) {
-			return nil, errors.New("failed to append cert").AtWarning()
+			return nil, errors.New("failed to append cert")
 		}
 	}
 	return root, nil
