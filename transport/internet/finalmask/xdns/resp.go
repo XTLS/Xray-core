@@ -385,6 +385,7 @@ func (m *SendManager) Close() {
 	}
 	close(m.ch)
 	for key, info := range m.m {
+		close(info.stash)
 		close(info.ch)
 		delete(m.m, key)
 	}
