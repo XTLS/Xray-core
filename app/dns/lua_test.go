@@ -139,3 +139,61 @@ func TestCallLuaHookNormalizesDomain(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+type benchmarkLuaNameServer struct {
+	ips []net.IP
+}
+
+func (*benchmarkLuaNameServer) Name() string         { return "benchmark" }
+func (*benchmarkLuaNameServer) IsDisableCache() bool { return true }
+func (s *benchmarkLuaNameServer) QueryIP(context.Context, string, featureDNS.IPOption) ([]net.IP, uint32, error) {
+	return s.ips, 60, nil
+}
+
+// BenchmarkLuaDNSHookCall isolates a preloaded Lua hook and its server:query bridge.
+// The direct case measures the same DNS client without Lua.
+func BenchmarkLuaDNSHookCall(b *testing.B) {
+	option := featureDNS.IPOption{IPv4Enable: true}
+	ip := net.ParseIP("127.0.0.1")
+	upstream := &benchmarkLuaNameServer{ips: []net.IP{ip}}
+	client := &Client{server: upstream, ipOption: &option, timeoutMs: time.Second}
+	server := &DNS{clients: []*Client{client}}
+	L := lua.NewState()
+	defer L.Close()
+	server.RegisterLua(L)
+	if err := L.DoString(`
+local server = require("xray.dns").servers[1]
+function handleDNSQuery(q)
+    return server:query(q)
+end
+`); err != nil {
+		b.Fatal(err)
+	}
+
+	ctx := context.Background()
+	for _, bench := range []struct {
+		name  string
+		query func() ([]net.IP, uint32, error)
+	}{
+		{"direct", func() ([]net.IP, uint32, error) { return client.QueryIP(ctx, "example.com", option) }},
+		{"lua_hook", func() ([]net.IP, uint32, error) { return server.CallLuaHook(L, ctx, "example.com", option) }},
+	} {
+		b.Run(bench.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			var ips []net.IP
+			var ttl uint32
+			var err error
+			for i := 0; i < b.N; i++ {
+				ips, ttl, err = bench.query()
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+			b.StopTimer()
+			if ttl != 60 || len(ips) != 1 || !ips[0].Equal(ip) {
+				b.Fatalf("query() = %v, TTL %d; want %v, TTL 60", ips, ttl, ip)
+			}
+		})
+	}
+}

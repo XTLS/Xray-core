@@ -46,8 +46,8 @@ func (s *DNS) RegisterLua(L *lua.LState) {
 				} else {
 					ips, ttl, err = client.QueryIP(ctx, string(domain), option)
 				}
-				result := L.NewTable()
-				addresses := L.NewTable()
+				result := L.CreateTable(0, 3)
+				addresses := L.CreateTable(len(ips), 0)
 				for j, ip := range ips {
 					address := L.NewUserData()
 					address.Value = ip
@@ -76,7 +76,7 @@ func (s *DNS) RegisterLua(L *lua.LState) {
 // must already have passed DNS normalization, hosts, and address-family handling.
 // The caller serializes access to its state; ctx cancels Lua execution and upstream calls.
 func (s *DNS) CallLuaHook(L *lua.LState, ctx context.Context, domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
-	q := L.NewTable()
+	q := L.CreateTable(0, 4)
 	q.RawSetString("domain", lua.LString(strings.ToLower(domain)))
 	q.RawSetString("ipv4", lua.LBool(option.IPv4Enable))
 	q.RawSetString("ipv6", lua.LBool(option.IPv6Enable))
