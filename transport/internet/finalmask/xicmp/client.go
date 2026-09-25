@@ -310,13 +310,6 @@ func (c *xicmpConnClient) Close() error {
 	_ = c.icmp4.Close()
 	_ = c.icmp6.Close()
 	c.wg.Wait()
-	select {
-	case p := <-c.readCh:
-		if p.p != nil {
-			pool.Put(p.p)
-		}
-	default:
-	}
 	close(c.readCh)
 	return nil
 }
