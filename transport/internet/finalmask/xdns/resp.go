@@ -280,6 +280,7 @@ func (r *Resp) Decode(decoded []byte) int {
 }
 
 type SendInfo struct {
+	stash    chan []byte
 	ch       chan []byte
 	deadline time.Time
 }
@@ -319,6 +320,7 @@ func (m *SendManager) gc() {
 			m.mu.Lock()
 			for key, info := range m.m {
 				if now.After(info.deadline) {
+					close(info.stash)
 					close(info.ch)
 					delete(m.m, key)
 				}
@@ -335,6 +337,7 @@ func (m *SendManager) Push(clientID ClientID, p []byte) {
 	info := m.m[clientID]
 	if info == nil {
 		info = &SendInfo{
+			stash:    make(chan []byte, 1),
 			ch:       make(chan []byte, 128),
 			deadline: time.Now().Add(sendTTL),
 		}
@@ -348,18 +351,33 @@ func (m *SendManager) Push(clientID ClientID, p []byte) {
 	}
 }
 
-func (m *SendManager) Pop(clientID ClientID) chan []byte {
+func (m *SendManager) Stash(clientID ClientID, p []byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	info := m.m[clientID]
+	if info == nil {
+		return
+	}
+	info.deadline = time.Now().Add(sendTTL)
+	select {
+	case info.ch <- p:
+	default:
+	}
+}
+
+func (m *SendManager) Pop(clientID ClientID) (chan []byte, chan []byte) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	info := m.m[clientID]
 	if info == nil {
 		info = &SendInfo{
-			ch: make(chan []byte, 128),
+			stash: make(chan []byte, 1),
+			ch:    make(chan []byte, 128),
 		}
 		m.m[clientID] = info
 	}
 	info.deadline = time.Now().Add(sendTTL)
-	return info.ch
+	return info.ch, info.stash
 }
 
 func (m *SendManager) Close() {

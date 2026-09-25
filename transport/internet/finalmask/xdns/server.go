@@ -280,19 +280,25 @@ func (c *xdnsServer) send() {
 			}
 		}
 
-		ch := c.sendManager.Pop(rec.clientID)
+		ch, stash := c.sendManager.Pop(rec.clientID)
 		left := rec.resp.cap
 		timer.Reset(maxResponseDelay)
 		var ps [][]byte
 		for {
 			var p []byte
 			select {
-			case p = <-ch:
+			case p = <-stash:
 			default:
 				select {
+				case p = <-stash:
 				case p = <-ch:
-				case <-timer.C:
-				case nextRec = <-c.recCh:
+				default:
+					select {
+					case p = <-stash:
+					case p = <-ch:
+					case <-timer.C:
+					case nextRec = <-c.recCh:
+					}
 				}
 			}
 			if len(p) == 0 {
@@ -303,7 +309,9 @@ func (c *xdnsServer) send() {
 			if left < 0 {
 				if len(ps) == 0 {
 					errors.LogError(context.Background(), "err size ", len(p))
+					break
 				}
+				c.sendManager.Stash(rec.clientID, p)
 				break
 			}
 			ps = append(ps, p)
