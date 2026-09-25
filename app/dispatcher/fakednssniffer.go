@@ -32,6 +32,9 @@ func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error)
 		if ob.Target.Network == net.Network_TCP || ob.Target.Network == net.Network_UDP {
 			domainFromFakeDNS := fakeDNSEngine.GetDomainFromFakeDNS(ob.Target.Address)
 			if domainFromFakeDNS != "" {
+				if content := session.ContentFromContext(ctx); content != nil {
+					content.SetAttribute("fakedns", "true")
+				}
 				errors.LogInfo(ctx, "fake dns got domain: ", domainFromFakeDNS, " for ip: ", ob.Target.Address.String())
 				return &fakeDNSSniffResult{domainName: domainFromFakeDNS}, nil
 			}
