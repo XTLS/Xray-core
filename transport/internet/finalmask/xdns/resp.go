@@ -68,9 +68,6 @@ func NewResp(msg dnsmessage.Message, domain *Domain, edns0 uint16) *Resp {
 		}
 		cap = 16*n - n - 1
 	}
-	if cap < 2+1 {
-		return nil
-	}
 
 	return &Resp{
 		msg:    msg,
@@ -360,7 +357,7 @@ func (m *SendManager) Stash(clientID ClientID, p []byte) {
 	}
 	info.deadline = time.Now().Add(sendTTL)
 	select {
-	case info.ch <- p:
+	case info.stash <- p:
 	default:
 	}
 }
