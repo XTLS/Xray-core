@@ -61,7 +61,11 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	if body != nil {
 		method = c.transportConfig.GetNormalizedUplinkHTTPMethod() // stream-up/one
 	}
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	requestCtx := context.WithoutCancel(ctx)
+	if c.httpVersion == "2" {
+		requestCtx = withHTTP2DialContext(requestCtx, ctx)
+	}
+	req, err := http.NewRequestWithContext(requestCtx, method, url, body)
 	if err != nil {
 		errors.LogInfoInner(ctx, err, "failed to create HTTP request for "+url)
 		return nil, nil, nil, err
@@ -100,7 +104,11 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, nil)
+	requestCtx := context.WithoutCancel(ctx)
+	if c.httpVersion == "2" {
+		requestCtx = withHTTP2DialContext(requestCtx, ctx)
+	}
+	req, err := http.NewRequestWithContext(requestCtx, method, url, nil)
 	if err != nil {
 		return err
 	}

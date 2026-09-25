@@ -2,6 +2,7 @@ package splithttp
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	stdnet "net"
@@ -95,6 +96,104 @@ func TestCoalescingHTTP2PoolSharesInFlightDial(t *testing.T) {
 	}
 }
 
+func TestDefaultDialerClientCancelsStalledHTTP2Dial(t *testing.T) {
+	handshakeStarted := make(chan struct{})
+	peerClosed := make(chan struct{})
+	transport := newHTTP2Transport(func(context.Context) (xnet.Conn, error) {
+		clientConn, serverConn := stdnet.Pipe()
+		go func() {
+			defer serverConn.Close()
+			buffer := make([]byte, 1)
+			_, _ = serverConn.Read(buffer)
+			close(handshakeStarted)
+			_, _ = io.Copy(io.Discard, serverConn)
+			close(peerClosed)
+		}()
+		return tls.Client(clientConn, &tls.Config{InsecureSkipVerify: true}), nil
+	}, time.Minute, 0)
+	client := &DefaultDialerClient{
+		transportConfig: &Config{},
+		client:          &http.Client{Transport: transport},
+		httpVersion:     "2",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	openDone := make(chan struct{})
+	go func() {
+		stream, _, _, _ := client.OpenStream(ctx, "https://xray.test/", "session", nil, false)
+		if stream != nil {
+			_ = stream.Close()
+		}
+		close(openDone)
+	}()
+
+	select {
+	case <-handshakeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("TLS handshake did not start")
+	}
+	cancel()
+	select {
+	case <-peerClosed:
+	case <-time.After(time.Second):
+		t.Fatal("stalled TLS connection was not closed with the caller")
+	}
+	select {
+	case <-openDone:
+	case <-time.After(time.Second):
+		t.Fatal("OpenStream did not return after cancellation")
+	}
+}
+
+func TestDefaultDialerClientKeepsEstablishedHTTP2StreamAfterCallerCancellation(t *testing.T) {
+	requestStarted := make(chan struct{})
+	releaseResponse := make(chan struct{})
+	var dials atomic.Int32
+	transport := newPipeHTTP2Transport(t, &dials, &http2.Server{}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(requestStarted)
+		<-releaseResponse
+		_, _ = io.WriteString(w, "response")
+	}))
+	client := &DefaultDialerClient{
+		transportConfig: &Config{},
+		client:          &http.Client{Transport: transport},
+		httpVersion:     "2",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stream, _, _, err := client.OpenStream(ctx, "https://xray.test/", "session", nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	waitForStartedRequest(t, requestStarted)
+	cancel()
+	close(releaseResponse)
+
+	readDone := make(chan struct {
+		body string
+		err  error
+	}, 1)
+	go func() {
+		body, err := io.ReadAll(stream)
+		readDone <- struct {
+			body string
+			err  error
+		}{string(body), err}
+	}()
+	select {
+	case result := <-readDone:
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		if result.body != "response" {
+			t.Fatalf("response body = %q, want %q", result.body, "response")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("established stream stopped after caller cancellation")
+	}
+}
+
 func TestCoalescingHTTP2PoolRetriesCanceledLeader(t *testing.T) {
 	var dials atomic.Int32
 	firstDialStarted := make(chan struct{})
@@ -121,36 +220,52 @@ func TestCoalescingHTTP2PoolRetriesCanceledLeader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	waiterRequest, err := http.NewRequest(http.MethodGet, "https://xray.test/", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	leaderDone := make(chan error, 1)
 	go func() {
 		_, err := transport.ConnPool.GetClientConn(leaderRequest, "xray.test:443")
 		leaderDone <- err
 	}()
 	<-firstDialStarted
-	waiterDone := make(chan *http2.ClientConn, 1)
-	go func() {
-		conn, _ := transport.ConnPool.GetClientConn(waiterRequest, "xray.test:443")
-		waiterDone <- conn
-	}()
-	time.Sleep(20 * time.Millisecond)
+
+	const waiters = 64
+	waiterStart := make(chan struct{})
+	waiterReady := sync.WaitGroup{}
+	waiterReady.Add(waiters)
+	waiterDone := make(chan *http2.ClientConn, waiters)
+	for range waiters {
+		go func() {
+			request, err := http.NewRequest(http.MethodGet, "https://xray.test/", nil)
+			if err != nil {
+				waiterReady.Done()
+				waiterDone <- nil
+				return
+			}
+			waiterReady.Done()
+			<-waiterStart
+			conn, _ := transport.ConnPool.GetClientConn(request, "xray.test:443")
+			waiterDone <- conn
+		}()
+	}
+	waiterReady.Wait()
+	close(waiterStart)
 	cancelLeader()
 
 	if err := <-leaderDone; !errors.Is(err, context.Canceled) {
 		t.Fatalf("leader error = %v, want context.Canceled", err)
 	}
-	select {
-	case conn := <-waiterDone:
-		if conn == nil {
-			t.Fatal("live waiter did not retry the canceled dial")
+	var sharedConn *http2.ClientConn
+	for range waiters {
+		select {
+		case conn := <-waiterDone:
+			if conn == nil {
+				t.Fatal("live waiter did not retry the canceled dial")
+			}
+			sharedConn = conn
+		case <-time.After(3 * time.Second):
+			t.Fatal("live waiter did not finish its retry")
 		}
-		_ = conn.Close()
-	case <-time.After(3 * time.Second):
-		t.Fatal("live waiter did not finish its retry")
 	}
+	_ = sharedConn.Close()
 	serverConns.Wait()
 	if got := dials.Load(); got != 2 {
 		t.Fatalf("physical dials = %d, want 2", got)
