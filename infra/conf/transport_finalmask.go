@@ -726,6 +726,7 @@ type XMC struct {
 	Hostname string       `json:"hostname"`
 	Profiles []XMCProfile `json:"profiles"`
 	Password string       `json:"password"`
+	Padding  []string     `json:"padding"`
 }
 
 type XMCProfile struct {
@@ -768,6 +769,20 @@ func (c *XMC) Build() (proto.Message, error) {
 	if c.Password == "" {
 		return nil, fmt.Errorf("empty password")
 	}
+	config := &xmc.Config{Password: c.Password, Hostname: c.Hostname}
+	for i, value := range c.Padding {
+		minimum, maximum, err := ParseRangeString(value)
+		if err != nil {
+			return nil, fmt.Errorf("minecraft padding turn %d: %w", i, err)
+		}
+		config.Padding = append(config.Padding, &xmc.Padding{
+			LengthMin: int64(minimum),
+			LengthMax: int64(maximum),
+		})
+	}
+	if err := config.ValidatePadding(); err != nil {
+		return nil, fmt.Errorf("minecraft padding: %w", err)
+	}
 
 	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
 	if err != nil {
@@ -788,13 +803,10 @@ func (c *XMC) Build() (proto.Message, error) {
 		profiles = append(profiles, profile)
 	}
 
-	return &xmc.Config{
-		Password:      c.Password,
-		Hostname:      c.Hostname,
-		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
-		RsaPublicKey:  rsaPublicKey,
-		Profiles:      profiles,
-	}, nil
+	config.RsaPrivateKey = x509.MarshalPKCS1PrivateKey(rsaPrivateKey)
+	config.RsaPublicKey = rsaPublicKey
+	config.Profiles = profiles
+	return config, nil
 }
 
 type Xicmp struct {

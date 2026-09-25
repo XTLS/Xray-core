@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"testing"
+	"time"
 )
 
 func TestPacketStreamUsesPlainFraming(t *testing.T) {
@@ -37,6 +38,18 @@ func TestPacketStreamUsesPlainFraming(t *testing.T) {
 }
 
 func TestPacketStreamRoundTrip(t *testing.T) {
+	for name, padding := range map[string][]*Padding{
+		"default": nil,
+		"single":  {{LengthMin: 3, LengthMax: 3}},
+		"even":    {{LengthMin: 127, LengthMax: 129}, {LengthMin: 16383, LengthMax: 16385}},
+		"odd":     {{LengthMin: 3, LengthMax: 3}, {LengthMin: 1, LengthMax: 1}, {LengthMin: 32768, LengthMax: 32768}},
+	} {
+		t.Run(name, func(t *testing.T) { testPacketStreamRoundTrip(t, padding) })
+	}
+}
+
+func testPacketStreamRoundTrip(t *testing.T, padding []*Padding) {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +58,15 @@ func TestPacketStreamRoundTrip(t *testing.T) {
 
 	const password = "packet-stream-shared-key"
 	privateKey, publicKey := deriveTestRSAKey(t, password)
-	profiles := []loginProfile{testLoginProfile("packet_user")}
+	profile := testLoginProfile("packet_user")
+	config := &Config{
+		Password: password, RsaPrivateKey: privateKey, RsaPublicKey: publicKey,
+		Hostname: "localhost", Padding: padding,
+		Profiles: []*Profile{{
+			Username: profile.Username, Uuid: profile.UUID[:],
+			TexturesValue: profile.TexturesValue, TexturesSignature: profile.TexturesSignature,
+		}},
+	}
 	clientPayload := bytes.Repeat([]byte("client-payload-"), 5000)
 	serverPayload := bytes.Repeat([]byte("server-payload-"), 5000)
 	serverDone := make(chan error, 1)
@@ -57,11 +78,19 @@ func TestPacketStreamRoundTrip(t *testing.T) {
 			return
 		}
 		defer rawConn.Close()
+		if err := rawConn.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+			serverDone <- err
+			return
+		}
 
-		server, wrapErr := wrapConnServer(rawConn, profiles, password, privateKey, publicKey)
+		server, wrapErr := config.WrapConnServer(rawConn)
 		if wrapErr != nil {
 			serverDone <- wrapErr
 			return
+		}
+		defer server.Close()
+		if len(padding) > 0 && len(server.(*serverConn).paddingSchedule) != len(padding) {
+			t.Error("server did not use configured padding")
 		}
 		got := make([]byte, len(clientPayload))
 		if _, readErr := io.ReadFull(server, got); readErr != nil {
@@ -81,10 +110,17 @@ func TestPacketStreamRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rawClient.Close()
+	if err := rawClient.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
 
-	client, err := newClientConn(rawClient, profiles, password, publicKey, "localhost")
+	client, err := config.WrapConnClient(rawClient)
 	if err != nil {
 		t.Fatal(err)
+	}
+	defer client.Close()
+	if len(padding) > 0 && len(client.(*clientConn).paddingSchedule) != len(padding) {
+		t.Fatal("client did not use configured padding")
 	}
 	if _, err = client.Write(clientPayload); err != nil {
 		t.Fatalf("write payload: %v", err)
