@@ -38,19 +38,21 @@ type mphRuleInfo struct {
 // MphMatcherGroup is an implementation of MatcherGroup.
 // It implements Rabin-Karp algorithm and minimal perfect hash table for Full and Domain matcher.
 type MphMatcherGroup struct {
-	rules      []string   // RuleIdx -> pattern string, index 0 reserved for failed lookup
-	values     [][]uint32 // RuleIdx -> registered matcher values for the pattern (Full Matcher takes precedence)
-	level0     []uint32   // RollingHash & Mask -> seed for Memhash
-	level0Mask uint32     // Mask restricting RollingHash to 0 ~ len(level0)
-	level1     []uint32   // Memhash<seed> & Mask -> stored index for rules
-	level1Mask uint32     // Mask for restricting Memhash<seed> to 0 ~ len(level1)
-	ruleInfos  *map[string]mphRuleInfo
+	patterns    string   // All rule patterns concatenated
+	patternOffs []uint32 // RuleIdx -> patterns[patternOffs[i]:patternOffs[i+1]], index 0 reserved for failed lookup
+	values      []uint32 // All registered matcher values concatenated
+	valueOffs   []uint32 // RuleIdx -> values[valueOffs[i]:valueOffs[i+1]] (Full Matcher takes precedence)
+	level0      []uint32 // RollingHash & Mask -> seed for Memhash
+	level0Mask  uint32   // Mask restricting RollingHash to 0 ~ len(level0)
+	level1      []uint32 // Memhash<seed> & Mask -> stored index for rules
+	level1Mask  uint32   // Mask for restricting Memhash<seed> to 0 ~ len(level1)
+	rules       []string // RuleIdx -> pattern string, only used for building
+	ruleInfos   *map[string]mphRuleInfo
 }
 
 func NewMphMatcherGroup() *MphMatcherGroup {
 	return &MphMatcherGroup{
 		rules:      []string{""},
-		values:     [][]uint32{nil},
 		level0:     nil,
 		level0Mask: 0,
 		level1:     nil,
@@ -78,7 +80,6 @@ func (g *MphMatcherGroup) addPattern(suffixHash uint32, suffixPattern string, pa
 	if !found {
 		info = mphRuleInfo{rollingHash: RollingHash(suffixHash, pattern)}
 		g.rules = append(g.rules, fullPattern)
-		g.values = append(g.values, nil)
 	}
 	info.matchers[matcherType] = append(info.matchers[matcherType], value)
 	(*g.ruleInfos)[fullPattern] = info
@@ -94,14 +95,27 @@ func (g *MphMatcherGroup) Build() error {
 	g.level1 = make([]uint32, nextPow2(ruleCount))
 	g.level1Mask = uint32(len(g.level1) - 1)
 
+	// Flatten patterns and values so the built group has no per-rule objects
+	valueCount := 0
+	for _, ruleInfo := range *g.ruleInfos {
+		valueCount += len(ruleInfo.matchers[Full]) + len(ruleInfo.matchers[Domain])
+	}
+	g.patterns = strings.Join(g.rules, "")
+	g.patternOffs = make([]uint32, len(g.rules)+1)
+	g.values = make([]uint32, 0, valueCount)
+	g.valueOffs = make([]uint32, len(g.rules)+1)
+
 	// Create buckets based on all rule's rolling hash
 	buckets := make([][]uint32, len(g.level0))
 	for ruleIdx := 1; ruleIdx < len(g.rules); ruleIdx++ { // Traverse rules starting from index 1 (0 reserved for failed lookup)
 		ruleInfo := (*g.ruleInfos)[g.rules[ruleIdx]]
 		bucketIdx := ruleInfo.rollingHash & g.level0Mask
 		buckets[bucketIdx] = append(buckets[bucketIdx], uint32(ruleIdx))
-		g.values[ruleIdx] = append(ruleInfo.matchers[Full], ruleInfo.matchers[Domain]...) // nolint:gocritic
+		g.patternOffs[ruleIdx+1] = g.patternOffs[ruleIdx] + uint32(len(g.rules[ruleIdx]))
+		g.values = append(append(g.values, ruleInfo.matchers[Full]...), ruleInfo.matchers[Domain]...)
+		g.valueOffs[ruleIdx+1] = uint32(len(g.values))
 	}
+	g.rules = nil
 	g.ruleInfos = nil // Set ruleInfos nil to release memory
 	runtime.GC()      // peak mem
 
@@ -121,7 +135,7 @@ func (g *MphMatcherGroup) Build() error {
 		seed := uint32(0)
 		for len(hashedBucket) != len(bucket) {
 			for _, ruleIdx := range bucket {
-				memHash := MemHash(seed, g.rules[ruleIdx]) & g.level1Mask
+				memHash := MemHash(seed, g.pattern(ruleIdx)) & g.level1Mask
 				if occupied[memHash] { // Collision occurred with this seed
 					for _, hash := range hashedBucket { // Revert all values in this hashed bucket
 						occupied[hash] = false
@@ -141,12 +155,26 @@ func (g *MphMatcherGroup) Build() error {
 	return nil
 }
 
+func (g *MphMatcherGroup) pattern(ruleIdx uint32) string {
+	return g.patterns[g.patternOffs[ruleIdx]:g.patternOffs[ruleIdx+1]]
+}
+
+// valuesOf caps the capacity, so appending to a Match result can't overwrite the next rule's values.
+func (g *MphMatcherGroup) valuesOf(ruleIdx uint32) []uint32 {
+	start, end := g.valueOffs[ruleIdx], g.valueOffs[ruleIdx+1]
+	return g.values[start:end:end]
+}
+
 // Lookup searches for input in minimal perfect hash table and returns its index. 0 indicates not found.
 func (g *MphMatcherGroup) Lookup(rollingHash uint32, input string) uint32 {
 	i0 := rollingHash & g.level0Mask
 	seed := g.level0[i0]
 	i1 := MemHash(seed, input) & g.level1Mask
-	if n := g.level1[i1]; g.rules[n] == input {
+	n := g.level1[i1]
+	// Build only puts valid rule indices in level1, so n+1 < len(patternOffs) and the span is inside patterns.
+	// Skip the bounds checks, they made this hot path measurably slower than indexing a []string
+	offs := (*[2]uint32)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(g.patternOffs)), uintptr(n)*4))
+	if start := offs[0]; int(offs[1]-start) == len(input) && unsafe.String((*byte)(unsafe.Add(unsafe.Pointer(unsafe.StringData(g.patterns)), start)), len(input)) == input {
 		return n
 	}
 	return 0
@@ -160,12 +188,12 @@ func (g *MphMatcherGroup) Match(input string) []uint32 {
 		hash = hash*PrimeRK + uint32(input[i])
 		if input[i] == '.' {
 			if mphIdx := g.Lookup(hash, input[i:]); mphIdx != 0 {
-				matches = append(matches, g.values[mphIdx])
+				matches = append(matches, g.valuesOf(mphIdx))
 			}
 		}
 	}
 	if mphIdx := g.Lookup(hash, input); mphIdx != 0 {
-		matches = append(matches, g.values[mphIdx])
+		matches = append(matches, g.valuesOf(mphIdx))
 	}
 	return CompositeMatchesReverse(matches)
 }
