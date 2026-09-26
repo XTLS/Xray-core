@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/browser_dialer"
-	"github.com/xtls/xray-core/transport/internet/websocket"
 )
 
 // BrowserDialerClient implements splithttp.DialerClient in terms of browser dialer
@@ -33,13 +32,7 @@ func (c *BrowserDialerClient) OpenStream(ctx context.Context, url string, sessio
 
 	c.transportConfig.FillStreamRequest(request, sessionId, "")
 
-	conn, err := browser_dialer.DialGet(request.URL.String(), request.Header, request.Cookies())
-	dummyAddr := &net.IPAddr{}
-	if err != nil {
-		return nil, dummyAddr, dummyAddr, err
-	}
-
-	return websocket.NewConnection(conn, dummyAddr, nil, 0), conn.RemoteAddr(), conn.LocalAddr(), nil
+	return browser_dialer.DialGetStream(request.URL.String(), request.Header, request.Cookies())
 }
 
 func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {

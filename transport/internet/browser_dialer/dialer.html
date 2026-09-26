@@ -111,8 +111,27 @@
 						const requestInit = prepareRequestInit(task.extra);
 
 						console.log("Dial GET", task.url);
-						ws.send("ok");
 						const controller = new AbortController();
+						let pendingBytes = 0;
+						let resume = null;
+						const waitForConsumption = async (limit) => {
+							while (pendingBytes >= limit && ws.readyState === WebSocket.OPEN) {
+								await new Promise(resolve => { resume = resolve; });
+								resume = null;
+							}
+						};
+						if (task.readWindow) {
+							ws.onmessage = (event) => {
+								const consumed = Number(event.data);
+								if (!Number.isSafeInteger(consumed) || consumed <= 0 || consumed > pendingBytes) {
+									ws.close();
+									return;
+								}
+								pendingBytes -= consumed;
+								if (resume) resume();
+							};
+						}
+						ws.send(task.readWindow ? "ok-read" : "ok");
 
 						/*
 						Aborting a streaming response in JavaScript
@@ -128,6 +147,7 @@
 
 						let reader = null;
 						ws.onclose = (event) => {
+							if (resume) resume();
 							try {
 								reader && reader.cancel();
 							} catch(e) {}
@@ -148,10 +168,21 @@
 							const body = await response.body;
 							reader = body.getReader();
 
-							while (true) {
+							while (ws.readyState === WebSocket.OPEN) {
+								// Wait for Xray to consume data before pulling more from HTTP.
+								// Use acknowledgements so background timer throttling cannot stall the relay.
+								if (task.readWindow) await waitForConsumption(task.readWindow);
+								if (ws.readyState !== WebSocket.OPEN) break;
 								const { done, value } = await reader.read();
-								if (value) ws.send(value);  // don't send back "undefined" string when received nothing
-								if (done) break;
+								if (value) {
+									pendingBytes += value.byteLength;
+									ws.send(value);  // don't send back "undefined" string when received nothing
+								}
+								if (done) {
+									// Let the last required acknowledgement arrive before closing.
+									if (task.readWindow) await waitForConsumption(task.readWindow / 2);
+									break;
+								}
 							}
 						} finally {
 							upstreamGetCount -= 1;

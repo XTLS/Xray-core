@@ -24,6 +24,7 @@ type task struct {
 	URL            string `json:"url"`
 	Extra          any    `json:"extra,omitempty"`
 	StreamResponse bool   `json:"streamResponse"`
+	ReadWindow     int    `json:"readWindow,omitempty"`
 }
 
 var (
@@ -192,6 +193,17 @@ func dialWithBody(method string, uri string, headers http.Header, cookies []*htt
 }
 
 func dialTask(task task) (*websocket.Conn, error) {
+	conn, err := dispatchTask(task)
+	if err != nil {
+		return nil, err
+	}
+	if err := CheckOK(conn); err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
+func dispatchTask(task task) (*websocket.Conn, error) {
 	data, err := json.Marshal(task)
 	if err != nil {
 		return nil, err
@@ -206,11 +218,6 @@ func dialTask(task task) (*websocket.Conn, error) {
 			break
 		}
 	}
-	err = CheckOK(conn)
-	if err != nil {
-		return nil, err
-	}
-
 	return conn, nil
 }
 
