@@ -2,9 +2,12 @@ package masque
 
 import (
 	"context"
+	"net/http"
 	"net/netip"
 	"reflect"
 	"runtime"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/masque/connectip"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"golang.org/x/net/http2"
 )
 
 const (
@@ -35,6 +39,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("tls config is nil")
 	}
 	config := streamSettings.ProtocolSettings.(*Config)
+	if usesHTTP2(tlsConfig) {
+		return dialHTTP2(ctx, dest, streamSettings, tlsConfig, config)
+	}
 	dest.Network = net.Network_UDP
 
 	gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
@@ -112,7 +119,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("unknown congestion control: ", quicParams.Congestion)
 	}
 
-	conn, err := establish(ctx, qconn, config, authority(config, gotlsConfig.ServerName, dest.Port))
+	cc := (&http3.Transport{EnableDatagrams: true, DisableCompression: true}).NewClientConn(qconn)
+	conn, err := establish(ctx, connectip.NewClientConn(cc), quicConn{qconn}, func() {
+		qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeRequestCanceled), "")
+	}, config, authority(config, gotlsConfig.ServerName, dest.Port))
 	if err != nil {
 		qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "")
 		return nil, err
@@ -120,10 +130,58 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	return conn, nil
 }
 
-func establish(ctx context.Context, qconn *quic.Conn, config *Config, host string) (*Conn, error) {
-	stop := context.AfterFunc(ctx, func() {
-		qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeRequestCanceled), "")
-	})
+func usesHTTP2(config *tls.Config) bool {
+	return slices.Contains(config.NextProtocol, http2.NextProtoTLS) && !slices.Contains(config.NextProtocol, http3.NextProtoH3)
+}
+
+func dialHTTP2(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig, tlsConfig *tls.Config, config *Config) (stat.Connection, error) {
+	dest.Network = net.Network_TCP
+	gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+
+	var conn net.Conn
+	var err error
+	if streamSettings.FinalMask != nil {
+		conn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
+	} else {
+		conn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
+	}
+	if err != nil {
+		return nil, errors.New("failed to dial to dest").Base(err)
+	}
+	if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+		conn = tls.UClient(conn, gotlsConfig, fingerprint)
+	} else {
+		conn = tls.Client(conn, gotlsConfig)
+	}
+	tlsConn := conn.(tls.Interface)
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if protocol := tlsConn.NegotiatedProtocol(); protocol != http2.NextProtoTLS {
+		conn.Close()
+		return nil, errors.New("the server negotiated ", strconv.Quote(protocol), " instead of h2")
+	}
+
+	cc, err := newHTTP2ClientConn(conn)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	mconn, err := establish(ctx, connectip.NewHTTP2ClientConn(cc), cc, func() { cc.Close() }, config, authority(config, gotlsConfig.ServerName, dest.Port))
+	if err != nil {
+		cc.Close()
+		return nil, err
+	}
+	return mconn, nil
+}
+
+type tunnelClient interface {
+	Dial(*connectip.Request) (*connectip.Conn, *http.Response, error)
+}
+
+func establish(ctx context.Context, client tunnelClient, hconn httpConn, abort func(), config *Config, host string) (*Conn, error) {
+	stop := context.AfterFunc(ctx, abort)
 	defer stop()
 
 	req, err := connectip.NewRequest(ctx, "https://"+host+config.Path)
@@ -151,8 +209,7 @@ func establish(ctx context.Context, qconn *quic.Conn, config *Config, host strin
 		header.Del("User-Agent")
 	}
 
-	cc := (&http3.Transport{EnableDatagrams: true, DisableCompression: true}).NewClientConn(qconn)
-	ipConn, _, err := connectip.NewClientConn(cc).Dial(req)
+	ipConn, _, err := client.Dial(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			err = context.Cause(ctx)
@@ -188,7 +245,7 @@ func establish(ctx context.Context, qconn *quic.Conn, config *Config, host strin
 
 	conn := &Conn{
 		ipConn:   ipConn,
-		quicConn: qconn,
+		httpConn: hconn,
 		local:    local,
 	}
 	go conn.serveAddressAssignments()

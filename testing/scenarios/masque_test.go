@@ -1,6 +1,8 @@
 package scenarios
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	gotls "crypto/tls"
 	"crypto/x509"
@@ -8,12 +10,18 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 	"golang.org/x/sync/errgroup"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
@@ -52,7 +60,7 @@ const (
 	masqueAuthorization = "Basic dTpw"
 )
 
-func startMasqueServer(t *testing.T) (net.Port, [32]byte) {
+func startMasqueServer(t *testing.T, h2 bool) (net.Port, [32]byte) {
 	dev, _, gstack, err := wireguard.CreateNetTUN([]netip.Addr{masqueServerV4, masqueServerV6}, nil, transmasque.MinPacketSize, false)
 	common.Must(err)
 	t.Cleanup(func() { dev.Close() })
@@ -180,6 +188,13 @@ func startMasqueServer(t *testing.T) (net.Port, [32]byte) {
 		Certificates: []gotls.Certificate{{Certificate: [][]byte{certificate.Certificate}, PrivateKey: key}},
 		NextProtos:   []string{http3.NextProtoH3},
 	}
+	if h2 {
+		tlsConfig.NextProtos = []string{http2.NextProtoTLS}
+		ln := common.Must2(gotls.Listen("tcp", "127.0.0.1:0", tlsConfig))
+		t.Cleanup(func() { ln.Close() })
+		go serveHTTP2(ln, http.HandlerFunc(handler))
+		return net.Port(ln.Addr().(*net.TCPAddr).Port), certHash
+	}
 	pktConn := common.Must2(net.ListenUDP("udp", &net.UDPAddr{IP: net.LocalHostIP.IP()}))
 	tr := &quic.Transport{Conn: pktConn}
 	ln := common.Must2(tr.ListenEarly(tlsConfig, &quic.Config{EnableDatagrams: true, InitialPacketSize: 1350}))
@@ -195,8 +210,182 @@ func startMasqueServer(t *testing.T) (net.Port, [32]byte) {
 	return net.Port(pktConn.LocalAddr().(*net.UDPAddr).Port), certHash
 }
 
+func serveHTTP2(ln net.Listener, handler http.Handler) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go serveHTTP2Conn(conn, handler)
+	}
+}
+
+type http2ServerConn struct {
+	mu   sync.Mutex
+	fr   *http2.Framer
+	hbuf bytes.Buffer
+	henc *hpack.Encoder
+}
+
+func (c *http2ServerConn) write(f func(*http2.Framer) error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return f(c.fr)
+}
+
+func (c *http2ServerConn) writeHeaders(streamID uint32, status int, header http.Header) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.hbuf.Reset()
+	c.henc.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(status)})
+	for k, vv := range header {
+		for _, v := range vv {
+			c.henc.WriteField(hpack.HeaderField{Name: strings.ToLower(k), Value: v})
+		}
+	}
+	return c.fr.WriteHeaders(http2.HeadersFrameParam{StreamID: streamID, BlockFragment: c.hbuf.Bytes(), EndHeaders: true})
+}
+
+func (c *http2ServerConn) writeData(streamID uint32, endStream bool, data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for {
+		n := min(len(data), 16384)
+		if err := c.fr.WriteData(streamID, endStream && n == len(data), data[:n]); err != nil {
+			return err
+		}
+		if data = data[n:]; len(data) == 0 {
+			return nil
+		}
+	}
+}
+
+func serveHTTP2Conn(conn net.Conn, handler http.Handler) {
+	defer conn.Close()
+	br := bufio.NewReader(conn)
+	preface := make([]byte, len(http2.ClientPreface))
+	if _, err := io.ReadFull(br, preface); err != nil || string(preface) != http2.ClientPreface {
+		return
+	}
+	sc := &http2ServerConn{fr: http2.NewFramer(conn, br)}
+	sc.henc = hpack.NewEncoder(&sc.hbuf)
+	sc.fr.ReadMetaHeaders = hpack.NewDecoder(4096, nil)
+	if err := sc.write(func(fr *http2.Framer) error {
+		if err := fr.WriteSettings(
+			http2.Setting{ID: http2.SettingEnableConnectProtocol, Val: 1},
+			http2.Setting{ID: http2.SettingInitialWindowSize, Val: 1 << 30},
+		); err != nil {
+			return err
+		}
+		return fr.WriteWindowUpdate(0, 1<<30)
+	}); err != nil {
+		return
+	}
+
+	bodies := make(map[uint32]*io.PipeWriter)
+	defer func() {
+		for _, body := range bodies {
+			body.Close()
+		}
+	}()
+	for {
+		f, err := sc.fr.ReadFrame()
+		if err != nil {
+			return
+		}
+		switch f := f.(type) {
+		case *http2.SettingsFrame:
+			if !f.IsAck() {
+				err = sc.write((*http2.Framer).WriteSettingsAck)
+			}
+		case *http2.PingFrame:
+			if !f.IsAck() {
+				err = sc.write(func(fr *http2.Framer) error { return fr.WritePing(true, f.Data) })
+			}
+		case *http2.MetaHeadersFrame:
+			u, err := url.ParseRequestURI(f.PseudoValue("path"))
+			if err != nil {
+				return
+			}
+			pr, pw := io.Pipe()
+			bodies[f.StreamID] = pw
+			req := &http.Request{
+				Method:     f.PseudoValue("method"),
+				URL:        u,
+				Proto:      "HTTP/2.0",
+				ProtoMajor: 2,
+				Header:     http.Header{},
+				Host:       f.PseudoValue("authority"),
+				Body:       pr,
+			}
+			for _, hf := range f.RegularFields() {
+				req.Header.Add(hf.Name, hf.Value)
+			}
+			if protocol := f.PseudoValue("protocol"); protocol != "" {
+				req.Header.Set(":protocol", protocol)
+			}
+			streamID := f.StreamID
+			w := &http2ResponseWriter{conn: sc, streamID: streamID, header: http.Header{}}
+			go func() {
+				handler.ServeHTTP(w, req)
+				w.WriteHeader(http.StatusOK)
+				sc.writeData(streamID, true, nil)
+			}()
+		case *http2.DataFrame:
+			if body := bodies[f.StreamID]; body != nil {
+				if _, err := body.Write(f.Data()); err != nil || f.StreamEnded() {
+					body.Close()
+					delete(bodies, f.StreamID)
+				}
+			}
+		case *http2.RSTStreamFrame:
+			if body := bodies[f.StreamID]; body != nil {
+				body.CloseWithError(http2.StreamError{StreamID: f.StreamID, Code: f.ErrCode})
+				delete(bodies, f.StreamID)
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+type http2ResponseWriter struct {
+	conn        *http2ServerConn
+	streamID    uint32
+	header      http.Header
+	wroteHeader bool
+}
+
+func (w *http2ResponseWriter) Header() http.Header { return w.header }
+
+func (w *http2ResponseWriter) WriteHeader(code int) {
+	if !w.wroteHeader {
+		w.wroteHeader = true
+		w.conn.writeHeaders(w.streamID, code, w.header)
+	}
+}
+
+func (w *http2ResponseWriter) Write(b []byte) (int, error) {
+	w.WriteHeader(http.StatusOK)
+	if err := w.conn.writeData(w.streamID, false, b); err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
+func (w *http2ResponseWriter) Flush() {}
+
 func TestMasque(t *testing.T) {
-	serverPort, certHash := startMasqueServer(t)
+	testMasque(t, false)
+}
+
+func TestMasqueHTTP2(t *testing.T) {
+	testMasque(t, true)
+}
+
+func testMasque(t *testing.T, h2 bool) {
+	serverPort, certHash := startMasqueServer(t, h2)
 
 	tcpPort := tcp.PickPort()
 	tcp6Port := tcp.PickPort()
@@ -213,6 +402,13 @@ func TestMasque(t *testing.T) {
 				AllowedNetworks: []net.Network{network},
 			}),
 		}
+	}
+	tlsConfig := &tls.Config{
+		ServerName:           "localhost",
+		PinnedPeerCertSha256: [][]byte{certHash[:]},
+	}
+	if h2 {
+		tlsConfig.NextProtocol = []string{http2.NextProtoTLS}
 	}
 	clientConfig := &core.Config{
 		App: []*serial.TypedMessage{
@@ -248,10 +444,7 @@ func TestMasque(t *testing.T) {
 						},
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
-							serial.ToTypedMessage(&tls.Config{
-								ServerName:           "localhost",
-								PinnedPeerCertSha256: [][]byte{certHash[:]},
-							}),
+							serial.ToTypedMessage(tlsConfig),
 						},
 					},
 				}),

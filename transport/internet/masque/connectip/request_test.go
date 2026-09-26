@@ -71,6 +71,24 @@ func TestProxyRequestParsing(t *testing.T) {
 		require.Equal(t, http.StatusNotImplemented, err.(*ProxyRequestParseError).HTTPStatus)
 	})
 
+	t.Run("HTTP/2", func(t *testing.T) {
+		req := newRequest("https://localhost:1234/masque/ip")
+		req.Proto, req.ProtoMajor = "HTTP/2.0", 2
+		req.Header.Set(":protocol", requestProtocol)
+		r, err := ParseProxyRequest(req)
+		require.NoError(t, err)
+		require.Equal(t, &ProxyRequest{body: req.Body}, r)
+	})
+
+	t.Run("wrong protocol over HTTP/2", func(t *testing.T) {
+		req := newRequest("https://localhost:1234/masque")
+		req.Proto, req.ProtoMajor = "HTTP/2.0", 2
+		req.Header.Set(":protocol", "websocket")
+		_, err := ParseProxyRequest(req)
+		require.EqualError(t, err, "unexpected protocol: websocket")
+		require.Equal(t, http.StatusNotImplemented, err.(*ProxyRequestParseError).HTTPStatus)
+	})
+
 	t.Run("wrong request method", func(t *testing.T) {
 		req := newRequest("https://localhost:1234/masque")
 		req.Method = http.MethodHead

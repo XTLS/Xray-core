@@ -38,14 +38,18 @@ const (
 	ipProtoICMPv6 = 58
 )
 
-type http3Stream interface {
+type requestStream interface {
 	io.ReadWriteCloser
-	StreamID() quic.StreamID
-	ReceiveDatagram(context.Context) ([]byte, error)
-	SendDatagram([]byte) error
 	CancelRead(quic.StreamErrorCode)
 	CancelWrite(quic.StreamErrorCode)
 	SetWriteDeadline(time.Time) error
+}
+
+type http3Stream interface {
+	requestStream
+	StreamID() quic.StreamID
+	ReceiveDatagram(context.Context) ([]byte, error)
+	SendDatagram([]byte) error
 }
 
 var (
@@ -53,7 +57,11 @@ var (
 	_ http3Stream = &http3.RequestStream{}
 )
 
-const maxQueuedCapsules = 128
+const (
+	maxQueuedCapsules    = 128
+	maxQueuedDatagrams   = 128
+	maxCapsulePacketSize = 1<<16 - 1
+)
 
 var errCapsuleLimit = goerrors.New("connect-ip: capsule limit exceeded")
 
@@ -63,7 +71,10 @@ type streamWrite struct {
 }
 
 type Conn struct {
-	str         http3Stream
+	str         requestStream
+	h3          http3Stream
+	datagrams   chan []byte
+	writeMu     sync.Mutex
 	writeNotify chan struct{}
 	writeDone   chan error
 
@@ -87,7 +98,7 @@ type Conn struct {
 	datagramCapsuleOnce sync.Once
 }
 
-func newProxiedConn(str http3Stream) *Conn {
+func newProxiedConn(str requestStream) *Conn {
 	c := &Conn{
 		str:                    str,
 		writeNotify:            make(chan struct{}, 1),
@@ -96,6 +107,9 @@ func newProxiedConn(str http3Stream) *Conn {
 		addressRequests:        make(chan *addressRequestCapsule, maxQueuedCapsules),
 		availableRouteUpdates:  make(chan []IPRoute, 1),
 		closeChan:              make(chan struct{}),
+	}
+	if c.h3, _ = str.(http3Stream); c.h3 == nil {
+		c.datagrams = make(chan []byte, maxQueuedDatagrams)
 	}
 	go func() {
 		err := c.readFromStream()
@@ -382,6 +396,12 @@ func (c *Conn) readFromStream() error {
 			}
 			queueLatest(c.availableRouteUpdates, capsule.IPAddressRanges)
 		case capsuleTypeDatagram:
+			if c.h3 == nil {
+				if err := c.queueDatagram(cr); err != nil {
+					return err
+				}
+				continue
+			}
 			c.datagramCapsuleOnce.Do(func() {
 				errors.LogWarning(context.Background(), "connect-ip: dropping IP packets sent in DATAGRAM capsules, only QUIC DATAGRAM frames are supported")
 			})
@@ -412,12 +432,47 @@ func (c *Conn) writeToStream() error {
 			if w.Fin {
 				return c.str.Close()
 			}
-			if _, err := c.str.Write(w.Data); err != nil {
+			if err := c.write(w.Data); err != nil {
 				return err
 			}
 		}
 	}
 	return c.closeErr
+}
+
+func (c *Conn) write(b []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_, err := c.str.Write(b)
+	return err
+}
+
+func (c *Conn) queueDatagram(cr http3.CapsuleReader) error {
+	if cr.Remaining() > int64(len(contextIDZero)+maxCapsulePacketSize) {
+		errors.LogDebug(context.Background(), "connect-ip: dropping a ", cr.Remaining(), "-byte DATAGRAM capsule")
+		return cr.Discard()
+	}
+	data := make([]byte, cr.Remaining())
+	if _, err := io.ReadFull(cr, data); err != nil {
+		return err
+	}
+	select {
+	case c.datagrams <- data:
+	case <-c.closeChan:
+	}
+	return nil
+}
+
+func (c *Conn) receiveDatagram() ([]byte, error) {
+	if c.h3 != nil {
+		return c.h3.ReceiveDatagram(context.Background())
+	}
+	select {
+	case data := <-c.datagrams:
+		return data, nil
+	case <-c.closeChan:
+		return nil, c.closeErr
+	}
 }
 
 func (c *Conn) ReadPacket(b []byte) (int, error) {
@@ -427,7 +482,7 @@ func (c *Conn) ReadPacket(b []byte) (int, error) {
 			return 0, c.closeErr
 		default:
 		}
-		data, err := c.str.ReceiveDatagram(context.Background())
+		data, err := c.receiveDatagram()
 		if err != nil {
 			select {
 			case <-c.closeChan:
@@ -525,7 +580,18 @@ func (c *Conn) WritePacket(b []byte) (icmp []byte, err error) {
 		errors.LogDebugInner(context.Background(), err, "dropping proxied packet (", len(b), " bytes) that can't be proxied")
 		return nil, nil
 	}
-	if err := c.str.SendDatagram(data); err != nil {
+	if c.h3 == nil {
+		if err := c.write(data); err != nil {
+			select {
+			case <-c.closeChan:
+				return nil, c.closeErr
+			default:
+				return nil, err
+			}
+		}
+		return nil, nil
+	}
+	if err := c.h3.SendDatagram(data); err != nil {
 		if tooLarge, ok := goerrors.AsType[*quic.DatagramTooLargeError](err); ok {
 			icmpPacket, err := composeICMPTooLargePacket(b, int(tooLarge.MaxDatagramPayloadSize)-c.datagramOverhead())
 			if err != nil {
@@ -578,14 +644,22 @@ func (c *Conn) composeDatagram(b []byte) ([]byte, error) {
 		}
 		b[7]--
 	}
-	data := make([]byte, 0, len(contextIDZero)+len(b))
+	size := len(contextIDZero) + len(b)
+	var data []byte
+	if c.h3 == nil {
+		data = make([]byte, 0, quicvarint.Len(uint64(capsuleTypeDatagram))+quicvarint.Len(uint64(size))+size)
+		data = quicvarint.Append(data, uint64(capsuleTypeDatagram))
+		data = quicvarint.Append(data, uint64(size))
+	} else {
+		data = make([]byte, 0, size)
+	}
 	data = append(data, contextIDZero...)
 	data = append(data, b...)
 	return data, nil
 }
 
 func (c *Conn) datagramOverhead() int {
-	return quicvarint.Len(uint64(c.str.StreamID()/4)) + len(contextIDZero)
+	return quicvarint.Len(uint64(c.h3.StreamID()/4)) + len(contextIDZero)
 }
 
 func (c *Conn) MaxPacketSize() int {
@@ -594,7 +668,10 @@ func (c *Conn) MaxPacketSize() int {
 		return 0
 	default:
 	}
-	err := c.str.SendDatagram(make([]byte, 1<<16))
+	if c.h3 == nil {
+		return maxCapsulePacketSize
+	}
+	err := c.h3.SendDatagram(make([]byte, 1<<16))
 	tooLarge, ok := goerrors.AsType[*quic.DatagramTooLargeError](err)
 	if !ok {
 		return 0
