@@ -172,7 +172,6 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 	for _, tag := range tags {
 		handler := tag
 		client := newPingClient(
-			h.ctx,
 			h.dispatcher,
 			h.Settings.Destination,
 			h.Settings.Timeout,
@@ -185,7 +184,7 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 			}
 			timers = append(timers, time.AfterFunc(delay, func() {
 				errors.LogDebug(h.ctx, "checking ", handler)
-				delay, err := client.MeasureDelay(h.Settings.HttpMethod)
+				delay, err := client.MeasureDelay(ctx, h.Settings.HttpMethod)
 				if err == nil {
 					ch <- &rtt{
 						handler: handler,
@@ -193,7 +192,13 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 					}
 					return
 				}
-				if !h.checkConnectivity() {
+				if ctx.Err() != nil {
+					return
+				}
+				if !h.checkConnectivity(ctx) {
+					if ctx.Err() != nil {
+						return
+					}
 					errors.LogWarning(h.ctx, "network is down")
 					ch <- &rtt{
 						handler: handler,
@@ -271,7 +276,7 @@ func (h *HealthPing) Cleanup(tags []string) {
 
 // checkConnectivity checks the network connectivity, it returns
 // true if network is good or "connectivity check url" not set
-func (h *HealthPing) checkConnectivity() bool {
+func (h *HealthPing) checkConnectivity(ctx context.Context) bool {
 	if h.Settings.Connectivity == "" {
 		return true
 	}
@@ -279,7 +284,7 @@ func (h *HealthPing) checkConnectivity() bool {
 		h.Settings.Connectivity,
 		h.Settings.Timeout,
 	)
-	if _, err := tester.MeasureDelay(h.Settings.HttpMethod); err != nil {
+	if _, err := tester.MeasureDelay(ctx, h.Settings.HttpMethod); err != nil {
 		return false
 	}
 	return true

@@ -17,10 +17,24 @@ type pingClient struct {
 	httpClient  *http.Client
 }
 
-func newPingClient(ctx context.Context, dispatcher routing.Dispatcher, destination string, timeout time.Duration, handler string) *pingClient {
+type requestContextKey struct{}
+
+type requestContextTransport struct {
+	transport *http.Transport
+}
+
+func (t *requestContextTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// The standard transport may detach dial cancellation so that a connection
+	// can be reused by another request. Preserve the exact request context for
+	// the tagged dial, which is dedicated to this health check.
+	ctx := context.WithValue(req.Context(), requestContextKey{}, req.Context())
+	return t.transport.RoundTrip(req.WithContext(ctx))
+}
+
+func newPingClient(dispatcher routing.Dispatcher, destination string, timeout time.Duration, handler string) *pingClient {
 	return &pingClient{
 		destination: destination,
-		httpClient:  newHTTPClient(ctx, dispatcher, handler, timeout),
+		httpClient:  newHTTPClient(dispatcher, handler, timeout),
 	}
 }
 
@@ -31,7 +45,7 @@ func newDirectPingClient(destination string, timeout time.Duration) *pingClient 
 	}
 }
 
-func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler string, timeout time.Duration) *http.Client {
+func newHTTPClient(dispatcher routing.Dispatcher, handler string, timeout time.Duration) *http.Client {
 	tr := &http.Transport{
 		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -39,11 +53,15 @@ func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler 
 			if err != nil {
 				return nil, err
 			}
-			return tagged.Dialer(ctxv, dispatcher, dest, handler)
+			requestCtx, ok := ctx.Value(requestContextKey{}).(context.Context)
+			if !ok {
+				requestCtx = ctx
+			}
+			return tagged.Dialer(requestCtx, dispatcher, dest, handler)
 		},
 	}
 	return &http.Client{
-		Transport: tr,
+		Transport: &requestContextTransport{transport: tr},
 		Timeout:   timeout,
 		// don't follow redirect
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -53,12 +71,12 @@ func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler 
 }
 
 // MeasureDelay returns the delay time of the request to dest
-func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
+func (s *pingClient) MeasureDelay(ctx context.Context, httpMethod string) (time.Duration, error) {
 	if s.httpClient == nil {
 		panic("pingClient not initialized")
 	}
 
-	req, err := http.NewRequest(httpMethod, s.destination, nil)
+	req, err := http.NewRequestWithContext(ctx, httpMethod, s.destination, nil)
 	if err != nil {
 		return rttFailed, err
 	}
@@ -69,13 +87,13 @@ func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
 	if err != nil {
 		return rttFailed, err
 	}
+	defer resp.Body.Close()
 	if httpMethod == http.MethodGet {
 		_, err = io.Copy(io.Discard, resp.Body)
 		if err != nil {
 			return rttFailed, err
 		}
 	}
-	resp.Body.Close()
 
 	return time.Since(start), nil
 }
