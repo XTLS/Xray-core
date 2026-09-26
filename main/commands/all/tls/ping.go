@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	utls "github.com/refraction-networking/utls"
@@ -19,7 +20,7 @@ import (
 
 // cmdPing is the tls ping command
 var cmdPing = &base.Command{
-	UsageLine: "{{.Exec}} tls ping [-ip <ip>] <domain>",
+	UsageLine: "{{.Exec}} tls ping [-ip <ip>] [-sni <name>] <domain>",
 	Short:     "Ping the domain with TLS handshake",
 	Long: `
 Ping the domain with TLS handshake.
@@ -28,6 +29,13 @@ Arguments:
 
 	-ip
 		The IP address of the domain.
+
+	-sni
+		Override the SNI used by the second handshake. Together with -ip,
+		this can test whether a candidate REALITY target address accepts a
+		controlled alternate hostname. A successful handshake only identifies
+		this specific shared-endpoint behavior; failure does not prove that the
+		target is safe.
 `,
 }
 
@@ -35,7 +43,10 @@ func init() {
 	cmdPing.Run = executePing // break init loop
 }
 
-var pingIPStr = cmdPing.Flag.String("ip", "", "")
+var (
+	pingIPStr      = cmdPing.Flag.String("ip", "", "")
+	pingServerName = cmdPing.Flag.String("sni", "", "")
+)
 
 func executePing(cmd *base.Command, args []string) {
 	if cmdPing.Flag.NArg() < 1 {
@@ -95,19 +106,19 @@ func executePing(cmd *base.Command, args []string) {
 	}
 
 	fmt.Println("-------------------")
-	fmt.Println("Pinging with SNI")
+	serverName := domain
+	if *pingServerName != "" {
+		serverName = *pingServerName
+	}
+	fmt.Println("Pinging with SNI: ", serverName)
+	var sniHandshakeErr error
 	{
-		tcpConn, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: ip, Port: TargetPort})
-		if err != nil {
-			base.Fatalf("Failed to dial tcp: %s", err)
-		}
-		tlsConn := GeneraticUClient(tcpConn, &gotls.Config{
-			ServerName: domain,
+		tlsConn, err := dialTLSPing(&net.TCPAddr{IP: ip, Port: TargetPort}, &gotls.Config{
+			ServerName: serverName,
 			NextProtos: []string{"h2", "http/1.1"},
 			MaxVersion: gotls.VersionTLS13,
 			MinVersion: gotls.VersionTLS12,
 		})
-		err = tlsConn.Handshake()
 		if err != nil {
 			fmt.Println("Handshake failure: ", err)
 		} else {
@@ -116,11 +127,40 @@ func executePing(cmd *base.Command, args []string) {
 			printCertificates(tabWriter, tlsConn.ConnectionState().PeerCertificates)
 			tabWriter.Flush()
 		}
-		tlsConn.Close()
+		if tlsConn != nil {
+			tlsConn.Close()
+		}
+		sniHandshakeErr = err
+	}
+
+	if *pingServerName != "" && !strings.EqualFold(domain, serverName) {
+		fmt.Println("-------------------")
+		fmt.Println(alternateSNIAssessment(ip.String()+":"+strconv.Itoa(TargetPort), serverName, sniHandshakeErr))
 	}
 
 	fmt.Println("-------------------")
 	fmt.Println("TLS ping finished")
+}
+
+func dialTLSPing(address *net.TCPAddr, config *gotls.Config) (*utls.UConn, error) {
+	tcpConn, err := net.DialTCP("tcp", nil, address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial tcp: %w", err)
+	}
+	tlsConn := GeneraticUClient(tcpConn, config)
+	if err := tlsConn.Handshake(); err != nil {
+		tlsConn.Close()
+		return nil, err
+	}
+	return tlsConn, nil
+}
+
+func alternateSNIAssessment(address, serverName string, handshakeErr error) string {
+	limitation := "This probe covers only the supplied SNI at this address and time. It does not test other tenant names, HTTP personalization, DNS or CDN changes, or out-of-band login and security logs. Failure does not prove that a REALITY target is safe."
+	if handshakeErr != nil {
+		return fmt.Sprintf("REALITY target check: alternate SNI %q was not accepted by %s.\n%s", serverName, address, limitation)
+	}
+	return fmt.Sprintf("REALITY target check: alternate SNI %q was accepted by %s. This is consistent with a shared TLS endpoint; do not use it as a REALITY target when the alternate hostname is independently controlled and can expose the connecting IP.\n%s", serverName, address, limitation)
 }
 
 func printCertificates(tabWriter *tabwriter.Writer, certs []*x509.Certificate) {
