@@ -88,6 +88,8 @@ func extractInboundUsers(inb *core.InboundHandlerConfig) []*protocol.User {
 		return ty.Users
 	case *shadowsocks_2022.MultiUserServerConfig:
 		return ty.Users
+	case *hysteria.ServerConfig:
+    	return ty.Users
 	default:
 		fmt.Println("unsupported inbound type")
 	}
