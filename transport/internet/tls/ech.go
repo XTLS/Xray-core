@@ -244,7 +244,6 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		utils.TryDefaultHeadersWith(req.Header, "fetch")
 		req.Header.Set("X-Padding", utils.H2Base62Pad(crypto.RandBetween(100, 1000)))
 
-		req.URL.Scheme = "https"
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, 0, err
