@@ -53,7 +53,7 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 		v.Users = v.Clients
 	}
 
-	if shadowsocks_2022.IsSupportedMethod(v.Cipher) {
+	if _, err := shadowsocks_2022.GetCipherMethod(v.Cipher); err == nil {
 		return buildShadowsocks2022(v)
 	}
 
@@ -212,63 +212,43 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 		return nil, errors.New(`Shadowsocks settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple Shadowsocks outbounds and routing balancer instead`)
 	}
 
-	if len(v.Servers) == 1 {
-		server := v.Servers[0]
-		if shadowsocks_2022.IsSupportedMethod(server.Cipher) {
-			if server.Address == nil {
-				return nil, errors.New("Shadowsocks server address is not set.")
-			}
-			if server.Port == 0 {
-				return nil, errors.New("Invalid Shadowsocks port.")
-			}
-			if server.Password == "" {
-				return nil, errors.New("Shadowsocks password is not specified.")
-			}
-
-			config := new(shadowsocks_2022.ClientConfig)
-			config.Address = server.Address.Build()
-			config.Port = uint32(server.Port)
-			config.Method = server.Cipher
-			config.Key = server.Password
-			return config, nil
-		}
+	server := v.Servers[0]
+	if server.Address == nil {
+		return nil, errors.New("Shadowsocks server address is not set.")
+	}
+	if server.Port == 0 {
+		return nil, errors.New("Invalid Shadowsocks port.")
+	}
+	if server.Password == "" {
+		return nil, errors.New("Shadowsocks password is not specified.")
 	}
 
+	if _, err := shadowsocks_2022.GetCipherMethod(server.Cipher); err == nil {
+		config := new(shadowsocks_2022.ClientConfig)
+		config.Address = server.Address.Build()
+		config.Port = uint32(server.Port)
+		config.Method = server.Cipher
+		config.Key = server.Password
+		return config, nil
+	}
 	config := new(shadowsocks.ClientConfig)
-	for _, server := range v.Servers {
-		if shadowsocks_2022.IsSupportedMethod(server.Cipher) {
-			return nil, errors.New("Shadowsocks 2022 accept no multi servers")
-		}
-		if server.Address == nil {
-			return nil, errors.New("Shadowsocks server address is not set.")
-		}
-		if server.Port == 0 {
-			return nil, errors.New("Invalid Shadowsocks port.")
-		}
-		if server.Password == "" {
-			return nil, errors.New("Shadowsocks password is not specified.")
-		}
-		account := &shadowsocks.Account{
-			Password: server.Password,
-		}
-		account.CipherType = cipherFromString(server.Cipher)
-		if account.CipherType == shadowsocks.CipherType_UNKNOWN {
-			return nil, errors.New("unknown cipher method: ", server.Cipher)
-		}
-
-		ss := &protocol.ServerEndpoint{
-			Address: server.Address.Build(),
-			Port:    uint32(server.Port),
-			User: &protocol.User{
-				Level:   uint32(server.Level),
-				Email:   server.Email,
-				Account: serial.ToTypedMessage(account),
-			},
-		}
-
-		config.Server = ss
-		break
+	account := &shadowsocks.Account{
+		Password: server.Password,
 	}
+	account.CipherType = cipherFromString(server.Cipher)
+	if account.CipherType == shadowsocks.CipherType_UNKNOWN {
+		return nil, errors.New("unknown cipher method: ", server.Cipher)
+	}
+	ss := &protocol.ServerEndpoint{
+		Address: server.Address.Build(),
+		Port:    uint32(server.Port),
+		User: &protocol.User{
+			Level:   uint32(server.Level),
+			Email:   server.Email,
+			Account: serial.ToTypedMessage(account),
+		},
+	}
+	config.Server = ss
 
 	return config, nil
 }

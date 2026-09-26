@@ -114,11 +114,11 @@ func NewUDPSessionManager(timeout time.Duration) *UDPSessionManager {
 	}
 }
 
-func (m *UDPSessionManager) GetOrCreate(sessionID uint64) (*ServerUDPSession, bool) {
+func (m *UDPSessionManager) GetOrCreate(sessionID uint64) *ServerUDPSession {
 	now := time.Now().Unix()
 	if s, ok := m.sessions.Load(sessionID); ok {
 		s.LastActive.Store(now)
-		return s, true
+		return s
 	}
 
 	s := &ServerUDPSession{
@@ -129,7 +129,7 @@ func (m *UDPSessionManager) GetOrCreate(sessionID uint64) (*ServerUDPSession, bo
 	actual, loaded := m.sessions.LoadOrStore(sessionID, s)
 	if loaded {
 		actual.LastActive.Store(now)
-		return actual, true
+		return actual
 	}
 
 	// Trigger cleanup if at least 30 seconds have passed since last cleanup
@@ -138,7 +138,7 @@ func (m *UDPSessionManager) GetOrCreate(sessionID uint64) (*ServerUDPSession, bo
 		go m.cleanup(now)
 	}
 
-	return s, false
+	return s
 }
 
 func (m *UDPSessionManager) cleanup(now int64) {

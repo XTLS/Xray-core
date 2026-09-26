@@ -136,7 +136,7 @@ func (i *RelayInbound) processTCP(ctx context.Context, conn net.Conn, dispatcher
 
 	sessionPolicy := i.policyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return errors.New("unable to set read deadline").Base(err).AtWarning()
+		return errors.New("unable to set read deadline").Base(err)
 	}
 
 	// Read Salt + Outer EIH
@@ -163,7 +163,7 @@ func (i *RelayInbound) processTCP(ctx context.Context, conn net.Conn, dispatcher
 	if !ok {
 		return ErrInvalidRequest
 	}
-	_ = conn.SetReadDeadline(time.Time{})
+	conn.SetReadDeadline(time.Time{})
 
 	inbound := session.InboundFromContext(ctx)
 	inbound.User = &protocol.MemoryUser{

@@ -4,6 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"errors"
+	"strings"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -14,23 +15,18 @@ type CipherMethod struct {
 	IsChaCha      bool
 }
 
-var (
-	cipherAES128GCM        = &CipherMethod{Name: MethodAES128GCM, KeySaltLength: 16, IsChaCha: false}
-	cipherAES256GCM        = &CipherMethod{Name: MethodAES256GCM, KeySaltLength: 32, IsChaCha: false}
-	cipherChaCha20Poly1305 = &CipherMethod{Name: MethodChaCha20Poly1305, KeySaltLength: 32, IsChaCha: true}
-)
+var methods = map[string]*CipherMethod{
+	MethodAES128GCM:        {Name: MethodAES128GCM, KeySaltLength: 16, IsChaCha: false},
+	MethodAES256GCM:        {Name: MethodAES256GCM, KeySaltLength: 32, IsChaCha: false},
+	MethodChaCha20Poly1305: {Name: MethodChaCha20Poly1305, KeySaltLength: 32, IsChaCha: true},
+}
 
 func GetCipherMethod(name string) (*CipherMethod, error) {
-	switch name {
-	case MethodAES128GCM:
-		return cipherAES128GCM, nil
-	case MethodAES256GCM:
-		return cipherAES256GCM, nil
-	case MethodChaCha20Poly1305:
-		return cipherChaCha20Poly1305, nil
-	default:
-		return nil, errors.New("unknown shadowsocks 2022 method")
+	name = strings.ToLower(name)
+	if m, ok := methods[name]; ok {
+		return m, nil
 	}
+	return nil, errors.New("unknown shadowsocks 2022 method")
 }
 
 // NewAEAD creates standard stream AEAD cipher instance (AES-GCM or ChaCha20-Poly1305)

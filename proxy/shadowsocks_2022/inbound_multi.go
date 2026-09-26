@@ -204,7 +204,7 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 
 	sessionPolicy := i.policyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return errors.New("unable to set read deadline").Base(err).AtWarning()
+		return errors.New("unable to set read deadline").Base(err)
 	}
 
 	// 1. Read Request Salt (16 or 32 bytes)
@@ -255,7 +255,7 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 	if err != nil {
 		return err
 	}
-	_ = conn.SetReadDeadline(time.Time{})
+	conn.SetReadDeadline(time.Time{})
 	dest := reqHeader.Destination
 
 	// 6. Send Server Response Handshake
@@ -343,7 +343,7 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 			packetID := binary.BigEndian.Uint64(rawHeader[8:16])
 
 			// Replay protection & session lookup
-			sessionItem, _ := i.udpSessions.GetOrCreate(sessionID)
+			sessionItem := i.udpSessions.GetOrCreate(sessionID)
 
 			sessionItem.Lock()
 			if !sessionItem.Window.Check(packetID) {
@@ -503,7 +503,7 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 }
 
 func (i *MultiUserInbound) encodeServerUDPPacket(clientSessionID uint64, userPSK []byte, dest net.Destination, payload []byte) ([]byte, error) {
-	sessionItem, _ := i.udpSessions.GetOrCreate(clientSessionID)
+	sessionItem := i.udpSessions.GetOrCreate(clientSessionID)
 	if err := sessionItem.EnsureServerState(i.method, i.udpMasterCipher, nil, userPSK); err != nil {
 		return nil, err
 	}

@@ -81,10 +81,6 @@ func (w *StreamWriter) Nonce() []byte {
 	return w.nonce[:]
 }
 
-func (w *StreamWriter) Cipher() cipher.AEAD {
-	return w.cipher
-}
-
 func (w *StreamWriter) WriteChunk(payload []byte) error {
 	payloadLen := len(payload)
 	if payloadLen == 0 {
@@ -150,10 +146,6 @@ func NewStreamReader(r io.Reader, c cipher.AEAD) *StreamReader {
 
 func (r *StreamReader) Nonce() []byte {
 	return r.nonce[:]
-}
-
-func (r *StreamReader) Cipher() cipher.AEAD {
-	return r.cipher
 }
 
 func (r *StreamReader) Read(p []byte) (int, error) {
@@ -367,20 +359,17 @@ func WriteTCPRequest(w io.Writer, method *CipherMethod, pskList [][]byte, dest n
 
 	handshakeBuf.Write(clientSalt)
 
-	if len(pskList) > 1 {
-		for i := 0; i < len(pskList)-1; i++ {
-			currPSK := pskList[i]
-			identitySubkey := DeriveIdentitySubKey(currPSK, clientSalt, method.KeySaltLength)
-			block, err := method.NewBlock(identitySubkey)
-			if err != nil {
-				return nil, err
-			}
-			nextPSK := pskList[i+1]
-			pskHash := DeriveUserPSKHash(nextPSK)
-			var encryptedEIH [AESBlockSize]byte
-			block.Encrypt(encryptedEIH[:], pskHash[:])
-			handshakeBuf.Write(encryptedEIH[:])
+	for i, currPSK := range pskList[:len(pskList)-1] {
+		identitySubkey := DeriveIdentitySubKey(currPSK, clientSalt, method.KeySaltLength)
+		block, err := method.NewBlock(identitySubkey)
+		if err != nil {
+			return nil, err
 		}
+		nextPSK := pskList[i+1]
+		pskHash := DeriveUserPSKHash(nextPSK)
+		var encryptedEIH [AESBlockSize]byte
+		block.Encrypt(encryptedEIH[:], pskHash[:])
+		handshakeBuf.Write(encryptedEIH[:])
 	}
 
 	payloadLen := len(payload)

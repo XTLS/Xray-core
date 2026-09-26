@@ -98,7 +98,7 @@ func (i *Inbound) processTCP(ctx context.Context, conn net.Conn, dispatcher rout
 
 	sessionPolicy := i.policyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
-		return errors.New("unable to set read deadline").Base(err).AtWarning()
+		return errors.New("unable to set read deadline").Base(err)
 	}
 
 	var salt [32]byte
@@ -123,7 +123,7 @@ func (i *Inbound) processTCP(ctx context.Context, conn net.Conn, dispatcher rout
 	if err != nil {
 		return err
 	}
-	_ = conn.SetReadDeadline(time.Time{})
+	conn.SetReadDeadline(time.Time{})
 	dest := reqHeader.Destination
 
 	writer, err := WriteTCPResponse(conn, i.method, i.psk, saltSlice, nil)
@@ -243,7 +243,7 @@ func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatch
 							}
 							cEntry.timer.Update()
 							for _, rb := range resMb {
-								encPacket, err := i.udpCodec.EncodePacket(sessID, dest, rb.Bytes())
+								encPacket, err := i.udpCodec.EncodeServerPacket(sessID, dest, rb.Bytes())
 								rb.Release()
 								if err != nil {
 									continue

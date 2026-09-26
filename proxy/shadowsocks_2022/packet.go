@@ -281,7 +281,7 @@ func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 		packetID := binary.BigEndian.Uint64(plain[8:16])
 
 		if c.sessions != nil {
-			sessionItem, _ := c.sessions.GetOrCreate(sessionID)
+			sessionItem := c.sessions.GetOrCreate(sessionID)
 			sessionItem.Lock()
 			if !sessionItem.Window.CheckAndAdd(packetID) {
 				sessionItem.Unlock()
@@ -303,7 +303,7 @@ func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 	var sessionItem *ServerUDPSession
 
 	if c.sessions != nil {
-		sessionItem, _ = c.sessions.GetOrCreate(sessionID)
+		sessionItem = c.sessions.GetOrCreate(sessionID)
 		sessionItem.Lock()
 		if !sessionItem.Window.Check(packetID) {
 			sessionItem.Unlock()
@@ -444,15 +444,11 @@ func (s *ServerUDPSession) EncodeServerPacket(method *CipherMethod, clientSessio
 }
 
 func (c *UDPCodec) EncodeServerPacket(clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
-	sessionItem, _ := c.sessions.GetOrCreate(clientSessionID)
+	sessionItem := c.sessions.GetOrCreate(clientSessionID)
 	if err := sessionItem.EnsureServerState(c.method, c.blockCipher, c.chachaCipher, c.psk); err != nil {
 		return nil, err
 	}
 	return sessionItem.EncodeServerPacket(c.method, clientSessionID, dest, payload)
-}
-
-func (c *UDPCodec) EncodePacket(clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
-	return c.EncodeServerPacket(clientSessionID, dest, payload)
 }
 
 type UDPWriter struct {

@@ -27,7 +27,6 @@ func init() {
 }
 
 type Outbound struct {
-	ctx           context.Context
 	server        net.Destination
 	method        *CipherMethod
 	pskList       [][]byte
@@ -55,7 +54,6 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Outbound, error) {
 
 	v := core.MustFromContext(ctx)
 	return &Outbound{
-		ctx: ctx,
 		server: net.Destination{
 			Address: config.Address.AsAddress(),
 			Port:    net.Port(config.Port),
@@ -94,7 +92,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		conn = rawConn
 		return nil
 	}); err != nil {
-		return errors.New("failed to find an available destination").Base(err).AtWarning()
+		return errors.New("failed to find an available destination").Base(err)
 	}
 	defer conn.Close()
 
@@ -135,7 +133,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 			}
 
 			if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-				return errors.New("failed to write A request payload").Base(err).AtWarning()
+				return errors.New("failed to write A request payload").Base(err)
 			}
 
 			if err := bufferedWriter.SetBuffered(false); err != nil {

@@ -2,7 +2,6 @@ package shadowsocks_2022
 
 import (
 	"context"
-	"strings"
 	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -38,12 +37,6 @@ const (
 	MethodChaCha20Poly1305 = "2022-blake3-chacha20-poly1305"
 )
 
-var List = []string{
-	MethodAES128GCM,
-	MethodAES256GCM,
-	MethodChaCha20Poly1305,
-}
-
 var (
 	ErrBadKey            = errors.New("bad key")
 	ErrBadHeaderType     = errors.New("bad header type")
@@ -55,12 +48,3 @@ var (
 	ErrNoPadding         = errors.New("bad request: missing payload or padding")
 	ErrInvalidRequest    = errors.New("invalid request")
 )
-
-func IsSupportedMethod(method string) bool {
-	for _, m := range List {
-		if strings.EqualFold(m, method) {
-			return true
-		}
-	}
-	return false
-}

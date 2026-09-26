@@ -10,9 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"errors"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/routing"
 	. "github.com/xtls/xray-core/proxy/shadowsocks_2022"
 	"github.com/xtls/xray-core/transport"
 	"lukechampine.com/blake3"
@@ -228,3 +231,42 @@ func (w *customWriter) Close() error {
 }
 
 func (w *customWriter) Interrupt() {}
+
+type dummyDispatcher struct {
+	onDispatch func(ctx context.Context, dest net.Destination) (*transport.Link, error)
+}
+
+func (d *dummyDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+	if d.onDispatch != nil {
+		return d.onDispatch(ctx, dest)
+	}
+	return nil, errors.New("not handled")
+}
+
+func (d *dummyDispatcher) DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error {
+	return nil
+}
+
+func (d *dummyDispatcher) Start() error      { return nil }
+func (d *dummyDispatcher) Close() error      { return nil }
+func (d *dummyDispatcher) Type() interface{} { return routing.DispatcherType() }
+
+type dummyStatConn struct {
+	gonet.Conn
+}
+
+func (c *dummyStatConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	b := buf.New()
+	_, err := b.ReadFrom(c.Conn)
+	return buf.MultiBuffer{b}, err
+}
+
+func (c *dummyStatConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	defer buf.ReleaseMulti(mb)
+	for _, b := range mb {
+		if _, err := c.Conn.Write(b.Bytes()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
