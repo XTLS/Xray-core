@@ -29,6 +29,7 @@ type Server interface {
 
 // Client is the interface for DNS client.
 type Client struct {
+	id            string
 	server        Server
 	skipFallback  bool
 	expectedIPs   geodata.IPMatcher
@@ -97,7 +98,7 @@ func NewClient(
 	ipOption dns.IPOption,
 	updateRules func(bool),
 ) (*Client, error) {
-	client := &Client{}
+	client := &Client{id: ns.Id}
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
 		// Create a new server for each client for now
 		server, err := NewServer(ctx, ns.Address.AsDestination(), dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)

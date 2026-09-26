@@ -14,9 +14,11 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 )
 
 type NameServerConfig struct {
+	ID              string     `json:"id"`
 	Address         *Address   `json:"address"`
 	ClientIP        *Address   `json:"clientIp"`
 	Port            uint16     `json:"port"`
@@ -43,6 +45,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
+		ID              string     `json:"id"`
 		Address         *Address   `json:"address"`
 		ClientIP        *Address   `json:"clientIp"`
 		Port            uint16     `json:"port"`
@@ -60,6 +63,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		UnexpectedIPs   StringList `json:"unexpectedIPs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
+		c.ID = advanced.ID
 		c.Address = advanced.Address
 		c.ClientIP = advanced.ClientIP
 		c.Port = advanced.Port
@@ -134,6 +138,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	}
 
 	return &dns.NameServer{
+		Id: c.ID,
 		Address: &net.Endpoint{
 			Network: net.Network_UDP,
 			Address: c.Address.Build(),
@@ -159,6 +164,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 // DNSConfig is a JSON serializable object for dns.Config
 type DNSConfig struct {
 	Servers                []*NameServerConfig `json:"servers"`
+	Script                 string              `json:"script"`
 	Hosts                  *HostsWrapper       `json:"hosts"`
 	ClientIP               *Address            `json:"clientIp"`
 	Tag                    string              `json:"tag"`
@@ -276,6 +282,21 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
 		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
+	}
+
+	if c.Script != "" {
+		path := c.Script
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(platform.GetConfDirPath(), path)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, errors.New("DNS script does not exist: ", path).Base(err)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, errors.New("DNS script is not a regular file: ", path)
+		}
+		config.Script = path
 	}
 
 	if c.ClientIP != nil {
