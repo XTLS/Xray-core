@@ -6,8 +6,11 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	stdnet "net"
 	"net/http"
+	"net/http/httptest"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -464,4 +467,99 @@ func Test_maxUpload(t *testing.T) {
 	}
 
 	common.Must(listen.Close())
+}
+
+func Test_packetUpRandomizesPostSizePerRequest(t *testing.T) {
+	const uploadSize = 64 * 1024
+
+	releaseDownlink := make(chan struct{})
+	uploadReceived := make(chan struct{})
+	var uploadReceivedOnce sync.Once
+	var sizesMu sync.Mutex
+	var postSizes []int
+	var receivedBytes int
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method == http.MethodGet {
+			writer.WriteHeader(http.StatusOK)
+			writer.(http.Flusher).Flush()
+			select {
+			case <-releaseDownlink:
+			case <-request.Context().Done():
+			}
+			return
+		}
+
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			t.Errorf("failed to read upload request: %v", err)
+			writer.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		sizesMu.Lock()
+		postSizes = append(postSizes, len(body))
+		receivedBytes += len(body)
+		if receivedBytes >= uploadSize {
+			uploadReceivedOnce.Do(func() { close(uploadReceived) })
+		}
+		sizesMu.Unlock()
+		writer.WriteHeader(http.StatusOK)
+	}))
+	defer func() {
+		close(releaseDownlink)
+		server.Close()
+	}()
+
+	listenPort := net.Port(server.Listener.Addr().(*stdnet.TCPAddr).Port)
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "/sh",
+			Mode: "packet-up",
+			ScMaxEachPostBytes: &RangeConfig{
+				From: 1000,
+				To:   1004,
+			},
+			ScMinPostsIntervalMs: &RangeConfig{
+				From: -1,
+				To:   -1,
+			},
+		},
+	}
+
+	conn, err := Dial(context.Background(), net.TCPDestination(net.LocalHostIP, listenPort), streamSettings)
+	common.Must(err)
+	defer conn.Close()
+
+	upload := make([]byte, uploadSize)
+	common.Must2(conn.Write(upload))
+
+	select {
+	case <-uploadReceived:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for packet-up requests")
+	}
+
+	sizesMu.Lock()
+	gotPostSizes := append([]int(nil), postSizes...)
+	gotReceivedBytes := receivedBytes
+	sizesMu.Unlock()
+
+	if gotReceivedBytes != uploadSize {
+		t.Fatalf("received %d upload bytes, want %d", gotReceivedBytes, uploadSize)
+	}
+
+	fullPostSizes := make(map[int]struct{})
+	for _, size := range gotPostSizes {
+		if size > 1004 {
+			t.Fatalf("POST body has %d bytes, want at most 1004", size)
+		}
+		if size >= 1000 {
+			fullPostSizes[size] = struct{}{}
+		}
+	}
+	if len(fullPostSizes) < 2 {
+		t.Fatalf("all full POST bodies used the same size: %v", gotPostSizes)
+	}
 }
