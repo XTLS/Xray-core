@@ -3,6 +3,8 @@ package log
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	lua "github.com/yuin/gopher-lua"
@@ -30,7 +32,8 @@ func TestLuaLog(t *testing.T) {
 	nativeError := L.NewUserData()
 	nativeError.Value = fmt.Errorf("lookup failed: %w", errors.New("upstream timeout"))
 	L.SetGlobal("nativeError", nativeError)
-	if err := L.DoString(`
+	path := filepath.Join(t.TempDir(), "logging.lua")
+	if err := os.WriteFile(path, []byte(`
 		local log = require("xray.log")
 		assert(log == require("xray.log"))
 		log.debug("query: ", "example.com")
@@ -44,6 +47,18 @@ func TestLuaLog(t *testing.T) {
 		local ok, err = pcall(function() error("Lua failure", 0) end)
 		assert(not ok)
 		log.error(err)
+		function logHook()
+			log.info("hook")
+		end
+	`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := L.DoFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := L.DoString(`
+		logHook()
+		require("xray.log").info("anonymous")
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -52,13 +67,15 @@ func TestLuaLog(t *testing.T) {
 		severity Severity
 		message  string
 	}{
-		{Severity_Debug, "[Debug] query: example.com"},
-		{Severity_Info, "[Info] count=42, enabled=true, value=nil"},
-		{Severity_Warning, "[Warning] fallback"},
-		{Severity_Error, "[Error] failed"},
-		{Severity_Error, "[Error] DNS failed: lookup failed: upstream timeout"},
-		{Severity_Warning, "[Warning] lookup failed: upstream timeout"},
-		{Severity_Error, "[Error] Lua failure"},
+		{Severity_Debug, "[Debug] logging.lua: query: example.com"},
+		{Severity_Info, "[Info] logging.lua: count=42, enabled=true, value=nil"},
+		{Severity_Warning, "[Warning] logging.lua: fallback"},
+		{Severity_Error, "[Error] logging.lua: failed"},
+		{Severity_Error, "[Error] logging.lua: DNS failed: lookup failed: upstream timeout"},
+		{Severity_Warning, "[Warning] logging.lua: lookup failed: upstream timeout"},
+		{Severity_Error, "[Error] logging.lua: Lua failure"},
+		{Severity_Info, "[Info] logging.lua: hook"},
+		{Severity_Info, "[Info] <string>: anonymous"},
 	}
 	if len(handler.messages) != len(want) {
 		t.Fatalf("logged %d messages, want %d", len(handler.messages), len(want))
