@@ -184,6 +184,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		if tls.GetFingerprint(config.Fingerprint) == nil {
 			return nil, errors.New(`unknown "fingerprint": `, config.Fingerprint)
 		}
+		if !tls.FingerprintSupportsTLS13(config.Fingerprint) {
+			return nil, errors.New(`fingerprint "`, config.Fingerprint, `" does not support TLS 1.3, which is required by REALITY`)
+		}
 		if len(c.ServerNames) != 0 {
 			return nil, errors.New(`non-empty "serverNames", please use "serverName" instead`)
 		}
