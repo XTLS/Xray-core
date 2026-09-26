@@ -458,7 +458,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		panic("`scMaxEachPostBytes` should be bigger than 0")
 	}
 
-	maxUploadSize := scMaxEachPostBytes.rand()
+	maxUploadSize := scMaxEachPostBytes.To
 	// WithSizeLimit(0) will still allow single bytes to pass, and a lot of
 	// code relies on this behavior. Subtract 1 so that together with
 	// uploadWriter wrapper, exact size limits can be enforced
@@ -488,7 +488,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			doSplit := atomic.Bool{}
 			for doSplit.Store(true); doSplit.Load(); {
 				var chunk buf.MultiBuffer
-				remainder, chunk = buf.SplitSize(remainder, maxUploadSize)
+				postSize := scMaxEachPostBytes.rand()
+				remainder, chunk = buf.SplitSize(remainder, postSize)
 				if chunk.IsEmpty() {
 					break
 				}
