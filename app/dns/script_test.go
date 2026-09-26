@@ -48,7 +48,7 @@ assert(by_id.primary and by_id.fallback, "primary and fallback DNS servers are r
 
 function handleDNSQuery(q)
     local answer = by_id.primary:query(q)
-    if not answer.error and us_ips:AnyMatch(answer.ips) then
+    if not answer.error and us_ips:anyMatch(answer.ips) then
         return answer
     end
     return by_id.fallback:query(q)

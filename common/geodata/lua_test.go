@@ -16,12 +16,12 @@ func TestLuaIPMatcherAcceptsNativeIP(t *testing.T) {
 	L.SetGlobal("ip", ip)
 	if err := L.DoString(`
 		local matcher = require("xray.geodata").ipMatcher({"127.0.0.0/8"})
-		assert(matcher:Match(ip))
-		assert(matcher:AnyMatch({ip}))
-		assert(matcher:Matches({ip}))
-		local matched, unmatched = matcher:FilterIPs({ip})
+		assert(matcher:match(ip))
+		assert(matcher:anyMatch({ip}))
+		assert(matcher:matches({ip}))
+		local matched, unmatched = matcher:filterIPs({ip})
 		assert(#matched == 1 and #unmatched == 0)
-		assert(matcher:Match(matched[1]))
+		assert(matcher:match(matched[1]))
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -33,9 +33,9 @@ func TestLuaDomainMatcherUsesNativeMatcher(t *testing.T) {
 	RegisterLua(L)
 	if err := L.DoString(`
 		local matcher = require("xray.geodata").domainMatcher({"example.com"})
-		assert(matcher:MatchAny("example.com"))
-		assert(matcher:MatchAny("www.example.com"))
-		assert(#(matcher:Match("www.example.com")) == 1)
+		assert(matcher:matchAny("example.com"))
+		assert(matcher:matchAny("www.example.com"))
+		assert(#(matcher:match("www.example.com")) == 1)
 	`); err != nil {
 		t.Fatal(err)
 	}
