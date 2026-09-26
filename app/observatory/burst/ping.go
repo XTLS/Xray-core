@@ -2,8 +2,10 @@ package burst
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common/net"
@@ -53,9 +55,18 @@ func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler 
 }
 
 // MeasureDelay returns the delay time of the request to dest
-func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
+func (s *pingClient) MeasureDelay(httpMethod string, expectedStatus int32, minimumResponseBytes int64) (time.Duration, error) {
 	if s.httpClient == nil {
 		panic("pingClient not initialized")
+	}
+	if expectedStatus != 0 && (expectedStatus < 100 || expectedStatus > 599) {
+		return rttFailed, fmt.Errorf("expected status must be 0 or a valid HTTP status code")
+	}
+	if minimumResponseBytes < 0 {
+		return rttFailed, fmt.Errorf("minimum response bytes must not be negative")
+	}
+	if minimumResponseBytes > 0 && !strings.EqualFold(httpMethod, http.MethodGet) {
+		return rttFailed, fmt.Errorf("minimum response bytes requires GET, got %s", httpMethod)
 	}
 
 	req, err := http.NewRequest(httpMethod, s.destination, nil)
@@ -69,13 +80,21 @@ func (s *pingClient) MeasureDelay(httpMethod string) (time.Duration, error) {
 	if err != nil {
 		return rttFailed, err
 	}
-	if httpMethod == http.MethodGet {
-		_, err = io.Copy(io.Discard, resp.Body)
+	defer resp.Body.Close()
+
+	if expectedStatus != 0 && resp.StatusCode != int(expectedStatus) {
+		return rttFailed, fmt.Errorf("unexpected HTTP status: got %d, want %d", resp.StatusCode, expectedStatus)
+	}
+	if strings.EqualFold(httpMethod, http.MethodGet) {
+		var responseBytes int64
+		responseBytes, err = io.Copy(io.Discard, resp.Body)
 		if err != nil {
 			return rttFailed, err
 		}
+		if responseBytes < minimumResponseBytes {
+			return rttFailed, fmt.Errorf("response body too short: got %d bytes, want at least %d", responseBytes, minimumResponseBytes)
+		}
 	}
-	resp.Body.Close()
 
 	return time.Since(start), nil
 }

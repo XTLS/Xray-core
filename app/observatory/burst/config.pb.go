@@ -88,9 +88,13 @@ type HealthPingConfig struct {
 	// ping timeout, int64 values of time.Duration
 	Timeout int64 `protobuf:"varint,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	// http method to make request
-	HttpMethod    string `protobuf:"bytes,6,opt,name=httpMethod,proto3" json:"httpMethod,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	HttpMethod string `protobuf:"bytes,6,opt,name=httpMethod,proto3" json:"httpMethod,omitempty"`
+	// exact HTTP status code required for a successful probe; 0 disables validation
+	ExpectedStatus int32 `protobuf:"varint,7,opt,name=expected_status,json=expectedStatus,proto3" json:"expected_status,omitempty"`
+	// minimum response body size required for a successful GET probe; 0 disables validation
+	MinimumResponseBytes int64 `protobuf:"varint,8,opt,name=minimum_response_bytes,json=minimumResponseBytes,proto3" json:"minimum_response_bytes,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *HealthPingConfig) Reset() {
@@ -165,6 +169,20 @@ func (x *HealthPingConfig) GetHttpMethod() string {
 	return ""
 }
 
+func (x *HealthPingConfig) GetExpectedStatus() int32 {
+	if x != nil {
+		return x.ExpectedStatus
+	}
+	return 0
+}
+
+func (x *HealthPingConfig) GetMinimumResponseBytes() int64 {
+	if x != nil {
+		return x.MinimumResponseBytes
+	}
+	return 0
+}
+
 var File_app_observatory_burst_config_proto protoreflect.FileDescriptor
 
 const file_app_observatory_burst_config_proto_rawDesc = "" +
@@ -173,7 +191,7 @@ const file_app_observatory_burst_config_proto_rawDesc = "" +
 	"\x06Config\x12)\n" +
 	"\x10subject_selector\x18\x02 \x03(\tR\x0fsubjectSelector\x12R\n" +
 	"\vping_config\x18\x03 \x01(\v21.xray.core.app.observatory.burst.HealthPingConfigR\n" +
-	"pingConfig\"\xd4\x01\n" +
+	"pingConfig\"\xb3\x02\n" +
 	"\x10HealthPingConfig\x12 \n" +
 	"\vdestination\x18\x01 \x01(\tR\vdestination\x12\"\n" +
 	"\fconnectivity\x18\x02 \x01(\tR\fconnectivity\x12\x1a\n" +
@@ -182,7 +200,9 @@ const file_app_observatory_burst_config_proto_rawDesc = "" +
 	"\atimeout\x18\x05 \x01(\x03R\atimeout\x12\x1e\n" +
 	"\n" +
 	"httpMethod\x18\x06 \x01(\tR\n" +
-	"httpMethodBp\n" +
+	"httpMethod\x12'\n" +
+	"\x0fexpected_status\x18\a \x01(\x05R\x0eexpectedStatus\x124\n" +
+	"\x16minimum_response_bytes\x18\b \x01(\x03R\x14minimumResponseBytesBp\n" +
 	"\x1ecom.xray.app.observatory.burstP\x01Z/github.com/xtls/xray-core/app/observatory/burst\xaa\x02\x1aXray.App.Observatory.Burstb\x06proto3"
 
 var (

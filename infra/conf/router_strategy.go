@@ -1,12 +1,14 @@
 package conf
 
 import (
+	"net/http"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/xtls/xray-core/app/observatory/burst"
 	"github.com/xtls/xray-core/app/router"
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/infra/conf/cfgcommon/duration"
 )
 
@@ -45,12 +47,14 @@ type strategyLeastLoadConfig struct {
 
 // HealthCheckSettings holds settings for health Checker
 type HealthCheckSettings struct {
-	Destination   string            `json:"destination"`
-	Connectivity  string            `json:"connectivity"`
-	Interval      duration.Duration `json:"interval"`
-	SamplingCount int               `json:"sampling"`
-	Timeout       duration.Duration `json:"timeout"`
-	HttpMethod    string            `json:"httpMethod"`
+	Destination          string            `json:"destination"`
+	Connectivity         string            `json:"connectivity"`
+	Interval             duration.Duration `json:"interval"`
+	SamplingCount        int               `json:"sampling"`
+	Timeout              duration.Duration `json:"timeout"`
+	HttpMethod           string            `json:"httpMethod"`
+	ExpectedStatus       int32             `json:"expectedStatus"`
+	MinimumResponseBytes int64             `json:"minimumResponseBytes"`
 }
 
 func (h HealthCheckSettings) Build() (proto.Message, error) {
@@ -60,13 +64,24 @@ func (h HealthCheckSettings) Build() (proto.Message, error) {
 	} else {
 		httpMethod = strings.TrimSpace(h.HttpMethod)
 	}
+	if h.ExpectedStatus != 0 && (h.ExpectedStatus < 100 || h.ExpectedStatus > 599) {
+		return nil, errors.New("expectedStatus must be 0 or a valid HTTP status code")
+	}
+	if h.MinimumResponseBytes < 0 {
+		return nil, errors.New("minimumResponseBytes must not be negative")
+	}
+	if h.MinimumResponseBytes > 0 && !strings.EqualFold(httpMethod, http.MethodGet) {
+		return nil, errors.New("minimumResponseBytes requires httpMethod GET")
+	}
 	return &burst.HealthPingConfig{
-		Destination:   h.Destination,
-		Connectivity:  h.Connectivity,
-		Interval:      int64(h.Interval),
-		Timeout:       int64(h.Timeout),
-		SamplingCount: int32(h.SamplingCount),
-		HttpMethod:    httpMethod,
+		Destination:          h.Destination,
+		Connectivity:         h.Connectivity,
+		Interval:             int64(h.Interval),
+		Timeout:              int64(h.Timeout),
+		SamplingCount:        int32(h.SamplingCount),
+		HttpMethod:           httpMethod,
+		ExpectedStatus:       h.ExpectedStatus,
+		MinimumResponseBytes: h.MinimumResponseBytes,
 	}, nil
 }
 

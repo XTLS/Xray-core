@@ -15,12 +15,14 @@ import (
 
 // HealthPingSettings holds settings for health Checker
 type HealthPingSettings struct {
-	Destination   string        `json:"destination"`
-	Connectivity  string        `json:"connectivity"`
-	Interval      time.Duration `json:"interval"`
-	SamplingCount int           `json:"sampling"`
-	Timeout       time.Duration `json:"timeout"`
-	HttpMethod    string        `json:"httpMethod"`
+	Destination          string        `json:"destination"`
+	Connectivity         string        `json:"connectivity"`
+	Interval             time.Duration `json:"interval"`
+	SamplingCount        int           `json:"sampling"`
+	Timeout              time.Duration `json:"timeout"`
+	HttpMethod           string        `json:"httpMethod"`
+	ExpectedStatus       int32         `json:"expectedStatus"`
+	MinimumResponseBytes int64         `json:"minimumResponseBytes"`
 }
 
 // HealthPing is the health checker for balancers
@@ -49,12 +51,14 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 		}
 
 		settings = &HealthPingSettings{
-			Connectivity:  strings.TrimSpace(config.Connectivity),
-			Destination:   strings.TrimSpace(config.Destination),
-			Interval:      time.Duration(config.Interval),
-			SamplingCount: int(config.SamplingCount),
-			Timeout:       time.Duration(config.Timeout),
-			HttpMethod:    httpMethod,
+			Connectivity:         strings.TrimSpace(config.Connectivity),
+			Destination:          strings.TrimSpace(config.Destination),
+			Interval:             time.Duration(config.Interval),
+			SamplingCount:        int(config.SamplingCount),
+			Timeout:              time.Duration(config.Timeout),
+			HttpMethod:           httpMethod,
+			ExpectedStatus:       config.ExpectedStatus,
+			MinimumResponseBytes: config.MinimumResponseBytes,
 		}
 	}
 	if settings.Destination == "" {
@@ -185,7 +189,7 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 			}
 			timers = append(timers, time.AfterFunc(delay, func() {
 				errors.LogDebug(h.ctx, "checking ", handler)
-				delay, err := client.MeasureDelay(h.Settings.HttpMethod)
+				delay, err := client.MeasureDelay(h.Settings.HttpMethod, h.Settings.ExpectedStatus, h.Settings.MinimumResponseBytes)
 				if err == nil {
 					ch <- &rtt{
 						handler: handler,
@@ -279,7 +283,7 @@ func (h *HealthPing) checkConnectivity() bool {
 		h.Settings.Connectivity,
 		h.Settings.Timeout,
 	)
-	if _, err := tester.MeasureDelay(h.Settings.HttpMethod); err != nil {
+	if _, err := tester.MeasureDelay(h.Settings.HttpMethod, 0, 0); err != nil {
 		return false
 	}
 	return true

@@ -28,5 +28,9 @@ message HealthPingConfig {
   int64 timeout = 5;
   // http method to make request
   string httpMethod = 6;
+  // exact HTTP status code required for a successful probe; 0 disables validation
+  int32 expected_status = 7;
+  // minimum response body size required for a successful GET probe; 0 disables validation
+  int64 minimum_response_bytes = 8;
 
 }
