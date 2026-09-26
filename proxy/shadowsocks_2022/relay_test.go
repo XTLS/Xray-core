@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	gonet "net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"errors"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"

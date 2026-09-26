@@ -431,8 +431,6 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 			}
 
 			payload := bodyPlain[offset+addrLen:]
-			payloadCopy := make([]byte, len(payload))
-			copy(payloadCopy, payload)
 
 			entry, ok := udpConns.Load(sessionID)
 			if !ok {
@@ -496,7 +494,7 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 
 			entry.timer.Update()
 			pBuf := buf.New()
-			pBuf.Write(payloadCopy)
+			pBuf.Write(payload)
 			_ = entry.link.Writer.WriteMultiBuffer(buf.MultiBuffer{pBuf})
 		}
 	}

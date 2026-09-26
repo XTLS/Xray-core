@@ -109,12 +109,14 @@ func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
 }
 
 func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
+	v.Cipher = strings.ToLower(v.Cipher)
 	if len(v.Users) == 0 {
 		config := new(shadowsocks_2022.ServerConfig)
 		config.Method = v.Cipher
 		config.Key = v.Password
 		config.Network = v.NetworkList.Build()
 		config.Email = v.Email
+		config.Level = int32(v.Level)
 		return config, nil
 	}
 
@@ -169,6 +171,7 @@ func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
 			Email:   user.Email,
 			Address: user.Address.Build(),
 			Port:    uint32(user.Port),
+			Level:   int32(user.Level),
 		})
 	}
 	return config, nil

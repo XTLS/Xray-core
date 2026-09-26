@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
-	mrand "math/rand"
+	mrand "math/rand/v2"
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -169,7 +169,7 @@ func (r *StreamReader) Read(p []byte) (int, error) {
 
 	payloadLen := int(binary.BigEndian.Uint16(decryptedLen))
 	if payloadLen == 0 {
-		return 0, nil
+		return 0, ErrInvalidRequest
 	}
 
 	chunkEnd := payloadLen + AEADTagSize
@@ -213,7 +213,7 @@ func (r *StreamReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 	payloadLen := int(binary.BigEndian.Uint16(decryptedLen))
 	if payloadLen == 0 {
-		return nil, nil
+		return nil, ErrInvalidRequest
 	}
 
 	chunkEnd := payloadLen + AEADTagSize
@@ -375,7 +375,7 @@ func WriteTCPRequest(w io.Writer, method *CipherMethod, pskList [][]byte, dest n
 	payloadLen := len(payload)
 	var paddingLen int
 	if payloadLen < MaxPaddingLength {
-		paddingLen = mrand.Intn(MaxPaddingLength-payloadLen) + 1
+		paddingLen = mrand.IntN(MaxPaddingLength-payloadLen) + 1
 	}
 	addrPortLen := AddrPortLength(dest)
 	varHeaderLen := addrPortLen + 2 + paddingLen + payloadLen

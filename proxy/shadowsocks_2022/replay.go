@@ -25,8 +25,7 @@ type SlidingWindow struct {
 }
 
 func (f *SlidingWindow) Reset() {
-	f.last = 0
-	f.ring[0] = 0
+	*f = SlidingWindow{}
 }
 
 func (f *SlidingWindow) Check(counter uint64) bool {
