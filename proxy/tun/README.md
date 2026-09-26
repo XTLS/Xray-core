@@ -17,10 +17,53 @@ Plainly enabling it in the config probably will result nothing, or lock your rou
 By default, enabling the feature will only bring the tun interface up. \
 When configured explicitly, Windows and Linux can apply interface addresses from `gateway`, while macOS uses the first IPv4 prefix from `gateway` to configure the utun point-to-point address. \
 Windows, Linux and macOS can also apply system routes from `autoSystemRoutingTable`.
-Linux and macOS do not configure system DNS from the `dns` field; system DNS remains managed by the OS or distribution-specific network services. \
+macOS does not configure system DNS from the `dns` field, and neither does Linux by default; system DNS remains managed by the OS or distribution-specific network services. \
 For more advanced routing policies or rules, OS level configuration can still manage the named interface (e.g. xray0) when it appears.
 This keeps complex system level routing and rules in a single place of responsibility - the OS itself. \
 Examples of how to achieve this on a simple Linux system (Ubuntu with systemd-networkd) can be found at the end of this README.
+
+### SYSTEM DNS ON LINUX (`autoSystemDNS`)
+
+On Linux, setting `autoSystemDNS` to `true` lets the inbound point the system resolver at the tun interface, so name lookups resolve through Xray instead of going out over the physical link. It is off by default, and it is Linux-only.
+
+It uses `resolvectl`, which means it applies only when all of these hold:
+
+- the system runs systemd and `resolvectl` is on `PATH`
+- `systemd-resolved` is enabled and actually managing DNS (installed but not running has no effect)
+- systemd-resolved is version 240 or newer, where `default-route` exists
+- no `dns` upstream resolves through the system resolver, directly or through its own bootstrap (see below)
+
+The address handed over is the first IPv4 `gateway` incremented by one (e.g. `192.168.100.1/30` -> `192.168.100.2`). It is not taken from `dns`: handing `1.1.1.1` to `resolvectl dns` would make systemd-resolved query that server directly over the physical link, which is the leak this option exists to close.
+
+Because that address has to actually answer, the takeover is checked before it happens. A query from the interface address to that address is routed through the configured rules, and host-wide DNS is only changed when the result is a DNS-capable outbound. Otherwise the option does nothing and DNS is left to the OS. In practice this means you also need a routing rule sending the interface's port 53 to a `dns` outbound, for example:
+
+```json
+"routing": {
+  "rules": [
+    { "type": "field", "inboundTag": ["tun"], "port": 53, "outboundTag": "dns" }
+  ]
+}
+```
+
+The check is a preflight, not a proof for arbitrary rules. It sends its query from the interface address and from a representative ephemeral source port, so a rule that matches on the source port cannot be predicted ahead of time: if the interface's port 53 reaches the `dns` outbound only from some source ports, the takeover is accepted and queries from the other ports fail. Supported configurations are those where the DNS path does not depend on the source port, that is, where the interface's port 53 reaches a `dns` outbound whatever its source.
+
+It is also a check for the dependencies it knows about, not a proof that no indirect one exists. A hostname-based upstream that bootstraps through system DNS is the case in point: `https+local://dns.google/dns-query` resolves its own hostname with `DialSystem`, so once the takeover is in place that bootstrap goes `resolved -> TUN -> DNS outbound -> bootstrap -> resolved` and the query times out. The preflight does not see it, because the dependency sits in the upstream's bootstrap rather than in the clients it inspects. Upstream resolution, bootstrap included, therefore has to stay independent of the resolver path being redirected; configuring the address instead of the hostname, or resolving the hostname beforehand, avoids it.
+
+The upstream requirement in the list above matters as much as the routing rule. With no name servers configured, Core resolves through a client that forwards to the system resolver; pointing the system resolver at the TUN would then close a loop through the DNS outbound, `resolved -> TUN -> DNS outbound -> system resolver -> resolved`, and resolution stops. The takeover is refused in that case.
+
+The same applies to a name server pointed at `localhost`, and to a `dns` section that is present but lists no name servers. One such upstream is enough to refuse the takeover even when independent upstreams are configured alongside it: name servers are selected per domain, so a domain-specific rule can still choose the local one, and the loop then affects whichever domains reach it. The check is deliberately broader than the loop it observed, because the alternative would be to drop a name server the user configured.
+
+Where it does not apply, DNS is left alone and the leak described in XTLS/Xray-core#6454 remains:
+
+| Environment | Behaviour |
+|---|---|
+| systemd distribution with systemd-resolved enabled | applies |
+| Alpine, Void, Devuan, OpenRC-based, OpenWrt | no `resolvectl`, skipped |
+| DNS managed by dnsmasq / unbound / BIND / static `resolv.conf` | unreachable by `resolvectl`, skipped |
+| Containers without a systemd-resolved daemon | skipped |
+| systemd older than 240 | `default-route` unavailable, skipped |
+
+On `Close()` the setting is reverted. It is **not** reverted if the process is killed with `SIGKILL`, since a process cannot handle that signal; run `resolvectl revert <iface>` to clean up by hand. An application that brings its own DNS endpoint is unaffected either way — this only covers the system resolver.
 
 Due to this inbound not actually being a proxy, the configuration ignore required listen and port options, and never listen on any port. \
 Here is simple Xray config snippet to enable the inbound:
