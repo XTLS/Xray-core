@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/routing"
+	"golang.org/x/sync/singleflight"
 )
 
 // HealthPingSettings holds settings for health Checker
@@ -31,6 +32,7 @@ type HealthPing struct {
 	dispatcher    routing.Dispatcher
 	access        sync.Mutex
 	ticker        *time.Ticker
+	connectivity  singleflight.Group
 
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
@@ -193,7 +195,7 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 					}
 					return
 				}
-				if !h.checkConnectivity() {
+				if !h.checkConnectivity(ctx) {
 					errors.LogWarning(h.ctx, "network is down")
 					ch <- &rtt{
 						handler: handler,
@@ -271,16 +273,30 @@ func (h *HealthPing) Cleanup(tags []string) {
 
 // checkConnectivity checks the network connectivity, it returns
 // true if network is good or "connectivity check url" not set
-func (h *HealthPing) checkConnectivity() bool {
+func (h *HealthPing) checkConnectivity(ctx context.Context) bool {
 	if h.Settings.Connectivity == "" {
 		return true
 	}
-	tester := newDirectPingClient(
-		h.Settings.Connectivity,
-		h.Settings.Timeout,
-	)
-	if _, err := tester.MeasureDelay(h.Settings.HttpMethod); err != nil {
+	result := h.connectivity.DoChan("connectivity", func() (any, error) {
+		probeCtx, cancel := context.WithTimeout(h.ctx, h.Settings.Timeout)
+		defer cancel()
+		tester := newDirectPingClient(
+			h.Settings.Connectivity,
+			h.Settings.Timeout,
+		)
+		_, err := tester.MeasureDelayContext(probeCtx, h.Settings.HttpMethod)
+		return err == nil, nil
+	})
+	timer := time.NewTimer(h.Settings.Timeout)
+	defer timer.Stop()
+	select {
+	case result := <-result:
+		return result.Err == nil && result.Val.(bool)
+	case <-ctx.Done():
+		return false
+	case <-h.ctx.Done():
+		return false
+	case <-timer.C:
 		return false
 	}
-	return true
 }
