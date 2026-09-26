@@ -6,6 +6,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
+	"github.com/xtls/xray-core/common/log"
 	luamgr "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
@@ -30,6 +31,7 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 		defer cancel()
 		L, err := program.NewState(initCtx, func(L *lua.LState) {
 			geodata.RegisterLua(L)
+			log.RegisterLua(L)
 			server.RegisterLua(L)
 		})
 		if err != nil {

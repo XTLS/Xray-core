@@ -142,9 +142,14 @@ func TestDNSScriptHookErrorAndFakeDNSOption(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "script.lua")
 	script := `
 local server = require("xray.dns").servers[1]
+local log = require("xray.log")
+log.info("DNS script loaded")
 function handleDNSQuery(q)
+    log.debug("DNS query: ", q.domain)
     if q.domain == "bad.example" then error("script failure") end
-    return server:query(q)
+    local answer = server:query(q)
+    if answer.error then log.error("DNS failed: ", answer.error) end
+    return answer
 end
 `
 	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
