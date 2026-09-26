@@ -1,6 +1,8 @@
 package strmatcher
 
 import (
+	"errors"
+	"math"
 	"math/bits"
 	"runtime"
 	"sort"
@@ -101,6 +103,9 @@ func (g *MphMatcherGroup) Build() error {
 		valueCount += len(ruleInfo.matchers[Full]) + len(ruleInfo.matchers[Domain])
 	}
 	g.patterns = strings.Join(g.rules, "")
+	if uint64(len(g.patterns)) > math.MaxUint32 || uint64(valueCount) > math.MaxUint32 {
+		return errors.New("too many rules for MphMatcherGroup")
+	}
 	g.patternOffs = make([]uint32, len(g.rules)+1)
 	g.values = make([]uint32, 0, valueCount)
 	g.valueOffs = make([]uint32, len(g.rules)+1)
