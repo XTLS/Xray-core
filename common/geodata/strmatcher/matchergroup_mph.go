@@ -171,8 +171,10 @@ func (g *MphMatcherGroup) Lookup(rollingHash uint32, input string) uint32 {
 	seed := g.level0[i0]
 	i1 := MemHash(seed, input) & g.level1Mask
 	n := g.level1[i1]
-	// Check length before slicing, most lookups miss
-	if start, end := g.patternOffs[n], g.patternOffs[n+1]; int(end-start) == len(input) && g.patterns[start:end] == input {
+	// Build only puts valid rule indices in level1, so n+1 < len(patternOffs) and the span is inside patterns.
+	// Skip the bounds checks, they made this hot path measurably slower than indexing a []string
+	offs := (*[2]uint32)(unsafe.Add(unsafe.Pointer(unsafe.SliceData(g.patternOffs)), uintptr(n)*4))
+	if start := offs[0]; int(offs[1]-start) == len(input) && unsafe.String((*byte)(unsafe.Add(unsafe.Pointer(unsafe.StringData(g.patterns)), start)), len(input)) == input {
 		return n
 	}
 	return 0
