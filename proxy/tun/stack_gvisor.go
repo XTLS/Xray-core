@@ -42,8 +42,8 @@ type stackGVisor struct {
 	endpoint    stack.LinkEndpoint
 }
 
-// NewStack builds new ip stack (using gVisor)
-func NewStack(ctx context.Context, options StackOptions, handler *Handler) (Stack, error) {
+// newGVisorStack builds new ip stack (using gVisor)
+func newGVisorStack(ctx context.Context, options StackOptions, handler *Handler) (Stack, error) {
 	gStack := &stackGVisor{
 		ctx:         ctx,
 		tun:         options.Tun,
