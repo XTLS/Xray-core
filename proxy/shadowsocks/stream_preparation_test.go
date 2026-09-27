@@ -3,6 +3,11 @@ package shadowsocks
 import (
 	"bytes"
 	"context"
+	"io"
+	gonet "net"
+	"testing"
+	"time"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -11,10 +16,6 @@ import (
 	"github.com/xtls/xray-core/transport/exchange"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"io"
-	gonet "net"
-	"testing"
-	"time"
 )
 
 func TestStreamResponseHandlesNilTerminalBuffer(t *testing.T) {
@@ -40,6 +41,7 @@ type preparationDialer struct {
 func (d preparationDialer) Dial(context.Context, net.Destination) (stat.Connection, error) {
 	return d.conn, nil
 }
+
 func TestPreparationIdleClosesBlockedHeader(t *testing.T) {
 	conn, peer := gonet.Pipe()
 	defer conn.Close()

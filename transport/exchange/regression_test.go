@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/xtls/xray-core/features/policy"
 	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/xtls/xray-core/features/policy"
 )
 
 func TestIngressEOFPolicyRunsDuringPreparation(t *testing.T) {

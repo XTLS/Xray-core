@@ -57,6 +57,7 @@ func (r *legacyPacketReader) release() {
 	buf.ReleaseMulti(r.cache)
 	r.cache = nil
 }
+
 func (r *legacyPacketReader) ReadPacket(p []byte) (int, net.Destination, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

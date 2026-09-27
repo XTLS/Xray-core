@@ -1,9 +1,10 @@
 package exchange
 
 import (
-	"github.com/xtls/xray-core/common/buf"
 	"io"
 	"net"
+
+	"github.com/xtls/xray-core/common/buf"
 )
 
 // Native vector IO is a leaf, never the execution ABI. Counters and activity

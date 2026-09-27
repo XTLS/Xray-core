@@ -165,12 +165,14 @@ func TestPacketAssociationCancelUnblocksPressure(t *testing.T) {
 		t.Fatal("reply worker was not joined")
 	}
 }
+
 func (s *scriptedPacketSource) WritePacket(p []byte, dest net.Destination) (int, error) {
 	s.mu.Lock()
 	s.written = append(s.written, dest)
 	s.mu.Unlock()
 	return len(p), nil
 }
+
 func (s *scriptedPacketSource) Abort()                           { s.once.Do(func() { close(s.done) }) }
 func (s *scriptedPacketSource) SetWriteDeadline(time.Time) error { s.deadlines.Add(1); return nil }
 
@@ -187,6 +189,7 @@ func (l *scriptedPacketLeg) ReadPacket([]byte) (int, net.Destination, error) {
 	l.exited.Store(true)
 	return 0, net.Destination{}, io.EOF
 }
+
 func (l *scriptedPacketLeg) WritePacket(p []byte, dest net.Destination) (int, error) {
 	l.mu.Lock()
 	l.dests = append(l.dests, dest)

@@ -3,9 +3,10 @@
 package exchange
 
 import (
-	"golang.org/x/sys/unix"
 	"io"
 	"net"
+
+	"golang.org/x/sys/unix"
 )
 
 // spliceTransfer owns one nonblocking kernel pipe. Progress after each syscall

@@ -3,9 +3,10 @@ package retry_test
 import (
 	"context"
 	"errors"
-	"github.com/xtls/xray-core/common/retry"
 	"testing"
 	"time"
+
+	"github.com/xtls/xray-core/common/retry"
 )
 
 func TestContextCancelsBackoffWait(t *testing.T) {

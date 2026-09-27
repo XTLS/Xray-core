@@ -1,8 +1,9 @@
 package outbound
 
 import (
-	"github.com/xtls/xray-core/common/net"
 	"testing"
+
+	"github.com/xtls/xray-core/common/net"
 )
 
 type addressPacket struct{ dest net.Destination }
@@ -10,10 +11,12 @@ type addressPacket struct{ dest net.Destination }
 func (p *addressPacket) ReadPacket(b []byte) (int, net.Destination, error) {
 	return copy(b, "x"), p.dest, nil
 }
+
 func (p *addressPacket) WritePacket(b []byte, d net.Destination) (int, error) {
 	p.dest = d
 	return len(b), nil
 }
+
 func TestPacketSenderAddressMappingKeepsOtherDestinations(t *testing.T) {
 	original := net.DomainAddress("first.test")
 	resolved := net.LocalHostIP

@@ -43,12 +43,14 @@ func (s Stream) closeRead() {
 		_ = s.CloseRead()
 	}
 }
+
 func (s Stream) closeWrite() error {
 	if s.CloseWrite != nil {
 		return s.CloseWrite()
 	}
 	return nil
 }
+
 func (s Stream) abort() {
 	if s.Abort != nil {
 		s.Abort()
@@ -62,6 +64,7 @@ func (s Stream) ProjectReader() io.Reader {
 	}
 	return &countedReader{Reader: s.Reader, count: s.CountRead}
 }
+
 func (s Stream) ProjectWriter() io.Writer {
 	if s.CountWrite == nil {
 		return s.Writer

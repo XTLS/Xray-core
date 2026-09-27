@@ -2,13 +2,14 @@ package outbound
 
 import (
 	"context"
+	"io"
+	"testing"
+
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/exchange"
 	"github.com/xtls/xray-core/transport/internet"
-	"io"
-	"testing"
 )
 
 type malformedPacketProxy struct {
@@ -19,6 +20,7 @@ type malformedPacketProxy struct {
 func (p malformedPacketProxy) Process(context.Context, *transport.Link, internet.Dialer) error {
 	return nil
 }
+
 func (p malformedPacketProxy) PreparePacket(context.Context, internet.Dialer) (exchange.PacketEndpoint, error) {
 	return p.endpoint, p.err
 }
@@ -33,6 +35,7 @@ func TestPacketPrepareErrorAbortsReturnedResource(t *testing.T) {
 		t.Fatalf("err=%v aborted=%v", err, aborted)
 	}
 }
+
 func TestPacketRejectsMalformedEndpointBeforeAddressWrapping(t *testing.T) {
 	for _, kind := range []string{"reader", "writer", "abort"} {
 		t.Run(kind, func(t *testing.T) {

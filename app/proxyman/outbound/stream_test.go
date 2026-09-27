@@ -20,6 +20,7 @@ func (p *guardedStreamProxy) Process(context.Context, *transport.Link, internet.
 	p.legacy = true
 	return nil
 }
+
 func (p *guardedStreamProxy) PrepareStream(context.Context, *exchange.Stream, internet.Dialer) (exchange.Stream, error) {
 	p.prepared = true
 	return exchange.Stream{Reader: bytes.NewReader(nil), Writer: io.Discard}, nil

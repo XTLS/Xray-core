@@ -49,6 +49,7 @@ func (g *packetPathGuard) Dispatch(_ context.Context, link *transport.Link) {
 	common.Interrupt(link.Reader)
 	common.Interrupt(link.Writer)
 }
+
 func (g *packetPathGuard) PreparePacket(ctx context.Context) (exchange.PacketEndpoint, error) {
 	g.native.Add(1)
 	return g.packet.PreparePacket(ctx)

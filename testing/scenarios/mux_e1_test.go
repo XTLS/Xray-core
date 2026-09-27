@@ -41,6 +41,7 @@ func (g *nativeMuxChildGuard) Dispatch(_ context.Context, link *transport.Link) 
 	common.Interrupt(link.Reader)
 	common.Interrupt(link.Writer)
 }
+
 func (g *nativeMuxChildGuard) DispatchStream(ctx context.Context, source exchange.Stream) error {
 	g.native.Add(1)
 	return g.stream.DispatchStream(ctx, source)

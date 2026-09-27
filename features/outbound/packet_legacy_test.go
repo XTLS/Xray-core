@@ -2,11 +2,12 @@ package outbound
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport"
-	"testing"
-	"time"
 )
 
 type packetTestHandler struct {

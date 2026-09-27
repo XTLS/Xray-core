@@ -84,6 +84,7 @@ type lifecycleLeg struct {
 func newLifecycleLeg() *lifecycleLeg {
 	return &lifecycleLeg{replies: make(chan lifecyclePacket, 1), done: make(chan struct{})}
 }
+
 func (l *lifecycleLeg) ReadPacket(p []byte) (int, net.Destination, error) {
 	select {
 	case packet := <-l.replies:
@@ -92,6 +93,7 @@ func (l *lifecycleLeg) ReadPacket(p []byte) (int, net.Destination, error) {
 		return 0, net.Destination{}, io.EOF
 	}
 }
+
 func (l *lifecycleLeg) WritePacket(p []byte, dest net.Destination) (int, error) {
 	l.writes.Add(1)
 	if l.writeError {
