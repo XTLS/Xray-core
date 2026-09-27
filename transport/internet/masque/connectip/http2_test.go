@@ -109,7 +109,7 @@ func setupHTTP2Conns(t *testing.T) (client, server *Conn) {
 
 func newTestHTTP2Stream() (*http2Stream, *io.PipeWriter) {
 	pr, pw := io.Pipe()
-	return &http2Stream{reader: bufio.NewReader(pr), body: newRequestBody(), rsp: pr, cancel: func() {}}, pw
+	return &http2Stream{reader: bufio.NewReader(pr), body: NewStreamBuffer(), rsp: pr, cancel: func() {}}, pw
 }
 
 func TestHTTP2Request(t *testing.T) {
@@ -343,7 +343,7 @@ func TestHTTP2CloseUnblocksWrites(t *testing.T) {
 	require.Eventually(t, func() bool {
 		str.body.mu.Lock()
 		defer str.body.mu.Unlock()
-		return len(str.body.buf) >= maxBufferedRequestBody
+		return len(str.body.buf) >= maxStreamBuffer
 	}, 5*time.Second, time.Millisecond)
 
 	closed := make(chan error, 1)
@@ -416,7 +416,7 @@ func TestHTTP2WritesDatagramCapsules(t *testing.T) {
 
 func TestRequestBody(t *testing.T) {
 	t.Run("coalesces writes", func(t *testing.T) {
-		b := newRequestBody()
+		b := NewStreamBuffer()
 		for _, s := range []string{"foo", "bar", "baz"} {
 			_, err := b.Write([]byte(s))
 			require.NoError(t, err)
@@ -428,8 +428,8 @@ func TestRequestBody(t *testing.T) {
 	})
 
 	t.Run("blocks writes while full", func(t *testing.T) {
-		b := newRequestBody()
-		_, err := b.Write(make([]byte, maxBufferedRequestBody))
+		b := NewStreamBuffer()
+		_, err := b.Write(make([]byte, maxStreamBuffer))
 		require.NoError(t, err)
 		written := make(chan struct{})
 		go func() {
@@ -441,7 +441,7 @@ func TestRequestBody(t *testing.T) {
 			t.Fatal("write did not block")
 		case <-time.After(50 * time.Millisecond):
 		}
-		_, err = b.Read(make([]byte, maxBufferedRequestBody))
+		_, err = b.Read(make([]byte, maxStreamBuffer))
 		require.NoError(t, err)
 		select {
 		case <-written:
@@ -451,7 +451,7 @@ func TestRequestBody(t *testing.T) {
 	})
 
 	t.Run("close", func(t *testing.T) {
-		b := newRequestBody()
+		b := NewStreamBuffer()
 		_, err := b.Write([]byte("foo"))
 		require.NoError(t, err)
 		require.NoError(t, b.Close())
@@ -463,8 +463,8 @@ func TestRequestBody(t *testing.T) {
 	})
 
 	t.Run("write deadline", func(t *testing.T) {
-		b := newRequestBody()
-		_, err := b.Write(make([]byte, maxBufferedRequestBody))
+		b := NewStreamBuffer()
+		_, err := b.Write(make([]byte, maxStreamBuffer))
 		require.NoError(t, err)
 		writeErr := make(chan error, 1)
 		go func() {
@@ -481,11 +481,11 @@ func TestRequestBody(t *testing.T) {
 		require.NoError(t, b.Close())
 		data, err := io.ReadAll(b)
 		require.NoError(t, err)
-		require.Len(t, data, maxBufferedRequestBody)
+		require.Len(t, data, maxStreamBuffer)
 	})
 
 	t.Run("close with error", func(t *testing.T) {
-		b := newRequestBody()
+		b := NewStreamBuffer()
 		_, err := b.Write([]byte("foo"))
 		require.NoError(t, err)
 		b.CloseWithError(net.ErrClosed)

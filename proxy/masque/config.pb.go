@@ -74,15 +74,125 @@ func (x *ClientConfig) GetRemoteDns() []string {
 	return nil
 }
 
+type Account struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Account) Reset() {
+	*x = Account{}
+	mi := &file_proxy_masque_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Account) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Account) ProtoMessage() {}
+
+func (x *Account) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_masque_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Account.ProtoReflect.Descriptor instead.
+func (*Account) Descriptor() ([]byte, []int) {
+	return file_proxy_masque_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Account) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type ServerConfig struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	Address       []string               `protobuf:"bytes,2,rep,name=address,proto3" json:"address,omitempty"`
+	Mtu           uint32                 `protobuf:"varint,3,opt,name=mtu,proto3" json:"mtu,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServerConfig) Reset() {
+	*x = ServerConfig{}
+	mi := &file_proxy_masque_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServerConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServerConfig) ProtoMessage() {}
+
+func (x *ServerConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_masque_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServerConfig.ProtoReflect.Descriptor instead.
+func (*ServerConfig) Descriptor() ([]byte, []int) {
+	return file_proxy_masque_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ServerConfig) GetUsers() []*protocol.User {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
+func (x *ServerConfig) GetAddress() []string {
+	if x != nil {
+		return x.Address
+	}
+	return nil
+}
+
+func (x *ServerConfig) GetMtu() uint32 {
+	if x != nil {
+		return x.Mtu
+	}
+	return 0
+}
+
 var File_proxy_masque_config_proto protoreflect.FileDescriptor
 
 const file_proxy_masque_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19proxy/masque/config.proto\x12\x11xray.proxy.masque\x1a!common/protocol/server_spec.proto\"k\n" +
+	"\x19proxy/masque/config.proto\x12\x11xray.proxy.masque\x1a!common/protocol/server_spec.proto\x1a\x1acommon/protocol/user.proto\"k\n" +
 	"\fClientConfig\x12<\n" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\x12\x1d\n" +
 	"\n" +
-	"remote_dns\x18\x02 \x03(\tR\tremoteDnsBU\n" +
+	"remote_dns\x18\x02 \x03(\tR\tremoteDns\"%\n" +
+	"\aAccount\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\"l\n" +
+	"\fServerConfig\x120\n" +
+	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x12\x18\n" +
+	"\aaddress\x18\x02 \x03(\tR\aaddress\x12\x10\n" +
+	"\x03mtu\x18\x03 \x01(\rR\x03mtuBU\n" +
 	"\x15com.xray.proxy.masqueP\x01Z&github.com/xtls/xray-core/proxy/masque\xaa\x02\x11Xray.Proxy.Masqueb\x06proto3"
 
 var (
@@ -97,18 +207,22 @@ func file_proxy_masque_config_proto_rawDescGZIP() []byte {
 	return file_proxy_masque_config_proto_rawDescData
 }
 
-var file_proxy_masque_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_proxy_masque_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_proxy_masque_config_proto_goTypes = []any{
 	(*ClientConfig)(nil),            // 0: xray.proxy.masque.ClientConfig
-	(*protocol.ServerEndpoint)(nil), // 1: xray.common.protocol.ServerEndpoint
+	(*Account)(nil),                 // 1: xray.proxy.masque.Account
+	(*ServerConfig)(nil),            // 2: xray.proxy.masque.ServerConfig
+	(*protocol.ServerEndpoint)(nil), // 3: xray.common.protocol.ServerEndpoint
+	(*protocol.User)(nil),           // 4: xray.common.protocol.User
 }
 var file_proxy_masque_config_proto_depIdxs = []int32{
-	1, // 0: xray.proxy.masque.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: xray.proxy.masque.ClientConfig.server:type_name -> xray.common.protocol.ServerEndpoint
+	4, // 1: xray.proxy.masque.ServerConfig.users:type_name -> xray.common.protocol.User
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_proxy_masque_config_proto_init() }
@@ -122,7 +236,7 @@ func file_proxy_masque_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_masque_config_proto_rawDesc), len(file_proxy_masque_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
