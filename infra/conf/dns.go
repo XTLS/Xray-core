@@ -285,16 +285,9 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 	}
 
 	if c.Script != "" {
-		path := c.Script
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(platform.GetConfDirPath(), path)
-		}
-		info, err := os.Stat(path)
+		path, err := platform.ResolveLuaFile(c.Script)
 		if err != nil {
-			return nil, errors.New("DNS script does not exist: ", path).Base(err)
-		}
-		if !info.Mode().IsRegular() {
-			return nil, errors.New("DNS script is not a regular file: ", path)
+			return nil, errors.New("failed to resolve DNS script: ", c.Script).Base(err)
 		}
 		config.Script = path
 	}
