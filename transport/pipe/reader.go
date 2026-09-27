@@ -26,6 +26,13 @@ func (r *Reader) Interrupt() {
 	r.pipe.Interrupt()
 }
 
+// WaitClosed returns a channel that is closed after the pipe is closed or
+// interrupted, from either end of the pipe. Once it is closed, no more data
+// can be written into the pipe.
+func (r *Reader) WaitClosed() <-chan struct{} {
+	return r.pipe.done.Wait()
+}
+
 // ReturnAnError makes ReadMultiBuffer return an error, only once.
 func (r *Reader) ReturnAnError(err error) {
 	r.pipe.errChan <- err

@@ -34,6 +34,18 @@ func Record(msg Message) {
 	}
 }
 
+// AccessEnabled reports whether the current handler accepts access messages.
+// Handlers without this optional capability retain their existing behavior.
+func AccessEnabled() bool {
+	if h := logHandler.Load(); h != nil {
+		if ah, ok := (*h).(interface{ AccessEnabled() bool }); ok {
+			return ah.AccessEnabled()
+		}
+		return true
+	}
+	return false
+}
+
 type SeverityLogger interface {
 	Handler
 	Severity() Severity

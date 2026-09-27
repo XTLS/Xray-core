@@ -2,6 +2,7 @@ package buf
 
 import (
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/stats"
 )
 
 type EndpointOverrideReader struct {
@@ -22,6 +23,12 @@ func (r *EndpointOverrideReader) ReadMultiBuffer() (MultiBuffer, error) {
 	return mb, err
 }
 
+// Hold implements stats.Holdable, forwarding to the wrapped reader so that
+// copies bracket themselves on its counter.
+func (r *EndpointOverrideReader) Hold() func() {
+	return stats.Hold(r.Reader)
+}
+
 type EndpointOverrideWriter struct {
 	Writer
 	Dest         net.Address
@@ -35,4 +42,10 @@ func (w *EndpointOverrideWriter) WriteMultiBuffer(mb MultiBuffer) error {
 		}
 	}
 	return w.Writer.WriteMultiBuffer(mb)
+}
+
+// Hold implements stats.Holdable, forwarding to the wrapped writer so that
+// copies bracket themselves on its counter.
+func (w *EndpointOverrideWriter) Hold() func() {
+	return stats.Hold(w.Writer)
 }

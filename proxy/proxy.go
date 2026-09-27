@@ -757,6 +757,15 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			if inTimer != nil {
 				inTimer.SetTimeout(24 * time.Hour)
 			}
+			var counter stats.Counter
+			if statWriter != nil {
+				counter = statWriter.Counter
+			}
+			// The raw copy bypasses the writer and reports its size to the
+			// counter only after it finishes. Hold the counting for the whole
+			// copy, so that reading the counter (the access log) waits for
+			// the compensation.
+			release := stats.Hold(counter)
 			w, err := tc.ReadFrom(readerConn)
 			if readCounter != nil {
 				readCounter.Add(w) // outbound stats
@@ -767,6 +776,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			if statWriter != nil {
 				statWriter.Counter.Add(w) // user stats
 			}
+			release()
 			if err != nil && errors.Cause(err) != io.EOF {
 				return err
 			}

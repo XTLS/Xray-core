@@ -40,23 +40,33 @@ func (r *TimeoutWrapperReader) ReadMultiBuffer() (MultiBuffer, error) {
 	if r.done != nil {
 		<-r.done
 		r.done = nil
-		if r.Counter != nil {
-			r.Counter.Add(int64(r.mb.Len()))
-		}
 		return r.mb, r.err
 	}
+	// The read may finish long after it started; hold the counting for its
+	// duration, so that snapshotting the counter waits for the accounting.
+	release := stats.Hold(r.Counter)
 	r.mb, r.err = r.Reader.ReadMultiBuffer()
 	if r.Counter != nil {
 		r.Counter.Add(int64(r.mb.Len()))
 	}
+	release()
 	return r.mb, r.err
 }
 
 func (r *TimeoutWrapperReader) ReadMultiBufferTimeout(duration time.Duration) (MultiBuffer, error) {
 	if r.done == nil {
 		r.done = make(chan struct{})
+		counter := r.Counter
+		// Count the read where it happens, not when its result is consumed:
+		// the consumer may return before the read completes, for example on
+		// cancellation, and never come back for the result.
+		release := stats.Hold(counter)
 		go func() {
 			r.mb, r.err = r.Reader.ReadMultiBuffer()
+			if counter != nil {
+				counter.Add(int64(r.mb.Len()))
+			}
+			release()
 			close(r.done)
 		}()
 	}
@@ -68,13 +78,17 @@ func (r *TimeoutWrapperReader) ReadMultiBufferTimeout(duration time.Duration) (M
 	select {
 	case <-r.done:
 		r.done = nil
-		if r.Counter != nil {
-			r.Counter.Add(int64(r.mb.Len()))
-		}
 		return r.mb, r.err
 	case <-timeout:
 		return nil, nil
 	}
+}
+
+// Hold implements stats.Holdable: copies reading through this reader bracket
+// themselves on the counter, so that the final access log record waits for a
+// copy that keeps accounting after the connection settled.
+func (r *TimeoutWrapperReader) Hold() func() {
+	return stats.Hold(r.Counter)
 }
 
 // Writer extends io.Writer with MultiBuffer.

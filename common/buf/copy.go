@@ -113,6 +113,14 @@ func Copy(reader Reader, writer Writer, options ...CopyOption) error {
 	for _, option := range options {
 		option(&handler)
 	}
+	// Hold the endpoints' counters for the whole copy: on cancellation or
+	// error, the caller (e.g. task.Run) may return while this copy is still
+	// running and accounting bytes, and the final access log record must
+	// wait for that.
+	releaseReader := stats.Hold(reader)
+	defer releaseReader()
+	releaseWriter := stats.Hold(writer)
+	defer releaseWriter()
 	err := copyInternal(reader, writer, &handler)
 	if err != nil && errors.Cause(err) != io.EOF {
 		return err

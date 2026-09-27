@@ -20,6 +20,27 @@ type Counter interface {
 	Add(int64) int64
 }
 
+// Holdable is implemented by counters and IO wrappers that bracket the data
+// transfers whose size they account. A transfer may report its size only when
+// it finishes — a raw copy reporting its total, or a read completing after
+// its caller returned — and a copy may keep accounting after the connection
+// it served has settled. Hold brackets such a transfer, so that reading the
+// final counter value can wait for the accounting.
+type Holdable interface {
+	// Hold brackets a data transfer. It returns the function that ends the
+	// bracket, to be called once the transfer is done accounting.
+	Hold() func()
+}
+
+// Hold brackets a data transfer on v if it is Holdable, otherwise it returns
+// a no-op.
+func Hold(v any) func() {
+	if h, ok := v.(Holdable); ok {
+		return h.Hold()
+	}
+	return func() {}
+}
+
 // OnlineMap is the interface for tracking online IP addresses.
 //
 // xray:api:stable

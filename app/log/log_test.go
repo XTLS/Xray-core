@@ -3,6 +3,7 @@ package log_test
 import (
 	"context"
 	"net"
+	"path/filepath"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -11,6 +12,33 @@ import (
 	clog "github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/testing/mocks"
 )
+
+func TestAccessEnabled(t *testing.T) {
+	for _, logType := range []log.LogType{log.LogType_None, log.LogType_File} {
+		logger, err := log.New(context.Background(), &log.Config{
+			ErrorLogType:  log.LogType_None,
+			AccessLogType: logType,
+			AccessLogPath: filepath.Join(t.TempDir(), "access.log"),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { logger.Close() })
+		want := logType != log.LogType_None
+		if clog.AccessEnabled() != want {
+			t.Errorf("access enabled for %v = %v, want %v", logType, clog.AccessEnabled(), want)
+		}
+		common.Must(logger.Close())
+		if clog.AccessEnabled() {
+			t.Error("closed logger still reports access logging enabled")
+		}
+		common.Must(logger.Start())
+		if clog.AccessEnabled() != want {
+			t.Error("logger restart changed access logging state")
+		}
+		common.Must(logger.Close())
+	}
+}
 
 func TestCustomLogHandler(t *testing.T) {
 	mockCtl := gomock.NewController(t)

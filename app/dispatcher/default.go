@@ -91,6 +91,13 @@ func (r *cachedReader) Interrupt() {
 	}
 }
 
+// Hold implements stats.Holdable: it forwards to the wrapped reader, so
+// that copies bracket themselves on the access log counting even while the
+// sniffing cache wraps it.
+func (r *cachedReader) Hold() func() {
+	return stats.Hold(r.reader)
+}
+
 // DefaultDispatcher is a default implementation of Dispatcher.
 type DefaultDispatcher struct {
 	ohm    outbound.Manager
@@ -137,7 +144,7 @@ func (*DefaultDispatcher) Start() error {
 // Close implements common.Closable.
 func (*DefaultDispatcher) Close() error { return nil }
 
-func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *transport.Link) {
+func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *transport.Link, *accessTraffic) {
 	opt := pipe.OptionsFromContext(ctx)
 	uplinkReader, uplinkWriter := pipe.New(opt...)
 	downlinkReader, downlinkWriter := pipe.New(opt...)
@@ -158,25 +165,16 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		user = sessionInbound.User
 	}
 
+	var uplink, downlink stats.Counter
 	if user != nil && len(user.Email) > 0 {
 		p := d.policy.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := d.stats.GetOrRegisterCounter(name); c != nil {
-				inboundLink.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  inboundLink.Writer,
-				}
-			}
+			uplink, _ = d.stats.GetOrRegisterCounter(name)
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
-			if c, _ := d.stats.GetOrRegisterCounter(name); c != nil {
-				outboundLink.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  outboundLink.Writer,
-				}
-			}
+			downlink, _ = d.stats.GetOrRegisterCounter(name)
 		}
 
 		if p.Stats.UserOnline {
@@ -184,7 +182,20 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		}
 	}
 
-	return inboundLink, outboundLink
+	var traffic *accessTraffic
+	if log.AccessMessageFromContext(ctx) != nil && log.AccessEnabled() {
+		traffic = newPipeAccessTraffic(uplinkReader, downlinkReader)
+		uplink = fanoutCounter(traffic.uplink, uplink)
+		downlink = fanoutCounter(traffic.downlink, downlink)
+	}
+	if uplink != nil {
+		inboundLink.Writer = &SizeStatWriter{Counter: uplink, Writer: inboundLink.Writer}
+	}
+	if downlink != nil {
+		outboundLink.Writer = &SizeStatWriter{Counter: downlink, Writer: outboundLink.Writer}
+	}
+
+	return inboundLink, outboundLink, traffic
 }
 
 func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager stats.Manager, link *transport.Link) *transport.Link {
@@ -194,27 +205,44 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		user = sessionInbound.User
 	}
 
+	traffic := accessTrafficFromContext(ctx)
+
 	link.Reader = &buf.TimeoutWrapperReader{Reader: link.Reader}
 
+	var uplink, downlink stats.Counter
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := statsManager.GetOrRegisterCounter(name); c != nil {
-				link.Reader.(*buf.TimeoutWrapperReader).Counter = c
-			}
+			uplink, _ = statsManager.GetOrRegisterCounter(name)
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
-			if c, _ := statsManager.GetOrRegisterCounter(name); c != nil {
-				link.Writer = &SizeStatWriter{
-					Counter: c,
-					Writer:  link.Writer,
-				}
-			}
+			downlink, _ = statsManager.GetOrRegisterCounter(name)
 		}
 		if p.Stats.UserOnline {
 			trackOnlineIP(ctx, statsManager, user.Email, sessionInbound.Source.Address.String())
+		}
+	}
+	if traffic != nil {
+		// Count the traffic of this connection for the access log, together
+		// with the user stats, if any.
+		link.Reader.(*buf.TimeoutWrapperReader).Counter = fanoutCounter(traffic.uplink, uplink)
+		link.Writer = &SizeStatWriter{
+			Counter: fanoutCounter(traffic.downlink, downlink),
+			Writer:  link.Writer,
+		}
+	} else {
+		// No access log tracking (e.g. links prepared for reverse proxy);
+		// count the user stats only.
+		if uplink != nil {
+			link.Reader.(*buf.TimeoutWrapperReader).Counter = uplink
+		}
+		if downlink != nil {
+			link.Writer = &SizeStatWriter{
+				Counter: downlink,
+				Writer:  link.Writer,
+			}
 		}
 	}
 
@@ -283,7 +311,8 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	}
 
 	sniffingRequest := content.SniffingRequest
-	inbound, outbound := d.getLink(ctx)
+	inbound, outbound, traffic := d.getLink(ctx)
+	ctx = contextWithAccessTraffic(ctx, traffic)
 	if !sniffingRequest.Enabled {
 		go d.routedDispatch(ctx, outbound, destination)
 	} else {
@@ -338,6 +367,11 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		content = new(session.Content)
 		ctx = session.ContextWithContent(ctx, content)
 	}
+	var traffic *accessTraffic
+	if log.AccessMessageFromContext(ctx) != nil && log.AccessEnabled() {
+		traffic = newLinkAccessTraffic()
+	}
+	ctx = contextWithAccessTraffic(ctx, traffic)
 	outbound = WrapLink(ctx, d.policy, d.stats, outbound)
 	sniffingRequest := content.SniffingRequest
 	if !sniffingRequest.Enabled {
@@ -370,6 +404,13 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			}
 		}
 		d.routedDispatch(ctx, outbound, destination)
+	}
+	// The outbound handler has returned. Mark the link as finished without
+	// waiting: transfers that are still running, like a raw copy that reports
+	// its size at the end, may only complete after this returns. The record
+	// is written by the tracker once they finished their accounting.
+	if traffic != nil {
+		traffic.settle()
 	}
 
 	return nil
@@ -498,7 +539,13 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				accessMessage.Detour = inTag + " >> " + tag
 			}
 		}
-		log.Record(accessMessage)
+		if traffic := accessTrafficFromContext(ctx); traffic != nil {
+			// Record the message when the connection ends, together with the
+			// uplink and downlink byte counts of the whole connection.
+			traffic.deferredRecord(accessMessage)
+		} else {
+			log.Record(accessMessage)
+		}
 	}
 
 	handler.Dispatch(ctx, link)

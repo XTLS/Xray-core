@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/serial"
@@ -27,6 +28,12 @@ type AccessMessage struct {
 	Reason interface{}
 	Email  string
 	Detour string
+	// Uplink is the number of bytes sent from the client to the target. It is
+	// the total of the connection for records written after the connection
+	// ends, and 0 for records written at dispatch or rejection time.
+	Uplink int64
+	// Downlink is the number of bytes sent from the target to the client.
+	Downlink int64
 }
 
 func (m *AccessMessage) String() string {
@@ -54,6 +61,11 @@ func (m *AccessMessage) String() string {
 		builder.WriteString(" email: ")
 		builder.WriteString(m.Email)
 	}
+
+	builder.WriteString(" uplink=")
+	builder.WriteString(strconv.FormatInt(m.Uplink, 10))
+	builder.WriteString(" downlink=")
+	builder.WriteString(strconv.FormatInt(m.Downlink, 10))
 
 	return builder.String()
 }

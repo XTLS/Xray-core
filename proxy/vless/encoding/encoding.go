@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 )
@@ -174,6 +175,11 @@ func DecodeResponseHeader(reader io.Reader, request *protocol.RequestHeader) (*A
 
 // XtlsRead can switch to splice copy
 func XtlsRead(reader buf.Reader, writer buf.Writer, timer *signal.ActivityTimer, conn net.Conn, trafficState *proxy.TrafficState, isUplink bool, ctx context.Context) error {
+	// Hold the writer's counter for the whole copy: on cancellation, task.Run
+	// may return while this copy is still running and accounting bytes, and
+	// the final access log record must wait for that.
+	release := stats.Hold(writer)
+	defer release()
 	err := func() error {
 		for {
 			if isUplink && trafficState.Inbound.UplinkReaderDirectCopy || !isUplink && trafficState.Outbound.DownlinkReaderDirectCopy {

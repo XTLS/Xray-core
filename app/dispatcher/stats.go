@@ -23,3 +23,10 @@ func (w *SizeStatWriter) Close() error {
 func (w *SizeStatWriter) Interrupt() {
 	common.Interrupt(w.Writer)
 }
+
+// Hold implements stats.Holdable: copies writing through this writer bracket
+// themselves on the counters, so that the final access log record waits for
+// a copy that keeps accounting after the connection settled.
+func (w *SizeStatWriter) Hold() func() {
+	return stats.Hold(w.Counter)
+}
