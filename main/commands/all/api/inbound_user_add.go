@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
 	"github.com/xtls/xray-core/proxy/trojan"
+	"github.com/xtls/xray-core/proxy/hysteria"
 	vlessin "github.com/xtls/xray-core/proxy/vless/inbound"
 	vmessin "github.com/xtls/xray-core/proxy/vmess/inbound"
 
@@ -90,6 +91,8 @@ func extractInboundUsers(inb *core.InboundHandlerConfig) []*protocol.User {
 	case *shadowsocks_2022.MultiUserServerConfig:
 		return ty.Users
 	case *masque.ServerConfig:
+		return ty.Users
+	case *hysteria.ServerConfig:
 		return ty.Users
 	default:
 		fmt.Println("unsupported inbound type")
