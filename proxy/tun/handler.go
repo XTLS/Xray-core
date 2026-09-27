@@ -165,6 +165,16 @@ func (t *Handler) Start() error {
 		return err
 	}
 
+	// Platform-specific system DNS takeover, where the platform implements it.
+	// Non-fatal: a failure leaves DNS management with the OS.
+	if c, ok := tunInterface.(interface {
+		ConfigureSystemDNS(context.Context, string) error
+	}); ok {
+		if err := c.ConfigureSystemDNS(t.ctx, t.tag); err != nil {
+			errors.LogInfoInner(t.ctx, err, "[tun] system DNS not configured")
+		}
+	}
+
 	t.stack = tunStack
 	t.tun = tunInterface
 

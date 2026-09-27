@@ -15,4 +15,5 @@ message Config {
   repeated string auto_system_routing_table = 6;
   string auto_outbounds_interface = 7;
   string desc = 8;
+  bool auto_system_dns = 9;
 }
