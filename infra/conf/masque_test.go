@@ -105,7 +105,7 @@ func TestMasqueServerConfig(t *testing.T) {
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
-				"clients": [{"email": "u@example.com", "pass": "p", "level": 1}],
+				"users": [{"email": "u@example.com", "pass": "p", "level": 1}],
 				"address": ["10.13.0.1/24", "fd13::1/64"],
 				"mtu": 1400
 			}`,
@@ -121,7 +121,7 @@ func TestMasqueServerConfig(t *testing.T) {
 			},
 		},
 		{
-			Input:  `{"users": [{"email": "u", "pass": "p:q"}], "address": ["10.13.0.1/24"]}`,
+			Input:  `{"clients": [{"email": "u", "pass": "p:q"}], "address": ["10.13.0.1/24"]}`,
 			Parser: loadJSON(creator),
 			Output: &masqueproxy.ServerConfig{
 				Users: []*protocol.User{{
@@ -141,17 +141,17 @@ func TestMasqueServerConfig(t *testing.T) {
 	})
 
 	for _, input := range []string{
-		`{"clients": [{"email": "u:v", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"email": "", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"pass": "p"}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"email": "u", "pass": ""}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"email": "u", "pass": "p"}, {"email": "U", "pass": "q"}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"email": "u", "pass": "p"}]}`,
-		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1"]}`,
-		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24", "10.14.0.1/24"]}`,
-		`{"clients": [{"email": "u", "pass": "p"}], "address": ["fd13::1/64", "fd14::1/64"]}`,
-		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 1000}`,
-		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 70000}`,
+		`{"users": [{"email": "u:v", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"users": [{"email": "", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"users": [{"pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"users": [{"email": "u", "pass": ""}], "address": ["10.13.0.1/24"]}`,
+		`{"users": [{"email": "u", "pass": "p"}, {"email": "U", "pass": "q"}], "address": ["10.13.0.1/24"]}`,
+		`{"users": [{"email": "u", "pass": "p"}]}`,
+		`{"users": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1"]}`,
+		`{"users": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24", "10.14.0.1/24"]}`,
+		`{"users": [{"email": "u", "pass": "p"}], "address": ["fd13::1/64", "fd14::1/64"]}`,
+		`{"users": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 1000}`,
+		`{"users": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 70000}`,
 	} {
 		if _, err := loadJSON(creator)(input); err == nil {
 			t.Errorf("expected an error for %s", input)
@@ -172,7 +172,7 @@ func TestMasqueInboundConfig(t *testing.T) {
 	if err := build(`{
 		"protocol": "masque",
 		"port": 443,
-		"settings": {"clients": [{"email": "u@example.com", "pass": "p"}], "address": ["10.13.0.1/24"]},
+		"settings": {"users": [{"email": "u@example.com", "pass": "p"}], "address": ["10.13.0.1/24"]},
 		"streamSettings": {"network": "masque", "security": "tls"}
 	}`); err != nil {
 		t.Error(err)
@@ -180,7 +180,7 @@ func TestMasqueInboundConfig(t *testing.T) {
 	if err := build(`{
 		"protocol": "vless",
 		"port": 443,
-		"settings": {"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b"}], "decryption": "none"},
+		"settings": {"users": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b"}], "decryption": "none"},
 		"streamSettings": {"network": "masque", "security": "tls"}
 	}`); err == nil {
 		t.Error("expected an error for the masque transport on a vless inbound")
