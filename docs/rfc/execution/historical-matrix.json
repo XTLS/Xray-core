@@ -1,0 +1,1211 @@
+{
+  "status": "HISTORICAL REGISTER; not 64 passing E1 tests",
+  "revision": 267,
+  "recorded_at": "2026-09-20T01:54:12.094292+00:00",
+  "matrix_state": "OPEN",
+  "production_selection": false,
+  "historical_official_reference": "c412e77a9b712082ac9ebf27fa793951cb5a7d85",
+  "source_register_sha256": "311a3f7865cd6311bb2e5f01b1c2c059073efcc123545a651479bc63f510abda",
+  "evidence_access": "Run identifiers index saved local receipts. Original complete source bundles and raw logs are not included; this is not independent public reproduction of every historical row.",
+  "rows": [
+    {
+      "id": "CONTROL-1",
+      "question": "Exact control and candidate parity",
+      "scope": "execution-design history",
+      "variants": [
+        "S exact official",
+        "A current snapshot",
+        "O/B/L/D frozen"
+      ],
+      "historical_status": "PROCEDURE_INVARIANT: exact baseline, clean control, source hashes and failure preservation required for every run",
+      "historical_next_step_not_current_plan": "No independent experiment row execution; enforce through the matrix runner and review receipts.",
+      "historical_run_ids": [
+        "CONTROL-CRYPTO-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "BUF-1",
+      "question": "Framing headroom, copy and returned storage",
+      "scope": "execution-design history",
+      "variants": [
+        "S/temp control",
+        "CopyReturn old framing",
+        "CopyReturn native StackNew temp",
+        "CopyReturn reserved frame",
+        "RETIRED: RejectDetached generic replacement"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: framing, returned storage and allocation controls preserved",
+      "historical_next_step_not_current_plan": "No active rerun. Carry applicable framing/error/ownership properties into candidate acceptance.",
+      "historical_run_ids": [
+        "R-SS1-UNIT-001",
+        "R-SS1-NET-S-001",
+        "R-SS1-NET-S-002",
+        "R-SS1-NET-COPY-001",
+        "R-SS1-NET-COPY-WIN-001",
+        "R-SS1-NET-S-WIN-001",
+        "R-SS1-BENCH-S-001",
+        "R-SS1-BENCH-COPY-OLD-001",
+        "R-SS1-BENCH-COPY-RESERVED-001"
+      ],
+      "historical_unknowns": [
+        "CopyReturn payload result fixed only; generic prefix return and panic ownership remain BUF-1D",
+        "No measured heap/copy/throughput benefit yet"
+      ]
+    },
+    {
+      "id": "BUF-2",
+      "question": "Connection-oriented Shadowsocks batch/vector/headroom",
+      "scope": "execution-design history",
+      "variants": [
+        "S native MultiBuffer/connection control",
+        "applicable CopyReturn old/StackNew/reserved controls",
+        "one R-SS2 producer-reserved batch candidate",
+        "D byte-copy historical control only"
+      ],
+      "historical_status": "MERGED_INTO_CONN-1: conn-oriented SS correctness, native UDP/MUX fallback and copy/allocation receipts preserved",
+      "historical_next_step_not_current_plan": "CONN-1 owns real ReadV/adaptation, fallback frequency, retained heap, full-flow cost and exact layer-removal evidence.",
+      "historical_run_ids": [
+        "R-SS2-NET-WIN-001",
+        "R-SS2-PATTERN-S-001",
+        "R-SS2-PATTERN-COPYSTACK-001",
+        "R-SS2-V2-PATTERN-WIN-001",
+        "R-SS2-PATTERN-S-LINUX-001",
+        "R-SS2-PATTERN-COPYSTACK-LINUX-001",
+        "R-SS2-V2-PATTERN-LINUX-001",
+        "R-SS2-PORTABILITY-V2-WIN-001",
+        "R-SS2-METRICS-S-COPIES-002",
+        "R-SS2-METRICS-COPYSTACK-COPIES-001",
+        "R-SS2-METRICS-V2-COPIES-001",
+        "R-SS2-METRICS-S-ALLOCS-001",
+        "R-SS2-METRICS-COPYSTACK-ALLOCS-001",
+        "R-SS2-METRICS-V2-ALLOCS-001",
+        "R-SS2-METRICS-V2-FACTORY-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "PKT-1",
+      "question": "Packet destinations, sizes and partial acceptance",
+      "scope": "execution-design history",
+      "variants": [
+        "native packet owner/control",
+        "R-SS2 applicable packet-aware batch or explicit native fallback"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: one real SS UDP association preserved native packet fallback and A/B/A/B destinations",
+      "historical_next_step_not_current_plan": "No pre-selection packet expansion. Reuse packet boundaries/destinations as acceptance criteria for applicable candidates.",
+      "historical_run_ids": [
+        "R-SS2-PORTABILITY-S-WIN-001",
+        "R-SS2-PORTABILITY-COPYSTACK-WIN-001",
+        "R-SS2-PORTABILITY-V2-WIN-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "COPY-1",
+      "question": "Copy primitive memory, CPU and latency",
+      "scope": "execution-design history",
+      "variants": [
+        "32K direct buffer",
+        "8K buffer",
+        "bounded pool",
+        "native batch"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: cap-shaped Windows/Linux primitive allocations recorded",
+      "historical_next_step_not_current_plan": "No repeated primitive benchmark. CONN-1 must measure real adapter/readv, retained heap and full-flow cost if applicable.",
+      "historical_run_ids": [
+        "R-SS2-METRICS-S-ALLOCS-001",
+        "R-SS2-METRICS-COPYSTACK-ALLOCS-001",
+        "R-SS2-METRICS-V2-ALLOCS-001",
+        "R-SS2-METRICS-V2-FACTORY-001",
+        "R-SS2-CAP-S-WIN-001",
+        "R-SS2-CAP-COPYSTACK-WIN-001",
+        "R-SS2-CAP-V2-WIN-001",
+        "R-SS2-CAP-V2-WIN-002",
+        "R-SS2-CAP-S-ALLOCS-001",
+        "R-SS2-CAP-COPYSTACK-ALLOCS-001",
+        "R-SS2-CAP-V2-ALLOCS-001",
+        "R-SS2-CAP-S-ALLOCS-LINUX-001",
+        "R-SS2-CAP-COPYSTACK-ALLOCS-LINUX-001",
+        "R-SS2-CAP-V2-ALLOCS-LINUX-001"
+      ],
+      "historical_unknowns": [
+        "Actual ReadV/syscall and prepared-copy adapter execution are excluded from the cap-shaped primitive",
+        "Retained heap, fallback frequency, full-connection allocation cost and backpressure remain unmeasured",
+        "Windows and Linux each have one process per variant; same-platform isolated-process repeatability remains separate",
+        "No latency, throughput, p90/p99, Android or release conclusion follows from raw ns/op"
+      ]
+    },
+    {
+      "id": "COPY-2",
+      "question": "Native progress versus final/deferred byte reporting",
+      "scope": "execution-design history",
+      "variants": [
+        "stock final n/deferred",
+        "owned chunked splice progress",
+        "native readv progress"
+      ],
+      "historical_status": "DEFERRED_UNTIL_CONCRETE_CANDIDATE: native progress and byte-boundary acceptance suite",
+      "historical_next_step_not_current_plan": "Run only for a selected candidate whose copy path makes the boundary material.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "FIN-1",
+      "question": "Natural EOF, half-close and explicit abort",
+      "scope": "execution-design history",
+      "variants": [
+        "native behavior",
+        "directional FIN propagation",
+        "explicit full stop"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: A shared timeout and B SS-local alternatives pass the real property with distinct limitations; no selection",
+      "historical_next_step_not_current_plan": "No additional pre-selection FIN run. Carry shared-caller risk, deliberate-empty ambiguity and data-plus-error ownership into neutral evidence and later acceptance.",
+      "historical_run_ids": [
+        "FIN1-DATAERR-S-WIN-001",
+        "FIN1-SS-TIMEOUT-S-CLASSIFIER-001",
+        "FIN1-SS-TIMEOUT-S-REQUIRED-001",
+        "FIN1-SS-TIMEOUT-COPYSTACK-CLASSIFIER-001",
+        "FIN1-SS-TIMEOUT-COPYSTACK-REQUIRED-001",
+        "FIN1-SS-TIMEOUT-R2V2-CLASSIFIER-001",
+        "FIN1-SS-TIMEOUT-R2V2-REQUIRED-001",
+        "FIN1-DATAERR-S-WIN-002",
+        "FIN1-SS-TIMEOUT-S-CLASSIFIER-LINUX-001",
+        "FIN1-SS-TIMEOUT-S-REQUIRED-LINUX-001",
+        "FIN1-CANDIDATE-A-UNIT-WIN-001",
+        "FIN1-CANDIDATE-A-REQUIRED-WIN-001",
+        "FIN1-CANDIDATE-B-UNIT-WIN-001",
+        "FIN1-CANDIDATE-B-REQUIRED-WIN-001",
+        "FIN1-CANDIDATE-A-PACKAGES-WIN-001",
+        "FIN1-CANDIDATE-A-SCENARIOS-WIN-001",
+        "FIN1-CANDIDATE-B-SCENARIOS-WIN-001",
+        "FIN1-CANDIDATE-A-LINUX-001",
+        "FIN1-CANDIDATE-B-LINUX-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "MUX-1",
+      "question": "Blocked DATA, child close and sibling survival",
+      "scope": "execution-design history",
+      "variants": [
+        "stock blocked-admission control",
+        "native pipe cancellation-aware DATA admission",
+        "one bounded shared frame serializer",
+        "per-child scheduler only if fairness gap remains"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: merged MUX gate records v2 blocker closure and full-uplink late-missing B delay",
+      "historical_next_step_not_current_plan": "No scheduler/fairness expansion before owner analysis. Preserve all positive and counterexample receipts.",
+      "historical_run_ids": [
+        "MUX-STOCK-CLOSE-GAP-WIN-001",
+        "MUX-STOCK-CLOSE-GAP-WIN-002",
+        "MUX-CANCEL-PIPE-WIN-001",
+        "MUX-CANCEL-LIFECYCLE-WIN-001",
+        "MUX-CANCEL-PIPE-LINUX-001",
+        "MUX-CANCEL-LIFECYCLE-LINUX-001",
+        "MUX-CANCEL-PACKAGES-WIN-001",
+        "MUX-CANCEL-V2-NEG-WIN-001",
+        "MUX-CANCEL-V2-NEG-LINUX-001",
+        "MUX-CANCEL-V2-POS-WIN-001",
+        "MUX-CANCEL-V2-POS-LINUX-001",
+        "MUX-CANCEL-V2-PACKAGES-WIN-001",
+        "MUX-V2-LATE-MISSING-WIN-001",
+        "MUX-V2-LATE-MISSING-WIN-002",
+        "MUX-V2-LATE-MISSING-LINUX-001"
+      ],
+      "historical_unknowns": [
+        "Already-admitted frame cannot be retracted from a blocked downstream physical write",
+        "Child input/output stop, fetchInput join and END lower admission are different facts"
+      ]
+    },
+    {
+      "id": "MUX-2",
+      "question": "END ordering and bounded close capacity",
+      "scope": "execution-design history",
+      "variants": [
+        "stock ignored END error/control wait",
+        "per-admitted-session END reserve with retained ID",
+        "bounded serializer/control scheduler"
+      ],
+      "historical_status": "MERGED_INTO_MUX-1: exact local END/error evidence and arbitrary missing-session admission bound preserved",
+      "historical_next_step_not_current_plan": "No independent active row.",
+      "historical_run_ids": [
+        "MUX-STOCK-CLOSE-GAP-WIN-002",
+        "MUX-STOCK-END-ERROR-WIN-001",
+        "MUX-END-RETURN-WIN-001"
+      ],
+      "historical_unknowns": [
+        "Finite reserve needs finite admitted-session slots; unlimited concurrency cannot have finite guaranteed END capacity",
+        "Wire END6bytes currently may retain pooled8KiB; verify compact native buffer before memory claims",
+        "No carrier-wide close or dropEND may masquerade as selected child completion"
+      ]
+    },
+    {
+      "id": "MUX-3",
+      "question": "Child batching, pressure and metadata",
+      "scope": "execution-design history",
+      "variants": [
+        "native pipe/gather control",
+        "R-SS2 applicable batch path or explicit native fallback",
+        "D byte-only historical seam"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: same-carrier neighbor exchange and native prepared-path fallback preserved",
+      "historical_next_step_not_current_plan": "No active rerun; use sibling isolation and carrier separation as acceptance properties.",
+      "historical_run_ids": [
+        "R-SS2-PORTABILITY-S-WIN-001",
+        "R-SS2-PORTABILITY-COPYSTACK-WIN-001",
+        "R-SS2-PORTABILITY-V2-WIN-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "XUDP-1",
+      "question": "Local reuse, stale identity and retained remote state",
+      "scope": "execution-design history",
+      "variants": [
+        "native XUDP owners",
+        "local exact-handle candidates"
+      ],
+      "historical_status": "DEFERRED_UNTIL_CONCRETE_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run only for a candidate that changes XUDP owner/carrier boundaries.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "TUN-1",
+      "question": "Full-cone identity, destinations and stale retirement",
+      "scope": "execution-design history",
+      "variants": [
+        "native gVisor owners",
+        "owner-local admission",
+        "packet seam"
+      ],
+      "historical_status": "DEFERRED_UNTIL_CONCRETE_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run host and device-specific TUN evidence only for an applicable candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "IDENT-1",
+      "question": "Distinguishing user, internal and measurement admission",
+      "scope": "acceptance boundary, not E1 completion",
+      "variants": [
+        "explicit admission methods",
+        "typed owner-local origin"
+      ],
+      "historical_status": "MERGED_INTO_CONN-1: explicit USER/internal admission is per migrated path, not a generic origin framework",
+      "historical_next_step_not_current_plan": "CONN-1 records admission/attribution on the one real USER TCP path; measurements remain deferred.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "IDENT-2",
+      "question": "Selected outbound and exact logical reference",
+      "scope": "acceptance boundary, not E1 completion",
+      "variants": [
+        "dispatcher projection/index",
+        "owner-local handle/projection"
+      ],
+      "historical_status": "MERGED: MUX collision evidence is closed in MUX-1; remaining logical-reference/ABA questions move to CONN-1",
+      "historical_next_step_not_current_plan": "No independent active row. Require exact references and stale-instance isolation on each candidate path.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "OBS-1",
+      "question": "Independent live, tag and history reads",
+      "scope": "outside execution RFC",
+      "variants": [
+        "combined snapshot control",
+        "separate native views"
+      ],
+      "historical_status": "DEFERRED_CANDIDATE_ACCEPTANCE",
+      "historical_next_step_not_current_plan": "Run limits and concurrent reads for a concrete OBS bundle, not as an architecture discriminator.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "OBS-2",
+      "question": "Start/end results and bounded retention",
+      "scope": "outside execution RFC",
+      "variants": [
+        "bounded sequence log",
+        "snapshot+sequence",
+        "bounded event stream"
+      ],
+      "historical_status": "DEFERRED_CANDIDATE_ACCEPTANCE",
+      "historical_next_step_not_current_plan": "Run event ordering/loss only for a concrete observation candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "OBS-3",
+      "question": "Slow consumer, loss and resynchronization",
+      "scope": "outside execution RFC",
+      "variants": [
+        "pull ring/cursor",
+        "bounded push+gap"
+      ],
+      "historical_status": "DEFERRED_CANDIDATE_ACCEPTANCE",
+      "historical_next_step_not_current_plan": "Run slow-consumer/gap/resync only for a concrete event candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "OBS-4",
+      "question": "Totals/rates with partial writes, raw paths and reuse",
+      "scope": "outside execution RFC",
+      "variants": [
+        "current delta sampler",
+        "independent views/progress candidates"
+      ],
+      "historical_status": "DEFERRED_CANDIDATE_ACCEPTANCE",
+      "historical_next_step_not_current_plan": "Run continuity/reset/late-completion only for a concrete totals/rates candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "CTL-1",
+      "question": "Rule/balancer application and readback",
+      "scope": "outside execution RFC",
+      "variants": [
+        "native updates",
+        "thin serialized operation"
+      ],
+      "historical_status": "DEFERRED_CANDIDATE_ACCEPTANCE",
+      "historical_next_step_not_current_plan": "Run route writer/membership/readback for a concrete control bundle.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "CTL-2",
+      "question": "Runtime destination redirection",
+      "scope": "outside execution RFC",
+      "variants": [
+        "native prepared handlers",
+        "composed route+handler operation"
+      ],
+      "historical_status": "DEFERRED_CANDIDATE_ACCEPTANCE",
+      "historical_next_step_not_current_plan": "Run redirect/failure behavior for a concrete control bundle.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "CTL-3",
+      "question": "Handler replacement and existing-flow lifetime",
+      "scope": "outside execution RFC",
+      "variants": [
+        "native manager",
+        "validated prepare/publish adapter"
+      ],
+      "historical_status": "DEFERRED_CANDIDATE_ACCEPTANCE",
+      "historical_next_step_not_current_plan": "Run outbound start/detach/tag-reuse behavior for a concrete control bundle.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "CTL-4",
+      "question": "Captured-set close after a switch",
+      "scope": "outside execution RFC",
+      "variants": [
+        "caller composition",
+        "snapshot-aware operation adapter"
+      ],
+      "historical_status": "DEFERRED_MERGED_WITH_CTL-5: future per-path exact-close acceptance suite",
+      "historical_next_step_not_current_plan": "After a concrete path candidate exists, test captured-set isolation, failed switch, concurrent admissions and close completion together.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-1",
+      "question": "Runtime dependencies and provisional rollback",
+      "scope": "outside execution RFC",
+      "variants": [
+        "P negative control",
+        "explicit ready dependencies",
+        "prepared resolver graph"
+      ],
+      "historical_status": "MERGED_INTO_DNS-A1",
+      "historical_next_step_not_current_plan": "DNS-A1 owns the narrowed async-worker and G/T identity discriminator.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-2",
+      "question": "Identity of old DNS-owned work",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G: private owner token + same per-state activity",
+        "T: active/draining configured tags + same activity"
+      ],
+      "historical_status": "MERGED_INTO_DNS-A1",
+      "historical_next_step_not_current_plan": "DNS-A1 reuses ready-state publication and tests only material owner/cutover cells.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-3",
+      "question": "Retirement of DNS queries, caches and transports",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D"
+      ],
+      "historical_status": "MERGED_INTO_DNS-A1",
+      "historical_next_step_not_current_plan": "DNS-A1 records the necessary in-flight/failure facts; no full transport Cartesian matrix.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-4",
+      "question": "Cache policy and mixed A/AAAA expiry",
+      "scope": "outside execution RFC",
+      "variants": [
+        "fresh cache",
+        "validated compatible migration"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run cache expiry/refresh cells only for supported kinds in a selected DNS owner model.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-5",
+      "question": "Built-in DNS and routed/local path parity",
+      "scope": "outside execution RFC",
+      "variants": [
+        "TCP/UDP local+routed",
+        "DoH/QUIC prepared clients",
+        "prepared instances+routing"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run per-kind parity only after a DNS owner model and supported client kinds exist.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "API-1",
+      "question": "Direct Go versus wire-adapter parity",
+      "scope": "outside execution RFC",
+      "variants": [
+        "direct Go",
+        "experimental thin native API adapter"
+      ],
+      "historical_status": "DEFERRED_READINESS_PLANE",
+      "historical_next_step_not_current_plan": "Validate Go/API adapter parity only after a concrete bundle is selected.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "SCALE-1",
+      "question": "Retained heap, GC and tails under concurrency",
+      "scope": "acceptance boundary, not E1 completion",
+      "variants": [
+        "S/A/O/B/L/D and new forms"
+      ],
+      "historical_status": "DEFERRED_READINESS_PLANE",
+      "historical_next_step_not_current_plan": "Run scale/high-water evidence only after candidate selection.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "COMPOSE-1",
+      "question": "Composition of compatible experimental candidates",
+      "scope": "acceptance boundary, not E1 completion",
+      "variants": [
+        "explicit combined source bundles"
+      ],
+      "historical_status": "DEFERRED_READINESS_PLANE",
+      "historical_next_step_not_current_plan": "Run mixed-system composition only after compatible candidates are selected.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "PLATFORM-1",
+      "question": "Host and Android cross-build boundaries",
+      "scope": "acceptance boundary, not E1 completion",
+      "variants": [
+        "Windows",
+        "Linux",
+        "Android cross-build"
+      ],
+      "historical_status": "DEFERRED_READINESS_PLANE",
+      "historical_next_step_not_current_plan": "Run broad platform/cross-build evidence after candidate selection.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "PLATFORM-2",
+      "question": "Physical device and external-network evidence",
+      "scope": "acceptance boundary, not E1 completion",
+      "variants": [
+        "connected Android core harness",
+        "controlled network impairment/remote peer"
+      ],
+      "historical_status": "DEFERRED_READINESS_PLANE: physical device prerequisite remains absent",
+      "historical_next_step_not_current_plan": "Device validation remains an explicit later prerequisite.",
+      "historical_run_ids": [],
+      "historical_unknowns": [
+        "Device/TUN validation unavailable; cross-build cannot replace it"
+      ]
+    },
+    {
+      "id": "BUF-1B",
+      "question": "Producer-reserved AEAD payload without a gather copy",
+      "scope": "execution-design history",
+      "variants": [
+        "CopyReturn gathers into output frame",
+        "one R-SS2 reuses explicitly prepared producer buffer",
+        "unreserved cached/unsupported input falls back honestly"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: prepared writer removes one gather at its measured boundary",
+      "historical_next_step_not_current_plan": "No active rerun; CONN-1 owns real-path adaptation and full-flow costs.",
+      "historical_run_ids": [
+        "R-SS2-CORE-001",
+        "R-SS2-DISCRIMINATORS-001",
+        "R-SS2-V2-CORRECTNESS-001",
+        "R-SS2-V2-TCP-ORACLE-002",
+        "R-SS2-V2-CORRECTNESS-LINUX-001",
+        "R-SS2-V2-PATTERN-WIN-001",
+        "R-SS2-V2-PATTERN-LINUX-001",
+        "R-SS2-PORTABILITY-V2-WIN-001",
+        "R-SS2-METRICS-S-COPIES-001",
+        "R-SS2-METRICS-S-COPIES-002",
+        "R-SS2-METRICS-COPYSTACK-COPIES-001",
+        "R-SS2-METRICS-V2-COPIES-001",
+        "R-SS2-METRICS-S-ALLOCS-001",
+        "R-SS2-METRICS-COPYSTACK-ALLOCS-001",
+        "R-SS2-METRICS-V2-ALLOCS-001",
+        "R-SS2-METRICS-V2-FACTORY-001"
+      ],
+      "historical_unknowns": [
+        "Actual ReadV/adaptation execution, retained heap and full-connection cost remain unmeasured",
+        "Unknown/cached sniff input and pipe remain native fallback; reservation is explicit per read",
+        "Initial SS CopyOnceTimeout empty-timeout and data-plus-error paths remain separate discriminators; no inherited fix claim"
+      ]
+    },
+    {
+      "id": "BUF-1C",
+      "question": "Authoritative Seal backing and error cleanup",
+      "scope": "execution-design history",
+      "variants": [
+        "v1 ignores returned backing",
+        "copy authoritative returned ciphertext",
+        "explicit reject non-inplace result"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: authoritative returned storage covered for built-in scope",
+      "historical_next_step_not_current_plan": "Carry malformed/allocating authenticator boundaries into an applicable candidate acceptance suite.",
+      "historical_run_ids": [
+        "R-SS1-RETURN-001",
+        "R-SS1-COPY-UNIT-001",
+        "R-SS1-REJECT-UNIT-001",
+        "VMESS-BODY-S-001",
+        "VMESS-BODY-S-002",
+        "VMESS-BODY-COPY-001",
+        "VMESS-BODY-COPY-LINUX-001"
+      ],
+      "historical_unknowns": [
+        "empty/packet/padding generic seal also ignores returned slice",
+        "size encoder returned result and panic ownership are distinct next cases"
+      ]
+    },
+    {
+      "id": "DNS-M1",
+      "question": "Missing dispatcher/FakeDNS dependency readiness",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: direct TCP readiness component",
+      "historical_next_step_not_current_plan": "DNS-A1 reuses this component; no unchanged rerun.",
+      "historical_run_ids": [
+        "DNS-RUNTIME-PREPARE-S-001",
+        "DNS-RUNTIME-PREPARE-J1-001",
+        "DNS-RUNTIME-COMPOSED-J1-LINUX-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M2",
+      "question": "Provisional rollback across client kinds",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: lazy routed/local construction and failure preservation",
+      "historical_next_step_not_current_plan": "DNS-A1 extends only actual worker ownership; general rollback remains deferred.",
+      "historical_run_ids": [
+        "DNS-RUNTIME-PREPARE-S-001",
+        "DNS-RUNTIME-PREPARE-J1-001",
+        "DNS-RUNTIME-OWNERSHIP-S-001",
+        "DNS-RUNTIME-COMPOSED-J1-LINUX-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M3",
+      "question": "Local/remote TCP DNS cutover",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: one paused old-A/fresh-B snapshot component",
+      "historical_next_step_not_current_plan": "DNS-A1 runs only publish/drain cells needed to distinguish G/T after worker ownership is proven.",
+      "historical_run_ids": [
+        "DNS-RUNTIME-PREPARE-S-001",
+        "DNS-RUNTIME-PREPARE-J1-001",
+        "DNS-RUNTIME-COMPOSED-J1-LINUX-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M4",
+      "question": "Stale refresh retirement",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "MERGED_INTO_DNS-A1: asynchronous worker lifetime first; stale/periodic work deferred",
+      "historical_next_step_not_current_plan": "DNS-A1 first proves TCP worker admission/join. Stale refresh is not an independent pre-selection row.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M5",
+      "question": "Singleflight across generations",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run generation singleflight only for a selected owner model.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M6",
+      "question": "Mixed A/AAAA expiry and results",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run mixed A/AAAA only for applicable supported clients.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M7",
+      "question": "Parallel winner/loser ownership",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run parallel-loser retirement only for a selected owner model.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M8",
+      "question": "UDP pending link and EDNS retry",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run UDP retry/persistent-link ownership only for an applicable candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M9",
+      "question": "DNS outbound identity and recursion",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "MERGED_INTO_DNS-A1: G/T identity comparison after shared TCP-worker ownership",
+      "historical_next_step_not_current_plan": "DNS-A1 compares identity only after the same worker admission/join substrate passes.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M10",
+      "question": "h2c transport pool ownership",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run active/idle connection retirement only for supported client kinds.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M11",
+      "question": "HTTPS handshake failure ownership",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run DoH provisional cleanup only if DoH is supported by the candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M12",
+      "question": "QUIC stream, idle and dial lifetime",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run DoQ ownership only if DoQ is supported by the candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M13",
+      "question": "Local resolver lifetime",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run local-system behavior only if included in candidate scope.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M14",
+      "question": "Borrowed FakeDNS engine ownership",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run FakeDNS shared-feature behavior only if runtime FakeDNS Apply is supported.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M15",
+      "question": "Cache/pubsub periodic work and migration",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run cache/pubsub periodic joins only for the selected owner model.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M16",
+      "question": "Concurrent applies and retired backlog",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run apply backlog/concurrency only after the operation contract exists.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M17",
+      "question": "Instance close across DNS owner types",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run the lifecycle transport matrix only for supported kinds.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M18",
+      "question": "Repeated apply/close and races",
+      "scope": "outside execution RFC",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "DEFERRED_UNTIL_DNS_OWNER_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run lifecycle race/double-close only for the selected owner model.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M19",
+      "question": "Unchanged upstream regression controls",
+      "scope": "acceptance boundary, not E1 completion",
+      "variants": [
+        "G/P",
+        "G/D",
+        "T/P",
+        "T/D where applicable"
+      ],
+      "historical_status": "VALIDATION_INVARIANT: original upstream tests and fixtures remain unchanged",
+      "historical_next_step_not_current_plan": "Enforce for every candidate run; do not execute as an architecture decision row.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "DNS-M20",
+      "question": "Bootstrap feature construction order",
+      "scope": "outside execution RFC",
+      "variants": [
+        "S dispatcher-before-DNS",
+        "S DNS-before-dispatcher",
+        "S isolated DNS-first process",
+        "DNS-M21 dependency-ready alternatives"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: stock bootstrap order counterexample preserved",
+      "historical_next_step_not_current_plan": "No unchanged rerun.",
+      "historical_run_ids": [
+        "DNS-BOOTSTRAP-S-001",
+        "DNS-BOOTSTRAP-S-ISOLATED-001"
+      ],
+      "historical_unknowns": []
+    },
+    {
+      "id": "CTL-5",
+      "question": "Exact references and per-target close outcome",
+      "scope": "outside execution RFC",
+      "variants": [
+        "current exact owner references",
+        "owner-local handles",
+        "selected snapshot composition"
+      ],
+      "historical_status": "DEFERRED_MERGED_WITH_CTL-4: future per-path exact-close acceptance suite",
+      "historical_next_step_not_current_plan": "No independent pre-selection row; exact references/close owner/completion belong to each candidate path.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "BUF-1D",
+      "question": "Returned size-prefix storage and panic cleanup",
+      "scope": "execution-design history",
+      "variants": [
+        "native Encode return ignored",
+        "consume returned prefix",
+        "explicit error or panic cleanup"
+      ],
+      "historical_status": "DEFERRED_UNTIL_CONCRETE_CANDIDATE",
+      "historical_next_step_not_current_plan": "Run prefix-return/panic ownership only for an applicable framing candidate.",
+      "historical_run_ids": [],
+      "historical_unknowns": []
+    },
+    {
+      "id": "BUF-1E",
+      "question": "Native StackNew temporary-buffer cost",
+      "scope": "execution-design history",
+      "variants": [
+        "CopyReturn stock temp buf.New",
+        "CopyReturn stock temp buf.StackNew",
+        "CopyReturn reserved frame"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: StackNew primitive allocation result preserved",
+      "historical_next_step_not_current_plan": "No repeated primitive benchmark.",
+      "historical_run_ids": [
+        "R-SS1-STACKTEMP-UNIT-001",
+        "R-SS1-BENCH-STACKTEMP-001"
+      ],
+      "historical_unknowns": [
+        "Exact Buffer header and pool boxing allocation attribution requires measurement; retained heap and speed remain separate"
+      ]
+    },
+    {
+      "id": "DNS-M21",
+      "question": "Matcher construction after client readiness",
+      "scope": "outside execution RFC",
+      "variants": [
+        "S order-dependent control",
+        "A: trailing matcher finalizer (error masking hypothesis)",
+        "B: whole builder with ready dispatcher/FakeDNS",
+        "later if warranted: explicit per-client completion/error receipts"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: B/J1 bootstrap construction component",
+      "historical_next_step_not_current_plan": "No unchanged bootstrap rerun; DNS-A1 reuses only relevant preparation behavior.",
+      "historical_run_ids": [
+        "DNS-BOOTSTRAP-A-ORDER-001",
+        "DNS-BOOTSTRAP-B-ORDER-001",
+        "DNS-BOOTSTRAP-S-EXTENDED-001",
+        "DNS-BOOTSTRAP-A-EXTENDED-001",
+        "DNS-BOOTSTRAP-B-EXTENDED-001",
+        "DNS-RUNTIME-PREPARE-BOOTSTRAP-J1-001",
+        "DNS-RUNTIME-COMPOSED-J1-LINUX-001"
+      ],
+      "historical_unknowns": [
+        "Do not silently fix by reordering test App config",
+        "Feature callback errors and provisional resources need explicit ownership",
+        "Bootstrap repair does not prove runtime Apply or resource retirement"
+      ]
+    },
+    {
+      "id": "DNS-M22",
+      "question": "Dependency callback error folding",
+      "scope": "outside execution RFC",
+      "variants": [
+        "S last-callback control",
+        "F first-error exact identity",
+        "J aggregate all with singleton wrapper",
+        "J1 singleton-direct, aggregate only multiple errors"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: J1 callback error-fold component; F remains comparison evidence",
+      "historical_next_step_not_current_plan": "No independent active row; callback folding is candidate composition evidence.",
+      "historical_run_ids": [
+        "DNS-CALLBACK-S-001",
+        "DNS-CALLBACK-F-B-001",
+        "DNS-CALLBACK-J-B-001",
+        "DNS-CALLBACK-S-IDENTITY-001",
+        "DNS-CALLBACK-F-IDENTITY-001",
+        "DNS-CALLBACK-J-IDENTITY-001",
+        "DNS-CALLBACK-J1-B-001",
+        "DNS-CALLBACK-J1-B-LINUX-001"
+      ],
+      "historical_unknowns": [
+        "Exact singleton identity differs from errors.Is discoverability; existing baseline identity is preserved by F",
+        "Error folding does not prove construction rollback or DNS generation retirement"
+      ]
+    },
+    {
+      "id": "CONN-1",
+      "question": "Connection facade over retained execution owners",
+      "scope": "execution-design history",
+      "variants": [
+        "stock DispatchLink",
+        "current fork UserStream -> userStreamReader/BufferToBytesWriter -> transport.Link",
+        "bounded DispatchConn/ProcessConn-style candidate with at most one explicit temporary legacy Link adapter for named unmigrated outbound callers"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: one bounded conn-native SOCKS-to-Freedom branch passes lifecycle/routing/ReadV/splice gates, but retains ownership/accounting layers, removes zero proven byte copies and increases full-flow allocation count",
+      "historical_next_step_not_current_plan": "Remove CONN-1 from active execution. Carry the structural receipt, exact adapter boundaries and acceptance limitations into later owner analysis; do not call this general path replacement or select it for production.",
+      "historical_run_ids": [
+        "CONN1-V3-WIN-RACE-001",
+        "CONN1-V4-WIN-RACE-001",
+        "CONN1-V4-WIN-FALLBACK-001",
+        "CONN1-CURRENT-WIN-SCENARIO-001",
+        "CONN1-V4-WIN-SCENARIO-001",
+        "CONN1-V4-WIN-CONTROLS-001",
+        "CONN1-V5-WIN-SEALED-001",
+        "CONN1-V5-WIN-HANDLER-FALLBACK-001",
+        "CONN1-V6-WIN-SEALED-001",
+        "CONN1-V6-WIN-RACE-001",
+        "CONN1-V6-WIN-SCENARIO-001",
+        "CONN1-CURRENT-LINUX-READV-001",
+        "CONN1-CURRENT-LINUX-READV-002",
+        "CONN1-CURRENT-LINUX-READV-003",
+        "CONN1-V6-LINUX-READV-001",
+        "CONN1-CURRENT-LINUX-SPLICE-001",
+        "CONN1-V6-LINUX-SPLICE-001",
+        "CONN1-V9-WIN-OFF-1024-C01",
+        "CONN1-V9-WIN-OFF-1024-V01",
+        "CONN1-V9-WIN-OFF-1024-C02",
+        "CONN1-V9-WIN-OFF-1024-V02",
+        "CONN1-V9-WIN-OFF-1024-C03",
+        "CONN1-V9-WIN-OFF-1024-V03",
+        "CONN1-V9-WIN-OFF-1024-C04",
+        "CONN1-V9-WIN-OFF-1024-V04",
+        "CONN1-V9-WIN-OFF-1024-C05",
+        "CONN1-V9-WIN-OFF-1024-V05",
+        "CONN1-V9-WIN-OFF-65536-C01",
+        "CONN1-V9-WIN-OFF-65536-V01",
+        "CONN1-V9-WIN-OFF-65536-C02",
+        "CONN1-V9-WIN-OFF-65536-V02",
+        "CONN1-V9-WIN-OFF-65536-C03",
+        "CONN1-V9-WIN-OFF-65536-V03",
+        "CONN1-V9-WIN-OFF-65536-C04",
+        "CONN1-V9-WIN-OFF-65536-V04",
+        "CONN1-V9-WIN-OFF-65536-C05",
+        "CONN1-V9-WIN-OFF-65536-V05",
+        "CONN1-V9-WIN-ON-1024-C01",
+        "CONN1-V9-WIN-ON-1024-V01",
+        "CONN1-V9-WIN-ON-1024-C02",
+        "CONN1-V9-WIN-ON-1024-V02",
+        "CONN1-V9-WIN-ON-1024-C03",
+        "CONN1-V9-WIN-ON-1024-V03",
+        "CONN1-V9-WIN-ON-1024-C04",
+        "CONN1-V9-WIN-ON-1024-V04",
+        "CONN1-V9-WIN-ON-1024-C05",
+        "CONN1-V9-WIN-ON-1024-V05",
+        "CONN1-V9-WIN-ON-65536-C01",
+        "CONN1-V9-WIN-ON-65536-V01",
+        "CONN1-V9-WIN-ON-65536-C02",
+        "CONN1-V9-WIN-ON-65536-V02",
+        "CONN1-V9-WIN-ON-65536-C03",
+        "CONN1-V9-WIN-ON-65536-V03",
+        "CONN1-V9-WIN-ON-65536-C04",
+        "CONN1-V9-WIN-ON-65536-V04",
+        "CONN1-V9-WIN-ON-65536-C05",
+        "CONN1-V9-WIN-ON-65536-V05"
+      ],
+      "historical_unknowns": [
+        "The executable candidate must preserve retained pipelined payload and sniff resume, selected rule/outbound attribution, n+error and accepted-byte boundaries, exact close/unblock/completion, OBS off/on behavior, readv/splice and optional capabilities.",
+        "The first TCP slice must record exact removed layers and temporary adapter callers/deletion condition; a wrapper over the unchanged UserStream-to-Link path is not path replacement.",
+        "UDP requires a future PacketConn/association model and MUX/XUDP require virtual-child compatibility, carrier separation and sibling isolation; they are constraints, not part of the first executable slice.",
+        "FinalMask remains below transport as physical net.Conn/net.PacketConn creator or wrapper and is not the USER identity, accounting or control owner.",
+        "Allocations, retained heap and full-flow latency need matched candidate evidence; primitive allocation results alone are insufficient."
+      ]
+    },
+    {
+      "id": "DNS-A1",
+      "question": "Async TCP-worker ownership and opaque-token versus tag identity",
+      "scope": "outside execution RFC",
+      "variants": [
+        "top-level lookup lease negative control",
+        "G private owner token plus TCP-worker child lease",
+        "T configured tags plus the same TCP-worker child lease"
+      ],
+      "historical_status": "CLOSED_WITH_SCOPED_EVIDENCE: serial routed TCP worker ownership and publish/drain ordering pass; G/T differ only in identity precision; no model selected",
+      "historical_next_step_not_current_plan": "Remove DNS-A1 from active execution. Carry the neutral receipt, S/J1 composition boundary and deferred parallel/Close/non-TCP limits into owner analysis; do not expand the transport matrix automatically.",
+      "historical_run_ids": [
+        "DNS-A1-G-DIRECT-WIN-001",
+        "DNS-A1-T-DIRECT-WIN-001",
+        "DNS-A1-G-HOST-WIN-001",
+        "DNS-A1-T-HOST-OWNER-WIN-001",
+        "DNS-A1-G-J1-HOST-WIN-001",
+        "DNS-A1-T-J1-HOST-WIN-001",
+        "DNS-A1-G-J1-HOST-LINUX-001",
+        "DNS-A1-T-J1-HOST-LINUX-001"
+      ],
+      "historical_unknowns": [
+        "The owner lease must cover the actual detached TCP worker, not only DNS.LookupIP return.",
+        "G and T must share worker ownership, lock order, drain receipts and resource behavior; only identity matching may differ.",
+        "Stale refresh, parallel losers, periodic cache work, non-TCP transports and client-kind Cartesian coverage remain deferred until an owner model is selected."
+      ]
+    },
+    {
+      "id": "APP-ROUTE-1",
+      "question": "Native process routing and actual-flow attribution",
+      "scope": "outside execution RFC",
+      "variants": [
+        "stock TUN process finder plus native process matcher and runtime rule/handler mutation",
+        "later candidate/device acceptance for actual rule/outbound receipt, app correlation sufficiency and captured-set exact close"
+      ],
+      "historical_status": "DEFERRED_STOCK_INTEGRATION: native process/app routing and runtime rule mutation exist; later candidate/device acceptance covers route receipt, app correlation and captured-set close",
+      "historical_next_step_not_current_plan": "No pre-selection implementation run. Reuse stock routing. For a later concrete candidate, retain Route.GetRuleTag and resolved handler.Tag once, test whether a stable app-specific ruleTag is sufficient for product correlation, bind the logical record to owner-local exact close, and validate the Android process-finder artifact/device boundary.",
+      "historical_run_ids": [],
+      "historical_unknowns": [
+        "Capture native Route.GetRuleTag and the successfully resolved handler.Tag once in the logical-flow record.",
+        "Determine whether product correlation through an app-specific stable ruleTag is sufficient; a trusted retained source reference requires a later concrete insufficiency and fresh approval.",
+        "Bind the record to an owner-local exact-close reference so a captured old-app set excludes new flows, siblings, handlers and Instance.",
+        "Validate the actual Android artifact and process-finder callback later; package inventory, package-to-UID trust and NodeUid-to-outboundTag mapping remain application responsibilities."
+      ]
+    },
+    {
+      "id": "CONN-R1",
+      "question": "Coherent direct/Shadowsocks stream ownership replacement",
+      "scope": "execution-design history",
+      "variants": [
+        "functionally comparable existing USER path",
+        "bounded stream replacement with one justified temporary legacy boundary"
+      ],
+      "historical_status": "SCOPED_RESULT_COMPLETE: structural replacement and bounded direct/AES128 SS evidence; no foundation selected",
+      "historical_next_step_not_current_plan": "Owner analysis. Retain unproved Linux splice syscall, in-flight dial close boundary and deferred MUX/packet/device/release acceptance; do not auto-run or migrate candidate-v14.",
+      "historical_run_ids": [
+        "CONNR1-V2-FOCUSED-WIN-001",
+        "CONNR1-V3-FOCUSED-WIN-001",
+        "CONNR1-V4-FOCUSED-WIN-001",
+        "CONNR1-V5-FOCUSED-WIN-001",
+        "CONNR1-V6-FOCUSED-WIN-001",
+        "CONNR1-V6-REAL-WIN-001",
+        "CONNR1-V7-AES128-WIN-001",
+        "CONNR1-V8-AES128-WIN-001",
+        "CONNR1-V8-COMBINED-LINUX-001",
+        "CONNR1-V8-COMBINED-LINUX-002",
+        "CONNR1-COST-CONTROL-WIN-001",
+        "CONNR1-V11-FOCUSED-WIN-001",
+        "CONNR1-V13-FOCUSED-WIN-001",
+        "CONNR1-V13-REAL-WIN-001",
+        "CONNR1-V13-COMBINED-LINUX-001",
+        "CONNR1-V14-AFFECTED-WIN-001",
+        "CONNR1-V14-REAL-WIN-001",
+        "CONNR1-V14-AFFECTED-LINUX-001",
+        "CONNR1-COST4-CONTROL-WIN-001",
+        "CONNR1-COST4-CANDIDATE-WIN-001"
+      ],
+      "historical_unknowns": [
+        "Actual replacement feasibility beyond the grouped-buf CONN-1 contract",
+        "Full-path framing/vector compatibility and total runtime cost",
+        "Exact retained legacy callers and removable adapter boundaries"
+      ]
+    },
+    {
+      "id": "CONN-R2",
+      "question": "Shared stream executor and native MUX-child fit",
+      "scope": "execution-design history",
+      "variants": [
+        "frozen CONN-R1 current-control",
+        "R1 v14 plus one shared direct/SS executor and owned preparation",
+        "native logical MUX-child applicability gate"
+      ],
+      "historical_status": "SCOPED_RESULT_COMPLETE: structural PASS; Windows direct/SS correctness and bounded cost PASS with limitations; MUX-child runtime SOURCE_BLOCKED_WITH_EXACT_SCOPE; no foundation selected",
+      "historical_next_step_not_current_plan": "Owner decision. If a general foundation decision requires MUX, run exactly one later discriminator for a Link-backed child-local ownership/admission contract with a real two-sibling native MUX harness; do not transfer or expand automatically.",
+      "historical_run_ids": [],
+      "historical_unknowns": [
+        "Context-free DNS and uncancelable retry can delay close during preparation",
+        "Native MUX-child executor integration and joined child completion are unproved",
+        "Linux splice syscall, retained heap, Android/device, full-core CI, release and upstream acceptance are unproved"
+      ]
+    }
+  ]
+}

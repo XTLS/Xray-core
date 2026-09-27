@@ -27,6 +27,28 @@ useful concrete example, but ordinary framed paths must constrain the common
 boundary before it is generalized. Old Process callers, including direct library
 usage, need an explicit replacement rather than disappearance by assumption.
 
+## Stage exit evidence and concrete retirement targets
+
+| Stage | Owners that must move together | Concrete retirement | Exit evidence still required beyond E1 |
+| --- | --- | --- | --- |
+| Ordinary stream cohort | Decoded input, sniff/replay, routed preparation, framed startup, transfer and policy/completion | Selected inbound bridges, crossed handoffs where present, repeated input wrappers and outbound relay supervisors | Direct and framed cases; EOF/data/error/partial write; silent-client startup; counters and real native capabilities; remaining callers listed before body deletion |
+| Request/virtual admissions and local outcomes | HTTP request versus accepted connection, embedded Dial/tagged entry, local response/reject, fallback and same-exchange reinjection | API bridges into old Dispatch, duplicated fallback relay/lifetime work, redispatch into an independent old executor | Request reuse, immediate virtual return, first-byte/PROXY-header custody, local completion without inventing a dialed peer |
+| Packet association cohort | Source association, replaceable route legs, addressed IO, deadlines and response delivery | Old UDP relay ownership and mandatory packet metadata carried through Link/buf boundaries on migrated paths | Multi-destination/empty/large messages, pressure/overflow, expiry/reopen, exact source retirement, stale callbacks, virtual/shared-device interruption; E1 proves only selected SOCKS mechanics |
+| Child/carrier/retained state | MUX and reverse child admission, frame serialization, END/ID lifetime, retained XUDP and carrier failure | Old child Dispatch/relay, concrete pipe completion assumptions, error-return/recovery lifetime coupling and old carrier bridges | Sibling isolation, full-frame ordering, control progress, stalled physical carrier, rebind/expiry and reverse integration; E1 M1 is an early two-child discriminator |
+| Final old-engine retirement | Every remaining built-in entry and handler, plus declared external API compatibility | Unreachable Process bodies, old handoffs, obsolete projections and execution state | Production caller audit with no built-in dependence on the old engine; externally retained projections call the new engine instead of retaining a second executor |
+
+Every stage must count both removals and additions: new queues, blocked workers,
+timers, locks and compatibility adapters. A useful local buffer can survive;
+retaining an entire old execution model under a new wrapper does not complete
+the stage. Remaining gaps return to their actual owner stage rather than an
+unbounded final cleanup bucket. Future retirement targets are not claims that
+the current experimental diff already deleted those mechanisms.
+
+The [full core atlas](CORE_ATLAS.md), [historical matrix](EXPERIMENT_MATRIX.md)
+and [detailed E1 results](E1_RESULTS.md) supply the owner coverage and reasons
+behind these stages. Historical DNS replacement and observation rows do not
+become prerequisites merely because they appear in that larger register.
+
 ## Related PRs, checked 2026-09-27
 
 - [#5143](https://github.com/XTLS/Xray-core/pull/5143) is open: decoded VMess

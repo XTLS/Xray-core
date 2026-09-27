@@ -11,6 +11,24 @@ It does not select an upstream API or authorize migration of every protocol.
 Read [ownership](OWNERSHIP_MAP.md), [validation](VALIDATION.md),
 [design decisions](DESIGN_DECISIONS.md), and [migration](MIGRATION.md).
 
+The short proposal is only the entry point. The supporting research is available
+in full, with historical and current evidence kept distinct:
+
+- [Full 64-row experiment register and causal history](EXPERIMENT_MATRIX.md),
+  with [machine-readable rows, variants, statuses and receipt IDs](historical-matrix.json).
+- [Full pinned core atlas](CORE_ATLAS.md): entry points, protocol/transport
+  boundaries, packet/MUX/XUDP, reinjection, fast paths and actual close owners;
+  later-base corrections are explicit.
+- [Detailed E1 results](E1_RESULTS.md): rejected R1 mechanisms, alternatives,
+  regression families, allocation/storage measurements, negative results and
+  remaining gaps. The aggregate samples are published alongside the tables.
+- [Pinned sing-box and Mihomo implementation examples](PEER_EXAMPLES.md),
+  including capability/packet/lifetime differences and limits of comparison.
+
+Historical `CONN-R1/CONN-R2` and current `E1 R1/R2` are different series. The
+64 research rows are not 64 passing E1 tests; the six current integration cells
+are not a substitute for the broader research history.
+
 ## Problem and proposal
 
 Decoded input, routing, outbound startup, copy supervision, directional policy,

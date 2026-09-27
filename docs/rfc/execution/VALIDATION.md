@@ -76,11 +76,17 @@ go test ./transport/exchange -run '^TestAheadRetainedStorageProbe$' -v -count=1
 go test ./transport/exchange -run '^$' -bench '^BenchmarkAheadOwnedTransfer$' -benchmem
 ```
 
-They do not establish a whole-core speedup. Earlier local matched-flow
-measurements had mixed allocations, including higher short/framed-flow cost;
-the RFC makes no uniform efficiency claim. Numeric comparisons with older
-revisions are omitted because their full historical controls are not part of
-this public package. No benchmark rerun is needed to establish the owner map.
+They do not establish a whole-core speedup. [E1_RESULTS.md](E1_RESULTS.md)
+preserves the saved numeric comparisons, including higher short/framed-flow
+cost, workload and lifetime boundaries, sample counts, pool retention and
+negative findings. Aggregate JSON samples are published with the report.
+Historical R1 source bundles are not all part of this package; those tables
+are saved host evidence, not a promise of independent reproduction from the
+current candidate alone. No benchmark was rerun just to restore this evidence.
+
+The earlier [64-row research matrix](EXPERIMENT_MATRIX.md) is distinct from
+the six E1 cells. Its deferred and rejected results remain visible; they are
+not counted as E1 PASS or evidence that all of Xray has been migrated.
 
 ## Reuse of existing public evidence
 
@@ -129,3 +135,8 @@ require cooperation with cancellation/interruption.
 No full platform build matrix, whole-tree race suite or comparative benchmark
 was rerun for packaging. The exact public revision is recorded in the Draft PR;
 any automatically scheduled upstream/fork CI has its own status and scope.
+
+The subsequent documentation expansion restores the historical register, atlas,
+peer comparison and numeric receipts. It does not change the 55 R2 source/test
+files or their manifest hashes. The audit's publication allowlist is extended
+only for those documents and aggregate data; Go tests are not rerun for prose.

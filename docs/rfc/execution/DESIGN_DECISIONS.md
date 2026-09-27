@@ -6,6 +6,12 @@ These choices explain the executable specimen. They are not requirements for
 upstream to adopt its exact interfaces. Alternatives remain open where the
 experiment does not discriminate between them.
 
+The [historical matrix](EXPERIMENT_MATRIX.md) explains which earlier forms
+failed to remove actual work and why E1 added packet/child discriminators.
+[E1_RESULTS.md](E1_RESULTS.md) retains the R1 failure sequence, the full R2
+alternative comparison, measured allocation/retention and negative cost cells.
+This document is the short mechanism explanation, not the entire evidence base.
+
 ## Independent read-ahead and completion
 
 Removing independent reads changes when EOF becomes visible if the peer write

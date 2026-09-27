@@ -18,6 +18,14 @@ PACKAGE_FILES = {
     "docs/rfc/execution/MIGRATION.md",
     "docs/rfc/execution/VALIDATION.md",
     "docs/rfc/execution/source-manifest.json",
+    "docs/rfc/execution/CORE_ATLAS.md",
+    "docs/rfc/execution/EXPERIMENT_MATRIX.md",
+    "docs/rfc/execution/historical-matrix.json",
+    "docs/rfc/execution/E1_RESULTS.md",
+    "docs/rfc/execution/PEER_EXAMPLES.md",
+    "docs/rfc/execution/evidence/buffer-results.json",
+    "docs/rfc/execution/evidence/r2-flow-samples.json",
+    "docs/rfc/execution/evidence/r2-flow-summary.json",
     "testing/executionprobe/overlay.py",
     "testing/executionprobe/validate.py",
     "testing/executionprobe/probe.go",
@@ -62,7 +70,7 @@ def audit():
             current = (ROOT / name).read_bytes()
             if original.replace(b"\r\n", b"\n") != current.replace(b"\r\n", b"\n"):
                 raise RuntimeError("Original fixture/test/dependency changed: " + name)
-    print("PASS: exact 65-path export; public and original R2 hashes match; original tests, fixtures and dependencies unchanged.")
+    print(f"PASS: exact {len(allowed)}-path export; public and original R2 hashes match; original tests, fixtures and dependencies unchanged.")
 
 
 def focused():

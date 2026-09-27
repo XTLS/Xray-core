@@ -1,0 +1,242 @@
+[
+  {
+    "scenario": "socks",
+    "payload": 1024,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 58324,
+    "allocs_per_flow": 267.7,
+    "completion_ms": 0.53,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 5.0
+  },
+  {
+    "scenario": "socks",
+    "payload": 1024,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 54872,
+    "allocs_per_flow": 262.0,
+    "completion_ms": 2001.49,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 7.0
+  },
+  {
+    "scenario": "socks",
+    "payload": 1048576,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1134121,
+    "allocs_per_flow": 979.8,
+    "completion_ms": 1.4,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 5.0
+  },
+  {
+    "scenario": "socks",
+    "payload": 1048576,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1132308,
+    "allocs_per_flow": 981.8,
+    "completion_ms": 2002.2,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 7.0
+  },
+  {
+    "scenario": "ss",
+    "payload": 1024,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 121369,
+    "allocs_per_flow": 699.0,
+    "completion_ms": 1000.84,
+    "timers_outstanding_samples": [
+      3,
+      3
+    ],
+    "events_per_flow": 15.0
+  },
+  {
+    "scenario": "ss",
+    "payload": 1024,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 90407,
+    "allocs_per_flow": 671.2,
+    "completion_ms": 3001.51,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 16.0
+  },
+  {
+    "scenario": "ss",
+    "payload": 1048576,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1385935,
+    "allocs_per_flow": 5718.3,
+    "completion_ms": 1836.93,
+    "timers_outstanding_samples": [
+      1,
+      0
+    ],
+    "events_per_flow": 15.0
+  },
+  {
+    "scenario": "ss",
+    "payload": 1048576,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1312396,
+    "allocs_per_flow": 4457.7,
+    "completion_ms": 3002.83,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 16.0
+  },
+  {
+    "scenario": "trojan",
+    "payload": 1024,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 106924,
+    "allocs_per_flow": 389.5,
+    "completion_ms": 0.62,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 6.0
+  },
+  {
+    "scenario": "trojan",
+    "payload": 1024,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 82108,
+    "allocs_per_flow": 448.7,
+    "completion_ms": 2001.03,
+    "timers_outstanding_samples": [
+      1,
+      1
+    ],
+    "events_per_flow": 10.0
+  },
+  {
+    "scenario": "trojan",
+    "payload": 1048576,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1208665,
+    "allocs_per_flow": 761.8,
+    "completion_ms": 6.26,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 6.0
+  },
+  {
+    "scenario": "trojan",
+    "payload": 1048576,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1287584,
+    "allocs_per_flow": 1825.2,
+    "completion_ms": 2003.65,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 10.0
+  },
+  {
+    "scenario": "vless",
+    "payload": 1024,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 113336,
+    "allocs_per_flow": 466.3,
+    "completion_ms": 2001.67,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 12.0
+  },
+  {
+    "scenario": "vless",
+    "payload": 1024,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 75539,
+    "allocs_per_flow": 459.0,
+    "completion_ms": 3001.51,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 13.0
+  },
+  {
+    "scenario": "vless",
+    "payload": 1048576,
+    "variant": "candidate",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1205249,
+    "allocs_per_flow": 1341.8,
+    "completion_ms": 2002.3,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 12.0
+  },
+  {
+    "scenario": "vless",
+    "payload": 1048576,
+    "variant": "control",
+    "samples": 2,
+    "flows": 6,
+    "bytes_per_flow": 1181515,
+    "allocs_per_flow": 2003.3,
+    "completion_ms": 3002.61,
+    "timers_outstanding_samples": [
+      0,
+      0
+    ],
+    "events_per_flow": 13.0
+  }
+]

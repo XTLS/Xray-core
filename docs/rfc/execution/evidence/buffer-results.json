@@ -1,0 +1,154 @@
+{
+  "status": "Saved host measurements; not rerun for this documentation update",
+  "date": "2026-09-27",
+  "go": "go1.27.0",
+  "os": "windows",
+  "arch": "amd64",
+  "baseline": "3519dfecbd65022ba71d9bc73e94063d0cbc8636",
+  "ahead": {
+    "r1": [
+      {
+        "payload_bytes": 1024,
+        "iterations": 200,
+        "bytes_per_op": 34026,
+        "allocations_per_op": 15
+      },
+      {
+        "payload_bytes": 1024,
+        "iterations": 200,
+        "bytes_per_op": 34029,
+        "allocations_per_op": 15
+      },
+      {
+        "payload_bytes": 1048576,
+        "iterations": 200,
+        "bytes_per_op": 1091519,
+        "allocations_per_op": 310
+      },
+      {
+        "payload_bytes": 1048576,
+        "iterations": 200,
+        "bytes_per_op": 1091413,
+        "allocations_per_op": 310
+      }
+    ],
+    "r2": [
+      {
+        "payload_bytes": 1024,
+        "iterations": 200,
+        "bytes_per_op": 1229,
+        "allocations_per_op": 13
+      },
+      {
+        "payload_bytes": 1024,
+        "iterations": 200,
+        "bytes_per_op": 1319,
+        "allocations_per_op": 13
+      },
+      {
+        "payload_bytes": 1048576,
+        "iterations": 200,
+        "bytes_per_op": 4094,
+        "allocations_per_op": 46
+      },
+      {
+        "payload_bytes": 1048576,
+        "iterations": 200,
+        "bytes_per_op": 4035,
+        "allocations_per_op": 48
+      }
+    ]
+  },
+  "storage": {
+    "r1": {
+      "active_payload_storage_bytes": 3145728,
+      "heap_delta_active": 3241760,
+      "heap_delta_after_gc1_owners_held": 2691856,
+      "heap_delta_after_gc2_owners_held": 2691856,
+      "heap_delta_after_owner_release_gc": 43312,
+      "heap_delta_joined_before_gc": 3241872,
+      "heap_scope": "Go HeapAlloc incl owner/runtime metadata; not process RSS",
+      "owner_retained_payload_after_abort_join": 2621440,
+      "owners": 32,
+      "peak_queue_slots": 160,
+      "peak_queued_payload_bytes": 2621440,
+      "producer_held_payload_bytes": 524288,
+      "queue_limit": 65536
+    },
+    "r2": {
+      "active_payload_storage_bytes": 3145728,
+      "heap_delta_active": 3234832,
+      "heap_delta_after_gc1_owners_held": 3226800,
+      "heap_delta_after_gc2_owners_held": 73464,
+      "heap_delta_after_owner_release_gc": 48376,
+      "heap_delta_joined_before_gc": 3240752,
+      "heap_scope": "Go HeapAlloc incl owner/runtime metadata; not process RSS",
+      "owner_retained_payload_after_abort_join": 0,
+      "owners": 32,
+      "peak_queue_slots": 160,
+      "peak_queued_payload_bytes": 2621440,
+      "producer_held_payload_bytes": 524288,
+      "queue_limit": 65536
+    }
+  },
+  "instrumentation_calibration": [
+    {
+      "allocs_per_event": 1,
+      "bytes_per_event": 24,
+      "events": 100000,
+      "kind": "task"
+    },
+    {
+      "allocs_per_event": 1,
+      "bytes_per_event": 16,
+      "events": 100000,
+      "kind": "timer"
+    }
+  ],
+  "r2_source_delta_from_r1": {
+    "production_added": 437,
+    "production_deleted": 251,
+    "paths": [
+      {
+        "path": "features/outbound/outbound.go",
+        "added": 1,
+        "deleted": 1
+      },
+      {
+        "path": "proxy/socks/server.go",
+        "added": 1,
+        "deleted": 1
+      },
+      {
+        "path": "app/dispatcher/packet.go",
+        "added": 38,
+        "deleted": 31
+      },
+      {
+        "path": "app/proxyman/outbound/packet.go",
+        "added": 38,
+        "deleted": 98
+      },
+      {
+        "path": "features/outbound/packet_legacy.go",
+        "added": 101,
+        "deleted": 0
+      },
+      {
+        "path": "proxy/freedom/packet.go",
+        "added": 18,
+        "deleted": 4
+      },
+      {
+        "path": "transport/exchange/ahead.go",
+        "added": 60,
+        "deleted": 26
+      },
+      {
+        "path": "transport/exchange/packet.go",
+        "added": 180,
+        "deleted": 90
+      }
+    ]
+  }
+}

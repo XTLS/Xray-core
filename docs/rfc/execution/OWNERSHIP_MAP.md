@@ -6,6 +6,12 @@ This is a focused map of official base `3519dfec` and this experiment, not a
 complete replacement architecture for every Xray entry. Relative code links
 refer to this RFC. The as-is source is pinned to the official base.
 
+This is the focused E1 overlay. [CORE_ATLAS.md](CORE_ATLAS.md) preserves the
+full source-navigation map at its earlier official pin, with later-base
+corrections separated explicitly. It includes special admissions, virtual and
+physical connection forms, transport registries, reinjection, counter/fast-path
+boundaries and the close-owner table omitted from this short overlay.
+
 ## Existing execution
 
 ```mermaid
