@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/xtls/xray-core/common/serial"
@@ -27,6 +28,8 @@ type AccessMessage struct {
 	Reason interface{}
 	Email  string
 	Detour string
+	// Observed bytes at connection teardown; interrupted transfers may be partial.
+	Uplink, Downlink int64
 }
 
 func (m *AccessMessage) String() string {
@@ -54,6 +57,10 @@ func (m *AccessMessage) String() string {
 		builder.WriteString(" email: ")
 		builder.WriteString(m.Email)
 	}
+	builder.WriteString(" up=")
+	builder.WriteString(strconv.FormatInt(m.Uplink, 10))
+	builder.WriteString(" down=")
+	builder.WriteString(strconv.FormatInt(m.Downlink, 10))
 
 	return builder.String()
 }

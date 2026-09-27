@@ -145,6 +145,13 @@ func (g *Instance) Severity() log.Severity {
 	return g.config.ErrorLogLevel
 }
 
+// AccessEnabled reports whether access messages are currently being logged.
+func (g *Instance) AccessEnabled() bool {
+	g.RLock()
+	defer g.RUnlock()
+	return g.active && g.accessLogger != nil
+}
+
 // Close implements common.Closable.Close().
 func (g *Instance) Close() error {
 	errors.LogDebug(context.Background(), "Logger closing")

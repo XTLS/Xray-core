@@ -137,7 +137,7 @@ func (*DefaultDispatcher) Start() error {
 // Close implements common.Closable.
 func (*DefaultDispatcher) Close() error { return nil }
 
-func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *transport.Link) {
+func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *transport.Link, *accessTraffic) {
 	opt := pipe.OptionsFromContext(ctx)
 	uplinkReader, uplinkWriter := pipe.New(opt...)
 	downlinkReader, downlinkWriter := pipe.New(opt...)
@@ -184,7 +184,13 @@ func (d *DefaultDispatcher) getLink(ctx context.Context) (*transport.Link, *tran
 		}
 	}
 
-	return inboundLink, outboundLink
+	traffic := newAccessTraffic(ctx)
+	if traffic != nil {
+		traffic.upDone, traffic.downDone = uplinkReader.WaitClosed(), downlinkReader.WaitClosed()
+		inboundLink.Writer = traffic.up.wrap(inboundLink.Writer)
+		outboundLink.Writer = traffic.down.wrap(outboundLink.Writer)
+	}
+	return inboundLink, outboundLink, traffic
 }
 
 func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager stats.Manager, link *transport.Link) *transport.Link {
@@ -283,9 +289,9 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 	}
 
 	sniffingRequest := content.SniffingRequest
-	inbound, outbound := d.getLink(ctx)
+	inbound, outbound, traffic := d.getLink(ctx)
 	if !sniffingRequest.Enabled {
-		go d.routedDispatch(ctx, outbound, destination)
+		go d.routedDispatch(ctx, outbound, destination, traffic)
 	} else {
 		go func() {
 			cReader := &cachedReader{
@@ -314,7 +320,7 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 					ob.Target = destination
 				}
 			}
-			d.routedDispatch(ctx, outbound, destination)
+			d.routedDispatch(ctx, outbound, destination, traffic)
 		}()
 	}
 	return inbound, nil
@@ -339,9 +345,15 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 		ctx = session.ContextWithContent(ctx, content)
 	}
 	outbound = WrapLink(ctx, d.policy, d.stats, outbound)
+	traffic := newAccessTraffic(ctx)
+	if traffic != nil {
+		reader := outbound.Reader.(*buf.TimeoutWrapperReader)
+		traffic.up.user, reader.Counter = reader.Counter, &traffic.up
+		outbound.Writer = traffic.down.wrap(outbound.Writer)
+	}
 	sniffingRequest := content.SniffingRequest
 	if !sniffingRequest.Enabled {
-		d.routedDispatch(ctx, outbound, destination)
+		d.routedDispatch(ctx, outbound, destination, traffic)
 	} else {
 		cReader := &cachedReader{
 			reader: outbound.Reader.(buf.TimeoutReader),
@@ -369,7 +381,7 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 				ob.Target = destination
 			}
 		}
-		d.routedDispatch(ctx, outbound, destination)
+		d.routedDispatch(ctx, outbound, destination, traffic)
 	}
 
 	return nil
@@ -431,7 +443,7 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 	return contentResult, contentErr
 }
 
-func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
+func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination, traffic *accessTraffic) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 
@@ -498,7 +510,11 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				accessMessage.Detour = inTag + " >> " + tag
 			}
 		}
-		log.Record(accessMessage)
+		if traffic != nil {
+			defer traffic.record(*accessMessage)
+		} else {
+			log.Record(accessMessage)
+		}
 	}
 
 	handler.Dispatch(ctx, link)
