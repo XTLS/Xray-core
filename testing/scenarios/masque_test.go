@@ -61,7 +61,7 @@ var (
 
 const (
 	masqueEchoPort      = 7
-	masqueAuthorization = "Basic dTpw"
+	masqueAuthorization = "Basic dUBleGFtcGxlLmNvbTpw"
 )
 
 func startMasqueServer(t *testing.T, h2 bool) (net.Port, [32]byte) {
@@ -504,7 +504,7 @@ func masqueServerInbound(serverPort net.Port, certificate *tls.Certificate, alpn
 		ProxySettings: serial.ToTypedMessage(&masque.ServerConfig{
 			Users: []*protocol.User{{
 				Email:   "u@example.com",
-				Account: serial.ToTypedMessage(&masque.Account{User: "u", Pass: "p"}),
+				Account: serial.ToTypedMessage(&masque.Account{Password: "p"}),
 			}},
 			Address: []string{"10.14.0.1/24", "fd14::1/64"},
 		}),
@@ -595,7 +595,7 @@ func TestMasqueServerHTTP2(t *testing.T) {
 
 func TestMasqueServerRejectsWrongPassword(t *testing.T) {
 	for _, h2 := range []bool{false, true} {
-		if err := testMasqueServer(t, h2, "Basic dTp3cm9uZw=="); err == nil {
+		if err := testMasqueServer(t, h2, "Basic dUBleGFtcGxlLmNvbTp3cm9uZw=="); err == nil {
 			t.Errorf("a wrong password got through (h2: %v)", h2)
 		}
 	}

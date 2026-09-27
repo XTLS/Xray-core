@@ -105,7 +105,7 @@ func TestMasqueServerConfig(t *testing.T) {
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
-				"clients": [{"user": "u", "pass": "p", "email": "u@example.com", "level": 1}],
+				"clients": [{"email": "u@example.com", "pass": "p", "level": 1}],
 				"address": ["10.13.0.1/24", "fd13::1/64"],
 				"mtu": 1400
 			}`,
@@ -114,18 +114,19 @@ func TestMasqueServerConfig(t *testing.T) {
 				Users: []*protocol.User{{
 					Email:   "u@example.com",
 					Level:   1,
-					Account: serial.ToTypedMessage(&masqueproxy.Account{User: "u", Pass: "p"}),
+					Account: serial.ToTypedMessage(&masqueproxy.Account{Password: "p"}),
 				}},
 				Address: []string{"10.13.0.1/24", "fd13::1/64"},
 				Mtu:     1400,
 			},
 		},
 		{
-			Input:  `{"users": [{"user": "u", "pass": "p:q"}], "address": ["10.13.0.1/24"]}`,
+			Input:  `{"users": [{"email": "u", "pass": "p:q"}], "address": ["10.13.0.1/24"]}`,
 			Parser: loadJSON(creator),
 			Output: &masqueproxy.ServerConfig{
 				Users: []*protocol.User{{
-					Account: serial.ToTypedMessage(&masqueproxy.Account{User: "u", Pass: "p:q"}),
+					Email:   "u",
+					Account: serial.ToTypedMessage(&masqueproxy.Account{Password: "p:q"}),
 				}},
 				Address: []string{"10.13.0.1/24"},
 			},
@@ -140,16 +141,17 @@ func TestMasqueServerConfig(t *testing.T) {
 	})
 
 	for _, input := range []string{
-		`{"clients": [{"user": "u:v", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"user": "", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"user": "u", "pass": ""}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"user": "u", "pass": "p"}, {"user": "u", "pass": "q"}], "address": ["10.13.0.1/24"]}`,
-		`{"clients": [{"user": "u", "pass": "p"}]}`,
-		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1"]}`,
-		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24", "10.14.0.1/24"]}`,
-		`{"clients": [{"user": "u", "pass": "p"}], "address": ["fd13::1/64", "fd14::1/64"]}`,
-		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 1000}`,
-		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 70000}`,
+		`{"clients": [{"email": "u:v", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"email": "", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"email": "u", "pass": ""}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"email": "u", "pass": "p"}, {"email": "U", "pass": "q"}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"email": "u", "pass": "p"}]}`,
+		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1"]}`,
+		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24", "10.14.0.1/24"]}`,
+		`{"clients": [{"email": "u", "pass": "p"}], "address": ["fd13::1/64", "fd14::1/64"]}`,
+		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 1000}`,
+		`{"clients": [{"email": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 70000}`,
 	} {
 		if _, err := loadJSON(creator)(input); err == nil {
 			t.Errorf("expected an error for %s", input)
@@ -170,7 +172,7 @@ func TestMasqueInboundConfig(t *testing.T) {
 	if err := build(`{
 		"protocol": "masque",
 		"port": 443,
-		"settings": {"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24"]},
+		"settings": {"clients": [{"email": "u@example.com", "pass": "p"}], "address": ["10.13.0.1/24"]},
 		"streamSettings": {"network": "masque", "security": "tls"}
 	}`); err != nil {
 		t.Error(err)

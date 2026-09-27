@@ -76,8 +76,7 @@ func (x *ClientConfig) GetRemoteDns() []string {
 
 type Account struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	User          string                 `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
-	Pass          string                 `protobuf:"bytes,2,opt,name=pass,proto3" json:"pass,omitempty"`
+	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -112,16 +111,9 @@ func (*Account) Descriptor() ([]byte, []int) {
 	return file_proxy_masque_config_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Account) GetUser() string {
+func (x *Account) GetPassword() string {
 	if x != nil {
-		return x.User
-	}
-	return ""
-}
-
-func (x *Account) GetPass() string {
-	if x != nil {
-		return x.Pass
+		return x.Password
 	}
 	return ""
 }
@@ -194,10 +186,9 @@ const file_proxy_masque_config_proto_rawDesc = "" +
 	"\fClientConfig\x12<\n" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\x12\x1d\n" +
 	"\n" +
-	"remote_dns\x18\x02 \x03(\tR\tremoteDns\"1\n" +
-	"\aAccount\x12\x12\n" +
-	"\x04user\x18\x01 \x01(\tR\x04user\x12\x12\n" +
-	"\x04pass\x18\x02 \x01(\tR\x04pass\"l\n" +
+	"remote_dns\x18\x02 \x03(\tR\tremoteDns\"%\n" +
+	"\aAccount\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\"l\n" +
 	"\fServerConfig\x120\n" +
 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x12\x18\n" +
 	"\aaddress\x18\x02 \x03(\tR\aaddress\x12\x10\n" +

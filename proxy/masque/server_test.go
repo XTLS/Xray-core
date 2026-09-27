@@ -290,8 +290,8 @@ func TestServerReleasesAddresses(t *testing.T) {
 func TestServerRemoveUserClosesTunnels(t *testing.T) {
 	s, _ := newTestServer(t)
 	s.validator = newValidator()
-	alice := &protocol.MemoryUser{Email: "a@example.com", Account: &MemoryAccount{User: "a", Pass: "p"}}
-	bob := &protocol.MemoryUser{Email: "b@example.com", Account: &MemoryAccount{User: "b", Pass: "p"}}
+	alice := &protocol.MemoryUser{Email: "a@example.com", Account: &MemoryAccount{Password: "p"}}
+	bob := &protocol.MemoryUser{Email: "b@example.com", Account: &MemoryAccount{Password: "p"}}
 	require.NoError(t, s.AddUser(context.Background(), alice))
 	require.NoError(t, s.AddUser(context.Background(), bob))
 	_, aConn := addUserTunnel(t, s, alice)
@@ -301,8 +301,8 @@ func TestServerRemoveUserClosesTunnels(t *testing.T) {
 	require.True(t, aConn.isClosed())
 	require.False(t, bConn.isClosed())
 	require.Error(t, s.RemoveUser(context.Background(), "a@example.com"))
-	require.Nil(t, s.validator.get("a", "p"))
-	require.Equal(t, bob, s.validator.get("b", "p"))
+	require.Nil(t, s.validator.get("a@example.com", "p"))
+	require.Equal(t, bob, s.validator.get("b@example.com", "p"))
 }
 
 func TestPacketDestination(t *testing.T) {

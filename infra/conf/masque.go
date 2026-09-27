@@ -39,7 +39,6 @@ func (c *MasqueClientConfig) Build() (proto.Message, error) {
 }
 
 type MasqueUserConfig struct {
-	User  string `json:"user"`
 	Pass  string `json:"pass"`
 	Level uint32 `json:"level"`
 	Email string `json:"email"`
@@ -60,25 +59,26 @@ func (c *MasqueServerConfig) Build() (proto.Message, error) {
 		Address: c.Address,
 		Mtu:     c.MTU,
 	}
-	names := make(map[string]bool)
+	emails := make(map[string]bool)
 	for _, user := range c.Users {
-		if user.User == "" || strings.Contains(user.User, ":") {
-			return nil, errors.New(`MASQUE: invalid "user" `, user.User)
+		if user.Email == "" {
+			return nil, errors.New(`MASQUE: "email" is empty`)
+		}
+		if strings.Contains(user.Email, ":") {
+			return nil, errors.New(`MASQUE: invalid "email" `, user.Email)
 		}
 		if user.Pass == "" {
-			return nil, errors.New(`MASQUE: "pass" of `, user.User, ` is empty`)
+			return nil, errors.New(`MASQUE: "pass" of `, user.Email, ` is empty`)
 		}
-		if names[user.User] {
-			return nil, errors.New(`MASQUE: duplicate "user" `, user.User)
+		email := strings.ToLower(user.Email)
+		if emails[email] {
+			return nil, errors.New(`MASQUE: duplicate "email" `, user.Email)
 		}
-		names[user.User] = true
+		emails[email] = true
 		config.Users = append(config.Users, &protocol.User{
-			Email: user.Email,
-			Level: user.Level,
-			Account: serial.ToTypedMessage(&masque.Account{
-				User: user.User,
-				Pass: user.Pass,
-			}),
+			Email:   user.Email,
+			Level:   user.Level,
+			Account: serial.ToTypedMessage(&masque.Account{Password: user.Pass}),
 		})
 	}
 	if len(c.Address) == 0 {
