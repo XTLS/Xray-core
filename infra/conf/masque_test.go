@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/serial"
 	. "github.com/xtls/xray-core/infra/conf"
+	masqueproxy "github.com/xtls/xray-core/proxy/masque"
 	"github.com/xtls/xray-core/transport/internet/masque"
 )
 
@@ -81,5 +84,93 @@ func TestMasqueOutboundConfig(t *testing.T) {
 		if err := build(input); err == nil {
 			t.Errorf("expected an error for %s", input)
 		}
+	}
+}
+
+func TestMasqueServerConfig(t *testing.T) {
+	creator := func() Buildable {
+		return new(MasqueServerConfig)
+	}
+
+	runMultiTestCase(t, []TestCase{
+		{
+			Input: `{
+				"clients": [{"user": "u", "pass": "p", "email": "u@example.com", "level": 1}],
+				"address": ["10.13.0.1/24", "fd13::1/64"],
+				"mtu": 1400
+			}`,
+			Parser: loadJSON(creator),
+			Output: &masqueproxy.ServerConfig{
+				Users: []*protocol.User{{
+					Email:   "u@example.com",
+					Level:   1,
+					Account: serial.ToTypedMessage(&masqueproxy.Account{User: "u", Pass: "p"}),
+				}},
+				Address: []string{"10.13.0.1/24", "fd13::1/64"},
+				Mtu:     1400,
+			},
+		},
+		{
+			Input:  `{"users": [{"user": "u", "pass": "p:q"}], "address": ["10.13.0.1/24"]}`,
+			Parser: loadJSON(creator),
+			Output: &masqueproxy.ServerConfig{
+				Users: []*protocol.User{{
+					Account: serial.ToTypedMessage(&masqueproxy.Account{User: "u", Pass: "p:q"}),
+				}},
+				Address: []string{"10.13.0.1/24"},
+			},
+		},
+		{
+			Input:  `{"address": ["10.13.0.1/24"]}`,
+			Parser: loadJSON(creator),
+			Output: &masqueproxy.ServerConfig{
+				Address: []string{"10.13.0.1/24"},
+			},
+		},
+	})
+
+	for _, input := range []string{
+		`{"clients": [{"user": "u:v", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"user": "", "pass": "p"}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"user": "u", "pass": ""}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"user": "u", "pass": "p"}, {"user": "u", "pass": "q"}], "address": ["10.13.0.1/24"]}`,
+		`{"clients": [{"user": "u", "pass": "p"}]}`,
+		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1"]}`,
+		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24", "10.14.0.1/24"]}`,
+		`{"clients": [{"user": "u", "pass": "p"}], "address": ["fd13::1/64", "fd14::1/64"]}`,
+		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 1000}`,
+		`{"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24"], "mtu": 70000}`,
+	} {
+		if _, err := loadJSON(creator)(input); err == nil {
+			t.Errorf("expected an error for %s", input)
+		}
+	}
+}
+
+func TestMasqueInboundConfig(t *testing.T) {
+	build := func(s string) error {
+		c := new(InboundDetourConfig)
+		if err := json.Unmarshal([]byte(s), c); err != nil {
+			return err
+		}
+		_, err := c.Build()
+		return err
+	}
+
+	if err := build(`{
+		"protocol": "masque",
+		"port": 443,
+		"settings": {"clients": [{"user": "u", "pass": "p"}], "address": ["10.13.0.1/24"]},
+		"streamSettings": {"network": "masque", "security": "tls"}
+	}`); err != nil {
+		t.Error(err)
+	}
+	if err := build(`{
+		"protocol": "vless",
+		"port": 443,
+		"settings": {"clients": [{"id": "27848739-7e62-4138-9fd3-098a63964b6b"}], "decryption": "none"},
+		"streamSettings": {"network": "masque", "security": "tls"}
+	}`); err == nil {
+		t.Error("expected an error for the masque transport on a vless inbound")
 	}
 }
