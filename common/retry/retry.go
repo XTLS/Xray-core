@@ -1,6 +1,7 @@
 package retry // import "github.com/xtls/xray-core/common/retry"
 
 import (
+	"context"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -15,15 +16,23 @@ type Strategy interface {
 }
 
 type retryer struct {
+	ctx          context.Context
 	totalAttempt int
 	nextDelay    func() uint32
 }
 
 // On implements Strategy.On.
 func (r *retryer) On(method func() error) error {
+	ctx := r.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	attempt := 0
 	accumulatedError := make([]error, 0, r.totalAttempt)
 	for attempt < r.totalAttempt {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		err := method()
 		if err == nil {
 			return nil
@@ -33,7 +42,13 @@ func (r *retryer) On(method func() error) error {
 			accumulatedError = append(accumulatedError, err)
 		}
 		delay := r.nextDelay()
-		time.Sleep(time.Duration(delay) * time.Millisecond)
+		timer := time.NewTimer(time.Duration(delay) * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 		attempt++
 	}
 	return errors.New(accumulatedError).Base(ErrRetryFailed)
@@ -50,8 +65,15 @@ func Timed(attempts int, delay uint32) Strategy {
 }
 
 func ExponentialBackoff(attempts int, delay uint32) Strategy {
+	return ExponentialBackoffContext(context.Background(), attempts, delay)
+}
+
+// ExponentialBackoffContext preserves the retry schedule but stops its wait
+// when the owner cancels. It cannot cancel a method that ignores its context.
+func ExponentialBackoffContext(ctx context.Context, attempts int, delay uint32) Strategy {
 	nextDelay := uint32(0)
 	return &retryer{
+		ctx:          ctx,
 		totalAttempt: attempts,
 		nextDelay: func() uint32 {
 			r := nextDelay

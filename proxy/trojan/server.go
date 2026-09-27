@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport/exchange"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -241,7 +242,18 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	})
 
 	errors.LogInfo(ctx, "received request for ", destination)
-	return s.handleConnection(ctx, sessionPolicy, destination, clientReader, buf.NewWriter(conn), dispatcher)
+	source := exchange.Stream{
+		Reader: clientReader, Writer: conn,
+		Policy: &sessionPolicy.Timeouts, ReadAhead: &sessionPolicy.Buffer.PerConnection,
+		SetReadDeadline: conn.SetReadDeadline, Abort: func() { _ = conn.Close() },
+	}
+	if half, ok := iConn.(interface{ CloseRead() error }); ok {
+		source.CloseRead = half.CloseRead
+	}
+	if half, ok := iConn.(interface{ CloseWrite() error }); ok {
+		source.CloseWrite = half.CloseWrite
+	}
+	return routing.DispatchStream(dispatcher, ctx, destination, source)
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Session, clientReader *PacketReader, clientWriter *PacketWriter, dispatcher routing.Dispatcher) error {
@@ -317,47 +329,6 @@ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Sess
 	if err := task.Run(ctx, requestDone); err != nil {
 		return err
 	}
-	return nil
-}
-
-func (s *Server) handleConnection(ctx context.Context, sessionPolicy policy.Session,
-	destination net.Destination,
-	clientReader buf.Reader,
-	clientWriter buf.Writer, dispatcher routing.Dispatcher,
-) error {
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-
-	link, err := dispatcher.Dispatch(ctx, destination)
-	if err != nil {
-		return errors.New("failed to dispatch request to ", destination).Base(err)
-	}
-
-	requestDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-		if buf.Copy(clientReader, link.Writer, buf.UpdateActivity(timer)) != nil {
-			return errors.New("failed to transfer request").Base(err)
-		}
-		return nil
-	}
-
-	responseDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-
-		if err := buf.Copy(link.Reader, clientWriter, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to write response").Base(err)
-		}
-		return nil
-	}
-
-	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
-		common.Must(common.Interrupt(link.Reader))
-		common.Must(common.Interrupt(link.Writer))
-		return errors.New("connection ends").Base(err)
-	}
-
 	return nil
 }
 

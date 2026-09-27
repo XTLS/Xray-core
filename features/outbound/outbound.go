@@ -4,9 +4,11 @@ import (
 	"context"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/exchange"
 )
 
 // Handler is the interface for handlers that process outbound connections.
@@ -18,6 +20,25 @@ type Handler interface {
 	Dispatch(ctx context.Context, link *transport.Link)
 	SenderSettings() *serial.TypedMessage
 	ProxySettings() *serial.TypedMessage
+}
+
+// StreamHandler prepares and executes a decoded logical stream.
+type StreamHandler interface {
+	DispatchStream(context.Context, exchange.Stream) error
+}
+
+type PacketHandler interface {
+	PreparePacket(context.Context) (exchange.PacketEndpoint, error)
+}
+
+// DispatchStream keeps unconverted custom handlers reachable through their
+// old Link entry. Selected built-in handlers implement StreamHandler.
+func DispatchStream(handler Handler, ctx context.Context, source exchange.Stream) error {
+	if native, ok := handler.(StreamHandler); ok {
+		return native.DispatchStream(ctx, source)
+	}
+	handler.Dispatch(ctx, &transport.Link{Reader: buf.NewReader(source.ProjectReader()), Writer: buf.NewWriter(source.ProjectWriter())})
+	return nil
 }
 
 type HandlerSelector interface {

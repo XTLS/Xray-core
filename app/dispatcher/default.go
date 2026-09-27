@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
@@ -18,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	routing_session "github.com/xtls/xray-core/features/routing/session"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -432,74 +430,12 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 }
 
 func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.Link, destination net.Destination) {
-	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds)-1]
-
-	var handler outbound.Handler
-
-	routingLink := routing_session.AsRoutingContext(ctx)
-	inTag := routingLink.GetInboundTag()
-	isPickRoute := 0
-	if forcedOutboundTag := session.GetForcedOutboundTagFromContext(ctx); forcedOutboundTag != "" {
-		ctx = session.SetForcedOutboundTagToContext(ctx, "")
-		if h := d.ohm.GetHandler(forcedOutboundTag); h != nil {
-			isPickRoute = 1
-			errors.LogInfo(ctx, "taking platform initialized detour [", forcedOutboundTag, "] for [", destination, "]")
-			handler = h
-		} else {
-			errors.LogError(ctx, "non existing tag for platform initialized detour: ", forcedOutboundTag)
-			common.Close(link.Writer)
-			common.Interrupt(link.Reader)
-			return
-		}
-	} else if d.router != nil {
-		if route, err := d.router.PickRoute(routingLink); err == nil {
-			outTag := route.GetOutboundTag()
-			if h := d.ohm.GetHandler(outTag); h != nil {
-				isPickRoute = 2
-				if route.GetRuleTag() == "" {
-					errors.LogInfo(ctx, "taking detour [", outTag, "] for [", destination, "]")
-				} else {
-					errors.LogInfo(ctx, "Hit route rule: [", route.GetRuleTag(), "] so taking detour [", outTag, "] for [", destination, "]")
-				}
-				handler = h
-			} else {
-				errors.LogWarning(ctx, "non existing outTag: ", outTag)
-				common.Close(link.Writer)
-				common.Interrupt(link.Reader)
-				return // DO NOT CHANGE: the traffic shouldn't be processed by default outbound if the specified outbound tag doesn't exist (yet), e.g., VLESS Reverse Proxy
-			}
-		} else {
-			errors.LogInfo(ctx, "default route for ", destination)
-		}
-	}
-
-	if handler == nil {
-		handler = d.ohm.GetDefaultHandler()
-	}
-
-	if handler == nil {
-		errors.LogInfo(ctx, "default outbound handler not exist")
+	ctx, handler, err := d.selectStreamHandler(ctx, destination)
+	if err != nil {
+		errors.LogWarning(ctx, err.Error())
 		common.Close(link.Writer)
 		common.Interrupt(link.Reader)
 		return
 	}
-
-	ob.Tag = handler.Tag()
-	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
-		if tag := handler.Tag(); tag != "" {
-			if inTag == "" {
-				accessMessage.Detour = tag
-			} else if isPickRoute == 1 {
-				accessMessage.Detour = inTag + " ==> " + tag
-			} else if isPickRoute == 2 {
-				accessMessage.Detour = inTag + " -> " + tag
-			} else {
-				accessMessage.Detour = inTag + " >> " + tag
-			}
-		}
-		log.Record(accessMessage)
-	}
-
 	handler.Dispatch(ctx, link)
 }

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	goerrors "errors"
 	"io"
 	"math/big"
 	"runtime"
@@ -27,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/exchange"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/reality"
@@ -72,6 +74,20 @@ type Outbound interface {
 	// Process processes the given connection. The given dialer may be used to dial a system outbound connection.
 	Process(context.Context, *transport.Link, internet.Dialer) error
 }
+
+// StreamOutbound prepares its protocol endpoint before common transfer begins.
+// The returned endpoint owns its cleanup after successful return; preparation
+// must close any acquired resource on failure.
+type StreamOutbound interface {
+	PrepareStream(context.Context, *exchange.Stream, internet.Dialer) (exchange.Stream, error)
+}
+
+// PacketOutbound prepares an addressed datagram endpoint for an association.
+type PacketOutbound interface {
+	PreparePacket(context.Context, internet.Dialer) (exchange.PacketEndpoint, error)
+}
+
+var ErrLegacyStreamShape = goerrors.New("stream shape remains on legacy handler")
 
 // UserManager is the interface for Inbounds and Outbounds that can manage their users.
 type UserManager interface {

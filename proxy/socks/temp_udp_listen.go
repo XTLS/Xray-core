@@ -3,6 +3,7 @@ package socks
 import (
 	"context"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,8 @@ type TempUDPConn struct {
 	AssociatedTCPConn net.Conn
 	ExpectedRemote    atomic.Pointer[net.UDPAddr]
 	Timer             *signal.ActivityTimer
+	closeOnce         sync.Once
+	closeErr          error
 }
 
 func (c *TempUDPConn) Read(b []byte) (n int, err error) {
@@ -61,12 +64,21 @@ func (c *TempUDPConn) RemoteAddr() net.Addr {
 
 func (c *TempUDPConn) SetTimeout(d time.Duration) {
 	c.Timer = signal.CancelAfterInactivity(context.Background(), func() {
-		c.Close()
+		c.closeResources()
 	}, d)
 }
 
 func (c *TempUDPConn) Close() error {
-	c.Timer.SetTimeout(0)
-	c.AssociatedTCPConn.Close()
-	return c.PacketConn.Close()
+	if c.Timer != nil {
+		c.Timer.SetTimeout(0)
+	}
+	c.closeResources()
+	return c.closeErr
+}
+
+func (c *TempUDPConn) closeResources() {
+	c.closeOnce.Do(func() {
+		_ = c.AssociatedTCPConn.Close()
+		c.closeErr = c.PacketConn.Close()
+	})
 }

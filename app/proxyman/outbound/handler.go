@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/exchange"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"google.golang.org/protobuf/proto"
@@ -65,6 +66,7 @@ type Handler struct {
 	udp443          string
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
+	policyManager   policy.Manager
 }
 
 // NewHandler creates a new Handler based on the given configuration.
@@ -75,6 +77,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		tag:             config.Tag,
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
+		policyManager:   v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 
 	if config.SenderSettings != nil {
@@ -167,6 +170,67 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 
 	h.proxy = proxyHandler
 	return h, nil
+}
+
+// DispatchStream prepares a selected protocol endpoint, then gives both
+// directions to the single stream execution owner. MUX outbound still has its
+// separate carrier lifetime and is excluded from this ordinary stream cohort.
+func (h *Handler) DispatchStream(ctx context.Context, source exchange.Stream) error {
+	outbounds := session.OutboundsFromContext(ctx)
+	ob := outbounds[len(outbounds)-1]
+	content := session.ContentFromContext(ctx)
+	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain() && (content == nil || !content.SkipDNSResolve) {
+		ips, err := internet.LookupForIP(ob.Target.Address.Domain(), h.senderSettings.TargetStrategy, nil)
+		if err != nil {
+			errors.LogInfoInner(ctx, err, "failed to resolve ip for target ", ob.Target.Address.Domain())
+			if h.senderSettings.TargetStrategy.ForceIP() {
+				return errors.New("failed to resolve ip for target ", ob.Target.Address.Domain()).Base(err)
+			}
+		} else {
+			unchanged := ob.Target.Address.Domain()
+			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			errors.LogInfo(ctx, "target: ", unchanged, " resolved to: ", ob.Target.Address.String())
+		}
+	}
+	if h.mux != nil && h.mux.Enabled {
+		h.Dispatch(ctx, &transport.Link{Reader: buf.NewReader(source.ProjectReader()), Writer: buf.NewWriter(source.ProjectWriter())})
+		return nil
+	}
+	preparer, ok := h.proxy.(proxy.StreamOutbound)
+	if !ok {
+		h.Dispatch(ctx, &transport.Link{Reader: buf.NewReader(source.ProjectReader()), Writer: buf.NewWriter(source.ProjectWriter())})
+		return nil
+	}
+	target, err := preparer.PrepareStream(ctx, &source, h)
+	if err != nil {
+		if goerrors.Is(err, exchange.ErrHandled) {
+			return nil
+		}
+		if goerrors.Is(err, proxy.ErrLegacyStreamShape) {
+			h.Dispatch(ctx, &transport.Link{Reader: buf.NewReader(source.ProjectReader()), Writer: buf.NewWriter(source.ProjectWriter())})
+			return nil
+		}
+		session.SubmitOutboundErrorToOriginator(ctx, err)
+		return err
+	}
+	if target.Abort != nil {
+		defer target.Abort()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	timeouts := h.policyManager.ForLevel(0).Timeouts
+	if target.Policy != nil {
+		timeouts = *target.Policy
+	}
+	err = exchange.Run(ctx, source, target, timeouts.ConnectionIdle, timeouts.DownlinkOnly, timeouts.UplinkOnly)
+	if goerrors.Is(err, context.Canceled) || goerrors.Is(err, io.EOF) || goerrors.Is(err, io.ErrClosedPipe) {
+		return nil
+	}
+	if err != nil {
+		session.SubmitOutboundErrorToOriginator(ctx, err)
+	}
+	return err
 }
 
 // Tag implements outbound.Handler.

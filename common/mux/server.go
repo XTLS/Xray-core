@@ -3,6 +3,7 @@ package mux
 import (
 	"context"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -16,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/exchange"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
@@ -71,7 +73,20 @@ func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *t
 	case <-ctx.Done():
 	case <-worker.done.Wait():
 	}
+	_ = worker.Close()
+	<-worker.WaitJoined()
 	return nil
+}
+
+// DispatchStream forwards ordinary decoded streams through the same ingress
+// wrapper without constructing a MUX child Link. Carrier children have their
+// own admission and lifetime in the later M1 cohort.
+func (s *Server) DispatchStream(ctx context.Context, dest net.Destination, source exchange.Stream) error {
+	return routing.DispatchStream(s.dispatcher, ctx, dest, source)
+}
+
+func (s *Server) DispatchPacket(ctx context.Context, first net.Destination, source exchange.PacketEndpoint) error {
+	return routing.DispatchPacket(s.dispatcher, ctx, first, source)
 }
 
 // Start implements common.Runnable.
@@ -90,20 +105,39 @@ type ServerWorker struct {
 	sessionManager *SessionManager
 	done           *done.Instance
 	timer          *time.Ticker
+	ctx            context.Context
+	cancel         context.CancelFunc
+	rootConn       net.Conn
+	frames         *carrierFrames
+	frameWriter    buf.Writer
+	joined         chan struct{}
+	runDone        chan struct{}
+	nativeMu       sync.Mutex
+	native         map[uint16]*nativeChild
+	nativeWorkers  sync.WaitGroup
 }
 
 func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.Link) (*ServerWorker, error) {
+	carrierCtx, cancel := context.WithCancel(ctx)
 	worker := &ServerWorker{
 		dispatcher:     d,
 		link:           link,
 		sessionManager: NewSessionManager(),
 		done:           done.New(),
 		timer:          time.NewTicker(60 * time.Second),
+		ctx:            carrierCtx,
+		cancel:         cancel,
+		joined:         make(chan struct{}),
+		runDone:        make(chan struct{}),
+		native:         make(map[uint16]*nativeChild),
 	}
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		inbound.CanSpliceCopy = 3
+		worker.rootConn = inbound.Conn
 	}
-	go worker.run(ctx)
+	worker.frames = newCarrierFrames(carrierCtx, cancel, link.Writer, muxTimeouts(ctx).ConnectionIdle)
+	worker.frameWriter = carrierFrameWriter{frames: worker.frames}
+	go worker.run(carrierCtx)
 	go worker.monitor()
 	return worker, nil
 }
@@ -126,21 +160,40 @@ func (w *ServerWorker) monitor() {
 		checkSize := w.sessionManager.Size()
 		checkCount := w.sessionManager.Count()
 		select {
+		case <-w.ctx.Done():
+			common.Must(w.done.Close())
+			w.shutdown()
+			return
 		case <-w.done.Wait():
-			w.sessionManager.Close()
-			common.Interrupt(w.link.Writer)
-			common.Interrupt(w.link.Reader)
+			w.shutdown()
 			return
 		case <-w.timer.C:
-			if w.sessionManager.CloseIfNoSessionAndIdle(checkSize, checkCount) {
+			if w.nativeCount() == 0 && w.sessionManager.CloseIfNoSessionAndIdle(checkSize, checkCount) {
 				common.Must(w.done.Close())
 			}
 		}
 	}
 }
 
+func (w *ServerWorker) shutdown() {
+	// The physical VMess read/write can outlive context cancellation; close it
+	// before waiting for any logical child or carrier writer.
+	if w.rootConn != nil {
+		_ = w.rootConn.Close()
+	}
+	common.Interrupt(w.link.Writer)
+	common.Interrupt(w.link.Reader)
+	w.cancel()
+	w.cancelNativeChildren()
+	_ = w.sessionManager.Close()
+	<-w.runDone
+	w.nativeWorkers.Wait()
+	w.frames.wait()
+	close(w.joined)
+}
+
 func (w *ServerWorker) ActiveConnections() uint32 {
-	return uint32(w.sessionManager.Size())
+	return uint32(w.sessionManager.Size() + w.nativeCount())
 }
 
 func (w *ServerWorker) Closed() bool {
@@ -150,6 +203,8 @@ func (w *ServerWorker) Closed() bool {
 func (w *ServerWorker) WaitClosed() <-chan struct{} {
 	return w.done.Wait()
 }
+
+func (w *ServerWorker) WaitJoined() <-chan struct{} { return w.joined }
 
 func (w *ServerWorker) Close() error {
 	return w.done.Close()
@@ -164,13 +219,13 @@ func (w *ServerWorker) handleStatusKeepAlive(meta *FrameMetadata, reader *buf.Bu
 
 func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
 	ctx = session.SubContextFromMuxInbound(ctx)
-	if meta.Inbound != nil && meta.Inbound.Source.IsValid() && meta.Inbound.Local.IsValid() {
-		if inbound := session.InboundFromContext(ctx); inbound != nil {
-			newInbound := *inbound
+	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		newInbound := *inbound
+		if meta.Inbound != nil && meta.Inbound.Source.IsValid() && meta.Inbound.Local.IsValid() {
 			newInbound.Source = meta.Inbound.Source
 			newInbound.Local = meta.Inbound.Local
-			ctx = session.ContextWithInbound(ctx, &newInbound)
 		}
+		ctx = session.ContextWithInbound(ctx, &newInbound)
 	}
 	errors.LogInfo(ctx, "received request for ", meta.Target)
 	{
@@ -181,7 +236,9 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		}
 		if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
 			msg.From = inbound.Source
-			msg.Email = inbound.User.Email
+			if inbound.User != nil {
+				msg.Email = inbound.User.Email
+			}
 		}
 		ctx = log.ContextWithAccessMessage(ctx, msg)
 	}
@@ -190,6 +247,9 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		if meta.Target.Network != network {
 			return errors.New("unexpected network ", meta.Target.Network) // it will break the whole Mux connection
 		}
+	}
+	if w.nativeGet(meta.SessionID) != nil {
+		return errors.New("MUX child ID still live or closing")
 	}
 
 	if meta.GlobalID != [8]byte{} { // MUST ignore empty Global ID
@@ -257,10 +317,15 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 			x.Mux.Close(false)
 			return errors.New("failed to add new session")
 		}
-		go handle(ctx, x.Mux, w.link.Writer)
+		go handle(ctx, x.Mux, w.frameWriter)
 		return nil
 	}
 
+	if meta.Target.Network == net.Network_TCP {
+		if native, ok := w.dispatcher.(routing.StreamDispatcher); ok {
+			return w.handleNativeNew(ctx, meta, reader, native)
+		}
+	}
 	link, err := w.dispatcher.Dispatch(ctx, meta.Target)
 	if err != nil {
 		if meta.Option.Has(OptionData) {
@@ -282,7 +347,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		s.Close(false)
 		return errors.New("failed to add new session")
 	}
-	go handle(ctx, s, w.link.Writer)
+	go handle(ctx, s, w.frameWriter)
 	if !meta.Option.Has(OptionData) {
 		return nil
 	}
@@ -298,6 +363,21 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 }
 
 func (w *ServerWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.BufferedReader) error {
+	if child := w.nativeGet(meta.SessionID); child != nil {
+		if !meta.Option.Has(OptionData) {
+			return nil
+		}
+		frame, err := readNativePayload(reader)
+		if err == errNativeFrameBound {
+			child.abort()
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		child.enqueue(frame)
+		return nil
+	}
 	if !meta.Option.Has(OptionData) {
 		return nil
 	}
@@ -305,8 +385,13 @@ func (w *ServerWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 	s, found := w.sessionManager.Get(meta.SessionID)
 	if !found {
 		// Notify remote peer to close this session.
-		closingWriter := NewResponseWriter(meta.SessionID, w.link.Writer, protocol.TransferTypeStream)
-		closingWriter.Close()
+		frame, err := encodeChildEnd(meta.SessionID, false)
+		if err != nil {
+			return err
+		}
+		if err = w.frames.tryControl(frame); err != nil {
+			return err
+		}
 
 		return buf.Copy(NewStreamReader(reader), buf.Discard)
 	}
@@ -324,6 +409,21 @@ func (w *ServerWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.Buffere
 }
 
 func (w *ServerWorker) handleStatusEnd(meta *FrameMetadata, reader *buf.BufferedReader) error {
+	if child := w.nativeGet(meta.SessionID); child != nil {
+		if meta.Option.Has(OptionData) {
+			frame, err := readNativePayload(reader)
+			if err == errNativeFrameBound {
+				child.abort()
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			child.enqueue(frame)
+		}
+		child.closeInput()
+		return nil
+	}
 	if s, found := w.sessionManager.Get(meta.SessionID); found {
 		s.Close(false)
 	}
@@ -361,6 +461,7 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 }
 
 func (w *ServerWorker) run(ctx context.Context) {
+	defer close(w.runDone)
 	defer func() {
 		common.Must(w.done.Close())
 	}()

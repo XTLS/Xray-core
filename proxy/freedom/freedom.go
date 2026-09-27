@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pires/go-proxyproto"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
@@ -17,18 +16,14 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
-	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 var (
@@ -287,87 +282,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	input := link.Reader
 	output := link.Writer
 
-	var conn stat.Connection
-	var blockedDest *net.Destination
-	var blockedRule *FinalRule
-	err := retry.ExponentialBackoff(5, 100).On(func() error {
-		if destination.Address.Family().IsDomain() {
-			if defaultRule != nil || len(h.finalRules) > 0 {
-				if strategy := h.resolveStrategy; strategy.HasStrategy() {
-					ips, err := internet.LookupForIP(destination.Address.Domain(), strategy, outGateway)
-					if err != nil { // non-force may still dial with system DNS
-						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
-						if strategy.ForceIP() {
-							return err // retry
-						}
-					}
-					for _, ip := range ips {
-						if addr := net.IPAddress(ip); addr != nil {
-							if rule := h.matchFinalRule(destination.Network, addr, destination.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-								blockedDest = &destination
-								blockedDest.Address = addr
-								blockedRule = rule
-								return nil
-							}
-						}
-					}
-				} else {
-					addrs, err := net.DefaultResolver.LookupIPAddr(ctx, destination.Address.Domain())
-					if err != nil { // dialer may retry DNS
-						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
-					}
-					for _, addr := range addrs {
-						if ipAddr := net.IPAddress(addr.IP); ipAddr != nil {
-							if rule := h.matchFinalRule(destination.Network, ipAddr, destination.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-								blockedDest = &destination
-								blockedDest.Address = ipAddr
-								blockedRule = rule
-								return nil
-							}
-						}
-					}
-				}
-			}
-		} else {
-			if rule := h.matchFinalRule(destination.Network, destination.Address, destination.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-				blockedDest = &destination
-				blockedRule = rule
-				return nil
-			}
-		}
-
-		rawConn, err := dialer.Dial(ctx, destination)
-		if err != nil {
-			return err
-		}
-
-		conn = rawConn
-		return nil
-	})
+	conn, blockedRule, blockedDest, err := h.openConnection(ctx, dialer, destination, defaultRule, outGateway, inbound)
 	if err != nil {
-		return errors.New("failed to open connection to ", destination).Base(err)
+		return err
 	}
 	if blockedDest != nil {
 		return h.blackhole(ctx, input, output, blockedRule, blockedDest)
-	}
-	if destination.Address.Family().IsDomain() && (defaultRule != nil || len(h.finalRules) > 0) {
-		// pre-check may fail or dialer may select another IP
-		remoteDest := net.DestinationFromAddr(conn.RemoteAddr())
-		if rule := h.matchFinalRule(remoteDest.Network, remoteDest.Address, remoteDest.Port, defaultRule); rule != nil && rule.action == RuleAction_Block {
-			conn.Close()
-			return h.blackhole(ctx, input, output, rule, &remoteDest)
-		}
-	}
-
-	if h.config.ProxyProtocol > 0 && h.config.ProxyProtocol <= 2 {
-		version := byte(h.config.ProxyProtocol)
-		srcAddr := inbound.Source.RawNetAddr()
-		dstAddr := conn.RemoteAddr()
-		header := proxyproto.HeaderProxyFromAddrs(version, srcAddr, dstAddr)
-		if _, err = header.WriteTo(conn); err != nil {
-			conn.Close()
-			return errors.New("failed to set PROXY protocol v", version).Base(err)
-		}
 	}
 	defer conn.Close()
 	errors.LogInfo(ctx, "connection opened to ", destination, ", local endpoint ", conn.LocalAddr(), ", remote endpoint ", conn.RemoteAddr())
@@ -458,196 +378,62 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 }
 
 func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
-	iConn := conn
-	statConn, ok := iConn.(*stat.CounterConnection)
-	if ok {
-		iConn = statConn.Connection
+	packet, ok := newFreedomPacketIO(conn, h, defaultRule, UDPOverride, DialDest, nil)
+	if !ok {
+		return &buf.PacketReader{Reader: conn}
 	}
-	var counter stats.Counter
-	if statConn != nil {
-		counter = statConn.ReadCounter
-	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
-		isOverridden := false
-		if UDPOverride.Address != nil || UDPOverride.Port != 0 {
-			isOverridden = true
-		}
-
-		return &PacketReader{
-			PacketConnWrapper: c,
-			Counter:           counter,
-			Handler:           h,
-			DefaultRule:       defaultRule,
-			IsOverridden:      isOverridden,
-			InitUnchangedAddr: DialDest.Address,
-			InitChangedAddr:   net.DestinationFromAddr(conn.RemoteAddr()).Address,
-		}
-	}
-	return &buf.PacketReader{Reader: conn}
+	return &PacketReader{packet: packet}
 }
 
-type PacketReader struct {
-	*internet.PacketConnWrapper
-	stats.Counter
-	Handler           *Handler
-	DefaultRule       *FinalRule
-	IsOverridden      bool
-	InitUnchangedAddr net.Address
-	InitChangedAddr   net.Address
-}
+type PacketReader struct{ packet *freedomPacketIO }
 
 func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	b := buf.New()
 	b.Resize(0, buf.Size)
-	for {
-		n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
-		if err != nil {
-			b.Release()
-			return nil, err
-		}
-		udpAddr := d.(*net.UDPAddr)
-		sourceAddr := net.IPAddress(udpAddr.IP)
-		if rule := r.Handler.matchFinalRule(net.Network_UDP, sourceAddr, net.Port(udpAddr.Port), r.DefaultRule); rule != nil && rule.action == RuleAction_Block {
-			continue
-		}
-		b.Resize(0, int32(n))
-
-		// if udp dest addr is changed, we are unable to get the correct src addr
-		// so we don't attach src info to udp packet, break cone behavior, assuming the dial dest is the expected scr addr
-		if !r.IsOverridden {
-			if r.InitChangedAddr == sourceAddr {
-				sourceAddr = r.InitUnchangedAddr
-			}
-			b.UDP = &net.Destination{
-				Address: sourceAddr,
-				Port:    net.Port(udpAddr.Port),
-				Network: net.Network_UDP,
-			}
-		}
-		if r.Counter != nil {
-			r.Counter.Add(int64(n))
-		}
-		return buf.MultiBuffer{b}, nil
+	n, from, err := r.packet.ReadPacket(b.Bytes())
+	if err != nil {
+		b.Release()
+		return nil, err
 	}
+	b.Resize(0, int32(n))
+	if r.packet.override.Address == nil && r.packet.override.Port == 0 {
+		b.UDP = &from
+	}
+	return buf.MultiBuffer{b}, nil
 }
 
-// DialDest means the dial target used in the dialer when creating conn
+// DialDest is the actual initial dial target; each later UDP buffer may name
+// another destination on the same packet-capable connection.
 func NewPacketWriter(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverride net.Destination, DialDest net.Destination, outGateway net.Address) buf.Writer {
-	iConn := conn
-	statConn, ok := iConn.(*stat.CounterConnection)
-	if ok {
-		iConn = statConn.Connection
+	packet, ok := newFreedomPacketIO(conn, h, defaultRule, UDPOverride, DialDest, outGateway)
+	if !ok {
+		return &buf.SequentialWriter{Writer: conn}
 	}
-	var counter stats.Counter
-	if statConn != nil {
-		counter = statConn.WriteCounter
-	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
-		// If DialDest is a domain, it will be resolved in dialer
-		// check this behavior and add it to map
-		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
-		if DialDest.Address.Family().IsDomain() {
-			resolvedUDPAddr.Store(DialDest.Address.Domain(), net.DestinationFromAddr(conn.RemoteAddr()).Address)
-		}
-		return &PacketWriter{
-			PacketConnWrapper: c,
-			Counter:           counter,
-			Handler:           h,
-			DefaultRule:       defaultRule,
-			UDPOverride:       UDPOverride,
-			ResolvedUDPAddr:   resolvedUDPAddr,
-			OutGateway:        outGateway,
-		}
-	}
-	return &buf.SequentialWriter{Writer: conn}
+	packet.firstWrite = false // the existing NoisePacketWriter owns legacy noise
+	return &PacketWriter{packet: packet}
 }
 
-type PacketWriter struct {
-	*internet.PacketConnWrapper
-	stats.Counter
-	*Handler
-	DefaultRule *FinalRule
-	UDPOverride net.Destination
-
-	// Dest of udp packets might be a domain, we will resolve them to IP
-	// But resolver will return a random one if the domain has many IPs
-	// Resulting in these packets being sent to many different IPs randomly
-	// So, cache and keep the resolve result
-	ResolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
-	OutGateway      net.Address
-}
+type PacketWriter struct{ packet *freedomPacketIO }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for {
-		mb2, b := buf.SplitFirst(mb)
-		mb = mb2
+		rest, b := buf.SplitFirst(mb)
+		mb = rest
 		if b == nil {
-			break
+			return nil
 		}
-		var n int
 		var err error
 		if b.UDP != nil {
-			if w.UDPOverride.Address != nil {
-				b.UDP.Address = w.UDPOverride.Address
-			}
-			if w.UDPOverride.Port != 0 {
-				b.UDP.Port = w.UDPOverride.Port
-			}
-			if b.UDP.Address.Family().IsDomain() {
-				if ip, ok := w.ResolvedUDPAddr.Load(b.UDP.Address.Domain()); ok {
-					b.UDP.Address = ip
-				} else {
-					shouldUseSystemResolver := true
-					if strategy := w.Handler.resolveStrategy; strategy.HasStrategy() {
-						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), strategy, w.OutGateway)
-						if err != nil {
-							// drop packet if resolve failed when forceIP
-							if strategy.ForceIP() {
-								b.Release()
-								continue
-							}
-						} else {
-							ip = net.IPAddress(ips[dice.Roll(len(ips))])
-							shouldUseSystemResolver = false
-						}
-					}
-					if shouldUseSystemResolver {
-						udpAddr, err := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
-						if err != nil {
-							b.Release()
-							continue
-						} else {
-							ip = net.IPAddress(udpAddr.IP)
-						}
-					}
-					if ip != nil {
-						b.UDP.Address, _ = w.ResolvedUDPAddr.LoadOrStore(b.UDP.Address.Domain(), ip)
-					}
-				}
-			}
-			if rule := w.matchFinalRule(net.Network_UDP, b.UDP.Address, b.UDP.Port, w.DefaultRule); rule != nil && rule.action == RuleAction_Block {
-				b.Release()
-				continue
-			}
-			destAddr := b.UDP.RawNetAddr()
-			if destAddr == nil {
-				b.Release()
-				continue
-			}
-			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
+			_, err = w.packet.WritePacket(b.Bytes(), *b.UDP)
 		} else {
-			n, err = w.PacketConnWrapper.Write(b.Bytes())
+			_, err = w.packet.WriteDefaultPacket(b.Bytes())
 		}
 		b.Release()
 		if err != nil {
 			buf.ReleaseMulti(mb)
 			return err
 		}
-		if w.Counter != nil {
-			w.Counter.Add(int64(n))
-		}
 	}
-	return nil
 }
 
 type NoisePacketWriter struct {

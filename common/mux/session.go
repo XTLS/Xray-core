@@ -79,6 +79,9 @@ func (m *SessionManager) Add(s *Session) bool {
 	if m.closed {
 		return false
 	}
+	if _, exists := m.sessions[s.ID]; exists {
+		return false
+	}
 
 	m.count++
 	m.sessions[s.ID] = s
