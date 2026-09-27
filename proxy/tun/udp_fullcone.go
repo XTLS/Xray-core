@@ -78,11 +78,11 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 	}
 }
 
-func (u *udpConnectionHandler) connectionFinished(src net.Destination) {
+func (u *udpConnectionHandler) connectionFinished(conn *udpConn) {
 	u.Lock()
-	conn, found := u.udpConns[src]
-	if found {
-		delete(u.udpConns, src)
+	// Close runs twice per flow; a newer conn may already own this src.
+	if u.udpConns[conn.src] == conn {
+		delete(u.udpConns, conn.src)
 		close(conn.egress)
 	}
 	u.Unlock()
@@ -161,7 +161,7 @@ func (c *udpConn) Write(p []byte) (int, error) {
 }
 
 func (c *udpConn) Close() error {
-	c.handler.connectionFinished(c.src)
+	c.handler.connectionFinished(c)
 
 	return nil
 }
