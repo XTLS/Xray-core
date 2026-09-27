@@ -4,25 +4,28 @@ package brutal
 
 import (
 	"context"
+	"fmt"
 	"net"
-	"reflect"
+	"syscall"
 
-	"github.com/pires/go-proxyproto"
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"golang.org/x/sys/unix"
 )
 
 func NewConn(c *Config, raw net.Conn) (net.Conn, error) {
-	conn := raw
-	if pc, ok := conn.(*proxyproto.Conn); ok {
-		conn = pc.Raw()
+	conn, ok := raw.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	})
+	if !ok {
+		errors.LogError(context.Background(), fmt.Sprintf("failed to get syscall conn, type=%T", raw))
+		return raw, nil
 	}
-	if _, ok := conn.(*net.TCPConn); !ok {
-		errors.LogError(context.Background(), "unsupported conn ", reflect.TypeOf(conn))
+	sysConn, err := conn.SyscallConn()
+	if err != nil {
+		errors.LogErrorInner(context.Background(), err, "failed to get syscall conn")
+		return raw, nil
 	}
-	sysConn := common.Must2(conn.(*net.TCPConn).SyscallConn())
-	err := sysConn.Control(func(fd uintptr) {
+	err = sysConn.Control(func(fd uintptr) {
 		if err := unix.SetsockoptString(int(fd), unix.IPPROTO_TCP, unix.TCP_CONGESTION, "brutal"); err != nil {
 			errors.LogErrorInner(context.Background(), err, "failed to set congestion")
 			return

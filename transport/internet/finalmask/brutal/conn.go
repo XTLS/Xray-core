@@ -10,6 +10,6 @@ import (
 )
 
 func NewConn(c *Config, raw net.Conn) (net.Conn, error) {
-	errors.LogError(context.Background(), "unsupported system")
+	errors.LogError(context.Background(), "not implemented")
 	return raw, nil
 }
