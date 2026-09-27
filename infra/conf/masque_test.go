@@ -40,6 +40,14 @@ func TestMasqueConfig(t *testing.T) {
 			Parser: loadJSON(creator),
 			Output: &masque.Config{Path: "/masque/ip?target=*&ipproto=*"},
 		},
+		{
+			Input:  `{"user": "u", "pass": "p:q", "headers": {"X-Token": "a"}}`,
+			Parser: loadJSON(creator),
+			Output: &masque.Config{
+				Path:    "/.well-known/masque/ip/*/*/",
+				Headers: map[string]string{"Authorization": "Basic dTpwOnE=", "X-Token": "a"},
+			},
+		},
 	})
 
 	for _, input := range []string{
@@ -50,6 +58,8 @@ func TestMasqueConfig(t *testing.T) {
 		`{"headers": {"Capsule-Protocol": "?0"}}`,
 		`{"headers": {"X Token": "a"}}`,
 		`{"headers": {"X-Token": "a\r\nb"}}`,
+		`{"user": "u:v", "pass": "p"}`,
+		`{"user": "u", "pass": "p", "headers": {"authorization": "Basic dTpw"}}`,
 	} {
 		if _, err := loadJSON(creator)(input); err == nil {
 			t.Errorf("expected an error for %s", input)
