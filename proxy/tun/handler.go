@@ -143,7 +143,9 @@ func (t *Handler) Start() error {
 
 	tunStackOptions := StackOptions{
 		Tun:         tunInterface,
+		MTU:         t.config.MTU,
 		IdleTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+		Backend:     t.config.Stack,
 	}
 	tunStack, err := NewStack(t.ctx, tunStackOptions, t)
 	if err != nil {

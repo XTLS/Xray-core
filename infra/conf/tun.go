@@ -20,6 +20,7 @@ type TunConfig struct {
 	UserLevel              uint32   `json:"userLevel"`
 	AutoSystemRoutingTable []string `json:"autoSystemRoutingTable"`
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
+	Stack                  string   `json:"stack"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -31,6 +32,7 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		DNS:                    v.DNS,
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
+		Stack:                  v.Stack,
 	}
 	if v.AutoOutboundsInterface != nil {
 		config.AutoOutboundsInterface = *v.AutoOutboundsInterface
@@ -51,6 +53,11 @@ func (v *TunConfig) Build() (proto.Message, error) {
 	}
 	if config.MTU == 0 {
 		config.MTU = 1500
+	}
+	switch config.Stack {
+	case "", "gvisor", "system":
+	default:
+		return nil, fmt.Errorf("unknown tun stack: %s (must be \"gvisor\" or \"system\")", config.Stack)
 	}
 	return config, nil
 }
