@@ -1,7 +1,9 @@
 package strmatcher_test
 
 import (
+	"math/rand"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
@@ -274,5 +276,65 @@ func TestEmptyMphMatcherGroup(t *testing.T) {
 	r := g.Match("example.com")
 	if len(r) != 0 {
 		t.Error("Expect [], but ", r)
+	}
+}
+
+func TestMphMatcherGroupRandom(t *testing.T) {
+	inputs := []string{""} // All strings over "ab." up to 7 bytes
+	for i := 0; len(inputs[i]) < 7; i++ {
+		for _, c := range []string{"a", "b", "."} {
+			inputs = append(inputs, inputs[i]+c)
+		}
+	}
+	for seed := int64(0); seed < 300; seed++ {
+		r := rand.New(rand.NewSource(seed))
+		g := NewMphMatcherGroup()
+		full, domain := map[string][]uint32{}, map[string][]uint32{} // Stored pattern -> values
+		for value := uint32(r.Intn(200)); value > 0; value-- {
+			pattern := make([]byte, r.Intn(8))
+			for i := range pattern {
+				pattern[i] = "ab."[r.Intn(3)]
+			}
+			if p := string(pattern); r.Intn(2) == 0 {
+				g.AddFullMatcher(FullMatcher(p), value)
+				full[p] = append(full[p], value)
+			} else {
+				g.AddDomainMatcher(DomainMatcher(p), value)
+				domain[p] = append(domain[p], value)
+				domain["."+p] = append(domain["."+p], value)
+			}
+		}
+		g.Build()
+		for _, input := range inputs {
+			keys := []string{input} // Whole input first, then "." suffixes from longest to shortest
+			for i := range len(input) {
+				if input[i] == '.' {
+					keys = append(keys, input[i:])
+				}
+			}
+			var want []uint32
+			for _, k := range keys {
+				want = append(append(want, full[k]...), domain[k]...)
+			}
+			if m := g.Match(input); !slices.Equal(m, want) {
+				t.Fatalf("seed %d: Match(%q) = %v, want %v", seed, input, m, want)
+			}
+			if m := g.MatchAny(input); m != (len(want) > 0) {
+				t.Fatalf("seed %d: MatchAny(%q) = %v", seed, input, m)
+			}
+		}
+	}
+}
+
+func TestMphMatcherGroupAppend(t *testing.T) {
+	g := NewMphMatcherGroup()
+	g.AddFullMatcher(FullMatcher("a.com"), 1)
+	g.AddFullMatcher(FullMatcher("b.com"), 2)
+	g.Build()
+	if m := append(g.Match("a.com"), 3); !slices.Equal(m, []uint32{1, 3}) {
+		t.Error("expect [1 3], but ", m)
+	}
+	if m := g.Match("b.com"); !slices.Equal(m, []uint32{2}) {
+		t.Error("expect [2], but ", m)
 	}
 }
