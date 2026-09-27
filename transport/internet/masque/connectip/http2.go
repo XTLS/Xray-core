@@ -15,7 +15,7 @@ import (
 	"github.com/apernet/quic-go"
 )
 
-const maxBufferedRequestBody = 32 << 10
+const maxStreamBuffer = 32 << 10
 
 type HTTP2ClientConn struct {
 	roundTripper http.RoundTripper
@@ -37,7 +37,7 @@ func (c *HTTP2ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
 	ctx := httpReq.Context()
 	streamCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	stop := context.AfterFunc(ctx, cancel)
-	body := newRequestBody()
+	body := NewStreamBuffer()
 	r := httpReq.Clone(streamCtx)
 	r.Header[":protocol"] = []string{requestProtocol}
 	r.Body = body
@@ -67,7 +67,7 @@ func (c *HTTP2ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
 
 type http2Stream struct {
 	reader *bufio.Reader
-	body   *requestBody
+	body   *StreamBuffer
 	rsp    io.Closer
 	cancel context.CancelFunc
 }
@@ -86,7 +86,7 @@ func (s *http2Stream) abort() {
 	s.rsp.Close()
 }
 
-type requestBody struct {
+type StreamBuffer struct {
 	mu       sync.Mutex
 	cond     sync.Cond
 	buf      []byte
@@ -95,13 +95,13 @@ type requestBody struct {
 	deadline time.Time
 }
 
-func newRequestBody() *requestBody {
-	b := &requestBody{}
+func NewStreamBuffer() *StreamBuffer {
+	b := &StreamBuffer{}
 	b.cond.L = &b.mu
 	return b
 }
 
-func (b *requestBody) Read(p []byte) (int, error) {
+func (b *StreamBuffer) Read(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for len(b.buf) == 0 && !b.closed && b.err == nil {
@@ -119,7 +119,7 @@ func (b *requestBody) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func (b *requestBody) Write(p []byte) (int, error) {
+func (b *StreamBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for {
@@ -130,7 +130,7 @@ func (b *requestBody) Write(p []byte) (int, error) {
 			return 0, io.ErrClosedPipe
 		case !b.deadline.IsZero() && !time.Now().Before(b.deadline):
 			return 0, os.ErrDeadlineExceeded
-		case len(b.buf) < maxBufferedRequestBody:
+		case len(b.buf) < maxStreamBuffer:
 			b.buf = append(b.buf, p...)
 			b.cond.Broadcast()
 			return len(p), nil
@@ -139,7 +139,7 @@ func (b *requestBody) Write(p []byte) (int, error) {
 	}
 }
 
-func (b *requestBody) Close() error {
+func (b *StreamBuffer) Close() error {
 	b.mu.Lock()
 	b.closed = true
 	b.cond.Broadcast()
@@ -147,7 +147,7 @@ func (b *requestBody) Close() error {
 	return nil
 }
 
-func (b *requestBody) CloseWithError(err error) {
+func (b *StreamBuffer) CloseWithError(err error) {
 	b.mu.Lock()
 	if b.err == nil {
 		b.err = err
@@ -157,7 +157,7 @@ func (b *requestBody) CloseWithError(err error) {
 	b.mu.Unlock()
 }
 
-func (b *requestBody) SetWriteDeadline(t time.Time) error {
+func (b *StreamBuffer) SetWriteDeadline(t time.Time) error {
 	b.mu.Lock()
 	b.deadline = t
 	b.cond.Broadcast()
