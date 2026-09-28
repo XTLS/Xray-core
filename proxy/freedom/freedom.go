@@ -28,6 +28,7 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -457,6 +458,30 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	return nil
 }
 
+// packetConn is a UDP connection that can address each packet individually (full-cone),
+// i.e. *internet.PacketConnWrapper or *finalmask.PacketConnWrapper.
+type packetConn interface {
+	net.Conn
+	ReadFrom(p []byte) (n int, addr net.Addr, err error)
+	WriteTo(p []byte, addr net.Addr) (n int, err error)
+}
+
+// asPacketConn returns conn as a packetConn if it is a UDP socket from the system dialer,
+// optionally wrapped by finalmask. A pipe to another outbound (sockopt.dialerProxy) is excluded,
+// since it can't address packets individually.
+func asPacketConn(conn net.Conn) (packetConn, bool) {
+	switch c := conn.(type) {
+	case *internet.PacketConnWrapper:
+		return c, true
+	case *finalmask.PacketConnWrapper:
+		if _, ok := c.PacketConn.(*internet.FakePacketConn); ok {
+			return nil, false
+		}
+		return c, true
+	}
+	return nil, false
+}
+
 func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverride net.Destination, DialDest net.Destination) buf.Reader {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
@@ -467,14 +492,14 @@ func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverr
 	if statConn != nil {
 		counter = statConn.ReadCounter
 	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+	if c, ok := asPacketConn(iConn); ok {
 		isOverridden := false
 		if UDPOverride.Address != nil || UDPOverride.Port != 0 {
 			isOverridden = true
 		}
 
 		return &PacketReader{
-			PacketConnWrapper: c,
+			packetConn:        c,
 			Counter:           counter,
 			Handler:           h,
 			DefaultRule:       defaultRule,
@@ -487,7 +512,7 @@ func NewPacketReader(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverr
 }
 
 type PacketReader struct {
-	*internet.PacketConnWrapper
+	packetConn
 	stats.Counter
 	Handler           *Handler
 	DefaultRule       *FinalRule
@@ -500,7 +525,7 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	b := buf.New()
 	b.Resize(0, buf.Size)
 	for {
-		n, d, err := r.PacketConnWrapper.ReadFrom(b.Bytes())
+		n, d, err := r.packetConn.ReadFrom(b.Bytes())
 		if err != nil {
 			b.Release()
 			return nil, err
@@ -542,7 +567,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverr
 	if statConn != nil {
 		counter = statConn.WriteCounter
 	}
-	if c, ok := iConn.(*internet.PacketConnWrapper); ok {
+	if c, ok := asPacketConn(iConn); ok {
 		// If DialDest is a domain, it will be resolved in dialer
 		// check this behavior and add it to map
 		resolvedUDPAddr := utils.NewTypedSyncMap[string, net.Address]()
@@ -550,20 +575,20 @@ func NewPacketWriter(conn net.Conn, h *Handler, defaultRule *FinalRule, UDPOverr
 			resolvedUDPAddr.Store(DialDest.Address.Domain(), net.DestinationFromAddr(conn.RemoteAddr()).Address)
 		}
 		return &PacketWriter{
-			PacketConnWrapper: c,
-			Counter:           counter,
-			Handler:           h,
-			DefaultRule:       defaultRule,
-			UDPOverride:       UDPOverride,
-			ResolvedUDPAddr:   resolvedUDPAddr,
-			OutGateway:        outGateway,
+			packetConn:      c,
+			Counter:         counter,
+			Handler:         h,
+			DefaultRule:     defaultRule,
+			UDPOverride:     UDPOverride,
+			ResolvedUDPAddr: resolvedUDPAddr,
+			OutGateway:      outGateway,
 		}
 	}
 	return &buf.SequentialWriter{Writer: conn}
 }
 
 type PacketWriter struct {
-	*internet.PacketConnWrapper
+	packetConn
 	stats.Counter
 	*Handler
 	DefaultRule *FinalRule
@@ -634,9 +659,9 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				b.Release()
 				continue
 			}
-			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
+			n, err = w.packetConn.WriteTo(b.Bytes(), destAddr)
 		} else {
-			n, err = w.PacketConnWrapper.Write(b.Bytes())
+			n, err = w.packetConn.Write(b.Bytes())
 		}
 		b.Release()
 		if err != nil {
