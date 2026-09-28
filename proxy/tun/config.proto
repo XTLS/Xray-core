@@ -16,4 +16,5 @@ message Config {
   string auto_outbounds_interface = 7;
   string desc = 8;
   bool auto_system_dns = 9;
+  optional bool strict_route = 10;
 }
