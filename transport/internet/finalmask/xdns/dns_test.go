@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 func namesEqual(a, b Name) bool {
@@ -875,22 +877,59 @@ func TestIPAnswerPayloadRoundTrip(t *testing.T) {
 func TestParseResolver(t *testing.T) {
 	tests := []struct {
 		resolver string
+		protocol resolverProtocol
+		server   string
 		rrType   uint16
+		dohURL   string
 	}{
-		{"example.com+udp://1.1.1.1:53", RRTypeTXT},
-		{"example.com:txt+udp://1.1.1.1:53", RRTypeTXT},
-		{"example.com:a+udp://1.1.1.1:53", RRTypeA},
-		{"example.com:aaaa+udp://1.1.1.1:53", RRTypeAAAA},
+		{"example.com+udp://1.1.1.1:53", resolverUDP, "1.1.1.1:53", RRTypeTXT, ""},
+		{"example.com:txt+udp://1.1.1.1:53", resolverUDP, "1.1.1.1:53", RRTypeTXT, ""},
+		{"example.com:a+udp://1.1.1.1:53", resolverUDP, "1.1.1.1:53", RRTypeA, ""},
+		{"example.com:aaaa+udp://1.1.1.1:53", resolverUDP, "1.1.1.1:53", RRTypeAAAA, ""},
+		{"example.com+dot://resolver.example", resolverDOT, "resolver.example:853", RRTypeTXT, ""},
+		{"example.com:aaaa+doh://resolver.example", resolverDOH, "resolver.example:443", RRTypeAAAA, "https://resolver.example:443/dns-query"},
+		{"example.com+doh://resolver.example/custom?x=1", resolverDOH, "resolver.example:443", RRTypeTXT, "https://resolver.example:443/custom?x=1"},
+		{"example.com:aaaa+dot://[2001:db8::53]", resolverDOT, "[2001:db8::53]:853", RRTypeAAAA, ""},
+		{"example.com+doh://[2001:db8::443]/dns-query", resolverDOH, "[2001:db8::443]:443", RRTypeTXT, "https://[2001:db8::443]:443/dns-query"},
 	}
 
 	for _, test := range tests {
-		domain, server, rrType, err := parseResolver(test.resolver)
+		got, err := parseResolver(test.resolver)
 		if err != nil {
 			t.Fatalf("parseResolver(%q) err = %v", test.resolver, err)
 		}
-		if domain.String() != "example.com" || server != "1.1.1.1:53" || rrType != test.rrType {
-			t.Fatalf("parseResolver(%q) = (%q, %q, %d)", test.resolver, domain.String(), server, rrType)
+		if got.domain.String() != "example.com" || got.protocol != test.protocol || got.server != test.server || got.rrType != test.rrType {
+			t.Fatalf("parseResolver(%q) = (%q, %d, %q, %d)", test.resolver, got.domain.String(), got.protocol, got.server, got.rrType)
 		}
+		if test.dohURL != "" && got.dohURL.String() != test.dohURL {
+			t.Fatalf("parseResolver(%q) doh URL = %q, want %q", test.resolver, got.dohURL, test.dohURL)
+		}
+	}
+}
+
+func TestParseResolverRejectsInvalidEndpoint(t *testing.T) {
+	for _, resolver := range []string{
+		"example.com+udp://resolver.example:53",
+		"example.com+udp://1.1.1.1",
+		"example.com+dot://resolver.example/path",
+		"example.com+dot://resolver.example?x=1",
+		"example.com+dot://resolver.example:",
+		"example.com+doh://resolver.example:bad",
+		"example.com+doh://resolver.example:0",
+		"example.com+doq://resolver.example",
+	} {
+		if _, err := parseResolver(resolver); err == nil {
+			t.Fatalf("parseResolver(%q) err = nil", resolver)
+		}
+	}
+}
+
+func TestNewConnClientRequiresResolverDialer(t *testing.T) {
+	if _, err := NewConnClient(&Config{Resolvers: []string{"example.com+dot://resolver.example"}}, nil); err == nil {
+		t.Fatal("NewConnClient(dot) error = nil")
+	}
+	if _, err := NewConnClientWithDialer(&Config{Resolvers: []string{"example.com+dot://resolver.example"}}, nil, &finalmask.Dialer{}); err == nil {
+		t.Fatal("NewConnClientWithDialer(dot) error = nil")
 	}
 }
 

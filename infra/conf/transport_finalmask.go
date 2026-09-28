@@ -711,8 +711,8 @@ func (c *Xdns) Build() (proto.Message, error) {
 	}
 
 	for _, r := range c.Resolvers {
-		if !strings.Contains(r, "+udp://") {
-			return nil, errors.New("invalid resolver ", r)
+		if err := xdns.ValidateResolver(r); err != nil {
+			return nil, errors.New("invalid resolver ", r).Base(err)
 		}
 	}
 
