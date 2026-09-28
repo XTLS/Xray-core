@@ -18,7 +18,7 @@ func TestLuaIPMatcher(t *testing.T) {
 	ips.Value = []net.IP{ip.Value.(net.IP), net.ParseIP("8.8.8.8")}
 	L.SetGlobal("ips", ips)
 	if err := L.DoString(`
-		local matcher = require("xray.geodata").IPMatcher("127.0.0.0/8", "::1")
+		local matcher = require("xray.geodata").BuildIPMatcher("127.0.0.0/8", "::1")
 		assert(matcher:Match(ip))
 		assert(matcher:AnyMatch(ips))
 		assert(not matcher:Matches(ips))
@@ -35,7 +35,7 @@ func TestLuaDomainMatcher(t *testing.T) {
 	defer L.Close()
 	RegisterLua(L)
 	if err := L.DoString(`
-		local matcher = require("xray.geodata").DomainMatcher("example.com", "full:other.com")
+		local matcher = require("xray.geodata").BuildDomainMatcher("example.com", "full:other.com")
 		assert(matcher:MatchAny("example.com"))
 		assert(matcher:MatchAny("www.example.com"))
 		assert(matcher:MatchAny("other.com"))
@@ -51,8 +51,8 @@ func TestLuaMatchersRejectInvalidRules(t *testing.T) {
 		name   string
 		script string
 	}{
-		{"IP rule", `require("xray.geodata").IPMatcher("not-an-ip")`},
-		{"non-string domain rule", `require("xray.geodata").DomainMatcher("example.com", true)`},
+		{"IP rule", `require("xray.geodata").BuildIPMatcher("not-an-ip")`},
+		{"non-string domain rule", `require("xray.geodata").BuildDomainMatcher("example.com", true)`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			L := lua.NewState()

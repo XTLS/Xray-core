@@ -10,7 +10,7 @@ func RegisterLua(L *lua.LState) {
 	L.PreloadModule("xray.geodata", func(L *lua.LState) int {
 		module := L.NewTable()
 
-		module.RawSetString("DomainMatcher", L.NewFunction(func(L *lua.LState) int {
+		module.RawSetString("BuildDomainMatcher", L.NewFunction(func(L *lua.LState) int {
 			parsed, err := ParseDomainRules(luaRules(L), Domain_Domain)
 			if err != nil {
 				L.RaiseError("%v", err)
@@ -25,7 +25,7 @@ func RegisterLua(L *lua.LState) {
 			return 1
 		}))
 
-		module.RawSetString("IPMatcher", L.NewFunction(func(L *lua.LState) int {
+		module.RawSetString("BuildIPMatcher", L.NewFunction(func(L *lua.LState) int {
 			parsed, err := ParseIPRules(luaRules(L))
 			if err != nil {
 				L.RaiseError("%v", err)
