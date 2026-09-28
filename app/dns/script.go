@@ -37,9 +37,9 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 		if err != nil {
 			return nil, err
 		}
-		if L.GetGlobal("handleDNSQuery").Type() != lua.LTFunction {
+		if L.GetGlobal("HandleDNSQuery").Type() != lua.LTFunction {
 			L.Close()
-			return nil, errors.New("DNS script must define handleDNSQuery(domain, ipv4, ipv6, fake)")
+			return nil, errors.New("DNS script must define HandleDNSQuery(domain, ipv4, ipv6, fake)")
 		}
 		return L, nil
 	})

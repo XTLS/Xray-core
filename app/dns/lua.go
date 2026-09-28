@@ -18,12 +18,12 @@ func (s *DNS) RegisterLua(L *lua.LState) {
 		for i, client := range s.clients {
 			server := L.NewTable()
 
-			server.RawSetString("id", lua.LString(client.id))
+			server.RawSetString("ID", lua.LString(client.id))
 
-			server.RawSetString("query", L.NewFunction(func(L *lua.LState) int {
+			server.RawSetString("Query", L.NewFunction(func(L *lua.LState) int {
 				domain, ok := L.Get(2).(lua.LString)
 				if !ok {
-					L.RaiseError("server:query requires a domain")
+					L.RaiseError("server:Query requires a domain")
 					return 0
 				}
 				option := featureDNS.IPOption{
@@ -33,7 +33,7 @@ func (s *DNS) RegisterLua(L *lua.LState) {
 				}
 				ctx := L.Context()
 				if ctx == nil {
-					L.RaiseError("server:query requires an active DNS query")
+					L.RaiseError("server:Query requires an active DNS query")
 					return 0
 				}
 				var ips []net.IP
@@ -60,13 +60,13 @@ func (s *DNS) RegisterLua(L *lua.LState) {
 			servers.RawSetInt(i+1, server)
 		}
 		module := L.NewTable()
-		module.RawSetString("servers", servers)
+		module.RawSetString("Servers", servers)
 		L.Push(module)
 		return 1
 	})
 }
 
-// CallLuaHook invokes handleDNSQuery in the supplied state.
+// CallLuaHook invokes HandleDNSQuery in the supplied state.
 // Returned slices and IP bytes may share storage with DNS caches or matcher inputs.
 func (s *DNS) CallLuaHook(L *lua.LState, ctx context.Context, domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
 	previous := L.Context()
@@ -78,9 +78,9 @@ func (s *DNS) CallLuaHook(L *lua.LState, ctx context.Context, domain string, opt
 			L.SetContext(previous)
 		}
 	}()
-	fn := L.GetGlobal("handleDNSQuery")
+	fn := L.GetGlobal("HandleDNSQuery")
 	if fn.Type() != lua.LTFunction {
-		return nil, 0, errors.New("DNS script must define handleDNSQuery(domain, ipv4, ipv6, fake)")
+		return nil, 0, errors.New("DNS script must define HandleDNSQuery(domain, ipv4, ipv6, fake)")
 	}
 	if err := L.CallByParam(lua.P{Fn: fn, NRet: 3, Protect: true},
 		lua.LString(strings.ToLower(domain)), lua.LBool(option.IPv4Enable),

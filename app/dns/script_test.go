@@ -37,21 +37,21 @@ func (s *geoIPScriptNameServer) QueryIP(ctx context.Context, domain string, _ fe
 func TestDNSScriptGeoIPFallback(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 	script := `
-local servers = require("xray.dns").servers
-local us_ips = require("xray.geodata").ipMatcher("geoip:us")
+local servers = require("xray.dns").Servers
+local us_ips = require("xray.geodata").IPMatcher("geoip:us")
 
 local by_id = {}
 for _, server in ipairs(servers) do
-    by_id[server.id] = server
+    by_id[server.ID] = server
 end
 assert(by_id.primary and by_id.fallback, "primary and fallback DNS servers are required")
 
-function handleDNSQuery(domain, ipv4, ipv6, fake)
-    local ips, ttl, err = by_id.primary:query(domain, ipv4, ipv6, fake)
-    if not err and us_ips:anyMatch(ips) then
+function HandleDNSQuery(domain, ipv4, ipv6, fake)
+    local ips, ttl, err = by_id.primary:Query(domain, ipv4, ipv6, fake)
+    if not err and us_ips:AnyMatch(ips) then
         return ips, ttl, nil
     end
-    return by_id.fallback:query(domain, ipv4, ipv6, fake)
+    return by_id.fallback:Query(domain, ipv4, ipv6, fake)
 end
 `
 	scriptPath := filepath.Join(t.TempDir(), "geoip_fallback.lua")
@@ -118,7 +118,7 @@ func TestDNSScriptRejectsInvalidStartup(t *testing.T) {
 		name   string
 		script string
 	}{
-		{"syntax", "function handleDNSQuery("},
+		{"syntax", "function HandleDNSQuery("},
 		{"missing hook", "value = 1"},
 		{"top-level error", `error("setup failed")`},
 	} {
@@ -141,14 +141,14 @@ func TestDNSScriptRejectsInvalidStartup(t *testing.T) {
 func TestDNSScriptHookErrorAndFakeDNSOption(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "script.lua")
 	script := `
-local server = require("xray.dns").servers[1]
+local server = require("xray.dns").Servers[1]
 local log = require("xray.log")
-log.info("DNS script loaded")
-function handleDNSQuery(domain, ipv4, ipv6, fake)
-    log.debug("DNS query: ", domain)
+log.Info("DNS script loaded")
+function HandleDNSQuery(domain, ipv4, ipv6, fake)
+    log.Debug("DNS query: ", domain)
     if domain == "bad.example" then error("script failure") end
-    local ips, ttl, err = server:query(domain, ipv4, ipv6, fake)
-    if err then log.error("DNS failed: ", err) end
+    local ips, ttl, err = server:Query(domain, ipv4, ipv6, fake)
+    if err then log.Error("DNS failed: ", err) end
     return ips, ttl, err
 end
 `

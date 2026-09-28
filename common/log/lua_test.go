@@ -36,19 +36,19 @@ func TestLuaLog(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 		local log = require("xray.log")
 		assert(log == require("xray.log"))
-		log.debug("query: ", "example.com")
-		log.info("count=", 42, ", enabled=", true, ", value=", nil)
-		log.warning(setmetatable({}, {
+		log.Debug("query: ", "example.com")
+		log.Info("count=", 42, ", enabled=", true, ", value=", nil)
+		log.Warning(setmetatable({}, {
 			__tostring = function() return "fallback" end
 		}))
-		assert(select("#", log.error("failed")) == 0)
-		log.error("DNS failed: ", nativeError)
-		log.warning(nativeError)
+		assert(select("#", log.Error("failed")) == 0)
+		log.Error("DNS failed: ", nativeError)
+		log.Warning(nativeError)
 		local ok, err = pcall(function() error("Lua failure", 0) end)
 		assert(not ok)
-		log.error(err)
+		log.Error(err)
 		function logHook()
-			log.info("hook")
+			log.Info("hook")
 		end
 	`), 0o600); err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func TestLuaLog(t *testing.T) {
 	}
 	if err := L.DoString(`
 		logHook()
-		require("xray.log").info("anonymous")
+		require("xray.log").Info("anonymous")
 	`); err != nil {
 		t.Fatal(err)
 	}

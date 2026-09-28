@@ -12,10 +12,10 @@ func RegisterLua(L *lua.LState) {
 	L.PreloadModule("xray.log", func(L *lua.LState) int {
 		module := L.NewTable()
 		for name, severity := range map[string]Severity{
-			"debug":   Severity_Debug,
-			"info":    Severity_Info,
-			"warning": Severity_Warning,
-			"error":   Severity_Error,
+			"Debug":   Severity_Debug,
+			"Info":    Severity_Info,
+			"Warning": Severity_Warning,
+			"Error":   Severity_Error,
 		} {
 			module.RawSetString(name, L.NewFunction(func(L *lua.LState) int {
 				var content strings.Builder

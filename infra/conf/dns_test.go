@@ -129,7 +129,7 @@ func TestDNSScriptConfig(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("xray.location.confdir", dir)
 	path := filepath.Join(dir, "lookup.lua")
-	if err := os.WriteFile(path, []byte("function handleDNSQuery(domain, ipv4, ipv6, fake) end"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte("function HandleDNSQuery(domain, ipv4, ipv6, fake) end"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

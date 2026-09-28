@@ -80,7 +80,7 @@ func TestReadLuaDNSResultValidation(t *testing.T) {
 func TestCallLuaHookCancellation(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
-	if err := L.DoString(`function handleDNSQuery(domain, ipv4, ipv6, fake) while true do end end`); err != nil {
+	if err := L.DoString(`function HandleDNSQuery(domain, ipv4, ipv6, fake) while true do end end`); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -101,7 +101,7 @@ func TestCallLuaHookNormalizesDomain(t *testing.T) {
 	addresses.Value = []net.IP{net.ParseIP("127.0.0.1")}
 	L.SetGlobal("ips", addresses)
 	if err := L.DoString(`
-		function handleDNSQuery(domain, ipv4, ipv6, fake)
+		function HandleDNSQuery(domain, ipv4, ipv6, fake)
 			assert(domain == "example.com")
 			assert(ipv4 and not ipv6 and not fake)
 			return ips, 60, nil
@@ -130,7 +130,7 @@ func TestCallLuaHookRestoresState(t *testing.T) {
 			addresses := L.NewUserData()
 			addresses.Value = []net.IP{net.ParseIP("127.0.0.1")}
 			L.SetGlobal("ips", addresses)
-			if err := L.DoString("function handleDNSQuery() " + tc.body + " end"); err != nil {
+			if err := L.DoString("function HandleDNSQuery() " + tc.body + " end"); err != nil {
 				t.Fatal(err)
 			}
 			previous, cancel := context.WithCancel(context.Background())
@@ -157,13 +157,13 @@ func TestLuaDNSServerQuery(t *testing.T) {
 	server := &DNS{clients: []*Client{{server: &benchmarkLuaNameServer{ips: ips}, ipOption: &option, timeoutMs: time.Second}}}
 	server.RegisterLua(L)
 	if err := L.DoString(`
-local server = require("xray.dns").servers[1]
-local matcher = require("xray.geodata").ipMatcher("127.0.0.0/8")
-function handleDNSQuery(domain, ipv4, ipv6, fake)
-    local ips, ttl, err = server:query(domain, ipv4, ipv6, fake)
+local server = require("xray.dns").Servers[1]
+local matcher = require("xray.geodata").IPMatcher("127.0.0.0/8")
+function HandleDNSQuery(domain, ipv4, ipv6, fake)
+    local ips, ttl, err = server:Query(domain, ipv4, ipv6, fake)
     assert(type(ips) == "userdata" and not err)
-    assert(matcher:anyMatch(ips))
-    local matched = matcher:filterIPs(ips)
+    assert(matcher:AnyMatch(ips))
+    local matched = matcher:FilterIPs(ips)
     return matched, ttl, err
 end
 `); err != nil {
@@ -185,7 +185,7 @@ func (s *benchmarkLuaNameServer) QueryIP(context.Context, string, featureDNS.IPO
 	return s.ips, 60, nil
 }
 
-// BenchmarkLuaDNSHookCall isolates a preloaded Lua hook and its server:query bridge.
+// BenchmarkLuaDNSHookCall isolates a preloaded Lua hook and its server:Query bridge.
 // The direct case measures the same DNS client without Lua.
 func BenchmarkLuaDNSHookCall(b *testing.B) {
 	option := featureDNS.IPOption{IPv4Enable: true}
@@ -197,9 +197,9 @@ func BenchmarkLuaDNSHookCall(b *testing.B) {
 	defer L.Close()
 	server.RegisterLua(L)
 	if err := L.DoString(`
-local server = require("xray.dns").servers[1]
-function handleDNSQuery(domain, ipv4, ipv6, fake)
-    return server:query(domain, ipv4, ipv6, fake)
+local server = require("xray.dns").Servers[1]
+function HandleDNSQuery(domain, ipv4, ipv6, fake)
+    return server:Query(domain, ipv4, ipv6, fake)
 end
 `); err != nil {
 		b.Fatal(err)
