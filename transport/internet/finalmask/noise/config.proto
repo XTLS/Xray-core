@@ -6,6 +6,22 @@ option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/nois
 option java_package = "com.xray.transport.internet.finalmask.noise";
 option java_multiple_files = true;
 
+message Segment {
+    enum Kind {
+        BYTES = 0;
+        RANDOM = 1;
+        RANDOM_ASCII = 2;
+        RANDOM_DIGIT = 3;
+        TIMESTAMP = 4;
+        COUNTER = 5;
+        NONCE = 6;
+    }
+    Kind kind = 1;
+    bytes bytes = 2;
+    int64 min_size = 3;
+    int64 max_size = 4;
+}
+
 message Item {
     int64 rand_min = 1;
     int64 rand_max = 2;
@@ -14,6 +30,7 @@ message Item {
     bytes packet = 5;
     int64 delay_min = 6;
     int64 delay_max = 7;
+    repeated Segment segments = 8;
 }
 
 message Config {
