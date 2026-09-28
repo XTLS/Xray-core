@@ -21,7 +21,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/xtls/xray-core/transport/internet"
+	xnet "github.com/xtls/xray-core/common/net"
 	"golang.zx2c4.com/wireguard/tun"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -220,7 +220,7 @@ func (tun *netTun) DialUDPAddrPort(laddr, raddr netip.AddrPort) (net.Conn, error
 	if err != nil {
 		return nil, err
 	}
-	return &internet.PacketConnWrapper{
+	return &xnet.PacketConnWrapper{
 		PacketConn: conn,
 		Dest:       net.UDPAddrFromAddrPort(raddr),
 	}, nil

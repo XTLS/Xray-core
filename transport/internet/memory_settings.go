@@ -83,7 +83,7 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		var newConn net.PacketConn
 		var udpAddr net.Addr
 		switch c := conn.(type) {
-		case *PacketConnWrapper:
+		case *net.PacketConnWrapper:
 			newConn = c.PacketConn
 			udpAddr = conn.RemoteAddr()
 		case *cnc.Connection:

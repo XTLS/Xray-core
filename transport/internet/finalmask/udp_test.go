@@ -380,7 +380,7 @@ func TestPacketConnReadWrite(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { clientConn.Close() })
-			client := clientConn.(*finalmask.PacketConnWrapper).PacketConn
+			client := clientConn.(*net.PacketConnWrapper).PacketConn
 
 			_ = client.SetDeadline(time.Now().Add(time.Second))
 			_ = server.SetDeadline(time.Now().Add(time.Second))
