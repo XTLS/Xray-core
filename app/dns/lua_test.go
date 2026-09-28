@@ -158,7 +158,7 @@ func TestLuaDNSServerQuery(t *testing.T) {
 	server.RegisterLua(L)
 	if err := L.DoString(`
 local server = require("xray.dns").servers[1]
-local matcher = require("xray.geodata").ipMatcher({"127.0.0.0/8"})
+local matcher = require("xray.geodata").ipMatcher("127.0.0.0/8")
 function handleDNSQuery(domain, ipv4, ipv6, fake)
     local ips, ttl, err = server:query(domain, ipv4, ipv6, fake)
     assert(type(ips) == "userdata" and not err)

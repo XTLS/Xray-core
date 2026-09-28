@@ -6,13 +6,12 @@ import (
 )
 
 // RegisterLua makes xray.geodata available to require in an LState.
-// Matchers retain registry handles, so they remain usable after a reload.
 func RegisterLua(L *lua.LState) {
 	L.PreloadModule("xray.geodata", func(L *lua.LState) int {
 		module := L.NewTable()
 
 		module.RawSetString("domainMatcher", L.NewFunction(func(L *lua.LState) int {
-			parsed, err := ParseDomainRules(luaRules(L, 1), Domain_Domain)
+			parsed, err := ParseDomainRules(luaRules(L), Domain_Domain)
 			if err != nil {
 				L.RaiseError("%v", err)
 				return 0
@@ -27,7 +26,7 @@ func RegisterLua(L *lua.LState) {
 		}))
 
 		module.RawSetString("ipMatcher", L.NewFunction(func(L *lua.LState) int {
-			parsed, err := ParseIPRules(luaRules(L, 1))
+			parsed, err := ParseIPRules(luaRules(L))
 			if err != nil {
 				L.RaiseError("%v", err)
 				return 0
@@ -45,11 +44,10 @@ func RegisterLua(L *lua.LState) {
 	})
 }
 
-func luaRules(L *lua.LState, index int) []string {
-	table := L.CheckTable(index)
-	rules := make([]string, table.Len())
+func luaRules(L *lua.LState) []string {
+	rules := make([]string, L.GetTop())
 	for i := range rules {
-		value, ok := table.RawGetInt(i + 1).(lua.LString)
+		value, ok := L.Get(i + 1).(lua.LString)
 		if !ok {
 			L.RaiseError("geodata rules must be strings")
 			return nil

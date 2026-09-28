@@ -38,7 +38,7 @@ func TestDNSScriptGeoIPFallback(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 	script := `
 local servers = require("xray.dns").servers
-local us_ips = require("xray.geodata").ipMatcher({"geoip:us"})
+local us_ips = require("xray.geodata").ipMatcher("geoip:us")
 
 local by_id = {}
 for _, server in ipairs(servers) do

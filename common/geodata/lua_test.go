@@ -7,34 +7,39 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-func TestLuaIPMatcherAcceptsNativeIP(t *testing.T) {
+func TestLuaIPMatcher(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	RegisterLua(L)
 	ip := L.NewUserData()
 	ip.Value = net.ParseIP("127.0.0.1")
 	L.SetGlobal("ip", ip)
+	ips := L.NewUserData()
+	ips.Value = []net.IP{ip.Value.(net.IP), net.ParseIP("8.8.8.8")}
+	L.SetGlobal("ips", ips)
 	if err := L.DoString(`
-		local matcher = require("xray.geodata").ipMatcher({"127.0.0.0/8"})
+		local matcher = require("xray.geodata").ipMatcher("127.0.0.0/8", "::1")
 		assert(matcher:match(ip))
-		assert(matcher:anyMatch({ip}))
-		assert(matcher:matches({ip}))
-		local matched, unmatched = matcher:filterIPs({ip})
-		assert(#matched == 1 and #unmatched == 0)
-		assert(matcher:match(matched[1]))
+		assert(matcher:anyMatch(ips))
+		assert(not matcher:matches(ips))
+		local matched, unmatched = matcher:filterIPs(ips)
+		assert(type(matched) == "userdata" and type(unmatched) == "userdata")
+		assert(#matched == 1 and #unmatched == 1)
 	`); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestLuaDomainMatcherUsesNativeMatcher(t *testing.T) {
+func TestLuaDomainMatcher(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	RegisterLua(L)
 	if err := L.DoString(`
-		local matcher = require("xray.geodata").domainMatcher({"example.com"})
+		local matcher = require("xray.geodata").domainMatcher("example.com", "full:other.com")
 		assert(matcher:matchAny("example.com"))
 		assert(matcher:matchAny("www.example.com"))
+		assert(matcher:matchAny("other.com"))
+		assert(not matcher:matchAny("www.other.com"))
 		assert(#(matcher:match("www.example.com")) == 1)
 	`); err != nil {
 		t.Fatal(err)
@@ -46,8 +51,8 @@ func TestLuaMatchersRejectInvalidRules(t *testing.T) {
 		name   string
 		script string
 	}{
-		{"IP rule", `require("xray.geodata").ipMatcher({"not-an-ip"})`},
-		{"non-string domain rule", `require("xray.geodata").domainMatcher({true})`},
+		{"IP rule", `require("xray.geodata").ipMatcher("not-an-ip")`},
+		{"non-string domain rule", `require("xray.geodata").domainMatcher("example.com", true)`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			L := lua.NewState()
