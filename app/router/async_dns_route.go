@@ -99,6 +99,17 @@ type asyncDNSStats struct {
 	queueDrops       atomic.Uint64
 	requests         atomic.Uint64
 	errors           atomic.Uint64
+	successes        atomic.Uint64
+	freshResponses   atomic.Uint64
+	staleResponses   atomic.Uint64
+	pendingResponses atomic.Uint64
+	expiredResponses atomic.Uint64
+	timeoutErrors    atomic.Uint64
+	canceledErrors   atomic.Uint64
+	transportErrors  atomic.Uint64
+	httpErrors       atomic.Uint64
+	invalidResponses atomic.Uint64
+	requestErrors    atomic.Uint64
 	exhausted        atomic.Uint64
 	evictions        atomic.Uint64
 	inheritedEntries atomic.Uint64
@@ -107,9 +118,11 @@ type asyncDNSStats struct {
 
 // AsyncDNSRouteStats is a low-cardinality snapshot without domain labels.
 type AsyncDNSRouteStats struct {
-	FreshHits, StaleHits, Misses, QueueDrops, Requests, Errors, Exhausted uint64
-	MatcherID, Evictions, InheritedEntries, InheritedJobs                 uint64
-	Entries, Jobs, Queued                                                 int
+	FreshHits, StaleHits, Misses, QueueDrops, Requests, Errors, Exhausted                       uint64
+	Successes, FreshResponses, StaleResponses, PendingResponses, ExpiredResponses               uint64
+	TimeoutErrors, CanceledErrors, TransportErrors, HTTPErrors, InvalidResponses, RequestErrors uint64
+	MatcherID, Evictions, InheritedEntries, InheritedJobs                                       uint64
+	Entries, Jobs, Queued                                                                       int
 }
 
 func (m *AsyncDNSRouteMatcher) Stats() AsyncDNSRouteStats {
@@ -119,6 +132,11 @@ func (m *AsyncDNSRouteMatcher) Stats() AsyncDNSRouteStats {
 		FreshHits: m.stats.freshHits.Load(), StaleHits: m.stats.staleHits.Load(),
 		Misses: m.stats.misses.Load(), QueueDrops: m.stats.queueDrops.Load(),
 		Requests: m.stats.requests.Load(), Errors: m.stats.errors.Load(), Exhausted: m.stats.exhausted.Load(),
+		Successes: m.stats.successes.Load(), FreshResponses: m.stats.freshResponses.Load(),
+		StaleResponses: m.stats.staleResponses.Load(), PendingResponses: m.stats.pendingResponses.Load(), ExpiredResponses: m.stats.expiredResponses.Load(),
+		TimeoutErrors: m.stats.timeoutErrors.Load(), CanceledErrors: m.stats.canceledErrors.Load(),
+		TransportErrors: m.stats.transportErrors.Load(), HTTPErrors: m.stats.httpErrors.Load(),
+		InvalidResponses: m.stats.invalidResponses.Load(), RequestErrors: m.stats.requestErrors.Load(),
 		MatcherID: m.matcherID, Evictions: m.stats.evictions.Load(), InheritedEntries: m.stats.inheritedEntries.Load(), InheritedJobs: m.stats.inheritedJobs.Load(),
 		Entries: len(m.cache), Jobs: len(m.jobs), Queued: len(m.queue),
 	}
@@ -418,6 +436,10 @@ func (m *AsyncDNSRouteMatcher) runScheduler() {
 					" capacity=", m.cacheCapacity, " queueCapacity=", cap(m.queue), " graceMillis=", m.staleGrace.Milliseconds(),
 					" freshHits=", s.FreshHits, " staleHits=", s.StaleHits, " misses=", s.Misses,
 					" requests=", s.Requests, " errors=", s.Errors, " evictions=", s.Evictions,
+					" successes=", s.Successes, " freshResponses=", s.FreshResponses, " staleResponses=", s.StaleResponses,
+					" pendingResponses=", s.PendingResponses, " expiredResponses=", s.ExpiredResponses,
+					" timeoutErrors=", s.TimeoutErrors, " canceledErrors=", s.CanceledErrors, " transportErrors=", s.TransportErrors,
+					" httpErrors=", s.HTTPErrors, " invalidResponses=", s.InvalidResponses, " requestErrors=", s.RequestErrors,
 					" queueDrops=", s.QueueDrops, " exhausted=", s.Exhausted,
 					" inheritedEntries=", s.InheritedEntries, " inheritedJobs=", s.InheritedJobs)
 				nextStats = now.Add(time.Minute)
@@ -461,12 +483,15 @@ func (m *AsyncDNSRouteMatcher) refresh(domain string) {
 		return
 	}
 	job.queued = false
-	if err == nil && m.acceptResponse(domain, response, started, now) {
-		delete(m.jobs, domain)
-		return
-	}
-	if err != nil || response.State != "pending" && response.State != "stale" {
-		m.stats.errors.Add(1)
+	if err != nil {
+		m.recordFetchError(err)
+	} else {
+		outcome := classifyAsyncDNSResponse(response, now.Sub(started))
+		m.recordResponse(outcome)
+		if outcome != asyncDNSResponseInvalid && m.acceptResponse(domain, response, started, now) {
+			delete(m.jobs, domain)
+			return
+		}
 	}
 	if job.attempts >= asyncDNSMaxAttempts || !now.Before(job.deadline) {
 		m.exhaustJob(job, now)
@@ -488,21 +513,19 @@ func (m *AsyncDNSRouteMatcher) refresh(domain string) {
 // A fresh classification supersedes last-good immediately, including RU->other.
 // Stale is only a retained projection: it never extends an existing hard deadline.
 func (m *AsyncDNSRouteMatcher) acceptResponse(domain string, response *asyncDNSClassifierResponse, started, now time.Time) bool {
-	if response == nil || response.Route != "ru" && response.Route != "other" || len(response.Generation) > 128 {
+	elapsed := now.Sub(started)
+	outcome := classifyAsyncDNSResponse(response, elapsed)
+	if outcome == asyncDNSResponseInvalid || outcome == asyncDNSResponsePending {
 		return false
 	}
-	elapsed := now.Sub(started)
 	fresh := time.Duration(response.TTLMillis)*time.Millisecond - elapsed
 	hard := time.Duration(response.StaleTTLMillis)*time.Millisecond - elapsed
 	entry := asyncDNSCacheEntry{routeRU: response.Route == "ru", lastUsed: now, generation: response.Generation}
 	if previous, ok := m.cache[domain]; ok {
 		entry.lastUsed = previous.lastUsed
 	}
-	switch response.State {
-	case "ready":
-		if fresh <= 0 || response.StaleTTLMillis > 0 && response.StaleTTLMillis < response.TTLMillis {
-			return false
-		}
+	switch outcome {
+	case asyncDNSResponseFresh:
 		entry.serverHardUntil = now.Add(fresh)
 		if response.StaleTTLMillis > 0 {
 			entry.serverHardUntil = now.Add(hard)
@@ -518,19 +541,30 @@ func (m *AsyncDNSRouteMatcher) acceptResponse(domain string, response *asyncDNSC
 			// cache rereads cannot mint grace, even if local maxTTL is shorter.
 			entry.hardUntil = minTime(entry.hardUntil, previous.hardUntil)
 			entry.serverHardUntil = minTime(entry.serverHardUntil, previous.serverHardUntil)
+			// Reading the same L2 generation does not refill it. Repeating an
+			// 80%-of-remaining prefetch here causes a cascade near expiration.
+			entry.refreshAt = entry.freshUntil
 		}
 		// A valid fresh read remains usable; the clamp limits stale allowance,
 		// not newly proven freshness. This also preserves legacy fresh-only L1.
 		if entry.hardUntil.Before(entry.freshUntil) {
 			entry.hardUntil = entry.freshUntil
 		}
-		entry.refreshAt = now.Add(fresh * 4 / 5)
-	case "stale":
-		if m.staleGrace == 0 || response.TTLMillis != 0 || hard <= 0 {
+		if entry.refreshAt.IsZero() {
+			entry.refreshAt = now.Add(fresh * 4 / 5)
+		}
+	case asyncDNSResponseStale, asyncDNSResponseExpired:
+		if m.staleGrace == 0 || response.StaleTTLMillis == 0 || hard <= 0 {
 			return false
 		}
 		entry.freshUntil = now
-		entry.hardUntil = now.Add(min(hard, m.staleGrace))
+		grace := m.staleGrace
+		if outcome == asyncDNSResponseExpired {
+			// Grace begins at the original fresh deadline, not at receipt.
+			// Network delay must never grant extra stale lifetime.
+			grace += fresh
+		}
+		entry.hardUntil = now.Add(min(hard, grace))
 		entry.serverHardUntil = now.Add(hard)
 		if previous, ok := m.cache[domain]; ok {
 			entry.hardUntil = minTime(entry.hardUntil, previous.hardUntil)
@@ -551,7 +585,7 @@ func (m *AsyncDNSRouteMatcher) acceptResponse(domain string, response *asyncDNSC
 		m.evictIfNeeded(now)
 	}
 	m.cache[domain] = entry
-	return response.State == "ready"
+	return outcome == asyncDNSResponseFresh
 }
 
 func minTime(a, b time.Time) time.Time {
@@ -585,38 +619,38 @@ func (m *AsyncDNSRouteMatcher) fetch(domain string) (*asyncDNSClassifierResponse
 func (m *AsyncDNSRouteMatcher) fetchContext(ctx context.Context, domain string) (*asyncDNSClassifierResponse, error) {
 	body, err := json.Marshal(asyncDNSClassifierRequest{Domain: domain, AllowStale: m.staleGrace > 0})
 	if err != nil {
-		return nil, err
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureRequest, err: err}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureRequest, err: err}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if m.bearerToken != "" {
 		if req.URL.User != nil || (req.URL.Scheme != "https" && req.URL.String() != m.overlayEndpoint) {
-			return nil, errors.New("refusing async DNS bearer token over an insecure endpoint")
+			return nil, &asyncDNSFetchError{kind: asyncDNSFailureRequest, err: errors.New("refusing async DNS bearer token over an insecure endpoint")}
 		}
 		req.Header.Set("Authorization", "Bearer "+m.bearerToken)
 	}
 	response, err := m.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: err}
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, errors.New("async DNS route classifier returned status ", response.StatusCode)
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureHTTP, err: errors.New("async DNS route classifier returned status ", response.StatusCode)}
 	}
 
 	data, err := io.ReadAll(io.LimitReader(response.Body, 32*1024+1))
 	if err != nil {
-		return nil, err
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: err}
 	}
 	if len(data) > 32*1024 {
-		return nil, errors.New("async DNS classifier response exceeds 32 KiB")
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureInvalidResponse, err: errors.New("async DNS classifier response exceeds 32 KiB")}
 	}
 	decoded := new(asyncDNSClassifierResponse)
 	if err := json.Unmarshal(data, decoded); err != nil {
-		return nil, err
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureInvalidResponse, err: err}
 	}
 	return decoded, nil
 }

@@ -157,3 +157,40 @@ L2 на втором edge. Затем один Gauss, малая Gauss cohort; �
 Rollback: убрать staleGraceMillis, при необходимости прежний immutable XrayR
 image. Старый classifier остаётся доступен через существующий blue/green owner.
 Cross-product дополнение — тот же infra ADR-20260904-02, без нового owner.
+
+## 2026-09-28: Успешный обмен и свежесть L1 учитываются отдельно
+
+В наблюдении wellserver6 классификатор отвечал HTTP 200, но часть `ready`
+имела remaining TTL меньше времени запроса. Это нормальное окончание свежести,
+а не transport/HTTP failure. Валидные `ready`, `stale`, `pending` и `ready`,
+потерявший свежесть за время обмена, учитываются в `successes`; последний
+получает отдельный `expiredResponses`, не увеличивая `errors`.
+
+Expired ready не превращается в fresh. При opt-in stale он может заполнить L1
+только до `min(requestStart + staleTtlMillis, requestStart + ttlMillis + grace)`.
+Прежние hard deadlines/tombstones дополнительно ограничивают этот срок; ещё
+свежая локальная запись не вытесняется. При выключенном stale или истёкшем hard
+результат не устанавливается. Задача остаётся в том же bounded retry budget и
+backoff, пока не получит fresh ready или не исчерпает лимит. Исходный ready с
+нулевым TTL, противоречивые сроки и неверная схема ответа остаются ошибками.
+
+Первое чтение или доказанная новая generation сохраняет prefetch на 80% свежести.
+После повторного чтения той же (либо неизвестной legacy) generation следующий
+запрос назначается на принятый абсолютный `freshUntil`. Повторное уменьшение
+интервала до 80% остатка исключено; freshness, local maxTTL и hard bounds не
+продлеваются. L2 продолжает обновляться своим существующим owner после expiry.
+
+Минутная статистика разделяет `freshResponses`, `staleResponses`,
+`pendingResponses`, `expiredResponses` и фиксированные причины настоящих ошибок:
+`timeoutErrors`, `canceledErrors`, `transportErrors`, `httpErrors`,
+`invalidResponses`, `requestErrors`. Домены, URL, generation и произвольный текст
+ошибки не попадают в метрики. Семантика `errors` сужена до реальных неуспешных
+обменов/невалидных ответов; сравнивать её напрямую со старым image нельзя.
+`requests` включает in-flight и отменённые при Close попытки, поэтому равенство
+`requests = successes + errors` не гарантируется во время работы/закрытия.
+
+Валидация: expired ready со stale и без него, anchored grace, сохранение fresh
+last-good и tombstones, malformed/HTTP/timeout, bounded pending retries,
+same-generation near-expiry без каскада, новая generation RU→other и reload.
+Delivery: закреплённый core → XrayR CI artifact → isolated QA → wellserver6.
+Это дополнение не меняет L2 protocol, classifier image или fleet configuration.
