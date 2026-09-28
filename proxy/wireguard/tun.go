@@ -85,7 +85,7 @@ func CreateForwarder(gstack *stack.Stack, handler func(conn net.Conn, dest net.D
 	}
 
 	gstack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
-		data := pkt.Clone().Data().AsRange().ToSlice()
+		data := pkt.Data().AsRange().ToSlice()
 		// if len(data) == 0 {
 		// 	return false
 		// }
@@ -112,12 +112,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	m.mutex.RLock()
 	uc, ok := m.m[src.NetAddr()]
 	if ok {
-		select {
-		case uc.queue <- &packet{
-			p:    data,
-			dest: &dst,
-		}:
-		default:
+		if !uc.queue.push(&packet{p: data, dest: &dst}) {
 			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", uc.dst.NetAddr(), " > queue full")
 		}
 		m.mutex.RUnlock()
@@ -131,7 +126,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 	uc, ok = m.m[src.NetAddr()]
 	if !ok {
 		uc = &udpConn{
-			queue: make(chan *packet, 1024),
+			queue: newPacketQueue(udpQueueLimit),
 			src:   src,
 			dst:   dst,
 		}
@@ -145,12 +140,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 		go m.handler(uc, dst)
 	}
 
-	select {
-	case uc.queue <- &packet{
-		p:    data,
-		dest: &dst,
-	}:
-	default:
+	if !uc.queue.push(&packet{p: data, dest: &dst}) {
 		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", uc.dst.NetAddr(), " > queue full 2")
 	}
 }
@@ -158,7 +148,7 @@ func (m *udpManager) feed(src net.Destination, dst net.Destination, data []byte)
 func (m *udpManager) close(uc *udpConn) {
 	if !uc.closed {
 		uc.closed = true
-		close(uc.queue)
+		uc.queue.close()
 		delete(m.m, uc.src.NetAddr())
 	}
 }
@@ -232,7 +222,7 @@ type packet struct {
 }
 
 type udpConn struct {
-	queue     chan *packet
+	queue     *packetQueue
 	src       net.Destination
 	dst       net.Destination
 	writeFunc func(payload []byte, src net.Destination, dst net.Destination) error
@@ -242,7 +232,7 @@ type udpConn struct {
 
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	for {
-		q, ok := <-c.queue
+		q, ok := c.queue.pop()
 		if !ok {
 			return nil, io.EOF
 		}
@@ -261,7 +251,7 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 }
 
 func (c *udpConn) Read(p []byte) (int, error) {
-	q, ok := <-c.queue
+	q, ok := c.queue.pop()
 	if !ok {
 		return 0, io.EOF
 	}
@@ -323,4 +313,69 @@ func (c *udpConn) SetReadDeadline(t time.Time) error {
 
 func (c *udpConn) SetWriteDeadline(t time.Time) error {
 	return nil
+}
+
+// udpQueueLimit bounds the packets waiting for one UDP flow; more are dropped.
+const udpQueueLimit = 1024
+
+// packetQueue holds the packets waiting for one UDP flow. Unlike a buffered
+// channel of the same bound it only allocates for packets actually queued, so
+// the many idle flows kept until the idle timeout cost next to nothing.
+type packetQueue struct {
+	mu     sync.Mutex
+	items  []*packet
+	limit  int
+	notify chan struct{}
+	closed bool
+}
+
+func newPacketQueue(limit int) *packetQueue {
+	return &packetQueue{limit: limit, notify: make(chan struct{}, 1)}
+}
+
+// push queues p and reports whether it was accepted.
+func (q *packetQueue) push(p *packet) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed || len(q.items) >= q.limit {
+		return false
+	}
+	q.items = append(q.items, p)
+	select {
+	case q.notify <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+// pop blocks until a packet is queued or the queue is closed and drained.
+func (q *packetQueue) pop() (*packet, bool) {
+	for {
+		q.mu.Lock()
+		if len(q.items) > 0 {
+			p := q.items[0]
+			q.items[0] = nil
+			q.items = q.items[1:]
+			if len(q.items) == 0 {
+				q.items = nil
+			}
+			q.mu.Unlock()
+			return p, true
+		}
+		if q.closed {
+			q.mu.Unlock()
+			return nil, false
+		}
+		q.mu.Unlock()
+		<-q.notify
+	}
+}
+
+func (q *packetQueue) close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if !q.closed {
+		q.closed = true
+		close(q.notify)
+	}
 }
