@@ -46,12 +46,12 @@ for _, server in ipairs(servers) do
 end
 assert(by_id.primary and by_id.fallback, "primary and fallback DNS servers are required")
 
-function handleDNSQuery(q)
-    local answer = by_id.primary:query(q)
-    if not answer.error and us_ips:anyMatch(answer.ips) then
-        return answer
+function handleDNSQuery(domain, ipv4, ipv6, fake)
+    local ips, ttl, err = by_id.primary:query(domain, ipv4, ipv6, fake)
+    if not err and us_ips:anyMatch(ips) then
+        return ips, ttl, nil
     end
-    return by_id.fallback:query(q)
+    return by_id.fallback:query(domain, ipv4, ipv6, fake)
 end
 `
 	scriptPath := filepath.Join(t.TempDir(), "geoip_fallback.lua")
@@ -144,12 +144,12 @@ func TestDNSScriptHookErrorAndFakeDNSOption(t *testing.T) {
 local server = require("xray.dns").servers[1]
 local log = require("xray.log")
 log.info("DNS script loaded")
-function handleDNSQuery(q)
-    log.debug("DNS query: ", q.domain)
-    if q.domain == "bad.example" then error("script failure") end
-    local answer = server:query(q)
-    if answer.error then log.error("DNS failed: ", answer.error) end
-    return answer
+function handleDNSQuery(domain, ipv4, ipv6, fake)
+    log.debug("DNS query: ", domain)
+    if domain == "bad.example" then error("script failure") end
+    local ips, ttl, err = server:query(domain, ipv4, ipv6, fake)
+    if err then log.error("DNS failed: ", err) end
+    return ips, ttl, err
 end
 `
 	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
