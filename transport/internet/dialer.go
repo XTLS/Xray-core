@@ -93,6 +93,9 @@ func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) 
 		IPv4Enable: (localAddr == nil && strategy.PreferIP4()) || (localAddr != nil && localAddr.Family().IsIPv4() && (strategy.PreferIP4() || strategy.FallbackIP4())),
 		IPv6Enable: (localAddr == nil && strategy.PreferIP6()) || (localAddr != nil && localAddr.Family().IsIPv6() && (strategy.PreferIP6() || strategy.FallbackIP6())),
 	})
+	if strategy == DomainStrategy_FORCE_IP6 {
+		ips = net.FilterNAT64(ips)
+	}
 	{ // Resolve fallback
 		if (len(ips) == 0 || err != nil) && strategy.HasFallback() && localAddr == nil {
 			ips, _, err = dnsClient.LookupIP(domain, dns.IPOption{
