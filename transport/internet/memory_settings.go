@@ -54,11 +54,10 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 		mss.SecurityType = s.SecurityType
 		mss.SecuritySettings = ess
 	}
+	if s != nil && (len(s.Tcpmasks) != 0 || len(s.Udpmasks) != 0) {
+		var tcpMasks []finalmask.TCPMask
+		var udpMasks []finalmask.UDPMask
 
-	var tcpMasks []finalmask.TCPMask
-	var udpMasks []finalmask.UDPMask
-
-	if s != nil {
 		for i := range s.Tcpmasks {
 			instance := common.Must2(s.Tcpmasks[i].GetInstance())
 			tcpMasks = append(tcpMasks, instance.(finalmask.TCPMask))
@@ -67,37 +66,37 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 			instance := common.Must2(s.Udpmasks[i].GetInstance())
 			udpMasks = append(udpMasks, instance.(finalmask.UDPMask))
 		}
-	}
 
-	dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
-		return DialSystem(ctx, dest, mss.SocketSettings)
-	}
-	listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
-		return ListenSystem(ctx, addr, mss.SocketSettings)
-	}
-	dialUDP := func(ctx context.Context, dest net.Destination) (net.PacketConn, net.Addr, error) {
-		conn, err := DialSystem(ctx, dest, mss.SocketSettings)
-		if err != nil {
-			return nil, nil, err
+		dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
+			return DialSystem(ctx, dest, mss.SocketSettings)
 		}
-		var newConn net.PacketConn
-		var udpAddr net.Addr
-		switch c := conn.(type) {
-		case *net.PacketConnWrapper:
-			newConn = c.PacketConn
-			udpAddr = conn.RemoteAddr()
-		case *cnc.Connection:
-			newConn = &FakePacketConn{Conn: c}
-			udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
-		default:
-			panic(reflect.TypeOf(c))
+		listen := func(ctx context.Context, addr net.Addr) (net.Listener, error) {
+			return ListenSystem(ctx, addr, mss.SocketSettings)
 		}
-		return newConn, udpAddr, nil
+		dialUDP := func(ctx context.Context, dest net.Destination) (net.PacketConn, net.Addr, error) {
+			conn, err := DialSystem(ctx, dest, mss.SocketSettings)
+			if err != nil {
+				return nil, nil, err
+			}
+			var newConn net.PacketConn
+			var udpAddr net.Addr
+			switch c := conn.(type) {
+			case *net.PacketConnWrapper:
+				newConn = c.PacketConn
+				udpAddr = conn.RemoteAddr()
+			case *cnc.Connection:
+				newConn = &FakePacketConn{Conn: c}
+				udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}, Port: 0}
+			default:
+				panic(reflect.TypeOf(c))
+			}
+			return newConn, udpAddr, nil
+		}
+		listenPacket := func(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
+			return ListenSystemPacket(ctx, addr, mss.SocketSettings)
+		}
+		mss.FinalMask = finalmask.NewFinalMask(tcpMasks, udpMasks, dialTCP, listen, dialUDP, listenPacket)
 	}
-	listenPacket := func(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
-		return ListenSystemPacket(ctx, addr, mss.SocketSettings)
-	}
-	mss.FinalMask = finalmask.NewFinalMask(tcpMasks, udpMasks, dialTCP, listen, dialUDP, listenPacket)
 
 	if s != nil && s.QuicParams != nil {
 		mss.QuicParams = s.QuicParams
