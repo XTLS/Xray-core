@@ -458,10 +458,10 @@ func ClientHandshake(request *protocol.RequestHeader, reader io.Reader, writer i
 	}
 
 	if b.Byte(0) != socks5Version {
-		return nil, errors.New("unexpected server version: ", b.Byte(0)).AtWarning()
+		return nil, errors.New("unexpected server version: ", b.Byte(0))
 	}
 	if b.Byte(1) != authByte {
-		return nil, errors.New("auth method not supported.").AtWarning()
+		return nil, errors.New("auth method not supported.")
 	}
 
 	if authByte == authPassword {

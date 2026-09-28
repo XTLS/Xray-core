@@ -165,7 +165,7 @@ func NewHandler(ctx context.Context, config *core.InboundHandlerConfig) (inbound
 
 	receiverSettings, ok := rawReceiverSettings.(*proxyman.ReceiverConfig)
 	if !ok {
-		return nil, errors.New("not a ReceiverConfig").AtError()
+		return nil, errors.New("not a ReceiverConfig")
 	}
 
 	streamSettings := receiverSettings.StreamSettings

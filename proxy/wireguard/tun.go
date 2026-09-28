@@ -49,7 +49,7 @@ func CalculateInterfaceName(name string) (tunName string) {
 	return
 }
 
-func createForwarder(gstack *stack.Stack, handler func(conn net.Conn, dest net.Destination)) {
+func CreateForwarder(gstack *stack.Stack, handler func(conn net.Conn, dest net.Destination)) {
 	gstack.SetPromiscuousMode(1, true)
 	gstack.SetSpoofing(1, true)
 

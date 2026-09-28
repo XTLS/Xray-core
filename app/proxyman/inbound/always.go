@@ -66,7 +66,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 	}
 	mss, err := internet.ToMemoryStreamConfig(receiverConfig.StreamSettings)
 	if err != nil {
-		return nil, errors.New("failed to parse stream config").Base(err).AtWarning()
+		return nil, errors.New("failed to parse stream config").Base(err)
 	}
 
 	newCtx := session.ContextWithInbound(ctx, &session.Inbound{Tag: tag, Source: src})

@@ -199,9 +199,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer conn.Close()
-		c := &udpConnClient{
+		c := &UDPConnClient{
 			PacketConn: conn.(*internet.PacketConnWrapper).PacketConn,
-			dest:       conn.RemoteAddr().(*net.UDPAddr),
+			Dest:       conn.RemoteAddr().(*net.UDPAddr),
 		}
 		reader = c
 		writer = c
@@ -336,6 +336,9 @@ func (h *Handler) init(ctx context.Context) error {
 }
 
 func (h *Handler) resolveLocal(host string) (net.IP, error) {
+	if ip := net.ParseIP(host); ip != nil {
+		return ip, nil
+	}
 	ips, _, err := h.dns.LookupIP(host, dns.IPOption{IPv4Enable: true, IPv6Enable: true})
 	if err != nil {
 		return nil, err
@@ -375,12 +378,12 @@ func (h *Handler) resolveLocal(host string) (net.IP, error) {
 	return got[dice.Roll(len(got))], nil
 }
 
-type udpConnClient struct {
+type UDPConnClient struct {
 	net.PacketConn
-	dest *net.UDPAddr
+	Dest *net.UDPAddr
 }
 
-func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
+func (c *UDPConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	b := buf.New()
 	b.Resize(0, buf.Size)
 	n, addr, err := c.PacketConn.ReadFrom(b.Bytes())
@@ -399,9 +402,9 @@ func (c *udpConnClient) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	return buf.MultiBuffer{b}, nil
 }
 
-func (c *udpConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
+func (c *UDPConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for i, b := range mb {
-		dst := c.dest
+		dst := c.Dest
 		if b.UDP != nil {
 			if b.UDP.Address.Family().IsDomain() {
 				if b.UDP.Port != net.Port(dst.Port) {
@@ -459,19 +462,26 @@ func (c *cache) run() {
 		return
 	}
 	c.running = true
-	c.m = make(map[string]entry)
+	if c.m == nil {
+		c.m = make(map[string]entry)
+	}
 	go c.gc()
 }
 
 func (c *cache) gc() {
 	ticker := time.NewTicker(time.Minute)
-	for {
-		now := <-ticker.C
+	defer ticker.Stop()
+	for now := range ticker.C {
 		c.mu.Lock()
 		for key, entry := range c.m {
 			if now.After(entry.deadline) {
 				delete(c.m, key)
 			}
+		}
+		if len(c.m) == 0 {
+			c.running = false
+			c.mu.Unlock()
+			return
 		}
 		c.mu.Unlock()
 	}

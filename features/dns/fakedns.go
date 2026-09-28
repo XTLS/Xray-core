@@ -13,7 +13,7 @@ type FakeDNSEngine interface {
 
 var (
 	FakeIPv4Pool = "198.18.0.0/15"
-	FakeIPv6Pool = "fc00::/18"
+	FakeIPv6Pool = "2001:2::/48"
 )
 
 type FakeDNSEngineRev0 interface {

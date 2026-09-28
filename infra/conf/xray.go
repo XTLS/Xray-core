@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/proxy/freedom"
+	"github.com/xtls/xray-core/proxy/masque"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -32,6 +33,7 @@ var (
 		"trojan":        func() interface{} { return new(TrojanServerConfig) },
 		"wireguard":     func() interface{} { return &WireGuardConfig{IsClient: false} },
 		"hysteria":      func() interface{} { return new(HysteriaServerConfig) },
+		"masque":        func() interface{} { return new(MasqueServerConfig) },
 		"tun":           func() interface{} { return new(TunConfig) },
 	}, "protocol", "settings")
 
@@ -48,6 +50,7 @@ var (
 		"vmess":       func() interface{} { return new(VMessOutboundConfig) },
 		"trojan":      func() interface{} { return new(TrojanClientConfig) },
 		"hysteria":    func() interface{} { return new(HysteriaClientConfig) },
+		"masque":      func() interface{} { return new(MasqueClientConfig) },
 		"dns":         func() interface{} { return new(DNSOutboundConfig) },
 		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
 	}, "protocol", "settings")
@@ -203,6 +206,9 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to build inbound handler for protocol ", c.Protocol).Base(err)
 	}
+	if _, ok := ts.(*masque.ServerConfig); !ok && receiverSettings.StreamSettings != nil && receiverSettings.StreamSettings.ProtocolName == "masque" {
+		return nil, errors.New("the masque transport can only be used by the masque inbound")
+	}
 
 	return &core.InboundHandlerConfig{
 		Tag:              c.Tag,
@@ -336,6 +342,14 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	}
 	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
 		return nil, err
+	}
+
+	if _, ok := ts.(*masque.ClientConfig); ok {
+		if ms := senderSettings.MultiplexSettings; ms != nil && ms.Enabled {
+			return nil, errors.New(`masque outbound does not support "mux"`)
+		}
+	} else if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.ProtocolName == "masque" {
+		return nil, errors.New("the masque transport can only be used by the masque outbound")
 	}
 
 	if fc, ok := ts.(*freedom.Config); ok {

@@ -1,7 +1,9 @@
 package conf
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"maps"
 	"math/big"
 	"net/url"
 	"sort"
@@ -20,10 +22,12 @@ import (
 	"github.com/xtls/xray-core/transport/internet/httpupgrade"
 	"github.com/xtls/xray-core/transport/internet/hysteria"
 	"github.com/xtls/xray-core/transport/internet/kcp"
+	"github.com/xtls/xray-core/transport/internet/masque"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tcp"
 	"github.com/xtls/xray-core/transport/internet/websocket"
 	"github.com/xtls/xray-core/transport/internet/xdrive"
+	"golang.org/x/net/http/httpguts"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -122,7 +126,7 @@ func (v *AuthenticatorRequest) Build() (*http.RequestConfig, error) {
 		for _, key := range headerNames {
 			value := v.Headers[key]
 			if value == nil {
-				return nil, errors.New("empty HTTP header value: " + key).AtError()
+				return nil, errors.New("empty HTTP header value: " + key)
 			}
 			config.Header = append(config.Header, &http.Header{
 				Name:  key,
@@ -190,7 +194,7 @@ func (v *AuthenticatorResponse) Build() (*http.ResponseConfig, error) {
 		for _, key := range headerNames {
 			value := v.Headers[key]
 			if value == nil {
-				return nil, errors.New("empty HTTP header value: " + key).AtError()
+				return nil, errors.New("empty HTTP header value: " + key)
 			}
 			config.Header = append(config.Header, &http.Header{
 				Name:  key,
@@ -240,11 +244,11 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 	if len(c.HeaderConfig) > 0 {
 		headerConfig, _, err := tcpHeaderLoader.Load(c.HeaderConfig)
 		if err != nil {
-			return nil, errors.New("invalid TCP header config").Base(err).AtError()
+			return nil, errors.New("invalid TCP header config").Base(err)
 		}
 		ts, err := headerConfig.(Buildable).Build()
 		if err != nil {
-			return nil, errors.New("invalid TCP header config").Base(err).AtError()
+			return nil, errors.New("invalid TCP header config").Base(err)
 		}
 		config.HeaderSettings = serial.ToTypedMessage(ts)
 	}
@@ -784,6 +788,63 @@ func (c *HysteriaConfig) Build() (proto.Message, error) {
 	}
 
 	return config, nil
+}
+
+type MasqueConfig struct {
+	Host    string            `json:"host"`
+	Path    string            `json:"path"`
+	User    string            `json:"user"`
+	Pass    string            `json:"pass"`
+	Headers map[string]string `json:"headers"`
+}
+
+func (c *MasqueConfig) Build() (proto.Message, error) {
+	path := c.Path
+	if path == "" {
+		path = masque.DefaultPath
+	}
+	path = strings.NewReplacer(
+		"{target}", "*", "{ipproto}", "*",
+		"{?target,ipproto}", "?target=*&ipproto=*", "{?ipproto,target}", "?ipproto=*&target=*",
+		"{&target,ipproto}", "&target=*&ipproto=*", "{&ipproto,target}", "&ipproto=*&target=*",
+	).Replace(path)
+	if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, "{}") {
+		return nil, errors.New(`invalid "path": `, path, `, only the variables {target} and {ipproto} are supported`)
+	}
+	if c.Host != "" {
+		if u, err := url.Parse("https://" + c.Host); err != nil || u.Host != c.Host {
+			return nil, errors.New(`invalid "host": `, c.Host)
+		}
+	}
+	for k, v := range c.Headers {
+		if !httpguts.ValidHeaderFieldName(k) || !httpguts.ValidHeaderFieldValue(v) {
+			return nil, errors.New(`invalid header in "headers": `, strconv.Quote(k))
+		}
+		switch strings.ToLower(k) {
+		case "host", "capsule-protocol":
+			return nil, errors.New(`"headers" can't contain "`, k, `"`)
+		case "authorization":
+			if c.User != "" || c.Pass != "" {
+				return nil, errors.New(`"headers" can't contain "`, k, `" when "user" or "pass" is set`)
+			}
+		}
+	}
+	headers := c.Headers
+	if c.User != "" || c.Pass != "" {
+		if strings.Contains(c.User, ":") {
+			return nil, errors.New(`invalid "user": `, c.User)
+		}
+		headers = maps.Clone(c.Headers)
+		if headers == nil {
+			headers = make(map[string]string)
+		}
+		headers["Authorization"] = "Basic " + base64.StdEncoding.EncodeToString([]byte(c.User+":"+c.Pass))
+	}
+	return &masque.Config{
+		Host:    c.Host,
+		Path:    path,
+		Headers: headers,
+	}, nil
 }
 
 func readFileOrString(f string, s []string) ([]byte, error) {

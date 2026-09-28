@@ -78,8 +78,13 @@ func open(name, desc string) (*wintun.Adapter, error) {
 	// generate a deterministic GUID from the adapter name
 	id := md5.Sum([]byte(name))
 	guid := (*windows.GUID)(unsafe.Pointer(&id[0]))
+	// try to open existing adapter by name
+	adapter, err := wintun.OpenAdapter(name)
+	if err == nil {
+		return adapter, nil
+	}
 	// try to create adapter anew
-	adapter, err := wintun.CreateAdapter(name, desc, guid)
+	adapter, err = wintun.CreateAdapter(name, desc, guid)
 	if err == nil {
 		return adapter, nil
 	}

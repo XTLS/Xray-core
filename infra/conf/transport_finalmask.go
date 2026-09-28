@@ -942,12 +942,19 @@ func (c *UDPHop) Build() (proto.Message, error) {
 		}
 		return nil, errors.New("invalid ip ", ip)
 	}
+	interval := c.Interval
+	if interval.From == 0 && interval.To == 0 {
+		interval.From, interval.To = 30, 30
+	}
+	if interval.From < 5 {
+		return nil, errors.New("interval must be at least 5")
+	}
 	return &udphop.Config{
 		Local:       local,
 		Remote:      remote,
 		RemoteOnce:  remoteOnce,
-		IntervalMin: int64(c.Interval.From),
-		IntervalMax: int64(c.Interval.To),
+		IntervalMin: int64(interval.From),
+		IntervalMax: int64(interval.To),
 		RemoteIPs:   remoteIPs,
 		RemotePorts: c.RemotePorts.Build().Ports(),
 	}, nil

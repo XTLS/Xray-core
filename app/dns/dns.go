@@ -212,6 +212,28 @@ func (s *DNS) IsOwnLink(ctx context.Context) bool {
 	return false
 }
 
+// MayUseSystemResolver reports whether any name server configured here could
+// still resolve through the system resolver. That is what happens when no name
+// server is configured at all, and it is also what a name server pointed at
+// "localhost" does. Callers that are about to redirect the system resolver need
+// to know, because a resolution path that reaches it would then loop back to
+// them.
+//
+// Any such server is enough: name servers can be selected per domain, so a
+// single local one makes some query reach the system resolver even when
+// independent upstreams are configured alongside it.
+func (s *DNS) MayUseSystemResolver() bool {
+	if len(s.clients) == 0 {
+		return true
+	}
+	for _, client := range s.clients {
+		if _, isLocal := client.server.(*LocalNameServer); isLocal {
+			return true
+		}
+	}
+	return false
+}
+
 // LookupIP implements dns.Client.
 func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
 	// Normalize the FQDN form query

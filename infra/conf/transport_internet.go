@@ -36,6 +36,8 @@ func (p TransportProtocol) Build() (string, error) {
 		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
 	case "hysteria":
 		return "hysteria", nil
+	case "masque":
+		return "masque", nil
 	case "xdrive":
 		return "xdrive", nil
 	default:
@@ -61,6 +63,7 @@ type StreamConfig struct {
 	WSSettings          *WebSocketConfig   `json:"wsSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
 	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
+	MASQUESettings      *MasqueConfig      `json:"masqueSettings"`
 	XDRIVESettings      *XDriveConfig      `json:"xdriveSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 }
@@ -193,6 +196,16 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
 			ProtocolName: "hysteria",
 			Settings:     serial.ToTypedMessage(hs),
+		})
+	}
+	if c.MASQUESettings != nil {
+		ms, err := c.MASQUESettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build MASQUE config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "masque",
+			Settings:     serial.ToTypedMessage(ms),
 		})
 	}
 	if c.XDRIVESettings != nil {
