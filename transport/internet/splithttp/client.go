@@ -3,6 +3,7 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,6 +43,59 @@ type DefaultDialerClient struct {
 
 func (c *DefaultDialerClient) IsClosed() bool {
 	return c.closed.Load()
+}
+
+type FramedReader struct {
+	reader io.ReadCloser
+	length uint64
+}
+
+func (r *FramedReader) Read(b []byte) (int, error) {
+	if len(b) == 0 {
+		return 0, nil
+	}
+
+	for r.length <= 0 {
+		lenBuf := make([]byte, 8)
+		_, err := io.ReadFull(r.reader, lenBuf)
+		if err != nil {
+			return 0, err
+		}
+		r.length = binary.BigEndian.Uint64(lenBuf)
+		isPadding := (r.length & 1) == 1
+		r.length >>= 1
+
+		if isPadding {
+			// skip all data
+			discarded, err := io.CopyN(io.Discard, r.reader, int64(r.length))
+			if err != nil {
+				return 0, err
+			}
+			if uint64(discarded) != r.length {
+				return 0, io.ErrUnexpectedEOF
+			}
+			// retry read
+			r.length = 0
+			continue
+		}
+		break
+	}
+
+	// slice the buffer for a truncated read
+	if uint64(len(b)) > r.length {
+		b = b[:r.length]
+	}
+
+	n, err := r.reader.Read(b)
+	r.length -= uint64(n)
+	if err == io.EOF && r.length > 0 {
+		err = io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+func (r *FramedReader) Close() error {
+	return r.reader.Close()
 }
 
 func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
@@ -91,7 +145,12 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			wrc.Close()
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+
+		if resp.Header.Get(c.transportConfig.GetScDownlinkFrameHeader()) != "" {
+			wrc.(*WaitReadCloser).Set(&FramedReader{reader: resp.Body})
+		} else {
+			wrc.(*WaitReadCloser).Set(resp.Body)
+		}
 	}()
 
 	<-gotConn.Wait()

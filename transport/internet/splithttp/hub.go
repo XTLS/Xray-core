@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	gotls "crypto/tls"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	goreality "github.com/xtls/reality"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
@@ -366,13 +368,75 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
 
+		frameHeader := ""
+		frameMode := false
+		if h.config.ScDownlinkFrameHeader != "" {
+			frameHeader = request.Header.Get(h.config.ScDownlinkFrameHeader)
+			if frameHeader != "" {
+				// Signal that server will use framed responses
+				writer.Header().Set(h.config.ScDownlinkFrameHeader, "1")
+				frameMode = true
+			}
+		}
+
 		writer.WriteHeader(http.StatusOK)
 		writer.(http.Flusher).Flush()
-
+		var keepaliveFrom int32 = -1
+		var keepaliveTo int32 = -1
+		var bytesFrom int32 = -1
+		var bytesTo int32 = -1
+		var delayMsFrom int32 = -1
+		var delayMsTo int32 = -1
+		var nextPadTime time.Time = time.Unix(0, 0)
+		if frameHeader != "" {
+			keepaliveFrom = h.config.GetScDownlinkKeepAliveSecs().GetFrom()
+			keepaliveTo = h.config.GetScDownlinkKeepAliveSecs().GetTo()
+			bytesFrom = h.config.GetScDownlinkFlushBytes().GetFrom()
+			bytesTo = h.config.GetScDownlinkFlushBytes().GetTo()
+			delayMsFrom = h.config.GetScDownlinkFlushDelayMs().GetFrom()
+			delayMsTo = h.config.GetScDownlinkFlushDelayMs().GetTo()
+			duration := crypto.RandBetween(int64(delayMsFrom), int64(delayMsTo))
+			nextPadTime = time.Now().Add(time.Duration(duration) * time.Millisecond)
+		}
 		httpSC := &httpServerConn{
 			Instance:       done.New(),
 			Reader:         request.Body,
 			ResponseWriter: writer,
+			frameMode:      frameMode,
+			bytesFrom:      bytesFrom,
+			bytesTo:        bytesTo,
+			delayMsFrom:    delayMsFrom,
+			delayMsTo:      delayMsTo,
+			nextPadTime:    nextPadTime,
+		}
+		if keepaliveFrom >= 0 && keepaliveTo > 0 {
+			go func() {
+				duration := crypto.RandBetween(int64(keepaliveFrom), int64(keepaliveTo))
+				timer := time.NewTimer(time.Duration(duration) * time.Second)
+				buf := make([]byte, 8)
+				defer timer.Stop()
+				for {
+					select {
+					case <-httpSC.Wait(): // httpSC connection closed
+						return
+					case <-timer.C: // need to send keepalive
+						// keepalive is an empty length padding
+						binary.BigEndian.PutUint64(buf, (uint64(0)<<1)|1)
+						httpSC.Lock()
+						_, err := httpSC.ResponseWriter.Write(buf)
+						if err == nil {
+							httpSC.ResponseWriter.(http.Flusher).Flush()
+						}
+						httpSC.Unlock()
+						if err != nil {
+							// we should get error in the writer
+							return
+						}
+						duration = crypto.RandBetween(int64(keepaliveFrom), int64(keepaliveTo))
+						timer.Reset(time.Duration(duration) * time.Second)
+					}
+				}
+			}()
 		}
 		localAddr := h.localAddr
 		if la, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && la != nil {
@@ -408,6 +472,12 @@ type httpServerConn struct {
 	*done.Instance
 	io.Reader // no need to Close request.Body
 	http.ResponseWriter
+	frameMode   bool
+	bytesFrom   int32
+	bytesTo     int32
+	delayMsFrom int32
+	delayMsTo   int32
+	nextPadTime time.Time
 }
 
 func (c *httpServerConn) Write(b []byte) (int, error) {
@@ -415,6 +485,48 @@ func (c *httpServerConn) Write(b []byte) (int, error) {
 	defer c.Unlock()
 	if c.Done() {
 		return 0, io.ErrClosedPipe
+	}
+	if c.frameMode {
+		// always update padding time to avoid excessive pads
+		curTime := time.Now()
+		needPadding := curTime.After(c.nextPadTime)
+		duration := crypto.RandBetween(int64(c.delayMsFrom), int64(c.delayMsTo))
+		c.nextPadTime = curTime.Add(time.Duration(duration) * time.Millisecond)
+
+		// uint64 (data << 1) | 0 - payload
+		// uint64 (data << 1) | 1 - padding
+		buf := make([]byte, 8)
+
+		// payload first
+		binary.BigEndian.PutUint64(buf, (uint64(len(b))<<1)|0)
+		n, err := c.ResponseWriter.Write(buf)
+		if err != nil {
+			return n, err
+		}
+		n, err = c.ResponseWriter.Write(b)
+		if err != nil {
+			return n, err
+		}
+
+		// then padding
+		if needPadding {
+			padSize := crypto.RandBetween(int64(c.bytesFrom), int64(c.bytesTo))
+			binary.BigEndian.PutUint64(buf, (uint64(padSize)<<1)|1)
+			_, err = c.ResponseWriter.Write(buf)
+			if err != nil {
+				return n, err
+			}
+			padBuf := make([]byte, padSize)
+			_, err = rand.Read(padBuf)
+			if err != nil {
+				return n, err
+			}
+			_, err = c.ResponseWriter.Write(padBuf)
+		}
+		if err == nil {
+			c.ResponseWriter.(http.Flusher).Flush()
+		}
+		return n, err
 	}
 	n, err := c.ResponseWriter.Write(b)
 	if err == nil {
