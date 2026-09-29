@@ -73,7 +73,7 @@ func NewUDPHopConn(c *Config, dest *net.Destination, dialer *finalmask.Dialer) (
 	if err != nil {
 		return nil, err
 	}
-	cur := conn.(*finalmask.PacketConnWrapper).PacketConn
+	cur := conn.(*net.PacketConnWrapper).PacketConn
 	addr := conn.RemoteAddr().(*net.UDPAddr)
 	client := &udpHopConn{
 		dialer: dialer,
@@ -150,7 +150,7 @@ func (c *udpHopConn) hop() {
 			_ = c.pre.Close()
 		}
 		c.pre = c.cur
-		c.cur = conn.(*finalmask.PacketConnWrapper).PacketConn
+		c.cur = conn.(*net.PacketConnWrapper).PacketConn
 		c.wg.Add(1)
 		go c.recv(c.cur)
 	}

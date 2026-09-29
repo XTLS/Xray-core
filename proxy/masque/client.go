@@ -151,7 +151,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		}
 		defer conn.Close()
 		uc := &wireguard.UDPConnClient{
-			PacketConn: conn.(*internet.PacketConnWrapper).PacketConn,
+			PacketConn: conn.(*net.PacketConnWrapper).PacketConn,
 			Dest:       conn.RemoteAddr().(*net.UDPAddr),
 		}
 		reader = uc

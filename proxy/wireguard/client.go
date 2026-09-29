@@ -27,7 +27,6 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.zx2c4.com/wireguard/device"
 )
 
@@ -200,7 +199,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 		defer conn.Close()
 		c := &UDPConnClient{
-			PacketConn: conn.(*internet.PacketConnWrapper).PacketConn,
+			PacketConn: conn.(*net.PacketConnWrapper).PacketConn,
 			Dest:       conn.RemoteAddr().(*net.UDPAddr),
 		}
 		reader = c
@@ -264,14 +263,14 @@ func (h *Handler) init(ctx context.Context) error {
 			if err != nil {
 				return nil, errors.New("failed to dial to dest").Base(err)
 			}
-			pktConn = conn.(*finalmask.PacketConnWrapper).PacketConn
+			pktConn = conn.(*net.PacketConnWrapper).PacketConn
 		} else {
 			conn, err := internet.DialSystem(ctx, dest, h.streamSettings.SocketSettings)
 			if err != nil {
 				return nil, errors.New("failed to dial to dest").Base(err)
 			}
 			switch c := conn.(type) {
-			case *internet.PacketConnWrapper:
+			case *net.PacketConnWrapper:
 				pktConn = c.PacketConn
 			case *cnc.Connection:
 				pktConn = &internet.FakePacketConn{Conn: c}

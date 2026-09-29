@@ -60,10 +60,10 @@ func (r *UDPResolver) dial() error {
 	if err != nil {
 		return err
 	}
-	r.conn = conn.(*finalmask.PacketConnWrapper).PacketConn
+	r.conn = conn.(*net.PacketConnWrapper).PacketConn
 	r.udpAddr = conn.RemoteAddr().(*net.UDPAddr)
 	r.wg.Add(1)
-	go r.recv(conn.(*finalmask.PacketConnWrapper).PacketConn)
+	go r.recv(conn.(*net.PacketConnWrapper).PacketConn)
 	return nil
 }
 
