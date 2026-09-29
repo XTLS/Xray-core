@@ -7,7 +7,7 @@ import (
 	"github.com/xtls/xray-core/proxy/tun"
 )
 
-func TestTunConfigAutoSystemWFP(t *testing.T) {
+func TestTunConfigAutoSystem(t *testing.T) {
 	creator := func() Buildable {
 		return new(TunConfig)
 	}
@@ -19,9 +19,14 @@ func TestTunConfigAutoSystemWFP(t *testing.T) {
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500},
 		},
 		{
-			Input:  `{"name": "xray0", "autoSystemWFP": true}`,
+			Input:  `{"name": "xray0", "autoSystemDnsToGateway": true}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemWfp: true},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemDnsToGateway: true},
+		},
+		{
+			Input:  `{"name": "xray0", "autoSystemWfpBlockLeak": true}`,
+			Parser: loadJSON(creator),
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemWfpBlockLeak: true},
 		},
 	})
 }

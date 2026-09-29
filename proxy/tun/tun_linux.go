@@ -185,7 +185,7 @@ var verifyDNSRouting = func(ctx context.Context, inboundTag, source, address str
 // resolution is left to the OS, which is the documented default. Errors are
 // returned to the caller, which treats them as non-fatal.
 func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) error {
-	if !t.options.AutoSystemDns {
+	if !t.options.AutoSystemDnsToGateway {
 		return nil
 	}
 	if t.systemDNSSet {

@@ -58,9 +58,9 @@ func recorder(t *testing.T, failOn string) *[][]string {
 func optedInTun() *LinuxTun {
 	return &LinuxTun{
 		options: &Config{
-			Name:          "xray_tun",
-			Gateway:       []string{"192.168.100.1/30"},
-			AutoSystemDns: true,
+			Name:                   "xray_tun",
+			Gateway:                []string{"192.168.100.1/30"},
+			AutoSystemDnsToGateway: true,
 		},
 		tunLink: testLink("xray_tun"),
 	}
@@ -79,7 +79,7 @@ func TestConfigureSystemDNSDisabledByDefault(t *testing.T) {
 	calls := recorder(t, "")
 
 	t1 := optedInTun()
-	t1.options.AutoSystemDns = false
+	t1.options.AutoSystemDnsToGateway = false
 
 	if err := t1.ConfigureSystemDNS(context.Background(), "tun"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
