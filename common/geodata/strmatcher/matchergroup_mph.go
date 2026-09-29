@@ -77,11 +77,6 @@ func (g *MphMatcherGroup) AddDomainMatcher(matcher DomainMatcher, value uint32) 
 	g.add(matcher.Pattern(), mphKindDomain, value)
 }
 
-func (g *MphMatcherGroup) grow(n, size int) {
-	g.buf = slices.Grow(g.buf, size)
-	g.entries = slices.Grow(g.entries, n)
-}
-
 func (g *MphMatcherGroup) add(pattern string, kind uint8, value uint32) {
 	if g.arena != "" {
 		panic(errMphBuilt)

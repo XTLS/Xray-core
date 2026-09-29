@@ -82,25 +82,9 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 			}
 			g.Add(m, uint32(i))
 		case *DomainRule_Geosite:
-			domains, err := loadSiteWithAttrs(v.Geosite.File, v.Geosite.Code, v.Geosite.Attrs)
+			err := loadSiteMatchers(v.Geosite, func(m strmatcher.Matcher) { g.Add(m, uint32(i)) })
 			if err != nil {
 				return nil, err
-			}
-			n, size := 0, 0
-			for _, d := range domains {
-				if d.Type == Domain_Full || d.Type == Domain_Domain {
-					n, size = n+1, size+len(d.Value)
-				}
-			}
-			g.Grow(n, size) // peak mem
-			for j, d := range domains {
-				domains[j] = nil // peak mem
-				m, err := parseDomain(d)
-				if err != nil {
-					errors.LogError(context.Background(), "ignore invalid geosite entry in ", v.Geosite.File, ":", v.Geosite.Code, " at index ", j, ", ", err)
-					continue
-				}
-				g.Add(m, uint32(i))
 			}
 		default:
 			panic("unknown domain rule type")
@@ -133,21 +117,11 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (strmat
 	errors.LogDebug(context.Background(), "geodata geosite matcher cache MISS ", key)
 
 	s := strmatcher.NewLinearAnyMatcher()
-	domains, err := loadSiteWithAttrs(rule.File, rule.Code, rule.Attrs)
-	if err != nil {
+	if err := loadSiteMatchers(rule, s.Add); err != nil {
 		return nil, err
 	}
-	for i, d := range domains {
-		domains[i] = nil // peak mem
-		m, err := parseDomain(d)
-		if err != nil {
-			errors.LogError(context.Background(), "ignore invalid geosite entry in ", rule.File, ":", rule.Code, " at index ", i, ", ", err)
-			continue
-		}
-		s.Add(m)
-	}
 	f.shared.Store(key, s)
-	return s, err
+	return s, nil
 }
 
 // BuildMatcher implements DomainMatcherFactory.
@@ -215,6 +189,20 @@ func (c *CompactDomainMatcher) MatchAny(input string) bool {
 		}
 	}
 	return false
+}
+
+// loadSiteMatchers calls add with a matcher for every domain of the geosite rule and logs the invalid ones.
+func loadSiteMatchers(rule *GeoSiteRule, add func(strmatcher.Matcher)) error {
+	i := 0
+	return loadSite(rule.File, rule.Code, rule.Attrs, func(t Domain_Type, value []byte) {
+		m, err := parseDomain(&Domain{Type: t, Value: string(value)})
+		if err != nil {
+			errors.LogError(context.Background(), "ignore invalid geosite entry in ", rule.File, ":", rule.Code, " at index ", i, ", ", err)
+		} else {
+			add(m)
+		}
+		i++
+	})
 }
 
 func parseDomain(d *Domain) (strmatcher.Matcher, error) {

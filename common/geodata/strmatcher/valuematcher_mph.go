@@ -16,17 +16,6 @@ func NewMphValueMatcher() *MphValueMatcher {
 	return new(MphValueMatcher)
 }
 
-// Grow makes room for n more `full` or `domain` patterns of total length size.
-func (g *MphValueMatcher) Grow(n, size int) {
-	if n == 0 {
-		return
-	}
-	if g.mph == nil {
-		g.mph = NewMphMatcherGroup()
-	}
-	g.mph.grow(n, size)
-}
-
 // Add implements ValueMatcher.Add.
 func (g *MphValueMatcher) Add(matcher Matcher, value uint32) {
 	switch matcher := matcher.(type) {
