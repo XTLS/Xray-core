@@ -52,9 +52,12 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 						case <-ch:
 						default:
 							errors.LogErrorInner(context.Background(), err, "unexpected closed")
-							if b.downFunc != nil {
+							b.mu.Lock()
+							downFunc := b.downFunc
+							b.mu.Unlock()
+							if downFunc != nil {
 								go func() {
-									common.Must(b.downFunc())
+									common.Must(downFunc())
 								}()
 							}
 						}
@@ -74,6 +77,13 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 			}
 		},
 	}, uint16(c.LocalAddr().(*net.UDPAddr).Port), nil
+}
+
+// setDownFunc sets downFunc after the device is created, since the device may already be using the bind.
+func (b *bind) setDownFunc(f func() error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.downFunc = f
 }
 
 func (b *bind) Close() error {

@@ -288,7 +288,13 @@ func (h *Handler) init(ctx context.Context) error {
 		}
 		return pktConn, nil
 	}
-	bind := &bind{}
+	// device.NewDevice may use the bind right away (Up -> BindUpdate -> Open),
+	// so everything it reads must be set before creating the device.
+	bind := &bind{
+		resolveFunc: resolveFunc,
+		listenFunc:  listenFunc,
+		reserved:    h.conf.Reserved,
+	}
 	logger := &device.Logger{
 		Verbosef: func(format string, args ...any) {
 			log.Record(&log.GeneralMessage{
@@ -304,10 +310,7 @@ func (h *Handler) init(ctx context.Context) error {
 		},
 	}
 	dev := device.NewDevice(h.tun, bind, logger)
-	bind.resolveFunc = resolveFunc
-	bind.listenFunc = listenFunc
-	bind.downFunc = dev.Down
-	bind.reserved = h.conf.Reserved
+	bind.setDownFunc(dev.Down)
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + h.conf.SecretKey + "\n")
 	for _, peer := range h.conf.Peers {
