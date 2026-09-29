@@ -406,3 +406,35 @@ func (g *MphMatcherGroup) MatchAny(input string) bool {
 	}
 	return g.lookup(h, input)&(mphFull|mphDomain) != 0
 }
+
+// mphSuffix is the suffix hash of input[off:], a parent domain of the input.
+type mphSuffix struct {
+	h   uint64
+	off int
+}
+
+// mphSuffixes appends the suffix hashes of the parent domains of input to dst, TLD side first, and returns them
+// with the hash of input itself: what MatchAny computes, computed once for several groups.
+func mphSuffixes(dst []mphSuffix, mul uint64, input string) ([]mphSuffix, uint64) {
+	h := uint64(0)
+	for i := len(input) - 1; i >= 0; i-- {
+		if input[i] == '.' {
+			dst = append(dst, mphSuffix{h, i + 1})
+		}
+		h = h*mul + uint64(input[i])
+	}
+	return dst, h
+}
+
+// matchAnyHashed is MatchAny with parents and h from mphSuffixes(_, mul, input).
+func (g *MphMatcherGroup) matchAnyHashed(input string, parents []mphSuffix, h, mul uint64) bool {
+	if g.mul != mul {
+		return g.MatchAny(input) // built with a later multiplier after a collision
+	}
+	for _, p := range parents {
+		if g.lookup(p.h, input[p.off:])&(mphDomain|mphParent) != 0 {
+			return true
+		}
+	}
+	return g.lookup(h, input)&(mphFull|mphDomain) != 0
+}
