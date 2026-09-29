@@ -223,13 +223,6 @@ func (c *udpHopConn) Close() error {
 	}
 	_ = c.cur.Close()
 	c.wg.Wait()
-	select {
-	case packet := <-c.readCh:
-		if packet.p != nil {
-			pool.Put(packet.p[:cap(packet.p)])
-		}
-	default:
-	}
 	close(c.readCh)
 	return nil
 }
