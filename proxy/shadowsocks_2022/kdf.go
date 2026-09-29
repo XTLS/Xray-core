@@ -61,3 +61,14 @@ func DeriveUserPSKHash(userPSK []byte) [AESBlockSize]byte {
 	copy(out[:], h[:AESBlockSize])
 	return out
 }
+
+func DecryptEIH(method *CipherMethod, key, salt, eih []byte) ([AESBlockSize]byte, error) {
+	identitySubkey := DeriveIdentitySubKey(key, salt, method.KeySaltLength)
+	block, err := method.NewBlock(identitySubkey)
+	if err != nil {
+		return [AESBlockSize]byte{}, err
+	}
+	var decryptedHash [AESBlockSize]byte
+	block.Decrypt(decryptedHash[:], eih)
+	return decryptedHash, nil
+}

@@ -1,18 +1,25 @@
 package shadowsocks_2022
 
 import (
+	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
 	"io"
 	"math"
 	mrand "math/rand/v2"
+	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/signal"
+	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/transport"
 )
 
 var addrParser = protocol.NewAddressParser(
@@ -36,15 +43,6 @@ func IncreaseNonce(nonce []byte) {
 // WriteAddressPort writes a destination address and port in SOCKS5 format
 func WriteAddressPort(w io.Writer, dest net.Destination) error {
 	return addrParser.WriteAddressPort(w, dest.Address, dest.Port)
-}
-
-// ReadAddressPort reads a destination address and port in SOCKS5 format
-func ReadAddressPort(r io.Reader) (net.Destination, error) {
-	addr, port, err := addrParser.ReadAddressPort(nil, r)
-	if err != nil {
-		return net.Destination{}, err
-	}
-	return net.TCPDestination(addr, port), nil
 }
 
 // AddrPortLength returns the serialized length of a destination in SOCKS5 format
@@ -243,13 +241,8 @@ type ClientRequestHeader struct {
 	EarlyData   []byte
 }
 
-func ReadClientRequestHeader(conn io.Reader, reader *StreamReader) (*ClientRequestHeader, error) {
-	var fixedBuf [RequestHeaderFixedChunkLength + AEADTagSize]byte
-	if _, err := io.ReadFull(conn, fixedBuf[:]); err != nil {
-		return nil, err
-	}
-
-	plainFixed, err := reader.cipher.Open(fixedBuf[:0], reader.Nonce(), fixedBuf[:], nil)
+func ReadClientRequestHeaderWithFixed(reader *StreamReader, fixedChunk []byte) (*ClientRequestHeader, error) {
+	plainFixed, err := reader.cipher.Open(fixedChunk[:0], reader.Nonce(), fixedChunk, nil)
 	if err != nil {
 		return nil, errors.New("failed to decrypt client request header").Base(err)
 	}
@@ -278,7 +271,7 @@ func ReadClientRequestHeader(conn io.Reader, reader *StreamReader) (*ClientReque
 	} else {
 		varChunkCipher = make([]byte, needed)
 	}
-	if _, err := io.ReadFull(conn, varChunkCipher); err != nil {
+	if _, err := io.ReadFull(reader.reader, varChunkCipher); err != nil {
 		return nil, err
 	}
 
@@ -288,7 +281,7 @@ func ReadClientRequestHeader(conn io.Reader, reader *StreamReader) (*ClientReque
 	}
 	IncreaseNonce(reader.Nonce())
 
-	dest, addrLen, err := parseAddressPort(plainVar)
+	dest, addrLen, err := ParseAddressPort(plainVar)
 	if err != nil {
 		return nil, err
 	}
@@ -307,42 +300,21 @@ func ReadClientRequestHeader(conn io.Reader, reader *StreamReader) (*ClientReque
 	offset += paddingLen
 
 	var earlyData []byte
+	var payloadLen int
 	if len(plainVar) > offset {
 		earlyData = plainVar[offset:]
+		payloadLen = len(earlyData)
+	}
+
+	// SIP022 §3.1.4: Servers MUST reject the request if the variable-length header chunk does not contain payload and the padding length is 0.
+	if paddingLen == 0 && payloadLen == 0 {
+		return nil, errors.New("request without payload and padding is not allowed")
 	}
 
 	return &ClientRequestHeader{
 		Destination: dest,
 		EarlyData:   earlyData,
 	}, nil
-}
-
-// ClientHandshake writes the full client request header to w
-func ClientHandshake(w io.Writer, method *CipherMethod, pskList [][]byte, dest net.Destination, payload []byte) ([]byte, *StreamWriter, error) {
-	salt := make([]byte, method.KeySaltLength)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		return nil, nil, err
-	}
-	writer, err := WriteTCPRequest(w, method, pskList, dest, salt, payload)
-	if err != nil {
-		return nil, nil, err
-	}
-	return salt, writer.(*StreamWriter), nil
-}
-
-// ClientVerifyServerResponse reads and verifies the server's handshake response
-func ClientVerifyServerResponse(r io.Reader, method *CipherMethod, psk []byte, clientSalt []byte) (*StreamReader, []byte, error) {
-	reader, err := ReadTCPResponse(r, method, psk, clientSalt)
-	if err != nil {
-		return nil, nil, err
-	}
-	sr := reader.(*StreamReader)
-	var initialPayload []byte
-	if sr.cached > 0 {
-		initialPayload = make([]byte, sr.cached)
-		copy(initialPayload, sr.buffer[sr.offset:sr.offset+sr.cached])
-	}
-	return sr, initialPayload, nil
 }
 
 // WriteTCPRequest writes the Shadowsocks 2022 request header into w and returns a body writer.
@@ -356,7 +328,16 @@ func WriteTCPRequest(w io.Writer, method *CipherMethod, pskList [][]byte, dest n
 
 	writer := NewStreamWriter(w, aead)
 
-	handshakeBuf := buf.New()
+	payloadLen := len(payload)
+	var paddingLen int
+	if payloadLen < MaxPaddingLength {
+		paddingLen = mrand.IntN(MaxPaddingLength) + 1
+	}
+	addrPortLen := AddrPortLength(dest)
+	varHeaderLen := addrPortLen + 2 + paddingLen + payloadLen
+
+	totalHandshakeLen := int32(method.KeySaltLength + len(pskList)*AESBlockSize + RequestHeaderFixedChunkLength + AEADTagSize + varHeaderLen + AEADTagSize)
+	handshakeBuf := buf.NewWithSize(totalHandshakeLen)
 	defer handshakeBuf.Release()
 
 	handshakeBuf.Write(clientSalt)
@@ -374,14 +355,6 @@ func WriteTCPRequest(w io.Writer, method *CipherMethod, pskList [][]byte, dest n
 		handshakeBuf.Write(encryptedEIH[:])
 	}
 
-	payloadLen := len(payload)
-	var paddingLen int
-	if payloadLen < MaxPaddingLength {
-		paddingLen = mrand.IntN(MaxPaddingLength-payloadLen) + 1
-	}
-	addrPortLen := AddrPortLength(dest)
-	varHeaderLen := addrPortLen + 2 + paddingLen + payloadLen
-
 	var fixedHeaderPlaintext [RequestHeaderFixedChunkLength]byte
 	fixedHeaderPlaintext[0] = HeaderTypeClient
 	binary.BigEndian.PutUint64(fixedHeaderPlaintext[1:9], uint64(time.Now().Unix()))
@@ -391,7 +364,7 @@ func WriteTCPRequest(w io.Writer, method *CipherMethod, pskList [][]byte, dest n
 	IncreaseNonce(writer.nonce[:])
 	handshakeBuf.Write(fixedChunk)
 
-	varHeaderBuf := buf.New()
+	varHeaderBuf := buf.NewWithSize(int32(varHeaderLen))
 	defer varHeaderBuf.Release()
 
 	if err := WriteAddressPort(varHeaderBuf, dest); err != nil {
@@ -423,11 +396,20 @@ func WriteTCPRequest(w io.Writer, method *CipherMethod, pskList [][]byte, dest n
 
 // ReadTCPResponse reads and verifies the server's handshake response and returns a reader for the stream.
 func ReadTCPResponse(r io.Reader, method *CipherMethod, psk []byte, clientSalt []byte) (buf.Reader, error) {
-	var serverSalt [32]byte
-	serverSaltSlice := serverSalt[:method.KeySaltLength]
-	if _, err := io.ReadFull(r, serverSaltSlice); err != nil {
-		return nil, err
+	fixedPlainLen := 1 + 8 + method.KeySaltLength + 2
+	chunkCipherLen := fixedPlainLen + AEADTagSize
+	headerLen := method.KeySaltLength + chunkCipherLen
+
+	// Single read call for Salt + Fixed-length response header chunk per SIP022 §3.1.4
+	var headerBuf [128]byte
+	headerSlice := headerBuf[:headerLen]
+	n, err := r.Read(headerSlice)
+	if err != nil || n < headerLen {
+		return nil, errors.New("failed to read complete server response header")
 	}
+
+	serverSaltSlice := headerSlice[:method.KeySaltLength]
+	chunkSlice := headerSlice[method.KeySaltLength:headerLen]
 
 	sessionKey := DeriveSessionSubKey(psk, serverSaltSlice, method.KeySaltLength)
 	aead, err := method.NewAEAD(sessionKey)
@@ -436,14 +418,6 @@ func ReadTCPResponse(r io.Reader, method *CipherMethod, psk []byte, clientSalt [
 	}
 
 	reader := NewStreamReader(r, aead)
-
-	fixedPlainLen := 1 + 8 + method.KeySaltLength + 2
-	chunkCipherLen := fixedPlainLen + AEADTagSize
-	var chunkBuf [64]byte
-	chunkSlice := chunkBuf[:chunkCipherLen]
-	if _, err := io.ReadFull(r, chunkSlice); err != nil {
-		return nil, err
-	}
 
 	decryptedFixed, err := reader.cipher.Open(chunkSlice[:0], reader.nonce[:], chunkSlice, nil)
 	if err != nil {
@@ -486,46 +460,190 @@ func ReadTCPResponse(r io.Reader, method *CipherMethod, psk []byte, clientSalt [
 	return reader, nil
 }
 
-// WriteTCPResponse writes the server handshake response and returns a body writer for server stream.
-func WriteTCPResponse(w io.Writer, method *CipherMethod, psk []byte, clientSalt []byte, initialPayload []byte) (buf.Writer, error) {
+// ServerStreamWriter lazily sends the response header along with the first payload chunk per SIP022 §3.1.2 & §3.1.4.
+type ServerStreamWriter struct {
+	mu           sync.Mutex
+	w            io.Writer
+	method       *CipherMethod
+	psk          []byte
+	clientSalt   []byte
+	streamWriter *StreamWriter
+}
+
+func NewServerStreamWriter(w io.Writer, method *CipherMethod, psk []byte, clientSalt []byte) *ServerStreamWriter {
+	return &ServerStreamWriter{
+		w:          w,
+		method:     method,
+		psk:        psk,
+		clientSalt: clientSalt,
+	}
+}
+
+func (s *ServerStreamWriter) sendHeaderWithFirstPayload(payload []byte) (*StreamWriter, error) {
 	var serverSalt [32]byte
-	serverSaltSlice := serverSalt[:method.KeySaltLength]
+	serverSaltSlice := serverSalt[:s.method.KeySaltLength]
 	if _, err := io.ReadFull(rand.Reader, serverSaltSlice); err != nil {
 		return nil, err
 	}
 
-	respKey := DeriveSessionSubKey(psk, serverSaltSlice, method.KeySaltLength)
-	respAead, err := method.NewAEAD(respKey)
+	respKey := DeriveSessionSubKey(s.psk, serverSaltSlice, s.method.KeySaltLength)
+	respAead, err := s.method.NewAEAD(respKey)
 	if err != nil {
 		return nil, err
 	}
-	writer := NewStreamWriter(w, respAead)
+	sw := NewStreamWriter(s.w, respAead)
 
-	respBuf := buf.New()
-	defer respBuf.Release()
+	totalHeaderLen := int32(s.method.KeySaltLength + 1 + 8 + s.method.KeySaltLength + 2 + AEADTagSize + len(payload) + AEADTagSize)
+	outBuf := buf.NewWithSize(totalHeaderLen)
+	defer outBuf.Release()
 
-	respBuf.Write(serverSaltSlice)
+	outBuf.Write(serverSaltSlice)
 
 	var fixedRespPlain [1 + 8 + 32 + 2]byte
-	fixedRespSlice := fixedRespPlain[:1+8+method.KeySaltLength+2]
+	fixedRespSlice := fixedRespPlain[:1+8+s.method.KeySaltLength+2]
 	fixedRespSlice[0] = HeaderTypeServer
 	binary.BigEndian.PutUint64(fixedRespSlice[1:9], uint64(time.Now().Unix()))
-	copy(fixedRespSlice[9:9+method.KeySaltLength], clientSalt)
-	binary.BigEndian.PutUint16(fixedRespSlice[9+method.KeySaltLength:11+method.KeySaltLength], uint16(len(initialPayload)))
+	copy(fixedRespSlice[9:9+s.method.KeySaltLength], s.clientSalt)
+	binary.BigEndian.PutUint16(fixedRespSlice[9+s.method.KeySaltLength:11+s.method.KeySaltLength], uint16(len(payload)))
 
-	fixedRespChunk := writer.cipher.Seal(nil, writer.nonce[:], fixedRespSlice, nil)
-	IncreaseNonce(writer.nonce[:])
-	respBuf.Write(fixedRespChunk)
+	fixedRespChunk := sw.cipher.Seal(nil, sw.nonce[:], fixedRespSlice, nil)
+	IncreaseNonce(sw.nonce[:])
+	outBuf.Write(fixedRespChunk)
 
-	if len(initialPayload) > 0 {
-		initialChunk := writer.cipher.Seal(nil, writer.nonce[:], initialPayload, nil)
-		IncreaseNonce(writer.nonce[:])
-		respBuf.Write(initialChunk)
+	if len(payload) > 0 {
+		payloadChunk := sw.cipher.Seal(nil, sw.nonce[:], payload, nil)
+		IncreaseNonce(sw.nonce[:])
+		outBuf.Write(payloadChunk)
 	}
 
-	if _, err := w.Write(respBuf.Bytes()); err != nil {
+	if _, err := s.w.Write(outBuf.Bytes()); err != nil {
 		return nil, err
 	}
+	return sw, nil
+}
 
-	return writer, nil
+func (s *ServerStreamWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	if mb.IsEmpty() {
+		return nil
+	}
+
+	if s.streamWriter == nil {
+		s.mu.Lock()
+		if s.streamWriter == nil {
+			firstBuf := mb[0]
+			firstBytes := firstBuf.Bytes()
+			chunkSize := len(firstBytes)
+			if chunkSize > MaxPacketSize {
+				chunkSize = MaxPacketSize
+			}
+			firstPayload := firstBytes[:chunkSize]
+			sw, err := s.sendHeaderWithFirstPayload(firstPayload)
+			if err != nil {
+				s.mu.Unlock()
+				buf.ReleaseMulti(mb)
+				return err
+			}
+			s.streamWriter = sw
+
+			firstBuf.Advance(int32(chunkSize))
+			if firstBuf.IsEmpty() {
+				firstBuf.Release()
+				mb = mb[1:]
+			}
+		}
+		s.mu.Unlock()
+		if len(mb) == 0 {
+			return nil
+		}
+	}
+
+	return s.streamWriter.WriteMultiBuffer(mb)
+}
+
+func (s *ServerStreamWriter) Write(p []byte) (int, error) {
+	n := len(p)
+	if s.streamWriter == nil {
+		s.mu.Lock()
+		if s.streamWriter == nil {
+			chunkSize := len(p)
+			if chunkSize > MaxPacketSize {
+				chunkSize = MaxPacketSize
+			}
+			firstPayload := p[:chunkSize]
+			sw, err := s.sendHeaderWithFirstPayload(firstPayload)
+			if err != nil {
+				s.mu.Unlock()
+				return 0, err
+			}
+			s.streamWriter = sw
+			p = p[chunkSize:]
+		}
+		s.mu.Unlock()
+		if len(p) == 0 {
+			return n, nil
+		}
+	}
+
+	_, err := s.streamWriter.Write(p)
+	return n, err
+}
+
+func (s *ServerStreamWriter) Close() error {
+	if s.streamWriter == nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if s.streamWriter == nil {
+			sw, err := s.sendHeaderWithFirstPayload(nil)
+			if err != nil {
+				return err
+			}
+			s.streamWriter = sw
+		}
+	}
+	return nil
+}
+
+// InitServerStream decrypts the client request header, verifies the timestamp and replay filter,
+// and returns a StreamReader for subsequent stream chunks.
+func InitServerStream(conn net.Conn, method *CipherMethod, psk, saltSlice []byte, salt [32]byte, fixedChunk []byte, saltFilter *antireplay.ReplayFilter[[32]byte]) (*StreamReader, *ClientRequestHeader, error) {
+	sessionKey := DeriveSessionSubKey(psk, saltSlice, method.KeySaltLength)
+	aead, err := method.NewAEAD(sessionKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	reader := NewStreamReader(conn, aead)
+
+	reqHeader, err := ReadClientRequestHeaderWithFixed(reader, fixedChunk)
+	if err != nil {
+		return nil, nil, err
+	}
+	_ = conn.SetReadDeadline(time.Time{})
+
+	if !saltFilter.Check(salt) {
+		return nil, nil, ErrSaltNotUnique
+	}
+	return reader, reqHeader, nil
+}
+
+func TransportTCP(ctx context.Context, sessionPolicy policy.Session, reader buf.Reader, writer buf.Writer, link *transport.Link) error {
+	ctx, cancel := context.WithCancel(ctx)
+	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+
+	requestDone := func() error {
+		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
+		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
+	}
+
+	responseDone := func() error {
+		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
+		if c, ok := writer.(io.Closer); ok {
+			defer c.Close()
+		}
+		return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
+	}
+
+	responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
+	return task.Run(ctx, requestDone, responseDoneAndCloseWriter)
 }

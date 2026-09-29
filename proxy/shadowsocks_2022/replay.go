@@ -6,8 +6,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/transport"
 )
 
 const (
@@ -74,30 +77,42 @@ func (f *SlidingWindow) CheckAndAdd(counter uint64) bool {
 
 type ServerUDPSession struct {
 	sync.Mutex
-	SessionID    uint64
-	RemoteCipher atomic.Pointer[cipher.AEAD]
-	Window       SlidingWindow
-	User         *protocol.MemoryUser
-	UserPSK      []byte
-	LastActive   atomic.Int64 // Unix timestamp in seconds
+	SessionID  uint64
+	Window     *SlidingWindow
+	User       *protocol.MemoryUser
+	UserPSK    []byte
+	LastActive atomic.Int64 // Unix timestamp in seconds
+
+	clientBodyCipher cipher.AEAD
 
 	ServerSessionID   uint64
 	ServerPacketID    atomic.Uint64
-	ServerCipher      cipher.AEAD
-	ServerBlockCipher cipher.Block
-	ServerChaCha      cipher.AEAD
+	serverBodyCipher  cipher.AEAD
+	serverHeaderBlock cipher.Block
+	serverChaCha      cipher.AEAD
+
+	manager     *UDPSessionManager
+	link        atomic.Pointer[transport.Link]
+	timer       *signal.ActivityTimer
+	currentConn atomic.Value // stores stat.Connection
 }
 
-func (s *ServerUDPSession) GetRemoteCipher() cipher.AEAD {
-	ptr := s.RemoteCipher.Load()
-	if ptr == nil {
-		return nil
+func (s *ServerUDPSession) CheckPacketID(packetID uint64) bool {
+	s.Lock()
+	defer s.Unlock()
+	if s.Window == nil {
+		s.Window = new(SlidingWindow)
 	}
-	return *ptr
+	return s.Window.Check(packetID)
 }
 
-func (s *ServerUDPSession) SetRemoteCipher(c cipher.AEAD) {
-	s.RemoteCipher.Store(&c)
+func (s *ServerUDPSession) AddPacketID(packetID uint64) {
+	s.Lock()
+	defer s.Unlock()
+	if s.Window == nil {
+		s.Window = new(SlidingWindow)
+	}
+	s.Window.Add(packetID)
 }
 
 type UDPSessionManager struct {
@@ -122,6 +137,7 @@ func (m *UDPSessionManager) GetOrCreate(sessionID uint64) *ServerUDPSession {
 
 	s := &ServerUDPSession{
 		SessionID: sessionID,
+		manager:   m,
 	}
 	s.LastActive.Store(now)
 
@@ -148,6 +164,7 @@ func (m *UDPSessionManager) cleanup(now int64) {
 	m.sessions.Range(func(k uint64, v *ServerUDPSession) bool {
 		if now-v.LastActive.Load() > timeoutSec {
 			m.sessions.Delete(k)
+			v.Close()
 		}
 		return true
 	})
@@ -155,4 +172,12 @@ func (m *UDPSessionManager) cleanup(now int64) {
 
 func (m *UDPSessionManager) Delete(sessionID uint64) {
 	m.sessions.Delete(sessionID)
+}
+
+func (m *UDPSessionManager) EncodeServerPacket(method *CipherMethod, psk []byte, clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
+	sessionItem := m.GetOrCreate(clientSessionID)
+	if err := sessionItem.EnsureServerState(method, psk); err != nil {
+		return nil, err
+	}
+	return sessionItem.EncodeServerPacket(method, clientSessionID, dest, payload)
 }
