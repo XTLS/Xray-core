@@ -7,7 +7,7 @@ import (
 	"github.com/xtls/xray-core/proxy/tun"
 )
 
-func TestTunConfigStrictRoute(t *testing.T) {
+func TestTunConfigAutoSystemWFP(t *testing.T) {
 	creator := func() Buildable {
 		return new(TunConfig)
 	}
@@ -19,9 +19,9 @@ func TestTunConfigStrictRoute(t *testing.T) {
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500},
 		},
 		{
-			Input:  `{"name": "xray0", "strictRoute": true}`,
+			Input:  `{"name": "xray0", "autoSystemWFP": true}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, StrictRoute: true},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemWfp: true},
 		},
 	})
 }

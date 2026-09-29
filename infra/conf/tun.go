@@ -21,7 +21,7 @@ type TunConfig struct {
 	AutoSystemRoutingTable []string `json:"autoSystemRoutingTable"`
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
 	AutoSystemDNS          bool     `json:"autoSystemDNS"`
-	StrictRoute            bool     `json:"strictRoute"`
+	AutoSystemWFP          bool     `json:"autoSystemWFP"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -34,7 +34,7 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
 		AutoSystemDns:          v.AutoSystemDNS,
-		StrictRoute:            v.StrictRoute,
+		AutoSystemWfp:          v.AutoSystemWFP,
 	}
 	if v.AutoOutboundsInterface != nil {
 		config.AutoOutboundsInterface = *v.AutoOutboundsInterface
