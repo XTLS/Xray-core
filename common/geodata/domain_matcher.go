@@ -86,6 +86,13 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 			if err != nil {
 				return nil, err
 			}
+			n, size := 0, 0
+			for _, d := range domains {
+				if d.Type == Domain_Full || d.Type == Domain_Domain {
+					n, size = n+1, size+len(d.Value)
+				}
+			}
+			g.Grow(n, size) // peak mem
 			for j, d := range domains {
 				domains[j] = nil // peak mem
 				m, err := parseDomain(d)

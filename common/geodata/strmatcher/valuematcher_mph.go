@@ -16,6 +16,17 @@ func NewMphValueMatcher() *MphValueMatcher {
 	return new(MphValueMatcher)
 }
 
+// Grow makes room for n more `full` or `domain` patterns of total length size.
+func (g *MphValueMatcher) Grow(n, size int) {
+	if n == 0 {
+		return
+	}
+	if g.mph == nil {
+		g.mph = NewMphMatcherGroup()
+	}
+	g.mph.grow(n, size)
+}
+
 // Add implements ValueMatcher.Add.
 func (g *MphValueMatcher) Add(matcher Matcher, value uint32) {
 	switch matcher := matcher.(type) {
@@ -46,7 +57,9 @@ func (g *MphValueMatcher) Add(matcher Matcher, value uint32) {
 func (g *MphValueMatcher) Build() error {
 	if g.mph != nil {
 		runtime.GC() // peak mem
-		g.mph.Build()
+		if err := g.mph.Build(); err != nil {
+			return err
+		}
 	}
 	runtime.GC() // peak mem
 	if g.ac != nil {
@@ -58,23 +71,17 @@ func (g *MphValueMatcher) Build() error {
 
 // Match implements ValueMatcher.Match.
 func (g *MphValueMatcher) Match(input string) []uint32 {
-	result := make([][]uint32, 0, 5)
+	var result []uint32
 	if g.mph != nil {
-		if matches := g.mph.Match(input); len(matches) > 0 {
-			result = append(result, matches)
-		}
+		result = g.mph.Match(input) // a new slice, returned without another copy
 	}
 	if g.ac != nil {
-		if matches := g.ac.Match(input); len(matches) > 0 {
-			result = append(result, matches)
-		}
+		result = append(result, g.ac.Match(input)...)
 	}
 	if g.regex != nil {
-		if matches := g.regex.Match(input); len(matches) > 0 {
-			result = append(result, matches)
-		}
+		result = append(result, g.regex.Match(input)...)
 	}
-	return CompositeMatches(result)
+	return result
 }
 
 // MatchAny implements ValueMatcher.MatchAny.
