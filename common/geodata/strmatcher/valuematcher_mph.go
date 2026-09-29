@@ -94,21 +94,21 @@ func (g *MphValueMatcher) matchAnyHashed(input string, parents []mphSuffix, h, m
 	return g.regex != nil && g.regex.MatchAny(input)
 }
 
-// MphSetGroup matches an input against several built MphValueMatchers, each bound to one value, as their
-// MatchAny would, and hashes the input once for all of them.
-type MphSetGroup struct {
+// MphValueMatcherCombiner combines several built MphValueMatchers, each bound to one value, and matches an input
+// against them as their MatchAny would, hashing the input once for all of them.
+type MphValueMatcherCombiner struct {
 	matchers []*MphValueMatcher
 	values   []uint32
 }
 
 // Add adds a built matcher that stands for value.
-func (s *MphSetGroup) Add(m *MphValueMatcher, value uint32) {
+func (s *MphValueMatcherCombiner) Add(m *MphValueMatcher, value uint32) {
 	s.matchers = append(s.matchers, m)
 	s.values = append(s.values, value)
 }
 
 // Match returns the values of the matchers that match input, in Add order.
-func (s *MphSetGroup) Match(input string) []uint32 {
+func (s *MphValueMatcherCombiner) Match(input string) []uint32 {
 	if len(s.matchers) == 0 {
 		return nil
 	}
@@ -125,7 +125,7 @@ func (s *MphSetGroup) Match(input string) []uint32 {
 }
 
 // MatchAny returns true as soon as one matcher matches input.
-func (s *MphSetGroup) MatchAny(input string) bool {
+func (s *MphValueMatcherCombiner) MatchAny(input string) bool {
 	switch len(s.matchers) {
 	case 0:
 		return false

@@ -48,7 +48,7 @@ func bitsOnes(i int) int {
 	return n
 }
 
-func TestMphSetGroup(t *testing.T) {
+func TestMphValueMatcherCombiner(t *testing.T) {
 	build := func(matchers ...Matcher) *MphValueMatcher {
 		m := NewMphValueMatcher()
 		for _, x := range matchers {
@@ -78,7 +78,7 @@ func TestMphSetGroup(t *testing.T) {
 		build(),
 		build(DomainMatcher("com"), DomainMatcher("a.b.c.d.e.f.g.h.i.j.k.l.m.n.o.p.q.r.s")),
 	}
-	var s MphSetGroup
+	var s MphValueMatcherCombiner
 	for i, m := range matchers {
 		s.Add(m, uint32(10+i))
 	}

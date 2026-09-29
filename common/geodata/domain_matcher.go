@@ -99,12 +99,12 @@ func (f *MphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatch
 	return g, nil
 }
 
-type CompactDomainMatcherFactory struct {
+type CompactMphDomainMatcherFactory struct {
 	sync.Mutex
 	shared *utils.WeakCacheMap[string, strmatcher.MphValueMatcher]
 }
 
-func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (*strmatcher.MphValueMatcher, error) {
+func (f *CompactMphDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (*strmatcher.MphValueMatcher, error) {
 	key := rule.File + ":" + rule.Code + "@" + rule.Attrs
 
 	f.Lock()
@@ -128,11 +128,11 @@ func (f *CompactDomainMatcherFactory) getOrCreateFrom(rule *GeoSiteRule) (*strma
 }
 
 // BuildMatcher implements DomainMatcherFactory.
-func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatcher, error) {
+func (f *CompactMphDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainMatcher, error) {
 	if len(rules) == 0 {
 		return nil, errors.New("empty domain rule list")
 	}
-	compact := new(CompactDomainMatcher)
+	compact := new(CompactMphDomainMatcher)
 	for i, r := range rules {
 		switch v := r.Value.(type) {
 		case *DomainRule_Custom:
@@ -149,7 +149,7 @@ func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainM
 			if err != nil {
 				return nil, err
 			}
-			compact.sets.Add(m, uint32(i))
+			compact.combiner.Add(m, uint32(i))
 		default:
 			panic("unknown domain rule type")
 		}
@@ -157,14 +157,14 @@ func (f *CompactDomainMatcherFactory) BuildMatcher(rules []*DomainRule) (DomainM
 	return compact, nil
 }
 
-type CompactDomainMatcher struct {
-	custom strmatcher.ValueMatcher
-	sets   strmatcher.MphSetGroup
+type CompactMphDomainMatcher struct {
+	custom   strmatcher.ValueMatcher
+	combiner strmatcher.MphValueMatcherCombiner
 }
 
 // Match implements DomainMatcher.
-func (c *CompactDomainMatcher) Match(input string) []uint32 {
-	result := c.sets.Match(input)
+func (c *CompactMphDomainMatcher) Match(input string) []uint32 {
+	result := c.combiner.Match(input)
 	if c.custom != nil {
 		result = append(c.custom.Match(input), result...)
 	}
@@ -172,11 +172,11 @@ func (c *CompactDomainMatcher) Match(input string) []uint32 {
 }
 
 // MatchAny implements DomainMatcher.
-func (c *CompactDomainMatcher) MatchAny(input string) bool {
+func (c *CompactMphDomainMatcher) MatchAny(input string) bool {
 	if c.custom != nil && c.custom.MatchAny(input) {
 		return true
 	}
-	return c.sets.MatchAny(input)
+	return c.combiner.MatchAny(input)
 }
 
 // loadSiteMatchers calls add with a matcher for every domain of the geosite rule and logs the invalid ones.
@@ -214,7 +214,7 @@ func parseDomain(d *Domain) (strmatcher.Matcher, error) {
 func newDomainMatcherFactory() DomainMatcherFactory {
 	switch runtime.GOOS {
 	case "ios", "android":
-		return &CompactDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.MphValueMatcher]()}
+		return &CompactMphDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.MphValueMatcher]()}
 	default:
 		return &MphDomainMatcherFactory{shared: utils.NewWeakCacheMap[string, strmatcher.MphValueMatcher]()}
 	}
