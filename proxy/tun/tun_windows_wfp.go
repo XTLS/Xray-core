@@ -185,14 +185,18 @@ func condition(field *windows.GUID, typ uint32, value uintptr) fwpmFilterConditi
 //     queries over HTTPS or TLS, so there its DNS Client service may not
 //     connect outside the TUN at all, except for name resolution on the local
 //     link (mDNS, LLMNR).
-//   - ipv6: no IPv6 at all, in either direction, for a TUN that cannot carry
-//     it, except loopback and what Windows itself needs on the local link
-//     (neighbor and multicast listener discovery, DHCPv6), none of which can
-//     leave it.
+//   - ipv4, ipv6: no IPv4, or no IPv6, at all, in either direction, for a TUN
+//     that no route of it leads to, except loopback and what Windows itself
+//     needs on the local link (DHCP, and for IPv6 neighbor and multicast
+//     listener discovery), none of which can leave it. The TUN carries what
+//     is routed to it even without an address of that IP version in gateway:
+//     Windows gives it link-local ones itself, an IPv6 one at once, an IPv4
+//     one from 169.254.0.0/16 after some seconds (until then, IPv4 routed to
+//     the TUN is unreachable).
 //
 // The filters live in a dynamic WFP session: closing the returned engine handle
 // with closeWFPEngine deletes them, and so does Windows when the process dies.
-func blockLeaks(tun winipcfg.LUID, dns, ipv6 bool) (windows.Handle, error) {
+func blockLeaks(tun winipcfg.LUID, dns, ipv4, ipv6 bool) (windows.Handle, error) {
 	engine, err := openWFPEngine()
 	if err != nil {
 		return 0, err
@@ -201,7 +205,7 @@ func blockLeaks(tun winipcfg.LUID, dns, ipv6 bool) (windows.Handle, error) {
 		closeWFPEngine(engine)
 		return 0, errors.New("FwpmTransactionBegin0 failed").Base(err)
 	}
-	err = addLeakFilters(engine, tun, dns, ipv6)
+	err = addLeakFilters(engine, tun, dns, ipv4, ipv6)
 	if err == nil {
 		if err = fwpmResult(procFwpmTransactionCommit0.Call(uintptr(engine))); err != nil {
 			err = errors.New("FwpmTransactionCommit0 failed").Base(err)
@@ -238,7 +242,7 @@ func closeWFPEngine(engine windows.Handle) {
 
 // addLeakFilters adds the filters of blockLeaks in a sublayer of their own.
 // blockLeaks runs it in a transaction, so that they take effect all at once.
-func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv6 bool) error {
+func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv4, ipv6 bool) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -319,7 +323,7 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv6 bool) er
 	// may also send the queries for an interface's servers over HTTPS or TLS,
 	// out through that interface and to any port. So there it may only
 	// connect through the TUN, except for mDNS and LLMNR, which stay on the
-	// local link (over IPv6 only while IPv6 is not blocked altogether).
+	// local link (over an IP version only while it is not blocked altogether).
 	// Earlier versions only query port 53, and may run the service in one
 	// process with others, which the filters would catch as well. Like
 	// Windows Firewall's rules for it, they recognize the service by its SID,
@@ -339,7 +343,7 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv6 bool) er
 			key       *windows.GUID
 			localLink bool
 		}{
-			{&fwpmLayerALEAuthConnectV4, true},
+			{&fwpmLayerALEAuthConnectV4, !ipv4},
 			{&fwpmLayerALEAuthConnectV6, !ipv6},
 		} {
 			if err := add(layer.key, "permit the DNS Client service through the TUN", 0, fwpActionPermit, 3, dnsClient, onTUN(&fwpmConditionIPLocalInterface), onTUN(&fwpmConditionIPNexthopInterface)); err != nil {
@@ -356,14 +360,34 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv6 bool) er
 		}
 	}
 
-	if ipv6 {
-		// Both directions: replies to a connection accepted from outside
-		// would leave through the physical link as well.
-		loopback := fwpmFilterCondition0{
-			fieldKey:       fwpmConditionFlags,
-			matchType:      fwpMatchFlagsAllSet,
-			conditionValue: fwpValue0{typ: fwpUint32, value: fwpConditionFlagIsLoopback},
+	// Both directions: replies to a connection accepted from outside would
+	// leave through the physical link as well.
+	loopback := fwpmFilterCondition0{
+		fieldKey:       fwpmConditionFlags,
+		matchType:      fwpMatchFlagsAllSet,
+		conditionValue: fwpValue0{typ: fwpUint32, value: fwpConditionFlagIsLoopback},
+	}
+	if ipv4 {
+		// DHCP keeps the addresses of the other interfaces, which Xray's own
+		// connections use.
+		dhcp := []fwpmFilterCondition0{
+			condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_UDP),
+			condition(&fwpmConditionIPLocalPort, fwpUint16, 68),
+			condition(&fwpmConditionIPRemotePort, fwpUint16, 67),
 		}
+		for _, layer := range []*windows.GUID{&fwpmLayerALEAuthConnectV4, &fwpmLayerALEAuthRecvAcceptV4} {
+			if err := add(layer, "permit IPv4 loopback", 0, fwpActionPermit, 1, loopback); err != nil {
+				return err
+			}
+			if err := add(layer, "permit DHCP", 0, fwpActionPermit, 1, dhcp...); err != nil {
+				return err
+			}
+			if err := add(layer, "block IPv4", 0, fwpActionBlock, 0); err != nil {
+				return err
+			}
+		}
+	}
+	if ipv6 {
 		// Neighbor and multicast listener discovery, ICMPv6 130-137 and 143,
 		// whose type and code sit where the local and remote port are.
 		discovery := []fwpmFilterCondition0{condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_ICMPV6)}

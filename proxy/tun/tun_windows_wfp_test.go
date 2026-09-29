@@ -114,7 +114,7 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := addLeakFilters(engine, loopback, true, true); err != nil {
+	if err := addLeakFilters(engine, loopback, true, true, true); err != nil {
 		skipUnlessElevated(err)
 	}
 }

@@ -247,17 +247,22 @@ startOver:
 	}
 
 	// With autoSystemWfpBlockLeak, once the system routes lead to the TUN,
-	// keep DNS if dns is set, and IPv6 if the TUN cannot carry it (no IPv6
-	// address, or no IPv6 route to it), from leaving through the other
-	// interfaces.
-	if blockDNS, blockIPv6 := len(dns) > 0, !address6 || !route6; t.options.AutoSystemWfpBlockLeak && (route4 || route6) && (blockDNS || blockIPv6) {
-		if t.wfp, err = blockLeaks(t.luid, blockDNS, blockIPv6); err != nil {
-			what := "DNS and IPv6"
-			if !blockIPv6 {
-				what = "DNS"
-			} else if !blockDNS {
-				what = "IPv6"
+	// keep DNS if dns is set, and an IP version no route of which leads to
+	// the TUN, from leaving through the other interfaces. Addresses do not
+	// matter: without one of a version in gateway, Windows gives the TUN a
+	// link-local one.
+	if blockDNS, blockIPv4, blockIPv6 := len(dns) > 0, !route4, !route6; t.options.AutoSystemWfpBlockLeak && (route4 || route6) && (blockDNS || blockIPv4 || blockIPv6) {
+		if t.wfp, err = blockLeaks(t.luid, blockDNS, blockIPv4, blockIPv6); err != nil {
+			var blocked []string
+			for _, b := range []struct {
+				on   bool
+				what string
+			}{{blockDNS, "DNS"}, {blockIPv4, "IPv4"}, {blockIPv6, "IPv6"}} {
+				if b.on {
+					blocked = append(blocked, b.what)
+				}
 			}
+			what := strings.Join(blocked, " and ")
 			// Rather no TUN than a leaking one. Before Windows 10 the filters are
 			// untested, and sing-box's broke its TUN there (SagerNet/sing-box#3659),
 			// so older versions only get a warning.
@@ -266,7 +271,7 @@ startOver:
 			}
 			errors.LogWarningInner(context.Background(), err, "[tun] unable to block ", what, " outside the TUN, leaks are possible")
 		} else {
-			errors.LogInfo(context.Background(), "[tun] outside the TUN, blocked DNS: ", blockDNS, ", blocked IPv6: ", blockIPv6)
+			errors.LogInfo(context.Background(), "[tun] outside the TUN, blocked DNS: ", blockDNS, ", blocked IPv4: ", blockIPv4, ", blocked IPv6: ", blockIPv6)
 			if blockDNS {
 				covered := slices.Clone(addresses)
 				for _, route := range routesData {
