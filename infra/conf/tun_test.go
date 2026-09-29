@@ -11,7 +11,6 @@ func TestTunConfigStrictRoute(t *testing.T) {
 	creator := func() Buildable {
 		return new(TunConfig)
 	}
-	enabled, disabled := true, false
 
 	runMultiTestCase(t, []TestCase{
 		{
@@ -20,14 +19,9 @@ func TestTunConfigStrictRoute(t *testing.T) {
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500},
 		},
 		{
-			Input:  `{"name": "xray0", "strictRoute": false}`,
-			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, StrictRoute: &disabled},
-		},
-		{
 			Input:  `{"name": "xray0", "strictRoute": true}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, StrictRoute: &enabled},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, StrictRoute: true},
 		},
 	})
 }

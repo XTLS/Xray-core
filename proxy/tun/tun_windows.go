@@ -246,11 +246,10 @@ startOver:
 		}
 	}
 
-	// Once the system routes lead to the TUN, keep DNS if dns is set, and IPv6
-	// if the TUN cannot carry it (no IPv6 address, or no IPv6 route to it),
-	// from leaving through the other interfaces, unless strictRoute is off.
-	strictRoute := t.options.StrictRoute == nil || *t.options.StrictRoute
-	if blockDNS, blockIPv6 := len(dns) > 0, !address6 || !route6; strictRoute && (route4 || route6) && (blockDNS || blockIPv6) {
+	// With strictRoute, once the system routes lead to the TUN, keep DNS if
+	// dns is set, and IPv6 if the TUN cannot carry it (no IPv6 address, or no
+	// IPv6 route to it), from leaving through the other interfaces.
+	if blockDNS, blockIPv6 := len(dns) > 0, !address6 || !route6; t.options.StrictRoute && (route4 || route6) && (blockDNS || blockIPv6) {
 		if t.wfp, err = blockLeaks(t.luid, blockDNS, blockIPv6); err != nil {
 			what := "DNS and IPv6"
 			if !blockIPv6 {
