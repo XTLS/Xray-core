@@ -6,16 +6,16 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 )
 
-func buildNoiseTag(tag string) (*noise.Config, error) {
-	msg, err := (&NoiseMask{Noise: []NoiseItem{{Tag: tag}}}).Build()
+func buildNoiseExp(exp string) (*noise.Config, error) {
+	msg, err := (&NoiseMask{Noise: []NoiseItem{{Exp: exp}}}).Build()
 	if err != nil {
 		return nil, err
 	}
 	return msg.(*noise.Config), nil
 }
 
-func TestNoiseTag(t *testing.T) {
-	cfg, err := buildNoiseTag("<b 0d0a0d0a><t><r 24><rc 20-40><rd 8><c><n>")
+func TestNoiseExp(t *testing.T) {
+	cfg, err := buildNoiseExp("<b 0d0a0d0a><t><r 24><rc 20-40><rd 8><c><n>")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,8 +44,8 @@ func TestNoiseTag(t *testing.T) {
 	}
 }
 
-func TestNoiseTagStripsHexPrefix(t *testing.T) {
-	cfg, err := buildNoiseTag("<b 0x16030100>")
+func TestNoiseExpStripsHexPrefix(t *testing.T) {
+	cfg, err := buildNoiseExp("<b 0x16030100>")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +54,11 @@ func TestNoiseTagStripsHexPrefix(t *testing.T) {
 	}
 }
 
-func TestNoiseTagWhitespace(t *testing.T) {
-	if _, err := buildNoiseTag("  <b 00>  <t>  "); err != nil {
+func TestNoiseExpWhitespace(t *testing.T) {
+	if _, err := buildNoiseExp("  <b 00>  <t>  "); err != nil {
 		t.Errorf("surrounding whitespace should be allowed: %v", err)
 	}
-	cfg, err := buildNoiseTag("<b 0d 0a 0d 0a>")
+	cfg, err := buildNoiseExp("<b 0d 0a 0d 0a>")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,8 +67,8 @@ func TestNoiseTagWhitespace(t *testing.T) {
 	}
 }
 
-func TestNoiseTagRejects(t *testing.T) {
-	for _, tag := range []string{
+func TestNoiseExpRejects(t *testing.T) {
+	for _, exp := range []string{
 		"<x 1>",
 		"<b>",
 		"<b zz>",
@@ -83,14 +83,14 @@ func TestNoiseTagRejects(t *testing.T) {
 		"<t> tail",
 		"<t><b>",
 	} {
-		if _, err := buildNoiseTag(tag); err == nil {
-			t.Errorf("expected an error for %q", tag)
+		if _, err := buildNoiseExp(exp); err == nil {
+			t.Errorf("expected an error for %q", exp)
 		}
 	}
 }
 
-func TestNoiseTagConflicts(t *testing.T) {
-	if _, err := (&NoiseMask{Noise: []NoiseItem{{Tag: "<t>", Rand: Int32Range{From: 10, To: 20}}}}).Build(); err == nil {
-		t.Error("tag with rand should be rejected")
+func TestNoiseExpConflicts(t *testing.T) {
+	if _, err := (&NoiseMask{Noise: []NoiseItem{{Exp: "<t>", Rand: Int32Range{From: 10, To: 20}}}}).Build(); err == nil {
+		t.Error("exp with rand should be rejected")
 	}
 }

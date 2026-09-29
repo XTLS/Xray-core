@@ -299,7 +299,7 @@ type NoiseItem struct {
 	RandRange *Int32Range     `json:"randRange"`
 	Type      string          `json:"type"`
 	Packet    json.RawMessage `json:"packet"`
-	Tag       string          `json:"tag"`
+	Exp       string          `json:"exp"`
 	Delay     Int32Range      `json:"delay"`
 }
 
@@ -311,11 +311,11 @@ type NoiseMask struct {
 func (c *NoiseMask) Build() (proto.Message, error) {
 	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
 	for _, item := range c.Noise {
-		if item.Tag != "" {
+		if item.Exp != "" {
 			if len(item.Packet) > 0 || item.Rand.To > 0 {
-				return nil, errors.New(`noise item "tag" can't be combined with "packet" or "rand"`)
+				return nil, errors.New(`noise item "exp" can't be combined with "packet" or "rand"`)
 			}
-			segments, err := parseNoiseTag(item.Tag)
+			segments, err := parseNoiseExp(item.Exp)
 			if err != nil {
 				return nil, err
 			}
@@ -358,21 +358,21 @@ func (c *NoiseMask) Build() (proto.Message, error) {
 	}, nil
 }
 
-var noiseTagPattern = regexp.MustCompile(`<\s*([a-z]+)(?:\s+([^>]*?))?\s*>`)
+var noiseExpPattern = regexp.MustCompile(`<\s*([a-z]+)(?:\s+([^>]*?))?\s*>`)
 
-func parseNoiseTag(tag string) ([]*noise.Segment, error) {
+func parseNoiseExp(exp string) ([]*noise.Segment, error) {
 	var segments []*noise.Segment
-	matches := noiseTagPattern.FindAllStringSubmatchIndex(tag, -1)
+	matches := noiseExpPattern.FindAllStringSubmatchIndex(exp, -1)
 	last := 0
 	for _, m := range matches {
-		if strings.TrimSpace(tag[last:m[0]]) != "" {
-			return nil, errors.New("invalid noise tag near ", tag[last:m[0]])
+		if strings.TrimSpace(exp[last:m[0]]) != "" {
+			return nil, errors.New("invalid noise exp near ", exp[last:m[0]])
 		}
 		last = m[1]
-		key := tag[m[2]:m[3]]
+		key := exp[m[2]:m[3]]
 		arg := ""
 		if m[4] >= 0 {
-			arg = tag[m[4]:m[5]]
+			arg = exp[m[4]:m[5]]
 		}
 		segment, err := buildNoiseSegment(key, arg)
 		if err != nil {
@@ -380,11 +380,11 @@ func parseNoiseTag(tag string) ([]*noise.Segment, error) {
 		}
 		segments = append(segments, segment)
 	}
-	if strings.TrimSpace(tag[last:]) != "" {
-		return nil, errors.New("invalid noise tag near ", tag[last:])
+	if strings.TrimSpace(exp[last:]) != "" {
+		return nil, errors.New("invalid noise exp near ", exp[last:])
 	}
 	if len(segments) == 0 {
-		return nil, errors.New("empty noise tag: ", tag)
+		return nil, errors.New("empty noise exp: ", exp)
 	}
 	return segments, nil
 }
@@ -392,14 +392,14 @@ func parseNoiseTag(tag string) ([]*noise.Segment, error) {
 func buildNoiseSegment(key, arg string) (*noise.Segment, error) {
 	sizeSegment := func(kind noise.Segment_Kind) (*noise.Segment, error) {
 		if arg == "" {
-			return nil, errors.New("noise tag <", key, "> needs a size")
+			return nil, errors.New("<", key, "> in noise exp needs a size")
 		}
 		lo, hi, err := ParseRangeString(arg)
 		if err != nil {
 			return nil, err
 		}
 		if lo < 0 || hi < lo || hi > 65535 {
-			return nil, errors.New("invalid size in noise tag: ", arg)
+			return nil, errors.New("invalid size in noise exp: ", arg)
 		}
 		return &noise.Segment{Kind: kind, MinSize: int64(lo), MaxSize: int64(hi)}, nil
 	}
@@ -407,11 +407,11 @@ func buildNoiseSegment(key, arg string) (*noise.Segment, error) {
 	case "b":
 		hexStr := strings.TrimPrefix(strings.TrimPrefix(strings.Join(strings.Fields(arg), ""), "0x"), "0X")
 		if len(hexStr) == 0 {
-			return nil, errors.New("empty bytes in noise tag")
+			return nil, errors.New("empty bytes in noise exp")
 		}
 		raw, err := hex.DecodeString(hexStr)
 		if err != nil {
-			return nil, errors.New("invalid hex in noise tag: ", arg).Base(err)
+			return nil, errors.New("invalid hex in noise exp: ", arg).Base(err)
 		}
 		return &noise.Segment{Kind: noise.Segment_BYTES, Bytes: raw}, nil
 	case "r":
@@ -422,21 +422,21 @@ func buildNoiseSegment(key, arg string) (*noise.Segment, error) {
 		return sizeSegment(noise.Segment_RANDOM_DIGIT)
 	case "t":
 		if arg != "" {
-			return nil, errors.New("noise tag <t> takes no argument")
+			return nil, errors.New("<t> in noise exp takes no argument")
 		}
 		return &noise.Segment{Kind: noise.Segment_TIMESTAMP}, nil
 	case "c":
 		if arg != "" {
-			return nil, errors.New("noise tag <c> takes no argument")
+			return nil, errors.New("<c> in noise exp takes no argument")
 		}
 		return &noise.Segment{Kind: noise.Segment_COUNTER}, nil
 	case "n":
 		if arg != "" {
-			return nil, errors.New("noise tag <n> takes no argument")
+			return nil, errors.New("<n> in noise exp takes no argument")
 		}
 		return &noise.Segment{Kind: noise.Segment_NONCE}, nil
 	default:
-		return nil, errors.New("unknown noise tag <", key, ">")
+		return nil, errors.New("unknown <", key, "> in noise exp")
 	}
 }
 
