@@ -283,9 +283,8 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 	}
 
 	if len(reqHeader.EarlyData) > 0 {
-		earlyBuf := buf.New()
-		earlyBuf.Write(reqHeader.EarlyData)
-		if err := link.Writer.WriteMultiBuffer(buf.MultiBuffer{earlyBuf}); err != nil {
+		mb := buf.MergeBytes(nil, reqHeader.EarlyData)
+		if err := link.Writer.WriteMultiBuffer(mb); err != nil {
 			return err
 		}
 	}
@@ -361,15 +360,11 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 			} else {
 				sessionItem.Unlock()
 				// Decrypt EIH
-				identitySubkey := DeriveIdentitySubKey(i.masterPSK, rawHeader[:8], i.method.KeySaltLength)
-				idBlock, err := i.method.NewBlock(identitySubkey)
-				if err != nil {
-					b.Release()
-					continue
-				}
-
 				var decryptedHash [16]byte
-				idBlock.Decrypt(decryptedHash[:], packetBytes[16:32])
+				i.udpMasterCipher.Decrypt(decryptedHash[:], packetBytes[16:32])
+				for k := 0; k < 16; k++ {
+					decryptedHash[k] ^= rawHeader[k]
+				}
 
 				user, ok := i.usersByHash.Load(decryptedHash)
 				if !ok || user == nil {

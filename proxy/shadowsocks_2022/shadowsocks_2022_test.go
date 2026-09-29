@@ -272,7 +272,7 @@ func TestUDPCodec(t *testing.T) {
 			psk := make([]byte, method.KeySaltLength)
 			_, _ = rand.Read(psk)
 
-			clientCodec, err := NewUDPPacketCodec(method, psk)
+			clientCodec, err := NewUDPPacketCodec(method, [][]byte{psk})
 			common.Must(err)
 			serverCodec, err := NewUDPServerCodec(method, psk, time.Minute)
 			common.Must(err)
@@ -358,5 +358,68 @@ func TestMultiUserManager(t *testing.T) {
 	}
 	if inbound.GetUser(context.Background(), "user1@example.com") != nil {
 		t.Fatal("user1 should have been removed")
+	}
+}
+
+func TestLargeStreamTransfer(t *testing.T) {
+	method, err := GetCipherMethod(MethodAES128GCM)
+	common.Must(err)
+	sessionKey := make([]byte, 16)
+	_, _ = rand.Read(sessionKey)
+
+	clientAead, err := method.NewAEAD(sessionKey)
+	common.Must(err)
+	serverAead, err := method.NewAEAD(sessionKey)
+	common.Must(err)
+
+	r, w := io.Pipe()
+	defer r.Close()
+	defer w.Close()
+
+	writer := NewStreamWriter(w, clientAead)
+	reader := NewStreamReader(r, serverAead)
+
+	const totalSize = 100 * 1024 // 100 KB
+	data := make([]byte, totalSize)
+	_, _ = rand.Read(data)
+
+	errCh := make(chan error, 1)
+	go func() {
+		// Write using Write (which splits by MaxPacketSize = 65535)
+		_, werr := writer.Write(data)
+		if werr != nil {
+			errCh <- werr
+			return
+		}
+		_ = w.Close()
+		errCh <- nil
+	}()
+
+	var received []byte
+	for {
+		mb, rerr := reader.ReadMultiBuffer()
+		if !mb.IsEmpty() {
+			for _, b := range mb {
+				received = append(received, b.Bytes()...)
+			}
+			buf.ReleaseMulti(mb)
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				break
+			}
+			t.Fatalf("ReadMultiBuffer error: %v", rerr)
+		}
+	}
+
+	if werr := <-errCh; werr != nil {
+		t.Fatalf("writer error: %v", werr)
+	}
+
+	if len(received) != totalSize {
+		t.Fatalf("received size mismatch: got %d, want %d", len(received), totalSize)
+	}
+	if !bytes.Equal(received, data) {
+		t.Fatal("received data does not match sent data")
 	}
 }

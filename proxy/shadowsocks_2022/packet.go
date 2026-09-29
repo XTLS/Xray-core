@@ -17,8 +17,10 @@ import (
 
 type UDPCodec struct {
 	method           *CipherMethod
+	pskList          [][]byte
 	psk              []byte
 	blockCipher      cipher.Block
+	blockCiphers     []cipher.Block
 	chachaCipher     cipher.AEAD
 	clientBodyCipher cipher.AEAD
 	clientSessionID  uint64
@@ -48,11 +50,23 @@ func newUDPCodec(method *CipherMethod, psk []byte) (*UDPCodec, error) {
 	return c, nil
 }
 
-func NewUDPPacketCodec(method *CipherMethod, psk []byte) (*UDPCodec, error) {
-	c, err := newUDPCodec(method, psk)
+func NewUDPPacketCodec(method *CipherMethod, pskList [][]byte) (*UDPCodec, error) {
+	finalPSK := pskList[len(pskList)-1]
+	c, err := newUDPCodec(method, finalPSK)
 	if err != nil {
 		return nil, err
 	}
+	c.pskList = pskList
+	if len(pskList) > 1 && !method.IsChaCha {
+		c.blockCiphers = make([]cipher.Block, len(pskList))
+		for i, psk := range pskList {
+			c.blockCiphers[i], err = method.NewBlock(psk)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	var sessID [8]byte
 	if _, err := io.ReadFull(rand.Reader, sessID[:]); err != nil {
 		return nil, err
@@ -60,7 +74,7 @@ func NewUDPPacketCodec(method *CipherMethod, psk []byte) (*UDPCodec, error) {
 	c.clientSessionID = binary.BigEndian.Uint64(sessID[:])
 
 	if !method.IsChaCha {
-		clientBodyKey := DeriveSessionSubKey(psk, sessID[:], method.KeySaltLength)
+		clientBodyKey := DeriveSessionSubKey(finalPSK, sessID[:], method.KeySaltLength)
 		c.clientBodyCipher, err = method.NewAEAD(clientBodyKey)
 		if err != nil {
 			return nil, err
@@ -130,21 +144,50 @@ func (c *UDPCodec) EncodeClientPacket(dest net.Destination, payload []byte) (*bu
 	}
 
 	// AES mode:
-	// 16B Encrypted Header + (11B header + padding + dest + payload + 16B AEAD tag)
-	totalLen := 16 + 11 + paddingLen + addrPortLen + len(payload) + AEADTagSize
+	var sessBytes [8]byte
+	binary.BigEndian.PutUint64(sessBytes[:], sessID)
+
+	var rawHeader [16]byte
+	copy(rawHeader[:8], sessBytes[:])
+	binary.BigEndian.PutUint64(rawHeader[8:16], packetID)
+
+	eihCount := 0
+	if len(c.pskList) > 1 {
+		eihCount = len(c.pskList) - 1
+	}
+
+	totalLen := 16 + eihCount*16 + 11 + paddingLen + addrPortLen + len(payload) + AEADTagSize
 	if totalLen > buf.Size {
 		return nil, ErrPacketTooLarge
 	}
 
 	outBuf := buf.New()
 
-	var rawHeader [16]byte
-	binary.BigEndian.PutUint64(rawHeader[:8], sessID)
-	binary.BigEndian.PutUint64(rawHeader[8:16], packetID)
+	if len(c.pskList) > 1 {
+		// Multi-user / Relay mode:
+		// 1. Header (16B) encrypted with first hop's block cipher
+		var encryptedHeader [16]byte
+		c.blockCiphers[0].Encrypt(encryptedHeader[:], rawHeader[:])
+		outBuf.Write(encryptedHeader[:])
 
-	var encryptedHeader [16]byte
-	c.blockCipher.Encrypt(encryptedHeader[:], rawHeader[:])
-	outBuf.Write(encryptedHeader[:])
+		// 2. Multi-hop EIHs for intermediate hops
+		for i := 0; i < len(c.pskList)-1; i++ {
+			nextPSK := c.pskList[i+1]
+			pskHash := DeriveUserPSKHash(nextPSK)
+			var eihPlain [16]byte
+			for k := 0; k < 16; k++ {
+				eihPlain[k] = pskHash[k] ^ rawHeader[k]
+			}
+			var encryptedEIH [16]byte
+			c.blockCiphers[i].Encrypt(encryptedEIH[:], eihPlain[:])
+			outBuf.Write(encryptedEIH[:])
+		}
+	} else {
+		// Single-user mode:
+		var encryptedHeader [16]byte
+		c.blockCipher.Encrypt(encryptedHeader[:], rawHeader[:])
+		outBuf.Write(encryptedHeader[:])
+	}
 
 	bodyAead := c.clientBodyCipher
 
@@ -163,7 +206,8 @@ func (c *UDPCodec) EncodeClientPacket(dest net.Destination, payload []byte) (*bu
 	}
 	outBuf.Write(payload)
 
-	plainBytes := outBuf.Bytes()[16:]
+	headerOffset := 16 + eihCount*16
+	plainBytes := outBuf.Bytes()[headerOffset:]
 	bodyNonce := rawHeader[4:16]
 	outBuf.Extend(int32(bodyAead.Overhead()))
 	bodyAead.Seal(plainBytes[:0], bodyNonce, plainBytes, nil)

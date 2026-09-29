@@ -47,7 +47,7 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Outbound, error) {
 	}
 
 	finalPSK := pskList[len(pskList)-1]
-	udpCodec, err := NewUDPPacketCodec(method, finalPSK)
+	udpCodec, err := NewUDPPacketCodec(method, pskList)
 	if err != nil {
 		return nil, errors.New("failed to create udp packet codec").Base(err)
 	}

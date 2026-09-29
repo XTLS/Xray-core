@@ -119,8 +119,16 @@ func (w *StreamWriter) Write(p []byte) (int, error) {
 func (w *StreamWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
 	for _, b := range mb {
-		if err := w.WriteChunk(b.Bytes()); err != nil {
-			return err
+		p := b.Bytes()
+		for len(p) > 0 {
+			chunkSize := len(p)
+			if chunkSize > MaxPacketSize {
+				chunkSize = MaxPacketSize
+			}
+			if err := w.WriteChunk(p[:chunkSize]); err != nil {
+				return err
+			}
+			p = p[chunkSize:]
 		}
 	}
 	return nil
@@ -168,7 +176,7 @@ func (r *StreamReader) Read(p []byte) (int, error) {
 	IncreaseNonce(r.nonce[:])
 
 	payloadLen := int(binary.BigEndian.Uint16(decryptedLen))
-	if payloadLen == 0 {
+	if payloadLen == 0 || payloadLen > MaxPacketSize {
 		return 0, ErrInvalidRequest
 	}
 
@@ -194,11 +202,10 @@ func (r *StreamReader) Read(p []byte) (int, error) {
 
 func (r *StreamReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if r.cached > 0 {
-		b := buf.New()
-		b.Write(r.buffer[r.offset : r.offset+r.cached])
+		mb := buf.MergeBytes(nil, r.buffer[r.offset:r.offset+r.cached])
 		r.cached = 0
 		r.offset = 0
-		return buf.MultiBuffer{b}, nil
+		return mb, nil
 	}
 
 	if _, err := io.ReadFull(r.reader, r.lenBuf[:]); err != nil {
@@ -212,7 +219,7 @@ func (r *StreamReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	IncreaseNonce(r.nonce[:])
 
 	payloadLen := int(binary.BigEndian.Uint16(decryptedLen))
-	if payloadLen == 0 {
+	if payloadLen == 0 || payloadLen > MaxPacketSize {
 		return nil, ErrInvalidRequest
 	}
 
@@ -227,9 +234,8 @@ func (r *StreamReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 	IncreaseNonce(r.nonce[:])
 
-	b := buf.New()
-	b.Write(decryptedPayload)
-	return buf.MultiBuffer{b}, nil
+	mb := buf.MergeBytes(nil, decryptedPayload)
+	return mb, nil
 }
 
 type ClientRequestHeader struct {
@@ -282,31 +288,27 @@ func ReadClientRequestHeader(conn io.Reader, reader *StreamReader) (*ClientReque
 	}
 	IncreaseNonce(reader.Nonce())
 
-	b := buf.New()
-	b.Write(plainVar)
-	defer b.Release()
-
-	dest, err := ReadAddressPort(b)
+	dest, addrLen, err := parseAddressPort(plainVar)
 	if err != nil {
 		return nil, err
 	}
+	dest.Network = net.Network_TCP
 
-	var padLenBytes [2]byte
-	if _, err := b.Read(padLenBytes[:]); err != nil {
-		return nil, err
+	offset := addrLen
+	if len(plainVar) < offset+2 {
+		return nil, ErrPacketTooShort
 	}
-	paddingLen := int(binary.BigEndian.Uint16(padLenBytes[:]))
-	if int(b.Len()) < paddingLen {
+	paddingLen := int(binary.BigEndian.Uint16(plainVar[offset : offset+2]))
+	offset += 2
+
+	if len(plainVar) < offset+paddingLen {
 		return nil, ErrNoPadding
 	}
-	if paddingLen > 0 {
-		b.Advance(int32(paddingLen))
-	}
+	offset += paddingLen
 
 	var earlyData []byte
-	if b.Len() > 0 {
-		earlyData = make([]byte, b.Len())
-		copy(earlyData, b.Bytes())
+	if len(plainVar) > offset {
+		earlyData = plainVar[offset:]
 	}
 
 	return &ClientRequestHeader{
