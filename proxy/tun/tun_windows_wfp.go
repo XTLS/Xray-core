@@ -36,12 +36,13 @@ const (
 	fwpmSessionFlagDynamic         = 1  // FWPM_SESSION_FLAG_DYNAMIC
 	fwpmFilterFlagClearActionRight = 8  // FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT
 
-	fwpUint8           = 1  // FWP_UINT8
-	fwpUint16          = 2  // FWP_UINT16
-	fwpUint32          = 3  // FWP_UINT32
-	fwpUint64          = 4  // FWP_UINT64
-	fwpByteArray16Type = 11 // FWP_BYTE_ARRAY16_TYPE
-	fwpByteBlobType    = 12 // FWP_BYTE_BLOB_TYPE
+	fwpUint8                  = 1  // FWP_UINT8
+	fwpUint16                 = 2  // FWP_UINT16
+	fwpUint32                 = 3  // FWP_UINT32
+	fwpUint64                 = 4  // FWP_UINT64
+	fwpByteArray16Type        = 11 // FWP_BYTE_ARRAY16_TYPE
+	fwpByteBlobType           = 12 // FWP_BYTE_BLOB_TYPE
+	fwpSecurityDescriptorType = 14 // FWP_SECURITY_DESCRIPTOR_TYPE
 
 	fwpMatchEqual       = 0 // FWP_MATCH_EQUAL
 	fwpMatchFlagsAllSet = 6 // FWP_MATCH_FLAGS_ALL_SET
@@ -68,7 +69,13 @@ var (
 	fwpmConditionIPRemoteAddress    = windows.GUID{Data1: 0xb235ae9a, Data2: 0x1d64, Data3: 0x49b8, Data4: [8]byte{0xa4, 0x4c, 0x5f, 0xf3, 0xd9, 0x09, 0x50, 0x45}}
 	fwpmConditionIPRemotePort       = windows.GUID{Data1: 0xc35a604d, Data2: 0xd22b, Data3: 0x4e1a, Data4: [8]byte{0x91, 0xb4, 0x68, 0xf6, 0x74, 0xee, 0x67, 0x4b}} // also FWPM_CONDITION_ICMP_CODE
 	fwpmConditionALEAppID           = windows.GUID{Data1: 0xd78e1e87, Data2: 0x8644, Data3: 0x4ea5, Data4: [8]byte{0x94, 0x37, 0xd8, 0x09, 0xec, 0xef, 0xc9, 0x71}}
+	fwpmConditionALEUserID          = windows.GUID{Data1: 0xaf043a0a, Data2: 0xb34d, Data3: 0x4f86, Data4: [8]byte{0x97, 0x9c, 0xc9, 0x03, 0x71, 0xaf, 0x6e, 0x66}}
 )
+
+// dnsClientSID is the SID of Windows' DNS Client service, NT SERVICE\Dnscache.
+// Service SIDs derive from the service name, so it is the same everywhere (sc
+// showsid dnscache).
+const dnsClientSID = "S-1-5-80-859482183-879914841-863379149-1145462774-2388618682"
 
 // ff02::1:2, where DHCPv6 clients send to. A package-level variable never
 // moves, so conditions may refer to it through uintptr.
@@ -170,10 +177,14 @@ func condition(field *windows.GUID, typ uint32, value uintptr) fwpmFilterConditi
 //   - dns: DNS (port 53) may only go through the TUN. Windows sends a name
 //     query to the DNS servers of all interfaces, not only to those of the TUN:
 //     to the first server of each interface, then to all of them when no answer
-//     arrives within a second or two. The physical interface usually got an
-//     on-link resolver like 192.168.1.1 from DHCP, and its LAN route is more
-//     specific than the TUN's default route, so those queries would leave
-//     through the physical link.
+//     arrives within a second or two. It sends the queries for the servers of
+//     an interface out through that interface, whatever the routes say, and
+//     other programs reach an on-link resolver, like 192.168.1.1 from DHCP,
+//     through its LAN route, which is more specific than the TUN's default
+//     route. Since Windows 11 and Server 2022, Windows may also send its
+//     queries over HTTPS or TLS, so there its DNS Client service may not
+//     connect outside the TUN at all, except for name resolution on the local
+//     link (mDNS, LLMNR).
 //   - ipv6: no IPv6 at all, in either direction, for a TUN that cannot carry
 //     it, except loopback and what Windows itself needs on the local link
 //     (neighbor and multicast listener discovery, DHCPv6), none of which can
@@ -299,6 +310,47 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv6 bool) er
 				return err
 			}
 			if err := add(layer.key, "block DNS", 0, fwpActionBlock, 2, dns53); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Since Windows 11 and Server 2022 (build 20348), the DNS Client service
+	// may also send the queries for an interface's servers over HTTPS or TLS,
+	// out through that interface and to any port. So there it may only
+	// connect through the TUN, except for mDNS and LLMNR, which stay on the
+	// local link (over IPv6 only while IPv6 is not blocked altogether).
+	// Earlier versions only query port 53, and may run the service in one
+	// process with others, which the filters would catch as well. Like
+	// Windows Firewall's rules for it, they recognize the service by its SID,
+	// which Windows puts in the token of its process: the security descriptor
+	// grants that SID the right to match (FWP_ACTRL_MATCH_FILTER, CC in SDDL).
+	if _, _, build := windows.RtlGetNtVersionNumbers(); dns && build >= 20348 {
+		sd, err := windows.SecurityDescriptorFromString("O:SYG:SYD:(A;;CCRC;;;" + dnsClientSID + ")")
+		if err != nil {
+			return err
+		}
+		sdBlob := &fwpByteBlob{size: sd.Length(), data: (*byte)(unsafe.Pointer(sd))}
+		pinner.Pin(sdBlob) // the condition only holds it as uintptr
+		dnsClient := condition(&fwpmConditionALEUserID, fwpSecurityDescriptorType, uintptr(unsafe.Pointer(sdBlob)))
+		// Conditions on the same field match when any of them does.
+		mdnsLLMNR := []fwpmFilterCondition0{dnsClient, condition(&fwpmConditionIPRemotePort, fwpUint16, 5353), condition(&fwpmConditionIPRemotePort, fwpUint16, 5355)}
+		for _, layer := range []struct {
+			key       *windows.GUID
+			localLink bool
+		}{
+			{&fwpmLayerALEAuthConnectV4, true},
+			{&fwpmLayerALEAuthConnectV6, !ipv6},
+		} {
+			if err := add(layer.key, "permit the DNS Client service through the TUN", 0, fwpActionPermit, 3, dnsClient, onTUN(&fwpmConditionIPLocalInterface), onTUN(&fwpmConditionIPNexthopInterface)); err != nil {
+				return err
+			}
+			if layer.localLink {
+				if err := add(layer.key, "permit the DNS Client service's mDNS and LLMNR", 0, fwpActionPermit, 3, mdnsLLMNR...); err != nil {
+					return err
+				}
+			}
+			if err := add(layer.key, "block the DNS Client service", 0, fwpActionBlock, 2, dnsClient); err != nil {
 				return err
 			}
 		}

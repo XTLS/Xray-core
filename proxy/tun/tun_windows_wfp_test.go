@@ -119,6 +119,16 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	}
 }
 
+func TestDNSClientSID(t *testing.T) {
+	sid, _, _, err := windows.LookupSID("", `NT SERVICE\Dnscache`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sid.String() != dnsClientSID {
+		t.Errorf(`NT SERVICE\Dnscache is %v, not %v`, sid, dnsClientSID)
+	}
+}
+
 func TestDNSOutsideTUN(t *testing.T) {
 	prefixes := []netip.Prefix{
 		netip.MustParsePrefix("198.51.100.1/30"), // gateway, not masked
