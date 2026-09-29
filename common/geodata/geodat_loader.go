@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"io"
 	"runtime"
+	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform/filesystem"
 
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -52,17 +55,56 @@ func loadIP(file, code string) ([]*CIDR, error) {
 	return geoip.Cidr, nil
 }
 
-func loadSite(file, code string) ([]*Domain, error) {
-	bs, err := loadFile(file, code)
+// loadSite calls fn, in file order, with the type and value of every domain of the geosite code
+// that has all the "@"-separated attrs. It decodes the entry while reading the file instead of
+// unmarshalling it into a []*Domain, so value is only valid during fn.
+func loadSite(file, code, attrs string, fn func(Domain_Type, []byte)) error {
+	runtime.GC() // peak mem
+	r, err := filesystem.OpenAsset(file)
 	if err != nil {
-		return nil, err
+		return errors.New("failed to open ", file).Base(err)
 	}
-	defer runtime.GC() // peak mem
-	var geosite GeoSite
-	if err := proto.Unmarshal(bs, &geosite); err != nil {
-		return nil, errors.New("error unmarshal Site in ", file, ":", code).Base(err)
+	defer r.Close()
+	br := bufio.NewReaderSize(r, 64*1024)
+	n, err := seek(br, []byte(code))
+	if err != nil {
+		return errors.New("failed to load code ", code, " from ", file).Base(err)
 	}
-	return geosite.Domain, nil
+	loadErr := func(err error) error {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return errors.New("failed to load code ", code, " from ", file).Base(err)
+	}
+	unmarshalErr := func(err error) error {
+		return errors.New("error unmarshal Site in ", file, ":", code).Base(err)
+	}
+	d := newSiteDecoder(attrs, fn)
+	for n > 0 {
+		w, err := br.Peek(min(n, br.Size()))
+		if err != nil {
+			return loadErr(err)
+		}
+		used, err := d.decode(w, len(w) < n)
+		if err != nil {
+			return unmarshalErr(err)
+		}
+		if used == 0 {
+			break // a field longer than the buffer
+		}
+		br.Discard(used)
+		n -= used
+	}
+	if n > 0 {
+		w := make([]byte, n)
+		if _, err := io.ReadFull(br, w); err != nil {
+			return loadErr(err)
+		}
+		if _, err := d.decode(w, false); err != nil {
+			return unmarshalErr(err)
+		}
+	}
+	return nil
 }
 
 func decodeVarint(br *bufio.Reader) (uint64, error) {
@@ -82,67 +124,62 @@ func decodeVarint(br *bufio.Reader) (uint64, error) {
 }
 
 func find(r io.Reader, code []byte, readBody bool) ([]byte, error) {
+	br := bufio.NewReaderSize(r, 64*1024)
+	bodyL, err := seek(br, code)
+	if err != nil || !readBody {
+		return nil, err
+	}
+	out := make([]byte, bodyL)
+	if _, err := io.ReadFull(br, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// seek advances br to the body of the entry for code and returns the body length.
+func seek(br *bufio.Reader, code []byte) (int, error) {
 	codeL := len(code)
 	if codeL == 0 {
-		return nil, errors.New("empty code")
+		return 0, errors.New("empty code")
 	}
-
-	br := bufio.NewReaderSize(r, 64*1024)
 	need := 2 + codeL // TODO: if code too long
-	prefixBuf := make([]byte, need)
 
 	for {
 		if _, err := br.ReadByte(); err != nil {
-			return nil, err
+			return 0, err
 		}
 
 		x, err := decodeVarint(br)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 		bodyL := int(x)
 		if bodyL <= 0 {
-			return nil, errors.New("invalid body length: ", bodyL)
+			return 0, errors.New("invalid body length: ", bodyL)
 		}
 
-		prefixL := bodyL
-		if prefixL > need {
-			prefixL = need
-		}
-		prefix := prefixBuf[:prefixL]
-		if _, err := io.ReadFull(br, prefix); err != nil {
-			return nil, err
-		}
-
-		match := false
-		if bodyL >= need {
-			if int(prefix[1]) == codeL && bytes.Equal(prefix[2:need], code) {
-				if !readBody {
-					return nil, nil
-				}
-				match = true
+		// Peek no more than the buffer holds: a code longer than the buffer cannot match a single
+		// length byte anyway, so a short peek only skips it, as base find (io.ReadFull) does.
+		prefix, err := br.Peek(min(bodyL, need, br.Size()))
+		if err != nil {
+			if err == io.EOF && len(prefix) > 0 {
+				err = io.ErrUnexpectedEOF // as io.ReadFull
 			}
+			return 0, err
 		}
-
-		remain := bodyL - prefixL
-		if match {
-			out := make([]byte, bodyL)
-			copy(out, prefix)
-			if remain > 0 {
-				if _, err := io.ReadFull(br, out[prefixL:]); err != nil {
-					return nil, err
-				}
-			}
-			return out, nil
+		if bodyL >= need && len(prefix) >= need && int(prefix[1]) == codeL && bytes.Equal(prefix[2:], code) {
+			return bodyL, nil
 		}
-
-		if remain > 0 {
-			if _, err := br.Discard(remain); err != nil {
-				return nil, err
-			}
+		if _, err := br.Discard(bodyL); err != nil {
+			return 0, err
 		}
 	}
 }
+
+// AttributeMatcher, HasAttrMatcher, AllAttrsMatcher and NewAllAttrsMatcher are the exported
+// attribute helpers that have been part of this package's API since #5814. The streaming loader
+// above filters attributes itself without building a *Domain, so it does not use them, but they
+// are kept for external callers. Their behaviour is unchanged.
 
 type AttributeMatcher interface {
 	Match(*Domain) bool
@@ -185,23 +222,137 @@ func NewAllAttrsMatcher(attrs string) AttributeMatcher {
 	return m
 }
 
-func loadSiteWithAttrs(file, code, attrs string) ([]*Domain, error) {
-	domains, err := loadSite(file, code)
-	if err != nil {
-		return nil, err
-	}
+var errInvalidUTF8 = errors.New("string field contains invalid UTF-8")
 
-	matcher := NewAllAttrsMatcher(attrs)
-	if matcher == nil {
-		return domains, nil
-	}
+type siteDecoder struct {
+	want []string
+	has  []bool
+	fn   func(Domain_Type, []byte)
+}
 
-	filtered := make([]*Domain, 0, len(domains))
-	for _, d := range domains {
-		if matcher.Match(d) {
-			filtered = append(filtered, d)
+func newSiteDecoder(attrs string, fn func(Domain_Type, []byte)) *siteDecoder {
+	d := &siteDecoder{fn: fn}
+	if attrs != "" {
+		d.want = strings.Split(attrs, "@")
+		d.has = make([]bool, len(d.want))
+	}
+	return d
+}
+
+// decode walks the whole fields at the start of b, a part of an encoded GeoSite (see geodat.proto),
+// calls fn for every domain that has all attrs and returns how many bytes it used. A field cut off
+// by the end of b is an error unless more is set. It accepts and rejects what proto.Unmarshal does.
+func (d *siteDecoder) decode(b []byte, more bool) (int, error) {
+	used := 0
+	for used < len(b) {
+		f, n, err := consumeField(b[used:])
+		if err == io.ErrUnexpectedEOF && more {
+			break
+		}
+		if err != nil {
+			return used, err
+		}
+		used += n
+		if f.typ != protowire.BytesType {
+			continue
+		}
+		switch f.num {
+		case 1: // code
+			if !utf8.Valid(f.v) {
+				return used, errInvalidUTF8
+			}
+		case 2: // domain
+			t, value, err := decodeDomain(f.v, d.want, d.has)
+			if err != nil {
+				return used, err
+			}
+			if !slices.Contains(d.has, false) {
+				d.fn(t, value)
+			}
 		}
 	}
+	return used, nil
+}
 
-	return filtered, nil
+// decodeDomain decodes an encoded Domain and sets has[i] if one of its attributes has the key want[i].
+func decodeDomain(b []byte, want []string, has []bool) (t Domain_Type, value []byte, err error) {
+	clear(has)
+	for len(b) > 0 {
+		f, n, err := consumeField(b)
+		if err != nil {
+			return 0, nil, err
+		}
+		b = b[n:]
+		switch {
+		case f.num == 1 && f.typ == protowire.VarintType: // type
+			t = Domain_Type(f.x)
+		case f.num == 2 && f.typ == protowire.BytesType: // value
+			if !utf8.Valid(f.v) {
+				return 0, nil, errInvalidUTF8
+			}
+			value = f.v
+		case f.num == 3 && f.typ == protowire.BytesType: // attribute
+			key, err := decodeAttributeKey(f.v)
+			if err != nil {
+				return 0, nil, err
+			}
+			for i, w := range want {
+				if string(key) == w {
+					has[i] = true
+				}
+			}
+		}
+	}
+	return t, value, nil
+}
+
+// decodeAttributeKey returns the key of an encoded Domain.Attribute.
+func decodeAttributeKey(b []byte) ([]byte, error) {
+	var key []byte
+	for len(b) > 0 {
+		f, n, err := consumeField(b)
+		if err != nil {
+			return nil, err
+		}
+		b = b[n:]
+		if f.num == 1 && f.typ == protowire.BytesType {
+			if !utf8.Valid(f.v) {
+				return nil, errInvalidUTF8
+			}
+			key = f.v
+		}
+	}
+	return key, nil
+}
+
+type protoField struct {
+	num protowire.Number
+	typ protowire.Type
+	v   []byte // payload of a length-delimited field
+	x   uint64 // value of a varint field
+}
+
+// consumeField parses the first field of an encoded message and returns it with its length.
+func consumeField(b []byte) (protoField, int, error) {
+	num, typ, n := protowire.ConsumeTag(b)
+	if n < 0 {
+		return protoField{}, 0, protowire.ParseError(n)
+	}
+	if num > protowire.MaxValidNumber {
+		return protoField{}, 0, errors.New("invalid field number ", num)
+	}
+	f := protoField{num: num, typ: typ}
+	var m int
+	switch typ {
+	case protowire.BytesType:
+		f.v, m = protowire.ConsumeBytes(b[n:])
+	case protowire.VarintType:
+		f.x, m = protowire.ConsumeVarint(b[n:])
+	default:
+		m = protowire.ConsumeFieldValue(num, typ, b[n:])
+	}
+	if m < 0 {
+		return protoField{}, 0, protowire.ParseError(m)
+	}
+	return f, n + m, nil
 }

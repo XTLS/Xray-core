@@ -78,6 +78,10 @@ func TestMphIndexMatcher(t *testing.T) {
 			Input:  "example.com",
 			Output: []uint32{10, 4},
 		},
+		{
+			Input:  "apis.org",
+			Output: []uint32{2, 6},
+		},
 	}
 	matcherGroup := NewMphIndexMatcher()
 	for _, rule := range rules {
@@ -87,8 +91,13 @@ func TestMphIndexMatcher(t *testing.T) {
 	}
 	matcherGroup.Build()
 	for _, test := range cases {
-		if m := matcherGroup.Match(test.Input); !reflect.DeepEqual(m, test.Output) {
+		m := matcherGroup.Match(test.Input)
+		if !reflect.DeepEqual(m, test.Output) {
 			t.Error("unexpected output: ", m, " for test case ", test)
+		}
+		clear(m) // the caller owns the result, so this must not change the next one
+		if m := matcherGroup.Match(test.Input); !reflect.DeepEqual(m, test.Output) {
+			t.Error("unexpected output after clearing the previous one: ", m, " for test case ", test)
 		}
 	}
 }
