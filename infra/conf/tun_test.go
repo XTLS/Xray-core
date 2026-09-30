@@ -25,9 +25,9 @@ func TestTunConfigAutoSystem(t *testing.T) {
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemDnsToGateway: true},
 		},
 		{
-			Input:  `{"name": "xray0", "autoSystemWfpBlockLeak": ["dns", "misconfig"]}`,
+			Input:  `{"name": "xray0", "autoSystemWfpBlockLeak": ["dns", "misconfigtun"]}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemWfpBlockLeak: []string{"dns", "misconfig"}},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemWfpBlockLeak: []string{"dns", "misconfigtun"}},
 		},
 		{
 			Input:  `{"name": "xray0", "autoSystemWfpBlockLeak": ["DNS"]}`,

@@ -39,7 +39,7 @@ func (v *TunConfig) Build() (proto.Message, error) {
 	}
 	for _, leak := range v.AutoSystemWfpBlockLeak {
 		switch leak := strings.ToLower(leak); leak {
-		case "dns", "misconfig":
+		case "dns", "misconfigtun":
 			config.AutoSystemWfpBlockLeak = append(config.AutoSystemWfpBlockLeak, leak)
 		default:
 			return nil, errors.New("unknown autoSystemWfpBlockLeak value: ", leak)

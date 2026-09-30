@@ -248,13 +248,13 @@ startOver:
 
 	// With autoSystemWfpBlockLeak, once the system routes lead to the TUN,
 	// keep DNS ("dns", if dns is set), and an IP version no route of which
-	// leads to the TUN ("misconfig"), from leaving through the other
+	// leads to the TUN ("misconfigtun"), from leaving through the other
 	// interfaces. Addresses do not matter: without one of a version in
 	// gateway, Windows gives the TUN a link-local one.
 	leaks := t.options.AutoSystemWfpBlockLeak
 	blockDNS := slices.Contains(leaks, "dns") && len(dns) > 0
-	blockIPv4 := slices.Contains(leaks, "misconfig") && !route4
-	blockIPv6 := slices.Contains(leaks, "misconfig") && !route6
+	blockIPv4 := slices.Contains(leaks, "misconfigtun") && !route4
+	blockIPv6 := slices.Contains(leaks, "misconfigtun") && !route6
 	if (route4 || route6) && (blockDNS || blockIPv4 || blockIPv6) {
 		if t.wfp, err = blockLeaks(t.luid, blockDNS, blockIPv4, blockIPv6); err != nil {
 			var blocked []string
