@@ -194,6 +194,26 @@ func TestHTTP2ClientDefaultUserAgent(t *testing.T) {
 	require.Equal(t, []string{http2DefaultUserAgent}, userAgents)
 }
 
+func TestHTTP2ClientClassicConnect(t *testing.T) {
+	cc, p := newHTTP2Peer(t)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodConnect, "https://cloudflareaccess.com:443", nil)
+	require.NoError(t, err)
+	req.Header.Set("Cf-Connect-Proto", "cf-connect-ip")
+	req.Header["User-Agent"] = nil
+	go cc.RoundTrip(req)
+	f := p.readFrame()
+	require.IsType(t, &http2.MetaHeadersFrame{}, f)
+	var fields []string
+	for _, hf := range f.(*http2.MetaHeadersFrame).Fields {
+		fields = append(fields, hf.Name+": "+hf.Value)
+	}
+	require.Equal(t, []string{
+		":method: CONNECT",
+		":authority: cloudflareaccess.com:443",
+		"cf-connect-proto: cf-connect-ip",
+	}, fields)
+}
+
 func TestHTTP2ClientNeedsExtendedConnect(t *testing.T) {
 	cc, _ := newHTTP2Peer(t)
 	_, err := cc.RoundTrip(connectRequest(t, context.Background(), io.NopCloser(strings.NewReader(""))))
