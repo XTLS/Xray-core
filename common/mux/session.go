@@ -13,7 +13,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
@@ -52,7 +51,7 @@ func (m *SessionManager) Count() int {
 	return int(m.count)
 }
 
-func (m *SessionManager) Allocate(Strategy *ClientStrategy, link *transport.Link) *Session {
+func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer) *Session {
 	m.Lock()
 	defer m.Unlock()
 
@@ -65,8 +64,8 @@ func (m *SessionManager) Allocate(Strategy *ClientStrategy, link *transport.Link
 
 	m.count++
 	s := &Session{
-		input:  link.Reader,
-		output: link.Writer,
+		input:  input,
+		output: output,
 		ID:     m.count,
 		parent: m,
 		done:   done.New(),

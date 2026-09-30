@@ -314,7 +314,7 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool 
 	}
 
 	sm := m.sessionManager
-	s := sm.Allocate(&m.strategy, link)
+	s := sm.Allocate(&m.strategy, link.Reader, link.Writer)
 	if s == nil {
 		return false
 	}
