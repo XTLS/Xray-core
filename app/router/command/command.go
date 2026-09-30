@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/xtls/xray-core/app/geodata"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
@@ -79,6 +80,14 @@ func (s *routingServer) ListRule(ctx context.Context, request *ListRuleRequest) 
 		return response, nil
 	}
 	return nil, errors.New("unsupported router implementation")
+}
+
+// ReloadGeoData reloads GeoIP/GeoSite data from disk.
+func (s *routingServer) ReloadGeoData(ctx context.Context, request *ReloadGeoDataRequest) (*ReloadGeoDataResponse, error) {
+	if err := geodata.Reload(); err != nil {
+		return nil, err
+	}
+	return &ReloadGeoDataResponse{}, nil
 }
 
 // NewRoutingServer creates a statistics service with statistics manager.

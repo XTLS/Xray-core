@@ -26,6 +26,7 @@ const (
 	RoutingService_AddRule_FullMethodName                = "/xray.app.router.command.RoutingService/AddRule"
 	RoutingService_RemoveRule_FullMethodName             = "/xray.app.router.command.RoutingService/RemoveRule"
 	RoutingService_ListRule_FullMethodName               = "/xray.app.router.command.RoutingService/ListRule"
+	RoutingService_ReloadGeoData_FullMethodName          = "/xray.app.router.command.RoutingService/ReloadGeoData"
 )
 
 // RoutingServiceClient is the client API for RoutingService service.
@@ -39,6 +40,7 @@ type RoutingServiceClient interface {
 	AddRule(ctx context.Context, in *AddRuleRequest, opts ...grpc.CallOption) (*AddRuleResponse, error)
 	RemoveRule(ctx context.Context, in *RemoveRuleRequest, opts ...grpc.CallOption) (*RemoveRuleResponse, error)
 	ListRule(ctx context.Context, in *ListRuleRequest, opts ...grpc.CallOption) (*ListRuleResponse, error)
+	ReloadGeoData(ctx context.Context, in *ReloadGeoDataRequest, opts ...grpc.CallOption) (*ReloadGeoDataResponse, error)
 }
 
 type routingServiceClient struct {
@@ -128,6 +130,16 @@ func (c *routingServiceClient) ListRule(ctx context.Context, in *ListRuleRequest
 	return out, nil
 }
 
+func (c *routingServiceClient) ReloadGeoData(ctx context.Context, in *ReloadGeoDataRequest, opts ...grpc.CallOption) (*ReloadGeoDataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReloadGeoDataResponse)
+	err := c.cc.Invoke(ctx, RoutingService_ReloadGeoData_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RoutingServiceServer is the server API for RoutingService service.
 // All implementations must embed UnimplementedRoutingServiceServer
 // for forward compatibility.
@@ -139,6 +151,7 @@ type RoutingServiceServer interface {
 	AddRule(context.Context, *AddRuleRequest) (*AddRuleResponse, error)
 	RemoveRule(context.Context, *RemoveRuleRequest) (*RemoveRuleResponse, error)
 	ListRule(context.Context, *ListRuleRequest) (*ListRuleResponse, error)
+	ReloadGeoData(context.Context, *ReloadGeoDataRequest) (*ReloadGeoDataResponse, error)
 	mustEmbedUnimplementedRoutingServiceServer()
 }
 
@@ -169,6 +182,9 @@ func (UnimplementedRoutingServiceServer) RemoveRule(context.Context, *RemoveRule
 }
 func (UnimplementedRoutingServiceServer) ListRule(context.Context, *ListRuleRequest) (*ListRuleResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRule not implemented")
+}
+func (UnimplementedRoutingServiceServer) ReloadGeoData(context.Context, *ReloadGeoDataRequest) (*ReloadGeoDataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReloadGeoData not implemented")
 }
 func (UnimplementedRoutingServiceServer) mustEmbedUnimplementedRoutingServiceServer() {}
 func (UnimplementedRoutingServiceServer) testEmbeddedByValue()                        {}
@@ -310,6 +326,24 @@ func _RoutingService_ListRule_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RoutingService_ReloadGeoData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReloadGeoDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RoutingServiceServer).ReloadGeoData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RoutingService_ReloadGeoData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RoutingServiceServer).ReloadGeoData(ctx, req.(*ReloadGeoDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RoutingService_ServiceDesc is the grpc.ServiceDesc for RoutingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -340,6 +374,10 @@ var RoutingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListRule",
 			Handler:    _RoutingService_ListRule_Handler,
+		},
+		{
+			MethodName: "ReloadGeoData",
+			Handler:    _RoutingService_ReloadGeoData_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

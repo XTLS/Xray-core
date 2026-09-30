@@ -57,7 +57,7 @@ func (g *Instance) execute() {
 	if g.downloader != nil {
 		err = g.reloadWithUpdate()
 	} else {
-		err = reload()
+		err = Reload()
 	}
 	if err != nil {
 		errors.LogErrorInner(context.Background(), err, "scheduled geodata reload failed")
@@ -76,7 +76,7 @@ func (g *Instance) reloadWithUpdate() error {
 		return err
 	}
 
-	if err := reload(); err != nil {
+	if err := Reload(); err != nil {
 		errors.LogErrorInner(context.Background(), err, "failed to reload geodata after downloading assets, rolling back")
 		rollbackErr := tx.rollback()
 		return errors.Combine(err, rollbackErr)
@@ -85,7 +85,8 @@ func (g *Instance) reloadWithUpdate() error {
 	return tx.commit()
 }
 
-func reload() error {
+// Reload reloads GeoIP and GeoSite data from disk.
+func Reload() error {
 	return errors.Combine(commongeodata.IPReg.Reload(), commongeodata.DomainReg.Reload())
 }
 

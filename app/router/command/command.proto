@@ -115,6 +115,10 @@ message ListRuleResponse{
   repeated ListRuleItem rules = 1;
 }
 
+message ReloadGeoDataRequest {}
+
+message ReloadGeoDataResponse {}
+
 service RoutingService {
   rpc SubscribeRoutingStats(SubscribeRoutingStatsRequest)
       returns (stream RoutingContext) {}
@@ -127,6 +131,8 @@ service RoutingService {
   rpc RemoveRule(RemoveRuleRequest) returns (RemoveRuleResponse) {}
 
   rpc ListRule(ListRuleRequest) returns (ListRuleResponse) {}
+
+  rpc ReloadGeoData(ReloadGeoDataRequest) returns (ReloadGeoDataResponse) {}
 }
 
 message Config {}
