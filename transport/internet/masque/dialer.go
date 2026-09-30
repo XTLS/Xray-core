@@ -45,6 +45,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 	gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
 	gotlsConfig.NextProtos = []string{http3.NextProtoH3}
+	if err := useWarp(config, gotlsConfig); err != nil {
+		return nil, err
+	}
 
 	quicParams := streamSettings.QuicParams
 	if quicParams == nil {
@@ -99,6 +102,9 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
+	if config.Warp != nil {
+		tr.ConnectionIDLength = 20
+	}
 	qconn, err := tr.Dial(ctx, udpAddr, gotlsConfig, quicConfig)
 	if err != nil {
 		tr.Close()
@@ -118,8 +124,16 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		return nil, errors.New("unknown congestion control: ", quicParams.Congestion)
 	}
 
-	cc := (&http3.Transport{EnableDatagrams: true, DisableCompression: true}).NewClientConn(qconn)
-	conn, err := establish(ctx, connectip.NewClientConn(cc), quicConn{qconn}, func() {
+	h3 := &http3.Transport{EnableDatagrams: true, DisableCompression: true}
+	if config.Warp != nil {
+		h3.AdditionalSettings = map[uint64]uint64{connectip.SettingDatagramDraft00: 1}
+	}
+	cc := h3.NewClientConn(qconn)
+	var client tunnelClient = connectip.NewClientConn(cc)
+	if config.Warp != nil {
+		client = connectip.NewCloudflareClientConn(cc, qconn)
+	}
+	conn, err := establish(ctx, client, quicConn{qconn}, func() {
 		qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeRequestCanceled), "")
 	}, config, authority(config, gotlsConfig.ServerName, dest.Port))
 	if err != nil {
@@ -136,6 +150,9 @@ func usesHTTP2(config *tls.Config) bool {
 func dialHTTP2(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig, tlsConfig *tls.Config, config *Config) (stat.Connection, error) {
 	dest.Network = net.Network_TCP
 	gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
+	if err := useWarp(config, gotlsConfig); err != nil {
+		return nil, err
+	}
 
 	var conn net.Conn
 	var err error
@@ -157,7 +174,7 @@ func dialHTTP2(ctx context.Context, dest net.Destination, streamSettings *intern
 		conn.Close()
 		return nil, err
 	}
-	if protocol := tlsConn.NegotiatedProtocol(); protocol != http2.NextProtoTLS {
+	if protocol := tlsConn.NegotiatedProtocol(); protocol != http2.NextProtoTLS && (config.Warp == nil || protocol != "") {
 		conn.Close()
 		return nil, errors.New("the server negotiated ", strconv.Quote(protocol), " instead of h2")
 	}
@@ -167,7 +184,11 @@ func dialHTTP2(ctx context.Context, dest net.Destination, streamSettings *intern
 		conn.Close()
 		return nil, err
 	}
-	mconn, err := establish(ctx, connectip.NewHTTP2ClientConn(cc), cc, func() { cc.Close() }, config, authority(config, gotlsConfig.ServerName, dest.Port))
+	var client tunnelClient = connectip.NewHTTP2ClientConn(cc)
+	if config.Warp != nil {
+		client = connectip.NewCloudflareHTTP2ClientConn(cc)
+	}
+	mconn, err := establish(ctx, client, cc, func() { cc.Close() }, config, authority(config, gotlsConfig.ServerName, dest.Port))
 	if err != nil {
 		cc.Close()
 		return nil, err
@@ -221,21 +242,39 @@ func establish(ctx context.Context, client tunnelClient, hconn httpConn, abort f
 		return nil, errors.New("the tunnel can only carry ", n, "-byte packets, less than ", MinPacketSize)
 	}
 
-	if _, err := ipConn.RequestAddresses([]netip.Prefix{
-		netip.PrefixFrom(netip.IPv4Unspecified(), 32),
-		netip.PrefixFrom(netip.IPv6Unspecified(), 128),
-	}); err != nil {
-		ipConn.Close()
-		return nil, err
-	}
 	var local []netip.Addr
-	for len(local) == 0 {
-		assigned, err := ipConn.ReceiveAddressAssignment(ctx)
-		if err != nil {
-			ipConn.Close()
-			return nil, errors.New("no address assigned").Base(err)
+	if config.Warp != nil {
+		prefixes := make([]netip.Prefix, 0, len(config.Warp.Address))
+		for _, s := range config.Warp.Address {
+			prefix, err := netip.ParsePrefix(s)
+			if err != nil {
+				ipConn.Close()
+				return nil, errors.New("invalid WARP address ", s).Base(err)
+			}
+			prefixes = append(prefixes, prefix)
+			local = append(local, prefix.Addr())
 		}
-		local = localAddrs(assigned)
+		if len(local) == 0 {
+			ipConn.Close()
+			return nil, errors.New("WARP needs an address")
+		}
+		ipConn.SetAssignedAddresses(prefixes)
+	} else {
+		if _, err := ipConn.RequestAddresses([]netip.Prefix{
+			netip.PrefixFrom(netip.IPv4Unspecified(), 32),
+			netip.PrefixFrom(netip.IPv6Unspecified(), 128),
+		}); err != nil {
+			ipConn.Close()
+			return nil, err
+		}
+		for len(local) == 0 {
+			assigned, err := ipConn.ReceiveAddressAssignment(ctx)
+			if err != nil {
+				ipConn.Close()
+				return nil, errors.New("no address assigned").Base(err)
+			}
+			local = localAddrs(assigned)
+		}
 	}
 	if !stop() {
 		ipConn.Close()

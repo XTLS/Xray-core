@@ -10,4 +10,11 @@ message Config {
   string host = 1;
   string path = 2;
   map<string, string> headers = 3;
+  Warp warp = 4;
+}
+
+message Warp {
+  bytes private_key = 1;
+  bytes public_key = 2;
+  repeated string address = 3;
 }

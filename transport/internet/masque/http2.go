@@ -207,11 +207,14 @@ func (c *http2ClientConn) writeHeaders(req *http.Request, maxFrameSize int) erro
 	if host == "" {
 		host = req.URL.Host
 	}
+	protocol := req.Header.Get(":protocol")
 	field(":method", req.Method)
 	field(":authority", host)
-	field(":scheme", req.URL.Scheme)
-	field(":path", req.URL.RequestURI())
-	if protocol := req.Header.Get(":protocol"); protocol != "" {
+	if req.Method != http.MethodConnect || protocol != "" {
+		field(":scheme", req.URL.Scheme)
+		field(":path", req.URL.RequestURI())
+	}
+	if protocol != "" {
 		field(":protocol", protocol)
 	}
 	if _, ok := req.Header["User-Agent"]; !ok {

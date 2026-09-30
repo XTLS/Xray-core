@@ -96,10 +96,21 @@ type Conn struct {
 	closeResult error
 
 	datagramCapsuleOnce sync.Once
+
+	bare bool
 }
 
 func newProxiedConn(str requestStream) *Conn {
+	return startProxiedConn(str, false)
+}
+
+func newBareProxiedConn(str requestStream) *Conn {
+	return startProxiedConn(str, true)
+}
+
+func startProxiedConn(str requestStream, bare bool) *Conn {
 	c := &Conn{
+		bare:                   bare,
 		str:                    str,
 		writeNotify:            make(chan struct{}, 1),
 		writeDone:              make(chan error, 1),
@@ -241,6 +252,12 @@ func (c *Conn) ReceiveAddressAssignment(ctx context.Context) ([]AssignedAddress,
 			return nil, c.closeErr
 		}
 	}
+}
+
+func (c *Conn) SetAssignedAddresses(prefixes []netip.Prefix) {
+	c.mu.Lock()
+	c.assignedAddresses = slices.Clone(prefixes)
+	c.mu.Unlock()
 }
 
 func (c *Conn) ReceiveAddressRequest(ctx context.Context) (*AddressRequest, error) {
@@ -491,15 +508,18 @@ func (c *Conn) ReadPacket(b []byte) (int, error) {
 				return 0, err
 			}
 		}
-		contextID, n, err := quicvarint.Parse(data)
-		if err != nil {
-			errors.LogDebugInner(context.Background(), err, "dropping malformed datagram")
-			continue
+		packet := data
+		if !c.bare || len(data) == 0 || data[0] == 0 {
+			contextID, n, err := quicvarint.Parse(data)
+			if err != nil {
+				errors.LogDebugInner(context.Background(), err, "dropping malformed datagram")
+				continue
+			}
+			if contextID != 0 {
+				continue
+			}
+			packet = data[n:]
 		}
-		if contextID != 0 {
-			continue
-		}
-		packet := data[n:]
 		if err := c.handleIncomingProxiedPacket(packet); err != nil {
 			errors.LogDebugInner(context.Background(), err, "dropping proxied packet")
 			continue
@@ -644,7 +664,11 @@ func (c *Conn) composeDatagram(b []byte) ([]byte, error) {
 		}
 		b[7]--
 	}
-	size := len(contextIDZero) + len(b)
+	contextID := contextIDZero
+	if c.bare {
+		contextID = nil
+	}
+	size := len(contextID) + len(b)
 	var data []byte
 	if c.h3 == nil {
 		data = make([]byte, 0, quicvarint.Len(uint64(capsuleTypeDatagram))+quicvarint.Len(uint64(size))+size)
@@ -653,7 +677,7 @@ func (c *Conn) composeDatagram(b []byte) ([]byte, error) {
 	} else {
 		data = make([]byte, 0, size)
 	}
-	data = append(data, contextIDZero...)
+	data = append(data, contextID...)
 	data = append(data, b...)
 	return data, nil
 }
