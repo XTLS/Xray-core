@@ -16,5 +16,5 @@ message Config {
   string auto_outbounds_interface = 7;
   string desc = 8;
   bool auto_system_dns_to_gateway = 9;
-  bool auto_system_wfp_block_leak = 10;
+  repeated string auto_system_wfp_block_leak = 10;
 }

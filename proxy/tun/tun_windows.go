@@ -247,11 +247,15 @@ startOver:
 	}
 
 	// With autoSystemWfpBlockLeak, once the system routes lead to the TUN,
-	// keep DNS if dns is set, and an IP version no route of which leads to
-	// the TUN, from leaving through the other interfaces. Addresses do not
-	// matter: without one of a version in gateway, Windows gives the TUN a
-	// link-local one.
-	if blockDNS, blockIPv4, blockIPv6 := len(dns) > 0, !route4, !route6; t.options.AutoSystemWfpBlockLeak && (route4 || route6) && (blockDNS || blockIPv4 || blockIPv6) {
+	// keep DNS ("dns", if dns is set), and an IP version no route of which
+	// leads to the TUN ("misconfig"), from leaving through the other
+	// interfaces. Addresses do not matter: without one of a version in
+	// gateway, Windows gives the TUN a link-local one.
+	leaks := t.options.AutoSystemWfpBlockLeak
+	blockDNS := slices.Contains(leaks, "dns") && len(dns) > 0
+	blockIPv4 := slices.Contains(leaks, "misconfig") && !route4
+	blockIPv6 := slices.Contains(leaks, "misconfig") && !route6
+	if (route4 || route6) && (blockDNS || blockIPv4 || blockIPv6) {
 		if t.wfp, err = blockLeaks(t.luid, blockDNS, blockIPv4, blockIPv6); err != nil {
 			var blocked []string
 			for _, b := range []struct {
@@ -267,7 +271,7 @@ startOver:
 			// untested, and sing-box's broke its TUN there (SagerNet/sing-box#3659),
 			// so older versions only get a warning.
 			if major, _, _ := windows.RtlGetNtVersionNumbers(); major >= 10 {
-				return errors.New("unable to block ", what, " outside the TUN (set autoSystemWfpBlockLeak to false to run without)").Base(err)
+				return errors.New("unable to block ", what, " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
 			}
 			errors.LogWarningInner(context.Background(), err, "[tun] unable to block ", what, " outside the TUN, leaks are possible")
 		} else {

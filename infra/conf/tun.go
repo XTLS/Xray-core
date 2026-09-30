@@ -6,7 +6,9 @@ import (
 	"math/big"
 	"net"
 	"strconv"
+	"strings"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/proxy/tun"
 	"google.golang.org/protobuf/proto"
 )
@@ -21,7 +23,7 @@ type TunConfig struct {
 	AutoSystemRoutingTable []string `json:"autoSystemRoutingTable"`
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
 	AutoSystemDnsToGateway bool     `json:"autoSystemDnsToGateway"`
-	AutoSystemWfpBlockLeak bool     `json:"autoSystemWfpBlockLeak"`
+	AutoSystemWfpBlockLeak []string `json:"autoSystemWfpBlockLeak"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -34,7 +36,14 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
 		AutoSystemDnsToGateway: v.AutoSystemDnsToGateway,
-		AutoSystemWfpBlockLeak: v.AutoSystemWfpBlockLeak,
+	}
+	for _, leak := range v.AutoSystemWfpBlockLeak {
+		switch leak := strings.ToLower(leak); leak {
+		case "dns", "misconfig":
+			config.AutoSystemWfpBlockLeak = append(config.AutoSystemWfpBlockLeak, leak)
+		default:
+			return nil, errors.New("unknown autoSystemWfpBlockLeak value: ", leak)
+		}
 	}
 	if v.AutoOutboundsInterface != nil {
 		config.AutoOutboundsInterface = *v.AutoOutboundsInterface
