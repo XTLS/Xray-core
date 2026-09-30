@@ -191,3 +191,15 @@ func TestVerifyDNSRoutingDecisions(t *testing.T) {
 		})
 	}
 }
+
+// Without an IPv4 gateway, the takeover uses the first IPv6 one, and the probe
+// carries IPv6 addresses.
+func TestVerifyDNSRoutingIPv6(t *testing.T) {
+	ctx := newRouteTestContext(t, true, udpNameServer([]byte{9, 9, 9, 9}), []*router.RoutingRule{port53Rule()})
+	if err := verifyDNSRouting(ctx, routeTestInboundTag, "fc00::1", "fc00::2"); err != nil {
+		t.Fatalf("expected the takeover to be accepted, got: %v", err)
+	}
+	if err := verifyDNSRouting(ctx, routeTestInboundTag, routeTestSource, "fc00::2"); err == nil {
+		t.Fatal("expected mixed IPv4 and IPv6 addresses to be refused")
+	}
+}
