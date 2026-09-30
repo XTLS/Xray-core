@@ -91,7 +91,6 @@
 - Tutorial
   - [XTLS Vision](https://github.com/chika0801/Xray-install)
   - [REALITY (English)](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
-  - [XTLS-Iran-Reality (English)](https://github.com/SasukeFreestyle/XTLS-Iran-Reality)
   - [Xray REALITY with 'steal oneself' (English)](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)
   - [Xray with WireGuard inbound (English)](https://g800.pages.dev/wireguard)
 
@@ -114,7 +113,6 @@
   - [XrayUI-dev](https://github.com/PhoenixNil/XrayUI-dev)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
