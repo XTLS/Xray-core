@@ -174,6 +174,23 @@ func copyConfig(c *tls.Config) *utls.Config {
 		EncryptedClientHelloConfigList: c.EncryptedClientHelloConfigList,
 		NextProtos:                     c.NextProtos,
 	}
+	if c.GetClientCertificate != nil {
+		config.GetClientCertificate = func(info *utls.CertificateRequestInfo) (*utls.Certificate, error) {
+			schemes := make([]tls.SignatureScheme, len(info.SignatureSchemes))
+			for i, s := range info.SignatureSchemes {
+				schemes[i] = tls.SignatureScheme(s)
+			}
+			cert, err := c.GetClientCertificate(&tls.CertificateRequestInfo{
+				AcceptableCAs:    info.AcceptableCAs,
+				SignatureSchemes: schemes,
+				Version:          info.Version,
+			})
+			if err != nil || cert == nil {
+				return &utls.Certificate{}, err
+			}
+			return &utls.Certificate{Certificate: cert.Certificate, PrivateKey: cert.PrivateKey, Leaf: cert.Leaf}, nil
+		}
+	}
 	return config
 }
 
