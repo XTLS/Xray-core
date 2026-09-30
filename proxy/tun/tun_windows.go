@@ -3,17 +3,25 @@
 package tun
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
 	"encoding/binary"
 	go_errors "errors"
 	"net"
 	"net/netip"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet"
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
@@ -38,6 +46,10 @@ type WindowsTun struct {
 	luid     winipcfg.LUID
 	cbr      winipcfg.ChangeCallback
 	cbi      winipcfg.ChangeCallback
+	wfp      windows.Handle
+	resolver *savedResolver
+	skipStop chan struct{}
+	skipDone chan struct{}
 	closed   bool
 }
 
@@ -197,19 +209,105 @@ startOver:
 		}
 	}
 
+	// Windows lists the TUN's DNS servers among the system's ones, which Go's
+	// resolver queries for Xray's own lookups past the TUN, where they lead
+	// nowhere or back into Xray. Not skipped are those another interface uses
+	// as well, as that could leave no server at all. As those can change at
+	// any time, they are looked at again as often as Go rereads its servers.
+	if len(dns) > 0 {
+		skipped, err := tunOnlyDNS(t.luid, dns)
+		if err != nil {
+			skipped = dns
+		}
+		internet.SkipDNSServers(skipped)
+		t.skipStop, t.skipDone = make(chan struct{}), make(chan struct{})
+		go func() {
+			defer close(t.skipDone)
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if skipped, err := tunOnlyDNS(t.luid, dns); err == nil {
+						internet.SkipDNSServers(skipped)
+					}
+				case <-t.skipStop:
+					return
+				}
+			}
+		}()
+	}
+
+	// Keep Windows from registering the TUN's addresses, and the host name
+	// with them, through dynamic DNS updates. Best effort.
+	if address4 || address6 {
+		if err := disableDNSRegistration(t.luid, dns); err != nil {
+			errors.LogDebugInner(context.Background(), err, "[tun] unable to disable DNS registration")
+		}
+	}
+
+	// With autoSystemWfpBlockLeak, once the system routes lead to the TUN,
+	// keep DNS ("dns", if dns is set), and an IP version no route of which
+	// leads to the TUN ("misconfigtun"), from leaving through the other
+	// interfaces. Addresses do not matter: without one of a version in
+	// gateway, Windows gives the TUN a link-local one.
+	leaks := t.options.AutoSystemWfpBlockLeak
+	blockDNS := slices.Contains(leaks, "dns") && len(dns) > 0
+	blockIPv4 := slices.Contains(leaks, "misconfigtun") && !route4
+	blockIPv6 := slices.Contains(leaks, "misconfigtun") && !route6
+	if (route4 || route6) && (blockDNS || blockIPv4 || blockIPv6) {
+		if t.wfp, err = blockLeaks(t.luid, blockDNS, blockIPv4, blockIPv6); err != nil {
+			var blocked []string
+			for _, b := range []struct {
+				on   bool
+				what string
+			}{{blockDNS, "DNS"}, {blockIPv4, "IPv4"}, {blockIPv6, "IPv6"}} {
+				if b.on {
+					blocked = append(blocked, b.what)
+				}
+			}
+			// Rather no TUN than a leaking one.
+			return errors.New("unable to block ", strings.Join(blocked, " and "), " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
+		}
+		errors.LogInfo(context.Background(), "[tun] outside the TUN, blocked DNS: ", blockDNS, ", blocked IPv4: ", blockIPv4, ", blocked IPv6: ", blockIPv6)
+		if blockDNS {
+			covered := slices.Clone(addresses)
+			for _, route := range routesData {
+				covered = append(covered, route.Destination)
+			}
+			for _, server := range dnsOutsideTUN(dns, covered) {
+				errors.LogWarning(context.Background(), "[tun] DNS server ", server, " is in neither gateway nor autoSystemRoutingTable, so queries to it cannot go through the TUN and are blocked")
+			}
+			// With updater, the dialer controllers bind Xray's own sockets
+			// to the physical interface.
+			if updater != nil {
+				t.resolver = resolveOnOwn()
+			}
+		}
+	}
+	if len(dns) > 0 || route4 || route6 {
+		if err := flushDNSCache(); err != nil {
+			errors.LogInfoInner(context.Background(), err, "[tun] unable to flush DNS cache")
+		}
+	}
+
 	if updater != nil {
-		t.cbr, err = winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
+		// Only a registered callback goes into the fields: a nil pointer in
+		// them would not compare equal to nil in Close.
+		cbr, err := winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
 			updater.Update()
 		})
 		if err != nil {
 			return err
 		}
-		t.cbi, err = winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
+		t.cbr = cbr
+		cbi, err := winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
 			updater.Update()
 		})
 		if err != nil {
 			return err
 		}
+		t.cbi = cbi
 	}
 	return nil
 }
@@ -236,11 +334,140 @@ func (t *WindowsTun) Close() error {
 		t.luid.FlushIPAddresses(windows.AF_INET6)
 		t.luid.FlushDNS(windows.AF_INET6)
 	}
+	if t.wfp != 0 {
+		closeWFPEngine(t.wfp)
+	}
+	if t.resolver != nil {
+		t.resolver.restore()
+	}
+	if t.skipStop != nil {
+		close(t.skipStop)
+		<-t.skipDone
+	}
+	internet.SkipDNSServers(nil)
+	if len(t.options.DNS) > 0 || len(t.options.AutoSystemRoutingTable) > 0 {
+		flushDNSCache()
+	}
 	if t.session != (wintun.Session{}) {
 		t.session.End()
 	}
 	if t.adapter != nil {
 		t.adapter.Close()
+	}
+	return nil
+}
+
+type savedResolver struct {
+	preferGo bool
+	dial     func(ctx context.Context, network, address string) (net.Conn, error)
+}
+
+// resolveOnOwn has Go resolve the names Xray would otherwise ask Windows for,
+// on Xray's own sockets, which the dialer controllers bind to the physical
+// interface, and skipping the TUN's DNS servers, as localdns does. Windows'
+// resolver runs in the DNS Client service, whose queries the DNS filter lets
+// through the TUN only, so Xray's own lookups, like of an outbound's server
+// domain, would go into Xray again and could end up waiting on themselves.
+//
+// It changes net.DefaultResolver for the whole process, which covers every
+// lookup that would reach Windows' resolver; restore undoes it.
+func resolveOnOwn() *savedResolver {
+	saved := &savedResolver{net.DefaultResolver.PreferGo, net.DefaultResolver.Dial}
+	dialer := &net.Dialer{Control: func(network, address string, c syscall.RawConn) error {
+		for _, ctl := range internet.Controllers {
+			if err := ctl(network, address, c); err != nil {
+				return err
+			}
+		}
+		return nil
+	}}
+	// Go's resolver moves on to the next server right away when a dial fails.
+	net.DefaultResolver.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if internet.IsSkippedDNSServer(address) {
+			return nil, errors.New("skipped DNS server ", address)
+		}
+		return dialer.DialContext(ctx, network, address)
+	}
+	net.DefaultResolver.PreferGo = true
+	return saved
+}
+
+func (s *savedResolver) restore() {
+	net.DefaultResolver.PreferGo = s.preferGo
+	net.DefaultResolver.Dial = s.dial
+}
+
+// tunOnlyDNS returns those of servers, the TUN's DNS servers, that Go's
+// resolver does not also get from another interface: one that is up and has
+// a gateway, as it reads them.
+func tunOnlyDNS(tun winipcfg.LUID, servers []netip.Addr) ([]netip.Addr, error) {
+	adapters, err := winipcfg.GetAdaptersAddresses(windows.AF_UNSPEC, winipcfg.GAAFlagIncludeGateways)
+	if err != nil {
+		return nil, err
+	}
+	var others []netip.Addr
+	for _, adapter := range adapters {
+		if adapter.LUID == tun || adapter.OperStatus != winipcfg.IfOperStatusUp || adapter.FirstGatewayAddress == nil {
+			continue
+		}
+		for server := adapter.FirstDNSServerAddress; server != nil; server = server.Next {
+			if addr, ok := netip.AddrFromSlice(server.Address.IP()); ok {
+				others = append(others, addr.Unmap())
+			}
+		}
+	}
+	return slices.DeleteFunc(slices.Clone(servers), func(server netip.Addr) bool {
+		return slices.Contains(others, server.Unmap())
+	}), nil
+}
+
+// disableDNSRegistration turns off the dynamic DNS registration of the
+// interface's addresses. dns are its DNS servers.
+func disableDNSRegistration(luid winipcfg.LUID, dns []netip.Addr) error {
+	guid, err := luid.GUID()
+	if err != nil {
+		return err
+	}
+	err = winipcfg.SetInterfaceDnsSettings(*guid, &winipcfg.DnsInterfaceSettings{
+		Version: winipcfg.DnsInterfaceSettingsVersion1,
+		Flags:   winipcfg.DnsInterfaceSettingsFlagRegistrationEnabled,
+	})
+	if err == nil || !go_errors.Is(err, windows.ERROR_PROC_NOT_FOUND) {
+		return err
+	}
+	return disableDNSRegistrationByNetsh(luid, dns)
+}
+
+// disableDNSRegistrationByNetsh does it for Windows before 10 1809, which
+// lacks SetInterfaceDnsSettings. The setting is the interface's, not the
+// address family's, but netsh only applies it along with a DNS server, which
+// replaces the IPv4 ones, so they are set again afterwards.
+func disableDNSRegistrationByNetsh(luid winipcfg.LUID, dns []netip.Addr) error {
+	row, err := luid.Interface()
+	if err != nil {
+		return err
+	}
+	server := "127.0.0.1" // any will do when there is no IPv4 one
+	if i := slices.IndexFunc(dns, netip.Addr.Is4); i >= 0 {
+		server = dns[i].String()
+	}
+	err = runNetsh("interface", "ipv4", "set", "dnsservers", "name="+strconv.FormatUint(uint64(row.InterfaceIndex), 10), "source=static", "address="+server, "register=none", "validate=no")
+	return errors.Combine(err, luid.SetDNS(windows.AF_INET, dns, nil))
+}
+
+// runNetsh runs netsh.exe from the system directory. netsh reports some
+// failures, like a syntax error, only in its output, even with exit code 0,
+// so any output counts as a failure.
+func runNetsh(args ...string) error {
+	system32, err := windows.GetSystemDirectory()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(filepath.Join(system32, "netsh.exe"), args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	output, err := cmd.CombinedOutput()
+	if output = bytes.TrimSpace(output); err != nil || len(output) > 0 {
+		return errors.New("netsh ", strings.Join(args, " "), ": ", string(output)).Base(err)
 	}
 	return nil
 }

@@ -53,23 +53,29 @@ var resolvectlRunner = func(name string, args ...string) ([]byte, error) {
 }
 
 // systemDNSAddrs derives the addresses used for the system DNS takeover from the
-// first IPv4 gateway: the gateway address itself is what a query from this
-// interface appears to come from, and the next address is what the resolver is
-// pointed at. The latter belongs to the TUN and is answered inside Xray;
-// handing the configured public resolvers to resolvectl instead would leave the
-// system querying them directly over the physical link, defeating the point of
-// the TUN.
+// first IPv4 gateway, or without one, the first IPv6 gateway: the gateway
+// address itself is what a query from this interface appears to come from, and
+// the next address is what the resolver is pointed at. The latter belongs to
+// the TUN and is answered inside Xray; handing the configured public resolvers
+// to resolvectl instead would leave the system querying them directly over the
+// physical link, defeating the point of the TUN.
 func systemDNSAddrs(gateway []string) (source, dns netip.Addr, ok bool) {
+	var first6 netip.Addr
 	for _, address := range gateway {
 		prefix, err := netip.ParsePrefix(address)
 		if err != nil {
 			continue
 		}
 		addr := prefix.Addr()
-		if !addr.Is4() {
-			continue
+		if addr.Is4() {
+			return addr, addr.Next(), true
 		}
-		return addr, addr.Next(), true
+		if !first6.IsValid() {
+			first6 = addr
+		}
+	}
+	if first6.IsValid() {
+		return first6, first6.Next(), true
 	}
 	return netip.Addr{}, netip.Addr{}, false
 }
@@ -115,11 +121,11 @@ const probeSourcePort = 49152
 // Overridable for tests.
 var verifyDNSRouting = func(ctx context.Context, inboundTag, source, address string) error {
 	ip, err := netip.ParseAddr(address)
-	if err != nil || !ip.Is4() {
+	if err != nil {
 		return errors.New("invalid DNS address ", address).Base(err)
 	}
 	src, err := netip.ParseAddr(source)
-	if err != nil || !src.Is4() {
+	if err != nil || src.Is4() != ip.Is4() {
 		return errors.New("invalid source address ", source).Base(err)
 	}
 
@@ -182,10 +188,10 @@ var verifyDNSRouting = func(ctx context.Context, inboundTag, source, address str
 //
 // It acts only when the config opts in, and it verifies the data path first:
 // unless a query to the advertised address would actually be handled, host-wide
-// resolution is left to the OS, which is the documented default. Errors are
-// returned to the caller, which treats them as non-fatal.
+// resolution is left to the OS and an error returned. The caller does not start
+// the TUN on an error, as the system DNS would bypass it.
 func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) error {
-	if !t.options.AutoSystemDns {
+	if !t.options.AutoSystemDnsToGateway {
 		return nil
 	}
 	if t.systemDNSSet {
@@ -202,7 +208,7 @@ func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) er
 
 	source, address, ok := systemDNSAddrs(t.options.Gateway)
 	if !ok {
-		return errors.New("no IPv4 gateway, cannot derive a system DNS address")
+		return errors.New("no gateway, cannot derive a system DNS address")
 	}
 
 	iface := t.ifaceName()

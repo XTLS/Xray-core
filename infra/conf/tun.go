@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"runtime"
+	"slices"
 	"strconv"
+	"strings"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/proxy/tun"
 	"google.golang.org/protobuf/proto"
 )
@@ -20,7 +24,8 @@ type TunConfig struct {
 	UserLevel              uint32   `json:"userLevel"`
 	AutoSystemRoutingTable []string `json:"autoSystemRoutingTable"`
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
-	AutoSystemDNS          bool     `json:"autoSystemDNS"`
+	AutoSystemDnsToGateway bool     `json:"autoSystemDnsToGateway"`
+	AutoSystemWfpBlockLeak []string `json:"autoSystemWfpBlockLeak"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -32,7 +37,32 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		DNS:                    v.DNS,
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
-		AutoSystemDns:          v.AutoSystemDNS,
+		AutoSystemDnsToGateway: v.AutoSystemDnsToGateway,
+	}
+	for _, leak := range v.AutoSystemWfpBlockLeak {
+		switch leak := strings.ToLower(leak); leak {
+		case "dns", "misconfigtun":
+			config.AutoSystemWfpBlockLeak = append(config.AutoSystemWfpBlockLeak, leak)
+		default:
+			return nil, errors.New("unknown autoSystemWfpBlockLeak value: ", leak)
+		}
+	}
+	// Each option needs other settings on the system it takes effect on: the
+	// filters go along with the routes of autoSystemRoutingTable, "dns" lets
+	// DNS through the TUN only, and autoSystemDnsToGateway points the system
+	// DNS at the gateway.
+	switch runtime.GOOS {
+	case "windows":
+		if len(config.AutoSystemWfpBlockLeak) > 0 && len(v.AutoSystemRoutingTable) == 0 {
+			return nil, errors.New("autoSystemWfpBlockLeak needs autoSystemRoutingTable to be set")
+		}
+		if slices.Contains(config.AutoSystemWfpBlockLeak, "dns") && len(v.DNS) == 0 {
+			return nil, errors.New(`autoSystemWfpBlockLeak "dns" needs dns to be set`)
+		}
+	case "linux":
+		if v.AutoSystemDnsToGateway && len(v.Gateway) == 0 {
+			return nil, errors.New("autoSystemDnsToGateway needs gateway to be set")
+		}
 	}
 	if v.AutoOutboundsInterface != nil {
 		config.AutoOutboundsInterface = *v.AutoOutboundsInterface

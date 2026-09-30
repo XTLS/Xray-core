@@ -58,9 +58,9 @@ func recorder(t *testing.T, failOn string) *[][]string {
 func optedInTun() *LinuxTun {
 	return &LinuxTun{
 		options: &Config{
-			Name:          "xray_tun",
-			Gateway:       []string{"192.168.100.1/30"},
-			AutoSystemDns: true,
+			Name:                   "xray_tun",
+			Gateway:                []string{"192.168.100.1/30"},
+			AutoSystemDnsToGateway: true,
 		},
 		tunLink: testLink("xray_tun"),
 	}
@@ -79,7 +79,7 @@ func TestConfigureSystemDNSDisabledByDefault(t *testing.T) {
 	calls := recorder(t, "")
 
 	t1 := optedInTun()
-	t1.options.AutoSystemDns = false
+	t1.options.AutoSystemDnsToGateway = false
 
 	if err := t1.ConfigureSystemDNS(context.Background(), "tun"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -103,7 +103,7 @@ func TestConfigureSystemDNSNoGateway(t *testing.T) {
 	t1.options.Gateway = nil
 
 	if err := t1.ConfigureSystemDNS(context.Background(), "tun"); err == nil {
-		t.Fatal("expected an error when no IPv4 gateway is configured")
+		t.Fatal("expected an error when no gateway is configured")
 	}
 	if len(*probes) != 0 {
 		t.Errorf("routing probe must not run without a gateway, got %d calls", len(*probes))
@@ -351,9 +351,18 @@ func TestSystemDNSAddrs(t *testing.T) {
 			wantOK:  false,
 		},
 		{
-			name:    "ipv6 only",
-			gateway: []string{"fc00::1/64"},
-			wantOK:  false,
+			name:       "ipv6 only",
+			gateway:    []string{"fc00::1/64"},
+			wantSource: "fc00::1",
+			wantDNS:    "fc00::2",
+			wantOK:     true,
+		},
+		{
+			name:       "first ipv6 without ipv4",
+			gateway:    []string{"fc00::1/64", "fd00::1/64"},
+			wantSource: "fc00::1",
+			wantDNS:    "fc00::2",
+			wantOK:     true,
 		},
 	}
 
