@@ -2,6 +2,7 @@ package mux_test
 
 import (
 	"context"
+	"io"
 	"testing"
 	"time"
 
@@ -113,4 +114,34 @@ func TestClientWorkerClose(t *testing.T) {
 	defer tw2.Close()
 
 	common.Must(w2.Close())
+}
+
+func TestClientWorkerDispatchRace(t *testing.T) {
+	reader, writer := pipe.New(pipe.WithoutSizeLimit())
+	worker, err := mux.NewClientWorker(transport.Link{Reader: reader, Writer: writer}, mux.ClientStrategy{})
+	common.Must(err)
+
+	// The mux connection dies as soon as the new session is allocated, like when
+	// the server closes it right away. The session manager's lock orders this
+	// goroutine after Allocate, but not after the rest of Dispatch.
+	go func() {
+		for worker.ActiveConnections() == 0 {
+			time.Sleep(time.Millisecond)
+		}
+		common.Must(writer.Close())
+	}()
+
+	uplinkReader, _ := pipe.New(pipe.WithoutSizeLimit())
+	downlinkReader, downlinkWriter := pipe.New(pipe.WithoutSizeLimit())
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
+	}})
+	if !worker.Dispatch(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}) {
+		t.Fatal("failed to dispatch")
+	}
+
+	// Closing the worker must close the link of its session as well.
+	if _, err := downlinkReader.ReadMultiBufferTimeout(time.Second * 2); err != io.EOF {
+		t.Error("expected closed downlink, but got ", err)
+	}
 }
