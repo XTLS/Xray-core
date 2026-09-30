@@ -227,6 +227,9 @@ func TestSocksBridageUDP(t *testing.T) {
 			defer CloseServer(server)
 			break
 		}
+		if server != nil {
+			CloseServer(server)
+		}
 		retry++
 		if retry > 5 {
 			t.Fatal("All attempts failed to start server")
@@ -341,6 +344,9 @@ func TestSocksBridageUDPWithRouting(t *testing.T) {
 		if server != nil && WaitConnAvailableWithTest(t, testUDPConn(serverPort+1, 1024, time.Second*2)) {
 			defer CloseServer(server)
 			break
+		}
+		if server != nil {
+			CloseServer(server)
 		}
 		retry++
 		if retry > 5 {
