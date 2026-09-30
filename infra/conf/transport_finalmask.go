@@ -299,7 +299,6 @@ type NoiseItem struct {
 	RandRange *Int32Range     `json:"randRange"`
 	Type      string          `json:"type"`
 	Packet    json.RawMessage `json:"packet"`
-	Exp       string          `json:"exp"`
 	Delay     Int32Range      `json:"delay"`
 }
 
@@ -311,11 +310,15 @@ type NoiseMask struct {
 func (c *NoiseMask) Build() (proto.Message, error) {
 	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
 	for _, item := range c.Noise {
-		if item.Exp != "" {
-			if len(item.Packet) > 0 || item.Rand.To > 0 {
-				return nil, errors.New(`noise item "exp" can't be combined with "packet" or "rand"`)
+		if len(item.Packet) > 0 && item.Rand.To > 0 {
+			return nil, errors.New("len(item.Packet) > 0 && item.Rand.To > 0")
+		}
+		if strings.ToLower(item.Type) == "exp" {
+			var exp string
+			if err := json.Unmarshal(item.Packet, &exp); err != nil {
+				return nil, errors.New(`"packet" of noise "type": "exp" must be a string`).Base(err)
 			}
-			segments, err := parseNoiseExp(item.Exp)
+			segments, err := parseNoiseExp(exp)
 			if err != nil {
 				return nil, err
 			}
@@ -325,10 +328,6 @@ func (c *NoiseMask) Build() (proto.Message, error) {
 				DelayMax: int64(item.Delay.To),
 			})
 			continue
-		}
-
-		if len(item.Packet) > 0 && item.Rand.To > 0 {
-			return nil, errors.New("len(item.Packet) > 0 && item.Rand.To > 0")
 		}
 		if item.RandRange == nil {
 			item.RandRange = &Int32Range{From: 0, To: 255}

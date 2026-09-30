@@ -1,13 +1,19 @@
 package conf
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 )
 
+func expPacket(exp string) json.RawMessage {
+	b, _ := json.Marshal(exp)
+	return b
+}
+
 func buildNoiseExp(exp string) (*noise.Config, error) {
-	msg, err := (&NoiseMask{Noise: []NoiseItem{{Exp: exp}}}).Build()
+	msg, err := (&NoiseMask{Noise: []NoiseItem{{Type: "exp", Packet: expPacket(exp)}}}).Build()
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +96,41 @@ func TestNoiseExpRejects(t *testing.T) {
 }
 
 func TestNoiseExpConflicts(t *testing.T) {
-	if _, err := (&NoiseMask{Noise: []NoiseItem{{Exp: "<t>", Rand: Int32Range{From: 10, To: 20}}}}).Build(); err == nil {
+	if _, err := (&NoiseMask{Noise: []NoiseItem{{Type: "exp", Packet: expPacket("<t>"), Rand: Int32Range{From: 10, To: 20}}}}).Build(); err == nil {
 		t.Error("exp with rand should be rejected")
+	}
+	for _, packet := range []string{``, `[1, 2]`, `5`} {
+		if _, err := (&NoiseMask{Noise: []NoiseItem{{Type: "exp", Packet: json.RawMessage(packet)}}}).Build(); err == nil {
+			t.Errorf("expected an error for packet %q", packet)
+		}
+	}
+}
+
+func TestNoiseExpFromJSON(t *testing.T) {
+	var mask NoiseMask
+	if err := json.Unmarshal([]byte(`{"noise": [
+		{"type": "exp", "packet": "<b 504f5354><rd 10-20>", "delay": "1-3"},
+		{"type": "EXP", "packet": "<t>"},
+		{"type": "str", "packet": "<t>"},
+		{"rand": "10-20"}
+	]}`), &mask); err != nil {
+		t.Fatal(err)
+	}
+	msg, err := mask.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := msg.(*noise.Config).Items
+	if len(items[0].Segments) != 2 || items[0].DelayMin != 1 || items[0].DelayMax != 3 {
+		t.Errorf("item 0 = %+v", items[0])
+	}
+	if len(items[1].Segments) != 1 || items[1].Segments[0].Kind != noise.Segment_TIMESTAMP {
+		t.Errorf("item 1 = %+v", items[1])
+	}
+	if len(items[2].Segments) != 0 || string(items[2].Packet) != "<t>" {
+		t.Errorf("item 2 = %+v", items[2])
+	}
+	if len(items[3].Segments) != 0 || items[3].RandMin != 10 || items[3].RandMax != 20 {
+		t.Errorf("item 3 = %+v", items[3])
 	}
 }
