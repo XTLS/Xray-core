@@ -99,6 +99,8 @@ type Config struct {
 	RsaPublicKey  []byte                 `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
 	Hostname      string                 `protobuf:"bytes,10,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Profiles      []*Profile             `protobuf:"bytes,11,rep,name=profiles,proto3" json:"profiles,omitempty"`
+	// Alternating startup padding turns, client first. Empty uses the built-in preset.
+	Padding       []*Padding `protobuf:"bytes,12,rep,name=padding,proto3" json:"padding,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -168,6 +170,65 @@ func (x *Config) GetProfiles() []*Profile {
 	return nil
 }
 
+func (x *Config) GetPadding() []*Padding {
+	if x != nil {
+		return x.Padding
+	}
+	return nil
+}
+
+type Padding struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LengthMin     int64                  `protobuf:"varint,1,opt,name=length_min,json=lengthMin,proto3" json:"length_min,omitempty"`
+	LengthMax     int64                  `protobuf:"varint,2,opt,name=length_max,json=lengthMax,proto3" json:"length_max,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Padding) Reset() {
+	*x = Padding{}
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Padding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Padding) ProtoMessage() {}
+
+func (x *Padding) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Padding.ProtoReflect.Descriptor instead.
+func (*Padding) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Padding) GetLengthMin() int64 {
+	if x != nil {
+		return x.LengthMin
+	}
+	return 0
+}
+
+func (x *Padding) GetLengthMax() int64 {
+	if x != nil {
+		return x.LengthMax
+	}
+	return 0
+}
+
 var File_transport_internet_finalmask_xmc_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
@@ -177,14 +238,20 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x12\n" +
 	"\x04uuid\x18\x02 \x01(\fR\x04uuid\x12%\n" +
 	"\x0etextures_value\x18\x03 \x01(\tR\rtexturesValue\x12-\n" +
-	"\x12textures_signature\x18\x04 \x01(\tR\x11texturesSignature\"\xe0\x01\n" +
+	"\x12textures_signature\x18\x04 \x01(\tR\x11texturesSignature\"\xaa\x02\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12&\n" +
 	"\x0frsa_private_key\x18\b \x01(\fR\rrsaPrivateKey\x12$\n" +
 	"\x0ersa_public_key\x18\t \x01(\fR\frsaPublicKey\x12\x1a\n" +
 	"\bhostname\x18\n" +
 	" \x01(\tR\bhostname\x12J\n" +
-	"\bprofiles\x18\v \x03(\v2..xray.transport.internet.finalmask.xmc.ProfileR\bprofilesJ\x04\b\x02\x10\x03B\x91\x01\n" +
+	"\bprofiles\x18\v \x03(\v2..xray.transport.internet.finalmask.xmc.ProfileR\bprofiles\x12H\n" +
+	"\apadding\x18\f \x03(\v2..xray.transport.internet.finalmask.xmc.PaddingR\apaddingJ\x04\b\x02\x10\x03\"G\n" +
+	"\aPadding\x12\x1d\n" +
+	"\n" +
+	"length_min\x18\x01 \x01(\x03R\tlengthMin\x12\x1d\n" +
+	"\n" +
+	"length_max\x18\x02 \x01(\x03R\tlengthMaxB\x91\x01\n" +
 	")com.xray.transport.internet.finalmask.xmcP\x01Z:github.com/xtls/xray-core/transport/internet/finalmask/xmc\xaa\x02%Xray.Transport.Internet.Finalmask.XMCb\x06proto3"
 
 var (
@@ -199,18 +266,20 @@ func file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_finalmask_xmc_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_xmc_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_transport_internet_finalmask_xmc_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_transport_internet_finalmask_xmc_config_proto_goTypes = []any{
 	(*Profile)(nil), // 0: xray.transport.internet.finalmask.xmc.Profile
 	(*Config)(nil),  // 1: xray.transport.internet.finalmask.xmc.Config
+	(*Padding)(nil), // 2: xray.transport.internet.finalmask.xmc.Padding
 }
 var file_transport_internet_finalmask_xmc_config_proto_depIdxs = []int32{
 	0, // 0: xray.transport.internet.finalmask.xmc.Config.profiles:type_name -> xray.transport.internet.finalmask.xmc.Profile
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 1: xray.transport.internet.finalmask.xmc.Config.padding:type_name -> xray.transport.internet.finalmask.xmc.Padding
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_xmc_config_proto_init() }
@@ -224,7 +293,7 @@ func file_transport_internet_finalmask_xmc_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_xmc_config_proto_rawDesc), len(file_transport_internet_finalmask_xmc_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
