@@ -2,6 +2,7 @@ package conf_test
 
 import (
 	"encoding/json"
+	"runtime"
 	"testing"
 
 	. "github.com/xtls/xray-core/infra/conf"
@@ -20,21 +21,43 @@ func TestTunConfigAutoSystem(t *testing.T) {
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500},
 		},
 		{
-			Input:  `{"name": "xray0", "autoSystemDnsToGateway": true}`,
+			Input:  `{"name": "xray0", "gateway": ["10.0.0.1/24"], "autoSystemDnsToGateway": true}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemDnsToGateway: true},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, Gateway: []string{"10.0.0.1/24"}, AutoSystemDnsToGateway: true},
 		},
 		{
-			Input:  `{"name": "xray0", "autoSystemWfpBlockLeak": ["dns", "misconfigtun"]}`,
+			Input:  `{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["dns", "misconfigtun"]}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemWfpBlockLeak: []string{"dns", "misconfigtun"}},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"dns", "misconfigtun"}},
 		},
 		{
-			Input:  `{"name": "xray0", "autoSystemWfpBlockLeak": ["DNS"]}`,
+			Input:  `{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["DNS"]}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemWfpBlockLeak: []string{"dns"}},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"dns"}},
 		},
 	})
+}
+
+// TestTunConfigAutoSystemNeeds checks that an option is rejected without the
+// setting it needs, only on the system it takes effect on.
+func TestTunConfigAutoSystemNeeds(t *testing.T) {
+	for _, c := range []struct {
+		input string
+		goos  string // where it is rejected
+	}{
+		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["misconfigtun"]}`, "windows"},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["misconfigtun"]}`, ""},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["dns"]}`, "windows"},
+		{`{"name": "xray0", "autoSystemDnsToGateway": true}`, "linux"},
+	} {
+		config := new(TunConfig)
+		if err := json.Unmarshal([]byte(c.input), config); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.Build(); (err != nil) != (runtime.GOOS == c.goos) {
+			t.Errorf("%s on %s: error = %v", c.input, runtime.GOOS, err)
+		}
+	}
 }
 
 func TestTunConfigAutoSystemWfpBlockLeakUnknown(t *testing.T) {

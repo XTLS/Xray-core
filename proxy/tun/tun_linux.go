@@ -188,8 +188,8 @@ var verifyDNSRouting = func(ctx context.Context, inboundTag, source, address str
 //
 // It acts only when the config opts in, and it verifies the data path first:
 // unless a query to the advertised address would actually be handled, host-wide
-// resolution is left to the OS, which is the documented default. Errors are
-// returned to the caller, which treats them as non-fatal.
+// resolution is left to the OS and an error returned. The caller does not start
+// the TUN on an error, as the system DNS would bypass it.
 func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) error {
 	if !t.options.AutoSystemDnsToGateway {
 		return nil

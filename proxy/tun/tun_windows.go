@@ -266,29 +266,22 @@ startOver:
 					blocked = append(blocked, b.what)
 				}
 			}
-			what := strings.Join(blocked, " and ")
-			// Rather no TUN than a leaking one. Before Windows 10 the filters are
-			// untested, and sing-box's broke its TUN there (SagerNet/sing-box#3659),
-			// so older versions only get a warning.
-			if major, _, _ := windows.RtlGetNtVersionNumbers(); major >= 10 {
-				return errors.New("unable to block ", what, " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
+			// Rather no TUN than a leaking one.
+			return errors.New("unable to block ", strings.Join(blocked, " and "), " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
+		}
+		errors.LogInfo(context.Background(), "[tun] outside the TUN, blocked DNS: ", blockDNS, ", blocked IPv4: ", blockIPv4, ", blocked IPv6: ", blockIPv6)
+		if blockDNS {
+			covered := slices.Clone(addresses)
+			for _, route := range routesData {
+				covered = append(covered, route.Destination)
 			}
-			errors.LogWarningInner(context.Background(), err, "[tun] unable to block ", what, " outside the TUN, leaks are possible")
-		} else {
-			errors.LogInfo(context.Background(), "[tun] outside the TUN, blocked DNS: ", blockDNS, ", blocked IPv4: ", blockIPv4, ", blocked IPv6: ", blockIPv6)
-			if blockDNS {
-				covered := slices.Clone(addresses)
-				for _, route := range routesData {
-					covered = append(covered, route.Destination)
-				}
-				for _, server := range dnsOutsideTUN(dns, covered) {
-					errors.LogWarning(context.Background(), "[tun] DNS server ", server, " is in neither gateway nor autoSystemRoutingTable, so queries to it cannot go through the TUN and are blocked")
-				}
-				// With updater, the dialer controllers bind Xray's own sockets
-				// to the physical interface.
-				if updater != nil {
-					t.resolver = resolveOnOwn()
-				}
+			for _, server := range dnsOutsideTUN(dns, covered) {
+				errors.LogWarning(context.Background(), "[tun] DNS server ", server, " is in neither gateway nor autoSystemRoutingTable, so queries to it cannot go through the TUN and are blocked")
+			}
+			// With updater, the dialer controllers bind Xray's own sockets
+			// to the physical interface.
+			if updater != nil {
+				t.resolver = resolveOnOwn()
 			}
 		}
 	}

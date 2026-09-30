@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -43,6 +45,23 @@ func (v *TunConfig) Build() (proto.Message, error) {
 			config.AutoSystemWfpBlockLeak = append(config.AutoSystemWfpBlockLeak, leak)
 		default:
 			return nil, errors.New("unknown autoSystemWfpBlockLeak value: ", leak)
+		}
+	}
+	// Each option needs other settings on the system it takes effect on: the
+	// filters go along with the routes of autoSystemRoutingTable, "dns" lets
+	// DNS through the TUN only, and autoSystemDnsToGateway points the system
+	// DNS at the gateway.
+	switch runtime.GOOS {
+	case "windows":
+		if len(config.AutoSystemWfpBlockLeak) > 0 && len(v.AutoSystemRoutingTable) == 0 {
+			return nil, errors.New("autoSystemWfpBlockLeak needs autoSystemRoutingTable to be set")
+		}
+		if slices.Contains(config.AutoSystemWfpBlockLeak, "dns") && len(v.DNS) == 0 {
+			return nil, errors.New(`autoSystemWfpBlockLeak "dns" needs dns to be set`)
+		}
+	case "linux":
+		if v.AutoSystemDnsToGateway && len(v.Gateway) == 0 {
+			return nil, errors.New("autoSystemDnsToGateway needs gateway to be set")
 		}
 	}
 	if v.AutoOutboundsInterface != nil {
