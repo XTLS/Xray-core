@@ -380,7 +380,7 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 
 	link := &transport.Link{
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
-		Writer: buf.NewWriter(conn),
+		Writer: buf.NewHalfCloseWriter(conn),
 	}
 	if err := s.dispatcher.DispatchLink(ctx, dest, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))

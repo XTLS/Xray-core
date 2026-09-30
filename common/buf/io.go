@@ -194,3 +194,23 @@ func NewWriter(writer io.Writer) Writer {
 		counter: counter,
 	}
 }
+
+type halfCloseWriter struct {
+	Writer
+	conn interface{ CloseWrite() error }
+}
+
+func (w *halfCloseWriter) Close() error {
+	return w.conn.CloseWrite()
+}
+
+// Interrupt must not send FIN, or an aborted response would look complete.
+func (w *halfCloseWriter) Interrupt() {}
+
+// NewHalfCloseWriter creates a new Writer whose Close only shuts down the write side of conn.
+func NewHalfCloseWriter(conn net.Conn) Writer {
+	if c, ok := stat.TryUnwrapStatsConn(conn).(interface{ CloseWrite() error }); ok {
+		return &halfCloseWriter{Writer: NewWriter(conn), conn: c}
+	}
+	return NewWriter(conn)
+}
