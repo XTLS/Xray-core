@@ -51,7 +51,7 @@ func (m *SessionManager) Count() int {
 	return int(m.count)
 }
 
-func (m *SessionManager) Allocate(Strategy *ClientStrategy) *Session {
+func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer) *Session {
 	m.Lock()
 	defer m.Unlock()
 
@@ -64,6 +64,8 @@ func (m *SessionManager) Allocate(Strategy *ClientStrategy) *Session {
 
 	m.count++
 	s := &Session{
+		input:  input,
+		output: output,
 		ID:     m.count,
 		parent: m,
 		done:   done.New(),
