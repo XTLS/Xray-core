@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"io"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -46,8 +45,12 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Outbound, error) {
 		return nil, errors.New("invalid key: ", config.Key).Base(err)
 	}
 
+	if method.IsChaCha && len(pskList) > 1 {
+		return nil, errors.New("multi-key is not supported for chacha20-poly1305")
+	}
+
 	finalPSK := pskList[len(pskList)-1]
-	udpCodec, err := NewUDPPacketCodec(method, finalPSK)
+	udpCodec, err := NewUDPPacketCodec(method, pskList)
 	if err != nil {
 		return nil, errors.New("failed to create udp packet codec").Base(err)
 	}
@@ -126,18 +129,30 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 
 		requestDone := func() error {
 			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-			bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
-			bodyWriter, err := WriteTCPRequest(bufferedWriter, o.method, o.pskList, destination, clientSaltSlice, nil)
+
+			var initialPayload []byte
+			var firstBuf *buf.Buffer
+			var remainingMB buf.MultiBuffer
+			if timeoutReader, ok := link.Reader.(buf.TimeoutReader); ok {
+				if mb, err := timeoutReader.ReadMultiBufferTimeout(0); err == nil && !mb.IsEmpty() {
+					remainingMB, firstBuf = buf.SplitFirst(mb)
+					initialPayload = firstBuf.Bytes()
+				}
+			}
+
+			bodyWriter, err := WriteTCPRequest(conn, o.method, o.pskList, destination, clientSaltSlice, initialPayload)
+			if firstBuf != nil {
+				firstBuf.Release()
+			}
 			if err != nil {
+				buf.ReleaseMulti(remainingMB)
 				return errors.New("failed to write request").Base(err)
 			}
 
-			if err = buf.CopyOnceTimeout(link.Reader, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
-				return errors.New("failed to write A request payload").Base(err)
-			}
-
-			if err := bufferedWriter.SetBuffered(false); err != nil {
-				return err
+			if !remainingMB.IsEmpty() {
+				if err := bodyWriter.WriteMultiBuffer(remainingMB); err != nil {
+					return err
+				}
 			}
 
 			return buf.Copy(link.Reader, bodyWriter, buf.UpdateActivity(timer))
@@ -163,13 +178,18 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 	}
 
 	if network == net.Network_UDP {
+		session, err := o.udpCodec.NewClientSession()
+		if err != nil {
+			return errors.New("failed to create client udp session").Base(err)
+		}
+
 		requestDone := func() error {
 			defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
 			writer := &UDPWriter{
 				Writer:      conn,
 				Destination: destination,
-				Codec:       o.udpCodec,
+				Session:     session,
 			}
 
 			if err := buf.Copy(link.Reader, writer, buf.UpdateActivity(timer)); err != nil {
@@ -182,8 +202,8 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 			defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
 			reader := &UDPReader{
-				Reader: conn,
-				Codec:  o.udpCodec,
+				Reader:  conn,
+				Session: session,
 			}
 
 			if err := buf.Copy(reader, link.Writer, buf.UpdateActivity(timer)); err != nil {

@@ -2,7 +2,6 @@ package shadowsocks_2022
 
 import (
 	"context"
-	"io"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -13,9 +12,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -101,35 +97,29 @@ func (i *Inbound) processTCP(ctx context.Context, conn net.Conn, dispatcher rout
 		return errors.New("unable to set read deadline").Base(err)
 	}
 
+	// 1. Single read call for Salt + Fixed-length header chunk per SIP022 §3.1.4
+	headerLen := i.method.KeySaltLength + RequestHeaderFixedChunkLength + AEADTagSize
+	headerBuf := make([]byte, headerLen)
+	n, err := conn.Read(headerBuf)
+	if err != nil || n < headerLen {
+		ResetTCPConn(conn)
+		return errors.New("failed to read complete handshake header")
+	}
+
 	var salt [32]byte
+	copy(salt[:i.method.KeySaltLength], headerBuf[:i.method.KeySaltLength])
 	saltSlice := salt[:i.method.KeySaltLength]
-	if _, err := io.ReadFull(conn, saltSlice); err != nil {
-		return err
-	}
+	fixedChunk := headerBuf[i.method.KeySaltLength:]
 
-	if !i.saltFilter.Check(salt) {
-		return ErrSaltNotUnique
-	}
-
-	sessionKey := DeriveSessionSubKey(i.psk, saltSlice, i.method.KeySaltLength)
-	aead, err := i.method.NewAEAD(sessionKey)
+	reader, reqHeader, err := InitServerStream(conn, i.method, i.psk, saltSlice, salt, fixedChunk, i.saltFilter)
 	if err != nil {
+		ResetTCPConn(conn)
 		return err
 	}
 
-	reader := NewStreamReader(conn, aead)
-
-	reqHeader, err := ReadClientRequestHeader(conn, reader)
-	if err != nil {
-		return err
-	}
-	conn.SetReadDeadline(time.Time{})
 	dest := reqHeader.Destination
 
-	writer, err := WriteTCPResponse(conn, i.method, i.psk, saltSlice, nil)
-	if err != nil {
-		return err
-	}
+	writer := NewServerStreamWriter(conn, i.method, i.psk, saltSlice)
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   conn.RemoteAddr(),
@@ -146,42 +136,17 @@ func (i *Inbound) processTCP(ctx context.Context, conn net.Conn, dispatcher rout
 	}
 
 	if len(reqHeader.EarlyData) > 0 {
-		earlyBuf := buf.New()
-		earlyBuf.Write(reqHeader.EarlyData)
-		if err := link.Writer.WriteMultiBuffer(buf.MultiBuffer{earlyBuf}); err != nil {
+		mb := buf.MergeBytes(nil, reqHeader.EarlyData)
+		if err := link.Writer.WriteMultiBuffer(mb); err != nil {
 			return err
 		}
 	}
 
-	sessionPolicy = i.policyManager.ForLevel(uint32(i.user.Level))
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-
-	requestDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
-	}
-
-	responseDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-		return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
-	}
-
-	responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
-	return task.Run(ctx, requestDone, responseDoneAndCloseWriter)
+	return TransportTCP(ctx, i.policyManager.ForLevel(uint32(i.user.Level)), reader, writer, link)
 }
 
 func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	udpConns := utils.NewTypedSyncMap[uint64, *udpConnEntry]()
-	defer func() {
-		udpConns.Range(func(key uint64, entry *udpConnEntry) bool {
-			entry.timer.SetTimeout(0)
-			return true
-		})
-	}()
-
-	reader := buf.NewReader(conn)
+	reader := buf.NewPacketReader(conn)
 	for {
 		mb, err := reader.ReadMultiBuffer()
 		if err != nil {
@@ -191,75 +156,30 @@ func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatch
 
 		for _, b := range mb {
 			decoded, err := i.udpCodec.DecodePacket(b.Bytes())
-			if err != nil {
-				b.Release()
+			b.Release()
+			if err != nil || decoded.HeaderType != HeaderTypeClient {
 				continue
 			}
 
-			entry, ok := udpConns.Load(decoded.SessionID)
-			if !ok {
-				sessCtx, cancel := context.WithCancel(ctx)
-				sessCtx = log.ContextWithAccessMessage(sessCtx, &log.AccessMessage{
-					From:   conn.RemoteAddr(),
-					To:     decoded.Destination,
-					Status: log.AccessAccepted,
-					Email:  i.user.Email,
-				})
-
-				link, err := dispatcher.Dispatch(sessCtx, decoded.Destination)
-				if err != nil {
-					cancel()
-					b.Release()
-					continue
+			sessionItem := i.udpCodec.GetSession(decoded.SessionID)
+			if sessionItem.User == nil {
+				sessionItem.Lock()
+				if sessionItem.User == nil {
+					sessionItem.User = i.user
 				}
-
-				newEntry := &udpConnEntry{
-					link:   link,
-					cancel: cancel,
-				}
-				sessionPolicy := i.policyManager.ForLevel(uint32(i.user.Level))
-				newEntry.timer = signal.CancelAfterInactivity(sessCtx, func() {
-					udpConns.Delete(decoded.SessionID)
-					common.Interrupt(link.Reader)
-					common.Interrupt(link.Writer)
-					cancel()
-				}, sessionPolicy.Timeouts.ConnectionIdle)
-
-				actual, loaded := udpConns.LoadOrStore(decoded.SessionID, newEntry)
-				if loaded {
-					// Another goroutine/packet beat us to storing, terminate our redundant link
-					newEntry.timer.SetTimeout(0)
-					entry = actual
-				} else {
-					entry = newEntry
-					go func(sessID uint64, dest net.Destination, cEntry *udpConnEntry) {
-						defer func() {
-							cEntry.timer.SetTimeout(0)
-						}()
-						for {
-							resMb, err := cEntry.link.Reader.ReadMultiBuffer()
-							if err != nil {
-								return
-							}
-							cEntry.timer.Update()
-							for _, rb := range resMb {
-								encPacket, err := i.udpCodec.EncodeServerPacket(sessID, dest, rb.Bytes())
-								rb.Release()
-								if err != nil {
-									continue
-								}
-								_, _ = conn.Write(encPacket)
-							}
-						}
-					}(decoded.SessionID, decoded.Destination, entry)
-				}
+				sessionItem.Unlock()
+			}
+			link, err := sessionItem.EnsureLink(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(dest net.Destination, payload []byte) ([]byte, error) {
+				return i.udpCodec.EncodeServerPacket(decoded.SessionID, dest, payload)
+			})
+			if err != nil {
+				continue
 			}
 
-			entry.timer.Update()
 			payloadBuf := buf.New()
 			payloadBuf.Write(decoded.Payload)
-			b.Release()
-			_ = entry.link.Writer.WriteMultiBuffer(buf.MultiBuffer{payloadBuf})
+			payloadBuf.UDP = &decoded.Destination
+			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{payloadBuf})
 		}
 	}
 }

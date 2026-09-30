@@ -2,9 +2,11 @@ package shadowsocks_2022_test
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"io"
 	gonet "net"
 	"sync"
 	"sync/atomic"
@@ -268,4 +270,107 @@ func (c *dummyStatConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 	}
 	return nil
+}
+
+func TestRelayTCPHandshakeForwarding(t *testing.T) {
+	methods := []string{MethodAES128GCM, MethodAES256GCM}
+	for _, methodName := range methods {
+		t.Run(methodName, func(t *testing.T) {
+			method, err := GetCipherMethod(methodName)
+			common.Must(err)
+
+			relayKey := make([]byte, method.KeySaltLength)
+			destKey := make([]byte, method.KeySaltLength)
+			_, _ = io.ReadFull(rand.Reader, relayKey)
+			_, _ = io.ReadFull(rand.Reader, destKey)
+
+			targetPort := uint32(54321)
+			relayConfig := &RelayServerConfig{
+				Method: methodName,
+				Key:    base64.StdEncoding.EncodeToString(relayKey),
+				Destinations: []*RelayDestination{
+					{
+						Key:     base64.StdEncoding.EncodeToString(destKey),
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    targetPort,
+						Email:   "test@xray.com",
+					},
+				},
+			}
+
+			testCtx := newTestContext()
+			inbound, err := NewRelayServer(testCtx, relayConfig)
+			common.Must(err)
+
+			targetDest := net.TCPDestination(net.LocalHostIP, net.Port(targetPort))
+
+			downstreamR, downstreamW := gonet.Pipe()
+			defer downstreamR.Close()
+			defer downstreamW.Close()
+
+			disp := &dummyDispatcher{
+				onDispatch: func(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+					inLink := &transport.Link{
+						Reader: buf.NewReader(downstreamR),
+						Writer: &customWriter{
+							write: func(mb buf.MultiBuffer) error {
+								defer buf.ReleaseMulti(mb)
+								for _, b := range mb {
+									if _, err := downstreamW.Write(b.Bytes()); err != nil {
+										return err
+									}
+								}
+								return nil
+							},
+						},
+					}
+					return inLink, nil
+				},
+			}
+
+			clientConn, relayConn := gonet.Pipe()
+			defer clientConn.Close()
+			defer relayConn.Close()
+
+			go func() {
+				_ = inbound.Process(testCtx, net.Network_TCP, &dummyStatConn{Conn: relayConn}, disp)
+			}()
+
+			clientSalt := make([]byte, method.KeySaltLength)
+			_, _ = io.ReadFull(rand.Reader, clientSalt)
+			pskList := [][]byte{relayKey, destKey}
+
+			go func() {
+				_, err := WriteTCPRequest(clientConn, method, pskList, targetDest, clientSalt, []byte("relay payload"))
+				if err != nil {
+					t.Errorf("WriteTCPRequest failed: %v", err)
+				}
+			}()
+
+			// Downstream server must be able to read Salt + Fixed chunk in a single Read call!
+			headerLen := method.KeySaltLength + RequestHeaderFixedChunkLength + AEADTagSize
+			headerBuf := make([]byte, headerLen)
+			n, err := downstreamR.Read(headerBuf)
+			if err != nil {
+				t.Fatalf("downstream failed to read handshake: %v", err)
+			}
+			if n < headerLen {
+				t.Fatalf("downstream expected single read >= %d bytes, got %d", headerLen, n)
+			}
+
+			// Verify downstream can decode the fixed chunk and subsequent payload
+			sessionKey := DeriveSessionSubKey(destKey, headerBuf[:method.KeySaltLength], method.KeySaltLength)
+			aead, err := method.NewAEAD(sessionKey)
+			common.Must(err)
+
+			reader := NewStreamReader(downstreamR, aead)
+			reqHeader, err := ReadClientRequestHeaderWithFixed(reader, headerBuf[method.KeySaltLength:])
+			if err != nil {
+				t.Fatalf("downstream failed to parse client request header: %v", err)
+			}
+			if string(reqHeader.EarlyData) != "relay payload" {
+				t.Fatalf("payload mismatch: expected 'relay payload', got '%s'", string(reqHeader.EarlyData))
+			}
+		})
+	}
 }

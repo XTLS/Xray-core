@@ -182,57 +182,48 @@ func TestTCPStream(t *testing.T) {
 				common.Must(err)
 				IncreaseNonce(reader.Nonce())
 
-				vBuf := buf.New()
-				vBuf.Write(plainVar)
-				receivedDest, err = ReadAddressPort(vBuf)
+				dest, addrLen, err := ParseAddressPort(plainVar)
 				common.Must(err)
+				receivedDest = net.TCPDestination(dest.Address, dest.Port)
+				plainVar = plainVar[addrLen:]
+				padLen := int(binary.BigEndian.Uint16(plainVar[:2]))
+				receivedPayload = plainVar[2+padLen:]
 
-				// Skip padding
-				var padBytes [2]byte
-				_, _ = vBuf.Read(padBytes[:])
-				padLen := int(padBytes[0])<<8 | int(padBytes[1])
-				vBuf.Advance(int32(padLen))
+				// Server sends response stream with receivedPayload as first payload
+				writer := NewServerStreamWriter(serverConn, method, rawKey, salt)
+				pBuf := buf.New()
+				pBuf.Write(receivedPayload)
+				_ = writer.WriteMultiBuffer(buf.MultiBuffer{pBuf})
 
-				receivedPayload = make([]byte, vBuf.Len())
-				copy(receivedPayload, vBuf.Bytes())
-				vBuf.Release()
-
-				// Server sends response handshake
-				serverSalt := make([]byte, method.KeySaltLength)
-				_, _ = rand.Read(serverSalt)
-				respKey := DeriveSessionSubKey(rawKey, serverSalt, method.KeySaltLength)
-				respAead, err := method.NewAEAD(respKey)
-				writer := NewStreamWriter(serverConn, respAead)
-				_, _ = serverConn.Write(serverSalt)
-
-				fixedResp := make([]byte, 1+8+method.KeySaltLength+2)
-				fixedResp[0] = HeaderTypeServer
-				binary.BigEndian.PutUint64(fixedResp[1:9], uint64(time.Now().Unix()))
-				copy(fixedResp[9:9+method.KeySaltLength], salt)
-				binary.BigEndian.PutUint16(fixedResp[9+method.KeySaltLength:11+method.KeySaltLength], 0)
-
-				fixedChunk := respAead.Seal(nil, writer.Nonce(), fixedResp, nil)
-				IncreaseNonce(writer.Nonce())
-				_, _ = serverConn.Write(fixedChunk)
-
-				// Echo stream data
+				// Read and echo additional stream data
 				mb, err := reader.ReadMultiBuffer()
 				common.Must(err)
 				_ = writer.WriteMultiBuffer(mb)
+				_ = writer.Close()
 			}()
 
 			// Client goroutine
 			go func() {
 				defer wg.Done()
-				clientSalt, writer, err := ClientHandshake(clientConn, method, [][]byte{rawKey}, dest, testPayload)
+				clientSalt := make([]byte, method.KeySaltLength)
+				common.Must2(io.ReadFull(rand.Reader, clientSalt))
+				writer, err := WriteTCPRequest(clientConn, method, [][]byte{rawKey}, dest, clientSalt, testPayload)
 				common.Must(err)
 
-				reader, _, err := ClientVerifyServerResponse(clientConn, method, rawKey, clientSalt)
+				reader, err := ReadTCPResponse(clientConn, method, rawKey, clientSalt)
 				common.Must(err)
+
+				// The first ReadMultiBuffer drains initialPayload from reader cache
+				mbInit, err := reader.ReadMultiBuffer()
+				common.Must(err)
+				if !bytes.Equal(mbInit[0].Bytes(), testPayload) {
+					t.Errorf("drained initial payload mismatch: got %s, want %s", mbInit[0].Bytes(), testPayload)
+				}
+				buf.ReleaseMulti(mbInit)
 
 				// Send additional stream data
 				streamData := []byte("stream chunk test")
-				_ = writer.WriteChunk(streamData)
+				_ = writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(streamData)})
 
 				mb, err := reader.ReadMultiBuffer()
 				common.Must(err)
@@ -272,12 +263,14 @@ func TestUDPCodec(t *testing.T) {
 			psk := make([]byte, method.KeySaltLength)
 			_, _ = rand.Read(psk)
 
-			clientCodec, err := NewUDPPacketCodec(method, psk)
+			clientCodec, err := NewUDPPacketCodec(method, [][]byte{psk})
 			common.Must(err)
 			serverCodec, err := NewUDPServerCodec(method, psk, time.Minute)
 			common.Must(err)
 
-			pktBuf, err := clientCodec.EncodeClientPacket(dest, payload)
+			session, err := clientCodec.NewClientSession()
+			common.Must(err)
+			pktBuf, err := session.EncodePacket(dest, payload)
 			common.Must(err)
 			defer pktBuf.Release()
 
@@ -358,5 +351,148 @@ func TestMultiUserManager(t *testing.T) {
 	}
 	if inbound.GetUser(context.Background(), "user1@example.com") != nil {
 		t.Fatal("user1 should have been removed")
+	}
+}
+
+func TestLargeStreamTransfer(t *testing.T) {
+	method, err := GetCipherMethod(MethodAES128GCM)
+	common.Must(err)
+	sessionKey := make([]byte, 16)
+	_, _ = rand.Read(sessionKey)
+
+	clientAead, err := method.NewAEAD(sessionKey)
+	common.Must(err)
+	serverAead, err := method.NewAEAD(sessionKey)
+	common.Must(err)
+
+	r, w := io.Pipe()
+	defer r.Close()
+	defer w.Close()
+
+	writer := NewStreamWriter(w, clientAead)
+	reader := NewStreamReader(r, serverAead)
+
+	const totalSize = 100 * 1024 // 100 KB
+	data := make([]byte, totalSize)
+	_, _ = rand.Read(data)
+
+	errCh := make(chan error, 1)
+	go func() {
+		// Write using Write (which splits by MaxPacketSize = 65535)
+		_, werr := writer.Write(data)
+		if werr != nil {
+			errCh <- werr
+			return
+		}
+		_ = w.Close()
+		errCh <- nil
+	}()
+
+	var received []byte
+	for {
+		mb, rerr := reader.ReadMultiBuffer()
+		if !mb.IsEmpty() {
+			for _, b := range mb {
+				received = append(received, b.Bytes()...)
+			}
+			buf.ReleaseMulti(mb)
+		}
+		if rerr != nil {
+			if rerr == io.EOF {
+				break
+			}
+			t.Fatalf("ReadMultiBuffer error: %v", rerr)
+		}
+	}
+
+	if werr := <-errCh; werr != nil {
+		t.Fatalf("writer error: %v", werr)
+	}
+
+	if len(received) != totalSize {
+		t.Fatalf("received size mismatch: got %d, want %d", len(received), totalSize)
+	}
+	if !bytes.Equal(received, data) {
+		t.Fatal("received data does not match sent data")
+	}
+}
+
+func TestClientUDPSessionMultiDestination(t *testing.T) {
+	for _, methodName := range []string{MethodAES128GCM, MethodAES256GCM, MethodChaCha20Poly1305} {
+		t.Run(methodName, func(t *testing.T) {
+			method, err := GetCipherMethod(methodName)
+			common.Must(err)
+			rawKey := make([]byte, method.KeySaltLength)
+			_, _ = rand.Read(rawKey)
+
+			clientCodec, err := NewUDPPacketCodec(method, [][]byte{rawKey})
+			common.Must(err)
+			serverCodec, err := NewUDPServerCodec(method, rawKey, time.Minute)
+			common.Must(err)
+
+			session, err := clientCodec.NewClientSession()
+			common.Must(err)
+
+			dest1 := net.UDPDestination(net.LocalHostIP, net.Port(53))
+			dest2 := net.UDPDestination(net.IPAddress([]byte{127, 0, 0, 2}), net.Port(53))
+
+			payload1 := []byte("query-google-dns")
+			payload2 := []byte("query-cloudflare-dns")
+
+			// Client sends to dest1 and dest2 using SAME session
+			pkt1, err := session.EncodePacket(dest1, payload1)
+			common.Must(err)
+			defer pkt1.Release()
+			pkt2, err := session.EncodePacket(dest2, payload2)
+			common.Must(err)
+			defer pkt2.Release()
+
+			// Server decodes both
+			dec1, err := serverCodec.DecodePacket(pkt1.Bytes())
+			common.Must(err)
+			dec2, err := serverCodec.DecodePacket(pkt2.Bytes())
+			common.Must(err)
+
+			if dec1.SessionID != session.ClientSessionID() || dec2.SessionID != session.ClientSessionID() {
+				t.Fatalf("both packets must share client session ID %d, got %d and %d", session.ClientSessionID(), dec1.SessionID, dec2.SessionID)
+			}
+			if dec1.Destination.String() != dest1.String() {
+				t.Fatalf("expected dest1 %s, got %s", dest1, dec1.Destination)
+			}
+			if dec2.Destination.String() != dest2.String() {
+				t.Fatalf("expected dest2 %s, got %s", dest2, dec2.Destination)
+			}
+			if !bytes.Equal(dec1.Payload, payload1) || !bytes.Equal(dec2.Payload, payload2) {
+				t.Fatal("payload mismatch")
+			}
+
+			// Server replies to dest1 and dest2
+			respPayload1 := []byte("reply-google-dns")
+			respPayload2 := []byte("reply-cloudflare-dns")
+
+			respPkt1, err := serverCodec.EncodeServerPacket(dec1.SessionID, dest1, respPayload1)
+			common.Must(err)
+			respPkt2, err := serverCodec.EncodeServerPacket(dec2.SessionID, dest2, respPayload2)
+			common.Must(err)
+
+			// Client decodes replies
+			clientDec1, err := session.DecodePacket(respPkt1)
+			common.Must(err)
+			if clientDec1.Destination.String() != dest1.String() {
+				t.Fatalf("expected client dec1 dest %s, got %s", dest1, clientDec1.Destination)
+			}
+			if !bytes.Equal(clientDec1.Payload, respPayload1) {
+				t.Fatal("reply payload 1 mismatch")
+			}
+
+			clientDec2, err := session.DecodePacket(respPkt2)
+			common.Must(err)
+			if clientDec2.Destination.String() != dest2.String() {
+				t.Fatalf("expected client dec2 dest %s, got %s", dest2, clientDec2.Destination)
+			}
+			if !bytes.Equal(clientDec2.Payload, respPayload2) {
+				t.Fatal("reply payload 2 mismatch")
+			}
+		})
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/cipher"
 	"encoding/binary"
-	"io"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,8 +18,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
@@ -207,64 +204,46 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 		return errors.New("unable to set read deadline").Base(err)
 	}
 
-	// 1. Read Request Salt (16 or 32 bytes)
+	// 1. Single read call for Salt + EIH + Fixed-length header chunk per SIP022 §3.1.4
+	headerLen := i.method.KeySaltLength + AESBlockSize + RequestHeaderFixedChunkLength + AEADTagSize
+	headerBuf := make([]byte, headerLen)
+	n, err := conn.Read(headerBuf)
+	if err != nil || n < headerLen {
+		ResetTCPConn(conn)
+		return errors.New("failed to read complete handshake header")
+	}
+
 	var salt [32]byte
+	copy(salt[:i.method.KeySaltLength], headerBuf[:i.method.KeySaltLength])
 	saltSlice := salt[:i.method.KeySaltLength]
-	if _, err := io.ReadFull(conn, saltSlice); err != nil {
-		return err
-	}
+	eih := headerBuf[i.method.KeySaltLength : i.method.KeySaltLength+AESBlockSize]
+	fixedChunk := headerBuf[i.method.KeySaltLength+AESBlockSize:]
 
-	if !i.saltFilter.Check(salt) {
-		return ErrSaltNotUnique
-	}
-
-	// 2. Read Extended Identity Header (16 bytes)
-	var eih [AESBlockSize]byte
-	if _, err := io.ReadFull(conn, eih[:]); err != nil {
-		return err
-	}
-
-	// Decrypt EIH with IdentitySubKey derived from masterPSK and salt
-	identitySubkey := DeriveIdentitySubKey(i.masterPSK, saltSlice, i.method.KeySaltLength)
-	block, err := i.method.NewBlock(identitySubkey)
+	decryptedHash, err := DecryptEIH(i.method, i.masterPSK, saltSlice, eih)
 	if err != nil {
+		ResetTCPConn(conn)
 		return err
 	}
-
-	var decryptedHash [AESBlockSize]byte
-	block.Decrypt(decryptedHash[:], eih[:])
 
 	// Lookup user
 	user, ok := i.usersByHash.Load(decryptedHash)
-	if !ok || user == nil {
+	if !ok {
+		ResetTCPConn(conn)
 		return ErrInvalidRequest
 	}
 	userPSK := user.Account.(*MemoryAccount).Key
 
-	// 3. Derive Session Subkey using matched user's PSK
-	sessionKey := DeriveSessionSubKey(userPSK, saltSlice, i.method.KeySaltLength)
-	aead, err := i.method.NewAEAD(sessionKey)
+	reader, reqHeader, err := InitServerStream(conn, i.method, userPSK, saltSlice, salt, fixedChunk, i.saltFilter)
 	if err != nil {
+		ResetTCPConn(conn)
 		return err
 	}
 
-	reader := NewStreamReader(conn, aead)
-
-	// 4 & 5. Read Client Request Header
-	reqHeader, err := ReadClientRequestHeader(conn, reader)
-	if err != nil {
-		return err
-	}
-	conn.SetReadDeadline(time.Time{})
 	dest := reqHeader.Destination
 
-	// 6. Send Server Response Handshake
-	writer, err := WriteTCPResponse(conn, i.method, userPSK, saltSlice, nil)
-	if err != nil {
-		return err
-	}
+	writer := NewServerStreamWriter(conn, i.method, userPSK, saltSlice)
 
-	// 7. Dispatch Connection to Xray routing with matched User
+	// Dispatch Connection to Xray routing with matched User
 	inbound := session.InboundFromContext(ctx)
 	inbound.User = user
 
@@ -283,42 +262,17 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 	}
 
 	if len(reqHeader.EarlyData) > 0 {
-		earlyBuf := buf.New()
-		earlyBuf.Write(reqHeader.EarlyData)
-		if err := link.Writer.WriteMultiBuffer(buf.MultiBuffer{earlyBuf}); err != nil {
+		mb := buf.MergeBytes(nil, reqHeader.EarlyData)
+		if err := link.Writer.WriteMultiBuffer(mb); err != nil {
 			return err
 		}
 	}
 
-	sessionPolicy = i.policyManager.ForLevel(user.Level)
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-
-	requestDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
-	}
-
-	responseDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-		return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
-	}
-
-	responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
-	return task.Run(ctx, requestDone, responseDoneAndCloseWriter)
+	return TransportTCP(ctx, i.policyManager.ForLevel(user.Level), reader, writer, link)
 }
 
 func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	udpConns := utils.NewTypedSyncMap[uint64, *udpConnEntry]()
-	defer func() {
-		udpConns.Range(func(key uint64, entry *udpConnEntry) bool {
-			entry.timer.SetTimeout(0)
-			return true
-		})
-	}()
-
-	reader := buf.NewReader(conn)
+	reader := buf.NewPacketReader(conn)
 	for {
 		mb, err := reader.ReadMultiBuffer()
 		if err != nil {
@@ -342,168 +296,61 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 			sessionID := binary.BigEndian.Uint64(rawHeader[:8])
 			packetID := binary.BigEndian.Uint64(rawHeader[8:16])
 
-			// Replay protection & session lookup
 			sessionItem := i.udpSessions.GetOrCreate(sessionID)
 
-			sessionItem.Lock()
-			if !sessionItem.Window.Check(packetID) {
-				sessionItem.Unlock()
+			if !sessionItem.CheckPacketID(packetID) {
 				b.Release()
 				continue
 			}
 
 			var userPSK []byte
 			var currentUser *protocol.MemoryUser
-			if sessionItem.User != nil {
-				currentUser = sessionItem.User
-				userPSK = sessionItem.UserPSK
-				sessionItem.Unlock()
-			} else {
-				sessionItem.Unlock()
-				// Decrypt EIH
-				identitySubkey := DeriveIdentitySubKey(i.masterPSK, rawHeader[:8], i.method.KeySaltLength)
-				idBlock, err := i.method.NewBlock(identitySubkey)
-				if err != nil {
-					b.Release()
-					continue
-				}
+			sessionItem.Lock()
+			currentUser = sessionItem.User
+			userPSK = sessionItem.UserPSK
+			sessionItem.Unlock()
 
-				var decryptedHash [16]byte
-				idBlock.Decrypt(decryptedHash[:], packetBytes[16:32])
+			if currentUser == nil {
+				// Decrypt EIH
+				decryptedHash := DecryptUDPEIH(i.udpMasterCipher, rawHeader[:], packetBytes[16:32])
 
 				user, ok := i.usersByHash.Load(decryptedHash)
-				if !ok || user == nil {
+				if !ok {
 					b.Release()
 					continue
 				}
 				currentUser = user
 				userPSK = user.Account.(*MemoryAccount).Key
-
-				sessionItem.Lock()
-				sessionItem.User = user
-				sessionItem.UserPSK = userPSK
-				sessionItem.Unlock()
 			}
 
-			// Decrypt Body (with AEAD caching per session)
-			bodyAead := sessionItem.GetRemoteCipher()
-			if bodyAead == nil {
-				bodyKey := DeriveSessionSubKey(userPSK, rawHeader[:8], i.method.KeySaltLength)
-				var err error
-				bodyAead, err = i.method.NewAEAD(bodyKey)
-				if err != nil {
-					b.Release()
-					continue
-				}
-				sessionItem.SetRemoteCipher(bodyAead)
-			}
-
-			bodyNonce := rawHeader[4:16]
-			bodyCipher := packetBytes[32:]
-			bodyPlain, err := bodyAead.Open(nil, bodyNonce, bodyCipher, nil)
+			decoded, err := sessionItem.DecryptAESPayload(i.method, userPSK, sessionID, packetID, rawHeader[:], packetBytes[32:])
 			b.Release()
-			if err != nil || len(bodyPlain) < 1+8+2 {
-				continue
-			}
-
-			sessionItem.Lock()
-			sessionItem.Window.Add(packetID)
-			sessionItem.Unlock()
-
-			if bodyPlain[0] != HeaderTypeClient {
-				continue
-			}
-			epoch := binary.BigEndian.Uint64(bodyPlain[1:9])
-			diff := time.Now().Unix() - int64(epoch)
-			if diff < -30 || diff > 30 {
-				continue
-			}
-
-			paddingLen := int(binary.BigEndian.Uint16(bodyPlain[9:11]))
-			offset := 11 + paddingLen
-			if len(bodyPlain) < offset {
-				continue
-			}
-
-			dest, addrLen, err := parseAddressPort(bodyPlain[offset:])
 			if err != nil {
 				continue
 			}
 
-			payload := bodyPlain[offset+addrLen:]
+			sessionItem.Lock()
+			if sessionItem.User == nil {
+				sessionItem.User = currentUser
+				sessionItem.UserPSK = userPSK
+			}
+			sessionItem.Unlock()
 
-			entry, ok := udpConns.Load(sessionID)
-			if !ok {
-				sessCtx, cancel := context.WithCancel(ctx)
-				inbound := session.InboundFromContext(sessCtx)
-				inbound.User = currentUser
-
-				sessCtx = log.ContextWithAccessMessage(sessCtx, &log.AccessMessage{
-					From:   conn.RemoteAddr(),
-					To:     dest,
-					Status: log.AccessAccepted,
-					Email:  currentUser.Email,
-				})
-
-				link, err := dispatcher.Dispatch(sessCtx, dest)
-				if err != nil {
-					cancel()
-					continue
-				}
-
-				newEntry := &udpConnEntry{
-					link:   link,
-					cancel: cancel,
-				}
-				sessionPolicy := i.policyManager.ForLevel(currentUser.Level)
-				newEntry.timer = signal.CancelAfterInactivity(sessCtx, func() {
-					udpConns.Delete(sessionID)
-					common.Interrupt(link.Reader)
-					common.Interrupt(link.Writer)
-					cancel()
-				}, sessionPolicy.Timeouts.ConnectionIdle)
-
-				actual, loaded := udpConns.LoadOrStore(sessionID, newEntry)
-				if loaded {
-					newEntry.timer.SetTimeout(0)
-					entry = actual
-				} else {
-					entry = newEntry
-					go func(sessID uint64, uPSK []byte, d net.Destination, cEntry *udpConnEntry) {
-						defer func() {
-							cEntry.timer.SetTimeout(0)
-						}()
-						for {
-							resMb, err := cEntry.link.Reader.ReadMultiBuffer()
-							if err != nil {
-								return
-							}
-							cEntry.timer.Update()
-							for _, rb := range resMb {
-								encPacket, err := i.encodeServerUDPPacket(sessID, uPSK, d, rb.Bytes())
-								rb.Release()
-								if err != nil {
-									continue
-								}
-								_, _ = conn.Write(encPacket)
-							}
-						}
-					}(sessionID, userPSK, dest, entry)
-				}
+			link, err := sessionItem.EnsureLink(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(replyDest net.Destination, payload []byte) ([]byte, error) {
+				return i.encodeServerUDPPacket(sessionID, userPSK, replyDest, payload)
+			})
+			if err != nil {
+				continue
 			}
 
-			entry.timer.Update()
 			pBuf := buf.New()
-			pBuf.Write(payload)
-			_ = entry.link.Writer.WriteMultiBuffer(buf.MultiBuffer{pBuf})
+			pBuf.Write(decoded.Payload)
+			pBuf.UDP = &decoded.Destination
+			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{pBuf})
 		}
 	}
 }
 
 func (i *MultiUserInbound) encodeServerUDPPacket(clientSessionID uint64, userPSK []byte, dest net.Destination, payload []byte) ([]byte, error) {
-	sessionItem := i.udpSessions.GetOrCreate(clientSessionID)
-	if err := sessionItem.EnsureServerState(i.method, i.udpMasterCipher, nil, userPSK); err != nil {
-		return nil, err
-	}
-	return sessionItem.EncodeServerPacket(i.method, clientSessionID, dest, payload)
+	return i.udpSessions.EncodeServerPacket(i.method, userPSK, clientSessionID, dest, payload)
 }
