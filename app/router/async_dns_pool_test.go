@@ -143,6 +143,32 @@ func TestAsyncDNSPoolFirstOperationFailoverAndPassiveCooldown(t *testing.T) {
 	}
 }
 
+func TestAsyncDNSPoolFirstThreeTransportFailuresReachFourthMember(t *testing.T) {
+	var ready, unexpected atomic.Int32
+	unused := func(w http.ResponseWriter, r *http.Request) { unexpected.Add(1) }
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150},
+		unused, unused, unused,
+		func(w http.ResponseWriter, r *http.Request) { ready.Add(1); io.WriteString(w, poolReady) },
+		unused, unused,
+	)
+	transport := m.client.Transport.(*http.Transport)
+	dial := transport.DialContext
+	var failed atomic.Int32
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == "100.64.0.10:8090" || address == "100.64.0.11:8090" || address == "100.64.0.12:8090" {
+			failed.Add(1)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		return dial(ctx, network, address)
+	}
+	response, err := m.fetch("three-primaries-down.example")
+	stats := m.Stats()
+	if err != nil || response == nil || response.Route != "ru" || failed.Load() != 3 || ready.Load() != 1 || unexpected.Load() != 0 || stats.PoolAttempts != 4 || stats.PoolFailovers != 3 {
+		t.Fatalf("first operation did not reach the healthy reserve: response=%+v err=%v failed=%d ready=%d unexpected=%d stats=%+v", response, err, failed.Load(), ready.Load(), unexpected.Load(), stats)
+	}
+}
+
 func TestAsyncDNSPoolStopsFanoutOnAuthoritativeOrNonRetryableResult(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -209,15 +235,34 @@ func TestAsyncDNSPoolBackgroundTimeoutDoesNotBecomeRouteWait(t *testing.T) {
 }
 
 func TestAsyncDNSPoolBoundsAttemptsAndTotalHTTPTimeout(t *testing.T) {
-	var calls atomic.Int32
-	handler := func(w http.ResponseWriter, r *http.Request) { calls.Add(1); <-r.Context().Done() }
-	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 90}, handler, handler, handler, handler, handler, handler)
-	start := time.Now()
-	if _, err := m.fetch("unavailable.example"); err == nil {
-		t.Fatal("all-down pool succeeded")
-	}
-	if calls.Load() != 3 || m.Stats().PoolAttempts != 3 || time.Since(start) > 160*time.Millisecond {
-		t.Fatalf("pool multiplied total timeout or attempted all six: calls=%d elapsed=%s", calls.Load(), time.Since(start))
+	t.Run("six-immediate-retryable-errors", func(t *testing.T) {
+		var calls atomic.Int32
+		handler := func(w http.ResponseWriter, r *http.Request) { calls.Add(1); w.WriteHeader(503) }
+		m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, handler, handler, handler, handler, handler, handler)
+		if _, err := m.fetch("all-six-failed.example"); err == nil {
+			t.Fatal("all-down pool succeeded")
+		}
+		if calls.Load() != 6 || m.Stats().PoolAttempts != 6 || m.Stats().PoolFailovers != 5 {
+			t.Fatalf("operation did not reach exactly the configured six members: calls=%d stats=%+v", calls.Load(), m.Stats())
+		}
+	})
+	for _, timeout := range []uint32{150, 200} {
+		t.Run(fmt.Sprint(timeout), func(t *testing.T) {
+			var calls atomic.Int32
+			handler := func(w http.ResponseWriter, r *http.Request) { calls.Add(1); <-r.Context().Done() }
+			m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: timeout}, handler, handler, handler, handler, handler, handler)
+			start := time.Now()
+			if _, err := m.fetch("unavailable.example"); err == nil {
+				t.Fatal("all-down pool succeeded")
+			}
+			elapsed := time.Since(start)
+			stats := m.Stats()
+			// Deadline/scheduling overhead can leave no time for the final member.
+			// Exactly six attempts are covered above without blackhole waits.
+			if calls.Load() < 3 || calls.Load() > 6 || stats.PoolAttempts < uint64(calls.Load()) || stats.PoolAttempts > 6 || stats.PoolFailovers != stats.PoolAttempts-1 || elapsed > time.Duration(timeout)*time.Millisecond+80*time.Millisecond {
+				t.Fatalf("pool multiplied the shared timeout or escaped attempt bounds: calls=%d elapsed=%s stats=%+v", calls.Load(), elapsed, stats)
+			}
+		})
 	}
 }
 
