@@ -37,10 +37,15 @@ environment proxy, DNS или redirects. Ошибка private pool не пере
 автоматически на публичный logical endpoint. Узкая overlay ACL и фактический
 маршрут каждого pin через encrypted overlay проверяются rollout owner.
 
-Каждая shared domain job выбирает rotating start; максимум три последовательные
-backend попытки. `requestTimeoutMillis` — общий HTTP deadline всей операции,
+Каждая shared domain job выбирает rotating start; максимум шесть последовательных
+backend попыток, по одной на configured member, пока не истёк общий deadline.
+Это позволяет дойти до резервного member в той же операции после отказа трёх
+основных; известные failures по-прежнему пропускаются по cooldown.
+`requestTimeoutMillis` — общий HTTP deadline всей операции,
 не по одному полному timeout на backend. Каждая попытка получает максимум
-`timeout / min(3, poolSize)` (150 мс / 3 = 50 мс; 150 мс / 2 = 75 мс).
+`timeout / min(6, poolSize)` (150/200 мс / 6 = 25/33,3 мс;
+150/200 мс / 2 = 75/100 мс). Время предыдущих попыток и overhead входят
+в тот же общий deadline, поэтому последняя попытка может получить меньше времени.
 Cancellation/Close останавливают переключения. Pool retry разрешён только для
 transport failures и HTTP 502/503/504. Pending, ready other, stale и любой
 неретраибельный HTTP/invalid payload завершают операцию; 401/403/429 не вызывают
@@ -56,8 +61,9 @@ domain, token или user labels.
 
 **Caller `routeWaitMillis` остаётся независимым общим бюджетом выбора маршрута**
 по ADR-0003: canary 25 мс включает queue/admission. Worker может завершиться позже
-и наполнить L1 для следующего connection. Blackholed первый backend с 50/75 мс
-share не гарантирует текущему connection RU route; последующие запросы могут
+и наполнить L1 для следующего connection. Blackholed первый backend с 25/33,3 мс
+share для шести members либо 75/100 мс для двух не гарантирует текущему connection
+RU route; последующие запросы могут
 пропустить backend по cooldown. Здоровые relay пути не получают новый 8 мс cutoff.
 
 ## Cache semantics
@@ -99,7 +105,8 @@ DNS round-robin не даёт bounded отказа текущего backend. Н�
 Шесть параллельных RPC отвергнуты: amplification без необходимости.
 
 Максимальное число backend calls на shared operation увеличивается с одного до
-трёх; фоновые domain retries по-прежнему ограничены восемью. При холодном L2,
+шести без увеличения общего HTTP deadline; фоновые domain retries по-прежнему
+ограничены восемью. При холодном L2,
 queue pressure или отказе pool connection продолжает static/default rules.
 Rollback удаляет plural env и сохраняет singular pin либо возвращает прежний
 immutable image через текущего writer; публичный HTTPS rollback выполняется

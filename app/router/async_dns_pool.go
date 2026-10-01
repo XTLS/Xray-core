@@ -17,7 +17,7 @@ import (
 
 const (
 	asyncDNSOverlayPoolEnv  = "XRAY_ASYNC_DNS_OVERLAY_ENDPOINTS_JSON"
-	asyncDNSPoolMaxAttempts = 3
+	asyncDNSPoolMaxAttempts = 6
 )
 
 var asyncDNSOverlayPrefix = netip.MustParsePrefix("100.64.0.0/10")
@@ -150,6 +150,8 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 	if len(candidates) == 0 {
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: errors.New("async DNS endpoint pool is cooling down")}
 	}
+	// Every configured member can be reached when earlier members fail. Shares
+	// remain inside the same operation deadline, including a six-member pool.
 	share := m.requestTimeout / time.Duration(min(asyncDNSPoolMaxAttempts, len(m.pool.states)))
 	var lastErr error
 	for i, endpoint := range candidates {
