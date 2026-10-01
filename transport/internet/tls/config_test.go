@@ -3,6 +3,7 @@ package tls_test
 import (
 	gotls "crypto/tls"
 	"crypto/x509"
+	"sync"
 	"testing"
 	"time"
 
@@ -96,4 +97,41 @@ func BenchmarkCertificateIssuing(b *testing.B) {
 		delete(tlsConfig.NameToCertificate, "www.example.com")
 		tlsConfig.Certificates = tlsConfig.Certificates[:lenCerts]
 	}
+}
+
+func TestCertificateOcspTickerSynchronization(t *testing.T) {
+	newEntry := func(name string) *Certificate {
+		ct, _ := cert.MustGenerate(nil, cert.CommonName(name), cert.DNSNames(name))
+		certificate := ParseCertificate(ct)
+		certificate.Usage = Certificate_ENCIPHERMENT
+		// A non-zero OcspStapling makes setupOcspTicker fire its callback
+		// immediately and then every second, so the ticker overlaps both
+		// the certificate list construction and concurrent handshakes.
+		certificate.OcspStapling = 1
+		return certificate
+	}
+
+	c := &Config{
+		Certificate: []*Certificate{
+			newEntry("a.example.com"),
+			newEntry("b.example.com"),
+		},
+	}
+	tlsConfig := c.GetTLSConfig()
+
+	var wg sync.WaitGroup
+	deadline := time.Now().Add(2 * time.Second)
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for time.Now().Before(deadline) {
+				if _, err := tlsConfig.GetCertificate(&gotls.ClientHelloInfo{ServerName: "a.example.com"}); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }

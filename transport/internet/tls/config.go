@@ -46,8 +46,8 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 }
 
 // BuildCertificates builds a list of TLS certificates from proto definition.
-func (c *Config) BuildCertificates() []*tls.Certificate {
-	certs := make([]*tls.Certificate, 0, len(c.Certificate))
+func (c *Config) BuildCertificates() *CertificateStore {
+	store := &CertificateStore{certs: make([]*tls.Certificate, 0, len(c.Certificate))}
 	for _, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
@@ -65,14 +65,20 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 			}
 			return &keyPair
 		}
-		if keyPair := getX509KeyPair(); keyPair != nil {
-			certs = append(certs, keyPair)
-		} else {
+		keyPair := getX509KeyPair()
+		if keyPair == nil {
 			continue
 		}
-		index := len(certs) - 1
+		// setupOcspTicker fires its callback before the first tick, so
+		// each entry must be in the store before its ticker starts.
+		store.mu.Lock()
+		store.certs = append(store.certs, keyPair)
+		index := len(store.certs) - 1
+		store.mu.Unlock()
 		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {
-			cert := certs[index]
+			store.mu.RLock()
+			cert := store.certs[index]
+			store.mu.RUnlock()
 			if isReloaded {
 				if newKeyPair := getX509KeyPair(); newKeyPair != nil {
 					cert = newKeyPair
@@ -84,13 +90,29 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 				if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
 					errors.LogWarningInner(context.Background(), err, "ignoring invalid OCSP")
 				} else if string(newOCSPData) != string(cert.OCSPStaple) {
-					cert.OCSPStaple = newOCSPData
+					copyCert := *cert
+					copyCert.OCSPStaple = newOCSPData
+					cert = &copyCert
 				}
 			}
-			certs[index] = cert
+			// Readers snapshot the slice header under RLock and then read
+			// elements lock-free, so published slices must stay immutable.
+			store.mu.Lock()
+			newCerts := make([]*tls.Certificate, len(store.certs))
+			copy(newCerts, store.certs)
+			newCerts[index] = cert
+			store.certs = newCerts
+			store.mu.Unlock()
 		})
 	}
-	return certs
+	return store
+}
+
+// CertificateStore holds server certificates that a background OCSP ticker
+// may replace concurrently with handshakes served by GetCertificateFunc.
+type CertificateStore struct {
+	mu    sync.RWMutex
+	certs []*tls.Certificate
 }
 
 func setupOcspTicker(entry *Certificate, callback func(isReloaded, isOcspstapling bool)) {
@@ -243,8 +265,11 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 	}
 }
 
-func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func getNewGetCertificateFunc(store *CertificateStore, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		store.mu.RLock()
+		certs := store.certs
+		store.mu.RUnlock()
 		if len(certs) == 0 {
 			return nil, errNoCertificates
 		}
