@@ -587,8 +587,10 @@ type Config struct {
 	DomainStrategy Config_DomainStrategy  `protobuf:"varint,1,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.app.router.Config_DomainStrategy" json:"domain_strategy,omitempty"`
 	Rule           []*RoutingRule         `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
 	BalancingRule  []*BalancingRule       `protobuf:"bytes,3,rep,name=balancing_rule,json=balancingRule,proto3" json:"balancing_rule,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Absolute path to the Lua routing script.
+	Script        string `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -640,6 +642,13 @@ func (x *Config) GetBalancingRule() []*BalancingRule {
 		return x.BalancingRule
 	}
 	return nil
+}
+
+func (x *Config) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
 }
 
 var File_app_router_config_proto protoreflect.FileDescriptor
@@ -699,11 +708,12 @@ const file_app_router_config_proto_rawDesc = "" +
 	"\tbaselines\x18\x03 \x03(\x03R\tbaselines\x12\x1a\n" +
 	"\bexpected\x18\x04 \x01(\x05R\bexpected\x12\x16\n" +
 	"\x06maxRTT\x18\x05 \x01(\x03R\x06maxRTT\x12\x1c\n" +
-	"\ttolerance\x18\x06 \x01(\x02R\ttolerance\"\x96\x02\n" +
+	"\ttolerance\x18\x06 \x01(\x02R\ttolerance\"\xae\x02\n" +
 	"\x06Config\x12O\n" +
 	"\x0fdomain_strategy\x18\x01 \x01(\x0e2&.xray.app.router.Config.DomainStrategyR\x0edomainStrategy\x120\n" +
 	"\x04rule\x18\x02 \x03(\v2\x1c.xray.app.router.RoutingRuleR\x04rule\x12E\n" +
-	"\x0ebalancing_rule\x18\x03 \x03(\v2\x1e.xray.app.router.BalancingRuleR\rbalancingRule\"B\n" +
+	"\x0ebalancing_rule\x18\x03 \x03(\v2\x1e.xray.app.router.BalancingRuleR\rbalancingRule\x12\x16\n" +
+	"\x06script\x18\x04 \x01(\tR\x06script\"B\n" +
 	"\x0eDomainStrategy\x12\b\n" +
 	"\x04AsIs\x10\x00\x12\x10\n" +
 	"\fIpIfNonMatch\x10\x02\x12\x0e\n" +

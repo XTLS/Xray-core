@@ -11,8 +11,27 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// RegisterLua makes xray.dns available to require in an LState.
+// RegisterLua makes xray.dns available with Query and optional Servers.
+func RegisterLua(L *lua.LState, client featureDNS.Client) {
+	// A configured DNS app passes its *DNS instance here.
+	if s, ok := client.(*DNS); ok {
+		registerLua(L, s, true)
+		return
+	}
+	L.PreloadModule("xray.dns", func(L *lua.LState) int {
+		module := L.NewTable()
+		module.RawSetString("Query", newLuaClientQuery(L, client))
+		L.Push(module)
+		return 1
+	})
+}
+
+// RegisterLua makes xray.dns available to DNS scripts with Servers so no Query.
 func (s *DNS) RegisterLua(L *lua.LState) {
+	registerLua(L, s, false)
+}
+
+func registerLua(L *lua.LState, s *DNS, exposeQuery bool) {
 	L.PreloadModule("xray.dns", func(L *lua.LState) int {
 		servers := L.NewTable()
 		for i, client := range s.clients {
@@ -59,19 +78,56 @@ func (s *DNS) RegisterLua(L *lua.LState) {
 			}))
 			servers.RawSetInt(i+1, server)
 		}
+
 		module := L.NewTable()
 		module.RawSetString("Servers", servers)
+		if exposeQuery {
+			module.RawSetString("Query", newLuaClientQuery(L, s))
+		}
 		L.Push(module)
 		return 1
+	})
+}
+
+func newLuaClientQuery(L *lua.LState, client featureDNS.Client) *lua.LFunction {
+	return L.NewFunction(func(L *lua.LState) int {
+		domain, ok := L.Get(1).(lua.LString)
+		if !ok {
+			L.RaiseError("dns.Query requires a domain")
+			return 0
+		}
+		option := featureDNS.IPOption{
+			IPv4Enable: L.CheckBool(2),
+			IPv6Enable: L.CheckBool(3),
+			FakeEnable: L.CheckBool(4),
+		}
+		if L.Context() == nil {
+			L.RaiseError("dns.Query requires an active DNS query")
+			return 0
+		}
+		ips, ttl, err := client.LookupIP(string(domain), option)
+		addresses := L.NewUserData()
+		addresses.Value = ips
+		L.Push(addresses)
+		L.Push(lua.LNumber(ttl))
+		if err != nil {
+			ud := L.NewUserData()
+			ud.Value = err
+			L.Push(ud)
+		} else {
+			L.Push(lua.LNil)
+		}
+		return 3
 	})
 }
 
 // CallLuaHook invokes HandleDNSQuery in the supplied state.
 // Returned slices and IP bytes may share storage with DNS caches or matcher inputs.
 func (s *DNS) CallLuaHook(L *lua.LState, ctx context.Context, domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
-	previous := L.Context()
+	previous, top := L.Context(), L.GetTop()
 	L.SetContext(ctx)
 	defer func() {
+		L.SetTop(top)
 		if previous == nil {
 			L.RemoveContext()
 		} else {
@@ -87,13 +143,7 @@ func (s *DNS) CallLuaHook(L *lua.LState, ctx context.Context, domain string, opt
 		lua.LBool(option.IPv6Enable), lua.LBool(option.FakeEnable)); err != nil {
 		return nil, 0, err
 	}
-	addresses, ttlValue, errorValue := L.Get(-3), L.Get(-2), L.Get(-1)
-	L.Pop(3)
-	ips, ttl, err := readLuaDNSResult(addresses, ttlValue, errorValue)
-	if ctx.Err() != nil {
-		return nil, 0, ctx.Err()
-	}
-	return ips, ttl, err
+	return readLuaDNSResult(L.Get(-3), L.Get(-2), L.Get(-1))
 }
 
 func readLuaDNSResult(addresses, ttlValue, errorValue lua.LValue) ([]net.IP, uint32, error) {
