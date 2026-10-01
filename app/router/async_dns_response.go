@@ -61,8 +61,9 @@ const (
 )
 
 type asyncDNSFetchError struct {
-	kind asyncDNSFailureKind
-	err  error
+	kind       asyncDNSFailureKind
+	statusCode int
+	err        error
 }
 
 func (e *asyncDNSFetchError) Error() string { return e.err.Error() }

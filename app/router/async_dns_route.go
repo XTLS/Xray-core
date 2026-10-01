@@ -103,6 +103,10 @@ type AsyncDNSRouteMatcher struct {
 	failureStreak   uint32
 	retryAfter      time.Time
 
+	pool              *asyncDNSEndpointPool
+	transportIdentity string
+	requestTimeout    time.Duration
+
 	mu    sync.Mutex
 	cache map[string]asyncDNSCacheEntry
 	jobs  map[string]*asyncDNSJob
@@ -138,6 +142,10 @@ type asyncDNSStats struct {
 	snapshotWrites   atomic.Uint64
 	snapshotErrors   atomic.Uint64
 	restoredEntries  atomic.Uint64
+
+	poolAttempts      atomic.Uint64
+	poolFailovers     atomic.Uint64
+	poolCooldownSkips atomic.Uint64
 }
 
 // AsyncDNSRouteStats is a low-cardinality snapshot without domain labels.
@@ -149,11 +157,17 @@ type AsyncDNSRouteStats struct {
 	Entries, Jobs, Queued                                                                             int
 	WaitStarts, WaitDrops, WaitTimeouts, Expirations, SnapshotWrites, SnapshotErrors, RestoredEntries uint64
 	Waiters                                                                                           int
+	PoolAttempts, PoolFailovers, PoolCooldownSkips                                                    uint64
+	PoolSize                                                                                          int
 }
 
 func (m *AsyncDNSRouteMatcher) Stats() AsyncDNSRouteStats {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	poolSize := 0
+	if m.pool != nil {
+		poolSize = len(m.pool.states)
+	}
 	return AsyncDNSRouteStats{
 		FreshHits: m.stats.freshHits.Load(), StaleHits: m.stats.staleHits.Load(),
 		Misses: m.stats.misses.Load(), QueueDrops: m.stats.queueDrops.Load(),
@@ -167,6 +181,7 @@ func (m *AsyncDNSRouteMatcher) Stats() AsyncDNSRouteStats {
 		Entries: len(m.cache), Jobs: len(m.jobs), Queued: len(m.queue),
 		WaitStarts: m.stats.waitStarts.Load(), WaitDrops: m.stats.waitDrops.Load(), WaitTimeouts: m.stats.waitTimeouts.Load(), Waiters: m.waiters,
 		Expirations: m.stats.expirations.Load(), SnapshotWrites: m.stats.snapshotWrites.Load(), SnapshotErrors: m.stats.snapshotErrors.Load(), RestoredEntries: m.stats.restoredEntries.Load(),
+		PoolAttempts: m.stats.poolAttempts.Load(), PoolFailovers: m.stats.poolFailovers.Load(), PoolCooldownSkips: m.stats.poolCooldownSkips.Load(), PoolSize: poolSize,
 	}
 }
 
@@ -192,6 +207,16 @@ func NewAsyncDNSRouteMatcher(config *AsyncDnsRouteConfig) (*AsyncDNSRouteMatcher
 	}
 	if bearerToken != "" && (endpoint.User != nil || (endpoint.Scheme != "https" && endpoint.String() != overlayEndpoint)) {
 		return nil, errors.New("authenticated async DNS route endpoint requires HTTPS without URL credentials")
+	}
+	pool, err := readAsyncDNSOverlayPool(overlayEndpoint, bearerToken)
+	if err != nil {
+		return nil, err
+	}
+	identity := endpoint.String()
+	if endpoint.String() != overlayEndpoint {
+		pool = nil // A transport pool never captures unrelated owner rules.
+	} else if pool != nil {
+		identity = pool.identity
 	}
 
 	requestTimeout := durationOrDefault(config.GetRequestTimeoutMillis(), defaultAsyncDNSRequestTimeout)
@@ -222,7 +247,7 @@ func NewAsyncDNSRouteMatcher(config *AsyncDnsRouteConfig) (*AsyncDNSRouteMatcher
 	if cacheCapacity > 100000 || queueCapacity > 100000 || workerCount > 64 {
 		return nil, errors.New("async DNS route capacity exceeds bounded limits")
 	}
-	store, err := newAsyncDNSSnapshotStore(config, endpoint.String(), maxTTL, staleGrace)
+	store, err := newAsyncDNSSnapshotStore(config, identity, maxTTL, staleGrace)
 	if err != nil {
 		return nil, err
 	}
@@ -251,6 +276,10 @@ func NewAsyncDNSRouteMatcher(config *AsyncDnsRouteConfig) (*AsyncDNSRouteMatcher
 		maxWaiters:    int(config.GetMaxWaiters()),
 		lruIndex:      make(map[string]*list.Element, cacheCapacity),
 		snapshot:      store,
+
+		pool:              pool,
+		transportIdentity: identity,
+		requestTimeout:    requestTimeout,
 	}
 	if m.maxWaiters == 0 {
 		m.maxWaiters = 256
@@ -281,9 +310,10 @@ func NewAsyncDNSRouteMatcher(config *AsyncDnsRouteConfig) (*AsyncDNSRouteMatcher
 // new matcher owns its own workers/HTTP context; only bounded value state moves.
 // Absolute deadlines, generations, retry attempts and cooldowns never restart.
 func (m *AsyncDNSRouteMatcher) inheritState(previous *AsyncDNSRouteMatcher) {
-	if m == previous || m.bearerToken != previous.bearerToken {
+	if m == previous || m.bearerToken != previous.bearerToken || m.transportIdentity != previous.transportIdentity {
 		return
 	}
+	m.pool.inherit(previous.pool)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	previous.mu.Lock()
@@ -836,17 +866,24 @@ func (m *AsyncDNSRouteMatcher) fetch(domain string) (*asyncDNSClassifierResponse
 }
 
 func (m *AsyncDNSRouteMatcher) fetchContext(ctx context.Context, domain string) (*asyncDNSClassifierResponse, error) {
+	if m.pool != nil {
+		return m.fetchPool(ctx, domain)
+	}
+	return m.fetchEndpoint(ctx, m.endpoint, domain)
+}
+
+func (m *AsyncDNSRouteMatcher) fetchEndpoint(ctx context.Context, endpoint, domain string) (*asyncDNSClassifierResponse, error) {
 	body, err := json.Marshal(asyncDNSClassifierRequest{Domain: domain, AllowStale: m.staleGrace > 0})
 	if err != nil {
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureRequest, err: err}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureRequest, err: err}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if m.bearerToken != "" {
-		if req.URL.User != nil || (req.URL.Scheme != "https" && req.URL.String() != m.overlayEndpoint) {
+		if !m.authorizeAsyncDNSURL(req.URL) {
 			return nil, &asyncDNSFetchError{kind: asyncDNSFailureRequest, err: errors.New("refusing async DNS bearer token over an insecure endpoint")}
 		}
 		req.Header.Set("Authorization", "Bearer "+m.bearerToken)
@@ -857,7 +894,7 @@ func (m *AsyncDNSRouteMatcher) fetchContext(ctx context.Context, domain string) 
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, &asyncDNSFetchError{kind: asyncDNSFailureHTTP, err: errors.New("async DNS route classifier returned status ", response.StatusCode)}
+		return nil, &asyncDNSFetchError{kind: asyncDNSFailureHTTP, statusCode: response.StatusCode, err: errors.New("async DNS route classifier returned status ", response.StatusCode)}
 	}
 
 	data, err := io.ReadAll(io.LimitReader(response.Body, 32*1024+1))
