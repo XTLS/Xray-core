@@ -83,6 +83,7 @@ func (s *RoundRobinStrategy) PickOutbound(tags []string) string {
 }
 
 type Balancer struct {
+	tag         string
 	selectors   []string
 	strategy    BalancingStrategy
 	ohm         outbound.Manager
@@ -113,6 +114,7 @@ func (b *Balancer) PickOutbound() (string, error) {
 			return b.fallbackTag, nil
 		}
 		// will use default handler
+		errors.LogWarning(context.Background(), "balancer [", b.tag, "] has no available outbound and no fallbackTag, so the default outbound will be used")
 		return "", errors.New("balancing strategy returns empty tag")
 	}
 	return tag, nil

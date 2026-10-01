@@ -105,6 +105,7 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 		if err != nil {
 			return err
 		}
+		balancer.tag = rule.Tag
 		balancer.InjectContext(r.ctx)
 		newBalancers[rule.Tag] = balancer
 	}
