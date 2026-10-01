@@ -105,7 +105,7 @@ func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun
 	var ipv6TableIndex int
 	if v6 != nil {
 		r := &netlink.Route{}
-		for i := range 1024 {
+		for {
 			ipv6TableIndex = int(tableIndex.Add(1)) - 1
 			r.Table = ipv6TableIndex
 			routeList, fErr := netlink.RouteListFiltered(netlink.FAMILY_V6, r, netlink.RT_FILTER_TABLE)
@@ -117,7 +117,7 @@ func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun
 				break
 			}
 			// to prevent infinite loop
-			if i == 1023 {
+			if ipv6TableIndex > 65535 {
 				return nil, nil, errors.New("failed to find available ipv6 table index")
 			}
 		}
