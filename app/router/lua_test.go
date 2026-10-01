@@ -75,7 +75,7 @@ function HandleRoute(ctx, inboundTag, sourcePort, targetPort, localPort,
     targetDomain, network, protocol, user, vlessRoute, skipDNSResolve, ...)
     assert(select("#", ...) == 0)
     assert(inboundTag == "in" and sourcePort == 1234 and targetPort == 443 and localPort == 5678)
-    assert(targetDomain == "MiXeD.Example." and network == router.NetworkTCP)
+    assert(targetDomain == "mixed.example." and network == router.NetworkTCP)
     assert(protocol == "tls" and user == "user@example.com" and vlessRoute == 4321 and skipDNSResolve)
     assert(ctx.GetNetwork == nil and ctx.Context == nil)
     savedContext = ctx

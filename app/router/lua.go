@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"runtime"
+	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -141,7 +142,7 @@ func (r *Router) CallLuaHook(L *lua.LState, ctx context.Context, routeCtx routin
 	if err := L.CallByParam(lua.P{Fn: fn, NRet: 3, Protect: true},
 		value, lua.LString(routeCtx.GetInboundTag()), lua.LNumber(routeCtx.GetSourcePort()),
 		lua.LNumber(routeCtx.GetTargetPort()), lua.LNumber(routeCtx.GetLocalPort()),
-		lua.LString(routeCtx.GetTargetDomain()), lua.LNumber(routeCtx.GetNetwork()),
+		lua.LString(strings.ToLower(routeCtx.GetTargetDomain())), lua.LNumber(routeCtx.GetNetwork()),
 		lua.LString(routeCtx.GetProtocol()), lua.LString(routeCtx.GetUser()),
 		lua.LNumber(routeCtx.GetVlessRoute()), lua.LBool(routeCtx.GetSkipDNSResolve())); err != nil {
 		return "", "", err

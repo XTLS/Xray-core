@@ -126,7 +126,7 @@ func TestRouterScriptModules(t *testing.T) {
 	calls := 0
 	d := &luaRouteDNSClient{lookup: func(domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
 		calls++
-		if domain != "MiXeD.Example." || !option.IPv4Enable || option.IPv6Enable || !option.FakeEnable {
+		if domain != "mixed.example." || !option.IPv4Enable || option.IPv6Enable || !option.FakeEnable {
 			t.Fatalf("dns.Query arguments = %q, %+v", domain, option)
 		}
 		return ips, 17, nil
