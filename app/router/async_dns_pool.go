@@ -40,11 +40,11 @@ type asyncDNSEndpointPool struct {
 
 func readAsyncDNSOverlayPool(overlay, token string) (*asyncDNSEndpointPool, error) {
 	raw, configured := os.LookupEnv(asyncDNSOverlayPoolEnv)
-	if !configured {
+	if !configured || raw == "" {
 		return nil, nil
 	}
 	var endpoints []string
-	if len(raw) == 0 || len(raw) > 4096 || json.Unmarshal([]byte(raw), &endpoints) != nil || len(endpoints) < 2 || len(endpoints) > 6 {
+	if len(raw) > 4096 || json.Unmarshal([]byte(raw), &endpoints) != nil || len(endpoints) < 2 || len(endpoints) > 6 {
 		return nil, errors.New("async DNS overlay pool requires a JSON array of 2..6 endpoints within 4096 bytes")
 	}
 	if overlay == "" || endpoints[0] != overlay || token == "" {
@@ -116,7 +116,7 @@ func (p *asyncDNSEndpointPool) record(endpoint string, failed bool, now time.Tim
 }
 
 func (p *asyncDNSEndpointPool) inherit(previous *asyncDNSEndpointPool) {
-	if p == nil || previous == nil || p.identity != previous.identity {
+	if p == nil || previous == nil || p == previous || p.identity != previous.identity {
 		return
 	}
 	p.mu.Lock()

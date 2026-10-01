@@ -71,7 +71,7 @@ func TestAsyncDNSPoolValidationFailsClosed(t *testing.T) {
 	setAsyncDNSTestToken(t, "test-pool-token")
 	t.Setenv("XRAY_ASYNC_DNS_OVERLAY_ENDPOINT", first)
 	for _, raw := range []string{
-		"", " ", "null", "[]", `{}`, `"not-an-array"`, `[`, `[null,null]`,
+		" ", "null", "[]", `{}`, `"not-an-array"`, `[`, `[null,null]`,
 		`["` + first + `"]`, `["` + second + `","` + first + `"]`,
 		`["` + first + `","` + first + `"]`,
 		`["` + first + `","http://classifier.internal:8090/v1/classify"]`,
@@ -96,6 +96,11 @@ func TestAsyncDNSPoolValidationFailsClosed(t *testing.T) {
 				t.Fatal("accepted invalid operator pool")
 			}
 		})
+	}
+	t.Setenv(asyncDNSOverlayPoolEnv, "")
+	legacy := newV2Matcher(t, &AsyncDnsRouteConfig{Endpoint: first})
+	if legacy.pool != nil || legacy.transportIdentity != first {
+		t.Fatal("empty plural env did not retain singular legacy transport")
 	}
 	endpoints := []string{first}
 	for i := range 6 {
@@ -329,6 +334,13 @@ func TestAsyncDNSPoolSnapshotIdentityAndReloadSemantics(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cache", "l1.json")
 	config := &AsyncDnsRouteConfig{Endpoint: endpoints[0], SnapshotPath: path, SnapshotCompatibilityId: "process:shared-semantic-namespace"}
 	m := newV2Matcher(t, config)
+	selfDone := make(chan struct{})
+	go func() { m.pool.inherit(m.pool); close(selfDone) }()
+	select {
+	case <-selfDone:
+	case <-time.After(time.Second):
+		t.Fatal("pool self-inheritance deadlocked")
+	}
 	now := time.Now()
 	m.mu.Lock()
 	m.acceptResponse("saved.example", &asyncDNSClassifierResponse{State: "ready", Route: "ru", TTLMillis: 5000, Generation: "same-fill"}, now, now)

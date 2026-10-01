@@ -27,8 +27,8 @@ endpoint существующим overlay mapping, после чего core ис
 HTTP, явный numeric port 1–65535 и точный `/v1/classify`; нет loopback, hostname,
 credentials, query, fragment или escaped path. Первый элемент строго равен
 `XRAY_ASYNC_DNS_OVERLAY_ENDPOINT`; `XRAY_ASYNC_DNS_OVERLAY_SOURCE_ENDPOINT`
-остаётся точным исходным HTTPS URL. Отсутствие plural env сохраняет прежний
-single-endpoint transport. Присутствующее пустое/некорректное значение или
+остаётся точным исходным HTTPS URL. Отсутствующий или пустой plural env сохраняет прежний
+single-endpoint transport. Непустое некорректное значение или
 pool без source mapping/token отклоняет startup/reload, а не включает fallback.
 
 Один защищённый существующий token file используется всеми classifier. Auth
