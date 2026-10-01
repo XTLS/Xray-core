@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	featureDNS "github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/dns/localdns"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -172,6 +173,67 @@ end
 	got, ttl, err := server.CallLuaHook(L, context.Background(), "example.com", option)
 	if err != nil || ttl != 60 || len(got) != 1 || !got[0].Equal(ips[0]) {
 		t.Fatalf("server query = %v, TTL %d, %v", got, ttl, err)
+	}
+}
+
+type luaDNSClient struct {
+	featureDNS.Client
+	lookup func(string, featureDNS.IPOption) ([]net.IP, uint32, error)
+}
+
+func (c *luaDNSClient) LookupIP(domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
+	return c.lookup(domain, option)
+}
+
+func TestLuaDNSClientQuery(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	L.SetContext(context.Background())
+	defer L.RemoveContext()
+	geodata.RegisterLua(L)
+	want := []net.IP{{127, 0, 0, 1}}
+	client := &luaDNSClient{lookup: func(domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
+		if domain != "MiXeD.Example." || !option.IPv4Enable || option.IPv6Enable || !option.FakeEnable {
+			t.Fatalf("dns.Query arguments = %q, %+v", domain, option)
+		}
+		return want, 42, nil
+	}}
+	RegisterLua(L, client)
+	if err := L.DoString(`
+local dns = require("xray.dns")
+local matcher = require("xray.geodata").BuildIPMatcher("127.0.0.1")
+assert(dns.Servers == nil)
+ips, ttl, err = dns.Query("MiXeD.Example.", true, false, true)
+assert(not err and ttl == 42 and matcher:AnyMatch(ips))
+`); err != nil {
+		t.Fatal(err)
+	}
+	got := L.GetGlobal("ips").(*lua.LUserData).Value.([]net.IP)
+	if &got[0] != &want[0] {
+		t.Fatal("dns.Query copied the IP slice")
+	}
+}
+
+func TestLuaDNSLocalClient(t *testing.T) {
+	L := lua.NewState()
+	defer L.Close()
+	L.SetContext(context.Background())
+	defer L.RemoveContext()
+	RegisterLua(L, localdns.New())
+	if err := L.DoString(`
+local dns = require("xray.dns")
+assert(dns.Servers[1].ID == "localhost")
+serverIPs, _, serverErr = dns.Servers[1]:Query("127.0.0.1", true, false, false)
+clientIPs, _, clientErr = dns.Query("127.0.0.1", true, false, false)
+assert(not serverErr and not clientErr)
+`); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"serverIPs", "clientIPs"} {
+		ips := L.GetGlobal(name).(*lua.LUserData).Value.([]net.IP)
+		if len(ips) != 1 || !ips[0].Equal(net.ParseIP("127.0.0.1")) {
+			t.Fatalf("%s = %v", name, ips)
+		}
 	}
 }
 
