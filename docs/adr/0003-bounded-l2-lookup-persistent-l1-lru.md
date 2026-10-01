@@ -72,6 +72,8 @@ Snapshot writer работает каждые 30–33 секунды при dirt
 reload. Reload наследует абсолютные deadlines, LRU, jobs и classifier cooldown;
 HTTP contexts и completion channels остаются у своих workers.
 Счётчики wait/expiration/snapshot/restore доступны в low-cardinality stats.
+Snapshot storage требует POSIX file permissions; попытка включить его на Windows
+отклоняется явно. Bounded wait/LRU доступны независимо от storage.
 
 DoH warm API, producer admission/auth и canonical DNS fill принадлежат
 `dns-route-cache` и общему ADR. Core не принимает непроверенные DNS-ответы

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -200,6 +201,9 @@ func TestAsyncDNSLRUPromotesUsersOnly(t *testing.T) {
 }
 
 func TestAsyncDNSSnapshotRestartPreservesDeadlinesAndLRU(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("snapshot storage requires POSIX permissions")
+	}
 	path := filepath.Join(t.TempDir(), "cache", "l1.json")
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"state":"ready","route":"ru","ttlMillis":5000,"staleTtlMillis":10000,"generation":"same-fill"}`)
@@ -262,6 +266,9 @@ func TestAsyncDNSSnapshotRejectedContextCorruptionClockAndExpiry(t *testing.T) {
 }
 
 func TestAsyncDNSSnapshotFailureAndDuplicatePathsDoNotStopRouting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("snapshot storage requires POSIX permissions")
+	}
 	dir := t.TempDir()
 	parent := filepath.Join(dir, "blocked")
 	if err := os.WriteFile(parent, []byte("file"), 0o600); err != nil {

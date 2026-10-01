@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -67,6 +68,9 @@ func newAsyncDNSSnapshotStore(config *AsyncDnsRouteConfig, endpoint string, maxT
 	path, id := config.GetSnapshotPath(), config.GetSnapshotCompatibilityId()
 	if path == "" {
 		return nil, nil
+	}
+	if runtime.GOOS == "windows" {
+		return nil, errors.New("async DNS snapshot requires POSIX file permissions; unsupported on Windows")
 	}
 	if len(path) > 4096 || !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Dir(path) == string(filepath.Separator) {
 		return nil, errors.New("async DNS snapshot requires a clean absolute file path in a dedicated directory")
