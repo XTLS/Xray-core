@@ -25,16 +25,19 @@ var (
 	mu         sync.Mutex
 )
 
-func allocateIPv6TableIndex() int {
+func allocateIPv6TableIndex() (int, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
+	if tableIndex > 65535 {
+		return 0, fmt.Errorf("failed to find available ipv6 table index")
+	}
 	if tableIndex > 10230 {
 		errors.LogInfo(context.Background(), "allocate new ipv6 table index: ", tableIndex)
 	}
 	currentIndex := tableIndex
 	tableIndex++
-	return currentIndex
+	return currentIndex, nil
 }
 
 type kernelTun struct {
@@ -111,17 +114,18 @@ func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun
 		}
 	}
 
-	ipv6TableIndex := allocateIPv6TableIndex()
+	var ipv6TableIndex int
 	if v6 != nil {
-		r := &netlink.Route{Table: ipv6TableIndex}
+		r := &netlink.Route{}
 		for {
+			ipv6TableIndex, err = allocateIPv6TableIndex()
+			if err != nil {
+				return nil, nil, err
+			}
+			r.Table = ipv6TableIndex
 			routeList, fErr := netlink.RouteListFiltered(netlink.FAMILY_V6, r, netlink.RT_FILTER_TABLE)
 			if len(routeList) == 0 || fErr != nil {
 				break
-			}
-			ipv6TableIndex--
-			if ipv6TableIndex < 0 {
-				return nil, nil, fmt.Errorf("failed to find available ipv6 table index")
 			}
 		}
 	}
