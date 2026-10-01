@@ -152,9 +152,14 @@ func TestAsyncDNSPoolStopsFanoutOnAuthoritativeOrNonRetryableResult(t *testing.T
 		{"pending", 200, `{"state":"pending","retryAfterMillis":5000}`},
 		{"other", 200, `{"state":"ready","route":"other","ttlMillis":5000}`},
 		{"stale", 200, `{"state":"stale","route":"ru","staleTtlMillis":5000}`},
-		{"invalid-json", 200, `{`}, {"invalid-shape", 200, `{"state":"broken"}`},
-		{"unauthorized", 401, ``}, {"forbidden", 403, ``}, {"overload", 429, ``},
-		{"redirect", 307, ``}, {"bad-request", 400, ``}, {"internal-error", 500, ``},
+		{"invalid-json", 200, `{`},
+		{"invalid-shape", 200, `{"state":"broken"}`},
+		{"unauthorized", 401, ``},
+		{"forbidden", 403, ``},
+		{"overload", 429, ``},
+		{"redirect", 307, ``},
+		{"bad-request", 400, ``},
+		{"internal-error", 500, ``},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var other atomic.Int32
