@@ -250,7 +250,11 @@ func TestRouterConfigAsyncDNSRoute(t *testing.T) {
 				"workers": 3,
 				"minTtlMillis": 1000,
 				"maxTtlMillis": 60000,
-				"staleGraceMillis": 600000
+				"staleGraceMillis": 600000,
+				"routeWaitMillis": 25,
+				"maxWaiters": 256,
+				"snapshotPath": "/var/lib/xrayr/dns-cache/primary.json",
+				"snapshotCompatibilityId": "primary:resolver-view:geoip-v1"
 			}
 		}]
 	}`), config); err != nil {
@@ -267,5 +271,18 @@ func TestRouterConfigAsyncDNSRoute(t *testing.T) {
 	got := built.Rule[0].AsyncDnsRoute
 	if got.GetEndpoint() != "https://dns-route-cache.tailnet.example/v1/classify" || got.GetWorkers() != 3 || got.GetMaxTtlMillis() != 60000 || got.GetStaleGraceMillis() != 600000 {
 		t.Fatalf("unexpected async DNS route config: %+v", got)
+	}
+	if got.GetRouteWaitMillis() != 25 || got.GetMaxWaiters() != 256 || got.GetSnapshotPath() != "/var/lib/xrayr/dns-cache/primary.json" || got.GetSnapshotCompatibilityId() != "primary:resolver-view:geoip-v1" {
+		t.Fatal("v2 cache options not compiled")
+	}
+}
+
+func TestRouterConfigAsyncDNSRejectsUnknownOptions(t *testing.T) {
+	config := new(RouterConfig)
+	if err := json.Unmarshal([]byte(`{"rules":[{"outboundTag":"ru","asyncDnsRoute":{"endpoint":"https://example.org/v1/classify","snapshotIntervalMillis":30000}}]}`), config); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Build(); err == nil {
+		t.Fatal("unsupported cache option silently ignored")
 	}
 }

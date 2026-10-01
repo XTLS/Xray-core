@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -130,14 +131,25 @@ type WebhookRuleConfig struct {
 }
 
 type AsyncDNSRouteRuleConfig struct {
-	Endpoint             string `json:"endpoint"`
-	RequestTimeoutMillis uint32 `json:"requestTimeoutMillis"`
-	CacheCapacity        uint32 `json:"cacheCapacity"`
-	QueueCapacity        uint32 `json:"queueCapacity"`
-	Workers              uint32 `json:"workers"`
-	MinTTLMillis         uint32 `json:"minTtlMillis"`
-	MaxTTLMillis         uint32 `json:"maxTtlMillis"`
-	StaleGraceMillis     uint32 `json:"staleGraceMillis"`
+	Endpoint                string `json:"endpoint"`
+	RequestTimeoutMillis    uint32 `json:"requestTimeoutMillis"`
+	CacheCapacity           uint32 `json:"cacheCapacity"`
+	QueueCapacity           uint32 `json:"queueCapacity"`
+	Workers                 uint32 `json:"workers"`
+	MinTTLMillis            uint32 `json:"minTtlMillis"`
+	MaxTTLMillis            uint32 `json:"maxTtlMillis"`
+	StaleGraceMillis        uint32 `json:"staleGraceMillis"`
+	RouteWaitMillis         uint32 `json:"routeWaitMillis"`
+	MaxWaiters              uint32 `json:"maxWaiters"`
+	SnapshotPath            string `json:"snapshotPath"`
+	SnapshotCompatibilityID string `json:"snapshotCompatibilityId"`
+}
+
+func (c *AsyncDNSRouteRuleConfig) UnmarshalJSON(data []byte) error {
+	type raw AsyncDNSRouteRuleConfig
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode((*raw)(c))
 }
 
 func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
@@ -288,14 +300,18 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 
 	if rawFieldRule.AsyncDNSRoute != nil {
 		rule.AsyncDnsRoute = &router.AsyncDnsRouteConfig{
-			Endpoint:             rawFieldRule.AsyncDNSRoute.Endpoint,
-			RequestTimeoutMillis: rawFieldRule.AsyncDNSRoute.RequestTimeoutMillis,
-			CacheCapacity:        rawFieldRule.AsyncDNSRoute.CacheCapacity,
-			QueueCapacity:        rawFieldRule.AsyncDNSRoute.QueueCapacity,
-			Workers:              rawFieldRule.AsyncDNSRoute.Workers,
-			MinTtlMillis:         rawFieldRule.AsyncDNSRoute.MinTTLMillis,
-			MaxTtlMillis:         rawFieldRule.AsyncDNSRoute.MaxTTLMillis,
-			StaleGraceMillis:     rawFieldRule.AsyncDNSRoute.StaleGraceMillis,
+			Endpoint:                rawFieldRule.AsyncDNSRoute.Endpoint,
+			RequestTimeoutMillis:    rawFieldRule.AsyncDNSRoute.RequestTimeoutMillis,
+			CacheCapacity:           rawFieldRule.AsyncDNSRoute.CacheCapacity,
+			QueueCapacity:           rawFieldRule.AsyncDNSRoute.QueueCapacity,
+			Workers:                 rawFieldRule.AsyncDNSRoute.Workers,
+			MinTtlMillis:            rawFieldRule.AsyncDNSRoute.MinTTLMillis,
+			MaxTtlMillis:            rawFieldRule.AsyncDNSRoute.MaxTTLMillis,
+			StaleGraceMillis:        rawFieldRule.AsyncDNSRoute.StaleGraceMillis,
+			RouteWaitMillis:         rawFieldRule.AsyncDNSRoute.RouteWaitMillis,
+			MaxWaiters:              rawFieldRule.AsyncDNSRoute.MaxWaiters,
+			SnapshotPath:            rawFieldRule.AsyncDNSRoute.SnapshotPath,
+			SnapshotCompatibilityId: rawFieldRule.AsyncDNSRoute.SnapshotCompatibilityID,
 		}
 	}
 

@@ -67,8 +67,8 @@ message RoutingRule {
 
 // AsyncDnsRouteConfig is an opt-in Evasionlab extension used by an edge
 // process to project shared DNS route classifications locally. The classifier
-// endpoint is queried only by bounded background workers; it is never on the
-// route-selection critical path.
+// endpoint is queried by bounded workers; an opt-in, aggregate route budget
+// may wait for the first cache response, never for the DNS fill/retry loop.
 message AsyncDnsRouteConfig {
   string endpoint = 1;
   uint32 request_timeout_millis = 2;
@@ -80,6 +80,10 @@ message AsyncDnsRouteConfig {
   // Opt-in stale-while-revalidate ceiling; 0 disables stale routing. The
   // classifier must also supply an authoritative remaining hard lifetime.
   uint32 stale_grace_millis = 8;
+  uint32 route_wait_millis = 9;
+  uint32 max_waiters = 10;
+  string snapshot_path = 11;
+  string snapshot_compatibility_id = 12;
 }
 
 message WebhookConfig {

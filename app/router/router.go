@@ -122,6 +122,13 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	}
 
 	for index, rule := range config.Rule {
+		if path := rule.GetAsyncDnsRoute().GetSnapshotPath(); path != "" {
+			for _, existing := range newRules {
+				if matcher := asyncDNSCondition(existing.Condition); matcher != nil && matcher.snapshot != nil && matcher.snapshot.path == path {
+					return errors.New("async DNS snapshot path must be unique per matcher")
+				}
+			}
+		}
 		cond, err := rule.BuildCondition()
 		if err != nil {
 			return err
@@ -223,6 +230,8 @@ func (r *Router) ListRule() []routing.Route {
 }
 
 func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context, error) {
+	// The same aggregate budget spans all rules and both DNS strategy passes.
+	wait := &asyncDNSRouteWaitContext{Context: ctx, connection: asyncDNSConnectionContext(ctx)}
 	// SkipDNSResolve is set from DNS module.
 	// the DOH remote server maybe a domain name,
 	// this prevents cycle resolving dead loop
@@ -231,6 +240,8 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 	if r.domainStrategy == Config_IpOnDemand && !skipDNSResolve {
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
+	wait.Context = ctx
+	ctx = wait
 
 	rules := *r.rules.Load()
 
@@ -244,7 +255,9 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 		return nil, ctx, common.ErrNoClue
 	}
 
-	ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
+	// Do not wrap wait in its own Context (which would recurse).
+	wait.Context = routing_dns.ContextWithDNSClient(wait.Context, r.dns)
+	ctx = wait
 
 	// Try applying rules again if we have IPs.
 	for _, rule := range rules {
