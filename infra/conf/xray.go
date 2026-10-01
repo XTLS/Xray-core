@@ -632,6 +632,11 @@ func (c *Config) Build() (*core.Config, error) {
 		config.App = append([]*serial.TypedMessage{serial.ToTypedMessage(r)}, config.App...)
 	}
 
+	if c.Observatory != nil && c.BurstObservatory != nil {
+		// Both register as the same feature, so the second one would run its probes but never be used.
+		return nil, errors.New(`"observatory" and "burstObservatory" can't be used together`)
+	}
+
 	if c.Observatory != nil {
 		r, err := c.Observatory.Build()
 		if err != nil {

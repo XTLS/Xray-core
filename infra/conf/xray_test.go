@@ -356,3 +356,24 @@ func TestConfig_Override(t *testing.T) {
 		})
 	}
 }
+
+func TestConfig_ObservatoryAndBurstObservatory(t *testing.T) {
+	const observatory = `"observatory": {"subjectSelector": ["proxy"]}`
+	const burstObservatory = `"burstObservatory": {"subjectSelector": ["proxy"], "pingConfig": {"destination": "https://connectivitycheck.gstatic.com/generate_204"}}`
+	build := func(fields string) error {
+		var c Config
+		common.Must(json.Unmarshal([]byte("{"+fields+"}"), &c))
+		_, err := c.Build()
+		return err
+	}
+	if err := build(observatory); err != nil {
+		t.Errorf("observatory alone: %v", err)
+	}
+	if err := build(burstObservatory); err != nil {
+		t.Errorf("burstObservatory alone: %v", err)
+	}
+	// Both register as the same feature, so only the first one would ever be used.
+	if err := build(observatory + "," + burstObservatory); err == nil {
+		t.Error("observatory and burstObservatory together: want an error, got none")
+	}
+}
