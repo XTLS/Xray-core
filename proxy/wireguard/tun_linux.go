@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
-	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -21,20 +21,11 @@ import (
 )
 
 var (
-	tableIndex int = 10230
-	mu         sync.Mutex
+	tableIndex atomic.Uint32
 )
 
-func allocateIPv6TableIndex() int {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if tableIndex > 10230 {
-		errors.LogInfo(context.Background(), "allocate new ipv6 table index: ", tableIndex)
-	}
-	currentIndex := tableIndex
-	tableIndex++
-	return currentIndex
+func init() {
+	tableIndex.Store(10230)
 }
 
 type kernelTun struct {
@@ -111,17 +102,23 @@ func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun
 		}
 	}
 
-	ipv6TableIndex := allocateIPv6TableIndex()
+	var ipv6TableIndex int
 	if v6 != nil {
-		r := &netlink.Route{Table: ipv6TableIndex}
+		r := &netlink.Route{}
 		for {
+			ipv6TableIndex = int(tableIndex.Add(1)) - 1
+			r.Table = ipv6TableIndex
 			routeList, fErr := netlink.RouteListFiltered(netlink.FAMILY_V6, r, netlink.RT_FILTER_TABLE)
-			if len(routeList) == 0 || fErr != nil {
+			if fErr != nil {
+				return nil, nil, errors.New("failed to pre check routes for table: ", ipv6TableIndex).Base(fErr)
+			}
+			if len(routeList) == 0 {
+				errors.LogInfo(context.Background(), "allocate new ipv6 table index: ", ipv6TableIndex)
 				break
 			}
-			ipv6TableIndex--
-			if ipv6TableIndex < 0 {
-				return nil, nil, fmt.Errorf("failed to find available ipv6 table index")
+			// to prevent infinite loop
+			if ipv6TableIndex > 65535 {
+				return nil, nil, errors.New("failed to find available ipv6 table index")
 			}
 		}
 	}
