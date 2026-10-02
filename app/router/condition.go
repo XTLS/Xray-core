@@ -339,6 +339,27 @@ func NewProcessNameMatcher(names []string) *ProcessNameMatcher {
 }
 
 func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
+	resolvedContext := ctx
+	// DNS resolution must not replace the socket's original destination, and all
+	// process rules in one routing decision must observe the same owner.
+	var processContext *processRoutingContext
+unwrap:
+	for {
+		switch current := ctx.(type) {
+		case *dns.ResolvableContext:
+			ctx = current.Context
+		case *Route:
+			ctx = current.Context
+		case *processRoutingContext:
+			if processContext == nil {
+				processContext = current
+			}
+			ctx = current.Context
+		default:
+			break unwrap
+		}
+	}
+
 	if len(ctx.GetSourceIPs()) == 0 {
 		return false
 	}
@@ -359,17 +380,19 @@ func (m *ProcessNameMatcher) Apply(ctx routing.Context) bool {
 	var dstIP string
 	var dstPort uint16 = 0
 
-	// do not use resolved IP because Android process lookup needs original dst ip
-	resolvableContext, ok := ctx.(*dns.ResolvableContext)
-	if ok && len(resolvableContext.Context.GetTargetIPs()) > 0 {
-		dstIP = resolvableContext.Context.GetTargetIPs()[0].String()
-		dstPort = uint16(resolvableContext.Context.GetTargetPort())
-	} else if len(ctx.GetTargetIPs()) > 0 {
+	if len(ctx.GetTargetIPs()) > 0 {
 		dstIP = ctx.GetTargetIPs()[0].String()
 		dstPort = uint16(ctx.GetTargetPort())
+	} else if ips := resolvedContext.GetTargetIPs(); len(ips) > 0 {
+		dstIP = ips[0].String()
+		dstPort = uint16(resolvedContext.GetTargetPort())
 	}
 
-	pid, name, absPath, err := net.FindProcess(network, srcIP, uint16(srcPort), dstIP, uint16(dstPort))
+	lookup := net.FindProcess
+	if processContext != nil {
+		lookup = processContext.lookup
+	}
+	pid, name, absPath, err := lookup(network, srcIP, srcPort, dstIP, dstPort)
 	if err != nil {
 		if err != net.ErrNotLocal {
 			errors.LogError(context.Background(), "Unables to find local process name: ", err)
