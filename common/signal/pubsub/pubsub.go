@@ -62,7 +62,7 @@ func (s *Service) Cleanup() error {
 	}
 
 	for name, subs := range s.subs {
-		newSub := make([]*Subscriber, 0, len(s.subs))
+		newSub := make([]*Subscriber, 0, len(subs))
 		for _, sub := range subs {
 			if !sub.IsClosed() {
 				newSub = append(newSub, sub)
