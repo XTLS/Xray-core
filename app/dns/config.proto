@@ -27,6 +27,7 @@ message NameServer {
   repeated xray.common.geodata.IPRule unexpected_ip = 13;
   bool actUnprior = 14;
   uint32 policyID = 17;
+  string id = 18;
 }
 
 enum QueryStrategy {
@@ -73,4 +74,7 @@ message Config {
   bool disableFallbackIfMatch = 11;
 
   bool enableParallelQuery = 14;
+
+  // Absolute path to the Lua DNS query script.
+  string script = 15;
 }

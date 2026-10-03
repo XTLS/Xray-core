@@ -93,6 +93,7 @@ type NameServer struct {
 	UnexpectedIp    []*geodata.IPRule      `protobuf:"bytes,13,rep,name=unexpected_ip,json=unexpectedIp,proto3" json:"unexpected_ip,omitempty"`
 	ActUnprior      bool                   `protobuf:"varint,14,opt,name=actUnprior,proto3" json:"actUnprior,omitempty"`
 	PolicyID        uint32                 `protobuf:"varint,17,opt,name=policyID,proto3" json:"policyID,omitempty"`
+	Id              string                 `protobuf:"bytes,18,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -239,6 +240,13 @@ func (x *NameServer) GetPolicyID() uint32 {
 	return 0
 }
 
+func (x *NameServer) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 type Config struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// NameServer list used by this DNS client.
@@ -258,8 +266,10 @@ type Config struct {
 	DisableFallback        bool          `protobuf:"varint,10,opt,name=disableFallback,proto3" json:"disableFallback,omitempty"`
 	DisableFallbackIfMatch bool          `protobuf:"varint,11,opt,name=disableFallbackIfMatch,proto3" json:"disableFallbackIfMatch,omitempty"`
 	EnableParallelQuery    bool          `protobuf:"varint,14,opt,name=enableParallelQuery,proto3" json:"enableParallelQuery,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Absolute path to the Lua DNS query script.
+	Script        string `protobuf:"bytes,15,opt,name=script,proto3" json:"script,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -369,6 +379,13 @@ func (x *Config) GetEnableParallelQuery() bool {
 	return false
 }
 
+func (x *Config) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
 type Config_HostMapping struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Domain *geodata.DomainRule    `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
@@ -435,7 +452,7 @@ var File_app_dns_config_proto protoreflect.FileDescriptor
 
 const file_app_dns_config_proto_rawDesc = "" +
 	"\n" +
-	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xde\x05\n" +
+	"\x14app/dns/config.proto\x12\fxray.app.dns\x1a\x1ccommon/net/destination.proto\x1a\x1bcommon/geodata/geodat.proto\"\xee\x05\n" +
 	"\n" +
 	"NameServer\x123\n" +
 	"\aaddress\x18\x01 \x01(\v2\x19.xray.common.net.EndpointR\aaddress\x12\x1b\n" +
@@ -461,10 +478,11 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\n" +
 	"actUnprior\x18\x0e \x01(\bR\n" +
 	"actUnprior\x12\x1a\n" +
-	"\bpolicyID\x18\x11 \x01(\rR\bpolicyIDB\x0f\n" +
+	"\bpolicyID\x18\x11 \x01(\rR\bpolicyID\x12\x0e\n" +
+	"\x02id\x18\x12 \x01(\tR\x02idB\x0f\n" +
 	"\r_disableCacheB\r\n" +
 	"\v_serveStaleB\x12\n" +
-	"\x10_serveExpiredTTLJ\x04\b\x04\x10\x05\"\x82\x05\n" +
+	"\x10_serveExpiredTTLJ\x04\b\x04\x10\x05\"\x9a\x05\n" +
 	"\x06Config\x129\n" +
 	"\vname_server\x18\x05 \x03(\v2\x18.xray.app.dns.NameServerR\n" +
 	"nameServer\x12\x1b\n" +
@@ -480,7 +498,8 @@ const file_app_dns_config_proto_rawDesc = "" +
 	"\x0fdisableFallback\x18\n" +
 	" \x01(\bR\x0fdisableFallback\x126\n" +
 	"\x16disableFallbackIfMatch\x18\v \x01(\bR\x16disableFallbackIfMatch\x120\n" +
-	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x1a}\n" +
+	"\x13enableParallelQuery\x18\x0e \x01(\bR\x13enableParallelQuery\x12\x16\n" +
+	"\x06script\x18\x0f \x01(\tR\x06script\x1a}\n" +
 	"\vHostMapping\x127\n" +
 	"\x06domain\x18\x02 \x01(\v2\x1f.xray.common.geodata.DomainRuleR\x06domain\x12\x0e\n" +
 	"\x02ip\x18\x03 \x03(\fR\x02ip\x12%\n" +

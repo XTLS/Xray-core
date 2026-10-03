@@ -2,6 +2,8 @@ package conf_test
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 	_ "unsafe"
@@ -235,4 +237,40 @@ func TestRouterConfig(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestRouterScriptConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("xray.location.confdir", dir)
+	path := filepath.Join(dir, "route.lua")
+	if err := os.WriteFile(path, []byte("function HandleRoute() end"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name      string
+		script    string
+		wantError bool
+	}{
+		{"relative", "route.lua", false},
+		{"absolute", path, false},
+		{"missing", "missing.lua", true},
+		{"directory", dir, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			built, err := (&RouterConfig{Script: tc.script}).Build()
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("Build accepted invalid script path")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if built.Script != path {
+				t.Fatalf("script path = %q, want %q", built.Script, path)
+			}
+		})
+	}
 }
