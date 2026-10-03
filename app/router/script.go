@@ -27,24 +27,20 @@ func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
 		return nil, err
 	}
 	e := &scriptEngine{router: router}
-	e.pool, err = luamgr.NewPool(router.ctx, func(poolCtx context.Context) (*lua.LState, error) {
-		initCtx, cancel := context.WithTimeout(poolCtx, scriptExecutionTimeout)
-		defer cancel()
-		L, err := program.NewState(initCtx, func(L *lua.LState) {
+	e.pool, err = luamgr.NewPool(router.ctx, program.NewStateFactory(
+		scriptExecutionTimeout,
+		func(L *lua.LState) {
 			geodata.RegisterLua(L)
 			log.RegisterLua(L)
 			router.RegisterLua(L)
 			dns.RegisterLua(L, router.dns)
-		})
-		if err != nil {
-			return nil, err
-		}
-		if L.GetGlobal("HandleRoute").Type() != lua.LTFunction {
-			L.Close()
-			return nil, errors.New("routing script must define HandleRoute(...)")
-		}
-		return L, nil
-	})
+		},
+		func(L *lua.LState) error {
+			if L.GetGlobal("HandleRoute").Type() != lua.LTFunction {
+				return errors.New("routing script must define HandleRoute(...)")
+			}
+			return nil
+		}))
 	if err != nil {
 		return nil, err
 	}
@@ -57,21 +53,17 @@ func (e *scriptEngine) close() {
 }
 
 func (e *scriptEngine) pickRoute(ctx routing.Context) (routing.Route, error) {
-	L, err := e.pool.Acquire()
+	var tag, ruleTag string
+	err := e.pool.WithState(func(L *lua.LState) error {
+		luaCtx, cancel := context.WithTimeout(e.pool.Context(), scriptExecutionTimeout)
+		defer cancel()
+		var luaErr error
+		tag, ruleTag, luaErr = e.router.CallLuaHook(L, luaCtx, ctx)
+		return luaErr
+	})
 	if err != nil {
 		return nil, err
 	}
-	reusable := false
-	defer func() {
-		e.pool.Release(L, reusable)
-	}()
-	callCtx, cancel := context.WithTimeout(e.pool.Context(), scriptExecutionTimeout)
-	defer cancel()
-	tag, ruleTag, err := e.router.CallLuaHook(L, callCtx, ctx)
-	if err != nil {
-		return nil, err
-	}
-	reusable = true
 	if tag == "" {
 		return nil, common.ErrNoClue
 	}

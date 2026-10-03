@@ -9,25 +9,22 @@ import (
 	glua "github.com/yuin/gopher-lua"
 )
 
-func TestPoolFactoryFailureClosesReturnedState(t *testing.T) {
+func TestPoolFactoryFailure(t *testing.T) {
 	failure := errors.New("factory failed")
-	state := glua.NewState()
 	_, err := NewPool(context.Background(), func(context.Context) (*glua.LState, error) {
-		return state, failure
+		return nil, failure
 	})
-	if !errors.Is(err, failure) || !state.IsClosed() {
-		t.Fatalf("NewPool error = %v, state closed = %t", err, state.IsClosed())
+	if !errors.Is(err, failure) {
+		t.Fatalf("NewPool error = %v, want %v", err, failure)
 	}
 
-	var failedState *glua.LState
 	calls := 0
 	pool, err := NewPool(context.Background(), func(context.Context) (*glua.LState, error) {
 		calls++
 		if calls == 1 {
 			return glua.NewState(), nil
 		}
-		failedState = glua.NewState()
-		return failedState, failure
+		return nil, failure
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -39,8 +36,8 @@ func TestPoolFactoryFailureClosesReturnedState(t *testing.T) {
 	}
 	defer pool.Release(borrowed, true)
 	_, err = pool.Acquire()
-	if !errors.Is(err, failure) || !failedState.IsClosed() {
-		t.Fatalf("Acquire error = %v, state closed = %t", err, failedState.IsClosed())
+	if !errors.Is(err, failure) {
+		t.Fatalf("Acquire error = %v, want %v", err, failure)
 	}
 }
 

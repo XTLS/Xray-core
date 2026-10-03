@@ -26,23 +26,19 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 		return nil, err
 	}
 	e := &scriptEngine{dns: server}
-	e.pool, err = luamgr.NewPool(server.ctx, func(poolCtx context.Context) (*lua.LState, error) {
-		initCtx, cancel := context.WithTimeout(poolCtx, scriptExecutionTimeout)
-		defer cancel()
-		L, err := program.NewState(initCtx, func(L *lua.LState) {
+	e.pool, err = luamgr.NewPool(server.ctx, program.NewStateFactory(
+		scriptExecutionTimeout,
+		func(L *lua.LState) {
 			geodata.RegisterLua(L)
 			log.RegisterLua(L)
 			server.RegisterLua(L)
-		})
-		if err != nil {
-			return nil, err
-		}
-		if L.GetGlobal("HandleDNSQuery").Type() != lua.LTFunction {
-			L.Close()
-			return nil, errors.New("DNS script must define HandleDNSQuery(domain, ipv4, ipv6, fake)")
-		}
-		return L, nil
-	})
+		},
+		func(L *lua.LState) error {
+			if L.GetGlobal("HandleDNSQuery").Type() != lua.LTFunction {
+				return errors.New("DNS script must define HandleDNSQuery(...)")
+			}
+			return nil
+		}))
 	if err != nil {
 		return nil, err
 	}
@@ -54,20 +50,13 @@ func (e *scriptEngine) close() {
 	e.pool.Close()
 }
 
-func (e *scriptEngine) query(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	L, err := e.pool.Acquire()
-	if err != nil {
-		return nil, 0, err
-	}
-	reusable := false
-	defer func() {
-		e.pool.Release(L, reusable)
-	}()
-	queryCtx, cancel := context.WithTimeout(e.pool.Context(), scriptExecutionTimeout)
-	defer cancel()
-	ips, ttl, err := e.dns.CallLuaHook(L, queryCtx, domain, option)
-	if err == nil {
-		reusable = true
-	}
-	return ips, ttl, err
+func (e *scriptEngine) query(domain string, option dns.IPOption) (ips []net.IP, ttl uint32, err error) {
+	err = e.pool.WithState(func(L *lua.LState) error {
+		luaCtx, cancel := context.WithTimeout(e.pool.Context(), scriptExecutionTimeout)
+		defer cancel()
+		var luaErr error
+		ips, ttl, luaErr = e.dns.CallLuaHook(L, luaCtx, domain, option)
+		return luaErr
+	})
+	return
 }

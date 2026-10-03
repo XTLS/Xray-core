@@ -121,9 +121,9 @@ func pushLuaError(L *lua.LState, err error) {
 }
 
 // CallLuaHook invokes HandleRoute in the supplied state.
-func (r *Router) CallLuaHook(L *lua.LState, ctx context.Context, routeCtx routing.Context) (string, string, error) {
+func (r *Router) CallLuaHook(L *lua.LState, luaCtx context.Context, routeCtx routing.Context) (string, string, error) {
 	previous, top := L.Context(), L.GetTop()
-	L.SetContext(ctx)
+	L.SetContext(luaCtx)
 	defer func() {
 		L.SetTop(top)
 		if previous == nil {

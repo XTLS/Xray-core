@@ -2,7 +2,6 @@ package lua
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	glua "github.com/yuin/gopher-lua"
@@ -10,13 +9,9 @@ import (
 
 const maxIdleStates = 16
 
-// LStateFactory must initialize a state fully and observe ctx while doing so.
-// The pool owns any non-nil state it returns, even when it also returns an error.
-type LStateFactory func(ctx context.Context) (*glua.LState, error)
-
 // Pool lends each state to one caller at a time. It grows on contention and
-// keeps up to maxIdleStates idle states until Close. Callers decide whether a
-// state is reusable.
+// keeps up to maxIdleStates idle states until Close. Acquire/Release callers
+// decide reusability; WithState uses its callback's error.
 type Pool struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -29,25 +24,12 @@ type Pool struct {
 	closed bool
 }
 
-// NewPool initializes one state before returning, so top-level errors surface at startup.
+// NewPool tests the factory by creating one state during initialization.
 func NewPool(ctx context.Context, factory LStateFactory) (*Pool, error) {
 	poolCtx, cancel := context.WithCancel(ctx)
 
-	// Create one state now to catch factory errors at startup.
 	state, err := factory(poolCtx)
 	if err != nil {
-		cancel()
-		if state != nil {
-			state.Close()
-		}
-		return nil, err
-	}
-	if state == nil {
-		cancel()
-		return nil, errors.New("Lua state factory returned nil")
-	}
-	if err := poolCtx.Err(); err != nil {
-		state.Close()
 		cancel()
 		return nil, err
 	}
@@ -83,23 +65,28 @@ func (p *Pool) Acquire() (*glua.LState, error) {
 	// for a Release instead of creating another state; allow the wait to be
 	// cancelled by the caller or by Close.
 	state, err := p.factory(p.ctx)
-	if err == nil && state == nil {
-		err = errors.New("Lua state factory returned nil")
-	}
 	if err != nil {
-		if state != nil {
-			state.Close()
-		}
-		p.active.Done()
-		return nil, err
-	}
-	if err := p.ctx.Err(); err != nil {
-		state.Close()
 		p.active.Done()
 		return nil, err
 	}
 
 	return state, nil
+}
+
+// WithState runs work on an exclusive state and releases it afterward. A state
+// is reusable only when work succeeds; a panic closes it before propagating.
+func (p *Pool) WithState(work func(*glua.LState) error) error {
+	state, err := p.Acquire()
+	if err != nil {
+		return err
+	}
+	reusable := false
+	defer func() {
+		p.Release(state, reusable)
+	}()
+	err = work(state)
+	reusable = err == nil
+	return err
 }
 
 // Release returns a healthy state to the pool and closes a failed or cancelled one.

@@ -157,7 +157,7 @@ func (s *DNS) CallLuaHook(L *lua.LState, ctx context.Context, domain string, opt
 	}()
 	fn := L.GetGlobal("HandleDNSQuery")
 	if fn.Type() != lua.LTFunction {
-		return nil, 0, errors.New("DNS script must define HandleDNSQuery(domain, ipv4, ipv6, fake)")
+		return nil, 0, errors.New("DNS script must define HandleDNSQuery(...)")
 	}
 	if err := L.CallByParam(lua.P{Fn: fn, NRet: 3, Protect: true},
 		lua.LString(strings.ToLower(domain)), lua.LBool(option.IPv4Enable),
