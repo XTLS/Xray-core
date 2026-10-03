@@ -18,6 +18,7 @@ type Pool struct {
 
 	factory LStateFactory
 	idle    []*glua.LState
+	top     int
 
 	mu     sync.Mutex
 	active sync.WaitGroup
@@ -34,7 +35,7 @@ func NewPool(ctx context.Context, factory LStateFactory) (*Pool, error) {
 		return nil, err
 	}
 
-	return &Pool{ctx: poolCtx, cancel: cancel, factory: factory, idle: []*glua.LState{state}}, nil
+	return &Pool{ctx: poolCtx, cancel: cancel, factory: factory, idle: []*glua.LState{state}, top: state.GetTop()}, nil
 }
 
 // Context is cancelled by Close. Query contexts should derive from it.
@@ -92,6 +93,7 @@ func (p *Pool) WithState(work func(*glua.LState) error) error {
 // Release returns a healthy state to the pool and closes a failed or cancelled one.
 func (p *Pool) Release(state *glua.LState, reusable bool) {
 	if reusable {
+		state.SetTop(p.top)
 		p.mu.Lock()
 		if !p.closed && p.ctx.Err() == nil && len(p.idle) < maxIdleStates {
 			p.idle = append(p.idle, state)
