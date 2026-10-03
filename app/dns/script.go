@@ -30,7 +30,7 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
 			log.RegisterLua(L)
-			server.RegisterLua(L)
+			server.registerLua(L)
 		},
 		func(L *lua.LState) error {
 			if L.GetGlobal("HandleDNSQuery").Type() != lua.LTFunction {

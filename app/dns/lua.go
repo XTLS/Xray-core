@@ -37,8 +37,8 @@ func RegisterLua(L *lua.LState, client featureDNS.Client) {
 	registerLua(L, servers, client)
 }
 
-// RegisterLua makes xray.dns available to DNS scripts.
-func (s *DNS) RegisterLua(L *lua.LState) {
+// registerLua makes xray.dns available to DNS scripts.
+func (s *DNS) registerLua(L *lua.LState) {
 	registerLua(L, luaServers(s), nil)
 }
 

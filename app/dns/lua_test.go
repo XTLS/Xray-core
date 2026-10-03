@@ -154,7 +154,7 @@ func TestLuaDNSServerQuery(t *testing.T) {
 	option := featureDNS.IPOption{IPv4Enable: true}
 	ips := []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("8.8.8.8")}
 	server := &DNS{clients: []*Client{{server: &benchmarkLuaNameServer{ips: ips}, ipOption: &option, timeoutMs: time.Second}}}
-	server.RegisterLua(L)
+	server.registerLua(L)
 	if err := L.DoString(`
 local server = require("xray.dns").Servers[1]
 local matcher = require("xray.geodata").BuildIPMatcher("127.0.0.0/8")
@@ -254,7 +254,7 @@ func BenchmarkLuaDNSHookCall(b *testing.B) {
 	server := &DNS{clients: []*Client{client}}
 	L := lua.NewState()
 	defer L.Close()
-	server.RegisterLua(L)
+	server.registerLua(L)
 	if err := L.DoString(`
 local server = require("xray.dns").Servers[1]
 function HandleDNSQuery(domain, ipv4, ipv6, fake)
