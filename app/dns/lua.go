@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
-	luamgr "github.com/xtls/xray-core/common/lua"
+	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
 	featureDNS "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/dns/localdns"
@@ -82,9 +82,9 @@ func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client
 				} else {
 					ips, ttl, err = client.query(ctx, string(domain), option)
 				}
-				luamgr.PushUserData(L, ips)
-				L.Push(lua.LNumber(ttl))
-				luamgr.PushError(L, err)
+				xlua.PushUserData(L, ips)
+				xlua.PushNumber(L, ttl)
+				xlua.PushError(L, err)
 				return 3
 			}))
 			serverList.RawSetInt(i+1, server)
@@ -119,9 +119,9 @@ func newLuaClientQuery(L *lua.LState, client featureDNS.Client) *lua.LFunction {
 			return 0
 		}
 		ips, ttl, err := client.LookupIP(string(domain), option)
-		luamgr.PushUserData(L, ips)
-		L.Push(lua.LNumber(ttl))
-		luamgr.PushError(L, err)
+		xlua.PushUserData(L, ips)
+		xlua.PushNumber(L, ttl)
+		xlua.PushError(L, err)
 		return 3
 	})
 }
@@ -144,17 +144,17 @@ func (s *DNS) callLuaHook(L *lua.LState, domain string, option featureDNS.IPOpti
 }
 
 func readLuaDNSResult(addresses, ttlValue, errorValue lua.LValue) ([]net.IP, uint32, error) {
-	if err := luamgr.ReadError(errorValue, "DNS script error must be an error or string"); err != nil {
+	if err := xlua.ReadError(errorValue, "DNS script error must be an error or string"); err != nil {
 		return nil, 0, err
 	}
-	ttl, err := luamgr.ReadUint32(ttlValue, "DNS script returned invalid TTL")
+	ttl, err := xlua.ReadUint32(ttlValue, "DNS script returned invalid TTL")
 	if err != nil {
 		return nil, 0, err
 	}
 	if addresses == lua.LNil {
 		return nil, 0, featureDNS.ErrEmptyResponse
 	}
-	ips, err := luamgr.ReadUserData[[]net.IP](addresses, "DNS script IPs must be native IP slice userdata")
+	ips, err := xlua.ReadUserData[[]net.IP](addresses, "DNS script IPs must be native IP slice userdata")
 	if err != nil {
 		return nil, 0, err
 	}

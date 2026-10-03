@@ -7,6 +7,27 @@ import (
 	glua "github.com/yuin/gopher-lua"
 )
 
+type number interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64
+}
+
+// PushNumber converts a Go number to a Lua number and pushes it.
+func PushNumber[T number](L *glua.LState, value T) {
+	L.Push(glua.LNumber(value))
+}
+
+// PushString converts a Go string to a Lua string and pushes it.
+func PushString(L *glua.LState, value string) {
+	L.Push(glua.LString(value))
+}
+
+// PushNil pushes Lua nil.
+func PushNil(L *glua.LState) {
+	L.Push(glua.LNil)
+}
+
 // PushUserData pushes a native Go value without copying it.
 func PushUserData(L *glua.LState, value any) {
 	ud := L.NewUserData()

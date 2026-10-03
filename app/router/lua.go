@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
-	luamgr "github.com/xtls/xray-core/common/lua"
+	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
 	lua "github.com/yuin/gopher-lua"
@@ -37,22 +37,22 @@ func (r *Router) RegisterLua(L *lua.LState) {
 			}
 			balancer, found := (*r.balancers.Load())[string(tag)]
 			if !found {
-				L.Push(lua.LNil)
-				luamgr.PushError(L, errors.New("balancer ", tag, " not found"))
+				xlua.PushNil(L)
+				xlua.PushError(L, errors.New("balancer ", tag, " not found"))
 				return 2
 			}
 			outboundTag, err := balancer.PickOutbound()
-			L.Push(lua.LString(outboundTag))
-			luamgr.PushError(L, err)
+			xlua.PushString(L, outboundTag)
+			xlua.PushError(L, err)
 			return 2
 		}))
 
 		module.RawSetString("FindProcess", L.NewFunction(func(L *lua.LState) int {
 			pid, name, path, err := findProcess(checkLuaContext(L), net.FindProcess)
-			L.Push(lua.LNumber(pid))
-			L.Push(lua.LString(name))
-			L.Push(lua.LString(path))
-			luamgr.PushError(L, err)
+			xlua.PushNumber(L, pid)
+			xlua.PushString(L, name)
+			xlua.PushString(L, path)
+			xlua.PushError(L, err)
 			return 4
 		}))
 
@@ -67,24 +67,24 @@ func registerLuaContext(L *lua.LState) {
 		values := L.CheckUserData(1).Value.(map[string]string)
 		key := L.CheckString(2)
 		if value, found := values[key]; found {
-			L.Push(lua.LString(value))
+			xlua.PushString(L, value)
 		} else {
-			L.Push(lua.LNil)
+			xlua.PushNil(L)
 		}
 		return 1
 	}))
 	methods := L.NewTable()
 	L.SetFuncs(methods, map[string]lua.LGFunction{
 		"GetSourceIPs": func(L *lua.LState) int {
-			luamgr.PushUserData(L, checkLuaContext(L).GetSourceIPs())
+			xlua.PushUserData(L, checkLuaContext(L).GetSourceIPs())
 			return 1
 		},
 		"GetTargetIPs": func(L *lua.LState) int {
-			luamgr.PushUserData(L, checkLuaContext(L).GetTargetIPs())
+			xlua.PushUserData(L, checkLuaContext(L).GetTargetIPs())
 			return 1
 		},
 		"GetLocalIPs": func(L *lua.LState) int {
-			luamgr.PushUserData(L, checkLuaContext(L).GetLocalIPs())
+			xlua.PushUserData(L, checkLuaContext(L).GetLocalIPs())
 			return 1
 		},
 		"GetAttributes": func(L *lua.LState) int {
@@ -129,14 +129,14 @@ func (r *Router) callLuaHook(L *lua.LState, routeCtx routing.Context) (string, s
 }
 
 func readLuaRouteResult(tagValue, ruleValue, errorValue lua.LValue) (string, string, error) {
-	if err := luamgr.ReadError(errorValue, "routing script error must be an error or string"); err != nil {
+	if err := xlua.ReadError(errorValue, "routing script error must be an error or string"); err != nil {
 		return "", "", err
 	}
-	tag, err := luamgr.ReadOptionalString(tagValue, "routing script outboundTag must be a string or nil")
+	tag, err := xlua.ReadOptionalString(tagValue, "routing script outboundTag must be a string or nil")
 	if err != nil || tag == "" {
 		return "", "", err
 	}
-	ruleTag, err := luamgr.ReadOptionalString(ruleValue, "routing script ruleTag must be a string")
+	ruleTag, err := xlua.ReadOptionalString(ruleValue, "routing script ruleTag must be a string")
 	if err != nil {
 		return "", "", err
 	}

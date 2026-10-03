@@ -8,7 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/log"
-	luamgr "github.com/xtls/xray-core/common/lua"
+	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/features/routing"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -17,16 +17,16 @@ const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
 	router *Router
-	pool   *luamgr.Pool
+	pool   *xlua.Pool
 }
 
 func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
-	program, err := luamgr.CompileFile(path)
+	program, err := xlua.CompileFile(path)
 	if err != nil {
 		return nil, err
 	}
 	e := &scriptEngine{router: router}
-	e.pool, err = luamgr.NewPool(router.ctx, scriptExecutionTimeout, program.NewStateFactory(
+	e.pool, err = xlua.NewPool(router.ctx, scriptExecutionTimeout, program.NewStateFactory(
 		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
