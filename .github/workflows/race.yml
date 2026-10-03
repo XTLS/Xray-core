@@ -1,0 +1,110 @@
+name: Selected Linux race checks
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  race:
+    name: Race (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: mux
+            package: ./common/mux/...
+            pattern: .
+            expected: TestClientWorkerEOF,TestClientWorkerClose,TestRegressionOutboundLeak
+          - group: tags-cache
+            package: ./app/proxyman/outbound
+            pattern: ^TestTagsCache$
+            expected: TestTagsCache
+          - group: udp
+            package: ./core
+            pattern: ^TestXrayDialUDP(Conn)?$
+            expected: TestXrayDialUDPConn,TestXrayDialUDP
+          - group: quic
+            package: ./transport/internet/splithttp
+            pattern: ^Test_ListenXHAndDial_QUIC$
+            expected: Test_ListenXHAndDial_QUIC
+    env:
+      CGO_ENABLED: '1'
+      TEST_PACKAGE: ${{ matrix.package }}
+      TEST_PATTERN: ${{ matrix.pattern }}
+      EXPECTED_TESTS: ${{ matrix.expected }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Restore geodata
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-geodat-
+      - name: Record environment
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/race"
+          {
+            git rev-parse HEAD
+            go version
+            go env GOOS GOARCH CGO_ENABLED
+            printf 'go test -mod=readonly -race -count=1 -timeout=5m -json %q -run %q\n' "$TEST_PACKAGE" "$TEST_PATTERN"
+            for asset in resources/geoip.dat resources/geosite.dat; do
+              if [ -f "$asset" ]; then
+                sha256sum "$asset"
+              else
+                printf 'Missing asset: %s\n' "$asset"
+              fi
+            done
+          } | tee "$RUNNER_TEMP/race/environment.txt"
+      - name: Run race tests
+        id: race
+        shell: bash
+        run: |
+          set +e
+          go test -mod=readonly -race -count=1 -timeout=5m -json "$TEST_PACKAGE" -run "$TEST_PATTERN" 2>&1 | tee "$RUNNER_TEMP/race/tests.jsonl"
+          statuses=("${PIPESTATUS[@]}")
+          printf '%s\n' "${statuses[0]}" > "$RUNNER_TEMP/race/exit-code.txt"
+          if [ "${statuses[0]}" -ne 0 ]; then
+            exit "${statuses[0]}"
+          fi
+          exit "${statuses[1]}"
+      - name: Check selected tests executed
+        if: ${{ always() && (steps.race.outcome == 'success' || steps.race.outcome == 'failure') }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          seen, skipped = set(), set()
+          for line in (Path(os.environ['RUNNER_TEMP']) / 'race/tests.jsonl').read_text().splitlines():
+              try:
+                  event = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if event.get('Action') == 'run' and 'Test' in event:
+                  seen.add(event['Test'])
+              if event.get('Action') == 'skip' and 'Test' in event:
+                  skipped.add(event['Test'])
+          missing = set(os.environ['EXPECTED_TESTS'].split(',')) - (seen - skipped)
+          print('Executed:', ', '.join(sorted(seen)))
+          print('Skipped:', ', '.join(sorted(skipped)))
+          if missing:
+              raise SystemExit('Selected tests did not execute: ' + ', '.join(sorted(missing)))
+          PY
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: race-${{ matrix.group }}
+          path: ${{ runner.temp }}/race/
+          if-no-files-found: warn
