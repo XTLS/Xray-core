@@ -2,10 +2,10 @@ package dns
 
 import (
 	"context"
-	"math"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
+	luamgr "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
 	featureDNS "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/dns/localdns"
@@ -82,17 +82,9 @@ func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client
 				} else {
 					ips, ttl, err = client.query(ctx, string(domain), option)
 				}
-				addresses := L.NewUserData()
-				addresses.Value = ips
-				L.Push(addresses)
+				luamgr.PushUserData(L, ips)
 				L.Push(lua.LNumber(ttl))
-				if err != nil {
-					ud := L.NewUserData()
-					ud.Value = err
-					L.Push(ud)
-				} else {
-					L.Push(lua.LNil)
-				}
+				luamgr.PushError(L, err)
 				return 3
 			}))
 			serverList.RawSetInt(i+1, server)
@@ -127,17 +119,9 @@ func newLuaClientQuery(L *lua.LState, client featureDNS.Client) *lua.LFunction {
 			return 0
 		}
 		ips, ttl, err := client.LookupIP(string(domain), option)
-		addresses := L.NewUserData()
-		addresses.Value = ips
-		L.Push(addresses)
+		luamgr.PushUserData(L, ips)
 		L.Push(lua.LNumber(ttl))
-		if err != nil {
-			ud := L.NewUserData()
-			ud.Value = err
-			L.Push(ud)
-		} else {
-			L.Push(lua.LNil)
-		}
+		luamgr.PushError(L, err)
 		return 3
 	})
 }
@@ -160,34 +144,22 @@ func (s *DNS) callLuaHook(L *lua.LState, domain string, option featureDNS.IPOpti
 }
 
 func readLuaDNSResult(addresses, ttlValue, errorValue lua.LValue) ([]net.IP, uint32, error) {
-	if errorValue != lua.LNil {
-		if ud, ok := errorValue.(*lua.LUserData); ok {
-			if err, ok := ud.Value.(error); ok {
-				return nil, 0, err
-			}
-		}
-		if s, ok := errorValue.(lua.LString); ok {
-			return nil, 0, errors.New(string(s))
-		}
-		return nil, 0, errors.New("DNS script error must be an error or string")
+	if err := luamgr.ReadError(errorValue, "DNS script error must be an error or string"); err != nil {
+		return nil, 0, err
 	}
-	ttl, ok := ttlValue.(lua.LNumber)
-	if !ok || ttl < 0 || ttl > math.MaxUint32 || math.Trunc(float64(ttl)) != float64(ttl) {
-		return nil, 0, errors.New("DNS script returned invalid TTL")
+	ttl, err := luamgr.ReadUint32(ttlValue, "DNS script returned invalid TTL")
+	if err != nil {
+		return nil, 0, err
 	}
 	if addresses == lua.LNil {
 		return nil, 0, featureDNS.ErrEmptyResponse
 	}
-	ud, ok := addresses.(*lua.LUserData)
-	if !ok {
-		return nil, 0, errors.New("DNS script IPs must be native IP slice userdata")
-	}
-	ips, ok := ud.Value.([]net.IP)
-	if !ok {
-		return nil, 0, errors.New("DNS script IPs must be native IP slice userdata")
+	ips, err := luamgr.ReadUserData[[]net.IP](addresses, "DNS script IPs must be native IP slice userdata")
+	if err != nil {
+		return nil, 0, err
 	}
 	if len(ips) == 0 {
 		return nil, 0, featureDNS.ErrEmptyResponse
 	}
-	return ips, uint32(ttl), nil
+	return ips, ttl, nil
 }

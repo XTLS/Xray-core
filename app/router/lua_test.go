@@ -126,10 +126,16 @@ func TestLuaRouteResult(t *testing.T) {
 		{name: "route", body: `return "out", "rule"`, tag: "out", rule: "rule"},
 		{name: "no match", body: `return nil`},
 		{name: "empty tag", body: `return ""`},
+		{name: "no match ignores rule", body: `return nil, false`},
+		{name: "empty tag ignores rule", body: `return "", false`},
+		{name: "missing rule", body: `return "out"`, tag: "out"},
 		{name: "invalid tag", body: `return 1`, wantErr: "outboundTag"},
 		{name: "invalid rule", body: `return "out", false`, wantErr: "ruleTag"},
 		{name: "string error", body: `return nil, nil, "script failure"`, wantErr: "script failure"},
 		{name: "native error", body: `return nil, nil, nativeError`, native: true},
+		{name: "error overrides invalid tags", body: `return false, false, nativeError`, native: true},
+		{name: "invalid error", body: `return "out", "rule", false`, wantErr: "error or string"},
+		{name: "wrong error userdata", body: `return "out", "rule", wrongError`, wantErr: "error or string"},
 		{name: "runtime error", body: `error("runtime failure")`, wantErr: "runtime failure"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,6 +143,9 @@ func TestLuaRouteResult(t *testing.T) {
 			value := L.NewUserData()
 			value.Value = nativeErr
 			L.SetGlobal("nativeError", value)
+			wrong := L.NewUserData()
+			wrong.Value = "not a native error"
+			L.SetGlobal("wrongError", wrong)
 			L.Push(lua.LTrue)
 
 			tag, rule, err := r.callLuaHook(L, &routing_session.Context{})
