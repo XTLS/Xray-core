@@ -142,19 +142,11 @@ func newLuaClientQuery(L *lua.LState, client featureDNS.Client) *lua.LFunction {
 	})
 }
 
-// CallLuaHook invokes HandleDNSQuery in the supplied state.
+// callLuaHook invokes HandleDNSQuery in the supplied state.
 // Returned slices and IP bytes may share storage with DNS caches or matcher inputs.
-func (s *DNS) CallLuaHook(L *lua.LState, ctx context.Context, domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
-	previous, top := L.Context(), L.GetTop()
-	L.SetContext(ctx)
-	defer func() {
-		L.SetTop(top)
-		if previous == nil {
-			L.RemoveContext()
-		} else {
-			L.SetContext(previous)
-		}
-	}()
+func (s *DNS) callLuaHook(L *lua.LState, domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
+	top := L.GetTop()
+	defer L.SetTop(top)
 	fn := L.GetGlobal("HandleDNSQuery")
 	if fn.Type() != lua.LTFunction {
 		return nil, 0, errors.New("DNS script must define HandleDNSQuery(...)")

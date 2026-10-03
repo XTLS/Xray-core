@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"time"
 
 	"github.com/xtls/xray-core/app/dns"
@@ -14,7 +13,7 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-const scriptExecutionTimeout = 10 * time.Second
+const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
 	router *Router
@@ -27,8 +26,8 @@ func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
 		return nil, err
 	}
 	e := &scriptEngine{router: router}
-	e.pool, err = luamgr.NewPool(router.ctx, program.NewStateFactory(
-		scriptExecutionTimeout,
+	e.pool, err = luamgr.NewPool(router.ctx, scriptExecutionTimeout, program.NewStateFactory(
+		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
 			log.RegisterLua(L)
@@ -54,12 +53,10 @@ func (e *scriptEngine) close() {
 
 func (e *scriptEngine) pickRoute(ctx routing.Context) (routing.Route, error) {
 	var tag, ruleTag string
-	err := e.pool.WithState(func(L *lua.LState) error {
-		luaCtx, cancel := context.WithTimeout(e.pool.Context(), scriptExecutionTimeout)
-		defer cancel()
-		var luaErr error
-		tag, ruleTag, luaErr = e.router.CallLuaHook(L, luaCtx, ctx)
-		return luaErr
+	err := e.pool.WithState(nil, 0, func(L *lua.LState) error {
+		var hookErr error
+		tag, ruleTag, hookErr = e.router.callLuaHook(L, ctx)
+		return hookErr
 	})
 	if err != nil {
 		return nil, err

@@ -88,7 +88,7 @@ function HandleRoute(ctx, inboundTag, sourcePort, targetPort, localPort,
 end`)
 
 	ctx := newLuaRouteTestContext()
-	tag, rule, err := r.CallLuaHook(L, context.Background(), ctx)
+	tag, rule, err := r.callLuaHook(L, ctx)
 	if err != nil || tag != "out" || rule != "rule" {
 		t.Fatalf("hook = %q, %q, %v", tag, rule, err)
 	}
@@ -137,11 +137,9 @@ func TestLuaRouteResult(t *testing.T) {
 			value := L.NewUserData()
 			value.Value = nativeErr
 			L.SetGlobal("nativeError", value)
-			previous := context.WithValue(context.Background(), struct{}{}, true)
-			L.SetContext(previous)
 			L.Push(lua.LTrue)
 
-			tag, rule, err := r.CallLuaHook(L, context.Background(), &routing_session.Context{})
+			tag, rule, err := r.callLuaHook(L, &routing_session.Context{})
 			if tag != tc.tag || rule != tc.rule {
 				t.Fatalf("result = %q, %q, %v", tag, rule, err)
 			}
@@ -157,8 +155,8 @@ func TestLuaRouteResult(t *testing.T) {
 			case err != nil:
 				t.Fatal(err)
 			}
-			if L.Context() != previous || L.GetTop() != 1 || L.Get(1) != lua.LTrue {
-				t.Fatal("hook did not restore the previous context and stack")
+			if L.GetTop() != 1 || L.Get(1) != lua.LTrue {
+				t.Fatal("hook did not restore the stack")
 			}
 		})
 	}
@@ -168,10 +166,11 @@ func TestLuaRouteCancellation(t *testing.T) {
 	r, L := newLuaRouterState(t, `function HandleRoute() while true do end end`)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, _, err := r.CallLuaHook(L, ctx, &routing_session.Context{}); err == nil {
+	L.SetContext(ctx)
+	if _, _, err := r.callLuaHook(L, &routing_session.Context{}); err == nil {
 		t.Fatal("CallLuaHook did not stop after context cancellation")
 	}
-	if L.Context() != nil || L.GetTop() != 0 {
+	if L.Context() != ctx || L.GetTop() != 0 {
 		t.Fatal("CallLuaHook did not restore the Lua state")
 	}
 }
@@ -253,7 +252,7 @@ end
 		b.Fatal(err)
 	}
 
-	ctx := context.Background()
+	L.SetContext(context.Background())
 	routeCtx := newLuaRouteTestContext()
 	for _, benchmark := range []struct {
 		name  string
@@ -267,7 +266,7 @@ end
 			return route.GetOutboundTag(), route.GetRuleTag(), nil
 		}},
 		{"lua_hook", func() (string, string, error) {
-			return r.CallLuaHook(L, ctx, routeCtx)
+			return r.callLuaHook(L, routeCtx)
 		}},
 	} {
 		b.Run(benchmark.name, func(b *testing.B) {

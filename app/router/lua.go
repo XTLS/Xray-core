@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"runtime"
 	"strings"
 
@@ -120,18 +119,10 @@ func pushLuaError(L *lua.LState, err error) {
 	L.Push(value)
 }
 
-// CallLuaHook invokes HandleRoute in the supplied state.
-func (r *Router) CallLuaHook(L *lua.LState, luaCtx context.Context, routeCtx routing.Context) (string, string, error) {
-	previous, top := L.Context(), L.GetTop()
-	L.SetContext(luaCtx)
-	defer func() {
-		L.SetTop(top)
-		if previous == nil {
-			L.RemoveContext()
-		} else {
-			L.SetContext(previous)
-		}
-	}()
+// callLuaHook invokes HandleRoute in the supplied state.
+func (r *Router) callLuaHook(L *lua.LState, routeCtx routing.Context) (string, string, error) {
+	top := L.GetTop()
+	defer L.SetTop(top)
 	fn := L.GetGlobal("HandleRoute")
 	if fn.Type() != lua.LTFunction {
 		return "", "", errors.New("routing script must define HandleRoute(...)")

@@ -84,14 +84,15 @@ func TestCallLuaHookCancellation(t *testing.T) {
 	if err := L.DoString(`function HandleDNSQuery(domain, ipv4, ipv6, fake) while true do end end`); err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	_, _, err := (&DNS{}).CallLuaHook(L, ctx, "example.com", featureDNS.IPOption{IPv4Enable: true})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	L.SetContext(ctx)
+	_, _, err := (&DNS{}).callLuaHook(L, "example.com", featureDNS.IPOption{IPv4Enable: true})
 	if err == nil {
 		t.Fatal("CallLuaHook did not stop after context cancellation")
 	}
-	if L.Context() != nil {
-		t.Fatal("CallLuaHook left the canceled context on the Lua state")
+	if L.Context() != ctx {
+		t.Fatal("CallLuaHook changed the Lua state's context")
 	}
 }
 
@@ -111,12 +112,12 @@ func TestCallLuaHookNormalizesDomain(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := &DNS{}
-	if _, _, err := s.CallLuaHook(L, context.Background(), "ExAmPlE.CoM", featureDNS.IPOption{IPv4Enable: true}); err != nil {
+	if _, _, err := s.callLuaHook(L, "ExAmPlE.CoM", featureDNS.IPOption{IPv4Enable: true}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestCallLuaHookRestoresState(t *testing.T) {
+func TestCallLuaHookRestoresStack(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		body    string
@@ -134,16 +135,13 @@ func TestCallLuaHookRestoresState(t *testing.T) {
 			if err := L.DoString("function HandleDNSQuery() " + tc.body + " end"); err != nil {
 				t.Fatal(err)
 			}
-			previous, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			L.SetContext(previous)
 			L.Push(lua.LTrue)
-			_, _, err := (&DNS{}).CallLuaHook(L, context.Background(), "example.com", featureDNS.IPOption{IPv4Enable: true})
+			_, _, err := (&DNS{}).callLuaHook(L, "example.com", featureDNS.IPOption{IPv4Enable: true})
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("hook error = %v, want error %t", err, tc.wantErr)
 			}
-			if L.Context() != previous || L.GetTop() != 1 || L.Get(1) != lua.LTrue {
-				t.Fatal("hook did not restore the previous context and stack")
+			if L.GetTop() != 1 || L.Get(1) != lua.LTrue {
+				t.Fatal("hook did not restore the stack")
 			}
 		})
 	}
@@ -170,7 +168,8 @@ end
 `); err != nil {
 		t.Fatal(err)
 	}
-	got, ttl, err := server.CallLuaHook(L, context.Background(), "example.com", option)
+	L.SetContext(context.Background())
+	got, ttl, err := server.callLuaHook(L, "example.com", option)
 	if err != nil || ttl != 60 || len(got) != 1 || !got[0].Equal(ips[0]) {
 		t.Fatalf("server query = %v, TTL %d, %v", got, ttl, err)
 	}
@@ -189,7 +188,6 @@ func TestLuaDNSClientQuery(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	L.SetContext(context.Background())
-	defer L.RemoveContext()
 	geodata.RegisterLua(L)
 	want := []net.IP{{127, 0, 0, 1}}
 	client := &luaDNSClient{lookup: func(domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
@@ -218,7 +216,6 @@ func TestLuaDNSLocalClient(t *testing.T) {
 	L := lua.NewState()
 	defer L.Close()
 	L.SetContext(context.Background())
-	defer L.RemoveContext()
 	RegisterLua(L, localdns.New())
 	if err := L.DoString(`
 local dns = require("xray.dns")
@@ -268,12 +265,13 @@ end
 	}
 
 	ctx := context.Background()
+	L.SetContext(ctx)
 	for _, bench := range []struct {
 		name  string
 		query func() ([]net.IP, uint32, error)
 	}{
 		{"direct", func() ([]net.IP, uint32, error) { return client.QueryIP(ctx, "example.com", option) }},
-		{"lua_hook", func() ([]net.IP, uint32, error) { return server.CallLuaHook(L, ctx, "example.com", option) }},
+		{"lua_hook", func() ([]net.IP, uint32, error) { return server.callLuaHook(L, "example.com", option) }},
 	} {
 		b.Run(bench.name, func(b *testing.B) {
 			b.ReportAllocs()
