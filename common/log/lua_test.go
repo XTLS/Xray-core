@@ -19,10 +19,8 @@ func (h *luaLogHandler) Handle(msg Message) {
 }
 
 func TestLuaLog(t *testing.T) {
-	logHandler.RLock()
-	previous := logHandler.Handler
-	logHandler.RUnlock()
-	t.Cleanup(func() { RegisterHandler(previous) })
+	previous := logHandler.Load()
+	t.Cleanup(func() { logHandler.Store(previous) })
 	handler := &luaLogHandler{}
 	RegisterHandler(handler)
 
@@ -122,10 +120,8 @@ type luaDiscardLogHandler struct{}
 func (luaDiscardLogHandler) Handle(Message) {}
 
 func BenchmarkLuaLog(b *testing.B) {
-	logHandler.RLock()
-	previous := logHandler.Handler
-	logHandler.RUnlock()
-	b.Cleanup(func() { RegisterHandler(previous) })
+	previous := logHandler.Load()
+	b.Cleanup(func() { logHandler.Store(previous) })
 	RegisterHandler(luaDiscardLogHandler{})
 	L := lua.NewState()
 	defer L.Close()
