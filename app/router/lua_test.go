@@ -48,7 +48,7 @@ func newLuaRouteTestContext() *luaRouteTestContext {
 	}
 }
 
-func newLuaRouterState(t *testing.T, script string) (*Router, *lua.LState) {
+func newLuaRouterState(t *testing.T, script string) *lua.LState {
 	t.Helper()
 	r := new(Router)
 	if err := r.Init(context.Background(), &Config{}, nil, nil, nil); err != nil {
@@ -61,11 +61,11 @@ func newLuaRouterState(t *testing.T, script string) (*Router, *lua.LState) {
 	if err := L.DoString(script); err != nil {
 		t.Fatal(err)
 	}
-	return r, L
+	return L
 }
 
 func TestLuaRouteBinding(t *testing.T) {
-	r, L := newLuaRouterState(t, `
+	L := newLuaRouterState(t, `
 local router = require("xray.router")
 local matcher = require("xray.geodata").BuildIPMatcher("127.0.0.0/8")
 assert(router.NetworkUnknown == 0 and router.NetworkTCP == 2)
@@ -88,9 +88,11 @@ function HandleRoute(ctx, inboundTag, sourcePort, targetPort, localPort,
 end`)
 
 	ctx := newLuaRouteTestContext()
-	tag, rule, err := r.callLuaHook(L, ctx)
-	if err != nil || tag != "out" || rule != "rule" {
-		t.Fatalf("hook = %q, %q, %v", tag, rule, err)
+	if err := callLuaRoute(L, ctx); err != nil {
+		t.Fatal(err)
+	}
+	if L.GetTop() != 3 || L.Get(1) != lua.LString("out") || L.Get(2) != lua.LString("rule") || L.Get(3) != lua.LNil {
+		t.Fatal("callLuaRoute did not leave the three route results on the stack")
 	}
 	if L.GetGlobal("savedContext").(*lua.LUserData).Value != ctx {
 		t.Fatal("routing context was copied")
@@ -117,70 +119,73 @@ assert(require("xray.router").LocalOS == expectedOS)`); err != nil {
 	}
 }
 
-func TestLuaRouteResult(t *testing.T) {
+func TestReadLuaRouteResult(t *testing.T) {
 	nativeErr := go_errors.New("native failure")
 	for _, tc := range []struct {
-		name, body, tag, rule, wantErr string
-		native                         bool
+		name, values      string
+		wantTag, wantRule string
+		wantErr           error
+		wantMessage       string
 	}{
-		{name: "route", body: `return "out", "rule"`, tag: "out", rule: "rule"},
-		{name: "no match", body: `return nil`},
-		{name: "empty tag", body: `return ""`},
-		{name: "no match ignores rule", body: `return nil, false`},
-		{name: "empty tag ignores rule", body: `return "", false`},
-		{name: "missing rule", body: `return "out"`, tag: "out"},
-		{name: "invalid tag", body: `return 1`, wantErr: "outboundTag"},
-		{name: "invalid rule", body: `return "out", false`, wantErr: "ruleTag"},
-		{name: "string error", body: `return nil, nil, "script failure"`, wantErr: "script failure"},
-		{name: "native error", body: `return nil, nil, nativeError`, native: true},
-		{name: "error overrides invalid tags", body: `return false, false, nativeError`, native: true},
-		{name: "invalid error", body: `return "out", "rule", false`, wantErr: "error or string"},
-		{name: "wrong error userdata", body: `return "out", "rule", wrongError`, wantErr: "error or string"},
-		{name: "runtime error", body: `error("runtime failure")`, wantErr: "runtime failure"},
+		{name: "route", values: `"out", "rule"`, wantTag: "out", wantRule: "rule"},
+		{name: "no match", values: `nil`},
+		{name: "empty tag", values: `""`},
+		{name: "no match ignores rule", values: `nil, false`},
+		{name: "empty tag ignores rule", values: `"", false`},
+		{name: "missing rule", values: `"out"`, wantTag: "out"},
+		{name: "invalid tag", values: `1`, wantMessage: "outboundTag"},
+		{name: "invalid rule", values: `"out", false`, wantMessage: "ruleTag"},
+		{name: "string error", values: `nil, nil, "script failure"`, wantMessage: "script failure"},
+		{name: "native error", values: `nil, nil, nativeError`, wantErr: nativeErr},
+		{name: "error overrides invalid tags", values: `false, false, nativeError`, wantErr: nativeErr},
+		{name: "invalid error", values: `"out", "rule", false`, wantMessage: "error or string"},
+		{name: "wrong error userdata", values: `"out", "rule", wrongError`, wantMessage: "error or string"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r, L := newLuaRouterState(t, "function HandleRoute() "+tc.body+" end")
-			value := L.NewUserData()
-			value.Value = nativeErr
-			L.SetGlobal("nativeError", value)
-			wrong := L.NewUserData()
-			wrong.Value = "not a native error"
-			L.SetGlobal("wrongError", wrong)
-			L.Push(lua.LTrue)
-
-			tag, rule, err := r.callLuaHook(L, &routing_session.Context{})
-			if tag != tc.tag || rule != tc.rule {
-				t.Fatalf("result = %q, %q, %v", tag, rule, err)
+			L := lua.NewState()
+			defer L.Close()
+			for name, value := range map[string]any{"nativeError": nativeErr, "wrongError": "not a native error"} {
+				ud := L.NewUserData()
+				ud.Value = value
+				L.SetGlobal(name, ud)
+			}
+			fn, err := L.LoadString("return " + tc.values)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := L.CallByParam(lua.P{Fn: fn, NRet: 3, Protect: true}); err != nil {
+				t.Fatal(err)
+			}
+			outboundTag, ruleTag, err := readLuaRouteResult(L)
+			if outboundTag != tc.wantTag || ruleTag != tc.wantRule {
+				t.Fatalf("result = %q, %q, %v; want %q, %q", outboundTag, ruleTag, err, tc.wantTag, tc.wantRule)
 			}
 			switch {
-			case tc.native:
-				if err != nativeErr {
+			case tc.wantErr != nil:
+				if err != tc.wantErr {
 					t.Fatalf("error = %v, want original error", err)
 				}
-			case tc.wantErr != "":
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			case tc.wantMessage != "":
+				if err == nil || !strings.Contains(err.Error(), tc.wantMessage) {
+					t.Fatalf("error = %v, want %q", err, tc.wantMessage)
 				}
 			case err != nil:
 				t.Fatal(err)
-			}
-			if L.GetTop() != 1 || L.Get(1) != lua.LTrue {
-				t.Fatal("hook did not restore the stack")
 			}
 		})
 	}
 }
 
-func TestLuaRouteCancellation(t *testing.T) {
-	r, L := newLuaRouterState(t, `function HandleRoute() while true do end end`)
+func TestCallLuaRouteCancellation(t *testing.T) {
+	L := newLuaRouterState(t, `function HandleRoute() while true do end end`)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	L.SetContext(ctx)
-	if _, _, err := r.callLuaHook(L, &routing_session.Context{}); err == nil {
-		t.Fatal("CallLuaHook did not stop after context cancellation")
+	if err := callLuaRoute(L, &routing_session.Context{}); err == nil {
+		t.Fatal("callLuaRoute did not stop after context cancellation")
 	}
-	if L.Context() != ctx || L.GetTop() != 0 {
-		t.Fatal("CallLuaHook did not restore the Lua state")
+	if L.Context() != ctx {
+		t.Fatal("callLuaRoute changed the Lua state's context")
 	}
 }
 
@@ -227,9 +232,9 @@ func TestFindProcess(t *testing.T) {
 	}
 }
 
-// BenchmarkLuaRouteHookCall isolates a preloaded Lua hook and its routing context bridge.
+// BenchmarkLuaRoute measures a preloaded routing script using its context bridge.
 // The direct case runs an equivalent native routing rule.
-func BenchmarkLuaRouteHookCall(b *testing.B) {
+func BenchmarkLuaRoute(b *testing.B) {
 	r := new(Router)
 	if err := r.Init(context.Background(), &Config{Rule: []*RoutingRule{{
 		TargetTag:  &RoutingRule_Tag{Tag: "out"},
@@ -262,36 +267,41 @@ end
 	}
 
 	L.SetContext(context.Background())
-	routeCtx := newLuaRouteTestContext()
+	ctx := newLuaRouteTestContext()
 	for _, benchmark := range []struct {
 		name  string
 		route func() (string, string, error)
 	}{
 		{"direct", func() (string, string, error) {
-			route, err := r.PickRoute(routeCtx)
+			route, err := r.PickRoute(ctx)
 			if err != nil {
 				return "", "", err
 			}
 			return route.GetOutboundTag(), route.GetRuleTag(), nil
 		}},
-		{"lua_hook", func() (string, string, error) {
-			return r.callLuaHook(L, routeCtx)
+		{"lua_script", func() (string, string, error) {
+			if err := callLuaRoute(L, ctx); err != nil {
+				return "", "", err
+			}
+			outboundTag, ruleTag, err := readLuaRouteResult(L)
+			L.Pop(3)
+			return outboundTag, ruleTag, err
 		}},
 	} {
 		b.Run(benchmark.name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
-			var tag, rule string
+			var outboundTag, ruleTag string
 			var err error
 			for i := 0; i < b.N; i++ {
-				tag, rule, err = benchmark.route()
+				outboundTag, ruleTag, err = benchmark.route()
 				if err != nil {
 					b.Fatal(err)
 				}
 			}
 			b.StopTimer()
-			if tag != "out" || rule != "rule" {
-				b.Fatalf("route() = %q, %q; want out, rule", tag, rule)
+			if outboundTag != "out" || ruleTag != "rule" {
+				b.Fatalf("route() = %q, %q; want out, rule", outboundTag, ruleTag)
 			}
 		})
 	}

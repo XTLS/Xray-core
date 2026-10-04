@@ -16,8 +16,7 @@ import (
 const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
-	router *Router
-	pool   *xlua.Pool
+	pool *xlua.Pool
 }
 
 func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
@@ -25,8 +24,8 @@ func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
 	if err != nil {
 		return nil, err
 	}
-	e := &scriptEngine{router: router}
-	e.pool, err = xlua.NewPool(router.ctx, scriptExecutionTimeout, program.NewStateFactory(
+
+	pool, err := xlua.NewPool(router.ctx, scriptExecutionTimeout, program.NewStateFactory(
 		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
@@ -43,8 +42,9 @@ func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	errors.LogInfo(router.ctx, "routing script initialized from ", path)
-	return e, nil
+	return &scriptEngine{pool: pool}, nil
 }
 
 func (e *scriptEngine) close() {
@@ -52,17 +52,25 @@ func (e *scriptEngine) close() {
 }
 
 func (e *scriptEngine) pickRoute(ctx routing.Context) (routing.Route, error) {
-	var tag, ruleTag string
-	err := e.pool.WithState(nil, 0, func(L *lua.LState) error {
-		var hookErr error
-		tag, ruleTag, hookErr = e.router.callLuaHook(L, ctx)
-		return hookErr
-	})
-	if err != nil {
+	var outboundTag, ruleTag string
+	var routeErr error
+
+	if err := e.pool.WithState(nil, 0, func(L *lua.LState) error {
+		if err := callLuaRoute(L, ctx); err != nil {
+			return err
+		}
+		outboundTag, ruleTag, routeErr = readLuaRouteResult(L)
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	if tag == "" {
+
+	if routeErr != nil {
+		return nil, routeErr
+	}
+	if outboundTag == "" {
 		return nil, common.ErrNoClue
 	}
-	return &Route{Context: ctx, outboundTag: tag, ruleTag: ruleTag}, nil
+
+	return &Route{Context: ctx, outboundTag: outboundTag, ruleTag: ruleTag}, nil
 }

@@ -106,41 +106,48 @@ func checkLuaContext(L *lua.LState) routing.Context {
 	return ctx
 }
 
-// callLuaHook invokes HandleRoute in the supplied state.
-func (r *Router) callLuaHook(L *lua.LState, routeCtx routing.Context) (string, string, error) {
-	top := L.GetTop()
-	defer L.SetTop(top)
+// callLuaRoute runs HandleRoute and leaves (outboundTag, ruleTag, err) on the stack.
+func callLuaRoute(L *lua.LState, ctx routing.Context) error {
 	fn := L.GetGlobal("HandleRoute")
 	if fn.Type() != lua.LTFunction {
-		return "", "", errors.New("routing script must define HandleRoute(...)")
+		return errors.New("routing script must define HandleRoute(...)")
 	}
+
 	value := L.NewUserData()
-	value.Value = routeCtx
+	value.Value = ctx
 	L.SetMetatable(value, L.GetTypeMetatable(luaContextType))
-	if err := L.CallByParam(lua.P{Fn: fn, NRet: 3, Protect: true},
-		value, lua.LString(routeCtx.GetInboundTag()), lua.LNumber(routeCtx.GetSourcePort()),
-		lua.LNumber(routeCtx.GetTargetPort()), lua.LNumber(routeCtx.GetLocalPort()),
-		lua.LString(strings.ToLower(routeCtx.GetTargetDomain())), lua.LNumber(routeCtx.GetNetwork()),
-		lua.LString(routeCtx.GetProtocol()), lua.LString(routeCtx.GetUser()),
-		lua.LNumber(routeCtx.GetVlessRoute()), lua.LBool(routeCtx.GetSkipDNSResolve())); err != nil {
-		return "", "", err
-	}
-	return readLuaRouteResult(L.Get(-3), L.Get(-2), L.Get(-1))
+
+	return L.CallByParam(lua.P{Fn: fn, NRet: 3, Protect: true},
+		value,
+		lua.LString(ctx.GetInboundTag()),
+		lua.LNumber(ctx.GetSourcePort()),
+		lua.LNumber(ctx.GetTargetPort()),
+		lua.LNumber(ctx.GetLocalPort()),
+		lua.LString(strings.ToLower(ctx.GetTargetDomain())),
+		lua.LNumber(ctx.GetNetwork()),
+		lua.LString(ctx.GetProtocol()),
+		lua.LString(ctx.GetUser()),
+		lua.LNumber(ctx.GetVlessRoute()),
+		lua.LBool(ctx.GetSkipDNSResolve()))
 }
 
-func readLuaRouteResult(tagValue, ruleValue, errorValue lua.LValue) (string, string, error) {
-	if err := xlua.ReadError(errorValue, "routing script error must be an error or string"); err != nil {
+// readLuaRouteResult reads (outboundTag, ruleTag, err) from the stack.
+func readLuaRouteResult(L *lua.LState) (string, string, error) {
+	if err := xlua.ReadError(L.Get(-1), "routing script error must be an error or string"); err != nil {
 		return "", "", err
 	}
-	tag, err := xlua.ReadOptionalString(tagValue, "routing script outboundTag must be a string or nil")
-	if err != nil || tag == "" {
+
+	outboundTag, err := xlua.ReadOptionalString(L.Get(-3), "routing script outboundTag must be a string or nil")
+	if err != nil || outboundTag == "" {
 		return "", "", err
 	}
-	ruleTag, err := xlua.ReadOptionalString(ruleValue, "routing script ruleTag must be a string")
+
+	ruleTag, err := xlua.ReadOptionalString(L.Get(-2), "routing script ruleTag must be a string")
 	if err != nil {
 		return "", "", err
 	}
-	return tag, ruleTag, nil
+
+	return outboundTag, ruleTag, nil
 }
 
 type processFinder func(string, string, uint16, string, uint16) (int, string, string, error)

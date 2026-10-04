@@ -5,6 +5,7 @@ import (
 	stdnet "net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -90,34 +91,76 @@ func TestRouterScriptStartup(t *testing.T) {
 }
 
 func TestRouterScriptRouting(t *testing.T) {
-	var dnsCalls atomic.Int32
-	d := &luaRouteDNSClient{lookup: func(string, featureDNS.IPOption) ([]net.IP, uint32, error) {
-		dnsCalls.Add(1)
-		return []net.IP{{1, 2, 3, 4}}, 60, nil
-	}}
-	r := startLuaRouter(t, `
+	for _, tc := range []struct {
+		name, body        string
+		wantTag, wantRule string
+		wantErr           error
+		wantMessage       string
+		wantCalls         string
+	}{
+		{name: "route", body: `return "lua-out", "lua-rule"`, wantTag: "lua-out", wantRule: "lua-rule", wantCalls: "2"},
+		{name: "no match", body: `return nil`, wantErr: common.ErrNoClue, wantCalls: "2"},
+		{name: "empty tag", body: `return ""`, wantErr: common.ErrNoClue, wantCalls: "2"},
+		{name: "balancer error", body: `local tag, err = router:PickOutbound("missing"); return tag, nil, err`, wantMessage: "not found", wantCalls: "2"},
+		{name: "string error", body: `return nil, nil, "blocked"`, wantMessage: "blocked", wantCalls: "2"},
+		{name: "invalid tag", body: `return false`, wantMessage: "outboundTag", wantCalls: "2"},
+		{name: "invalid rule", body: `return "lua-out", false`, wantMessage: "ruleTag", wantCalls: "2"},
+		{name: "execution error", body: `error("execution failed")`, wantMessage: "execution failed", wantCalls: "1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var dnsCalls atomic.Int32
+			d := &luaRouteDNSClient{lookup: func(string, featureDNS.IPOption) ([]net.IP, uint32, error) {
+				dnsCalls.Add(1)
+				return []net.IP{{1, 2, 3, 4}}, 60, nil
+			}}
+			script := `
+local router = require("xray.router")
+local calls = 0
 function HandleRoute(ctx, inbound)
-    if inbound == "miss" then return nil end
-    return "lua-out", "lua-rule"
-end`, d, &Config{
-		DomainStrategy: Config_IpOnDemand,
-		Rule: []*RoutingRule{{
-			TargetTag: &RoutingRule_Tag{Tag: "json-out"},
-			Networks:  []net.Network{net.Network_TCP},
-		}},
-	})
-	ctx := newLuaRouteTestContext()
-	ctx.Content.SkipDNSResolve = false
-	route, err := r.PickRoute(ctx)
-	if err != nil || route.GetOutboundTag() != "lua-out" || route.GetRuleTag() != "lua-rule" || route.(*Route).Context != ctx {
-		t.Fatalf("route = %v, %v", route, err)
-	}
-	ctx.Inbound.Tag = "miss"
-	if route, err := r.PickRoute(ctx); route != nil || err != common.ErrNoClue {
-		t.Fatalf("miss = %v, %v", route, err)
-	}
-	if dnsCalls.Load() != 0 {
-		t.Fatal("script routing implicitly resolved DNS")
+    calls = calls + 1
+    if inbound == "count" then return "lua-out", tostring(calls) end
+    ` + tc.body + `
+end
+`
+			r := startLuaRouter(t, script, d, &Config{
+				DomainStrategy: Config_IpOnDemand,
+				Rule: []*RoutingRule{{
+					TargetTag: &RoutingRule_Tag{Tag: "json-out"},
+					Networks:  []net.Network{net.Network_TCP},
+				}},
+			})
+			ctx := newLuaRouteTestContext()
+			ctx.Content.SkipDNSResolve = false
+			route, err := r.PickRoute(ctx)
+			switch {
+			case tc.wantErr != nil:
+				if err != tc.wantErr {
+					t.Fatalf("route error = %v, want %v", err, tc.wantErr)
+				}
+			case tc.wantMessage != "":
+				if err == nil || !strings.Contains(err.Error(), tc.wantMessage) {
+					t.Fatalf("route error = %v, want %q", err, tc.wantMessage)
+				}
+			case err != nil:
+				t.Fatal(err)
+			}
+			if tc.wantTag == "" {
+				if route != nil {
+					t.Fatalf("route = %v, want nil", route)
+				}
+			} else if route == nil || route.GetOutboundTag() != tc.wantTag || route.GetRuleTag() != tc.wantRule || route.(*Route).Context != ctx {
+				t.Fatalf("route = %v; want %q, %q and original context", route, tc.wantTag, tc.wantRule)
+			}
+
+			ctx.Inbound.Tag = "count"
+			route, err = r.PickRoute(ctx)
+			if err != nil || route == nil || route.GetOutboundTag() != "lua-out" || route.GetRuleTag() != tc.wantCalls {
+				t.Fatalf("next route = %v, %v; want lua-out, calls %s", route, err, tc.wantCalls)
+			}
+			if dnsCalls.Load() != 0 {
+				t.Fatal("script routing implicitly resolved DNS")
+			}
+		})
 	}
 }
 
@@ -223,39 +266,6 @@ end`, nil, config("a"))
 		}
 	})
 	wg.Wait()
-}
-
-func TestRouterScriptStateReuse(t *testing.T) {
-	r := startLuaRouter(t, `
-local calls = 0
-function HandleRoute(ctx, inbound)
-    calls = calls + 1
-    if inbound == "miss" then return nil end
-    if inbound == "fail" then error("failed") end
-    return tostring(calls)
-end`, nil, nil)
-	ctx := newLuaRouteTestContext()
-	pick := func(want string) {
-		t.Helper()
-		route, err := r.PickRoute(ctx)
-		if err != nil || route.GetOutboundTag() != want {
-			t.Fatalf("route = %v, %v, want %q", route, err, want)
-		}
-	}
-
-	pick("1")
-	ctx.Inbound.Tag = "miss"
-	if _, err := r.PickRoute(ctx); err != common.ErrNoClue {
-		t.Fatalf("miss = %v", err)
-	}
-	ctx.Inbound.Tag = "in"
-	pick("3")
-	ctx.Inbound.Tag = "fail"
-	if _, err := r.PickRoute(ctx); err == nil {
-		t.Fatal("script error was ignored")
-	}
-	ctx.Inbound.Tag = "in"
-	pick("1")
 }
 
 func TestRouterScriptDNSDispatcherReentry(t *testing.T) {
