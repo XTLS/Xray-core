@@ -95,9 +95,11 @@ type udpConn struct {
 	egress chan *packet
 	src    net.Destination
 	dst    net.Destination
+	drain  bool // set by the first read, which stays one packet as that is what sniffing looks at
 }
 
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	var mb buf.MultiBuffer
 	for {
 		e, ok := <-c.egress
 		if !ok {
@@ -108,11 +110,15 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		if _, err := b.Write(e.data); err != nil {
 			errors.LogErrorInner(context.Background(), err, "drop packet to ", e.dest, " with size ", len(e.data))
 			b.Release()
-			continue
+		} else {
+			b.UDP = e.dest
+			mb = append(mb, b)
 		}
-		b.UDP = e.dest
-
-		return buf.MultiBuffer{b}, nil
+		// also take what is already queued; each packet takes a Buffer of 8 KiB, so a read stays within 64 KiB
+		if len(mb) > 0 && (!c.drain || len(mb) == 8 || len(c.egress) == 0) {
+			c.drain = true
+			return mb, nil
+		}
 	}
 }
 
