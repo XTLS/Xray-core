@@ -47,6 +47,14 @@ func TestLuaLog(t *testing.T) {
 		local ok, err = pcall(function() error("Lua failure", 0) end)
 		assert(not ok)
 		log.Error(err)
+		local calls = 0
+		local custom = setmetatable({}, {
+			__tostring = function() calls = calls + 1; return "custom" end
+		})
+		log.Info(custom, custom)
+		assert(calls == 2)
+		log.Info("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l")
+		log.Info()
 		function logHook()
 			log.Info("hook")
 		end
@@ -62,6 +70,18 @@ func TestLuaLog(t *testing.T) {
 	`); err != nil {
 		t.Fatal(err)
 	}
+	other := filepath.Join(t.TempDir(), "other.lua")
+	if err := os.WriteFile(other, []byte(`
+		local log = require("xray.log")
+		log.Info("other")
+		logHook()
+		log.Info("other again")
+	`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := L.DoFile(other); err != nil {
+		t.Fatal(err)
+	}
 
 	want := []struct {
 		severity Severity
@@ -74,8 +94,14 @@ func TestLuaLog(t *testing.T) {
 		{Severity_Error, "[Error] logging.lua: DNS failed: lookup failed: upstream timeout"},
 		{Severity_Warning, "[Warning] logging.lua: lookup failed: upstream timeout"},
 		{Severity_Error, "[Error] logging.lua: Lua failure"},
+		{Severity_Info, "[Info] logging.lua: customcustom"},
+		{Severity_Info, "[Info] logging.lua: abcdefghijkl"},
+		{Severity_Info, "[Info] logging.lua: "},
 		{Severity_Info, "[Info] logging.lua: hook"},
 		{Severity_Info, "[Info] <string>: anonymous"},
+		{Severity_Info, "[Info] other.lua: other"},
+		{Severity_Info, "[Info] logging.lua: hook"},
+		{Severity_Info, "[Info] other.lua: other again"},
 	}
 	if len(handler.messages) != len(want) {
 		t.Fatalf("logged %d messages, want %d", len(handler.messages), len(want))
@@ -88,5 +114,46 @@ func TestLuaLog(t *testing.T) {
 		if msg.Severity != expected.severity || msg.String() != expected.message {
 			t.Errorf("message %d = %q with severity %v, want %q with severity %v", i, msg.String(), msg.Severity, expected.message, expected.severity)
 		}
+	}
+}
+
+type luaDiscardLogHandler struct{}
+
+func (luaDiscardLogHandler) Handle(Message) {}
+
+func BenchmarkLuaLog(b *testing.B) {
+	logHandler.RLock()
+	previous := logHandler.Handler
+	logHandler.RUnlock()
+	b.Cleanup(func() { RegisterHandler(previous) })
+	RegisterHandler(luaDiscardLogHandler{})
+	L := lua.NewState()
+	defer L.Close()
+	RegisterLua(L)
+	if err := L.DoString(`custom = setmetatable({}, {__tostring = function() return "custom" end})`); err != nil {
+		b.Fatal(err)
+	}
+	for _, benchmark := range []struct {
+		name, arguments string
+	}{
+		{"strings", `"query: ", "example.com"`},
+		{"mixed", `"count=", 42, ", enabled=", true, ", value=", nil`},
+		{"many_arguments", `"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"`},
+		{"tostring", "custom"},
+	} {
+		b.Run(benchmark.name, func(b *testing.B) {
+			if err := L.DoString(fmt.Sprintf(`local log = require("xray.log")
+function benchmarkLog() log.Info(%s) end`, benchmark.arguments)); err != nil {
+				b.Fatal(err)
+			}
+			fn := L.GetGlobal("benchmarkLog")
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := L.CallByParam(lua.P{Fn: fn, NRet: 0, Protect: true}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }

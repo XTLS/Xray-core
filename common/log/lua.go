@@ -11,6 +11,7 @@ import (
 func RegisterLua(L *lua.LState) {
 	L.PreloadModule("xray.log", func(L *lua.LState) int {
 		module := L.NewTable()
+		var source, prefix string // cache
 		for name, severity := range map[string]Severity{
 			"Debug":   Severity_Debug,
 			"Info":    Severity_Info,
@@ -22,20 +23,15 @@ func RegisterLua(L *lua.LState) {
 				// Prefix with the calling script's filename.
 				if caller, ok := L.GetStack(1); ok {
 					if _, err := L.GetInfo("S", caller, lua.LNil); err == nil && caller.Source != "" {
-						content.WriteString(filepath.Base(strings.TrimPrefix(caller.Source, "@")))
-						content.WriteString(": ")
+						if caller.Source != source {
+							source = caller.Source
+							prefix = filepath.Base(strings.TrimPrefix(source, "@")) + ": "
+						}
+						content.WriteString(prefix)
 					}
 				}
 				for i := 1; i <= L.GetTop(); i++ {
-					value := L.Get(i)
-					// Use Error() for Go errors in userdata.
-					if ud, ok := value.(*lua.LUserData); ok {
-						if err, ok := ud.Value.(error); ok {
-							content.WriteString(err.Error())
-							continue
-						}
-					}
-					content.WriteString(L.ToStringMeta(value).String())
+					content.WriteString(luaLogString(L, L.Get(i)))
 				}
 				Record(&GeneralMessage{
 					Severity: severity,
@@ -47,4 +43,16 @@ func RegisterLua(L *lua.LState) {
 		L.Push(module)
 		return 1
 	})
+}
+
+func luaLogString(L *lua.LState, value lua.LValue) string {
+	if ud, ok := value.(*lua.LUserData); ok {
+		if err, ok := ud.Value.(error); ok {
+			return err.Error()
+		}
+	}
+	if _, ok := L.GetMetaField(value, "__tostring").(*lua.LFunction); ok {
+		return L.ToStringMeta(value).String()
+	}
+	return value.String()
 }
