@@ -52,9 +52,9 @@ func luaServers(s *DNS) []luaDNSServer {
 
 func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client) {
 	L.PreloadModule("xray.dns", func(L *lua.LState) int {
-		serverList := L.NewTable()
+		serverList := L.CreateTable(len(servers), 0)
 		for i, client := range servers {
-			server := L.NewTable()
+			server := L.CreateTable(0, 2)
 
 			server.RawSetString("ID", lua.LString(client.id))
 
@@ -90,7 +90,7 @@ func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client
 			serverList.RawSetInt(i+1, server)
 		}
 
-		module := L.NewTable()
+		module := L.CreateTable(0, 2)
 		if servers != nil {
 			module.RawSetString("Servers", serverList)
 		}

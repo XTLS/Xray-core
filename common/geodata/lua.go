@@ -23,7 +23,7 @@ var (
 // RegisterLua makes xray.geodata available to require in an LState.
 func RegisterLua(L *lua.LState) {
 	L.PreloadModule("xray.geodata", func(L *lua.LState) int {
-		module := L.NewTable()
+		module := L.CreateTable(0, 2)
 
 		module.RawSetString("BuildDomainMatcher", L.NewFunction(func(L *lua.LState) int {
 			parsed, err := ParseDomainRules(luaRules(L), Domain_Domain)

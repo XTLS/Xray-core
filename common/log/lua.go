@@ -10,7 +10,7 @@ import (
 // RegisterLua makes xray.log available to require in an LState.
 func RegisterLua(L *lua.LState) {
 	L.PreloadModule("xray.log", func(L *lua.LState) int {
-		module := L.NewTable()
+		module := L.CreateTable(0, 4)
 		var source, prefix string // cache
 		for name, severity := range map[string]Severity{
 			"Debug":   Severity_Debug,

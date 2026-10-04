@@ -21,7 +21,7 @@ func (r *Router) RegisterLua(L *lua.LState) {
 	registerLuaContext(L)
 
 	L.PreloadModule("xray.router", func(L *lua.LState) int {
-		module := L.NewTable()
+		module := L.CreateTable(0, 7)
 
 		module.RawSetString("NetworkUnknown", lua.LNumber(net.Network_Unknown))
 		module.RawSetString("NetworkTCP", lua.LNumber(net.Network_TCP))
@@ -73,7 +73,7 @@ func registerLuaContext(L *lua.LState) {
 		}
 		return 1
 	}))
-	methods := L.NewTable()
+	methods := L.CreateTable(0, 4)
 	L.SetFuncs(methods, map[string]lua.LGFunction{
 		"GetSourceIPs": func(L *lua.LState) int {
 			xlua.PushUserData(L, checkLuaContext(L).GetSourceIPs())
