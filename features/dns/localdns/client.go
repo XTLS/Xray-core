@@ -97,6 +97,9 @@ func New() *Client {
 	r := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			if internet.IsSkippedDNSServer(address) {
+				return nil, errors.New("skipped DNS server ", address)
+			}
 			return d.DialContext(ctx, network, address)
 		},
 	}

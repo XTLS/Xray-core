@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -45,7 +46,9 @@ func (r *Request) Header() http.Header { return r.req.Header }
 
 func (r *Request) httpRequest() *http.Request { return r.req }
 
-type ProxyRequest struct{}
+type ProxyRequest struct {
+	body io.ReadCloser
+}
 
 type ProxyRequestParseError struct {
 	HTTPStatus int
@@ -62,10 +65,14 @@ func ParseProxyRequest(r *http.Request) (*ProxyRequest, error) {
 			Err:        fmt.Errorf("expected CONNECT request, got %s", r.Method),
 		}
 	}
-	if r.Proto != requestProtocol {
+	protocol := r.Proto
+	if r.ProtoMajor == 2 {
+		protocol = r.Header.Get(":protocol")
+	}
+	if protocol != requestProtocol {
 		return nil, &ProxyRequestParseError{
 			HTTPStatus: http.StatusNotImplemented,
-			Err:        fmt.Errorf("unexpected protocol: %s", r.Proto),
+			Err:        fmt.Errorf("unexpected protocol: %s", protocol),
 		}
 	}
 	capsuleHeaderValues, ok := r.Header[http3.CapsuleProtocolHeader]
@@ -82,6 +89,9 @@ func ParseProxyRequest(r *http.Request) (*ProxyRequest, error) {
 		}
 	}
 
+	if r.ProtoMajor == 2 {
+		return &ProxyRequest{body: r.Body}, nil
+	}
 	return &ProxyRequest{}, nil
 }
 

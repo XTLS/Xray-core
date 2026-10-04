@@ -23,9 +23,23 @@ func (e *PacketTooBigError) Error() string {
 	return "packet too big for the tunnel"
 }
 
+type httpConn interface {
+	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
+	Close() error
+}
+
+type quicConn struct {
+	*quic.Conn
+}
+
+func (c quicConn) Close() error {
+	return c.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "")
+}
+
 type Conn struct {
 	ipConn    *connectip.Conn
-	quicConn  *quic.Conn
+	httpConn  httpConn
 	local     []netip.Addr
 	closeOnce sync.Once
 }
@@ -58,17 +72,17 @@ func (c *Conn) Write(b []byte) (int, error) {
 func (c *Conn) Close() error {
 	c.closeOnce.Do(func() {
 		c.ipConn.Close()
-		c.quicConn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "")
+		c.httpConn.Close()
 	})
 	return nil
 }
 
 func (c *Conn) LocalAddr() net.Addr {
-	return c.quicConn.LocalAddr()
+	return c.httpConn.LocalAddr()
 }
 
 func (c *Conn) RemoteAddr() net.Addr {
-	return c.quicConn.RemoteAddr()
+	return c.httpConn.RemoteAddr()
 }
 
 func (c *Conn) SetDeadline(time.Time) error {

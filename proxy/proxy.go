@@ -277,6 +277,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 				w.ob.CanSpliceCopy = 1
 			}
 		}
+		SuppressOuterCloseNotify(w.conn)
 		readerConn, readCounter, _ := UnwrapRawConn(w.conn)
 		w.directReadCounter = readCounter
 		w.Reader = buf.NewReader(readerConn)
@@ -340,6 +341,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			// 	w.ob.CanSpliceCopy = 1
 			// }
 		}
+		SuppressOuterCloseNotify(w.conn)
 		rawConn, _, writerCounter := UnwrapRawConn(w.conn)
 		w.Writer = buf.NewWriter(rawConn)
 		w.directWriteCounter = writerCounter
@@ -666,6 +668,19 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 		if trafficState.NumberOfPacketToFilter <= 0 {
 			errors.LogDebug(ctx, "XtlsFilterTls stop filtering", buffer.Len())
 		}
+	}
+}
+
+type CloseNotifySuppressor interface {
+	SuppressCloseNotify()
+}
+
+// Close our local TLS conn instance might send a incorrect close_notify alert
+// if the XTLS direct copy mode is enabled and cause TLS BAD_RECORD_MAC on users' browser
+// Close the underlying connection directly to avoid this issue.
+func SuppressOuterCloseNotify(conn net.Conn) {
+	if suppressor, ok := stat.TryUnwrapStatsConn(conn).(CloseNotifySuppressor); ok {
+		suppressor.SuppressCloseNotify()
 	}
 }
 

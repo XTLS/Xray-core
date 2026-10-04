@@ -98,7 +98,7 @@ func ReadTCPSession(validator *Validator, reader io.Reader) (*protocol.RequestHe
 			iv := append([]byte(nil), buffer.BytesTo(ivLen)...)
 			r, err = account.Cipher.NewDecryptionReader(account.Key, iv, reader)
 			if err != nil {
-				return nil, nil, drain.WithError(drainer, reader, errors.New("failed to initialize decoding stream").Base(err).AtError())
+				return nil, nil, drain.WithError(drainer, reader, errors.New("failed to initialize decoding stream").Base(err))
 			}
 		}
 	}
@@ -146,7 +146,7 @@ func WriteTCPRequest(request *protocol.RequestHeader, writer io.Writer) (buf.Wri
 
 	w, err := account.Cipher.NewEncryptionWriter(account.Key, iv, writer)
 	if err != nil {
-		return nil, errors.New("failed to create encoding stream").Base(err).AtError()
+		return nil, errors.New("failed to create encoding stream").Base(err)
 	}
 
 	header := buf.New()

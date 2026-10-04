@@ -165,6 +165,18 @@ func (t *Handler) Start() error {
 		return err
 	}
 
+	// Platform-specific system DNS takeover, where the platform implements it.
+	// Rather no TUN than one that the system DNS bypasses.
+	if c, ok := tunInterface.(interface {
+		ConfigureSystemDNS(context.Context, string) error
+	}); ok {
+		if err := c.ConfigureSystemDNS(t.ctx, t.tag); err != nil {
+			_ = tunStack.Close()
+			_ = tunInterface.Close()
+			return errors.New("unable to set the system DNS (remove autoSystemDnsToGateway to run without)").Base(err)
+		}
+	}
+
 	t.stack = tunStack
 	t.tun = tunInterface
 

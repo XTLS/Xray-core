@@ -58,7 +58,7 @@ func NewFakeDNSHolder() (*Holder, error) {
 	var err error
 
 	if fkdns, err = NewFakeDNSHolderConfigOnly(nil); err != nil {
-		return nil, errors.New("Unable to create Fake Dns Engine").Base(err).AtError()
+		return nil, errors.New("Unable to create Fake Dns Engine").Base(err)
 	}
 	err = fkdns.initialize(dns.FakeIPv4Pool, 65535)
 	if err != nil {
@@ -80,13 +80,13 @@ func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
 	var err error
 
 	if _, ipRange, err = net.ParseCIDR(ipPoolCidr); err != nil {
-		return errors.New("Unable to parse CIDR for Fake DNS IP assignment").Base(err).AtError()
+		return errors.New("Unable to parse CIDR for Fake DNS IP assignment").Base(err)
 	}
 
 	ones, bits := ipRange.Mask.Size()
 	rooms := bits - ones
 	if math.Log2(float64(lruSize)) >= float64(rooms) {
-		return errors.New("LRU size is bigger than subnet size").AtError()
+		return errors.New("LRU size is bigger than subnet size")
 	}
 	fkdns.domainToIP = cache.NewLru(lruSize)
 	fkdns.ipRange = ipRange

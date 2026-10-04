@@ -7,7 +7,26 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/masque/connectip"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
+
+func TestUsesHTTP2(t *testing.T) {
+	for _, c := range []struct {
+		alpn []string
+		want bool
+	}{
+		{alpn: nil, want: false},
+		{alpn: []string{"h3"}, want: false},
+		{alpn: []string{"h2"}, want: true},
+		{alpn: []string{"h2", "http/1.1"}, want: true},
+		{alpn: []string{"h3", "h2"}, want: false},
+		{alpn: []string{"http/1.1"}, want: false},
+	} {
+		if got := usesHTTP2(&tls.Config{NextProtocol: c.alpn}); got != c.want {
+			t.Errorf("usesHTTP2(%q) = %v, want %v", c.alpn, got, c.want)
+		}
+	}
+}
 
 func TestAuthority(t *testing.T) {
 	for _, c := range []struct {

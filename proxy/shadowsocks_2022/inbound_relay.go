@@ -2,18 +2,11 @@ package shadowsocks_2022
 
 import (
 	"context"
+	"crypto/cipher"
+	"encoding/binary"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
-	C "github.com/sagernet/sing/common"
-	A "github.com/sagernet/sing/common/auth"
-	B "github.com/sagernet/sing/common/buf"
-	"github.com/sagernet/sing/common/bufio"
-	E "github.com/sagernet/sing/common/exceptions"
-	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -21,9 +14,9 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/singbridge"
 	"github.com/xtls/xray-core/common/uuid"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -34,10 +27,21 @@ func init() {
 	}))
 }
 
+type relayDest struct {
+	destination net.Destination
+	email       string
+	level       uint32
+	blockCipher cipher.Block
+}
+
 type RelayInbound struct {
-	networks     []net.Network
-	destinations []*RelayDestination
-	service      *shadowaead_2022.RelayService[int]
+	networks      []net.Network
+	method        *CipherMethod
+	relayPSK      []byte
+	relayBlock    cipher.Block
+	destinations  map[[AESBlockSize]byte]*relayDest
+	udpSessions   *UDPSessionManager
+	policyManager policy.Manager
 }
 
 func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbound, error) {
@@ -48,39 +52,62 @@ func NewRelayServer(ctx context.Context, config *RelayServerConfig) (*RelayInbou
 			net.Network_UDP,
 		}
 	}
-	inbound := &RelayInbound{
-		networks:     networks,
-		destinations: config.Destinations,
-	}
-	if !C.Contains(shadowaead_2022.List, config.Method) || !strings.Contains(config.Method, "aes") {
-		return nil, errors.New("unsupported method ", config.Method)
-	}
-	service, err := shadowaead_2022.NewRelayServiceWithPassword[int](config.Method, config.Key, 500, inbound)
+
+	method, err := GetCipherMethod(config.Method)
 	if err != nil {
-		return nil, errors.New("create service").Base(err)
+		return nil, err
+	}
+	if method.IsChaCha {
+		return nil, errors.New("shadowsocks 2022 relay: only aes methods are supported")
 	}
 
-	for i, destination := range config.Destinations {
-		if destination.Email == "" {
+	relayPSK, err := ParseKey(config.Key, method.KeySaltLength)
+	if err != nil {
+		return nil, err
+	}
+
+	relayBlock, err := method.NewBlock(relayPSK)
+	if err != nil {
+		return nil, err
+	}
+
+	v := core.MustFromContext(ctx)
+	i := &RelayInbound{
+		networks:      networks,
+		method:        method,
+		relayPSK:      relayPSK,
+		relayBlock:    relayBlock,
+		destinations:  make(map[[AESBlockSize]byte]*relayDest),
+		udpSessions:   NewUDPSessionManager(500 * time.Second),
+		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+	}
+
+	for idx, d := range config.Destinations {
+		if d.Email == "" {
 			u := uuid.New()
-			destination.Email = "unnamed-destination-" + strconv.Itoa(i) + "-" + u.String()
+			d.Email = "unnamed-destination-" + strconv.Itoa(idx) + "-" + u.String()
+		}
+		destKey, err := ParseKey(d.Key, method.KeySaltLength)
+		if err != nil {
+			return nil, err
+		}
+
+		destBlock, err := method.NewBlock(destKey)
+		if err != nil {
+			return nil, err
+		}
+
+		hash := DeriveUserPSKHash(destKey)
+
+		i.destinations[hash] = &relayDest{
+			destination: net.TCPDestination(d.Address.AsAddress(), net.Port(d.Port)),
+			email:       d.Email,
+			level:       uint32(d.Level),
+			blockCipher: destBlock,
 		}
 	}
-	err = service.UpdateUsersWithPasswords(
-		C.MapIndexed(config.Destinations, func(index int, it *RelayDestination) int { return index }),
-		C.Map(config.Destinations, func(it *RelayDestination) string { return it.Key }),
-		C.Map(config.Destinations, func(it *RelayDestination) M.Socksaddr {
-			return singbridge.ToSocksaddr(net.Destination{
-				Address: it.Address.AsAddress(),
-				Port:    net.Port(it.Port),
-			})
-		}),
-	)
-	if err != nil {
-		return nil, errors.New("create service").Base(err)
-	}
-	inbound.service = service
-	return inbound, nil
+
+	return i, nil
 }
 
 func (i *RelayInbound) Network() []net.Network {
@@ -92,103 +119,147 @@ func (i *RelayInbound) Process(ctx context.Context, network net.Network, connect
 	inbound.Name = "shadowsocks-2022-relay"
 	inbound.CanSpliceCopy = 3
 
-	var metadata M.Metadata
-	if inbound.Source.IsValid() {
-		metadata.Source = M.ParseSocksaddr(inbound.Source.NetAddr())
+	if network == net.Network_TCP {
+		return i.processTCP(ctx, connection, dispatcher)
+	}
+	return i.processUDP(ctx, connection, dispatcher)
+}
+
+func (i *RelayInbound) processTCP(ctx context.Context, conn net.Conn, dispatcher routing.Dispatcher) error {
+	defer conn.Close()
+
+	sessionPolicy := i.policyManager.ForLevel(0)
+	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
+		return errors.New("unable to set read deadline").Base(err)
 	}
 
-	ctx = session.ContextWithDispatcher(ctx, dispatcher)
+	// Read initial handshake in a single read call per SIP022 §3.1.3 & §3.1.4
+	needed := i.method.KeySaltLength + AESBlockSize
+	requestHeader := buf.New()
+	n, err := requestHeader.ReadFrom(conn)
+	if err != nil {
+		requestHeader.Release()
+		ResetTCPConn(conn)
+		return err
+	}
+	if int(n) < needed {
+		requestHeader.Release()
+		ResetTCPConn(conn)
+		return ErrInvalidRequest
+	}
 
-	if network == net.Network_TCP {
-		return singbridge.ReturnError(i.service.NewConnection(ctx, connection, metadata))
-	} else {
-		reader := buf.NewReader(connection)
-		pc := &natPacketConn{connection}
-		for {
-			mb, err := reader.ReadMultiBuffer()
-			if err != nil {
-				buf.ReleaseMulti(mb)
-				return singbridge.ReturnError(err)
+	headerSlice := requestHeader.Bytes()
+	salt := headerSlice[:i.method.KeySaltLength]
+	eih := headerSlice[i.method.KeySaltLength:needed]
+
+	decryptedHash, err := DecryptEIH(i.method, i.relayPSK, salt, eih)
+	if err != nil {
+		requestHeader.Release()
+		ResetTCPConn(conn)
+		return err
+	}
+
+	targetDest, ok := i.destinations[decryptedHash]
+	if !ok {
+		requestHeader.Release()
+		ResetTCPConn(conn)
+		return ErrInvalidRequest
+	}
+	conn.SetReadDeadline(time.Time{})
+
+	inbound := session.InboundFromContext(ctx)
+	inbound.User = &protocol.MemoryUser{
+		Email: targetDest.email,
+		Level: targetDest.level,
+	}
+
+	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+		From:   conn.RemoteAddr(),
+		To:     targetDest.destination,
+		Status: log.AccessAccepted,
+		Email:  targetDest.email,
+	})
+
+	errors.LogInfo(ctx, "relaying connection to ", targetDest.destination)
+
+	link, err := dispatcher.Dispatch(ctx, targetDest.destination)
+	if err != nil {
+		requestHeader.Release()
+		return err
+	}
+
+	// Unwrap outer EIH: send client salt and remaining handshake bytes to next hop
+	// in a single write call, satisfying downstream server's single-read handshake expectation (SIP022 §3.1.3).
+	var saltCopy [32]byte
+	copy(saltCopy[:i.method.KeySaltLength], salt)
+	copy(requestHeader.Bytes()[AESBlockSize:AESBlockSize+i.method.KeySaltLength], saltCopy[:i.method.KeySaltLength])
+	requestHeader.Advance(AESBlockSize)
+
+	if err := link.Writer.WriteMultiBuffer(buf.MultiBuffer{requestHeader}); err != nil {
+		return err
+	}
+
+	return TransportTCP(ctx, i.policyManager.ForLevel(targetDest.level), buf.NewReader(conn), buf.NewWriter(conn), link)
+}
+
+func (i *RelayInbound) processUDP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	reader := buf.NewPacketReader(conn)
+	for {
+		mb, err := reader.ReadMultiBuffer()
+		if err != nil {
+			buf.ReleaseMulti(mb)
+			return err
+		}
+
+		for _, b := range mb {
+			data := b.Bytes()
+			if len(data) < 2*AESBlockSize {
+				b.Release()
+				continue
 			}
-			for _, buffer := range mb {
-				packet := B.As(buffer.Bytes()).ToOwned()
-				buffer.Release()
-				err = i.service.NewPacket(ctx, pc, packet, metadata)
-				if err != nil {
-					packet.Release()
-					buf.ReleaseMulti(mb)
-					return err
+
+			var packetHeader [AESBlockSize]byte
+			i.relayBlock.Decrypt(packetHeader[:], data[:AESBlockSize])
+
+			eiHeader := DecryptUDPEIH(i.relayBlock, packetHeader[:], data[AESBlockSize:2*AESBlockSize])
+
+			targetDest, ok := i.destinations[eiHeader]
+			if !ok {
+				b.Release()
+				continue
+			}
+
+			// Extract sessionID from raw packetHeader for session-level link caching before re-encrypting
+			sessionID := binary.BigEndian.Uint64(packetHeader[:8])
+
+			// Re-encrypt packetHeader with next hop block cipher
+			targetDest.blockCipher.Encrypt(packetHeader[:], packetHeader[:])
+
+			// Strip outer EIH: replace second block with re-encrypted packetHeader and advance
+			copy(data[AESBlockSize:2*AESBlockSize], packetHeader[:])
+			b.Advance(int32(AESBlockSize))
+
+			dest := targetDest.destination
+			dest.Network = net.Network_UDP
+
+			sessionItem := i.udpSessions.GetOrCreate(sessionID)
+			if sessionItem.User == nil {
+				sessionItem.Lock()
+				if sessionItem.User == nil {
+					sessionItem.User = &protocol.MemoryUser{
+						Email: targetDest.email,
+						Level: targetDest.level,
+					}
 				}
+				sessionItem.Unlock()
 			}
+			link, err := sessionItem.EnsureLink(ctx, conn, dest, dispatcher, i.policyManager, nil)
+			if err != nil {
+				b.Release()
+				continue
+			}
+
+			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{b})
 		}
 	}
-}
-
-func (i *RelayInbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
-	inbound := session.InboundFromContext(ctx)
-	userInt, _ := A.UserFromContext[int](ctx)
-	user := i.destinations[userInt]
-	inbound.User = &protocol.MemoryUser{
-		Email: user.Email,
-		Level: uint32(user.Level),
-	}
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-		From:   metadata.Source,
-		To:     metadata.Destination,
-		Status: log.AccessAccepted,
-		Email:  user.Email,
-	})
-	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
-	dispatcher := session.DispatcherFromContext(ctx)
-	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
-	if err != nil {
-		return err
-	}
-	link, err := dispatcher.Dispatch(ctx, destination)
-	if err != nil {
-		return err
-	}
-	return singbridge.CopyConn(ctx, nil, link, conn)
-}
-
-func (i *RelayInbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
-	inbound := session.InboundFromContext(ctx)
-	userInt, _ := A.UserFromContext[int](ctx)
-	user := i.destinations[userInt]
-	inbound.User = &protocol.MemoryUser{
-		Email: user.Email,
-		Level: uint32(user.Level),
-	}
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-		From:   metadata.Source,
-		To:     metadata.Destination,
-		Status: log.AccessAccepted,
-		Email:  user.Email,
-	})
-	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
-	dispatcher := session.DispatcherFromContext(ctx)
-	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
-	if err != nil {
-		return err
-	}
-	link, err := dispatcher.Dispatch(ctx, destination)
-	if err != nil {
-		return err
-	}
-	outConn := &singbridge.PacketConnWrapper{
-		Reader: link.Reader,
-		Writer: link.Writer,
-		Dest:   destination,
-		T: signal.CancelAfterInactivity(ctx, func() {
-			common.Interrupt(link.Reader)
-		}, 300*time.Second),
-	}
-	return bufio.CopyPacketConn(ctx, conn, outConn)
-}
-
-func (i *RelayInbound) NewError(ctx context.Context, err error) {
-	if E.IsClosed(err) {
-		return
-	}
-	errors.LogWarning(ctx, err.Error())
 }

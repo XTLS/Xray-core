@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -81,14 +82,14 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 			if err != nil {
 				return nil, err
 			}
-			return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, err
+			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, err
 		},
 	}
 	for i := range fm.tcpMasks {
 		var newConn net.Conn
 		newConn, err = fm.tcpMasks[i].WrapConnClient(conn, &dest, dialer)
 		if err != nil {
-			_ = conn.Close()
+			common.CloseIfExists(conn)
 			return nil, err
 		}
 		conn = newConn
@@ -143,7 +144,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 		if err != nil {
 			return nil, err
 		}
-		return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, nil
+		return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, nil
 	}
 	for i := range fm.udpMasks {
 		if i > 0 {
@@ -170,7 +171,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 			if err != nil {
 				return nil, err
 			}
-			return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, err
+			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, err
 		},
 	}
 	var sizes []int
@@ -193,7 +194,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 			}
 			newConn, err = fm.udpMasks[i].WrapPacketConnClient(conn, &dest, dialer)
 			if err != nil {
-				_ = conn.Close()
+				common.CloseIfExists(conn)
 				return nil, err
 			}
 			conn = newConn
@@ -207,7 +208,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 	if addr == nil {
 		addr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
 	}
-	return &PacketConnWrapper{PacketConn: conn, udpAddr: addr}, nil
+	return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, nil
 }
 
 func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.PacketConn, error) {
@@ -240,7 +241,7 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {
 			newConn, err = fm.udpMasks[i].WrapPacketConnServer(nil, nil, nil)
 			if err != nil {
-				_ = conn.Close()
+				common.CloseIfExists(conn)
 				return nil, err
 			}
 			sizes = append(sizes, newConn.(interface{ Size() int }).Size())
@@ -253,7 +254,7 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 			}
 			newConn, err = fm.udpMasks[i].WrapPacketConnServer(conn, addr, lc)
 			if err != nil {
-				_ = conn.Close()
+				common.CloseIfExists(conn)
 				return nil, err
 			}
 			conn = newConn
@@ -270,24 +271,6 @@ func (fm *FinalMask) ListenPacket(ctx context.Context, addr net.Addr) (net.Packe
 const (
 	UDPSize = 4096
 )
-
-type PacketConnWrapper struct {
-	net.PacketConn
-	udpAddr net.Addr
-}
-
-func (c *PacketConnWrapper) RemoteAddr() net.Addr {
-	return c.udpAddr
-}
-
-func (c *PacketConnWrapper) Read(b []byte) (n int, err error) {
-	n, _, err = c.PacketConn.ReadFrom(b)
-	return
-}
-
-func (c *PacketConnWrapper) Write(b []byte) (n int, err error) {
-	return c.PacketConn.WriteTo(b, c.udpAddr)
-}
 
 type headerManagerConn struct {
 	net.PacketConn

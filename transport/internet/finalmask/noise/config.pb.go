@@ -21,6 +21,135 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Segment_Kind int32
+
+const (
+	Segment_BYTES        Segment_Kind = 0
+	Segment_RANDOM       Segment_Kind = 1
+	Segment_RANDOM_ASCII Segment_Kind = 2
+	Segment_RANDOM_DIGIT Segment_Kind = 3
+	Segment_TIMESTAMP    Segment_Kind = 4
+	Segment_COUNTER      Segment_Kind = 5
+	Segment_NONCE        Segment_Kind = 6
+)
+
+// Enum value maps for Segment_Kind.
+var (
+	Segment_Kind_name = map[int32]string{
+		0: "BYTES",
+		1: "RANDOM",
+		2: "RANDOM_ASCII",
+		3: "RANDOM_DIGIT",
+		4: "TIMESTAMP",
+		5: "COUNTER",
+		6: "NONCE",
+	}
+	Segment_Kind_value = map[string]int32{
+		"BYTES":        0,
+		"RANDOM":       1,
+		"RANDOM_ASCII": 2,
+		"RANDOM_DIGIT": 3,
+		"TIMESTAMP":    4,
+		"COUNTER":      5,
+		"NONCE":        6,
+	}
+)
+
+func (x Segment_Kind) Enum() *Segment_Kind {
+	p := new(Segment_Kind)
+	*p = x
+	return p
+}
+
+func (x Segment_Kind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Segment_Kind) Descriptor() protoreflect.EnumDescriptor {
+	return file_transport_internet_finalmask_noise_config_proto_enumTypes[0].Descriptor()
+}
+
+func (Segment_Kind) Type() protoreflect.EnumType {
+	return &file_transport_internet_finalmask_noise_config_proto_enumTypes[0]
+}
+
+func (x Segment_Kind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Segment_Kind.Descriptor instead.
+func (Segment_Kind) EnumDescriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_noise_config_proto_rawDescGZIP(), []int{0, 0}
+}
+
+type Segment struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          Segment_Kind           `protobuf:"varint,1,opt,name=kind,proto3,enum=xray.transport.internet.finalmask.noise.Segment_Kind" json:"kind,omitempty"`
+	Bytes         []byte                 `protobuf:"bytes,2,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	MinSize       int64                  `protobuf:"varint,3,opt,name=min_size,json=minSize,proto3" json:"min_size,omitempty"`
+	MaxSize       int64                  `protobuf:"varint,4,opt,name=max_size,json=maxSize,proto3" json:"max_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Segment) Reset() {
+	*x = Segment{}
+	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Segment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Segment) ProtoMessage() {}
+
+func (x *Segment) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Segment.ProtoReflect.Descriptor instead.
+func (*Segment) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_noise_config_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Segment) GetKind() Segment_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return Segment_BYTES
+}
+
+func (x *Segment) GetBytes() []byte {
+	if x != nil {
+		return x.Bytes
+	}
+	return nil
+}
+
+func (x *Segment) GetMinSize() int64 {
+	if x != nil {
+		return x.MinSize
+	}
+	return 0
+}
+
+func (x *Segment) GetMaxSize() int64 {
+	if x != nil {
+		return x.MaxSize
+	}
+	return 0
+}
+
 type Item struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RandMin       int64                  `protobuf:"varint,1,opt,name=rand_min,json=randMin,proto3" json:"rand_min,omitempty"`
@@ -30,13 +159,14 @@ type Item struct {
 	Packet        []byte                 `protobuf:"bytes,5,opt,name=packet,proto3" json:"packet,omitempty"`
 	DelayMin      int64                  `protobuf:"varint,6,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
 	DelayMax      int64                  `protobuf:"varint,7,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
+	Segments      []*Segment             `protobuf:"bytes,8,rep,name=segments,proto3" json:"segments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Item) Reset() {
 	*x = Item{}
-	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[0]
+	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +178,7 @@ func (x *Item) String() string {
 func (*Item) ProtoMessage() {}
 
 func (x *Item) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[0]
+	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,7 +191,7 @@ func (x *Item) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Item.ProtoReflect.Descriptor instead.
 func (*Item) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_noise_config_proto_rawDescGZIP(), []int{0}
+	return file_transport_internet_finalmask_noise_config_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Item) GetRandMin() int64 {
@@ -113,6 +243,13 @@ func (x *Item) GetDelayMax() int64 {
 	return 0
 }
 
+func (x *Item) GetSegments() []*Segment {
+	if x != nil {
+		return x.Segments
+	}
+	return nil
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ResetMin      int64                  `protobuf:"varint,1,opt,name=reset_min,json=resetMin,proto3" json:"reset_min,omitempty"`
@@ -124,7 +261,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[1]
+	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -136,7 +273,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[1]
+	mi := &file_transport_internet_finalmask_noise_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -149,7 +286,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_noise_config_proto_rawDescGZIP(), []int{1}
+	return file_transport_internet_finalmask_noise_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Config) GetResetMin() int64 {
@@ -177,7 +314,21 @@ var File_transport_internet_finalmask_noise_config_proto protoreflect.FileDescri
 
 const file_transport_internet_finalmask_noise_config_proto_rawDesc = "" +
 	"\n" +
-	"/transport/internet/finalmask/noise/config.proto\x12'xray.transport.internet.finalmask.noise\"\xda\x01\n" +
+	"/transport/internet/finalmask/noise/config.proto\x12'xray.transport.internet.finalmask.noise\"\x8a\x02\n" +
+	"\aSegment\x12I\n" +
+	"\x04kind\x18\x01 \x01(\x0e25.xray.transport.internet.finalmask.noise.Segment.KindR\x04kind\x12\x14\n" +
+	"\x05bytes\x18\x02 \x01(\fR\x05bytes\x12\x19\n" +
+	"\bmin_size\x18\x03 \x01(\x03R\aminSize\x12\x19\n" +
+	"\bmax_size\x18\x04 \x01(\x03R\amaxSize\"h\n" +
+	"\x04Kind\x12\t\n" +
+	"\x05BYTES\x10\x00\x12\n" +
+	"\n" +
+	"\x06RANDOM\x10\x01\x12\x10\n" +
+	"\fRANDOM_ASCII\x10\x02\x12\x10\n" +
+	"\fRANDOM_DIGIT\x10\x03\x12\r\n" +
+	"\tTIMESTAMP\x10\x04\x12\v\n" +
+	"\aCOUNTER\x10\x05\x12\t\n" +
+	"\x05NONCE\x10\x06\"\xa8\x02\n" +
 	"\x04Item\x12\x19\n" +
 	"\brand_min\x18\x01 \x01(\x03R\arandMin\x12\x19\n" +
 	"\brand_max\x18\x02 \x01(\x03R\arandMax\x12$\n" +
@@ -185,7 +336,8 @@ const file_transport_internet_finalmask_noise_config_proto_rawDesc = "" +
 	"\x0erand_range_max\x18\x04 \x01(\x05R\frandRangeMax\x12\x16\n" +
 	"\x06packet\x18\x05 \x01(\fR\x06packet\x12\x1b\n" +
 	"\tdelay_min\x18\x06 \x01(\x03R\bdelayMin\x12\x1b\n" +
-	"\tdelay_max\x18\a \x01(\x03R\bdelayMax\"\x87\x01\n" +
+	"\tdelay_max\x18\a \x01(\x03R\bdelayMax\x12L\n" +
+	"\bsegments\x18\b \x03(\v20.xray.transport.internet.finalmask.noise.SegmentR\bsegments\"\x87\x01\n" +
 	"\x06Config\x12\x1b\n" +
 	"\treset_min\x18\x01 \x01(\x03R\bresetMin\x12\x1b\n" +
 	"\treset_max\x18\x02 \x01(\x03R\bresetMax\x12C\n" +
@@ -204,18 +356,23 @@ func file_transport_internet_finalmask_noise_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_finalmask_noise_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_noise_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_transport_internet_finalmask_noise_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_transport_internet_finalmask_noise_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_transport_internet_finalmask_noise_config_proto_goTypes = []any{
-	(*Item)(nil),   // 0: xray.transport.internet.finalmask.noise.Item
-	(*Config)(nil), // 1: xray.transport.internet.finalmask.noise.Config
+	(Segment_Kind)(0), // 0: xray.transport.internet.finalmask.noise.Segment.Kind
+	(*Segment)(nil),   // 1: xray.transport.internet.finalmask.noise.Segment
+	(*Item)(nil),      // 2: xray.transport.internet.finalmask.noise.Item
+	(*Config)(nil),    // 3: xray.transport.internet.finalmask.noise.Config
 }
 var file_transport_internet_finalmask_noise_config_proto_depIdxs = []int32{
-	0, // 0: xray.transport.internet.finalmask.noise.Config.items:type_name -> xray.transport.internet.finalmask.noise.Item
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 0: xray.transport.internet.finalmask.noise.Segment.kind:type_name -> xray.transport.internet.finalmask.noise.Segment.Kind
+	1, // 1: xray.transport.internet.finalmask.noise.Item.segments:type_name -> xray.transport.internet.finalmask.noise.Segment
+	2, // 2: xray.transport.internet.finalmask.noise.Config.items:type_name -> xray.transport.internet.finalmask.noise.Item
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_noise_config_proto_init() }
@@ -228,13 +385,14 @@ func file_transport_internet_finalmask_noise_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_noise_config_proto_rawDesc), len(file_transport_internet_finalmask_noise_config_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   2,
+			NumEnums:      1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_transport_internet_finalmask_noise_config_proto_goTypes,
 		DependencyIndexes: file_transport_internet_finalmask_noise_config_proto_depIdxs,
+		EnumInfos:         file_transport_internet_finalmask_noise_config_proto_enumTypes,
 		MessageInfos:      file_transport_internet_finalmask_noise_config_proto_msgTypes,
 	}.Build()
 	File_transport_internet_finalmask_noise_config_proto = out.File

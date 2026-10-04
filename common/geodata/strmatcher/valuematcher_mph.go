@@ -46,7 +46,9 @@ func (g *MphValueMatcher) Add(matcher Matcher, value uint32) {
 func (g *MphValueMatcher) Build() error {
 	if g.mph != nil {
 		runtime.GC() // peak mem
-		g.mph.Build()
+		if err := g.mph.Build(); err != nil {
+			return err
+		}
 	}
 	runtime.GC() // peak mem
 	if g.ac != nil {
@@ -58,23 +60,17 @@ func (g *MphValueMatcher) Build() error {
 
 // Match implements ValueMatcher.Match.
 func (g *MphValueMatcher) Match(input string) []uint32 {
-	result := make([][]uint32, 0, 5)
+	var result []uint32
 	if g.mph != nil {
-		if matches := g.mph.Match(input); len(matches) > 0 {
-			result = append(result, matches)
-		}
+		result = g.mph.Match(input) // a new slice, returned without another copy
 	}
 	if g.ac != nil {
-		if matches := g.ac.Match(input); len(matches) > 0 {
-			result = append(result, matches)
-		}
+		result = append(result, g.ac.Match(input)...)
 	}
 	if g.regex != nil {
-		if matches := g.regex.Match(input); len(matches) > 0 {
-			result = append(result, matches)
-		}
+		result = append(result, g.regex.Match(input)...)
 	}
-	return CompositeMatches(result)
+	return result
 }
 
 // MatchAny implements ValueMatcher.MatchAny.
@@ -86,4 +82,63 @@ func (g *MphValueMatcher) MatchAny(input string) bool {
 		return true
 	}
 	return g.regex != nil && g.regex.MatchAny(input)
+}
+
+func (g *MphValueMatcher) matchAnyHashed(input string, parents []mphSuffix, h, mul uint64) bool {
+	if g.mph != nil && g.mph.matchAnyHashed(input, parents, h, mul) {
+		return true
+	}
+	if g.ac != nil && g.ac.MatchAny(input) {
+		return true
+	}
+	return g.regex != nil && g.regex.MatchAny(input)
+}
+
+// MphValueMatcherCombiner combines several built MphValueMatchers, each bound to one value, and matches an input
+// against them as their MatchAny would, hashing the input once for all of them.
+type MphValueMatcherCombiner struct {
+	matchers []*MphValueMatcher
+	values   []uint32
+}
+
+// Add adds a built matcher that stands for value.
+func (s *MphValueMatcherCombiner) Add(m *MphValueMatcher, value uint32) {
+	s.matchers = append(s.matchers, m)
+	s.values = append(s.values, value)
+}
+
+// Match returns the values of the matchers that match input, in Add order.
+func (s *MphValueMatcherCombiner) Match(input string) []uint32 {
+	if len(s.matchers) == 0 {
+		return nil
+	}
+	var stack [16]mphSuffix
+	mul := mphMultipliers[0]
+	parents, h := mphSuffixes(stack[:0], mul, input)
+	var result []uint32
+	for i, m := range s.matchers {
+		if m.matchAnyHashed(input, parents, h, mul) {
+			result = append(result, s.values[i])
+		}
+	}
+	return result
+}
+
+// MatchAny returns true as soon as one matcher matches input.
+func (s *MphValueMatcherCombiner) MatchAny(input string) bool {
+	switch len(s.matchers) {
+	case 0:
+		return false
+	case 1:
+		return s.matchers[0].MatchAny(input) // nothing to share, and it stops at the first matching suffix
+	}
+	var stack [16]mphSuffix
+	mul := mphMultipliers[0]
+	parents, h := mphSuffixes(stack[:0], mul, input)
+	for _, m := range s.matchers {
+		if m.matchAnyHashed(input, parents, h, mul) {
+			return true
+		}
+	}
+	return false
 }

@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -14,6 +15,7 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -81,7 +83,7 @@ var (
 		"noise":         func() interface{} { return new(NoiseMask) },
 		"salamander":    func() interface{} { return new(Salamander) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
-		"xdns":          func() interface{} { return new(Xdns) },
+		"xdns":          func() interface{} { return new(XDNS) },
 		"xicmp":         func() interface{} { return new(Xicmp) },
 		"realm":         func() interface{} { return new(Realm) },
 		"udphop":        func() interface{} { return new(UDPHop) },
@@ -308,14 +310,27 @@ type NoiseMask struct {
 }
 
 func (c *NoiseMask) Build() (proto.Message, error) {
+	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
 	for _, item := range c.Noise {
 		if len(item.Packet) > 0 && item.Rand.To > 0 {
 			return nil, errors.New("len(item.Packet) > 0 && item.Rand.To > 0")
 		}
-	}
-
-	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
-	for _, item := range c.Noise {
+		if strings.ToLower(item.Type) == "exp" {
+			var exp string
+			if err := json.Unmarshal(item.Packet, &exp); err != nil {
+				return nil, errors.New(`"packet" of noise "type": "exp" must be a string`).Base(err)
+			}
+			segments, err := parseNoiseExp(exp)
+			if err != nil {
+				return nil, err
+			}
+			noiseSlice = append(noiseSlice, &noise.Item{
+				Segments: segments,
+				DelayMin: int64(item.Delay.From),
+				DelayMax: int64(item.Delay.To),
+			})
+			continue
+		}
 		if item.RandRange == nil {
 			item.RandRange = &Int32Range{From: 0, To: 255}
 		}
@@ -342,6 +357,88 @@ func (c *NoiseMask) Build() (proto.Message, error) {
 		ResetMax: int64(c.Reset.To),
 		Items:    noiseSlice,
 	}, nil
+}
+
+var noiseExpPattern = regexp.MustCompile(`<\s*([a-z]+)(?:\s+([^>]*?))?\s*>`)
+
+func parseNoiseExp(exp string) ([]*noise.Segment, error) {
+	var segments []*noise.Segment
+	matches := noiseExpPattern.FindAllStringSubmatchIndex(exp, -1)
+	last := 0
+	for _, m := range matches {
+		if strings.TrimSpace(exp[last:m[0]]) != "" {
+			return nil, errors.New("invalid noise exp near ", exp[last:m[0]])
+		}
+		last = m[1]
+		key := exp[m[2]:m[3]]
+		arg := ""
+		if m[4] >= 0 {
+			arg = exp[m[4]:m[5]]
+		}
+		segment, err := buildNoiseSegment(key, arg)
+		if err != nil {
+			return nil, err
+		}
+		segments = append(segments, segment)
+	}
+	if strings.TrimSpace(exp[last:]) != "" {
+		return nil, errors.New("invalid noise exp near ", exp[last:])
+	}
+	if len(segments) == 0 {
+		return nil, errors.New("empty noise exp: ", exp)
+	}
+	return segments, nil
+}
+
+func buildNoiseSegment(key, arg string) (*noise.Segment, error) {
+	sizeSegment := func(kind noise.Segment_Kind) (*noise.Segment, error) {
+		if arg == "" {
+			return nil, errors.New("<", key, "> in noise exp needs a size")
+		}
+		lo, hi, err := ParseRangeString(arg)
+		if err != nil {
+			return nil, err
+		}
+		if lo < 0 || hi < lo || hi > 65535 {
+			return nil, errors.New("invalid size in noise exp: ", arg)
+		}
+		return &noise.Segment{Kind: kind, MinSize: int64(lo), MaxSize: int64(hi)}, nil
+	}
+	switch key {
+	case "b":
+		hexStr := strings.TrimPrefix(strings.TrimPrefix(strings.Join(strings.Fields(arg), ""), "0x"), "0X")
+		if len(hexStr) == 0 {
+			return nil, errors.New("empty bytes in noise exp")
+		}
+		raw, err := hex.DecodeString(hexStr)
+		if err != nil {
+			return nil, errors.New("invalid hex in noise exp: ", arg).Base(err)
+		}
+		return &noise.Segment{Kind: noise.Segment_BYTES, Bytes: raw}, nil
+	case "r":
+		return sizeSegment(noise.Segment_RANDOM)
+	case "rc":
+		return sizeSegment(noise.Segment_RANDOM_ASCII)
+	case "rd":
+		return sizeSegment(noise.Segment_RANDOM_DIGIT)
+	case "t":
+		if arg != "" {
+			return nil, errors.New("<t> in noise exp takes no argument")
+		}
+		return &noise.Segment{Kind: noise.Segment_TIMESTAMP}, nil
+	case "c":
+		if arg != "" {
+			return nil, errors.New("<c> in noise exp takes no argument")
+		}
+		return &noise.Segment{Kind: noise.Segment_COUNTER}, nil
+	case "n":
+		if arg != "" {
+			return nil, errors.New("<n> in noise exp takes no argument")
+		}
+		return &noise.Segment{Kind: noise.Segment_NONCE}, nil
+	default:
+		return nil, errors.New("unknown <", key, "> in noise exp")
+	}
 }
 
 type UDPItem struct {
@@ -694,32 +791,88 @@ func (c *Sudoku) Build() (proto.Message, error) {
 	}, nil
 }
 
-type Xdns struct {
-	Domain json.RawMessage `json:"domain"`
-
-	Domains   []string `json:"domains"`
-	Resolvers []string `json:"resolvers"`
+type XDNSDomain struct {
+	Name       string  `json:"name"`
+	LenLimit   int32   `json:"lenLimit"`
+	LabelLimit int32   `json:"labelLimit"`
+	Types      []int32 `json:"types"`
+	Edns0      int32   `json:"edns0"`
 }
 
-func (c *Xdns) Build() (proto.Message, error) {
-	if c.Domain != nil {
-		return nil, errors.PrintRemovedFeatureError("domain", "domains(server) & resolvers(client)")
-	}
+type XDNSResolverTCP struct {
+	Addr string `json:"addr"`
+}
 
-	if len(c.Domains) == 0 && len(c.Resolvers) == 0 {
-		return nil, errors.New("empty domains & empty resolvers")
-	}
+func (c *XDNSResolverTCP) Build() (proto.Message, error) {
+	return &xdns.TCPResolverProto{Addr: c.Addr}, nil
+}
 
-	for _, r := range c.Resolvers {
-		if !strings.Contains(r, "+udp://") {
-			return nil, errors.New("invalid resolver ", r)
+type XDNSResolverUDP struct {
+	Addr string `json:"addr"`
+}
+
+func (c *XDNSResolverUDP) Build() (proto.Message, error) {
+	return &xdns.UDPResolverProto{Addr: c.Addr}, nil
+}
+
+var xdnsLoader = NewJSONConfigLoader(ConfigCreatorCache{
+	"tcp": func() interface{} { return new(XDNSResolverTCP) },
+	"udp": func() interface{} { return new(XDNSResolverUDP) },
+}, "type", "settings")
+
+type XDNSResolver struct {
+	Type     string          `json:"type"`
+	Settings json.RawMessage `json:"settings"`
+}
+
+type XDNS struct {
+	Domains   []XDNSDomain   `json:"domains"`
+	Resolvers []XDNSResolver `json:"resolvers"`
+	ExtraPoll int32          `json:"extraPoll"`
+}
+
+func (c *XDNS) Build() (proto.Message, error) {
+	var domains []*xdns.DomainProto
+	var resolvers []*serial.TypedMessage
+	for i := range c.Domains {
+		if c.Domains[i].LenLimit == 0 {
+			c.Domains[i].LenLimit = 255
 		}
+		if c.Domains[i].LabelLimit == 0 {
+			c.Domains[i].LabelLimit = 63
+		}
+		types := make([]uint16, 0, len(c.Domains[i].Types))
+		for j := range c.Domains[i].Types {
+			types = append(types, uint16(c.Domains[i].Types[j]))
+		}
+		domain, err := xdns.NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
+		if err != nil {
+			return nil, err
+		}
+		errors.LogInfo(context.Background(), domain.Show())
+		domains = append(domains, &xdns.DomainProto{
+			Name:       c.Domains[i].Name,
+			LenLimit:   c.Domains[i].LenLimit,
+			LabelLimit: c.Domains[i].LabelLimit,
+			Types:      c.Domains[i].Types,
+			Edns0:      c.Domains[i].Edns0,
+		})
 	}
-
-	return &xdns.Config{
-		Domains:   c.Domains,
-		Resolvers: c.Resolvers,
-	}, nil
+	for i := range c.Resolvers {
+		config, err := xdnsLoader.LoadWithID(c.Resolvers[i].Settings, c.Resolvers[i].Type)
+		if err != nil {
+			return nil, err
+		}
+		pm, err := config.(interface{ Build() (proto.Message, error) }).Build()
+		if err != nil {
+			return nil, err
+		}
+		resolvers = append(resolvers, serial.ToTypedMessage(pm))
+	}
+	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
+		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")
+	}
+	return &xdns.Config{Domains: domains, Resolvers: resolvers, ExtraPoll: c.ExtraPoll}, nil
 }
 
 type XMC struct {
@@ -942,12 +1095,19 @@ func (c *UDPHop) Build() (proto.Message, error) {
 		}
 		return nil, errors.New("invalid ip ", ip)
 	}
+	interval := c.Interval
+	if interval.From == 0 && interval.To == 0 {
+		interval.From, interval.To = 30, 30
+	}
+	if interval.From < 5 {
+		return nil, errors.New("interval must be at least 5")
+	}
 	return &udphop.Config{
 		Local:       local,
 		Remote:      remote,
 		RemoteOnce:  remoteOnce,
-		IntervalMin: int64(c.Interval.From),
-		IntervalMax: int64(c.Interval.To),
+		IntervalMin: int64(interval.From),
+		IntervalMax: int64(interval.To),
 		RemoteIPs:   remoteIPs,
 		RemotePorts: c.RemotePorts.Build().Ports(),
 	}, nil

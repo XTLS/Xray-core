@@ -32,6 +32,8 @@ type Config struct {
 	AutoSystemRoutingTable []string               `protobuf:"bytes,6,rep,name=auto_system_routing_table,json=autoSystemRoutingTable,proto3" json:"auto_system_routing_table,omitempty"`
 	AutoOutboundsInterface string                 `protobuf:"bytes,7,opt,name=auto_outbounds_interface,json=autoOutboundsInterface,proto3" json:"auto_outbounds_interface,omitempty"`
 	Desc                   string                 `protobuf:"bytes,8,opt,name=desc,proto3" json:"desc,omitempty"`
+	AutoSystemDnsToGateway bool                   `protobuf:"varint,9,opt,name=auto_system_dns_to_gateway,json=autoSystemDnsToGateway,proto3" json:"auto_system_dns_to_gateway,omitempty"`
+	AutoSystemWfpBlockLeak []string               `protobuf:"bytes,10,rep,name=auto_system_wfp_block_leak,json=autoSystemWfpBlockLeak,proto3" json:"auto_system_wfp_block_leak,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -122,11 +124,25 @@ func (x *Config) GetDesc() string {
 	return ""
 }
 
+func (x *Config) GetAutoSystemDnsToGateway() bool {
+	if x != nil {
+		return x.AutoSystemDnsToGateway
+	}
+	return false
+}
+
+func (x *Config) GetAutoSystemWfpBlockLeak() []string {
+	if x != nil {
+		return x.AutoSystemWfpBlockLeak
+	}
+	return nil
+}
+
 var File_proxy_tun_config_proto protoreflect.FileDescriptor
 
 const file_proxy_tun_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\x82\x02\n" +
+	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\xfa\x02\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03MTU\x18\x02 \x01(\rR\x03MTU\x12\x18\n" +
@@ -136,7 +152,10 @@ const file_proxy_tun_config_proto_rawDesc = "" +
 	"user_level\x18\x05 \x01(\rR\tuserLevel\x129\n" +
 	"\x19auto_system_routing_table\x18\x06 \x03(\tR\x16autoSystemRoutingTable\x128\n" +
 	"\x18auto_outbounds_interface\x18\a \x01(\tR\x16autoOutboundsInterface\x12\x12\n" +
-	"\x04desc\x18\b \x01(\tR\x04descBL\n" +
+	"\x04desc\x18\b \x01(\tR\x04desc\x12:\n" +
+	"\x1aauto_system_dns_to_gateway\x18\t \x01(\bR\x16autoSystemDnsToGateway\x12:\n" +
+	"\x1aauto_system_wfp_block_leak\x18\n" +
+	" \x03(\tR\x16autoSystemWfpBlockLeakBL\n" +
 	"\x12com.xray.proxy.tunP\x01Z#github.com/xtls/xray-core/proxy/tun\xaa\x02\x0eXray.Proxy.Tunb\x06proto3"
 
 var (

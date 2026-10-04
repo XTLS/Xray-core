@@ -4,23 +4,16 @@ import (
 	"context"
 	"time"
 
-	shadowsocks "github.com/sagernet/sing-shadowsocks"
-	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
-	C "github.com/sagernet/sing/common"
-	B "github.com/sagernet/sing/common/buf"
-	"github.com/sagernet/sing/common/bufio"
-	E "github.com/sagernet/sing/common/exceptions"
-	M "github.com/sagernet/sing/common/metadata"
-	N "github.com/sagernet/sing/common/network"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/singbridge"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
@@ -32,10 +25,13 @@ func init() {
 }
 
 type Inbound struct {
-	networks []net.Network
-	service  shadowsocks.Service
-	email    string
-	level    int
+	networks      []net.Network
+	method        *CipherMethod
+	psk           []byte
+	user          *protocol.MemoryUser
+	saltFilter    *antireplay.ReplayFilter[[32]byte]
+	udpCodec      *UDPServerCodec
+	policyManager policy.Manager
 }
 
 func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
@@ -46,20 +42,35 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 			net.Network_UDP,
 		}
 	}
-	inbound := &Inbound{
-		networks: networks,
-		email:    config.Email,
-		level:    int(config.Level),
-	}
-	if !C.Contains(shadowaead_2022.List, config.Method) {
-		return nil, errors.New("unsupported method ", config.Method)
-	}
-	service, err := shadowaead_2022.NewServiceWithPassword(config.Method, config.Key, 500, inbound, nil)
+
+	method, err := GetCipherMethod(config.Method)
 	if err != nil {
-		return nil, errors.New("create service").Base(err)
+		return nil, errors.New("unsupported method: ", config.Method).Base(err)
 	}
-	inbound.service = service
-	return inbound, nil
+
+	psk, err := ParseKey(config.Key, method.KeySaltLength)
+	if err != nil {
+		return nil, err
+	}
+
+	udpCodec, err := NewUDPServerCodec(method, psk, 500*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	v := core.MustFromContext(ctx)
+	return &Inbound{
+		networks:   networks,
+		method:     method,
+		psk:        psk,
+		saltFilter: antireplay.NewMapFilter[[32]byte](60),
+		user: &protocol.MemoryUser{
+			Email: config.Email,
+			Level: uint32(config.Level),
+		},
+		udpCodec:      udpCodec,
+		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+	}, nil
 }
 
 func (i *Inbound) Network() []net.Network {
@@ -70,114 +81,105 @@ func (i *Inbound) Process(ctx context.Context, network net.Network, connection s
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks-2022"
 	inbound.CanSpliceCopy = 3
-
-	var metadata M.Metadata
-	if inbound.Source.IsValid() {
-		metadata.Source = M.ParseSocksaddr(inbound.Source.NetAddr())
-	}
-
-	ctx = session.ContextWithDispatcher(ctx, dispatcher)
+	inbound.User = i.user
 
 	if network == net.Network_TCP {
-		return singbridge.ReturnError(i.service.NewConnection(ctx, connection, metadata))
-	} else {
-		reader := buf.NewReader(connection)
-		pc := &natPacketConn{connection}
-		for {
-			mb, err := reader.ReadMultiBuffer()
-			if err != nil {
-				buf.ReleaseMulti(mb)
-				return singbridge.ReturnError(err)
-			}
-			for _, buffer := range mb {
-				packet := B.As(buffer.Bytes()).ToOwned()
-				buffer.Release()
-				err = i.service.NewPacket(ctx, pc, packet, metadata)
-				if err != nil {
-					packet.Release()
-					buf.ReleaseMulti(mb)
-					return err
-				}
-			}
+		return i.processTCP(ctx, connection, dispatcher)
+	}
+	return i.processUDP(ctx, connection, dispatcher)
+}
+
+func (i *Inbound) processTCP(ctx context.Context, conn net.Conn, dispatcher routing.Dispatcher) error {
+	defer conn.Close()
+
+	sessionPolicy := i.policyManager.ForLevel(0)
+	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
+		return errors.New("unable to set read deadline").Base(err)
+	}
+
+	// 1. Single read call for Salt + Fixed-length header chunk per SIP022 §3.1.4
+	headerLen := i.method.KeySaltLength + RequestHeaderFixedChunkLength + AEADTagSize
+	headerBuf := make([]byte, headerLen)
+	n, err := conn.Read(headerBuf)
+	if err != nil || n < headerLen {
+		ResetTCPConn(conn)
+		return errors.New("failed to read complete handshake header")
+	}
+
+	var salt [32]byte
+	copy(salt[:i.method.KeySaltLength], headerBuf[:i.method.KeySaltLength])
+	saltSlice := salt[:i.method.KeySaltLength]
+	fixedChunk := headerBuf[i.method.KeySaltLength:]
+
+	reader, reqHeader, err := InitServerStream(conn, i.method, i.psk, saltSlice, salt, fixedChunk, i.saltFilter)
+	if err != nil {
+		ResetTCPConn(conn)
+		return err
+	}
+
+	dest := reqHeader.Destination
+
+	writer := NewServerStreamWriter(conn, i.method, i.psk, saltSlice)
+
+	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+		From:   conn.RemoteAddr(),
+		To:     dest,
+		Status: log.AccessAccepted,
+		Email:  i.user.Email,
+	})
+
+	errors.LogInfo(ctx, "tunneling request to ", dest)
+
+	link, err := dispatcher.Dispatch(ctx, dest)
+	if err != nil {
+		return err
+	}
+
+	if len(reqHeader.EarlyData) > 0 {
+		mb := buf.MergeBytes(nil, reqHeader.EarlyData)
+		if err := link.Writer.WriteMultiBuffer(mb); err != nil {
+			return err
 		}
 	}
+
+	return TransportTCP(ctx, i.policyManager.ForLevel(uint32(i.user.Level)), reader, writer, link)
 }
 
-func (i *Inbound) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
-	inbound := session.InboundFromContext(ctx)
-	inbound.User = &protocol.MemoryUser{
-		Email: i.email,
-		Level: uint32(i.level),
-	}
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-		From:   metadata.Source,
-		To:     metadata.Destination,
-		Status: log.AccessAccepted,
-		Email:  i.email,
-	})
-	errors.LogInfo(ctx, "tunnelling request to tcp:", metadata.Destination)
-	dispatcher := session.DispatcherFromContext(ctx)
-	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_TCP)
-	if err != nil {
-		return err
-	}
-	link, err := dispatcher.Dispatch(ctx, destination)
-	if err != nil {
-		return err
-	}
-	return singbridge.CopyConn(ctx, nil, link, conn)
-}
+func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
+	reader := buf.NewPacketReader(conn)
+	for {
+		mb, err := reader.ReadMultiBuffer()
+		if err != nil {
+			buf.ReleaseMulti(mb)
+			return err
+		}
 
-func (i *Inbound) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata M.Metadata) error {
-	inbound := session.InboundFromContext(ctx)
-	inbound.User = &protocol.MemoryUser{
-		Email: i.email,
-		Level: uint32(i.level),
-	}
-	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-		From:   metadata.Source,
-		To:     metadata.Destination,
-		Status: log.AccessAccepted,
-		Email:  i.email,
-	})
-	errors.LogInfo(ctx, "tunnelling request to udp:", metadata.Destination)
-	dispatcher := session.DispatcherFromContext(ctx)
-	destination, err := singbridge.ToDestination(metadata.Destination, net.Network_UDP)
-	if err != nil {
-		return err
-	}
-	link, err := dispatcher.Dispatch(ctx, destination)
-	if err != nil {
-		return err
-	}
-	outConn := &singbridge.PacketConnWrapper{
-		Reader: link.Reader,
-		Writer: link.Writer,
-		Dest:   destination,
-		T: signal.CancelAfterInactivity(ctx, func() {
-			common.Interrupt(link.Reader)
-		}, 300*time.Second),
-	}
-	return bufio.CopyPacketConn(ctx, conn, outConn)
-}
+		for _, b := range mb {
+			decoded, err := i.udpCodec.DecodePacket(b.Bytes())
+			b.Release()
+			if err != nil || decoded.HeaderType != HeaderTypeClient {
+				continue
+			}
 
-func (i *Inbound) NewError(ctx context.Context, err error) {
-	if E.IsClosed(err) {
-		return
+			sessionItem := i.udpCodec.GetSession(decoded.SessionID)
+			if sessionItem.User == nil {
+				sessionItem.Lock()
+				if sessionItem.User == nil {
+					sessionItem.User = i.user
+				}
+				sessionItem.Unlock()
+			}
+			link, err := sessionItem.EnsureLink(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(dest net.Destination, payload []byte) ([]byte, error) {
+				return i.udpCodec.EncodeServerPacket(decoded.SessionID, dest, payload)
+			})
+			if err != nil {
+				continue
+			}
+
+			payloadBuf := buf.New()
+			payloadBuf.Write(decoded.Payload)
+			payloadBuf.UDP = &decoded.Destination
+			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{payloadBuf})
+		}
 	}
-	errors.LogWarning(ctx, err.Error())
-}
-
-type natPacketConn struct {
-	net.Conn
-}
-
-func (c *natPacketConn) ReadPacket(buffer *B.Buffer) (addr M.Socksaddr, err error) {
-	_, err = buffer.ReadFrom(c)
-	return
-}
-
-func (c *natPacketConn) WritePacket(buffer *B.Buffer, addr M.Socksaddr) error {
-	_, err := buffer.WriteTo(c)
-	return err
 }
