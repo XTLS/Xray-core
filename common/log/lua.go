@@ -19,6 +19,9 @@ func RegisterLua(L *lua.LState) {
 			"Error":   Severity_Error,
 		} {
 			module.RawSetString(name, L.NewFunction(func(L *lua.LState) int {
+				if GetSeverity() < severity {
+					return 0
+				}
 				var content strings.Builder
 				// Prefix with the calling script's filename.
 				if caller, ok := L.GetStack(1); ok {

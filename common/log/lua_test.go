@@ -115,14 +115,72 @@ func TestLuaLog(t *testing.T) {
 	}
 }
 
-type luaDiscardLogHandler struct{}
+type luaSeverityLogHandler struct {
+	luaLogHandler
+	level Severity
+}
 
-func (luaDiscardLogHandler) Handle(Message) {}
+func (h *luaSeverityLogHandler) Severity() Severity { return h.level }
+
+func TestLuaLogSeverity(t *testing.T) {
+	previous := logHandler.Load()
+	t.Cleanup(func() { logHandler.Store(previous) })
+	L := lua.NewState()
+	defer L.Close()
+	RegisterLua(L)
+	for _, level := range []Severity{Severity_Unknown, Severity_Error, Severity_Warning, Severity_Info, Severity_Debug, Severity_Warning} {
+		t.Run(level.String(), func(t *testing.T) {
+			handler := &luaSeverityLogHandler{level: level}
+			RegisterHandler(handler)
+			want := []Severity{}
+			for _, severity := range []Severity{Severity_Error, Severity_Warning, Severity_Info, Severity_Debug} {
+				if severity <= level {
+					want = append(want, severity)
+				}
+			}
+			if err := L.DoString(fmt.Sprintf(`
+				local log = require("xray.log")
+				local calls = 0
+				local value = setmetatable({}, {
+					__tostring = function() calls = calls + 1; return "message" end
+				})
+				for _, write in ipairs({log.Error, log.Warning, log.Info, log.Debug}) do
+					assert(select("#", write(value)) == 0)
+				end
+				assert(calls == %d)
+			`, len(want))); err != nil {
+				t.Fatal(err)
+			}
+			if len(handler.messages) != len(want) {
+				t.Fatalf("logged %d messages, want %d", len(handler.messages), len(want))
+			}
+			for i, severity := range want {
+				msg := handler.messages[i].(*GeneralMessage)
+				if msg.Severity != severity || msg.Content != "<string>: message" {
+					t.Errorf("message %d = %v, want severity %v and content %q", i, msg, severity, "<string>: message")
+				}
+			}
+		})
+	}
+}
+
+type luaDiscardLogHandler struct{ level Severity }
+
+func (luaDiscardLogHandler) Handle(Message)       {}
+func (h luaDiscardLogHandler) Severity() Severity { return h.level }
 
 func BenchmarkLuaLog(b *testing.B) {
+	benchmarkLuaLog(b, Severity_Debug)
+}
+
+func BenchmarkLuaLogFiltered(b *testing.B) {
+	benchmarkLuaLog(b, Severity_Warning)
+}
+
+func benchmarkLuaLog(b *testing.B, level Severity) {
 	previous := logHandler.Load()
 	b.Cleanup(func() { logHandler.Store(previous) })
-	RegisterHandler(luaDiscardLogHandler{})
+	RegisterHandler(luaDiscardLogHandler{level: level})
 	L := lua.NewState()
 	defer L.Close()
 	RegisterLua(L)
