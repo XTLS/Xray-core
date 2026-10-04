@@ -29,11 +29,11 @@ func PushWithDirectMethods(L *glua.LState, value any, directMethods map[string]D
 				return callLuarMethod(L, original)
 			})
 			// Keep luar's method aliases on the same direct binding.
-			methods.ForEach(func(key, method glua.LValue) {
+			for key, method := methods.Next(glua.LNil); key != glua.LNil; key, method = methods.Next(key) {
 				if method == original {
 					methods.RawSet(key, fn)
 				}
-			})
+			}
 		}
 		metatable.RawSetString("__index", methods)
 	}

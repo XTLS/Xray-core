@@ -7,6 +7,19 @@ import (
 	luar "layeh.com/gopher-luar"
 )
 
+var (
+	luaDomainDirectMethods = map[string]xlua.DirectMethod{
+		"Match":    luaDomainMatch,
+		"MatchAny": luaDomainMatchAny,
+	}
+	luaIPDirectMethods = map[string]xlua.DirectMethod{
+		"Match":     luaIPMatch,
+		"AnyMatch":  luaIPAnyMatch,
+		"Matches":   luaIPMatches,
+		"FilterIPs": luaIPFilterIPs,
+	}
+)
+
 // RegisterLua makes xray.geodata available to require in an LState.
 func RegisterLua(L *lua.LState) {
 	L.PreloadModule("xray.geodata", func(L *lua.LState) int {
@@ -23,10 +36,7 @@ func RegisterLua(L *lua.LState) {
 				L.RaiseError("%v", err)
 				return 0
 			}
-			xlua.PushWithDirectMethods(L, matcher, map[string]xlua.DirectMethod{
-				"Match":    luaDomainMatch,
-				"MatchAny": luaDomainMatchAny,
-			})
+			xlua.PushWithDirectMethods(L, matcher, luaDomainDirectMethods)
 			return 1
 		}))
 
@@ -41,12 +51,7 @@ func RegisterLua(L *lua.LState) {
 				L.RaiseError("%v", err)
 				return 0
 			}
-			xlua.PushWithDirectMethods(L, matcher, map[string]xlua.DirectMethod{
-				"Match":     luaIPMatch,
-				"AnyMatch":  luaIPAnyMatch,
-				"Matches":   luaIPMatches,
-				"FilterIPs": luaIPFilterIPs,
-			})
+			xlua.PushWithDirectMethods(L, matcher, luaIPDirectMethods)
 			return 1
 		}))
 		L.Push(module)
