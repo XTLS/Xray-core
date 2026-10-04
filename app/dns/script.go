@@ -15,7 +15,6 @@ import (
 const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
-	dns  *DNS
 	pool *xlua.Pool
 }
 
@@ -24,8 +23,8 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 	if err != nil {
 		return nil, err
 	}
-	e := &scriptEngine{dns: server}
-	e.pool, err = xlua.NewPool(server.ctx, scriptExecutionTimeout, program.NewStateFactory(
+
+	pool, err := xlua.NewPool(server.ctx, scriptExecutionTimeout, program.NewStateFactory(
 		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
@@ -41,19 +40,24 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	errors.LogInfo(server.ctx, "DNS script initialized from ", path)
-	return e, nil
+	return &scriptEngine{pool: pool}, nil
 }
 
 func (e *scriptEngine) close() {
 	e.pool.Close()
 }
 
-func (e *scriptEngine) query(domain string, option dns.IPOption) (ips []net.IP, ttl uint32, err error) {
-	err = e.pool.WithState(nil, 0, func(L *lua.LState) error {
-		var hookErr error
-		ips, ttl, hookErr = e.dns.callLuaHook(L, domain, option)
-		return hookErr
-	})
-	return
+func (e *scriptEngine) query(domain string, option dns.IPOption) (ips []net.IP, ttl uint32, queryErr error) {
+	if err := e.pool.WithState(nil, 0, func(L *lua.LState) error {
+		if err := callLuaQuery(L, domain, option); err != nil {
+			return err
+		}
+		ips, ttl, queryErr = readLuaQueryResult(L)
+		return nil
+	}); err != nil {
+		return nil, 0, err
+	}
+	return ips, ttl, queryErr
 }
