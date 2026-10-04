@@ -97,25 +97,19 @@ type MultiLengthPacketWriter struct {
 func (w *MultiLengthPacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
 	mb2Write := make(buf.MultiBuffer, 0, len(mb)+1)
+	var eb *buf.Buffer
 	for _, b := range mb {
 		length := b.Len()
 		if length == 0 || length+2 > buf.Size {
 			continue
 		}
-		eb := buf.New()
-		if err := eb.WriteByte(byte(length >> 8)); err != nil {
-			eb.Release()
-			continue
+		if eb == nil || length+2 > eb.Available() {
+			eb = buf.New()
+			mb2Write = append(mb2Write, eb)
 		}
-		if err := eb.WriteByte(byte(length)); err != nil {
-			eb.Release()
-			continue
-		}
-		if _, err := eb.Write(b.Bytes()); err != nil {
-			eb.Release()
-			continue
-		}
-		mb2Write = append(mb2Write, eb)
+		eb.WriteByte(byte(length >> 8))
+		eb.WriteByte(byte(length))
+		eb.Write(b.Bytes())
 	}
 	if mb2Write.IsEmpty() {
 		return nil

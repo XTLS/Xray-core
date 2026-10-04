@@ -95,13 +95,19 @@ type PacketWriter struct {
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
 	mb2Write := make(buf.MultiBuffer, 0, len(mb))
+	var eb *buf.Buffer // the last Buffer of mb2Write while it takes more packets
 	for _, b := range mb {
 		length := b.Len()
 		if length == 0 || length+666 > buf.Size {
 			continue
 		}
 
-		eb := buf.New()
+		// what precedes the payload of a Keep frame is 268 bytes at most, a New frame is the first in its Buffer
+		if eb == nil || eb.Available() < 268+length {
+			eb = buf.New()
+			mb2Write = append(mb2Write, eb)
+		}
+		n := eb.Len()
 		eb.Write([]byte{0, 0, 0, 0}) // Meta data length; Mux Session ID
 		if w.Dest.Network == net.Network_UDP {
 			eb.WriteByte(1) // New
@@ -120,14 +126,12 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				AddrParser.WriteAddressPort(eb, b.UDP.Address, b.UDP.Port)
 			}
 		}
-		l := eb.Len() - 2
-		eb.SetByte(0, byte(l>>8))
-		eb.SetByte(1, byte(l))
+		l := eb.Len() - n - 2
+		eb.SetByte(n, byte(l>>8))
+		eb.SetByte(n+1, byte(l))
 		eb.WriteByte(byte(length >> 8))
 		eb.WriteByte(byte(length))
 		eb.Write(b.Bytes())
-
-		mb2Write = append(mb2Write, eb)
 	}
 	if mb2Write.IsEmpty() {
 		return nil

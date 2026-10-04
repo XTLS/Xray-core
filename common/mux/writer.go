@@ -70,9 +70,6 @@ func (w *Writer) writeMetaOnly() error {
 
 func writeMetaWithFrame(writer buf.Writer, meta FrameMetadata, data buf.MultiBuffer) error {
 	frame := buf.New()
-	if len(data) == 1 {
-		frame.UDP = data[0].UDP
-	}
 	if err := meta.WriteTo(frame); err != nil {
 		return err
 	}
@@ -93,6 +90,48 @@ func (w *Writer) writeData(mb buf.MultiBuffer) error {
 	return writeMetaWithFrame(w.writer, meta, mb)
 }
 
+// writePackets writes each Buffer as one frame, consecutive frames share a Buffer while they fit.
+func (w *Writer) writePackets(mb buf.MultiBuffer) error {
+	var mb2 buf.MultiBuffer
+	var frame *buf.Buffer // the last Buffer of mb2 while it takes more frames
+	for !mb.IsEmpty() {
+		var b *buf.Buffer
+		mb, b = buf.SplitFirst(mb)
+		meta := w.getNextFrameMeta()
+		meta.Option.Set(OptionData)
+
+		// what precedes the payload of a Keep frame is 268 bytes at most
+		if frame == nil || frame.Available() < 268+b.Len() {
+			// one Buffer per write as in stream mode, so that the carrier can apply its size limit and serve other sessions
+			if len(mb2) > 0 {
+				if err := w.writer.WriteMultiBuffer(mb2); err != nil {
+					b.Release()
+					return err
+				}
+				mb2 = nil
+			}
+			frame = buf.New()
+			mb2 = append(mb2, frame)
+		}
+		frame.UDP = b.UDP
+		if err := meta.WriteTo(frame); err != nil {
+			b.Release()
+			buf.ReleaseMulti(mb2)
+			return err
+		}
+		frame.WriteByte(byte(b.Len() >> 8))
+		frame.WriteByte(byte(b.Len()))
+		if b.Len() > frame.Available() { // too large to share a Buffer with its own header
+			mb2 = append(mb2, b)
+			frame = nil
+		} else {
+			frame.Write(b.Bytes())
+			b.Release()
+		}
+	}
+	return w.writer.WriteMultiBuffer(mb2)
+}
+
 // WriteMultiBuffer implements buf.Writer.
 func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
@@ -101,15 +140,13 @@ func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		return w.writeMetaOnly()
 	}
 
+	if w.transferType == protocol.TransferTypePacket {
+		return w.writePackets(mb)
+	}
+
 	for !mb.IsEmpty() {
 		var chunk buf.MultiBuffer
-		if w.transferType == protocol.TransferTypeStream {
-			mb, chunk = buf.SplitSize(mb, 8*1024)
-		} else {
-			mb2, b := buf.SplitFirst(mb)
-			mb = mb2
-			chunk = buf.MultiBuffer{b}
-		}
+		mb, chunk = buf.SplitSize(mb, 8*1024)
 		if err := w.writeData(chunk); err != nil {
 			return err
 		}
