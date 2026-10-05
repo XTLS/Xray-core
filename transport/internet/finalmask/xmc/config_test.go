@@ -8,9 +8,9 @@ import (
 
 func TestPaddingScheduleFromConfig(t *testing.T) {
 	config := &Config{Padding: []*Padding{
-		{LengthMin: 3, LengthMax: 3},
-		{LengthMin: 127, LengthMax: 129},
-		{LengthMin: 16384, LengthMax: 16384},
+		{LengthMin: 3, LengthMax: 3, Direction: 1},
+		{LengthMin: 127, LengthMax: 129, Direction: 2},
+		{LengthMin: 16384, LengthMax: 16384, Direction: 1},
 	}}
 	want := []paddingTurn{
 		{direction: paddingClientToServer, minLength: 3, maxLength: 3},
@@ -50,12 +50,13 @@ func TestPaddingScheduleFromConfig(t *testing.T) {
 func TestValidatePadding(t *testing.T) {
 	for name, padding := range map[string][]*Padding{
 		"nil turn":       {nil},
-		"negative":       {{LengthMin: -1, LengthMax: 3}},
-		"prefix only":    {{LengthMin: 2, LengthMax: 3}},
-		"reversed range": {{LengthMin: 4, LengthMax: 3}},
-		"too long":       {{LengthMin: 3, LengthMax: maxPaddingTurnLength + 1}},
-		"int overflow":   {{LengthMin: 3, LengthMax: 1 << 32}},
-		"empty turn":     {{LengthMin: 3, LengthMax: 3}, {}},
+		"negative":       {{LengthMin: -1, LengthMax: 3, Direction: 1}},
+		"prefix only":    {{LengthMin: 2, LengthMax: 3, Direction: 1}},
+		"reversed range": {{LengthMin: 4, LengthMax: 3, Direction: 1}},
+		"too long":       {{LengthMin: 3, LengthMax: maxPaddingTurnLength + 1, Direction: 1}},
+		"int overflow":   {{LengthMin: 3, LengthMax: 1 << 32, Direction: 1}},
+		"empty turn":     {{LengthMin: 3, LengthMax: 3, Direction: 1}, {}},
+		"invalid direction": {{LengthMin: 3, LengthMax: 3, Direction: 0}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			config := &Config{Padding: padding}
@@ -69,7 +70,7 @@ func TestValidatePadding(t *testing.T) {
 			}
 		})
 	}
-	if err := (&Config{Padding: []*Padding{{LengthMin: 3, LengthMax: maxPaddingTurnLength}}}).ValidatePadding(); err != nil {
+	if err := (&Config{Padding: []*Padding{{LengthMin: 3, LengthMax: maxPaddingTurnLength, Direction: 1}}}).ValidatePadding(); err != nil {
 		t.Fatal(err)
 	}
 }

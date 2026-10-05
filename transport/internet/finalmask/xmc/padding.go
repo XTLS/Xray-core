@@ -121,9 +121,6 @@ func validatePaddingSchedule(schedule []paddingTurn, firstTurnPrefixLength int) 
 				}
 			}
 		}
-		if i > 0 && turn.direction == schedule[i-1].direction {
-			return fmt.Errorf("padding turns %d and %d have the same direction", i-1, i)
-		}
 	}
 	return nil
 }

@@ -201,7 +201,6 @@ func TestValidatePaddingSchedule(t *testing.T) {
 		{name: "reversed range", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 7}}},
 		{name: "wrong first direction", prefix: 3, schedule: []paddingTurn{{direction: paddingServerToClient, minLength: 8, maxLength: 8}}},
 		{name: "prefix leaves no header", prefix: 8, schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8}}},
-		{name: "same direction", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8}, {direction: paddingClientToServer, minLength: 8, maxLength: 8}}},
 		{name: "range with variants", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8, variants: []paddingVariant{paddingVariantFromChunks(8)}}}},
 		{name: "empty variant", schedule: []paddingTurn{{direction: paddingClientToServer, variants: []paddingVariant{{}}}}},
 		{name: "bad chunk", schedule: []paddingTurn{{direction: paddingClientToServer, variants: []paddingVariant{paddingVariantFromChunks(maxPaddingChunkLength + 1)}}}},
@@ -615,4 +614,32 @@ type recordingWriter struct {
 func (w *recordingWriter) Write(p []byte) (int, error) {
 	w.writes = append(w.writes, len(p))
 	return w.Buffer.Write(p)
+}
+
+func TestConsecutiveSameDirectionAllowed(t *testing.T) {
+	// Test that consecutive padding turns with the same direction are now allowed
+	schedule := []paddingTurn{
+		{direction: paddingClientToServer, minLength: 8, maxLength: 8},
+		{direction: paddingClientToServer, minLength: 16, maxLength: 16},
+		{direction: paddingServerToClient, minLength: 8, maxLength: 8},
+	}
+	if err := validatePaddingSchedule(schedule, 2); err != nil {
+		t.Fatalf("consecutive same direction should be allowed: %v", err)
+	}
+
+	// Verify the schedule executes correctly with proper synchronization
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	serverDone := make(chan error, 1)
+	go func() {
+		serverDone <- runPaddingSchedule(server, server, false, 2, schedule)
+	}()
+	if err := runPaddingSchedule(client, client, true, 2, schedule); err != nil {
+		t.Fatalf("client failed to run schedule with consecutive client turns: %v", err)
+	}
+	if err := <-serverDone; err != nil {
+		t.Fatalf("server failed to run schedule: %v", err)
+	}
 }

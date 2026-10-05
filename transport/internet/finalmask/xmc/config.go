@@ -46,9 +46,14 @@ func paddingScheduleFromConfig(padding []*Padding) ([]paddingTurn, error) {
 		if turn == nil || turn.LengthMin < 1 || turn.LengthMax < turn.LengthMin || turn.LengthMax > maxPaddingTurnLength {
 			return nil, fmt.Errorf("invalid padding length range at turn %d", i)
 		}
-		direction := paddingClientToServer
-		if i%2 != 0 {
+		var direction paddingDirection
+		switch turn.Direction {
+		case 1:
+			direction = paddingClientToServer
+		case 2:
 			direction = paddingServerToClient
+		default:
+			return nil, fmt.Errorf("invalid padding direction %d at turn %d (1=client-to-server, 2=server-to-client)", turn.Direction, i)
 		}
 		schedule[i] = paddingTurn{
 			direction: direction,
