@@ -1,12 +1,20 @@
 package websocket_test
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
+	"errors"
+	"io"
+	gonet "net"
+	"net/http"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/testing/servers/tcp"
@@ -154,5 +162,87 @@ func Test_listenWSAndDial_TLS(t *testing.T) {
 	end := time.Now()
 	if !end.Before(start.Add(time.Second * 5)) {
 		t.Error("end: ", end, " start: ", start)
+	}
+}
+
+// A reader waits for the next message outside the connection, where it holds no buffer,
+// whatever the size of the last one: one of full buffers looked like one that goes on.
+func Test_listenWS_WaitsAfterMessage(t *testing.T) {
+	listenPort := tcp.PickPort()
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName:     "websocket",
+		ProtocolSettings: &Config{Path: "ws"},
+	}
+	waited := make(chan time.Duration, 1)
+	listen, err := ListenWS(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
+		go func() {
+			defer conn.Close()
+			io.ReadFull(conn, make([]byte, buf.Size))
+			start := time.Now()
+			conn.(interface{ WaitRead() }).WaitRead()
+			waited <- time.Since(start)
+		}()
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), listenPort), streamSettings)
+	common.Must(err)
+	defer conn.Close()
+	common.Must2(conn.Write(make([]byte, buf.Size)))
+	time.Sleep(200 * time.Millisecond)
+	common.Must2(conn.Write([]byte{1}))
+	if d := <-waited; d < 100*time.Millisecond {
+		t.Error("the reader waited for ", d)
+	}
+}
+
+// The reader of the server gets its early data, then frames that came in one segment: the second one
+// is buffered when the reader looks for more, and nothing else comes to end a wait.
+func Test_listenWS_FramesInOneSegment(t *testing.T) {
+	listenPort := tcp.PickPort()
+	copied := make(chan error, 1)
+	listen, err := ListenWS(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+		ProtocolName:     "websocket",
+		ProtocolSettings: &Config{Path: "ws"},
+	}, func(conn stat.Connection) {
+		go func() {
+			defer conn.Close()
+			copied <- buf.Copy(buf.NewReader(conn), buf.NewWriter(conn))
+		}()
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	conn, err := net.Dial("tcp", net.TCPDestination(net.LocalHostIP, listenPort).NetAddr())
+	common.Must(err)
+	defer conn.Close()
+	start := time.Now()
+	common.Must(conn.SetDeadline(start.Add(2 * time.Second)))
+	common.Must2(conn.Write([]byte("GET /ws HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n" +
+		"Sec-WebSocket-Protocol: " + base64.RawURLEncoding.EncodeToString([]byte("xyz")) + "\r\n\r\n")))
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, nil)
+	common.Must(err)
+	if response.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatal("status: ", response.Status)
+	}
+	echo := func(frames []byte) {
+		b := make([]byte, len(frames))
+		if _, err := io.ReadFull(reader, b); err != nil || !bytes.Equal(b, frames) {
+			t.Fatal("read: ", b, ", error: ", err, ", after: ", time.Since(start))
+		}
+	}
+	echo([]byte{0x82, 3, 'x', 'y', 'z'})
+	// two binary frames in one segment, masked with zeros, and then nothing
+	common.Must2(conn.Write([]byte{0x82, 0x83, 0, 0, 0, 0, 'a', 'b', 'c', 0x82, 0x82, 0, 0, 0, 0, 'd', 'e'}))
+	echo([]byte{0x82, 3, 'a', 'b', 'c', 0x82, 2, 'd', 'e'})
+	// a reset that ends the wait of the reader is what its read fails with, it is not read away
+	time.Sleep(50 * time.Millisecond)
+	common.Must(conn.(*net.TCPConn).SetLinger(0))
+	conn.Close()
+	if err := <-copied; !buf.IsReadError(err) || !errors.As(err, new(*gonet.OpError)) {
+		t.Error("copy: ", err)
 	}
 }

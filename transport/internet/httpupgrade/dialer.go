@@ -20,10 +20,17 @@ import (
 
 type ConnRF struct {
 	net.Conn
-	Req   *http.Request
-	First bool
+	Req    *http.Request
+	First  bool
+	waiter tls.ReadWaiter
 	// reader has what has been read past the response and is not returned yet
 	reader *bufio.Reader
+}
+
+func (c *ConnRF) WaitRead() {
+	if c.reader == nil {
+		c.waiter.Wait(c.Conn)
+	}
 }
 
 func (c *ConnRF) Read(b []byte) (int, error) {
@@ -33,6 +40,7 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 		// `b` later with a single Read call
 		reader := bufio.NewReaderSize(c.Conn, len(b))
 		resp, err := http.ReadResponse(reader, c.Req) // nolint:bodyclose
+		c.Req = nil
 		if err != nil {
 			return 0, err
 		}

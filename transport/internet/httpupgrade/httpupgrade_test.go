@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/testing/servers/tcp"
@@ -244,19 +245,27 @@ func TestDial_ReadPastResponse(t *testing.T) {
 	common.Must(err)
 	defer conn.Close()
 
-	common.Must(conn.SetReadDeadline(time.Now().Add(4 * time.Second)))
+	start := time.Now()
+	common.Must(conn.SetReadDeadline(start.Add(4 * time.Second)))
 	// as the version of a VLESS response is read
 	b := make([]byte, 1)
 	read := func(expected string) {
 		for i := range expected {
+			conn.(interface{ WaitRead() }).WaitRead()
 			if n, err := conn.Read(b); n != 1 || err != nil || b[0] != expected[i] {
 				t.Fatal("read: ", n, " ", err, " ", string(b[:n]), ", expected: ", expected[i:i+1])
 			}
 		}
 	}
 	read("abc")
+	if conn.(*ConnRF).Req != nil {
+		t.Error("the request is kept after its response")
+	}
 	common.Must2(conn.Write([]byte("def")))
 	read("def")
+	if time.Since(start) > 2*time.Second {
+		t.Error("waited for what had been read")
+	}
 }
 
 func TestListen_ReadPastRequest(t *testing.T) {
@@ -267,7 +276,7 @@ func TestListen_ReadPastRequest(t *testing.T) {
 	}, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
-			io.Copy(conn, conn)
+			buf.Copy(buf.NewReader(conn), buf.NewWriter(conn))
 		}()
 	})
 	common.Must(err)
@@ -282,9 +291,13 @@ func TestListen_ReadPastRequest(t *testing.T) {
 	reader := bufio.NewReader(conn)
 	_, err = http.ReadResponse(reader, nil) // nolint:bodyclose
 	common.Must(err)
-	b := make([]byte, 6)
+	// the reader of the server has them, it does not wait for more to come
+	b := make([]byte, 3)
+	if _, err := io.ReadFull(reader, b); err != nil || string(b) != "abc" {
+		t.Fatal("read: ", string(b), " ", err)
+	}
 	common.Must2(conn.Write([]byte("def")))
-	if _, err := io.ReadFull(reader, b); err != nil || string(b) != "abcdef" {
+	if _, err := io.ReadFull(reader, b); err != nil || string(b) != "def" {
 		t.Fatal("read: ", string(b), " ", err)
 	}
 }

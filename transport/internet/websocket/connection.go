@@ -1,14 +1,19 @@
 package websocket
 
 import (
+	"bufio"
+	"context"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 var _ buf.Writer = (*connection)(nil)
@@ -20,7 +25,16 @@ type connection struct {
 	conn       *websocket.Conn
 	reader     io.Reader
 	remoteAddr net.Addr
+
+	// for WaitRead: whether reader has the early data, what conn has read and not returned,
+	// and what is left of its frame
+	waiter    tls.ReadWaiter
+	early     bool
+	br        **bufio.Reader
+	remaining *int64
 }
+
+var logUnknownFields sync.Once
 
 func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader, heartbeatPeriod uint32) *connection {
 	if heartbeatPeriod != 0 {
@@ -34,10 +48,39 @@ func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Rea
 		}()
 	}
 
-	return &connection{
+	c := &connection{
 		conn:       conn,
 		remoteAddr: remoteAddr,
 		reader:     extraReader,
+		early:      extraReader != nil,
+		br:         utils.TryAccessField[*bufio.Reader](conn, "br"),
+		remaining:  utils.TryAccessField[int64](conn, "readRemaining"),
+	}
+	if c.br == nil || c.remaining == nil {
+		logUnknownFields.Do(func() {
+			errors.LogWarning(context.Background(), "unexpected fields in *websocket.Conn, such connections keep more memory than they need")
+		})
+	}
+	return c
+}
+
+func (c *connection) WaitRead() {
+	if c.br == nil || c.remaining == nil {
+		return
+	}
+	if c.early {
+		if r, ok := c.reader.(interface{ Len() int }); !ok || r.Len() > 0 {
+			return
+		}
+	}
+	// not in a frame, and nothing read ahead
+	if *c.remaining == 0 && (*c.br).Buffered() == 0 {
+		conn := c.conn.NetConn()
+		if _, ok := conn.(*net.TCPConn); !ok {
+			c.waiter.Wait(conn) // TLS gives up what it holds while it waits here and not in its Read
+		}
+		// the next frame comes into the buffer that c.conn has anyway, and what fails stays with it for Read
+		c.Read(nil)
 	}
 }
 
@@ -52,6 +95,7 @@ func (c *connection) Read(b []byte) (int, error) {
 		nBytes, err := reader.Read(b)
 		if errors.Cause(err) == io.EOF {
 			c.reader = nil
+			c.early = false
 			continue
 		}
 		return nBytes, err

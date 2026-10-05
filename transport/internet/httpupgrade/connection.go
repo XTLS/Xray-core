@@ -3,11 +3,14 @@ package httpupgrade
 import (
 	"bufio"
 	"net"
+
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 type connection struct {
 	net.Conn
 	remoteAddr net.Addr
+	waiter     tls.ReadWaiter
 	// reader has what has been read past the request and is not returned yet
 	reader *bufio.Reader
 }
@@ -32,4 +35,10 @@ func (c *connection) Read(b []byte) (int, error) {
 
 func (c *connection) RemoteAddr() net.Addr {
 	return c.remoteAddr
+}
+
+func (c *connection) WaitRead() {
+	if c.reader == nil {
+		c.waiter.Wait(c.Conn)
+	}
 }

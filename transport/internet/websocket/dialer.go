@@ -165,6 +165,13 @@ type delayDialConn struct {
 	ctx            context.Context
 	dest           net.Destination
 	streamSettings *internet.MemoryStreamConfig
+	waiter         interface{ WaitRead() } // Conn once it is dialed, if it can wait for data
+}
+
+func (d *delayDialConn) WaitRead() {
+	if d.waiter != nil {
+		d.waiter.WaitRead()
+	}
 }
 
 // LocalAddr returns nil until the deferred WebSocket dial has completed.
@@ -219,6 +226,7 @@ func (d *delayDialConn) Read(b []byte) (int, error) {
 		case <-d.dialed:
 		}
 	}
+	d.waiter, _ = d.Conn.(interface{ WaitRead() })
 	return d.Conn.Read(b)
 }
 
