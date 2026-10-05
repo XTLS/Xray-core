@@ -818,12 +818,8 @@ func (c *XDNS) Build() (proto.Message, error) {
 		if c.Domains[i].LabelLimit == 0 {
 			c.Domains[i].LabelLimit = 63
 		}
-		types := make([]uint16, 0, len(c.Domains[i].Types))
-		for j := range c.Domains[i].Types {
-			types = append(types, uint16(c.Domains[i].Types[j]))
-		}
 		for j := range c.Domains[i].Names {
-			domain, err := xdns.NewDomain(c.Domains[i].Names[j], int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
+			domain, err := xdns.NewDomain(c.Domains[i].Names[j], int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), []uint16{1, 5, 16, 28}, uint16(c.Domains[i].Edns0))
 			if err != nil {
 				return nil, err
 			}

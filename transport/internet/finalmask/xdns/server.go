@@ -52,6 +52,9 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		for j := range c.Domains[i].Types {
 			types = append(types, uint16(c.Domains[i].Types[j]))
 		}
+		if len(types) == 0 {
+			types = []uint16{1, 5, 16, 28}
+		}
 		domain, err := NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
 		if err != nil {
 			return nil, err
