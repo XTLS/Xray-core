@@ -151,11 +151,21 @@ func (r *BufferedReader) Close() error {
 // SingleReader is a Reader that read one Buffer every time.
 type SingleReader struct {
 	io.Reader
+	// waiter, if any, waits for the Reader to have data, so that no Buffer is held meanwhile
+	waiter interface{ WaitRead() }
+	full   bool // the last read has filled its Buffer, more is likely to follow
 }
 
 // ReadMultiBuffer implements Reader.
 func (r *SingleReader) ReadMultiBuffer() (MultiBuffer, error) {
+	if r.waiter != nil && !r.full {
+		r.waiter.WaitRead()
+	}
 	b, err := ReadBuffer(r.Reader)
+	if err != nil {
+		r.waiter = nil // there may be nothing to wait for anymore
+	}
+	r.full = b.IsFull()
 	return MultiBuffer{b}, err
 }
 

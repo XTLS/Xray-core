@@ -134,9 +134,14 @@ func NewReader(reader io.Reader) Reader {
 		}
 	}
 
-	return &SingleReader{
+	r := &SingleReader{
 		Reader: reader,
 	}
+	if statConn, ok := reader.(*stat.CounterConnection); ok {
+		reader = statConn.Connection
+	}
+	r.waiter, _ = reader.(interface{ WaitRead() })
+	return r
 }
 
 // NewPacketReader creates a new PacketReader based on the given reader.

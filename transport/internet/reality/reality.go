@@ -38,10 +38,15 @@ import (
 type Conn struct {
 	*reality.Conn
 	suppressCloseNotify atomic.Bool
+	readWaiter          tls.ReadWaiter
 }
 
 func (c *Conn) SuppressCloseNotify() {
 	c.suppressCloseNotify.Store(true)
+}
+
+func (c *Conn) WaitRead() {
+	c.readWaiter.Wait(c.Conn)
 }
 
 func (c *Conn) Close() error {
@@ -74,10 +79,15 @@ type UConn struct {
 	AuthKey             []byte
 	Verified            bool
 	suppressCloseNotify atomic.Bool
+	readWaiter          tls.ReadWaiter
 }
 
 func (c *UConn) SuppressCloseNotify() {
 	c.suppressCloseNotify.Store(true)
+}
+
+func (c *UConn) WaitRead() {
+	c.readWaiter.Wait(c.Conn)
 }
 
 func (c *UConn) Close() error {

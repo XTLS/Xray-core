@@ -129,3 +129,32 @@ func TestReaderInterface(t *testing.T) {
 	_ = io.ByteReader(new(BufferedReader))
 	_ = io.WriterTo(new(BufferedReader))
 }
+
+type waitCounter struct {
+	sizes []int
+	waits int
+}
+
+func (r *waitCounter) WaitRead() { r.waits++ }
+
+func (r *waitCounter) Read(b []byte) (int, error) {
+	if len(r.sizes) == 0 {
+		return 0, io.EOF
+	}
+	n := r.sizes[0]
+	r.sizes = r.sizes[1:]
+	return n, nil
+}
+
+func TestSingleReaderWait(t *testing.T) {
+	// it waits before a read, unless the last one has filled its buffer or failed
+	r := &waitCounter{sizes: []int{10, Size, 10}}
+	reader := NewReader(r)
+	for _, waits := range []int{1, 2, 2, 3, 3} {
+		mb, _ := reader.ReadMultiBuffer()
+		ReleaseMulti(mb)
+		if r.waits != waits {
+			t.Fatal("waits: ", r.waits, ", expected: ", waits)
+		}
+	}
+}

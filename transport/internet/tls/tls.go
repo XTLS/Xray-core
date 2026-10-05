@@ -32,6 +32,7 @@ var (
 type Conn struct {
 	*tls.Conn
 	suppressCloseNotify atomic.Bool
+	readWaiter          ReadWaiter
 }
 
 const tlsCloseTimeout = 250 * time.Millisecond
@@ -49,6 +50,11 @@ func (c *Conn) Close() error {
 	})
 	defer timer.Stop()
 	return c.Conn.Close()
+}
+
+// WaitRead is what buf.SingleReader calls before it takes a buffer to read into.
+func (c *Conn) WaitRead() {
+	c.readWaiter.Wait(c.Conn)
 }
 
 func (c *Conn) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -91,6 +97,7 @@ func Input(conn any) (input *bytes.Reader, rawInput *bytes.Buffer) {
 type UConn struct {
 	*utls.UConn
 	suppressCloseNotify atomic.Bool
+	readWaiter          ReadWaiter
 }
 
 var _ Interface = (*UConn)(nil)
@@ -108,6 +115,10 @@ func (c *UConn) Close() error {
 	})
 	defer timer.Stop()
 	return c.Conn.Close()
+}
+
+func (c *UConn) WaitRead() {
+	c.readWaiter.Wait(c.Conn)
 }
 
 func (c *UConn) HandshakeContextServerName(ctx context.Context) string {
