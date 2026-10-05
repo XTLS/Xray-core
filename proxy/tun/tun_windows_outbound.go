@@ -75,13 +75,13 @@ func (g *outboundGuard) check() string {
 		}
 	}
 	if len(forwarding) > 0 {
-		return "forwarding is on for " + strings.Join(forwarding, " and ") + " on " + name + " (Mobile Hotspot and Internet Connection Sharing turn it on), so Windows ignores autoOutboundsInterface there, and Xray's own connections go into the TUN and stall"
+		return "forwarding is on for " + strings.Join(forwarding, " and ") + " on " + name + " (Mobile Hotspot and Internet Connection Sharing turn it on), so Windows ignores autoOutboundsInterface there, and Xray's own connections go into the TUN and stall: turn the hotspot off, or have it share the TUN instead of " + name
 	}
 	return ""
 }
 
-// recheck is check for a running TUN, which logs a forwarding problem when it
-// comes up. (Windows may turn forwarding on and off a few times meanwhile.)
+// recheck runs check, and warns about forwarding when it comes up. (Windows
+// may turn forwarding on and off a few times meanwhile.)
 func (g *outboundGuard) recheck() {
 	problem := g.check()
 	g.Lock()
@@ -89,7 +89,7 @@ func (g *outboundGuard) recheck() {
 	g.reported = problem
 	g.Unlock()
 	if cameUp {
-		errors.LogError(context.Background(), "[tun] ", problem)
+		errors.LogWarning(context.Background(), "[tun] ", problem)
 	}
 }
 

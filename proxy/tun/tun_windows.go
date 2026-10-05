@@ -307,9 +307,7 @@ startOver:
 		if route6 {
 			t.guard.families = append(t.guard.families, windows.AF_INET6)
 		}
-		if problem := t.guard.check(); problem != "" {
-			return errors.New(problem)
-		}
+		t.guard.recheck()
 		// Only a registered callback goes into the fields: a nil pointer in
 		// them would not compare equal to nil in Close.
 		cbr, err := winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
