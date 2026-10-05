@@ -15,3 +15,16 @@ func AccessField[valueType any](obj any, fieldName string) *valueType {
 	v := (*valueType)(unsafe.Pointer(field.UnsafeAddr()))
 	return v
 }
+
+// TryAccessField is AccessField that returns nil if obj has no such field of that type.
+func TryAccessField[valueType any](obj any, fieldName string) *valueType {
+	v := reflect.ValueOf(obj)
+	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
+		return nil
+	}
+	field, ok := v.Elem().Type().FieldByName(fieldName)
+	if !ok || len(field.Index) != 1 || field.Type != reflect.TypeFor[valueType]() {
+		return nil
+	}
+	return (*valueType)(unsafe.Add(v.UnsafePointer(), field.Offset))
+}

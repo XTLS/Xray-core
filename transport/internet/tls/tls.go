@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/tls"
@@ -79,6 +80,12 @@ func Client(c net.Conn, config *tls.Config) net.Conn {
 func Server(c net.Conn, config *tls.Config) net.Conn {
 	tlsConn := tls.Server(c, config)
 	return &Conn{Conn: tlsConn}
+}
+
+// Input returns where conn, a *tls.Conn, *utls.Conn, *reality.Conn or *encryption.CommonConn,
+// keeps what it has read and not returned yet. One that is not laid out as it was gives nil.
+func Input(conn any) (input *bytes.Reader, rawInput *bytes.Buffer) {
+	return utils.TryAccessField[bytes.Reader](conn, "input"), utils.TryAccessField[bytes.Buffer](conn, "rawInput")
 }
 
 type UConn struct {
