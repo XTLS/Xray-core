@@ -27,6 +27,7 @@ type outboundGuard struct {
 	sync.Mutex
 	families   []winipcfg.AddressFamily
 	luid       winipcfg.LUID            // of the interface last checked
+	name       string                   // of that interface
 	turnedOff  []winipcfg.AddressFamily // where weak host send was turned off on it
 	forwarding bool                     // whether forwarding was on there
 	stopped    bool
@@ -48,10 +49,10 @@ func (g *outboundGuard) check() {
 	}
 	if luid != g.luid {
 		g.restoreLocked()
-		g.luid = luid
+		g.luid, g.name = luid, name
+		g.forwarding = false // to warn about the new interface as well
 	}
 	if luid == 0 {
-		g.forwarding = false
 		return
 	}
 	var forwarding []string
@@ -92,10 +93,12 @@ func (g *outboundGuard) restore() {
 
 func (g *outboundGuard) restoreLocked() {
 	for _, family := range g.turnedOff {
-		if row, err := g.luid.IPInterface(family); err == nil {
-			if err := setWeakHostSend(row, true); err != nil {
-				errors.LogWarningInner(context.Background(), err, "[tun] unable to turn weak host send on again for ", familyName(family))
-			}
+		row, err := g.luid.IPInterface(family)
+		if err == nil {
+			err = setWeakHostSend(row, true)
+		}
+		if err != nil {
+			errors.LogWarningInner(context.Background(), err, "[tun] unable to turn weak host send on again for ", familyName(family), " on ", g.name)
 		}
 	}
 	g.turnedOff = nil
