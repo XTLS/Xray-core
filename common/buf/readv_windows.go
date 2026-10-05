@@ -5,8 +5,7 @@ import (
 )
 
 type windowsReader struct {
-	bufs  []syscall.WSABuf
-	ready bool
+	bufs []syscall.WSABuf
 }
 
 func (r *windowsReader) Init(bs []*Buffer) {
@@ -16,7 +15,6 @@ func (r *windowsReader) Init(bs []*Buffer) {
 	for _, b := range bs {
 		r.bufs = append(r.bufs, syscall.WSABuf{Len: uint32(Size), Buf: &b.v[0]})
 	}
-	r.ready = false
 }
 
 func (r *windowsReader) Clear() {
@@ -26,22 +24,15 @@ func (r *windowsReader) Clear() {
 	r.bufs = r.bufs[:0]
 }
 
-func (r *windowsReader) Read(fd uintptr) int32 {
-	// On the first invocation, we return -1 to indicate "not ready"
-	// to make rawConn.Read wait for readability using the runtime's own mechanism
-	// because syscall.WSARecv() is a blocking call when used with nil OVERLAPPED
-	if !r.ready {
-		r.ready = true
-		return -1
-	}
-
+func (r *windowsReader) Read(fd uintptr) (int32, error) {
 	var nBytes uint32
 	var flags uint32
 	err := syscall.WSARecv(syscall.Handle(fd), &r.bufs[0], uint32(len(r.bufs)), &nBytes, &flags, nil, nil)
 	if err != nil {
-		return -1
+		// rawConn.Read reports it when it waits for readability again
+		return -1, nil
 	}
-	return int32(nBytes)
+	return int32(nBytes), nil
 }
 
 func newMultiReader() multiReader {

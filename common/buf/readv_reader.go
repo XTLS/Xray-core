@@ -5,6 +5,9 @@ package buf
 
 import (
 	"io"
+	"net"
+	"os"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 
@@ -46,7 +49,8 @@ func (s *allocStrategy) Alloc() []*Buffer {
 
 type multiReader interface {
 	Init([]*Buffer)
-	Read(fd uintptr) int32
+	// Read returns -1 and no error if there is nothing to read yet.
+	Read(fd uintptr) (int32, error)
 	Clear()
 }
 
@@ -57,11 +61,18 @@ type ReadVReader struct {
 	mr      multiReader
 	alloc   allocStrategy
 	counter stats.Counter
+
+	// the read in progress, kept here so that a read does not allocate it
+	readFn func(fd uintptr) bool
+	bs     []*Buffer
+	nBytes int32
+	rerr   error
+	ready  bool
 }
 
 // NewReadVReader creates a new ReadVReader.
 func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Counter) *ReadVReader {
-	return &ReadVReader{
+	r := &ReadVReader{
 		Reader:  reader,
 		rawConn: rawConn,
 		alloc: allocStrategy{
@@ -70,27 +81,57 @@ func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Cou
 		mr:      newMultiReader(),
 		counter: counter,
 	}
+	r.readFn = r.tryRead
+	return r
+}
+
+func (r *ReadVReader) tryRead(fd uintptr) bool {
+	// On Windows, the first invocation returns false to indicate "not ready"
+	// to make rawConn.Read wait for readability using the runtime's own mechanism
+	// because syscall.WSARecv() is a blocking call when used with nil OVERLAPPED
+	if runtime.GOOS == "windows" && !r.ready {
+		r.ready = true
+		return false
+	}
+
+	// take the bytes right before the syscall and give them back if there is nothing to read,
+	// so that they are not held while waiting for readability
+	if r.bs == nil {
+		r.bs = r.alloc.Alloc()
+	} else {
+		for _, b := range r.bs {
+			*b = StackNew()
+		}
+	}
+	r.mr.Init(r.bs)
+	r.nBytes, r.rerr = r.mr.Read(fd)
+	r.mr.Clear()
+	if r.nBytes < 0 {
+		for _, b := range r.bs {
+			b.Release()
+		}
+		return r.rerr != nil
+	}
+
+	return true
 }
 
 func (r *ReadVReader) readMulti() (MultiBuffer, error) {
-	bs := r.alloc.Alloc()
-
-	r.mr.Init(bs)
-	var nBytes int32
-	err := r.rawConn.Read(func(fd uintptr) bool {
-		n := r.mr.Read(fd)
-		if n < 0 {
-			return false
-		}
-
-		nBytes = n
-		return true
-	})
-	r.mr.Clear()
+	r.ready = false
+	err := r.rawConn.Read(r.readFn)
+	bs, nBytes, rerr := r.bs, r.nBytes, r.rerr
+	r.bs, r.rerr = nil, nil
 
 	if err != nil {
-		ReleaseMulti(MultiBuffer(bs))
 		return nil, err
+	}
+
+	if rerr != nil {
+		rerr = os.NewSyscallError("read", rerr)
+		if conn, ok := r.Reader.(net.Conn); ok && conn.LocalAddr() != nil {
+			rerr = &net.OpError{Op: "read", Net: conn.LocalAddr().Network(), Source: conn.LocalAddr(), Addr: conn.RemoteAddr(), Err: rerr}
+		}
+		return nil, rerr
 	}
 
 	if nBytes == 0 {
@@ -122,7 +163,10 @@ func (r *ReadVReader) readMulti() (MultiBuffer, error) {
 
 // ReadMultiBuffer implements Reader.
 func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
-	if r.alloc.Current() == 1 {
+	// anything else may have bytes buffered in front of rawConn,
+	// and on Windows waiting for readability first costs one more syscall
+	_, raw := r.Reader.(*net.TCPConn)
+	if r.alloc.Current() == 1 && (!raw || runtime.GOOS == "windows") {
 		b, err := ReadBuffer(r.Reader)
 		if b.IsFull() {
 			r.alloc.Adjust(1)
@@ -140,7 +184,9 @@ func (r *ReadVReader) ReadMultiBuffer() (MultiBuffer, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.alloc.Adjust(uint32(len(mb)))
+	if r.alloc.Current() > 1 || mb[0].IsFull() {
+		r.alloc.Adjust(uint32(len(mb)))
+	}
 	return mb, nil
 }
 
