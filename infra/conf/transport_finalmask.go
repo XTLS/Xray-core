@@ -799,12 +799,7 @@ type XDNSDomain struct {
 }
 
 type XDNSResolver struct {
-	Type string `json:"type"`
-	Addr string `json:"addr"`
-}
-
-func (c *XDNSResolver) Build() (proto.Message, error) {
-	return &xdns.ResolverProto{Addr: c.Addr}, nil
+	Addrs []string `json:"addrs"`
 }
 
 type XDNS struct {
@@ -841,7 +836,26 @@ func (c *XDNS) Build() (proto.Message, error) {
 		})
 	}
 	for i := range c.Resolvers {
-		resolvers = append(resolvers, &xdns.ResolverProto{Type: c.Resolvers[i].Type, Addr: c.Resolvers[i].Addr})
+		for j := range c.Resolvers[i].Addrs {
+			u, e := url.Parse(c.Resolvers[i].Addrs[j])
+			if e != nil {
+				return nil, e
+			}
+			switch u.Scheme {
+			case "":
+				u.Scheme = "udp"
+			case "tcp", "udp":
+			default:
+				return nil, errors.New("invalid protocol")
+			}
+			var host, port string
+			host = u.Hostname()
+			port = u.Port()
+			if port == "" {
+				port = "53"
+			}
+			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: net.JoinHostPort(host, port)})
+		}
 	}
 	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
 		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")
