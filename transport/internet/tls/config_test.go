@@ -3,6 +3,7 @@ package tls_test
 import (
 	gotls "crypto/tls"
 	"crypto/x509"
+	"runtime"
 	"testing"
 	"time"
 
@@ -61,6 +62,28 @@ func TestExpiredCertificate(t *testing.T) {
 	common.Must(err)
 	if !x509Cert.NotAfter.After(time.Now()) {
 		t.Error("NotAfter: ", x509Cert.NotAfter)
+	}
+}
+
+func TestGetCertificateWhileReloading(t *testing.T) {
+	ct, _ := cert.MustGenerate(nil, cert.CommonName("www.example.com"), cert.DNSNames("www.example.com"))
+	c := &Config{
+		Certificate: []*Certificate{
+			ParseCertificate(ct),
+		},
+	}
+
+	// the certificate is looked at for a reload as soon as the config is there
+	tlsConfig := c.GetTLSConfig()
+	for i := 0; i < 1000; i++ {
+		xrayCert, err := tlsConfig.GetCertificate(&gotls.ClientHelloInfo{
+			ServerName: "www.example.com",
+		})
+		common.Must(err)
+		if xrayCert.Leaf.Subject.CommonName != "www.example.com" {
+			t.Fatal("CommonName: ", xrayCert.Leaf.Subject.CommonName)
+		}
+		runtime.Gosched()
 	}
 }
 
