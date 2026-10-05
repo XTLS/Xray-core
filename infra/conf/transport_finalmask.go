@@ -812,17 +812,17 @@ func (c *XDNS) Build() (proto.Message, error) {
 	var domains []*xdns.DomainProto
 	var resolvers []*xdns.ResolverProto
 	for i := range c.Domains {
+		if c.Domains[i].LenLimit == 0 {
+			c.Domains[i].LenLimit = 255
+		}
+		if c.Domains[i].LabelLimit == 0 {
+			c.Domains[i].LabelLimit = 63
+		}
+		types := make([]uint16, 0, len(c.Domains[i].Types))
+		for j := range c.Domains[i].Types {
+			types = append(types, uint16(c.Domains[i].Types[j]))
+		}
 		for j := range c.Domains[i].Names {
-			if c.Domains[i].LenLimit == 0 {
-				c.Domains[i].LenLimit = 255
-			}
-			if c.Domains[i].LabelLimit == 0 {
-				c.Domains[i].LabelLimit = 63
-			}
-			types := make([]uint16, 0, len(c.Domains[i].Types))
-			for j := range c.Domains[i].Types {
-				types = append(types, uint16(c.Domains[i].Types[j]))
-			}
 			domain, err := xdns.NewDomain(c.Domains[i].Names[j], int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
 			if err != nil {
 				return nil, err
