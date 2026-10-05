@@ -101,7 +101,7 @@ func (t *stackGVisor) Start() error {
 	// Use custom UDP packet handler, instead of strict gVisor forwarder, for FullCone NAT support
 	udpForwarder := newUdpConnectionHandler(t.handler.HandleConnection, t.writeRawUDPPacket)
 	ipStack.SetTransportProtocolHandler(udp.ProtocolNumber, func(id stack.TransportEndpointID, pkt *stack.PacketBuffer) bool {
-		data := pkt.Clone().Data().AsRange().ToSlice()
+		data := pkt.Data().AsRange().ToSlice()
 		// if len(data) == 0 {
 		// 	return false
 		// }
