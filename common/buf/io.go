@@ -167,7 +167,8 @@ func isPacketWriter(writer io.Writer) bool {
 	return false
 }
 
-// NewWriter creates a new Writer.
+// NewWriter creates a new Writer. For a connection that has JoinSize, which carries a stream of bytes
+// and has no file descriptor, it joins the Buffers of a MultiBuffer to write that many bytes at once.
 func NewWriter(writer io.Writer) Writer {
 	if mw, ok := writer.(Writer); ok {
 		return mw
@@ -176,6 +177,10 @@ func NewWriter(writer io.Writer) Writer {
 	iConn := writer
 	if statConn, ok := writer.(*stat.CounterConnection); ok {
 		iConn = statConn.Connection
+	}
+
+	if stream, ok := iConn.(interface{ JoinSize() int32 }); ok {
+		return &SequentialWriter{Writer: writer, stream: stream}
 	}
 
 	if isPacketWriter(iConn) {

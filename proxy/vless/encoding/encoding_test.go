@@ -1,6 +1,8 @@
 package encoding_test
 
 import (
+	"io"
+	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -11,6 +13,10 @@ import (
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy/vless"
 	. "github.com/xtls/xray-core/proxy/vless/encoding"
+	"github.com/xtls/xray-core/proxy/vless/encryption"
+	"github.com/xtls/xray-core/transport/internet/reality"
+	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 func toAccount(a *vless.Account) protocol.Account {
@@ -129,5 +135,18 @@ func TestMuxRequest(t *testing.T) {
 	}
 	if r := cmp.Diff(actualAddons, expectedAddons, cmp.Comparer(addonsComparer)); r != "" {
 		t.Error(r)
+	}
+}
+
+// XTLS Vision shapes the Buffers it sends, so buf.NewWriter must not join them for a connection that VLESS
+// allows it on. One that gets JoinSize needs a Writer of its own for Vision.
+func TestVisionBuffersNotJoined(t *testing.T) {
+	for _, conn := range []stat.Connection{&tls.Conn{}, &tls.UConn{}, &reality.Conn{}, &reality.UConn{}, &encryption.CommonConn{}} {
+		for _, writer := range []io.Writer{conn, &stat.CounterConnection{Connection: conn}} {
+			w, ok := buf.NewWriter(writer).(*buf.SequentialWriter)
+			if ok && !reflect.DeepEqual(w, &buf.SequentialWriter{Writer: writer}) {
+				t.Errorf("%T in %T: its Buffers are joined", conn, writer)
+			}
+		}
 	}
 }

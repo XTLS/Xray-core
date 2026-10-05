@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/stats"
 )
@@ -239,12 +240,46 @@ func (w *BufferedWriter) Close() error {
 // SequentialWriter is a Writer that writes MultiBuffer sequentially into the underlying io.Writer.
 type SequentialWriter struct {
 	io.Writer
+	// stream, if any, tells how many bytes of a MultiBuffer to join for a Write, 0 for none
+	stream interface{ JoinSize() int32 }
 }
 
 // WriteMultiBuffer implements Writer.
 func (w *SequentialWriter) WriteMultiBuffer(mb MultiBuffer) error {
+	if w.stream != nil && len(mb) > 1 {
+		if size := w.stream.JoinSize(); size > 0 {
+			return w.join(mb, size)
+		}
+	}
 	mb, err := WriteMultiBuffer(w.Writer, mb)
 	ReleaseMulti(mb)
+	return err
+}
+
+// join is apart from WriteMultiBuffer and defers nothing, so that the way to Write
+// takes no more of the stack than it did.
+func (w *SequentialWriter) join(mb MultiBuffer, size int32) (err error) {
+	p := bytespool.Alloc(size)[:size]
+	n := 0
+	for i, b := range mb {
+		for err == nil && !b.IsEmpty() {
+			c, _ := b.Read(p[n:])
+			if n += c; n < len(p) {
+				continue
+			}
+			if b.IsEmpty() {
+				b.Release() // rather than hold it through the Write
+			}
+			_, err = w.Write(p)
+			n = 0
+		}
+		b.Release()
+		mb[i] = nil
+	}
+	if err == nil && n > 0 {
+		_, err = w.Write(p[:n])
+	}
+	bytespool.Free(p)
 	return err
 }
 
