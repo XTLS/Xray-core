@@ -791,11 +791,11 @@ func (c *Sudoku) Build() (proto.Message, error) {
 }
 
 type XDNSDomain struct {
-	Name       string  `json:"name"`
-	LenLimit   int32   `json:"lenLimit"`
-	LabelLimit int32   `json:"labelLimit"`
-	Types      []int32 `json:"types"`
-	Edns0      int32   `json:"edns0"`
+	Names      []string `json:"names"`
+	LenLimit   int32    `json:"lenLimit"`
+	LabelLimit int32    `json:"labelLimit"`
+	Types      []int32  `json:"types"`
+	Edns0      int32    `json:"edns0"`
 }
 
 type XDNSResolver struct {
@@ -812,28 +812,30 @@ func (c *XDNS) Build() (proto.Message, error) {
 	var domains []*xdns.DomainProto
 	var resolvers []*xdns.ResolverProto
 	for i := range c.Domains {
-		if c.Domains[i].LenLimit == 0 {
-			c.Domains[i].LenLimit = 255
+		for j := range c.Domains[i].Names {
+			if c.Domains[i].LenLimit == 0 {
+				c.Domains[i].LenLimit = 255
+			}
+			if c.Domains[i].LabelLimit == 0 {
+				c.Domains[i].LabelLimit = 63
+			}
+			types := make([]uint16, 0, len(c.Domains[i].Types))
+			for j := range c.Domains[i].Types {
+				types = append(types, uint16(c.Domains[i].Types[j]))
+			}
+			domain, err := xdns.NewDomain(c.Domains[i].Names[j], int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
+			if err != nil {
+				return nil, err
+			}
+			errors.LogInfo(context.Background(), domain.Show())
+			domains = append(domains, &xdns.DomainProto{
+				Name:       c.Domains[i].Names[j],
+				LenLimit:   c.Domains[i].LenLimit,
+				LabelLimit: c.Domains[i].LabelLimit,
+				Types:      c.Domains[i].Types,
+				Edns0:      c.Domains[i].Edns0,
+			})
 		}
-		if c.Domains[i].LabelLimit == 0 {
-			c.Domains[i].LabelLimit = 63
-		}
-		types := make([]uint16, 0, len(c.Domains[i].Types))
-		for j := range c.Domains[i].Types {
-			types = append(types, uint16(c.Domains[i].Types[j]))
-		}
-		domain, err := xdns.NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
-		if err != nil {
-			return nil, err
-		}
-		errors.LogInfo(context.Background(), domain.Show())
-		domains = append(domains, &xdns.DomainProto{
-			Name:       c.Domains[i].Name,
-			LenLimit:   c.Domains[i].LenLimit,
-			LabelLimit: c.Domains[i].LabelLimit,
-			Types:      c.Domains[i].Types,
-			Edns0:      c.Domains[i].Edns0,
-		})
 	}
 	for i := range c.Resolvers {
 		for j := range c.Resolvers[i].Addrs {
