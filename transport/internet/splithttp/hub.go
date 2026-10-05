@@ -76,14 +76,9 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 
 	h.sessions.Store(sessionId, s)
 
-	shouldReap := done.New()
-	go func() {
-		time.Sleep(30 * time.Second)
-		shouldReap.Close()
-	}()
 	go func() {
 		select {
-		case <-shouldReap.Wait():
+		case <-time.After(30 * time.Second):
 			h.sessions.Delete(sessionId)
 			s.uploadQueue.Close()
 		case <-s.isFullyConnected.Wait():
