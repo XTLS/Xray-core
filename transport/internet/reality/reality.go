@@ -308,6 +308,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		time.Sleep(time.Duration(crypto.RandBetween(config.SpiderY[8], config.SpiderY[9])) * time.Millisecond) // return
 		return nil, errors.New("REALITY: processed invalid connection")
 	}
+	tls.DropHandshakeState(uConn.UConn)
 	return uConn, nil
 }
 

@@ -121,11 +121,43 @@ func (c *UConn) WaitRead() {
 	c.readWaiter.Wait(c.Conn)
 }
 
+// HandshakeContext must be called before the connection is shared.
+func (c *UConn) HandshakeContext(ctx context.Context) error {
+	if err := c.UConn.HandshakeContext(ctx); err != nil {
+		return err
+	}
+	if c.HandshakeState.Hello != nil {
+		DropHandshakeState(c.UConn)
+	}
+	return nil
+}
+
 func (c *UConn) HandshakeContextServerName(ctx context.Context) string {
 	if err := c.HandshakeContext(ctx); err != nil {
 		return ""
 	}
 	return c.ConnectionState().ServerName
+}
+
+// DropHandshakeState releases what uTLS keeps from a completed handshake and never reads again.
+// It must be called before the connection is shared.
+func DropHandshakeState(c *utls.UConn) {
+	// up to TLS 1.2, a renegotiation builds the next ClientHello from it
+	if c.ConnectionState().Version != utls.VersionTLS13 {
+		return
+	}
+	c.HandshakeState = utls.PubClientHandshakeState{}
+	c.Extensions = nil
+	spec := utils.TryAccessField[*utls.ClientHelloSpec](c, "clientHelloSpec")
+	hand := utils.TryAccessField[bytes.Buffer](c.Conn, "hand")
+	if spec == nil || hand == nil {
+		unknownFields(c)
+		return
+	}
+	*spec = nil
+	if hand.Len() == 0 {
+		*hand = bytes.Buffer{}
+	}
 }
 
 // WebsocketHandshakeContext basically calls UConn.Handshake inside it but it will try
