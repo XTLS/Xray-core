@@ -24,7 +24,7 @@ type TCPResolver struct {
 	mu      sync.Mutex
 }
 
-func NewTCPResolver(config *TCPResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
+func NewTCPResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
 	dest, err := net.ParseDestination("tcp:" + config.Addr)
 	if err != nil {
 		return nil, err

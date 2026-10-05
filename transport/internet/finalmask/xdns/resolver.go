@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net"
 
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
@@ -15,17 +14,13 @@ type Resolver interface {
 	Close()
 }
 
-func NewResolver(proto *serial.TypedMessage, dialer *finalmask.Dialer) (Resolver, error) {
-	config, err := proto.GetInstance()
-	if err != nil {
-		return nil, err
-	}
-	switch v := config.(type) {
-	case *TCPResolverProto:
-		return NewTCPResolver(v, dialer)
-	case *UDPResolverProto:
-		return NewUDPResolver(v, dialer)
+func NewResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
+	switch config.Type {
+	case "tcp":
+		return NewTCPResolver(config, dialer)
+	case "udp":
+		return NewUDPResolver(config, dialer)
 	default:
-		return nil, errors.New("unknown proto")
+		return nil, errors.New("unknown type")
 	}
 }
