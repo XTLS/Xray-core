@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/base64"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -43,6 +44,8 @@ func init() {
 	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
 }
 
+var writeBuffers sync.Pool
+
 func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig, ed []byte) (net.Conn, error) {
 	wsSettings := streamSettings.ProtocolSettings.(*Config)
 
@@ -62,6 +65,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		},
 		ReadBufferSize:   4 * 1024,
 		WriteBufferSize:  4 * 1024,
+		WriteBufferPool:  &writeBuffers,
 		HandshakeTimeout: time.Second * 8,
 	}
 

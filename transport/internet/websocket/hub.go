@@ -30,8 +30,10 @@ type requestHandler struct {
 var replacer = strings.NewReplacer("+", "-", "/", "_", "=", "")
 
 var upgrader = &websocket.Upgrader{
-	ReadBufferSize:   0,
-	WriteBufferSize:  0,
+	ReadBufferSize: 0,
+	// as large, with the 14 bytes for a frame header, as the buffer of net/http that was written from before
+	WriteBufferSize:  4*1024 - 14,
+	WriteBufferPool:  &sync.Pool{},
 	HandshakeTimeout: time.Second * 4,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
