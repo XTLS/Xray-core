@@ -69,6 +69,7 @@ func (p *Pool) Acquire(ctx context.Context) (*glua.LState, error) {
 	n := len(p.idle)
 	if n != 0 {
 		state := p.idle[n-1]
+		p.idle[n-1] = nil
 		p.idle = p.idle[:n-1]
 		p.mu.Unlock()
 		return state, nil
