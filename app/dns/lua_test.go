@@ -136,8 +136,12 @@ local matcher = require("xray.geodata").BuildIPMatcher("127.0.0.0/8")
 function HandleDNSQuery(domain, ipv4, ipv6, fake)
     local ips, ttl, err = server:Query(domain, ipv4, ipv6, fake)
     assert(type(ips) == "userdata" and not err)
+    assert(#ips == 2 and ips[1]:String() == "127.0.0.1" and ips[2]:String() == "8.8.8.8")
+    assert(matcher:Match(ips[1]) and not matcher:Match(ips[2]))
     assert(matcher:AnyMatch(ips))
-    local matched = matcher:FilterIPs(ips)
+    local matched, unmatched = matcher:FilterIPs(ips)
+    assert(#matched == 1 and #unmatched == 1)
+    assert(matched[1]:Equal(ips[1]) and unmatched[1]:Equal(ips[2]))
     return matched, ttl, err
 end
 `); err != nil {
@@ -167,7 +171,7 @@ func TestLuaDNSClientQuery(t *testing.T) {
 	defer L.Close()
 	L.SetContext(context.Background())
 	geodata.RegisterLua(L)
-	want := []net.IP{{127, 0, 0, 1}}
+	want := []net.IP{{127, 0, 0, 1}, net.ParseIP("::1")}
 	client := &luaDNSClient{lookup: func(domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
 		if domain != "MiXeD.Example." || !option.IPv4Enable || option.IPv6Enable || !option.FakeEnable {
 			t.Fatalf("dns.Query arguments = %q, %+v", domain, option)
@@ -181,6 +185,8 @@ local matcher = require("xray.geodata").BuildIPMatcher("127.0.0.1")
 assert(dns.Servers == nil)
 ips, ttl, err = dns.Query("MiXeD.Example.", true, false, true)
 assert(not err and ttl == 42 and matcher:AnyMatch(ips))
+assert(#ips == 2 and ips[1]:String() == "127.0.0.1" and ips[2]:String() == "::1")
+assert(matcher:Match(ips[1]) and not matcher:Match(ips[2]))
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -201,6 +207,8 @@ assert(dns.Servers[1].ID == "localhost")
 serverIPs, _, serverErr = dns.Servers[1]:Query("127.0.0.1", true, false, false)
 clientIPs, _, clientErr = dns.Query("127.0.0.1", true, false, false)
 assert(not serverErr and not clientErr)
+assert(#serverIPs == 1 and #clientIPs == 1)
+assert(serverIPs[1]:String() == "127.0.0.1" and serverIPs[1]:Equal(clientIPs[1]))
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -209,6 +217,47 @@ assert(not serverErr and not clientErr)
 		if len(ips) != 1 || !ips[0].Equal(net.ParseIP("127.0.0.1")) {
 			t.Fatalf("%s = %v", name, ips)
 		}
+	}
+}
+
+func TestLuaDNSQueryEmptyIPs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ips  []net.IP
+	}{
+		{"nil", nil},
+		{"empty", []net.IP{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			L := lua.NewState()
+			defer L.Close()
+			L.SetContext(context.Background())
+			L.SetGlobal("expectNil", lua.LBool(tc.ips == nil))
+			client := &luaDNSClient{lookup: func(string, featureDNS.IPOption) ([]net.IP, uint32, error) {
+				return tc.ips, 0, featureDNS.ErrEmptyResponse
+			}}
+			registerLua(L, []luaDNSServer{{query: func(_ context.Context, domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
+				return client.LookupIP(domain, option)
+			}}}, client)
+			if err := L.DoString(`
+local dns = require("xray.dns")
+for _, query in ipairs({
+    function() return dns.Servers[1]:Query("empty.example", true, false, false) end,
+    function() return dns.Query("empty.example", true, false, false) end,
+}) do
+    local ips, ttl, err = query()
+    assert(ttl == 0 and err)
+    if expectNil then
+        assert(ips == nil)
+    else
+        assert(type(ips) == "userdata" and #ips == 0)
+        assert(not pcall(function() return ips[1] end))
+    end
+end
+`); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

@@ -52,6 +52,8 @@ func luaServers(s *DNS) []luaDNSServer {
 
 func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client) {
 	L.PreloadModule("xray.dns", func(L *lua.LState) int {
+		pushIPs := xlua.NewSlicePusher[net.IP](L)
+
 		serverList := L.CreateTable(len(servers), 0)
 		for i, client := range servers {
 			server := L.CreateTable(0, 2)
@@ -82,7 +84,7 @@ func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client
 				} else {
 					ips, ttl, err = client.query(ctx, string(domain), option)
 				}
-				xlua.PushUserData(L, ips)
+				pushIPs(L, ips)
 				xlua.PushNumber(L, ttl)
 				xlua.PushError(L, err)
 				return 3
@@ -95,14 +97,14 @@ func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client
 			module.RawSetString("Servers", serverList)
 		}
 		if client != nil {
-			module.RawSetString("Query", newLuaClientQuery(L, client))
+			module.RawSetString("Query", newLuaClientQuery(L, client, pushIPs))
 		}
 		L.Push(module)
 		return 1
 	})
 }
 
-func newLuaClientQuery(L *lua.LState, client featureDNS.Client) *lua.LFunction {
+func newLuaClientQuery(L *lua.LState, client featureDNS.Client, pushIPs func(*lua.LState, []net.IP)) *lua.LFunction {
 	return L.NewFunction(func(L *lua.LState) int {
 		domain, ok := L.Get(1).(lua.LString)
 		if !ok {
@@ -119,7 +121,7 @@ func newLuaClientQuery(L *lua.LState, client featureDNS.Client) *lua.LFunction {
 			return 0
 		}
 		ips, ttl, err := client.LookupIP(string(domain), option)
-		xlua.PushUserData(L, ips)
+		pushIPs(L, ips)
 		xlua.PushNumber(L, ttl)
 		xlua.PushError(L, err)
 		return 3

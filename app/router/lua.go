@@ -62,6 +62,7 @@ func (r *Router) RegisterLua(L *lua.LState) {
 }
 
 func registerLuaContext(L *lua.LState) {
+	pushIPs := xlua.NewSlicePusher[net.IP](L)
 	attributes := L.NewTypeMetatable(luaAttributesType)
 	L.SetField(attributes, "__index", L.NewFunction(func(L *lua.LState) int {
 		values := L.CheckUserData(1).Value.(map[string]string)
@@ -76,15 +77,15 @@ func registerLuaContext(L *lua.LState) {
 	methods := L.CreateTable(0, 4)
 	L.SetFuncs(methods, map[string]lua.LGFunction{
 		"GetSourceIPs": func(L *lua.LState) int {
-			xlua.PushUserData(L, checkLuaContext(L).GetSourceIPs())
+			pushIPs(L, checkLuaContext(L).GetSourceIPs())
 			return 1
 		},
 		"GetTargetIPs": func(L *lua.LState) int {
-			xlua.PushUserData(L, checkLuaContext(L).GetTargetIPs())
+			pushIPs(L, checkLuaContext(L).GetTargetIPs())
 			return 1
 		},
 		"GetLocalIPs": func(L *lua.LState) int {
-			xlua.PushUserData(L, checkLuaContext(L).GetLocalIPs())
+			pushIPs(L, checkLuaContext(L).GetLocalIPs())
 			return 1
 		},
 		"GetAttributes": func(L *lua.LState) int {

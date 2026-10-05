@@ -5,6 +5,23 @@ import (
 	luar "layeh.com/gopher-luar"
 )
 
+// NewSlicePusher captures luar's slice metatable during state initialization.
+// The returned function wraps slices without reflection or metatable lookup,
+// and pushes nil for nil slices. Use it with this state or its coroutines.
+func NewSlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
+	metatable := luar.New(L, []T{}).(*glua.LUserData).Metatable
+	return func(L *glua.LState, values []T) {
+		if values == nil {
+			L.Push(glua.LNil)
+			return
+		}
+		userdata := L.NewUserData()
+		userdata.Value = values
+		userdata.Metatable = metatable
+		L.Push(userdata)
+	}
+}
+
 // DirectMethod handles a Lua call without luar's reflected method invocation.
 // It returns the result count and whether it handled the arguments. On false,
 // it must leave the stack unchanged for the original luar wrapper.

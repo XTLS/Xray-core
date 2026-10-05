@@ -81,7 +81,13 @@ function HandleRoute(ctx, inboundTag, sourcePort, targetPort, localPort,
     savedContext = ctx
     sourceIPs, targetIPs, localIPs = ctx:GetSourceIPs(), ctx:GetTargetIPs(), ctx:GetLocalIPs()
     attributes = ctx:GetAttributes()
+    assert(#sourceIPs == 1 and #targetIPs == 1 and #localIPs == 1)
+    assert(sourceIPs[1]:String() == "127.0.0.2" and targetIPs[1]:String() == "127.0.0.3")
+    assert(localIPs[1]:String() == "127.0.0.1")
+    assert(matcher:Match(sourceIPs[1]) and matcher:Match(targetIPs[1]) and matcher:Match(localIPs[1]))
     assert(matcher:AnyMatch(sourceIPs) and matcher:AnyMatch(targetIPs) and matcher:AnyMatch(localIPs))
+    local matched = matcher:FilterIPs(targetIPs)
+    assert(#matched == 1 and matched[1]:Equal(targetIPs[1]))
     assert(attributes.key == "value" and attributes.missing == nil)
     assert(not pcall(function() attributes.key = "changed" end))
     return "out", "rule"
@@ -116,6 +122,39 @@ end`)
 assert(attributes.key == "updated")
 assert(require("xray.router").LocalOS == expectedOS)`); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLuaRouteEmptyIPs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ips  []net.IP
+	}{
+		{"nil", nil},
+		{"empty", []net.IP{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			L := newLuaRouterState(t, `
+function HandleRoute(ctx)
+    for _, name in ipairs({"GetSourceIPs", "GetTargetIPs", "GetLocalIPs"}) do
+        local ips = ctx[name](ctx)
+        if expectNil then
+            assert(ips == nil)
+        else
+            assert(type(ips) == "userdata" and #ips == 0)
+            assert(not pcall(function() return ips[1] end))
+        end
+    end
+    return "out"
+end
+`)
+			L.SetGlobal("expectNil", lua.LBool(tc.ips == nil))
+			ctx := newLuaRouteTestContext()
+			ctx.sourceIPs, ctx.targetIPs, ctx.localIPs = tc.ips, tc.ips, tc.ips
+			if err := callLuaRoute(L, ctx); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

@@ -4,20 +4,6 @@ import (
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
 	lua "github.com/yuin/gopher-lua"
-	luar "layeh.com/gopher-luar"
-)
-
-var (
-	luaDomainDirectMethods = map[string]xlua.DirectMethod{
-		"Match":    luaDomainMatch,
-		"MatchAny": luaDomainMatchAny,
-	}
-	luaIPDirectMethods = map[string]xlua.DirectMethod{
-		"Match":     luaIPMatch,
-		"AnyMatch":  luaIPAnyMatch,
-		"Matches":   luaIPMatches,
-		"FilterIPs": luaIPFilterIPs,
-	}
 )
 
 // RegisterLua makes xray.geodata available to require in an LState.
@@ -36,7 +22,10 @@ func RegisterLua(L *lua.LState) {
 				L.RaiseError("%v", err)
 				return 0
 			}
-			xlua.PushWithDirectMethods(L, matcher, luaDomainDirectMethods)
+			xlua.PushWithDirectMethods(L, matcher, map[string]xlua.DirectMethod{
+				"Match":    newLuaDomainMatch(xlua.NewSlicePusher[uint32](L)),
+				"MatchAny": luaDomainMatchAny,
+			})
 			return 1
 		}))
 
@@ -51,9 +40,15 @@ func RegisterLua(L *lua.LState) {
 				L.RaiseError("%v", err)
 				return 0
 			}
-			xlua.PushWithDirectMethods(L, matcher, luaIPDirectMethods)
+			xlua.PushWithDirectMethods(L, matcher, map[string]xlua.DirectMethod{
+				"Match":     luaIPMatch,
+				"AnyMatch":  luaIPAnyMatch,
+				"Matches":   luaIPMatches,
+				"FilterIPs": newLuaIPFilterIPs(xlua.NewSlicePusher[net.IP](L)),
+			})
 			return 1
 		}))
+
 		L.Push(module)
 		return 1
 	})
@@ -111,29 +106,33 @@ func luaIPMatches(L *lua.LState) (int, bool) {
 	return 1, true
 }
 
-func luaIPFilterIPs(L *lua.LState) (int, bool) {
-	matcher, ips, ok := readLuaIPMatcherArgs[[]net.IP](L)
-	if !ok {
-		return 0, false
+func newLuaIPFilterIPs(pushIPs func(*lua.LState, []net.IP)) xlua.DirectMethod {
+	return func(L *lua.LState) (int, bool) {
+		matcher, ips, ok := readLuaIPMatcherArgs[[]net.IP](L)
+		if !ok {
+			return 0, false
+		}
+		matched, unmatched := matcher.FilterIPs(ips)
+		pushIPs(L, matched)
+		pushIPs(L, unmatched)
+		return 2, true
 	}
-	matched, unmatched := matcher.FilterIPs(ips)
-	L.Push(luar.New(L, matched))
-	L.Push(luar.New(L, unmatched))
-	return 2, true
 }
 
-func luaDomainMatch(L *lua.LState) (int, bool) {
-	if L.GetTop() == 2 {
-		if value, ok := L.Get(1).(*lua.LUserData); ok {
-			matcher, validMatcher := value.Value.(DomainMatcher)
-			domain, validDomain := L.Get(2).(lua.LString)
-			if validMatcher && validDomain {
-				L.Push(luar.New(L, matcher.Match(string(domain))))
-				return 1, true
+func newLuaDomainMatch(pushMatches func(*lua.LState, []uint32)) xlua.DirectMethod {
+	return func(L *lua.LState) (int, bool) {
+		if L.GetTop() == 2 {
+			if value, ok := L.Get(1).(*lua.LUserData); ok {
+				matcher, validMatcher := value.Value.(DomainMatcher)
+				domain, validDomain := L.Get(2).(lua.LString)
+				if validMatcher && validDomain {
+					pushMatches(L, matcher.Match(string(domain)))
+					return 1, true
+				}
 			}
 		}
+		return 0, false
 	}
-	return 0, false
 }
 
 func luaDomainMatchAny(L *lua.LState) (int, bool) {
