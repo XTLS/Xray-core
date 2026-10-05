@@ -25,20 +25,20 @@ import (
 // Internet Connection Sharing need, so it is only reported.
 type outboundGuard struct {
 	sync.Mutex
-	families  []winipcfg.AddressFamily
-	luid      winipcfg.LUID            // of the interface last checked
-	turnedOff []winipcfg.AddressFamily // where weak host send was turned off on it
-	reported  string                   // the forwarding problem last seen
-	stopped   bool
+	families   []winipcfg.AddressFamily
+	luid       winipcfg.LUID            // of the interface last checked
+	turnedOff  []winipcfg.AddressFamily // where weak host send was turned off on it
+	forwarding bool                     // whether forwarding was on there
+	stopped    bool
 }
 
-// check turns weak host send off on the bound interface, and returns what is
-// wrong if forwarding is on there.
-func (g *outboundGuard) check() string {
+// check turns weak host send off on the bound interface, and warns when
+// forwarding comes on there, but not again while it stays on.
+func (g *outboundGuard) check() {
 	g.Lock()
 	defer g.Unlock()
 	if g.stopped {
-		return ""
+		return
 	}
 	var luid winipcfg.LUID
 	var name string
@@ -51,7 +51,8 @@ func (g *outboundGuard) check() string {
 		g.luid = luid
 	}
 	if luid == 0 {
-		return ""
+		g.forwarding = false
+		return
 	}
 	var forwarding []string
 	for _, family := range g.families {
@@ -74,22 +75,10 @@ func (g *outboundGuard) check() string {
 			errors.LogInfo(context.Background(), "[tun] weak host send turned off for ", familyName(family), " on ", name, " while the TUN runs, as Windows would ignore autoOutboundsInterface")
 		}
 	}
-	if len(forwarding) > 0 {
-		return "forwarding is on for " + strings.Join(forwarding, " and ") + " on " + name + " (Mobile Hotspot and Internet Connection Sharing turn it on), so Windows ignores autoOutboundsInterface there, and Xray's own connections go into the TUN and stall: turn the hotspot off, or have it share the TUN instead of " + name
-	}
-	return ""
-}
-
-// recheck runs check, and warns about forwarding when it comes up. (Windows
-// may turn forwarding on and off a few times meanwhile.)
-func (g *outboundGuard) recheck() {
-	problem := g.check()
-	g.Lock()
-	cameUp := problem != "" && g.reported == ""
-	g.reported = problem
-	g.Unlock()
-	if cameUp {
-		errors.LogWarning(context.Background(), "[tun] ", problem)
+	wasOn := g.forwarding
+	g.forwarding = len(forwarding) > 0
+	if g.forwarding && !wasOn {
+		errors.LogWarning(context.Background(), "[tun] forwarding is on for ", strings.Join(forwarding, " and "), " on ", name, " (Mobile Hotspot and Internet Connection Sharing turn it on), so Windows ignores autoOutboundsInterface there, and Xray's own connections go into the TUN and stall: turn the hotspot off, or have it share the TUN instead of ", name)
 	}
 }
 
