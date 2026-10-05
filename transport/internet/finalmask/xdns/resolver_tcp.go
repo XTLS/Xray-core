@@ -130,13 +130,15 @@ func (r *TCPResolver) Send(p []byte) {
 
 func (r *TCPResolver) Close() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.closed() {
+		r.mu.Unlock()
 		return
 	}
 	close(r.closeCh)
-	if r.conn != nil {
-		_ = r.conn.Close()
+	conn := r.conn
+	r.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
 	}
 	r.wg.Wait()
 	close(r.readCh)

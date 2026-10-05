@@ -80,6 +80,9 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	for i := range c.Resolvers {
 		resolver, err := NewResolver(c.Resolvers[i], dialer)
 		if err != nil {
+			for _, resolver := range resolvers {
+				resolver.Close()
+			}
 			return nil, err
 		}
 		resolvers = append(resolvers, resolver)
