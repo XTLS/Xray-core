@@ -839,13 +839,17 @@ func (c *XDNS) Build() (proto.Message, error) {
 	}
 	for i := range c.Resolvers {
 		for j := range c.Resolvers[i].Addrs {
-			u, e := url.Parse(c.Resolvers[i].Addrs[j])
+			var u *url.URL
+			var e error
+			if !strings.Contains(c.Resolvers[i].Addrs[j], "://") {
+				u, e = url.Parse("udp://" + c.Resolvers[i].Addrs[j])
+			} else {
+				u, e = url.Parse(c.Resolvers[i].Addrs[j])
+			}
 			if e != nil {
 				return nil, e
 			}
 			switch u.Scheme {
-			case "":
-				u.Scheme = "udp"
 			case "tcp", "udp":
 			default:
 				return nil, errors.New("invalid protocol")
