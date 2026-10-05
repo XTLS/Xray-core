@@ -28,7 +28,7 @@ type outboundGuard struct {
 	families  []winipcfg.AddressFamily
 	luid      winipcfg.LUID            // of the interface last checked
 	turnedOff []winipcfg.AddressFamily // where weak host send was turned off on it
-	reported  string                   // the forwarding problem last logged
+	reported  string                   // the forwarding problem last seen
 	stopped   bool
 }
 
@@ -71,23 +71,24 @@ func (g *outboundGuard) check() string {
 		}
 		if !slices.Contains(g.turnedOff, family) {
 			g.turnedOff = append(g.turnedOff, family)
+			errors.LogInfo(context.Background(), "[tun] weak host send turned off for ", familyName(family), " on ", name, " while the TUN runs, as Windows would ignore autoOutboundsInterface")
 		}
-		errors.LogInfo(context.Background(), "[tun] weak host send turned off for ", familyName(family), " on ", name, " while the TUN runs, as Windows would ignore autoOutboundsInterface")
 	}
 	if len(forwarding) > 0 {
-		return "forwarding is on for " + strings.Join(forwarding, " and ") + " on " + name + ", as Mobile Hotspot and Internet Connection Sharing turn it on, so Windows ignores autoOutboundsInterface there, and Xray's own connections go into the TUN and stall"
+		return "forwarding is on for " + strings.Join(forwarding, " and ") + " on " + name + " (Mobile Hotspot and Internet Connection Sharing turn it on), so Windows ignores autoOutboundsInterface there, and Xray's own connections go into the TUN and stall"
 	}
 	return ""
 }
 
-// recheck is check for a running TUN, which logs a forwarding problem once.
+// recheck is check for a running TUN, which logs a forwarding problem when it
+// comes up. (Windows may turn forwarding on and off a few times meanwhile.)
 func (g *outboundGuard) recheck() {
 	problem := g.check()
 	g.Lock()
-	changed := problem != g.reported
+	cameUp := problem != "" && g.reported == ""
 	g.reported = problem
 	g.Unlock()
-	if changed && problem != "" {
+	if cameUp {
 		errors.LogError(context.Background(), "[tun] ", problem)
 	}
 }
