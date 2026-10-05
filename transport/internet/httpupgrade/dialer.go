@@ -22,6 +22,8 @@ type ConnRF struct {
 	net.Conn
 	Req   *http.Request
 	First bool
+	// reader has what has been read past the response and is not returned yet
+	reader *bufio.Reader
 }
 
 func (c *ConnRF) Read(b []byte) (int, error) {
@@ -40,7 +42,18 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 			return 0, errors.New("unrecognized reply")
 		}
 		// drain remaining bufreader
+		if reader.Buffered() > len(b) {
+			c.reader = reader // its buffer is never smaller than 16 bytes
+			return reader.Read(b)
+		}
 		return reader.Read(b[:reader.Buffered()])
+	}
+	if c.reader != nil {
+		n, err := c.reader.Read(b)
+		if c.reader.Buffered() == 0 {
+			c.reader = nil
+		}
+		return n, err
 	}
 	return c.Conn.Read(b)
 }

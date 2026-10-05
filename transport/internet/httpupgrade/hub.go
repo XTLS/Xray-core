@@ -100,7 +100,11 @@ func (s *server) upgrade(conn net.Conn) (stat.Connection, error) {
 	}
 	remoteAddr = http_proto.ApplyTrustedXForwardedFor(req.Header, trustedXFF, remoteAddr)
 
-	return stat.Connection(newConnection(conn, remoteAddr)), nil
+	upgradedConn := newConnection(conn, remoteAddr)
+	if connReader.Buffered() > 0 {
+		upgradedConn.reader = connReader
+	}
+	return stat.Connection(upgradedConn), nil
 }
 
 func (s *server) keepAccepting() {
