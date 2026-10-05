@@ -267,6 +267,16 @@ func (*Handler) Network() []net.Network {
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatch routing.Dispatcher) error {
+	// process has a large frame. It returns before the request is dispatched,
+	// so that the stack of this goroutine can shrink while the connection lasts.
+	var dispatchLink func() error
+	if err := h.process(ctx, network, connection, dispatch, &dispatchLink); err != nil || dispatchLink == nil {
+		return err
+	}
+	return dispatchLink()
+}
+
+func (h *Handler) process(ctx context.Context, network net.Network, connection stat.Connection, dispatch routing.Dispatcher, dispatchLink *func() error) error {
 	iConn := stat.TryUnwrapStatsConn(connection)
 
 	if h.decryption != nil {
@@ -622,13 +632,16 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
 	}
 
-	if err := dispatch.DispatchLink(
-		ctx, request.Destination(), &transport.Link{
-			Reader: clientReader,
-			Writer: clientWriter,
-		},
-	); err != nil {
-		return errors.New("failed to dispatch request").Base(err)
+	*dispatchLink = func() error {
+		if err := dispatch.DispatchLink(
+			ctx, request.Destination(), &transport.Link{
+				Reader: clientReader,
+				Writer: clientWriter,
+			},
+		); err != nil {
+			return errors.New("failed to dispatch request").Base(err)
+		}
+		return nil
 	}
 	return nil
 }
