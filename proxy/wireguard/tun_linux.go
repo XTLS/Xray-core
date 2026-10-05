@@ -20,9 +20,7 @@ import (
 	"golang.zx2c4.com/wireguard/tun"
 )
 
-var (
-	tableIndex atomic.Uint32
-)
+var tableIndex atomic.Uint32
 
 func init() {
 	tableIndex.Store(10230)
