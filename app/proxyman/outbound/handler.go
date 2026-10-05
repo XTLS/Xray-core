@@ -272,7 +272,17 @@ func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connecti
 		h.SetOutboundGateway(ctx, ob)
 	}
 
-	conn, err := internet.Dial(ctx, dest, h.streamSettings)
+	// The caller's goroutine usually lives as long as the connection. A stack that has grown for the dial is given
+	// back at later garbage collections at best, and not at all if what waits on it takes over a quarter of it.
+	// Dial in a goroutine that ends right after.
+	var conn stat.Connection
+	var err error
+	done := make(chan struct{})
+	go func() {
+		conn, err = internet.Dial(ctx, dest, h.streamSettings)
+		close(done)
+	}()
+	<-done
 	conn = h.getStatCouterConnection(conn)
 	return conn, err
 }
