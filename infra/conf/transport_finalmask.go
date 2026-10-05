@@ -15,7 +15,6 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -799,30 +798,13 @@ type XDNSDomain struct {
 	Edns0      int32   `json:"edns0"`
 }
 
-type XDNSResolverTCP struct {
-	Addr string `json:"addr"`
-}
-
-func (c *XDNSResolverTCP) Build() (proto.Message, error) {
-	return &xdns.TCPResolverProto{Addr: c.Addr}, nil
-}
-
-type XDNSResolverUDP struct {
-	Addr string `json:"addr"`
-}
-
-func (c *XDNSResolverUDP) Build() (proto.Message, error) {
-	return &xdns.UDPResolverProto{Addr: c.Addr}, nil
-}
-
-var xdnsLoader = NewJSONConfigLoader(ConfigCreatorCache{
-	"tcp": func() interface{} { return new(XDNSResolverTCP) },
-	"udp": func() interface{} { return new(XDNSResolverUDP) },
-}, "type", "settings")
-
 type XDNSResolver struct {
-	Type     string          `json:"type"`
-	Settings json.RawMessage `json:"settings"`
+	Type string `json:"type"`
+	Addr string `json:"addr"`
+}
+
+func (c *XDNSResolver) Build() (proto.Message, error) {
+	return &xdns.ResolverProto{Addr: c.Addr}, nil
 }
 
 type XDNS struct {
@@ -833,7 +815,7 @@ type XDNS struct {
 
 func (c *XDNS) Build() (proto.Message, error) {
 	var domains []*xdns.DomainProto
-	var resolvers []*serial.TypedMessage
+	var resolvers []*xdns.ResolverProto
 	for i := range c.Domains {
 		if c.Domains[i].LenLimit == 0 {
 			c.Domains[i].LenLimit = 255
@@ -859,15 +841,7 @@ func (c *XDNS) Build() (proto.Message, error) {
 		})
 	}
 	for i := range c.Resolvers {
-		config, err := xdnsLoader.LoadWithID(c.Resolvers[i].Settings, c.Resolvers[i].Type)
-		if err != nil {
-			return nil, err
-		}
-		pm, err := config.(interface{ Build() (proto.Message, error) }).Build()
-		if err != nil {
-			return nil, err
-		}
-		resolvers = append(resolvers, serial.ToTypedMessage(pm))
+		resolvers = append(resolvers, &xdns.ResolverProto{Type: c.Resolvers[i].Type, Addr: c.Resolvers[i].Addr})
 	}
 	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
 		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")

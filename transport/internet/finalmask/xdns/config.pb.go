@@ -7,7 +7,7 @@
 package xdns
 
 import (
-	serial "github.com/xtls/xray-core/common/serial"
+	_ "github.com/xtls/xray-core/common/serial"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -98,10 +98,62 @@ func (x *DomainProto) GetEdns0() int32 {
 	return 0
 }
 
+type ResolverProto struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Addr          string                 `protobuf:"bytes,2,opt,name=addr,proto3" json:"addr,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolverProto) Reset() {
+	*x = ResolverProto{}
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolverProto) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolverProto) ProtoMessage() {}
+
+func (x *ResolverProto) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolverProto.ProtoReflect.Descriptor instead.
+func (*ResolverProto) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ResolverProto) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *ResolverProto) GetAddr() string {
+	if x != nil {
+		return x.Addr
+	}
+	return ""
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Domains       []*DomainProto         `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
-	Resolvers     []*serial.TypedMessage `protobuf:"bytes,2,rep,name=resolvers,proto3" json:"resolvers,omitempty"`
+	Resolvers     []*ResolverProto       `protobuf:"bytes,2,rep,name=resolvers,proto3" json:"resolvers,omitempty"`
 	ExtraPoll     int32                  `protobuf:"varint,3,opt,name=extra_poll,json=extraPoll,proto3" json:"extra_poll,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -109,7 +161,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[1]
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -121,7 +173,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[1]
+	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -134,7 +186,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{1}
+	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Config) GetDomains() []*DomainProto {
@@ -144,7 +196,7 @@ func (x *Config) GetDomains() []*DomainProto {
 	return nil
 }
 
-func (x *Config) GetResolvers() []*serial.TypedMessage {
+func (x *Config) GetResolvers() []*ResolverProto {
 	if x != nil {
 		return x.Resolvers
 	}
@@ -158,94 +210,6 @@ func (x *Config) GetExtraPoll() int32 {
 	return 0
 }
 
-type TCPResolverProto struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Addr          string                 `protobuf:"bytes,1,opt,name=addr,proto3" json:"addr,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TCPResolverProto) Reset() {
-	*x = TCPResolverProto{}
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TCPResolverProto) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TCPResolverProto) ProtoMessage() {}
-
-func (x *TCPResolverProto) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TCPResolverProto.ProtoReflect.Descriptor instead.
-func (*TCPResolverProto) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *TCPResolverProto) GetAddr() string {
-	if x != nil {
-		return x.Addr
-	}
-	return ""
-}
-
-type UDPResolverProto struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Addr          string                 `protobuf:"bytes,1,opt,name=addr,proto3" json:"addr,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UDPResolverProto) Reset() {
-	*x = UDPResolverProto{}
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UDPResolverProto) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UDPResolverProto) ProtoMessage() {}
-
-func (x *UDPResolverProto) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_xdns_config_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UDPResolverProto.ProtoReflect.Descriptor instead.
-func (*UDPResolverProto) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *UDPResolverProto) GetAddr() string {
-	if x != nil {
-		return x.Addr
-	}
-	return ""
-}
-
 var File_transport_internet_finalmask_xdns_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
@@ -257,16 +221,15 @@ const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\vlabel_limit\x18\x03 \x01(\x05R\n" +
 	"labelLimit\x12\x14\n" +
 	"\x05types\x18\x04 \x03(\x05R\x05types\x12\x14\n" +
-	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"\xb6\x01\n" +
+	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"7\n" +
+	"\rResolverProto\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
+	"\x04addr\x18\x02 \x01(\tR\x04addr\"\xcb\x01\n" +
 	"\x06Config\x12M\n" +
-	"\adomains\x18\x01 \x03(\v23.xray.transport.internet.finalmask.xdns.DomainProtoR\adomains\x12>\n" +
-	"\tresolvers\x18\x02 \x03(\v2 .xray.common.serial.TypedMessageR\tresolvers\x12\x1d\n" +
+	"\adomains\x18\x01 \x03(\v23.xray.transport.internet.finalmask.xdns.DomainProtoR\adomains\x12S\n" +
+	"\tresolvers\x18\x02 \x03(\v25.xray.transport.internet.finalmask.xdns.ResolverProtoR\tresolvers\x12\x1d\n" +
 	"\n" +
-	"extra_poll\x18\x03 \x01(\x05R\textraPoll\"&\n" +
-	"\x10TCPResolverProto\x12\x12\n" +
-	"\x04addr\x18\x01 \x01(\tR\x04addr\"&\n" +
-	"\x10UDPResolverProto\x12\x12\n" +
-	"\x04addr\x18\x01 \x01(\tR\x04addrB\x94\x01\n" +
+	"extra_poll\x18\x03 \x01(\x05R\textraPollB\x94\x01\n" +
 	"*com.xray.transport.internet.finalmask.xdnsP\x01Z;github.com/xtls/xray-core/transport/internet/finalmask/xdns\xaa\x02&Xray.Transport.Internet.Finalmask.Xdnsb\x06proto3"
 
 var (
@@ -281,17 +244,15 @@ func file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_finalmask_xdns_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_xdns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_transport_internet_finalmask_xdns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_transport_internet_finalmask_xdns_config_proto_goTypes = []any{
-	(*DomainProto)(nil),         // 0: xray.transport.internet.finalmask.xdns.DomainProto
-	(*Config)(nil),              // 1: xray.transport.internet.finalmask.xdns.Config
-	(*TCPResolverProto)(nil),    // 2: xray.transport.internet.finalmask.xdns.TCPResolverProto
-	(*UDPResolverProto)(nil),    // 3: xray.transport.internet.finalmask.xdns.UDPResolverProto
-	(*serial.TypedMessage)(nil), // 4: xray.common.serial.TypedMessage
+	(*DomainProto)(nil),   // 0: xray.transport.internet.finalmask.xdns.DomainProto
+	(*ResolverProto)(nil), // 1: xray.transport.internet.finalmask.xdns.ResolverProto
+	(*Config)(nil),        // 2: xray.transport.internet.finalmask.xdns.Config
 }
 var file_transport_internet_finalmask_xdns_config_proto_depIdxs = []int32{
 	0, // 0: xray.transport.internet.finalmask.xdns.Config.domains:type_name -> xray.transport.internet.finalmask.xdns.DomainProto
-	4, // 1: xray.transport.internet.finalmask.xdns.Config.resolvers:type_name -> xray.common.serial.TypedMessage
+	1, // 1: xray.transport.internet.finalmask.xdns.Config.resolvers:type_name -> xray.transport.internet.finalmask.xdns.ResolverProto
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -310,7 +271,7 @@ func file_transport_internet_finalmask_xdns_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_xdns_config_proto_rawDesc), len(file_transport_internet_finalmask_xdns_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
