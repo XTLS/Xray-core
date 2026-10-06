@@ -26,12 +26,15 @@ func (r *posixReader) Init(bs []*Buffer) {
 	r.iovecs = iovecs
 }
 
-func (r *posixReader) Read(fd uintptr) int32 {
+func (r *posixReader) Read(fd uintptr) (int32, error) {
 	n, _, e := syscall.Syscall(syscall.SYS_READV, fd, uintptr(unsafe.Pointer(&r.iovecs[0])), uintptr(len(r.iovecs)))
-	if e != 0 {
-		return -1
+	if e == syscall.EAGAIN || e == syscall.EINTR {
+		return -1, nil
 	}
-	return int32(n)
+	if e != 0 {
+		return -1, e
+	}
+	return int32(n), nil
 }
 
 func (r *posixReader) Clear() {

@@ -20,12 +20,15 @@ func (r *unixReader) Init(bs []*Buffer) {
 	r.iovs = iovs
 }
 
-func (r *unixReader) Read(fd uintptr) int32 {
+func (r *unixReader) Read(fd uintptr) (int32, error) {
 	n, e := unix.Readv(int(fd), r.iovs)
-	if e != nil {
-		return -1
+	if e == unix.EAGAIN || e == unix.EINTR {
+		return -1, nil
 	}
-	return int32(n)
+	if e != nil {
+		return -1, e
+	}
+	return int32(n), nil
 }
 
 func (r *unixReader) Clear() {

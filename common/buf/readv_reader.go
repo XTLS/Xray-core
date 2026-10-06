@@ -5,6 +5,7 @@ package buf
 
 import (
 	"io"
+	"os"
 	"sync/atomic"
 	"syscall"
 
@@ -46,7 +47,8 @@ func (s *allocStrategy) Alloc() []*Buffer {
 
 type multiReader interface {
 	Init([]*Buffer)
-	Read(fd uintptr) int32
+	// Read returns -1 and no error if there is nothing to read yet.
+	Read(fd uintptr) (int32, error)
 	Clear()
 }
 
@@ -77,8 +79,13 @@ func (r *ReadVReader) readMulti() (MultiBuffer, error) {
 
 	r.mr.Init(bs)
 	var nBytes int32
+	var rerr error
 	err := r.rawConn.Read(func(fd uintptr) bool {
-		n := r.mr.Read(fd)
+		n, e := r.mr.Read(fd)
+		if e != nil {
+			rerr = e
+			return true
+		}
 		if n < 0 {
 			return false
 		}
@@ -88,6 +95,9 @@ func (r *ReadVReader) readMulti() (MultiBuffer, error) {
 	})
 	r.mr.Clear()
 
+	if err == nil && rerr != nil {
+		err = os.NewSyscallError("readv", rerr)
+	}
 	if err != nil {
 		ReleaseMulti(MultiBuffer(bs))
 		return nil, err
