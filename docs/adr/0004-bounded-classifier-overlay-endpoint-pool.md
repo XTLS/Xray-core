@@ -1,11 +1,12 @@
 # ADR-0004: Ограниченный pool private classifier endpoint
 
 - Status: Accepted
-- Date: 2026-10-01
+- Date: 2026-10-01; уточнение recovery: 2026-10-07
 - Repo-owner: `evasionlab/Xray-core`
 - Consumers: `evasionlab/XrayR`, `vpn.infra`, `dns-route-cache`; `vpn.bot` сохраняет logical routing owner.
 - Org-wide record: `evasionlab/infra/docs/adr/ADR-20261001-01-dns-cache-first-connection-and-l1-persistence.md`, дополнение owner о шести colocated classifier с общим L2.
-- Implementation: source подготовлен; production pool не включён.
+- Implementation: уточнение принято для source-разработки; не Rolled. Canary207 возвращён к singular transport после нарушения error gate. Новый pool rollout требует отдельного artifact/canary evidence.
+- Org-wide recovery contract: `evasionlab/infra/docs/architecture/kolmogorov-ha-data-consumer-contract-20261006.md`.
 
 ## Контекст и проблема
 
@@ -38,19 +39,25 @@ environment proxy, DNS или redirects. Ошибка private pool не пере
 маршрут каждого pin через encrypted overlay проверяются rollout owner.
 
 Каждая shared domain job выбирает rotating start; максимум шесть последовательных
-backend попыток, по одной на configured member, пока не истёк общий deadline.
-Это позволяет дойти до резервного member в той же операции после отказа трёх
-основных; известные failures по-прежнему пропускаются по cooldown.
-`requestTimeoutMillis` — общий HTTP deadline всей операции,
-не по одному полному timeout на backend. Каждая попытка получает максимум
-`timeout / min(6, poolSize)` (150/200 мс / 6 = 25/33,3 мс;
-150/200 мс / 2 = 75/100 мс). Время предыдущих попыток и overhead входят
-в тот же общий deadline, поэтому последняя попытка может получить меньше времени.
-Cancellation/Close останавливают переключения. Pool retry разрешён только для
-transport failures и HTTP 502/503/504. Pending, ready other, stale и любой
-неретраибельный HTTP/invalid payload завершают операцию; 401/403/429 не вызывают
-fanout. Первый `firstDone` закрывается после всей этой операции, не после
-ошибки первого backend. Общий worker/job/retry admission остаётся конечным.
+backend попыток, по одной на eligible configured member, пока не истёк общий
+deadline. `requestTimeoutMillis` ограничивает **всю операцию**, не каждую попытку
+по отдельности. При configured 150 мс здоровый первый member получает все
+оставшиеся 150 мс: бюджет больше не делится на число healthy/eligible members.
+После быстрого transport failure или HTTP 502/503/504 следующий eligible member
+получает только оставшееся время того же deadline. Отдельных concurrent/hedged
+запросов нет. Pending, ready other, stale и любой неретраибельный HTTP/invalid
+payload завершают операцию; 401/403/429 не вызывают fanout.
+
+Если первый member молча завис, он может исчерпать одну фоновую операцию.
+Она завершается ошибкой в общем deadline; retryable timeout записывает passive
+cooldown **до** возврата даже при истёкшем parent deadline. Следующая eligible
+операция может выбрать выжившего. Это не обещание успешного failover в той же
+операции и не гарантия zero errors или recovery меньше 150 мс. Явная внешняя
+cancellation/Close прекращает попытки без ложного health penalty.
+Первый `firstDone` закрывается после всей операции, не после первой backend
+ошибки. Общий worker/job/retry admission остаётся конечным. Core не добавляет
+Redis writes, SET replay или повтор side effects: прежний domain-only classifier
+body и серверные lease/fill fences сохраняются.
 
 Passive endpoint cooldown 250 мс–5 с хранит максимум шесть состояний отдельно
 от cache mutex. Уже известные failures пропускаются; полностью cooling pool
@@ -60,11 +67,14 @@ Low-cardinality stats: pool size, attempts, failovers, cooldown skips; нет UR
 domain, token или user labels.
 
 **Caller `routeWaitMillis` остаётся независимым общим бюджетом выбора маршрута**
-по ADR-0003: canary 25 мс включает queue/admission. Worker может завершиться позже
-и наполнить L1 для следующего connection. Blackholed первый backend с 25/33,3 мс
-share для шести members либо 75/100 мс для двух не гарантирует текущему connection
-RU route; последующие запросы могут
-пропустить backend по cooldown. Здоровые relay пути не получают новый 8 мс cutoff.
+по ADR-0003. Canary207 имеет actual routeWait0; это значение не меняется.
+Иные configured waiter budgets тоже сохраняются. Холодный connection продолжает
+существующий static/default fallback; valid L1 и bounded stale grace остаются
+рабочими. Worker может завершиться позже и наполнить L1 для следующих connections.
+Recovery включает существующие per-domain retries 250 мс–5 с с jitter, shared
+failure cooldown после трёх failures до 5 с, scheduler 25 мс и domain total budget
+30 с. Эти пределы не меняются; elapsed recovery доказывается реальным canary,
+а не прямым `fetch` или readiness. Не обещается immediate next job.
 
 ## Cache semantics
 
@@ -86,8 +96,11 @@ Token не участвует в snapshot identity. Absolute TTL и elapsed subt
 
 Focused HTTP tests используют private pins с loopback DialContext seam и fake
 token; production loopback pin не разрешается. Проверяются ready failover в
-одной shared job, отмена, max3/общий timeout, независимый 25 мс waiter и позднее
-наполнение L1, отсутствие fanout при pending/auth/429/redirect/invalid response,
+одной shared operation после fast refusal, healthy3×80 мс при общем150 мс,
+silent first→одна bounded failure→cooldown→следующая eligible operation,
+all-blackhole150/200 мс с одной попыткой и сохранённым cooldown,
+отмена без ложного health penalty, max6/общий timeout, независимый25 мс waiter
+и actual scheduler recovery при routeWait0 с сохранением warm L1/deadlines, отсутствие fanout при pending/auth/429/redirect/invalid response,
 bounded concurrent health state, proxy/token allowlist и snapshot/reload
 совместимость без продления TTL. Старые TTL/SWR/wait tests сохраняются.
 
@@ -102,7 +115,13 @@ central classifier; целевой pool — шесть DNS узлов. Fleet exp
 
 DNS round-robin не даёт bounded отказа текущего backend. Новый central proxy
 создаёт дополнительный отказ; local proxy добавляет lifecycle на каждом XrayR.
-Шесть параллельных RPC отвергнуты: amplification без необходимости.
+Шесть параллельных RPC и hedging отвергнуты: amplification и дополнительные
+запросы до authoritative pending/auth ответа. Равные короткие shares тоже
+отвергнуты: три здоровых80 мс endpoints отбрасывались при150 мс logical budget.
+Увеличение общего timeout или routeWait маскирует проблему и не принято.
+Sequential full-remaining сохраняет здоровые ответы, но явно допускает одну
+failed background operation при silent первом endpoint; последующий recovery
+ограничен прежними retries и проверяется canary.
 
 Максимальное число backend calls на shared operation увеличивается с одного до
 шести без увеличения общего HTTP deadline; фоновые domain retries по-прежнему

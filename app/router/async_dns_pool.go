@@ -150,9 +150,8 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 	if len(candidates) == 0 {
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: errors.New("async DNS endpoint pool is cooling down")}
 	}
-	// Allocate only across eligible remaining members. Cooldown exclusions and
-	// fast failures must not discard time from the shared operation deadline.
-	deadline, _ := ctx.Deadline()
+	// Healthy members keep the full remaining operation deadline. A silent
+	// failure may exhaust this job; passive cooldown protects later jobs.
 	var lastErr error
 	for i, endpoint := range candidates {
 		if err := ctx.Err(); err != nil {
@@ -162,19 +161,21 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 			m.stats.poolFailovers.Add(1)
 		}
 		m.stats.poolAttempts.Add(1)
-		share := time.Until(deadline) / time.Duration(len(candidates)-i)
-		attempt, stop := context.WithTimeout(ctx, share)
-		response, err := m.fetchEndpoint(attempt, endpoint, domain)
-		stop()
+		response, err := m.fetchEndpoint(ctx, endpoint, domain)
 		if err == nil {
 			m.pool.record(endpoint, false, time.Now())
 			return response, nil // Pending/stale/expired/invalid shape never fan out.
 		}
 		lastErr = err
-		if !asyncDNSPoolRetryable(err) || ctx.Err() != nil {
+		retryable := asyncDNSPoolRetryable(err)
+		// Deadline exhaustion still demotes a failed backend. Explicit caller
+		// cancellation is not evidence that the backend is unhealthy.
+		if retryable && ctx.Err() != context.Canceled {
+			m.pool.record(endpoint, true, time.Now())
+		}
+		if !retryable || ctx.Err() != nil {
 			return nil, err // Auth, overload, redirects and invalid payloads stop here.
 		}
-		m.pool.record(endpoint, true, time.Now())
 	}
 	return nil, lastErr
 }
