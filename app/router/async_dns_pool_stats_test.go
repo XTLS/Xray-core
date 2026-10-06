@@ -57,8 +57,12 @@ func TestAsyncDNSPoolAttemptStatsTerminalResultsDoNotFanOut(t *testing.T) {
 		pending, http, invalid uint64
 	}{
 		{"pending", 200, `{"state":"pending","retryAfterMillis":5000}`, 1, 0, 0},
-		{"auth", 401, "", 0, 1, 0}, {"forbidden", 403, "", 0, 1, 0}, {"overload", 429, "", 0, 1, 0}, {"other-http", 500, "", 0, 1, 0},
-		{"invalid-json", 200, "{", 0, 0, 1}, {"invalid-shape", 200, `{"state":"invalid"}`, 0, 0, 1},
+		{"auth", 401, "", 0, 1, 0},
+		{"forbidden", 403, "", 0, 1, 0},
+		{"overload", 429, "", 0, 1, 0},
+		{"other-http", 500, "", 0, 1, 0},
+		{"invalid-json", 200, "{", 0, 0, 1},
+		{"invalid-shape", 200, `{"state":"invalid"}`, 0, 0, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(tc.status); io.WriteString(w, tc.body) }, func(w http.ResponseWriter, r *http.Request) { t.Error("terminal result retried") })
