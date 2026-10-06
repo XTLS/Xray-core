@@ -150,9 +150,9 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 	if len(candidates) == 0 {
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: errors.New("async DNS endpoint pool is cooling down")}
 	}
-	// Every configured member can be reached when earlier members fail. Shares
-	// remain inside the same operation deadline, including a six-member pool.
-	share := m.requestTimeout / time.Duration(min(asyncDNSPoolMaxAttempts, len(m.pool.states)))
+	// Allocate only across eligible remaining members. Cooldown exclusions and
+	// fast failures must not discard time from the shared operation deadline.
+	deadline, _ := ctx.Deadline()
 	var lastErr error
 	for i, endpoint := range candidates {
 		if err := ctx.Err(); err != nil {
@@ -162,6 +162,7 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 			m.stats.poolFailovers.Add(1)
 		}
 		m.stats.poolAttempts.Add(1)
+		share := time.Until(deadline) / time.Duration(len(candidates)-i)
 		attempt, stop := context.WithTimeout(ctx, share)
 		response, err := m.fetchEndpoint(attempt, endpoint, domain)
 		stop()

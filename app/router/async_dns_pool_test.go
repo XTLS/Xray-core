@@ -427,3 +427,52 @@ func TestAsyncDNSPoolSnapshotIdentityAndReloadSemantics(t *testing.T) {
 		t.Fatal("pool membership change accepted persistent or inherited classifications")
 	}
 }
+
+func TestAsyncDNSPoolCooldownSurvivorUsesSharedBudget(t *testing.T) {
+	var contacted atomic.Int32
+	fast := func(w http.ResponseWriter, r *http.Request) {
+		t.Error("cooling member contacted")
+		fmt.Fprint(w, poolReady)
+	}
+	survivor := func(w http.ResponseWriter, r *http.Request) {
+		contacted.Add(1)
+		time.Sleep(80 * time.Millisecond)
+		fmt.Fprint(w, poolReady)
+	}
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, fast, fast, survivor)
+	m.pool.mu.Lock()
+	for i := 0; i < 2; i++ {
+		m.pool.states[i].cooldownUntil = time.Now().Add(time.Second)
+	}
+	m.pool.mu.Unlock()
+	start := time.Now()
+	response, err := m.fetchContext(context.Background(), "fixture.example")
+	if err != nil || response == nil || contacted.Load() != 1 {
+		t.Fatalf("healthy survivor lost unused shared budget: response=%v err=%v calls=%d elapsed=%v", response, err, contacted.Load(), time.Since(start))
+	}
+	if time.Since(start) >= 150*time.Millisecond {
+		t.Fatal("shared deadline exceeded")
+	}
+}
+
+func TestAsyncDNSPoolFastFailuresPreserveRemainingBudget(t *testing.T) {
+	var attempts atomic.Int32
+	failed := func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	survivor := func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
+		time.Sleep(80 * time.Millisecond)
+		fmt.Fprint(w, poolReady)
+	}
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, failed, failed, survivor)
+	start := time.Now()
+	response, err := m.fetchContext(context.Background(), "fixture.example")
+	if err != nil || response == nil || attempts.Load() != 3 {
+		t.Fatalf("fast failures discarded shared budget: response=%v err=%v attempts=%d", response, err, attempts.Load())
+	}
+	if time.Since(start) >= 150*time.Millisecond {
+		t.Fatal("shared deadline exceeded")
+	}
+}
