@@ -5,7 +5,7 @@
 - Repo-owner: `evasionlab/Xray-core`
 - Consumers: `evasionlab/XrayR`, `vpn.infra`, `dns-route-cache`; `vpn.bot` сохраняет logical routing owner.
 - Org-wide record: `evasionlab/infra/docs/adr/ADR-20261001-01-dns-cache-first-connection-and-l1-persistence.md`, дополнение owner о шести colocated classifier с общим L2.
-- Implementation: уточнение принято для source-разработки; не Rolled. Canary207 возвращён к singular transport после нарушения error gate. Новый pool rollout требует отдельного artifact/canary evidence.
+- Implementation: уточнение принято для source-разработки; не Rolled. Canary207 с validity fix прошёл обычные traffic gates, но проверка central endpoint loss выявила исчерпание бюджета известным failed probe. Fleet остаётся HOLD; исправление probe требует отдельного artifact/canary evidence.
 - Org-wide recovery contract: `evasionlab/infra/docs/architecture/kolmogorov-ha-data-consumer-contract-20261006.md`.
 
 ## Контекст и проблема
@@ -75,6 +75,26 @@ Recovery включает существующие per-domain retries 250 мс�
 failure cooldown после трёх failures до 5 с, scheduler 25 мс и domain total budget
 30 с. Эти пределы не меняются; elapsed recovery доказывается реальным canary,
 а не прямым `fetch` или readiness. Не обещается immediate next job.
+
+### Повторная попытка известного failed endpoint
+
+После passive cooldown endpoint с существующим `failures > 0` остаётся
+известным failed probe. Если после него в текущем списке есть ещё не
+пенализированный candidate, только такой probe получает child deadline
+`min(50 мс, remaining / 2)` внутри прежнего shared deadline. Если child budget
+меньше 1 мс, probe пропускается без HTTP и нового health penalty. Timeout child
+демотирует endpoint, но живой parent позволяет попробовать successor в той же
+операции. Explicit parent cancellation не создаёт дополнительный health penalty.
+Never-failed endpoint и случай без доступного unpenalized successor сохраняют
+весь remaining budget; healthy3×80 мс и общий150 мс не меняются.
+
+Последствие: восстановившийся known endpoint с ответом80 мс может оставаться
+пенализированным, пока есть здоровые peers; не обещается восстановление каждого
+member через короткий probe. Если все candidates penalized, полный remaining
+budget позволяет восстановить и медленный member. Новых фоновых probes,
+workers, retry schedules, flags или расширения request/routeWait budgets нет.
+Первый неизвестный silent отказ по-прежнему может завершить background job
+ошибкой; valid L1, stale grace и routeWait0 fallback сохраняют прежний контракт.
 
 ## Cache semantics
 
