@@ -36,6 +36,7 @@ func TestAsyncDNSDomainInputMatchesClassifierContract(t *testing.T) {
 		}
 	}
 }
+
 func invalidDomainInputs() []string {
 	return []string{
 		"", " . ", "synthetic..invalid", ".example", "example..", "-bad.example", "bad-.example", "bad name.example", "bad/name.example", "bad:443", "https://example", "*.example", "пример.рф", "例子.example", "127.0.0.1", "192.0.2.1.", "::1", "[::1]", strings.Repeat("a", 64) + ".example", strings.Repeat("a", 254),
