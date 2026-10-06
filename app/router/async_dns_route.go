@@ -523,7 +523,23 @@ func (m *AsyncDNSRouteMatcher) queueJob(domain string, job *asyncDNSJob, now tim
 }
 
 func normalizeAsyncDNSDomain(domain string) string {
-	return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+	domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+	// Match the classifier's domain-only input contract before creating a job.
+	// Invalid targets keep the existing fallback; they cannot acquire L1 state.
+	if domain == "" || len(domain) > 253 || net.ParseIP(domain) != nil {
+		return ""
+	}
+	for _, label := range strings.Split(domain, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return ""
+		}
+		for _, c := range label {
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+				return ""
+			}
+		}
+	}
+	return domain
 }
 
 func (m *AsyncDNSRouteMatcher) runWorker() {
