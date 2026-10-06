@@ -26,6 +26,7 @@ type asyncDNSEndpointState struct {
 	endpoint      string
 	failures      uint8
 	cooldownUntil time.Time
+	metrics       *asyncDNSPoolEndpointCounters
 }
 
 // The fixed-size pool is operator transport configuration, never owner JSON.
@@ -65,7 +66,7 @@ func readAsyncDNSOverlayPool(overlay, token string) (*asyncDNSEndpointPool, erro
 			return nil, errors.New("async DNS overlay pool endpoints must be distinct")
 		}
 		p.allowed[endpoint] = struct{}{}
-		p.states = append(p.states, asyncDNSEndpointState{endpoint: endpoint})
+		p.states = append(p.states, asyncDNSEndpointState{endpoint: endpoint, metrics: &asyncDNSPoolEndpointCounters{}})
 	}
 	// Reordering and passive failover do not invalidate persisted classifications.
 	// Membership changes do; the owner ID separately binds resolver/GeoIP semantics.
@@ -87,6 +88,7 @@ func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]string, int) {
 		state := &p.states[(start+offset)%len(p.states)]
 		if now.Before(state.cooldownUntil) {
 			skipped++
+			state.metrics.cooldownSkips.Add(1)
 			continue
 		}
 		if len(candidates) < asyncDNSPoolMaxAttempts {
@@ -161,7 +163,9 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 			m.stats.poolFailovers.Add(1)
 		}
 		m.stats.poolAttempts.Add(1)
+		started := time.Now()
 		response, err := m.fetchEndpoint(ctx, endpoint, domain)
+		m.pool.observe(endpoint, response, err, time.Since(started))
 		if err == nil {
 			m.pool.record(endpoint, false, time.Now())
 			return response, nil // Pending/stale/expired/invalid shape never fan out.

@@ -583,7 +583,13 @@ func (m *AsyncDNSRouteMatcher) runScheduler() {
 					" inheritedEntries=", s.InheritedEntries, " inheritedJobs=", s.InheritedJobs,
 					" routeWaitMillis=", m.routeWait.Milliseconds(), " waiters=", s.Waiters, " waitStarts=", s.WaitStarts,
 					" waitDrops=", s.WaitDrops, " waitTimeouts=", s.WaitTimeouts, " expirations=", s.Expirations,
-					" snapshotWrites=", s.SnapshotWrites, " snapshotErrors=", s.SnapshotErrors, " restoredEntries=", s.RestoredEntries)
+					" snapshotWrites=", s.SnapshotWrites, " snapshotErrors=", s.SnapshotErrors, " restoredEntries=", s.RestoredEntries,
+					" poolSize=", s.PoolSize, " poolAttempts=", s.PoolAttempts, " poolFailovers=", s.PoolFailovers, " poolCooldownSkips=", s.PoolCooldownSkips)
+				if m.pool != nil {
+					for i, endpoint := range m.pool.endpointStats() {
+						errors.LogInfo(m.ctx, endpoint.logLine(s.MatcherID, i))
+					}
+				}
 				nextStats = now.Add(time.Minute)
 			}
 		}
