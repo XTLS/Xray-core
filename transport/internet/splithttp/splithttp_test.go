@@ -6,12 +6,14 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	gonet "net"
 	"net/http"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"golang.org/x/net/http2"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
@@ -464,4 +466,33 @@ func Test_maxUpload(t *testing.T) {
 	}
 
 	common.Must(listen.Close())
+}
+
+func Test_ListenXH_HTTP2MaxFrameSize(t *testing.T) {
+	listenPort := tcp.PickPort()
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "/sh"},
+	}, func(conn stat.Connection) { conn.Close() })
+	common.Must(err)
+	defer listen.Close()
+
+	conn, err := gonet.Dial("tcp", gonet.JoinHostPort("127.0.0.1", listenPort.String()))
+	common.Must(err)
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	common.Must2(io.WriteString(conn, http2.ClientPreface))
+	framer := http2.NewFramer(conn, conn)
+	common.Must(framer.WriteSettings())
+
+	frame, err := framer.ReadFrame()
+	common.Must(err)
+	settings, ok := frame.(*http2.SettingsFrame)
+	if !ok {
+		t.Fatalf("first frame from the server is %T, not SETTINGS", frame)
+	}
+	size, ok := settings.Value(http2.SettingMaxFrameSize)
+	if !ok || size != 16<<10 {
+		t.Fatalf("server advertises SETTINGS_MAX_FRAME_SIZE %d (present: %v), want %d", size, ok, 16<<10)
+	}
 }

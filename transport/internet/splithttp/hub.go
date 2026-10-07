@@ -562,6 +562,12 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			ReadHeaderTimeout: time.Second * 4,
 			MaxHeaderBytes:    l.config.GetNormalizedServerMaxHeaderBytes(),
 			Protocols:         protocols,
+			// A Go HTTP/2 client holds a request body buffer as large as the
+			// max frame size the server advertises (capped at 512 KiB) for the
+			// whole life of a stream, and an XHTTP stream lives as long as the
+			// connection it carries. Advertising the protocol's default 16 KiB
+			// instead of Go's 1 MiB keeps that buffer at 16 KiB per stream.
+			HTTP2: &http.HTTP2Config{MaxReadFrameSize: 16 << 10},
 		}
 		go func() {
 			if err := l.server.Serve(l.listener); err != nil {
