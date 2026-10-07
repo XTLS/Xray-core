@@ -11,13 +11,24 @@ import (
 
 func TestAsyncDNSPoolExpiredDeadHeaderStallDoesNotOmitCooledFastPeer(t *testing.T) {
 	var calls [3]atomic.Int32
-	var active atomic.Int32
+	var active, entered atomic.Int32
+	allEntered := make(chan struct{})
 	handler := func(i int) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			calls[i].Add(1)
 			active.Add(1)
 			defer active.Add(-1)
+			if entered.Add(1) == 3 {
+				close(allEntered)
+			}
 			if i == 2 {
+				// A fast winner may otherwise cancel a launched peer before its
+				// handler runs. Gate the response to prove all three real arrivals.
+				select {
+				case <-allEntered:
+				case <-r.Context().Done():
+					return
+				}
 				io.WriteString(w, poolReady)
 				return
 			}
