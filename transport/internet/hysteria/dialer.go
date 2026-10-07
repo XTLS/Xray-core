@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/quic-go"
@@ -35,10 +36,12 @@ type client struct {
 	finalMask    *finalmask.FinalMask
 	quicParams   *internet.QuicParams
 
-	conn    *quic.Conn
-	tr      *quic.Transport
-	pktConn net.PacketConn
-	udpSM   *udpSessionManager
+	conn      *quic.Conn
+	tr        *quic.Transport
+	pktConn   net.PacketConn
+	udpSM     *udpSessionManager
+	aliveTCP  *atomic.Int64
+	lastAlive time.Time
 }
 
 func (c *client) status() status {
@@ -235,12 +238,15 @@ func (c *client) tcp(ctx context.Context) (stat.Connection, error) {
 		return nil, err
 	}
 
+	c.lastAlive = time.Now()
+	c.aliveTCP.Add(1)
 	return &interConn{
 		stream: stream,
 		local:  c.conn.LocalAddr(),
 		remote: c.conn.RemoteAddr(),
 
-		client: true,
+		client:   true,
+		aliveTCP: c.aliveTCP,
 	}, nil
 }
 
@@ -258,10 +264,28 @@ func (c *client) udp(ctx context.Context) (stat.Connection, error) {
 
 func (c *client) clean() {
 	c.Lock()
-	if c.status() == StatusInactive {
+	defer c.Unlock()
+	switch c.status() {
+	case StatusInactive:
 		c.close()
+		return
+	case StatusNull:
+		return
 	}
-	c.Unlock()
+	var udpSessions int
+	if c.udpSM != nil {
+		c.udpSM.RLock()
+		udpSessions = len(c.udpSM.m)
+		c.udpSM.RUnlock()
+	}
+	if udpSessions == 0 && c.aliveTCP.Load() == 0 {
+		if c.lastAlive.Add(net.ConnIdleTimeout).Before(time.Now()) {
+			c.close()
+			return
+		}
+	} else {
+		c.lastAlive = time.Now()
+	}
 }
 
 type dialerConf struct {
@@ -321,6 +345,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				socketConfig: streamSettings.SocketSettings,
 				finalMask:    streamSettings.FinalMask,
 				quicParams:   streamSettings.QuicParams,
+				aliveTCP:     &atomic.Int64{},
+				lastAlive:    time.Now(),
 			}
 			manager.m[dialerConf{dest, streamSettings}] = c
 		}

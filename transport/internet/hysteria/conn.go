@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/quic-go"
@@ -20,8 +21,10 @@ type interConn struct {
 	local  net.Addr
 	remote net.Addr
 
-	client bool
-	user   *protocol.MemoryUser
+	client    bool
+	user      *protocol.MemoryUser
+	closeOnce sync.Once
+	aliveTCP  *atomic.Int64
 }
 
 func (c *interConn) User() *protocol.MemoryUser {
@@ -46,6 +49,11 @@ func (c *interConn) Write(b []byte) (int, error) {
 
 func (c *interConn) Close() error {
 	c.stream.CancelRead(0)
+	if c.aliveTCP != nil {
+		c.closeOnce.Do(func() {
+			c.aliveTCP.Add(-1)
+		})
+	}
 	return c.stream.Close()
 }
 
