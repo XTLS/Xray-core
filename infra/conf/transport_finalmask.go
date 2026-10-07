@@ -835,28 +835,11 @@ func (c *XDNS) Build() (proto.Message, error) {
 	}
 	for i := range c.Resolvers {
 		for j := range c.Resolvers[i].Addrs {
-			var u *url.URL
-			var e error
-			if !strings.Contains(c.Resolvers[i].Addrs[j], "://") {
-				u, e = url.Parse("udp://" + c.Resolvers[i].Addrs[j])
-			} else {
-				u, e = url.Parse(c.Resolvers[i].Addrs[j])
+			resolver, err := xdns.ParseResolverAddr(c.Resolvers[i].Addrs[j])
+			if err != nil {
+				return nil, err
 			}
-			if e != nil {
-				return nil, e
-			}
-			switch u.Scheme {
-			case "tcp", "udp":
-			default:
-				return nil, errors.New("invalid protocol")
-			}
-			var host, port string
-			host = u.Hostname()
-			port = u.Port()
-			if port == "" {
-				port = "53"
-			}
-			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: net.JoinHostPort(host, port)})
+			resolvers = append(resolvers, resolver)
 		}
 	}
 	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {

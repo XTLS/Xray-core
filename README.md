@@ -244,6 +244,8 @@ If you are compiling a 32-bit MIPS/MIPSLE target, use this command instead:
 CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
 
+For this fork's XDNS DoT/DoH configuration, see [XDNS encrypted DNS](docs/xdns-encrypted-dns.md).
+
 ## Stargazers over time
 
 [![Stargazers over time](https://starchart.cc/XTLS/Xray-core.svg)](https://starchart.cc/XTLS/Xray-core)
