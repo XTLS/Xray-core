@@ -606,6 +606,13 @@ func (m *AsyncDNSRouteMatcher) runScheduler() {
 				if m.pool != nil {
 					for i, endpoint := range m.pool.endpointStats() {
 						errors.LogInfo(m.ctx, endpoint.logLine(s.MatcherID, i))
+						samples, discarded := m.pool.states[i].metrics.trace.takeErrorSamples()
+						for _, sample := range samples {
+							errors.LogInfo(m.ctx, sample.logLine(s.MatcherID, i))
+						}
+						if discarded > 0 {
+							errors.LogInfo(m.ctx, "async DNS HTTP error samples discarded matcher=", s.MatcherID, " endpointIndex=", i, " count=", discarded)
+						}
 					}
 				}
 				nextStats = now.Add(time.Minute)
