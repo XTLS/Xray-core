@@ -15,7 +15,6 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -792,37 +791,15 @@ func (c *Sudoku) Build() (proto.Message, error) {
 }
 
 type XDNSDomain struct {
-	Name       string  `json:"name"`
-	LenLimit   int32   `json:"lenLimit"`
-	LabelLimit int32   `json:"labelLimit"`
-	Types      []int32 `json:"types"`
-	Edns0      int32   `json:"edns0"`
+	Names      []string `json:"names"`
+	LenLimit   int32    `json:"lenLimit"`
+	LabelLimit int32    `json:"labelLimit"`
+	Types      []int32  `json:"types"`
+	Edns0      int32    `json:"edns0"`
 }
-
-type XDNSResolverTCP struct {
-	Addr string `json:"addr"`
-}
-
-func (c *XDNSResolverTCP) Build() (proto.Message, error) {
-	return &xdns.TCPResolverProto{Addr: c.Addr}, nil
-}
-
-type XDNSResolverUDP struct {
-	Addr string `json:"addr"`
-}
-
-func (c *XDNSResolverUDP) Build() (proto.Message, error) {
-	return &xdns.UDPResolverProto{Addr: c.Addr}, nil
-}
-
-var xdnsLoader = NewJSONConfigLoader(ConfigCreatorCache{
-	"tcp": func() interface{} { return new(XDNSResolverTCP) },
-	"udp": func() interface{} { return new(XDNSResolverUDP) },
-}, "type", "settings")
 
 type XDNSResolver struct {
-	Type     string          `json:"type"`
-	Settings json.RawMessage `json:"settings"`
+	Addrs []string `json:"addrs"`
 }
 
 type XDNS struct {
@@ -833,7 +810,7 @@ type XDNS struct {
 
 func (c *XDNS) Build() (proto.Message, error) {
 	var domains []*xdns.DomainProto
-	var resolvers []*serial.TypedMessage
+	var resolvers []*xdns.ResolverProto
 	for i := range c.Domains {
 		if c.Domains[i].LenLimit == 0 {
 			c.Domains[i].LenLimit = 255
@@ -841,33 +818,46 @@ func (c *XDNS) Build() (proto.Message, error) {
 		if c.Domains[i].LabelLimit == 0 {
 			c.Domains[i].LabelLimit = 63
 		}
-		types := make([]uint16, 0, len(c.Domains[i].Types))
-		for j := range c.Domains[i].Types {
-			types = append(types, uint16(c.Domains[i].Types[j]))
+		for j := range c.Domains[i].Names {
+			domain, err := xdns.NewDomain(c.Domains[i].Names[j], int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), []uint16{1, 5, 16, 28}, uint16(c.Domains[i].Edns0))
+			if err != nil {
+				return nil, err
+			}
+			errors.LogInfo(context.Background(), domain.Show())
+			domains = append(domains, &xdns.DomainProto{
+				Name:       c.Domains[i].Names[j],
+				LenLimit:   c.Domains[i].LenLimit,
+				LabelLimit: c.Domains[i].LabelLimit,
+				Types:      c.Domains[i].Types,
+				Edns0:      c.Domains[i].Edns0,
+			})
 		}
-		domain, err := xdns.NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
-		if err != nil {
-			return nil, err
-		}
-		errors.LogInfo(context.Background(), domain.Show())
-		domains = append(domains, &xdns.DomainProto{
-			Name:       c.Domains[i].Name,
-			LenLimit:   c.Domains[i].LenLimit,
-			LabelLimit: c.Domains[i].LabelLimit,
-			Types:      c.Domains[i].Types,
-			Edns0:      c.Domains[i].Edns0,
-		})
 	}
 	for i := range c.Resolvers {
-		config, err := xdnsLoader.LoadWithID(c.Resolvers[i].Settings, c.Resolvers[i].Type)
-		if err != nil {
-			return nil, err
+		for j := range c.Resolvers[i].Addrs {
+			var u *url.URL
+			var e error
+			if !strings.Contains(c.Resolvers[i].Addrs[j], "://") {
+				u, e = url.Parse("udp://" + c.Resolvers[i].Addrs[j])
+			} else {
+				u, e = url.Parse(c.Resolvers[i].Addrs[j])
+			}
+			if e != nil {
+				return nil, e
+			}
+			switch u.Scheme {
+			case "tcp", "udp":
+			default:
+				return nil, errors.New("invalid protocol")
+			}
+			var host, port string
+			host = u.Hostname()
+			port = u.Port()
+			if port == "" {
+				port = "53"
+			}
+			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: net.JoinHostPort(host, port)})
 		}
-		pm, err := config.(interface{ Build() (proto.Message, error) }).Build()
-		if err != nil {
-			return nil, err
-		}
-		resolvers = append(resolvers, serial.ToTypedMessage(pm))
 	}
 	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
 		return nil, errors.New("c.ExtraPoll < 0 || c.ExtraPoll > 3")

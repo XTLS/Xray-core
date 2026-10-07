@@ -178,6 +178,11 @@ startOver:
 		}
 		ipif, err := t.luid.IPInterface(family)
 		if err != nil {
+			// With IPv6 disabled system-wide (DisabledComponents), the adapter has no
+			// IPv6 interface at all. Skip the family unless the config asks for it.
+			if err == windows.ERROR_NOT_FOUND && family == windows.AF_INET6 && !address6 && !route6 {
+				continue
+			}
 			return err
 		}
 		ipif.RouterDiscoveryBehavior = winipcfg.RouterDiscoveryDisabled
