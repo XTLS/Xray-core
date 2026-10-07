@@ -21,10 +21,11 @@ type Writer interface {
 type WriterCreator func() Writer
 
 type generalLogger struct {
-	creator WriterCreator
-	buffer  chan Message
-	access  *semaphore.Instance
-	done    *done.Instance
+	creator  WriterCreator
+	buffer   chan Message
+	priority chan Message
+	access   *semaphore.Instance
+	done     *done.Instance
 }
 
 type serverityLogger struct {
@@ -35,20 +36,22 @@ type serverityLogger struct {
 // NewLogger returns a generic log handler that can handle all type of messages.
 func NewLogger(logWriterCreator WriterCreator) Handler {
 	return &generalLogger{
-		creator: logWriterCreator,
-		buffer:  make(chan Message, 128),
-		access:  semaphore.New(1),
-		done:    done.New(),
+		creator:  logWriterCreator,
+		buffer:   make(chan Message, 128),
+		priority: make(chan Message, 128),
+		access:   semaphore.New(1),
+		done:     done.New(),
 	}
 }
 
 func ReplaceWithSeverityLogger(serverity Severity) {
 	w := CreateStdoutLogWriter()
 	g := &generalLogger{
-		creator: w,
-		buffer:  make(chan Message, 128),
-		access:  semaphore.New(1),
-		done:    done.New(),
+		creator:  w,
+		buffer:   make(chan Message, 128),
+		priority: make(chan Message, 128),
+		access:   semaphore.New(1),
+		done:     done.New(),
 	}
 	s := &serverityLogger{
 		inner:    g,
@@ -82,9 +85,28 @@ func (l *generalLogger) run() {
 	defer logger.Close()
 
 	for {
+		// Closing never waits for a backlog. A blocked writer retains the
+		// existing Close boundary; delivery is not a durable acknowledgement.
 		select {
 		case <-l.done.Wait():
 			return
+		default:
+		}
+		// Periodic classifier stats are at most 1+N (<=7) messages/minute per matcher.
+		// Ordinary traffic cannot occupy or evict this separate queue.
+		select {
+		case msg := <-l.priority:
+			logger.Write(msg.String() + platform.LineSeparator())
+			dataWritten = true
+			continue
+		default:
+		}
+		select {
+		case <-l.done.Wait():
+			return
+		case msg := <-l.priority:
+			logger.Write(msg.String() + platform.LineSeparator())
+			dataWritten = true
 		case msg := <-l.buffer:
 			logger.Write(msg.String() + platform.LineSeparator())
 			dataWritten = true
@@ -98,8 +120,17 @@ func (l *generalLogger) run() {
 }
 
 func (l *generalLogger) Handle(msg Message) {
+	if l.done.Done() {
+		return
+	}
+	queue := l.buffer
+	if p, ok := msg.(interface{ IsPriority() bool }); ok && p.IsPriority() {
+		queue = l.priority
+	}
+	// Both queues remain finite and nonblocking, including priority overflow.
+	// No classifier worker waits for stdout or queue capacity here.
 	select {
-	case l.buffer <- msg:
+	case queue <- msg:
 	default:
 	}
 

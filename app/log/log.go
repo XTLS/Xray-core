@@ -212,6 +212,12 @@ var (
 	ipv6Regex = regexp.MustCompile(`(?:[\da-fA-F]{0,4}:[\da-fA-F]{0,4}){2,7}`)
 )
 
+// IsPriority forwards queue metadata without changing address masking or text.
+func (m *MaskedMsgWrapper) IsPriority() bool {
+	p, ok := m.Message.(interface{ IsPriority() bool })
+	return ok && p.IsPriority()
+}
+
 func (m *MaskedMsgWrapper) String() string {
 	str := m.Message.String()
 

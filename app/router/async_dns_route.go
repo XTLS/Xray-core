@@ -588,7 +588,7 @@ func (m *AsyncDNSRouteMatcher) runScheduler() {
 			m.mu.Unlock()
 			if !now.Before(nextStats) {
 				s := m.Stats()
-				errors.LogInfo(m.ctx, "async DNS route stats matcherID=", s.MatcherID,
+				errors.LogInfoPriority(m.ctx, "async DNS route stats matcherID=", s.MatcherID,
 					" entries=", s.Entries, " jobs=", s.Jobs, " queued=", s.Queued,
 					" capacity=", m.cacheCapacity, " queueCapacity=", cap(m.queue), " graceMillis=", m.staleGrace.Milliseconds(),
 					" freshHits=", s.FreshHits, " staleHits=", s.StaleHits, " misses=", s.Misses,
@@ -612,7 +612,7 @@ func (m *AsyncDNSRouteMatcher) runScheduler() {
 						errors.LogInfo(m.ctx, "async DNS pool failed jobs discarded matcherID=", s.MatcherID, " count=", discarded)
 					}
 					for i, endpoint := range m.pool.endpointStats() {
-						errors.LogInfo(m.ctx, endpoint.logLine(s.MatcherID, i))
+						errors.LogInfoPriority(m.ctx, endpoint.logLine(s.MatcherID, i))
 						samples, discarded := m.pool.states[i].metrics.trace.takeErrorSamples()
 						for _, sample := range samples {
 							errors.LogInfo(m.ctx, sample.logLine(s.MatcherID, i))
