@@ -155,6 +155,7 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 	candidates, skipped := m.pool.candidates(time.Now())
 	m.stats.poolCooldownSkips.Add(uint64(skipped))
 	if len(candidates) == 0 {
+		m.stats.poolSyntheticCooldown.Add(1)
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: errors.New("async DNS endpoint pool is cooling down")}
 	}
 	// Never-failed members keep the full remaining deadline. An expired,
