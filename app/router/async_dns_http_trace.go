@@ -26,6 +26,10 @@ const (
 )
 
 type asyncDNSHTTPTraceCounters struct {
+	samplesMu                                             sync.Mutex
+	samples                                               [4]asyncDNSHTTPErrorSample
+	sampleCount                                           int
+	sampleDiscarded                                       uint64
 	phases                                                [asyncDNSHTTPPhaseCount]atomic.Uint64
 	newConn, reusedConn, firstByte                        atomic.Uint64
 	acquireLE50, acquireLE100, acquireLE150, acquireGT150 atomic.Uint64
@@ -51,12 +55,17 @@ func (s asyncDNSHTTPTraceStats) logSuffix() string {
 }
 
 type asyncDNSHTTPAttemptTrace struct {
-	counters       *asyncDNSHTTPTraceCounters
-	mu             sync.Mutex
-	latest         int
-	acquireStarted time.Time
-	finished       bool
-	firstByteSeen  bool
+	counters                            *asyncDNSHTTPTraceCounters
+	mu                                  sync.Mutex
+	latest                              int
+	acquireStarted                      time.Time
+	finished                            bool
+	firstByteSeen                       bool
+	started, acquired, wrote, firstByte time.Time
+	deadline                            time.Time
+	conn                                net.Conn
+	reused                              bool
+	tcpAtAcquire                        asyncDNSTCPInfo
 }
 
 func (m *AsyncDNSRouteMatcher) newHTTPAttemptTrace(endpoint string) *asyncDNSHTTPAttemptTrace {
@@ -65,7 +74,7 @@ func (m *AsyncDNSRouteMatcher) newHTTPAttemptTrace(endpoint string) *asyncDNSHTT
 	}
 	for i := range m.pool.states {
 		if m.pool.states[i].endpoint == endpoint {
-			return &asyncDNSHTTPAttemptTrace{counters: &m.pool.states[i].metrics.trace}
+			return &asyncDNSHTTPAttemptTrace{counters: &m.pool.states[i].metrics.trace, started: time.Now()}
 		}
 	}
 	return nil
@@ -86,6 +95,7 @@ func (t *asyncDNSHTTPAttemptTrace) request(req *http.Request) *http.Request {
 	if t == nil {
 		return req
 	}
+	t.deadline, _ = req.Context().Deadline()
 	trace := &httptrace.ClientTrace{
 		GetConn: func(string) {
 			t.mu.Lock()
@@ -102,6 +112,9 @@ func (t *asyncDNSHTTPAttemptTrace) request(req *http.Request) *http.Request {
 				return
 			}
 			t.latest = asyncDNSHTTPWrite
+			t.acquired = time.Now()
+			t.conn, t.reused = info.Conn, info.Reused
+			t.tcpAtAcquire = asyncDNSReadTCPInfo(info.Conn)
 			if info.Reused {
 				t.counters.reusedConn.Add(1)
 			} else {
@@ -110,7 +123,7 @@ func (t *asyncDNSHTTPAttemptTrace) request(req *http.Request) *http.Request {
 			// Completed GetConn→GotConn acquisition only. Failed acquisition has
 			// phaseAcquire but no duration bucket; total attempt elapsed is separate.
 			if !t.acquireStarted.IsZero() {
-				elapsed := time.Since(t.acquireStarted)
+				elapsed := t.acquired.Sub(t.acquireStarted)
 				if elapsed <= 50*time.Millisecond {
 					t.counters.acquireLE50.Add(1)
 				}
@@ -129,6 +142,7 @@ func (t *asyncDNSHTTPAttemptTrace) request(req *http.Request) *http.Request {
 			defer t.mu.Unlock()
 			if !t.finished && !t.firstByteSeen {
 				t.firstByteSeen = true
+				t.firstByte = time.Now()
 				t.counters.firstByte.Add(1)
 				if t.latest < asyncDNSHTTPFirstByte {
 					t.latest = asyncDNSHTTPFirstByte
@@ -137,7 +151,14 @@ func (t *asyncDNSHTTPAttemptTrace) request(req *http.Request) *http.Request {
 		},
 		WroteRequest: func(info httptrace.WroteRequestInfo) {
 			if info.Err == nil {
-				t.phase(asyncDNSHTTPHeaders)
+				t.mu.Lock()
+				if !t.finished {
+					t.wrote = time.Now()
+					if t.latest < asyncDNSHTTPHeaders {
+						t.latest = asyncDNSHTTPHeaders
+					}
+				}
+				t.mu.Unlock()
 			}
 		},
 	}
@@ -152,6 +173,9 @@ func (t *asyncDNSHTTPAttemptTrace) finish(err error) {
 	defer t.mu.Unlock()
 	t.finished = true
 	t.counters.phases[t.latest].Add(1)
+	if err != nil {
+		t.recordErrorSample(err, time.Now())
+	}
 	var op *net.OpError
 	if !stderrors.As(err, &op) {
 		t.counters.netNone.Add(1)
