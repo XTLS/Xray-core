@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"io"
 	mrand "math/rand"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,8 +51,12 @@ type xdnsClient struct {
 	sendCh  chan []byte
 	poolCh  chan struct{}
 	closeCh chan struct{}
+	doneCh  chan struct{}
 	wg      sync.WaitGroup
 	mu      sync.Mutex
+
+	readDeadline  *connDeadline
+	writeDeadline *connDeadline
 }
 
 func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
@@ -80,6 +85,12 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 		domains = append(domains, domain)
 	}
 	resolvers := make([]Resolver, 0, len(c.Resolvers))
+	// Validate the entire list before opening any resolver connection.
+	for _, resolver := range c.Resolvers {
+		if _, err := normalizeResolver(resolver); err != nil {
+			return nil, err
+		}
+	}
 	for i := range c.Resolvers {
 		resolver, err := NewResolver(c.Resolvers[i], dialer)
 		if err != nil {
@@ -104,6 +115,11 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 		sendCh:  make(chan []byte, 16),
 		poolCh:  make(chan struct{}, pollLimit),
 		closeCh: make(chan struct{}),
+		doneCh:  make(chan struct{}),
+	}
+	if c.HandlesDial() {
+		client.readDeadline = newConnDeadline()
+		client.writeDeadline = newConnDeadline()
 	}
 	go client.run()
 	return client, nil
@@ -187,6 +203,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 }
 
 func (c *xdnsClient) run() {
+	defer close(c.doneCh)
 	for i := range len(c.resolvers) {
 		c.wg.Add(1)
 		go c.recv(i)
@@ -197,8 +214,6 @@ func (c *xdnsClient) run() {
 
 	c.wg.Wait()
 	close(c.readCh)
-	close(c.sendCh)
-	close(c.poolCh)
 }
 
 func (c *xdnsClient) recv(i int) {
@@ -334,6 +349,7 @@ func (c *xdnsClient) send() {
 	p := []byte(nil)
 	timeout := false
 	for {
+		p = nil
 		select {
 		case <-c.closeCh:
 			return
@@ -374,11 +390,38 @@ func (c *xdnsClient) send() {
 }
 
 func (c *xdnsClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	packet, ok := <-c.readCh
-	if ok {
-		return copy(p, packet.p), packet.addr, nil
+	for {
+		var timeout <-chan time.Time
+		var changed <-chan struct{}
+		var timer *time.Timer
+		if c.readDeadline != nil {
+			when, updates := c.readDeadline.snapshot()
+			changed = updates
+			if !when.IsZero() {
+				if !time.Now().Before(when) {
+					return 0, nil, os.ErrDeadlineExceeded
+				}
+				timer = time.NewTimer(time.Until(when))
+				timeout = timer.C
+			}
+		}
+		select {
+		case packet, ok := <-c.readCh:
+			if timer != nil {
+				timer.Stop()
+			}
+			if !ok {
+				return 0, nil, io.ErrClosedPipe
+			}
+			return copy(p, packet.p), packet.addr, nil
+		case <-timeout:
+			return 0, nil, os.ErrDeadlineExceeded
+		case <-changed:
+			if timer != nil {
+				timer.Stop()
+			}
+		}
 	}
-	return 0, nil, io.ErrClosedPipe
 }
 
 func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
@@ -386,6 +429,12 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	defer c.mu.Unlock()
 	if c.closed() {
 		return 0, io.ErrClosedPipe
+	}
+	if c.writeDeadline != nil {
+		when, _ := c.writeDeadline.snapshot()
+		if !when.IsZero() && !time.Now().Before(when) {
+			return 0, os.ErrDeadlineExceeded
+		}
 	}
 	if len(p) == 0 || len(p) > 4096 {
 		errors.LogError(context.Background(), "err size ", len(p))
@@ -410,16 +459,36 @@ func (c *xdnsClient) Close() error {
 	for i := range c.resolvers {
 		c.resolvers[i].Close()
 	}
+	<-c.doneCh
 	return nil
 }
 
 func (c *xdnsClient) LocalAddr() net.Addr { return &net.UDPAddr{IP: []byte{0, 0, 0, 0}} }
 
-func (c *xdnsClient) SetDeadline(t time.Time) error { return errors.New("not support") }
+func (c *xdnsClient) SetDeadline(t time.Time) error {
+	if c.readDeadline == nil {
+		return errors.New("not support")
+	}
+	c.readDeadline.set(t)
+	c.writeDeadline.set(t)
+	return nil
+}
 
-func (c *xdnsClient) SetReadDeadline(t time.Time) error { return errors.New("not support") }
+func (c *xdnsClient) SetReadDeadline(t time.Time) error {
+	if c.readDeadline == nil {
+		return errors.New("not support")
+	}
+	c.readDeadline.set(t)
+	return nil
+}
 
-func (c *xdnsClient) SetWriteDeadline(t time.Time) error { return errors.New("not support") }
+func (c *xdnsClient) SetWriteDeadline(t time.Time) error {
+	if c.writeDeadline == nil {
+		return errors.New("not support")
+	}
+	c.writeDeadline.set(t)
+	return nil
+}
 
 type ClientID [8]byte
 

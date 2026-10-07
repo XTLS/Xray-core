@@ -12,8 +12,9 @@ import (
 )
 
 type Dialer struct {
-	DialTCP func(net.Destination) (net.Conn, error)
-	DialUDP func(net.Destination) (net.Conn, error)
+	DialTCP        func(net.Destination) (net.Conn, error)
+	DialTCPContext func(context.Context, net.Destination) (net.Conn, error)
+	DialUDP        func(net.Destination) (net.Conn, error)
 }
 
 type ListenConfig struct {
@@ -30,6 +31,34 @@ type TCPMask interface {
 type UDPMask interface {
 	WrapPacketConnClient(net.PacketConn, *net.Destination, *Dialer) (net.PacketConn, error)
 	WrapPacketConnServer(net.PacketConn, net.Addr, *ListenConfig) (net.PacketConn, error)
+}
+
+func handlesUDPDial(mask UDPMask) bool {
+	if handler, ok := mask.(interface{ HandlesDial() bool }); ok {
+		return handler.HandlesDial()
+	}
+	_, ok := mask.(interface{ HandleDial() })
+	return ok
+}
+
+// Preserve the caller's routing/session values and cancellation while adding
+// each resolver request's cancellation and deadline to the underlying dial.
+func (fm *FinalMask) tcpDialContext(outer context.Context) func(context.Context, net.Destination) (net.Conn, error) {
+	return func(inner context.Context, dest net.Destination) (net.Conn, error) {
+		ctx, cancel := context.WithCancel(outer)
+		defer cancel()
+		stop := context.AfterFunc(inner, cancel)
+		defer stop()
+		if deadline, ok := inner.Deadline(); ok {
+			var cancelDeadline context.CancelFunc
+			ctx, cancelDeadline = context.WithDeadline(ctx, deadline)
+			defer cancelDeadline()
+		}
+		if err := inner.Err(); err != nil {
+			return nil, err
+		}
+		return fm.dialTCP(ctx, dest)
+	}
 }
 
 type FinalMask struct {
@@ -77,6 +106,7 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},
+		DialTCPContext: fm.tcpDialContext(ctx),
 		DialUDP: func(dest net.Destination) (net.Conn, error) {
 			conn, addr, err := fm.dialUDP(ctx, dest)
 			if err != nil {
@@ -148,7 +178,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 	}
 	for i := range fm.udpMasks {
 		if i > 0 {
-			if _, ok := fm.udpMasks[i].(interface{ HandleDial() }); ok {
+			if handlesUDPDial(fm.udpMasks[i]) {
 				return nil, fmt.Errorf("incorrect index: %d %T", i, fm.udpMasks[i])
 			}
 		}
@@ -156,7 +186,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 	var conn net.PacketConn
 	var addr net.Addr
 	var err error
-	if _, ok := fm.udpMasks[0].(interface{ HandleDial() }); !ok {
+	if !handlesUDPDial(fm.udpMasks[0]) {
 		conn, addr, err = fm.dialUDP(ctx, dest)
 		if err != nil {
 			return nil, err
@@ -166,6 +196,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},
+		DialTCPContext: fm.tcpDialContext(ctx),
 		DialUDP: func(dest net.Destination) (net.Conn, error) {
 			conn, addr, err := fm.dialUDP(ctx, dest)
 			if err != nil {
@@ -181,7 +212,7 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {
 			newConn, err = fm.udpMasks[i].WrapPacketConnClient(nil, nil, nil)
 			if err != nil {
-				_ = conn.Close()
+				common.CloseIfExists(conn)
 				return nil, err
 			}
 			sizes = append(sizes, newConn.(interface{ Size() int }).Size())
