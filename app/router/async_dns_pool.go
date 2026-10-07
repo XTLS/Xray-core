@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	asyncDNSOverlayPoolEnv  = "XRAY_ASYNC_DNS_OVERLAY_ENDPOINTS_JSON"
-	asyncDNSPoolMaxAttempts = 6
+	asyncDNSOverlayPoolEnv    = "XRAY_ASYNC_DNS_OVERLAY_ENDPOINTS_JSON"
+	asyncDNSPoolMaxAttempts   = 6
+	asyncDNSPoolMaxConcurrent = 3
 )
 
 var asyncDNSOverlayPrefix = netip.MustParsePrefix("100.64.0.0/10")
@@ -107,9 +108,9 @@ func (p *asyncDNSEndpointPool) candidatesWithDiagnostic(now time.Time) ([]asyncD
 		}
 	}
 	// Passive cooldown is a preference, not permission to remove redundancy.
-	// Keep ordinary >=2 eligible selection untouched. If fewer remain, reserve
+	// Keep ordinary >=3 eligible selection untouched. If fewer remain, reserve
 	// only enough least-failed cooled peers for the existing bounded hedge.
-	needed := max(0, min(2, len(p.states))-len(candidates))
+	needed := max(0, min(asyncDNSPoolMaxConcurrent, len(p.states))-len(candidates))
 	if needed > 0 {
 		sort.SliceStable(cooling, func(i, j int) bool {
 			if cooling[i].failures != cooling[j].failures {
@@ -223,18 +224,21 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 	}
 	// Only the coordinator launches, observes and records attempts. A result
 	// slot per concurrent request lets cancellation drain without blocked sends.
-	results := make(chan asyncDNSPoolResult, 2)
+	results := make(chan asyncDNSPoolResult, asyncDNSPoolMaxConcurrent)
 	active, next, attempts := 0, 0, 0
 	timer := time.NewTimer(asyncDNSPoolHedgeDelay)
 	defer timer.Stop()
 	var hedge <-chan time.Time
 	launch := func() bool {
-		for next < len(candidates) && active < 2 && ctx.Err() == nil {
+		for next < len(candidates) && active < min(asyncDNSPoolMaxConcurrent, len(candidates)) && ctx.Err() == nil {
 			i := next
 			candidate := candidates[i]
 			next++
 			attemptCtx, attemptCancel := ctx, func() {}
-			if candidate.knownFailed {
+			// A fixed 2/3-member pool has a slot for every member. Reserving
+			// child time by killing its sole recovered peer defeats that redundancy.
+			// Larger pools retain the inherited conditional reserve for later slots.
+			if candidate.knownFailed && len(m.pool.states) > asyncDNSPoolMaxConcurrent {
 				for _, successor := range candidates[i+1:] {
 					if successor.knownFailed {
 						continue
@@ -340,7 +344,8 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 			}
 		case <-hedge:
 			hedge = nil
-			launch() // Full slots never cancel a live request to make room.
+			for launch() { // One hedge fills both spare slots; never cancels a live request for room.
+			}
 		case <-ctx.Done():
 			return finish(nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: ctx.Err()}, context.Cause(ctx))
 		}

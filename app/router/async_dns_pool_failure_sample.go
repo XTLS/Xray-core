@@ -132,7 +132,7 @@ func diagnosticTerminalValid(s string) bool {
 }
 
 func (s asyncDNSPoolFailureSample) valid() bool {
-	if !diagnosticTerminalValid(s.Terminal) || s.Terminal == "success" || len(s.Candidates) > 6 || len(s.Attempts) > 6 || s.MaxConcurrent > 2 || s.MaxConcurrent < 0 {
+	if !diagnosticTerminalValid(s.Terminal) || s.Terminal == "success" || len(s.Candidates) > 6 || len(s.Attempts) > 6 || s.MaxConcurrent > asyncDNSPoolMaxConcurrent || s.MaxConcurrent < 0 {
 		return false
 	}
 	for _, c := range s.Candidates {

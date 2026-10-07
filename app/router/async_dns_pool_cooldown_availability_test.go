@@ -17,7 +17,7 @@ func coolPoolMember(m *AsyncDNSRouteMatcher, index int, failures uint8, until ti
 	m.pool.states[index].cooldownUntil = until
 }
 
-func TestAsyncDNSPoolCooldownReservesLeastFailedTwo(t *testing.T) {
+func TestAsyncDNSPoolCooldownReservesAllThreeInLeastFailedOrder(t *testing.T) {
 	fast := func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) }
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, fast, fast, fast)
 	now := time.Now()
@@ -25,7 +25,7 @@ func TestAsyncDNSPoolCooldownReservesLeastFailedTwo(t *testing.T) {
 	coolPoolMember(m, 1, 1, now.Add(2*time.Second))
 	coolPoolMember(m, 2, 1, now.Add(time.Second))
 	candidates, skipped := m.pool.candidates(now)
-	if len(candidates) != 2 || candidates[0].endpoint != m.pool.states[2].endpoint || candidates[1].endpoint != m.pool.states[1].endpoint || skipped != 1 {
+	if len(candidates) != 3 || candidates[0].endpoint != m.pool.states[2].endpoint || candidates[1].endpoint != m.pool.states[1].endpoint || skipped != 0 {
 		t.Fatalf("wrong bounded least-bad reserve: %+v skipped=%d", candidates, skipped)
 	}
 	for _, candidate := range candidates {
@@ -33,7 +33,7 @@ func TestAsyncDNSPoolCooldownReservesLeastFailedTwo(t *testing.T) {
 			t.Fatal("cooled fallback invented healthy state")
 		}
 	}
-	if m.pool.states[0].metrics.cooldownSkips.Load() != 1 || m.pool.states[1].metrics.cooldownSkips.Load() != 0 || m.pool.states[2].metrics.cooldownSkips.Load() != 0 {
+	if m.pool.states[0].metrics.cooldownSkips.Load() != 0 || m.pool.states[1].metrics.cooldownSkips.Load() != 0 || m.pool.states[2].metrics.cooldownSkips.Load() != 0 {
 		t.Fatal("reserved fallback falsely counted skipped")
 	}
 }
@@ -90,7 +90,7 @@ func TestAsyncDNSPoolOneEligibleStallUsesCooledBackup(t *testing.T) {
 	coolPoolMember(m, 2, 6, until)
 	started := time.Now()
 	response, err := m.fetchContext(context.Background(), "one-eligible.example")
-	if err != nil || response == nil || response.Generation != "cooled-backup" || time.Since(started) >= 150*time.Millisecond || calls[0].Load() != 1 || calls[1].Load() != 1 || calls[2].Load() != 0 || maxActive.Load() > 2 {
+	if err != nil || response == nil || response.Generation != "cooled-backup" || time.Since(started) >= 150*time.Millisecond || calls[0].Load() != 1 || calls[1].Load() != 1 || calls[2].Load() != 1 || maxActive.Load() > 3 {
 		t.Fatalf("sole eligible lost redundancy: response=%v err=%v calls=%d/%d/%d elapsed=%v max=%d", response, err, calls[0].Load(), calls[1].Load(), calls[2].Load(), time.Since(started), maxActive.Load())
 	}
 	deadline := time.Now().Add(time.Second)
@@ -101,7 +101,7 @@ func TestAsyncDNSPoolOneEligibleStallUsesCooledBackup(t *testing.T) {
 		t.Fatal("losing HTTP attempt leaked")
 	}
 	stats := m.pool.endpointStats()
-	if stats[0].WinnerCanceled != 1 || stats[0].Timeout != 0 || stats[1].Successes != 1 || stats[2].Started != 0 {
+	if stats[0].WinnerCanceled != 1 || stats[0].Timeout != 0 || stats[1].Successes != 1 || stats[2].WinnerCanceled != 1 {
 		t.Fatalf("real endpoint accounting lost: %+v", stats)
 	}
 }
@@ -123,7 +123,7 @@ func TestAsyncDNSPoolAllCooldownAllFailBounded(t *testing.T) {
 	}
 	started := time.Now()
 	_, err := m.fetchContext(context.Background(), "all-failed.example")
-	if !errors.Is(err, context.DeadlineExceeded) || calls.Load() != 2 || maxActive.Load() > 2 || time.Since(started) > 230*time.Millisecond || m.Stats().PoolSyntheticCooldown != 0 {
+	if !errors.Is(err, context.DeadlineExceeded) || calls.Load() != 3 || maxActive.Load() > 3 || time.Since(started) > 230*time.Millisecond || m.Stats().PoolSyntheticCooldown != 0 {
 		t.Fatalf("all-fail escaped configured deadline/attempt bounds: err=%v calls=%d active=%d elapsed=%v", err, calls.Load(), maxActive.Load(), time.Since(started))
 	}
 	deadline := time.Now().Add(time.Second)
@@ -134,7 +134,7 @@ func TestAsyncDNSPoolAllCooldownAllFailBounded(t *testing.T) {
 		t.Fatal("all-fail HTTP attempt leaked")
 	}
 	rows := m.pool.endpointStats()
-	if rows[0].Timeout+rows[1].Timeout != 2 || rows[2].Started != 0 {
+	if rows[0].Timeout+rows[1].Timeout+rows[2].Timeout != 3 {
 		t.Fatalf("all-fail real errors not visible: %+v", rows)
 	}
 }
@@ -147,7 +147,7 @@ func TestAsyncDNSPoolCooldownKeepsOrdinaryOrderAndRecovery(t *testing.T) {
 	coolPoolMember(m, 0, 6, until)
 	m.pool.next = 2
 	candidates, skipped := m.pool.candidates(now)
-	if len(candidates) != 2 || candidates[0].endpoint != m.pool.states[2].endpoint || candidates[1].endpoint != m.pool.states[1].endpoint || skipped != 1 {
+	if len(candidates) != 3 || candidates[0].endpoint != m.pool.states[2].endpoint || candidates[1].endpoint != m.pool.states[1].endpoint || skipped != 0 {
 		t.Fatalf("ordinary eligible order changed: %+v", candidates)
 	}
 	m.pool.next = 0

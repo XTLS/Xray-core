@@ -40,11 +40,11 @@ func TestAsyncDNSPoolHedgeOriginal80msWinnerAndDrain(t *testing.T) {
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, slow(poolReady), slow(`{"state":"ready","route":"other","ttlMillis":5000,"generation":"alternate"}`), slow(poolReady))
 	started := time.Now()
 	response, err := m.fetchContext(context.Background(), "healthy.example")
-	if err != nil || response.Route != "ru" || response.Generation != "same-fill" || calls.Load() != 2 || time.Since(started) >= 150*time.Millisecond {
+	if err != nil || response.Route != "ru" || response.Generation != "same-fill" || calls.Load() != 3 || time.Since(started) >= 150*time.Millisecond {
 		t.Fatalf("healthy80 lost: %v calls=%d", err, calls.Load())
 	}
 	stats := m.pool.endpointStats()
-	if stats[0].Successes != 1 || stats[1].WinnerCanceled != 1 || stats[1].Canceled != 0 || stats[1].Timeout != 0 || stats[2].Started != 0 {
+	if stats[0].Successes != 1 || stats[1].WinnerCanceled != 1 || stats[1].Canceled != 0 || stats[1].Timeout != 0 || stats[2].WinnerCanceled != 1 {
 		t.Fatalf("wrong winner/loser: %+v", stats)
 	}
 	if m.pool.states[1].failures != 0 {
@@ -86,7 +86,7 @@ func TestAsyncDNSPoolHedgeAnySelectedPrimarySilent(t *testing.T) {
 			m.pool.next = selected
 			started := time.Now()
 			response, err := m.fetchContext(context.Background(), "silent.example")
-			if err != nil || response.Route != "ru" || time.Since(started) >= 150*time.Millisecond || m.Stats().PoolAttempts != 2 || maxActive.Load() > 2 {
+			if err != nil || response.Route != "ru" || time.Since(started) >= 150*time.Millisecond || m.Stats().PoolAttempts != 3 || maxActive.Load() > 3 {
 				t.Fatalf("silent primary not recovered: %v elapsed=%v attempts=%d max=%d", err, time.Since(started), m.Stats().PoolAttempts, maxActive.Load())
 			}
 			if stats := m.pool.endpointStats(); stats[selected].WinnerCanceled != 1 || stats[selected].Timeout != 0 {
@@ -120,7 +120,7 @@ func TestAsyncDNSPoolHedgeAllSilentBoundedAndCallerCancel(t *testing.T) {
 			if callerCancel {
 				expected = context.Canceled
 			}
-			if !errors.Is(err, expected) || time.Since(started) > 230*time.Millisecond || calls.Load() != 2 || maxActive.Load() > 2 {
+			if !errors.Is(err, expected) || time.Since(started) > 230*time.Millisecond || calls.Load() != 3 || maxActive.Load() > 3 {
 				t.Fatalf("failed bound/drain: %v %v %d", err, time.Since(started), calls.Load())
 			}
 			stats := m.pool.endpointStats()
@@ -167,11 +167,15 @@ func TestAsyncDNSPoolHedgeTerminalAuthDrainsAlternate(t *testing.T) {
 			defer active.Add(-1)
 			<-r.Context().Done()
 		},
-		func(w http.ResponseWriter, r *http.Request) { t.Error("terminal auth fanned out to third") },
+		func(w http.ResponseWriter, r *http.Request) {
+			active.Add(1)
+			defer active.Add(-1)
+			<-r.Context().Done()
+		},
 	)
 	_, err := m.fetchContext(context.Background(), "auth.example")
 	stats := m.pool.endpointStats()
-	if err == nil || stats[0].HTTP401 != 1 || stats[1].OperationCanceled != 1 || stats[1].Transport != 0 || stats[1].WinnerCanceled != 0 || m.pool.states[1].failures != 0 {
+	if err == nil || stats[0].HTTP401 != 1 || stats[1].OperationCanceled != 1 || stats[2].OperationCanceled != 1 || stats[1].Transport != 0 || stats[1].WinnerCanceled != 0 || m.pool.states[1].failures != 0 {
 		t.Fatalf("terminal cancellation hidden/penalized: %v %+v", err, stats)
 	}
 	deadline := time.Now().Add(time.Second)
@@ -236,7 +240,7 @@ func TestAsyncDNSPoolHedgeRepeatedHTTPConnectionsDrained(t *testing.T) {
 				t.Fatalf("winner cancel hidden as real error: %+v", s)
 			}
 		}
-		if started != completed || completed != success+canceled || success*2 != completed {
+		if started != completed || completed != success+canceled || success*3 != completed {
 			t.Fatalf("unjoined attempt escaped conservation: started=%d completed=%d success=%d cancel=%d", started, completed, success, canceled)
 		}
 	}
@@ -267,7 +271,7 @@ func TestAsyncDNSPoolHedgeBothValidResponsesKeepOriginalWinner(t *testing.T) {
 	firstClosed, secondClosed := make(chan struct{}), make(chan struct{})
 	var active atomic.Int32
 	unused := func(w http.ResponseWriter, r *http.Request) { t.Error("fixture escaped controlled transport") }
-	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, unused, unused, unused)
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, unused, unused)
 	m.client.Transport = asyncDNSHedgeRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 		active.Add(1)
 		defer active.Add(-1)
@@ -353,7 +357,7 @@ func TestAsyncDNSPoolHedgeBothValidResponsesKeepOriginalWinner(t *testing.T) {
 			t.Fatalf("completed success fabricated as cancellation/error: %+v", stats)
 		}
 	}
-	if stats[2].Started != 0 || active.Load() != 0 || m.Stats().PoolAttempts != 2 {
+	if active.Load() != 0 || m.Stats().PoolAttempts != 2 {
 		t.Fatalf("surplus escaped bounds/join: %+v active=%d", stats, active.Load())
 	}
 }
@@ -384,12 +388,12 @@ func TestAsyncDNSPoolHedgeDeadlineAndReadyResultRace(t *testing.T) {
 			t.Fatal("deadline returned conflicting response")
 		}
 		stats := m.pool.endpointStats()
-		for i := 0; i < 2; i++ {
+		for i := 0; i < 3; i++ {
 			if stats[i].Attempts != 1 || stats[i].Successes != 1 || stats[i].WinnerCanceled+stats[i].OperationCanceled+stats[i].Canceled+stats[i].Timeout+stats[i].Transport != 0 {
 				t.Fatalf("ready race hid successes or invented failure: %+v", stats)
 			}
 		}
-		if m.Stats().PoolAttempts != 2 || stats[2].Started != 0 || active.Load() != 0 {
+		if m.Stats().PoolAttempts != 3 || active.Load() != 0 {
 			t.Fatalf("deadline race detached attempt: %+v", stats)
 		}
 	}

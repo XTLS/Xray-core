@@ -256,9 +256,9 @@ func TestAsyncDNSPoolBoundsAttemptsAndTotalHTTPTimeout(t *testing.T) {
 			}
 			elapsed := time.Since(start)
 			stats := m.Stats()
-			// Two silent attempts share one deadline; no slot is created by
+			// Three silent attempts share one deadline; no slot is created by
 			// canceling a live attempt. Fast failures still reach six members.
-			if calls.Load() != 2 || stats.PoolAttempts != 2 || stats.PoolFailovers != 1 || elapsed < time.Duration(timeout)*time.Millisecond-20*time.Millisecond || elapsed > time.Duration(timeout)*time.Millisecond+80*time.Millisecond {
+			if calls.Load() != 3 || stats.PoolAttempts != 3 || stats.PoolFailovers != 2 || elapsed < time.Duration(timeout)*time.Millisecond-20*time.Millisecond || elapsed > time.Duration(timeout)*time.Millisecond+80*time.Millisecond {
 				t.Fatalf("pool multiplied the shared timeout or escaped attempt bounds: calls=%d elapsed=%s stats=%+v", calls.Load(), elapsed, stats)
 			}
 			if m.pool.states[0].failures != 1 || !time.Now().Before(m.pool.states[0].cooldownUntil) {
@@ -495,7 +495,7 @@ func TestAsyncDNSPoolHealthyMembersKeepWholeBudget(t *testing.T) {
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, handler, handler, handler)
 	start := time.Now()
 	response, err := m.fetchContext(context.Background(), "healthy.example")
-	if err != nil || response == nil || response.Route != "ru" || calls.Load() != 2 {
+	if err != nil || response == nil || response.Route != "ru" || calls.Load() != 3 {
 		t.Fatalf("healthy member lost whole deadline: err=%v calls=%d elapsed=%v", err, calls.Load(), time.Since(start))
 	}
 	if time.Since(start) >= 150*time.Millisecond {
@@ -553,7 +553,7 @@ func TestAsyncDNSPoolSilentOperationRecoversWithoutFalsePenalty(t *testing.T) {
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { hung.Add(1); <-r.Context().Done() }, slow, slow)
 	start := time.Now()
 	response, err := m.fetchContext(context.Background(), "hung.example")
-	if err != nil || response == nil || response.Route != "ru" || hung.Load() != 1 || survivor.Load() != 1 || m.Stats().PoolAttempts != 2 || time.Since(start) >= 150*time.Millisecond {
+	if err != nil || response == nil || response.Route != "ru" || hung.Load() != 1 || survivor.Load() != 2 || m.Stats().PoolAttempts != 3 || time.Since(start) >= 150*time.Millisecond {
 		t.Fatalf("silent first did not recover: %v %+v", err, m.Stats())
 	}
 	if m.pool.states[0].failures != 0 || m.pool.endpointStats()[0].WinnerCanceled != 1 {

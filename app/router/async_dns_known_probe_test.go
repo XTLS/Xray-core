@@ -22,7 +22,7 @@ func markKnownProbe(m *AsyncDNSRouteMatcher, all bool) {
 	m.pool.next = 0
 }
 
-func TestAsyncDNSPoolKnownProbeReservesSurvivorBudget(t *testing.T) {
+func TestAsyncDNSPoolKnownProbeTwoMemberSharesParentAndDrains(t *testing.T) {
 	var hung, survivor atomic.Int32
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150},
 		func(w http.ResponseWriter, r *http.Request) { hung.Add(1); <-r.Context().Done() },
@@ -40,8 +40,8 @@ func TestAsyncDNSPoolKnownProbeReservesSurvivorBudget(t *testing.T) {
 		}
 	}
 	stats := m.pool.endpointStats()
-	if hung.Load() != 2 || survivor.Load() != 2 || stats[0].Timeout != 2 || stats[1].Successes != 2 || m.Stats().PoolFailovers != 2 {
-		t.Fatalf("real child timeout/failover counters wrong: %+v", stats)
+	if hung.Load() != 2 || survivor.Load() != 2 || stats[0].WinnerCanceled != 2 || stats[0].Timeout != 0 || stats[1].Successes != 2 || m.Stats().PoolFailovers != 2 {
+		t.Fatalf("parent-budget winner cancellation/failover counters wrong: %+v", stats)
 	}
 }
 
@@ -119,9 +119,10 @@ func TestAsyncDNSPoolKnownProbeTerminalAndExternalCancel(t *testing.T) {
 	})
 }
 
-func TestAsyncDNSPoolKnownProbeSkipsSubMillisecondBudget(t *testing.T) {
+func TestAsyncDNSPoolKnownProbeGenericFourSkipsSubMillisecondReserve(t *testing.T) {
 	var probe atomic.Int32
-	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { probe.Add(1); <-r.Context().Done() }, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) })
+	ready := func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) }
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { probe.Add(1); <-r.Context().Done() }, ready, ready, ready)
 	markKnownProbe(m, false)
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Microsecond)
 	defer cancel()
@@ -174,7 +175,54 @@ func TestAsyncDNSPoolKnownSlowProbeDoesNotDisplaceHealthyPeer(t *testing.T) {
 	m.pool.mu.Lock()
 	failure := m.pool.states[0].failures
 	m.pool.mu.Unlock()
-	if failure != 2 || m.pool.endpointStats()[1].Successes != 1 {
+	if failure != 1 || m.pool.endpointStats()[0].WinnerCanceled != 1 || m.pool.endpointStats()[0].Timeout != 0 || m.pool.endpointStats()[1].Successes != 1 {
 		t.Fatal("known slow probe unexpectedly promoted or displaced healthy peer")
+	}
+}
+
+func TestAsyncDNSPoolKnownProbeGenericFourKeepsChildReserve(t *testing.T) {
+	dead := func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }
+	recovered := func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(80 * time.Millisecond):
+			io.WriteString(w, poolReady)
+		case <-r.Context().Done():
+		}
+	}
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, dead, recovered, dead, dead)
+	markKnownProbe(m, false)
+	started := time.Now()
+	response, err := m.fetchContext(context.Background(), "generic-four.example")
+	if err != nil || response == nil || response.Generation != "same-fill" || time.Since(started) >= 150*time.Millisecond {
+		t.Fatalf("generic reserve changed %v", err)
+	}
+	s := m.pool.endpointStats()
+	if s[0].Timeout != 1 || s[0].WinnerCanceled != 0 || s[1].Successes != 1 || m.pool.states[0].failures != 2 {
+		t.Fatalf("generic actualchildtimeout hidden %+v", s)
+	}
+	if m.Stats().PoolAttempts > 4 {
+		t.Fatal("endpoint repeated")
+	}
+}
+
+func TestAsyncDNSPoolKnownRecovered80TwoMemberSharesParent(t *testing.T) {
+	recovered := func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(80 * time.Millisecond):
+			io.WriteString(w, poolReady)
+		case <-r.Context().Done():
+		}
+	}
+	dead := func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, recovered, dead)
+	markKnownProbe(m, false)
+	started := time.Now()
+	response, err := m.fetchContext(context.Background(), "recovered-two.example")
+	if err != nil || response == nil || response.Generation != "same-fill" || time.Since(started) >= 150*time.Millisecond {
+		t.Fatalf("recovered2 lostparentbudget %v", err)
+	}
+	s := m.pool.endpointStats()
+	if s[0].Successes != 1 || s[0].Timeout != 0 || s[1].WinnerCanceled != 1 || m.pool.states[0].failures != 0 {
+		t.Fatalf("recovery/cancelhealth wrong %+v", s)
 	}
 }
