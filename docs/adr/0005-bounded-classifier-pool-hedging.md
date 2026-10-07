@@ -140,3 +140,26 @@ Rollback возвращает прежний immutable XrayR artifact и точ�
 L2/token/namespace не удаляются. Новых workflows/flags/ADR по названию bugfix нет.
 Accepted означает source-решение, не Rolled; max6 runtime canary pending: retained954/1 и исходные failed
 fixtures не переинтерпретируются позднейшим успешным window.
+
+
+## Приоритет periodic classifier stats (SOURCE-only)
+
+Два retained natural captures нового max6 artifact не получили route/endpoint
+stats, хотя поздняя строка показывала работающий matcher и накопленные counters.
+Actual cause конкретного пропуска не доказан: существующий Core logger имеет
+normal queue128 и неблокирующий silent-drop при её заполнении, поэтому насыщение
+обычными Info/Debug способно терять редкие periodic строки.
+
+SOURCE-предложение: route stats и endpoint stats получают optional Priority bool
+в прежнем GeneralMessage и независимую bounded queue128. Только эти periodic
+строки (1+N<=7 в минуту на matcher) используют LogInfoPriority; error samples и
+обычный traffic сохраняют прежний путь. Writer забирает priority перед normal;
+normal продолжает после опустошения priority. Info severity, rendered format,
+address masking и schemas42/52 неизменны. Router не ждёт stdout/ёмкости очереди.
+
+Это изоляция от normal flood, а не durable delivery: при бесконечно заблокированном
+sink, overflow самой priority queue, выключенном severity/sink или Close записи
+могут быть потеряны. Delivery гарантируется только в scoped saturation fixture
+при разблокированном writer; production evidence/canary pending. ACK/метрики не
+подделываются, исходные failed captures остаются failed. Owner Core; consumer
+XrayR использует прежний logging protocol. Новых workflows/flags/ADR нет.

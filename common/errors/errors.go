@@ -139,38 +139,44 @@ func New(msg ...interface{}) *Error {
 }
 
 func LogDebug(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, nil, log.Severity_Debug, msg...)
+	doLog(ctx, nil, false, log.Severity_Debug, msg...)
 }
 
 func LogDebugInner(ctx context.Context, inner error, msg ...interface{}) {
-	doLog(ctx, inner, log.Severity_Debug, msg...)
+	doLog(ctx, inner, false, log.Severity_Debug, msg...)
 }
 
 func LogInfo(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, nil, log.Severity_Info, msg...)
+	doLog(ctx, nil, false, log.Severity_Info, msg...)
+}
+
+// LogInfoPriority preserves the normal Info severity and text, but requests the
+// independent bounded logger queue. Only low-rate periodic stats use this path.
+func LogInfoPriority(ctx context.Context, msg ...interface{}) {
+	doLog(ctx, nil, true, log.Severity_Info, msg...)
 }
 
 func LogInfoInner(ctx context.Context, inner error, msg ...interface{}) {
-	doLog(ctx, inner, log.Severity_Info, msg...)
+	doLog(ctx, inner, false, log.Severity_Info, msg...)
 }
 
 func LogWarning(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, nil, log.Severity_Warning, msg...)
+	doLog(ctx, nil, false, log.Severity_Warning, msg...)
 }
 
 func LogWarningInner(ctx context.Context, inner error, msg ...interface{}) {
-	doLog(ctx, inner, log.Severity_Warning, msg...)
+	doLog(ctx, inner, false, log.Severity_Warning, msg...)
 }
 
 func LogError(ctx context.Context, msg ...interface{}) {
-	doLog(ctx, nil, log.Severity_Error, msg...)
+	doLog(ctx, nil, false, log.Severity_Error, msg...)
 }
 
 func LogErrorInner(ctx context.Context, inner error, msg ...interface{}) {
-	doLog(ctx, inner, log.Severity_Error, msg...)
+	doLog(ctx, inner, false, log.Severity_Error, msg...)
 }
 
-func doLog(ctx context.Context, inner error, severity log.Severity, msg ...interface{}) {
+func doLog(ctx context.Context, inner error, priority bool, severity log.Severity, msg ...interface{}) {
 	pc, _, _, _ := runtime.Caller(2)
 	details := runtime.FuncForPC(pc).Name()
 	if len(details) >= trim {
@@ -194,6 +200,7 @@ func doLog(ctx context.Context, inner error, severity log.Severity, msg ...inter
 	}
 	log.Record(&log.GeneralMessage{
 		Severity: GetSeverity(err),
+		Priority: priority,
 		Content:  err,
 	})
 }

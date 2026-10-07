@@ -20,7 +20,12 @@ type Handler interface {
 type GeneralMessage struct {
 	Severity Severity
 	Content  interface{}
+	// Priority reserves independent bounded queue space; it does not bypass severity.
+	Priority bool
 }
+
+// IsPriority is optional metadata; Message and its rendered format remain unchanged.
+func (m *GeneralMessage) IsPriority() bool { return m.Priority }
 
 // String implements Message.
 func (m *GeneralMessage) String() string {
