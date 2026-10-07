@@ -1,9 +1,0 @@
-udp
-tcp
-dot
-doh
-doh3
-doq
-loadbalance
-fallback
-auto
