@@ -116,12 +116,16 @@ func TestAsyncDNSPoolMax3FiniteForegroundOfferQueueAndRedisRefusal(t *testing.T)
 				m.startJob(fmt.Sprintf("load%d.example", i), time.Now())
 			}
 			jobs, queued, dropped := len(m.jobs), len(m.queue), m.stats.queueDrops.Load()
+			var initialQueueAdmissions int
+			for _, job := range m.jobs {
+				initialQueueAdmissions += job.attempts
+			}
 			m.mu.Unlock()
-			if jobs > 8 || queued > 4 || dropped < 24 {
+			if jobs > 8 || queued > 4 || initialQueueAdmissions < 4 || initialQueueAdmissions > 6 || dropped+uint64(initialQueueAdmissions) != 32 {
 				t.Fatalf("unbounded offered load jobs=%d queued=%d refused=%d", jobs, queued, dropped)
 			}
-			// Only the first two workers run while backends are blocked. Stop before
-			// scheduled backlog can become another offered-load round.
+			// Observe two workers filling their three slots. A completed/refused
+			// job may legitimately dequeue the next already-admitted job before Close.
 			deadline := time.Now().Add(time.Second)
 			for active.Load() < 6 && time.Now().Before(deadline) {
 				time.Sleep(time.Millisecond)
@@ -138,7 +142,7 @@ func TestAsyncDNSPoolMax3FiniteForegroundOfferQueueAndRedisRefusal(t *testing.T)
 					t.Fatal("Redis acquire refusal was not visible")
 				}
 			}
-			// Stop prevents any subsequent queued refresh; Close cancels/drains workers.
+			// Close stops further dequeue/scheduling and cancels/drains active workers.
 			closeErr := make(chan error, 1)
 			go func() { closeErr <- m.Close() }()
 			select {
@@ -167,13 +171,14 @@ func TestAsyncDNSPoolMax3FiniteForegroundOfferQueueAndRedisRefusal(t *testing.T)
 				started += s.Started
 				terminal += s.Attempts
 			}
-			if started != terminal || started > 6 {
+			routeRequests := m.Stats().Requests
+			if started != terminal || routeRequests > uint64(jobs) || started > routeRequests*3 {
 				t.Fatalf("detached/reoffered requests %d/%d", started, terminal)
 			}
 			if samples, _ := m.pool.failureSamples.take(); len(samples) > 8 {
 				t.Fatal("diagnostic overflow")
 			}
-			t.Logf("offer32 actualJobs%d queued%d refusedQueue%d HTTPstarted%d maxHTTP%d RedisSlots%d logicalLookups%d acquireRefusals%d terminal%d stopdrained=true", jobs, queued, dropped, started, maxActive.Load(), redisSlots, lookups.Load(), refused.Load(), terminal)
+			t.Logf("offer32 acceptedJobs%d initialQueueAdmissions%d queued%d refusedQueue%d HTTPstarted%d maxHTTP%d RedisSlots%d logicalLookups%d acquireRefusals%d terminal%d stopdrained=true", jobs, initialQueueAdmissions, queued, dropped, started, maxActive.Load(), redisSlots, lookups.Load(), refused.Load(), terminal)
 		})
 	}
 }
