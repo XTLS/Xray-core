@@ -96,20 +96,24 @@ func TestAsyncDNSPoolAttemptStatsRecoveredHTTPStatus(t *testing.T) {
 }
 
 func TestAsyncDNSPoolAttemptStatsTimeoutAndCancellationPreserveHealth(t *testing.T) {
-	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) })
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }, func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(20 * time.Millisecond)
+		io.WriteString(w, poolReady)
+	})
+	markKnownProbe(m, false)
 	_, err := m.fetch("silent.example")
-	if err == nil {
-		t.Fatal("silent endpoint unexpectedly succeeded")
+	if err != nil {
+		t.Fatal("known silent probe lost surviving endpoint")
 	}
 	s := m.pool.endpointStats()
-	if s[0].Timeout != 1 || s[0].Attempts != 1 || s[1].Attempts != 0 || s[0].ElapsedLE150+s[0].ElapsedGT150 != 1 {
+	if s[0].Timeout != 1 || s[0].Attempts != 1 || s[1].Attempts != 1 || s[0].ElapsedLE150+s[0].ElapsedGT150 != 1 {
 		t.Fatalf("silent attempt not attributed: %+v", s)
 	}
 	if _, err = m.fetch("survivor.example"); err != nil {
 		t.Fatal(err)
 	}
 	s = m.pool.endpointStats()
-	if s[1].Successes != 1 || s[0].CooldownSkips == 0 {
+	if s[1].Successes != 2 || s[0].CooldownSkips == 0 {
 		t.Fatalf("passive recovery changed: %+v", s)
 	}
 	// Cancellation happens after the request starts, so it is an attempt; it must

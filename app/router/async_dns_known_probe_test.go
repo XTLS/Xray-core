@@ -53,10 +53,17 @@ func TestAsyncDNSPoolKnownProbeRecoveryAndAllPenalizedBudget(t *testing.T) {
 	}{{"quick-recovery", false, 10 * time.Millisecond}, {"all-penalized-slow-recovery", true, 80 * time.Millisecond}} {
 		t.Run(tc.name, func(t *testing.T) {
 			var second atomic.Int32
-			m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { time.Sleep(tc.delay); io.WriteString(w, poolReady) }, func(w http.ResponseWriter, r *http.Request) { second.Add(1); io.WriteString(w, poolReady) })
+			m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { time.Sleep(tc.delay); io.WriteString(w, poolReady) }, func(w http.ResponseWriter, r *http.Request) {
+				second.Add(1)
+				select {
+				case <-time.After(tc.delay):
+					io.WriteString(w, poolReady)
+				case <-r.Context().Done():
+				}
+			})
 			markKnownProbe(m, tc.all)
 			response, err := m.fetchContext(context.Background(), "recovered.example")
-			if err != nil || response == nil || second.Load() != 0 {
+			if err != nil || response == nil || second.Load() != map[bool]int32{false: 0, true: 1}[tc.all] {
 				t.Fatalf("recovery failed: %v", err)
 			}
 			m.pool.mu.Lock()

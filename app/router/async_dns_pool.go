@@ -147,67 +147,141 @@ func asyncDNSPoolRetryable(err error) bool {
 	return failure.kind == asyncDNSFailureTransport || failure.kind == asyncDNSFailureHTTP && (failure.statusCode == 502 || failure.statusCode == 503 || failure.statusCode == 504)
 }
 
-func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*asyncDNSClassifierResponse, error) {
-	// HTTP timeout is one shared operation budget, not multiplied by endpoints.
-	// This context belongs to the shared job, not to a 25ms route waiter.
-	ctx, cancel := context.WithTimeout(ctx, m.requestTimeout)
-	defer cancel()
+var (
+	asyncDNSPoolWinnerCancel   = stderrors.New("async DNS pool winner selected")
+	asyncDNSPoolTerminalCancel = stderrors.New("async DNS pool terminal response selected")
+)
+
+const asyncDNSPoolHedgeDelay = 50 * time.Millisecond
+
+type asyncDNSPoolResult struct {
+	endpoint string
+	response *asyncDNSClassifierResponse
+	err      error
+	cause    error
+	elapsed  time.Duration
+}
+
+func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) (*asyncDNSClassifierResponse, error) {
+	// A job has one configured deadline, independent of route waiters.
+	deadlineCtx, deadlineCancel := context.WithTimeout(parent, m.requestTimeout)
+	defer deadlineCancel()
+	ctx, cancel := context.WithCancelCause(deadlineCtx)
+	defer cancel(nil)
 	candidates, skipped := m.pool.candidates(time.Now())
 	m.stats.poolCooldownSkips.Add(uint64(skipped))
 	if len(candidates) == 0 {
 		m.stats.poolSyntheticCooldown.Add(1)
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: errors.New("async DNS endpoint pool is cooling down")}
 	}
-	// Never-failed members keep the full remaining deadline. An expired,
-	// known-failed probe reserves time for an available unpenalized successor.
-	var lastErr error
-	attempts := 0
-	for i, candidate := range candidates {
-		if err := ctx.Err(); err != nil {
-			return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: err}
-		}
-		attemptCtx, attemptCancel := ctx, func() {}
-		if candidate.knownFailed {
-			for _, successor := range candidates[i+1:] {
-				if successor.knownFailed {
-					continue
+	// Only the coordinator launches, observes and records attempts. A result
+	// slot per concurrent request lets cancellation drain without blocked sends.
+	results := make(chan asyncDNSPoolResult, 2)
+	active, next, attempts := 0, 0, 0
+	timer := time.NewTimer(asyncDNSPoolHedgeDelay)
+	defer timer.Stop()
+	var hedge <-chan time.Time
+	launch := func() bool {
+		for next < len(candidates) && active < 2 && ctx.Err() == nil {
+			i := next
+			candidate := candidates[i]
+			next++
+			attemptCtx, attemptCancel := ctx, func() {}
+			if candidate.knownFailed {
+				for _, successor := range candidates[i+1:] {
+					if successor.knownFailed {
+						continue
+					}
+					deadline, _ := ctx.Deadline()
+					budget := min(asyncDNSPoolHedgeDelay, time.Until(deadline)/2)
+					if budget < time.Millisecond {
+						attemptCtx = nil
+					} else {
+						attemptCtx, attemptCancel = context.WithTimeout(ctx, budget)
+					}
+					break
 				}
-				deadline, _ := ctx.Deadline() // WithTimeout above always supplies it.
-				budget := min(50*time.Millisecond, time.Until(deadline)/2)
-				if budget < time.Millisecond {
-					attemptCtx = nil // Do not spend a sub-millisecond probe budget.
-				} else {
-					attemptCtx, attemptCancel = context.WithTimeout(ctx, budget)
-				}
-				break
 			}
+			if attemptCtx == nil {
+				continue
+			}
+			if attempts > 0 {
+				m.stats.poolFailovers.Add(1)
+			}
+			m.pool.startAttempt(candidate.endpoint, active > 0)
+			attempts++
+			active++
+			m.stats.poolAttempts.Add(1)
+			go func(endpoint string, attemptCtx context.Context, attemptCancel context.CancelFunc) {
+				started := time.Now()
+				response, err := m.fetchEndpoint(attemptCtx, endpoint, domain)
+				cause := context.Cause(attemptCtx)
+				// net/http returns a custom cancellation cause rather than the
+				// context.Canceled sentinel. Normalize only this exact cause;
+				// concurrent real HTTP/timeout failures remain real failures.
+				if attemptCtx.Err() == context.Canceled && (stderrors.Is(err, context.Canceled) || cause != nil && stderrors.Is(err, cause)) {
+					err = &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: context.Canceled}
+				}
+				attemptCancel()
+				results <- asyncDNSPoolResult{endpoint, response, err, cause, time.Since(started)}
+			}(candidate.endpoint, attemptCtx, attemptCancel)
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(asyncDNSPoolHedgeDelay)
+			hedge = timer.C
+			return true
 		}
-		if attemptCtx == nil {
-			continue
+		return false
+	}
+	observe := func(r asyncDNSPoolResult) {
+		m.pool.observeCause(r.endpoint, r.response, r.err, r.elapsed, r.cause)
+		if r.err == nil {
+			m.pool.record(r.endpoint, false, time.Now())
+		} else if asyncDNSPoolRetryable(r.err) && !stderrors.Is(r.err, context.Canceled) {
+			m.pool.record(r.endpoint, true, time.Now())
 		}
-		if attempts > 0 {
-			m.stats.poolFailovers.Add(1)
+	}
+	finish := func(response *asyncDNSClassifierResponse, err, cause error) (*asyncDNSClassifierResponse, error) {
+		cancel(cause)
+		// Context-aware HTTP requests close response bodies in fetchEndpoint.
+		// No attempt goroutine is detached from its job or left behind on return.
+		for active > 0 {
+			r := <-results
+			active--
+			observe(r)
 		}
-		attempts++
-		m.stats.poolAttempts.Add(1)
-		started := time.Now()
-		response, err := m.fetchEndpoint(attemptCtx, candidate.endpoint, domain)
-		attemptCancel()
-		m.pool.observe(candidate.endpoint, response, err, time.Since(started))
-		if err == nil {
-			m.pool.record(candidate.endpoint, false, time.Now())
-			return response, nil // Pending/stale/expired/invalid shape never fan out.
+		return response, err
+	}
+	launch()
+	var lastErr error
+	for active > 0 {
+		select {
+		case r := <-results:
+			active--
+			observe(r)
+			if r.err == nil {
+				return finish(r.response, nil, asyncDNSPoolWinnerCancel)
+			}
+			lastErr = r.err
+			if !asyncDNSPoolRetryable(r.err) {
+				return finish(nil, r.err, asyncDNSPoolTerminalCancel)
+			}
+			if ctx.Err() == nil {
+				launch()
+			}
+		case <-hedge:
+			hedge = nil
+			launch() // Full slots never cancel a live request to make room.
+		case <-ctx.Done():
+			return finish(nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: ctx.Err()}, context.Cause(ctx))
 		}
-		lastErr = err
-		retryable := asyncDNSPoolRetryable(err)
-		// Deadline exhaustion still demotes a failed backend. Explicit caller
-		// cancellation is not evidence that the backend is unhealthy.
-		if retryable && ctx.Err() != context.Canceled {
-			m.pool.record(candidate.endpoint, true, time.Now())
-		}
-		if !retryable || ctx.Err() != nil {
-			return nil, err // Auth, overload, redirects and invalid payloads stop here.
-		}
+	}
+	if lastErr == nil {
+		lastErr = &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: ctx.Err()}
 	}
 	return nil, lastErr
 }

@@ -228,8 +228,8 @@ func TestAsyncDNSPoolBackgroundTimeoutDoesNotBecomeRouteWait(t *testing.T) {
 		t.Fatal("waiter exceeded its deadline or shortened background share")
 	}
 	eventuallyAsyncDNS(t, func() bool { return m.Stats().Entries == 1 })
-	if !m.Apply(swrContext("late-pool.example")) || primary.Load() != 1 || secondary.Load() != 1 || m.Stats().Requests != 2 || m.Stats().Errors != 1 {
-		t.Fatal("bounded background retry did not recover L1 after one failed operation")
+	if !m.Apply(swrContext("late-pool.example")) || primary.Load() != 1 || secondary.Load() != 1 || m.Stats().Requests != 1 || m.Stats().Errors != 0 {
+		t.Fatal("bounded background hedge did not recover L1 in one operation")
 	}
 }
 
@@ -256,9 +256,9 @@ func TestAsyncDNSPoolBoundsAttemptsAndTotalHTTPTimeout(t *testing.T) {
 			}
 			elapsed := time.Since(start)
 			stats := m.Stats()
-			// A silent first member may consume the whole operation deadline.
-			// Fast failures still reach exactly six members in the test above.
-			if calls.Load() != 1 || stats.PoolAttempts != 1 || stats.PoolFailovers != 0 || elapsed < time.Duration(timeout)*time.Millisecond-20*time.Millisecond || elapsed > time.Duration(timeout)*time.Millisecond+80*time.Millisecond {
+			// Two silent attempts share one deadline; no slot is created by
+			// canceling a live attempt. Fast failures still reach six members.
+			if calls.Load() != 2 || stats.PoolAttempts != 2 || stats.PoolFailovers != 1 || elapsed < time.Duration(timeout)*time.Millisecond-20*time.Millisecond || elapsed > time.Duration(timeout)*time.Millisecond+80*time.Millisecond {
 				t.Fatalf("pool multiplied the shared timeout or escaped attempt bounds: calls=%d elapsed=%s stats=%+v", calls.Load(), elapsed, stats)
 			}
 			if m.pool.states[0].failures != 1 || !time.Now().Before(m.pool.states[0].cooldownUntil) {
@@ -496,7 +496,7 @@ func TestAsyncDNSPoolHealthyMembersKeepWholeBudget(t *testing.T) {
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, handler, handler, handler)
 	start := time.Now()
 	response, err := m.fetchContext(context.Background(), "healthy.example")
-	if err != nil || response == nil || response.Route != "ru" || calls.Load() != 1 {
+	if err != nil || response == nil || response.Route != "ru" || calls.Load() != 2 {
 		t.Fatalf("healthy member lost whole deadline: err=%v calls=%d elapsed=%v", err, calls.Load(), time.Since(start))
 	}
 	if time.Since(start) >= 150*time.Millisecond {
@@ -510,7 +510,13 @@ func TestAsyncDNSPoolRefusedConnectionKeepsSameOperationBudget(t *testing.T) {
 		survivor.Add(1)
 		time.Sleep(80 * time.Millisecond)
 		io.WriteString(w, poolReady)
-	}, func(w http.ResponseWriter, r *http.Request) { t.Error("successful operation fanned out") })
+	}, func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-time.After(80 * time.Millisecond):
+			io.WriteString(w, poolReady)
+		case <-r.Context().Done():
+		}
+	})
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -527,7 +533,7 @@ func TestAsyncDNSPoolRefusedConnectionKeepsSameOperationBudget(t *testing.T) {
 	}
 	start := time.Now()
 	response, err := m.fetchContext(context.Background(), "refused.example")
-	if err != nil || response == nil || survivor.Load() != 1 || m.Stats().PoolAttempts != 2 {
+	if err != nil || response == nil || survivor.Load() != 1 || m.Stats().PoolAttempts != 3 {
 		t.Fatalf("fast refusal discarded remaining budget: err=%v stats=%+v", err, m.Stats())
 	}
 	if time.Since(start) >= 150*time.Millisecond {
@@ -535,29 +541,24 @@ func TestAsyncDNSPoolRefusedConnectionKeepsSameOperationBudget(t *testing.T) {
 	}
 }
 
-func TestAsyncDNSPoolExpiredOperationDemotesHungMember(t *testing.T) {
+func TestAsyncDNSPoolSilentOperationRecoversWithoutFalsePenalty(t *testing.T) {
 	var hung, survivor atomic.Int32
 	slow := func(w http.ResponseWriter, r *http.Request) {
 		survivor.Add(1)
-		time.Sleep(80 * time.Millisecond)
-		io.WriteString(w, poolReady)
+		select {
+		case <-time.After(80 * time.Millisecond):
+			io.WriteString(w, poolReady)
+		case <-r.Context().Done():
+		}
 	}
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { hung.Add(1); <-r.Context().Done() }, slow, slow)
 	start := time.Now()
-	_, err := m.fetchContext(context.Background(), "hung.example")
-	if !errors.Is(err, context.DeadlineExceeded) || hung.Load() != 1 || survivor.Load() != 0 || m.Stats().PoolAttempts != 1 || time.Since(start) > 230*time.Millisecond {
-		t.Fatalf("silent failure escaped one shared deadline: err=%v calls=%d/%d stats=%+v", err, hung.Load(), survivor.Load(), m.Stats())
+	response, err := m.fetchContext(context.Background(), "hung.example")
+	if err != nil || response == nil || response.Route != "ru" || hung.Load() != 1 || survivor.Load() != 1 || m.Stats().PoolAttempts != 2 || time.Since(start) >= 150*time.Millisecond {
+		t.Fatalf("silent first did not recover: %v %+v", err, m.Stats())
 	}
-	m.pool.mu.Lock()
-	state := m.pool.states[0]
-	m.pool.next = 0
-	m.pool.mu.Unlock()
-	if state.failures != 1 || !time.Now().Before(state.cooldownUntil) {
-		t.Fatal("expired operation failed to demote hung member")
-	}
-	response, err := m.fetchContext(context.Background(), "next.example")
-	if err != nil || response == nil || hung.Load() != 1 || survivor.Load() != 1 || m.Stats().PoolCooldownSkips != 1 {
-		t.Fatalf("next operation did not skip known hung member: err=%v stats=%+v", err, m.Stats())
+	if m.pool.states[0].failures != 0 || m.pool.endpointStats()[0].WinnerCanceled != 1 {
+		t.Fatal("speculative winner cancellation inferred unhealthy endpoint")
 	}
 }
 
@@ -581,7 +582,7 @@ func TestAsyncDNSPoolZeroWaitRecoveryKeepsWarmL1(t *testing.T) {
 		t.Fatal("background failure discarded warm decision")
 	}
 	eventuallyAsyncDNS(t, func() bool { return m.Stats().Entries == 2 })
-	if !m.Apply(swrContext("cold.example")) || primary.Load() != 1 || secondary.Load() != 1 || m.Stats().Requests != 2 || m.Stats().Errors != 1 {
+	if !m.Apply(swrContext("cold.example")) || primary.Load() != 1 || secondary.Load() != 1 || m.Stats().Requests != 1 || m.Stats().Errors != 0 {
 		t.Fatalf("scheduler did not recover cold L1 after bounded failed operation: %+v", m.Stats())
 	}
 	m.mu.Lock()
