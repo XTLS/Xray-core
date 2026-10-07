@@ -12,6 +12,7 @@ import (
 // At most six configured indices; no endpoint URLs, domains, tokens or errors.
 // Elapsed includes client Do and body decode, not server processing latency.
 type asyncDNSPoolEndpointCounters struct {
+	trace                                                           asyncDNSHTTPTraceCounters
 	attempts, successes, pending, timeout, canceled, transport      atomic.Uint64
 	http, invalid, request, cooldownSkips                           atomic.Uint64
 	http401, http403, http429, http502, http503, http504, httpOther atomic.Uint64
@@ -19,6 +20,7 @@ type asyncDNSPoolEndpointCounters struct {
 }
 
 type asyncDNSPoolEndpointStats struct {
+	Trace                                                           asyncDNSHTTPTraceStats
 	Attempts, Successes, Pending, Timeout, Canceled, Transport      uint64
 	HTTP, Invalid, Request, CooldownSkips                           uint64
 	HTTP401, HTTP403, HTTP429, HTTP502, HTTP503, HTTP504, HTTPOther uint64
@@ -97,7 +99,7 @@ func (p *asyncDNSEndpointPool) endpointStats() []asyncDNSPoolEndpointStats {
 	for i := range p.states {
 		c := p.states[i].metrics
 		out[i] = asyncDNSPoolEndpointStats{
-			Attempts: c.attempts.Load(), Successes: c.successes.Load(), Pending: c.pending.Load(),
+			Trace: c.trace.snapshot(), Attempts: c.attempts.Load(), Successes: c.successes.Load(), Pending: c.pending.Load(),
 			Timeout: c.timeout.Load(), Canceled: c.canceled.Load(), Transport: c.transport.Load(),
 			HTTP: c.http.Load(), Invalid: c.invalid.Load(), Request: c.request.Load(), CooldownSkips: c.cooldownSkips.Load(),
 			HTTP401: c.http401.Load(), HTTP403: c.http403.Load(), HTTP429: c.http429.Load(), HTTP502: c.http502.Load(), HTTP503: c.http503.Load(), HTTP504: c.http504.Load(), HTTPOther: c.httpOther.Load(),
@@ -108,5 +110,5 @@ func (p *asyncDNSEndpointPool) endpointStats() []asyncDNSPoolEndpointStats {
 }
 
 func (s asyncDNSPoolEndpointStats) logLine(matcher uint64, index int) string {
-	return fmt.Sprintf("async DNS pool endpoint stats matcherID=%d endpointIndex=%d attempts=%d successes=%d pending=%d timeoutErrors=%d canceledErrors=%d transportErrors=%d httpErrors=%d invalidResponses=%d requestErrors=%d cooldownSkips=%d http401=%d http403=%d http429=%d http502=%d http503=%d http504=%d httpOther=%d elapsedLE50Millis=%d elapsedLE100Millis=%d elapsedLE150Millis=%d elapsedGT150Millis=%d", matcher, index, s.Attempts, s.Successes, s.Pending, s.Timeout, s.Canceled, s.Transport, s.HTTP, s.Invalid, s.Request, s.CooldownSkips, s.HTTP401, s.HTTP403, s.HTTP429, s.HTTP502, s.HTTP503, s.HTTP504, s.HTTPOther, s.ElapsedLE50, s.ElapsedLE100, s.ElapsedLE150, s.ElapsedGT150)
+	return fmt.Sprintf("async DNS pool endpoint stats matcherID=%d endpointIndex=%d attempts=%d successes=%d pending=%d timeoutErrors=%d canceledErrors=%d transportErrors=%d httpErrors=%d invalidResponses=%d requestErrors=%d cooldownSkips=%d http401=%d http403=%d http429=%d http502=%d http503=%d http504=%d httpOther=%d elapsedLE50Millis=%d elapsedLE100Millis=%d elapsedLE150Millis=%d elapsedGT150Millis=%d", matcher, index, s.Attempts, s.Successes, s.Pending, s.Timeout, s.Canceled, s.Transport, s.HTTP, s.Invalid, s.Request, s.CooldownSkips, s.HTTP401, s.HTTP403, s.HTTP429, s.HTTP502, s.HTTP503, s.HTTP504, s.HTTPOther, s.ElapsedLE50, s.ElapsedLE100, s.ElapsedLE150, s.ElapsedGT150) + s.Trace.logSuffix()
 }
