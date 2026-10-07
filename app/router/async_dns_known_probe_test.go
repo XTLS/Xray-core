@@ -119,16 +119,15 @@ func TestAsyncDNSPoolKnownProbeTerminalAndExternalCancel(t *testing.T) {
 	})
 }
 
-func TestAsyncDNSPoolKnownProbeGenericFourSkipsSubMillisecondReserve(t *testing.T) {
-	var probe atomic.Int32
-	ready := func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) }
-	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { probe.Add(1); <-r.Context().Done() }, ready, ready, ready)
+func TestAsyncDNSPoolKnownProbeGenericFourPreservesTinyParentDeadline(t *testing.T) {
+	dead := func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }
+	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, dead, dead, dead, dead)
 	markKnownProbe(m, false)
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Microsecond)
 	defer cancel()
-	_, _ = m.fetchContext(ctx, "tiny.example")
-	if probe.Load() != 0 || m.pool.endpointStats()[0].Attempts != 0 {
-		t.Fatal("known probe spent an unusably small remaining budget")
+	_, err := m.fetchContext(ctx, "tiny.example")
+	if !errors.Is(err, context.DeadlineExceeded) || m.pool.endpointStats()[0].Attempts != 1 || m.Stats().PoolAttempts != 1 {
+		t.Fatal("known member did not retain the shorter caller deadline")
 	}
 }
 
@@ -180,7 +179,7 @@ func TestAsyncDNSPoolKnownSlowProbeDoesNotDisplaceHealthyPeer(t *testing.T) {
 	}
 }
 
-func TestAsyncDNSPoolKnownProbeGenericFourKeepsChildReserve(t *testing.T) {
+func TestAsyncDNSPoolKnownProbeGenericFourSharesParent(t *testing.T) {
 	dead := func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }
 	recovered := func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -194,11 +193,11 @@ func TestAsyncDNSPoolKnownProbeGenericFourKeepsChildReserve(t *testing.T) {
 	started := time.Now()
 	response, err := m.fetchContext(context.Background(), "generic-four.example")
 	if err != nil || response == nil || response.Generation != "same-fill" || time.Since(started) >= 150*time.Millisecond {
-		t.Fatalf("generic reserve changed %v", err)
+		t.Fatalf("generic parent deadline changed %v", err)
 	}
 	s := m.pool.endpointStats()
-	if s[0].Timeout != 1 || s[0].WinnerCanceled != 0 || s[1].Successes != 1 || m.pool.states[0].failures != 2 {
-		t.Fatalf("generic actualchildtimeout hidden %+v", s)
+	if s[0].Timeout != 0 || s[0].WinnerCanceled != 1 || s[1].Successes != 1 || m.pool.states[0].failures != 1 {
+		t.Fatalf("generic own winner cancellation mislabeled %+v", s)
 	}
 	if m.Stats().PoolAttempts > 4 {
 		t.Fatal("endpoint repeated")

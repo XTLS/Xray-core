@@ -18,7 +18,7 @@ import (
 const (
 	asyncDNSOverlayPoolEnv    = "XRAY_ASYNC_DNS_OVERLAY_ENDPOINTS_JSON"
 	asyncDNSPoolMaxAttempts   = 6
-	asyncDNSPoolMaxConcurrent = 3
+	asyncDNSPoolMaxConcurrent = asyncDNSPoolMaxAttempts
 )
 
 var asyncDNSOverlayPrefix = netip.MustParsePrefix("100.64.0.0/10")
@@ -108,8 +108,8 @@ func (p *asyncDNSEndpointPool) candidatesWithDiagnostic(now time.Time) ([]asyncD
 		}
 	}
 	// Passive cooldown is a preference, not permission to remove redundancy.
-	// Keep ordinary >=3 eligible selection untouched. If fewer remain, reserve
-	// only enough least-failed cooled peers for the existing bounded hedge.
+	// Every configured member has a slot. Keep eligible round-robin first,
+	// followed by all cooled peers in least-failed order; none is excluded.
 	needed := max(0, min(asyncDNSPoolMaxConcurrent, len(p.states))-len(candidates))
 	if needed > 0 {
 		sort.SliceStable(cooling, func(i, j int) bool {
@@ -235,27 +235,8 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 			candidate := candidates[i]
 			next++
 			attemptCtx, attemptCancel := ctx, func() {}
-			// A fixed 2/3-member pool has a slot for every member. Reserving
-			// child time by killing its sole recovered peer defeats that redundancy.
-			// Larger pools retain the inherited conditional reserve for later slots.
-			if candidate.knownFailed && len(m.pool.states) > asyncDNSPoolMaxConcurrent {
-				for _, successor := range candidates[i+1:] {
-					if successor.knownFailed {
-						continue
-					}
-					deadline, _ := ctx.Deadline()
-					budget := min(asyncDNSPoolHedgeDelay, time.Until(deadline)/2)
-					if budget < time.Millisecond {
-						attemptCtx = nil
-					} else {
-						attemptCtx, attemptCancel = context.WithTimeout(ctx, budget)
-					}
-					break
-				}
-			}
-			if attemptCtx == nil {
-				continue
-			}
+			// Every configured member fits the bounded hedge. All attempts share
+			// the parent deadline, including recovered members with failure history.
 			if attempts > 0 {
 				m.stats.poolFailovers.Add(1)
 			}
