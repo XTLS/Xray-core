@@ -107,3 +107,30 @@ loss с bounded restoration; runtime fleet пока HOLD. Rollback возвра�
 immutable XrayR artifact и private operator preimage через действующий writer;
 L2/token/namespace не удаляются. Org-wide draft фиксирует тот же concurrency и
 measurement contract, без нового delivery workflow или feature flag.
+
+### Passive cooldown и сохранение доступности
+
+Canary silent-loss выявил отдельный дефект selection: после единичных timeout
+оба surviving endpoints попали в cooldown; job без eligible кандидатов возвращал
+synthetic transport error без сетевой попытки. Единственный eligible endpoint
+также остаётся без hedge по source, даже когда cooled backup уже мог ответить.
+Это воспроизводимый source-риск; причина одного production timeout не доказана.
+
+Cooldown остаётся предпочтением, а не запретом резервной попытки. При минимум
+двух eligible endpoints прежний round-robin не меняется. При нуле или одном
+eligible selection дополняет список только до двух уникальных кандидатов:
+сначала меньше passive failures, затем ближайшее cooldown expiry; при равенстве
+сохраняется текущий round-robin порядок. Такие кандидаты `knownFailed=true`.
+Это предпочитает surviving endpoint с одним timeout dead primary с шестью,
+но не объявляет cooled endpoint здоровым. Истечение cooldown по-прежнему
+возвращает primary в обычный список; реальный успех очищает passive failure state.
+
+`cooldownSkips` считает только фактически исключённые cooled members; выбранный
+резерв сохраняет обычные attempt/timeout/success/cancel counters. Новых полей
+telemetry нет. При fast healthy <50 мс резерв не запускается. Общий configured
+job deadline, максимум две одновременные попытки, уникальные endpoints, workers,
+queue, auth/terminal responses и namespace не меняются. При полном отказе
+сохраняются реальные bounded attempts и errors вместо ложной synthetic cooldown
+недоступности. Давление на восстановившийся backend может возрасти в пределах
+уже принятого max2; лимиты backend не повышаются. Это SOURCE-коррекция внутри
+контракта; прежнее реальное fault failure остаётся evidence, runtime HOLD.

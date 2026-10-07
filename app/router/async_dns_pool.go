@@ -88,19 +88,38 @@ func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]asyncDNSEndpointCand
 	start := p.next
 	p.next = (p.next + 1) % len(p.states)
 	candidates := make([]asyncDNSEndpointCandidate, 0, min(asyncDNSPoolMaxAttempts, len(p.states)))
-	skipped := 0
+	cooling := make([]*asyncDNSEndpointState, 0, len(p.states))
 	for offset := range len(p.states) {
 		state := &p.states[(start+offset)%len(p.states)]
 		if now.Before(state.cooldownUntil) {
-			skipped++
-			state.metrics.cooldownSkips.Add(1)
+			cooling = append(cooling, state)
 			continue
 		}
 		if len(candidates) < asyncDNSPoolMaxAttempts {
 			candidates = append(candidates, asyncDNSEndpointCandidate{state.endpoint, state.failures > 0})
 		}
 	}
-	return candidates, skipped
+	// Passive cooldown is a preference, not permission to remove redundancy.
+	// Keep ordinary >=2 eligible selection untouched. If fewer remain, reserve
+	// only enough least-failed cooled peers for the existing bounded hedge.
+	needed := max(0, min(2, len(p.states))-len(candidates))
+	if needed > 0 {
+		sort.SliceStable(cooling, func(i, j int) bool {
+			if cooling[i].failures != cooling[j].failures {
+				return cooling[i].failures < cooling[j].failures
+			}
+			return cooling[i].cooldownUntil.Before(cooling[j].cooldownUntil)
+		})
+		for _, state := range cooling[:needed] {
+			candidates = append(candidates, asyncDNSEndpointCandidate{state.endpoint, true})
+		}
+	}
+	// Only omitted cooled members are skips; a reserved fallback can actually
+	// start and retains its real timeout/success/cancellation counters.
+	for _, state := range cooling[needed:] {
+		state.metrics.cooldownSkips.Add(1)
+	}
+	return candidates, len(cooling) - needed
 }
 
 func (p *asyncDNSEndpointPool) record(endpoint string, failed bool, now time.Time) {
