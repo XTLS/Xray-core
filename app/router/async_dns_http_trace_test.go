@@ -109,13 +109,14 @@ func TestAsyncDNSHTTPTraceTerminalAuthPendingAndCooldown(t *testing.T) {
 	for _, status := range []int{401, 429, 200} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			var calls atomic.Uint64
-			m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) {
+			terminal := func(w http.ResponseWriter, r *http.Request) {
 				calls.Add(1)
 				w.WriteHeader(status)
 				if status == 200 {
 					io.WriteString(w, `{"state":"pending","retryAfterMillis":5000}`)
 				}
-			}, func(w http.ResponseWriter, r *http.Request) { t.Error("terminal result retried") })
+			}
+			m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, terminal, terminal)
 			_, err := m.fetch("valid.example")
 			if (err == nil) != (status == 200) {
 				t.Fatal("terminal behavior changed")
@@ -135,17 +136,21 @@ func TestAsyncDNSHTTPTraceTerminalAuthPendingAndCooldown(t *testing.T) {
 				t.Fatalf("terminal phase missing: %+v", s)
 			}
 			m.pool.mu.Lock()
+			cooldownUntil := time.Now().Add(time.Hour)
 			for i := range m.pool.states {
-				m.pool.states[i].cooldownUntil = time.Now().Add(time.Hour)
+				m.pool.states[i].cooldownUntil = cooldownUntil
 			}
 			m.pool.mu.Unlock()
 			_, err = m.fetch("next.example")
-			if err == nil || m.Stats().PoolSyntheticCooldown != 1 || calls.Load() != 1 {
-				t.Fatal("cooldown changed behavior")
+			if (err == nil) != (status == 200) || m.Stats().PoolSyntheticCooldown != 0 || calls.Load() != 2 {
+				t.Fatal("cooldown fallback changed terminal behavior")
 			}
 			after := m.pool.endpointStats()
-			if after[0].Attempts != 1 || after[1].Attempts != 0 {
-				t.Fatal("synthetic cooldown counted as HTTP")
+			if after[0].Attempts != 1 || after[1].Attempts != 1 || after[1].Trace.Phases[phase] != 1 {
+				t.Fatalf("cooldown fallback HTTP phase/fanout changed: %+v", after)
+			}
+			if status == 200 && after[1].Pending != 1 {
+				t.Fatal("cooldown fallback pending changed")
 			}
 		})
 	}

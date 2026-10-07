@@ -36,8 +36,8 @@ func TestAsyncDNSPoolAttemptStatsIncludeRecoveredTransportFailure(t *testing.T) 
 		t.Fatal(err)
 	}
 	s = m.pool.endpointStats()
-	if s[0].CooldownSkips == 0 || s[0].Attempts != 1 {
-		t.Fatalf("cooldown not visible: %+v", s)
+	if s[0].CooldownSkips != 0 || s[0].Attempts != 1 || s[1].Successes != 2 {
+		t.Fatalf("reserved fallback falsely skipped or launched on fast healthy: %+v", s)
 	}
 	for i, v := range s {
 		line := v.logLine(7, i)
@@ -113,7 +113,7 @@ func TestAsyncDNSPoolAttemptStatsTimeoutAndCancellationPreserveHealth(t *testing
 		t.Fatal(err)
 	}
 	s = m.pool.endpointStats()
-	if s[1].Successes != 2 || s[0].CooldownSkips == 0 {
+	if s[1].Successes != 2 || s[0].CooldownSkips != 0 || s[0].Attempts != 1 {
 		t.Fatalf("passive recovery changed: %+v", s)
 	}
 	// Cancellation happens after the request starts, so it is an attempt; it must
