@@ -251,14 +251,14 @@ func TestAsyncDNSPoolBoundsAttemptsAndTotalHTTPTimeout(t *testing.T) {
 			handler := func(w http.ResponseWriter, r *http.Request) { calls.Add(1); <-r.Context().Done() }
 			m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: timeout}, handler, handler, handler, handler, handler, handler)
 			start := time.Now()
-			if _, err := m.fetch("unavailable.example"); err == nil {
-				t.Fatal("all-down pool succeeded")
+			if _, err := m.fetch("unavailable.example"); !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("all-down pool did not expire its parent: %v", err)
 			}
 			elapsed := time.Since(start)
 			stats := m.Stats()
-			// Three silent attempts share one deadline; no slot is created by
-			// canceling a live attempt. Fast failures still reach six members.
-			if calls.Load() != 3 || stats.PoolAttempts != 3 || stats.PoolFailovers != 2 || elapsed < time.Duration(timeout)*time.Millisecond-20*time.Millisecond || elapsed > time.Duration(timeout)*time.Millisecond+80*time.Millisecond {
+			// Six silent attempts share one deadline; no slot is created by
+			// canceling a live attempt. Fast failures also reach six members.
+			if calls.Load() != 6 || stats.PoolAttempts != 6 || stats.PoolFailovers != 5 || elapsed < time.Duration(timeout)*time.Millisecond-20*time.Millisecond || elapsed > time.Duration(timeout)*time.Millisecond+80*time.Millisecond {
 				t.Fatalf("pool multiplied the shared timeout or escaped attempt bounds: calls=%d elapsed=%s stats=%+v", calls.Load(), elapsed, stats)
 			}
 			if m.pool.states[0].failures != 1 || !time.Now().Before(m.pool.states[0].cooldownUntil) {
