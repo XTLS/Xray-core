@@ -66,6 +66,7 @@ type asyncDNSHTTPAttemptTrace struct {
 	conn                                net.Conn
 	reused                              bool
 	tcpAtAcquire                        asyncDNSTCPInfo
+	diagnostic                          *asyncDNSPoolTraceSample
 }
 
 func (m *AsyncDNSRouteMatcher) newHTTPAttemptTrace(endpoint string) *asyncDNSHTTPAttemptTrace {
@@ -172,6 +173,9 @@ func (t *asyncDNSHTTPAttemptTrace) finish(err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.finished = true
+	if t.diagnostic != nil {
+		t.diagnostic.set(t, err)
+	}
 	t.counters.phases[t.latest].Add(1)
 	if err != nil {
 		t.recordErrorSample(err, time.Now())

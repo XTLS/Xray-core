@@ -32,16 +32,18 @@ type asyncDNSEndpointState struct {
 type asyncDNSEndpointCandidate struct {
 	endpoint    string
 	knownFailed bool
+	diagnostic  asyncDNSPoolCandidateSample
 }
 
 // The fixed-size pool is operator transport configuration, never owner JSON.
 // Its allowlist is immutable; passive health state uses a separate mutex from L1.
 type asyncDNSEndpointPool struct {
-	mu       sync.Mutex
-	states   []asyncDNSEndpointState
-	allowed  map[string]struct{}
-	next     int
-	identity string
+	mu             sync.Mutex
+	states         []asyncDNSEndpointState
+	allowed        map[string]struct{}
+	next           int
+	identity       string
+	failureSamples asyncDNSPoolFailureBuffer
 }
 
 func readAsyncDNSOverlayPool(overlay, token string) (*asyncDNSEndpointPool, error) {
@@ -83,6 +85,11 @@ func readAsyncDNSOverlayPool(overlay, token string) (*asyncDNSEndpointPool, erro
 }
 
 func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]asyncDNSEndpointCandidate, int) {
+	c, skipped, _ := p.candidatesWithDiagnostic(now)
+	return c, skipped
+}
+
+func (p *asyncDNSEndpointPool) candidatesWithDiagnostic(now time.Time) ([]asyncDNSEndpointCandidate, int, []asyncDNSPoolCandidateSample) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	start := p.next
@@ -96,7 +103,7 @@ func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]asyncDNSEndpointCand
 			continue
 		}
 		if len(candidates) < asyncDNSPoolMaxAttempts {
-			candidates = append(candidates, asyncDNSEndpointCandidate{state.endpoint, state.failures > 0})
+			candidates = append(candidates, asyncDNSEndpointCandidate{endpoint: state.endpoint, knownFailed: state.failures > 0})
 		}
 	}
 	// Passive cooldown is a preference, not permission to remove redundancy.
@@ -111,7 +118,7 @@ func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]asyncDNSEndpointCand
 			return cooling[i].cooldownUntil.Before(cooling[j].cooldownUntil)
 		})
 		for _, state := range cooling[:needed] {
-			candidates = append(candidates, asyncDNSEndpointCandidate{state.endpoint, true})
+			candidates = append(candidates, asyncDNSEndpointCandidate{endpoint: state.endpoint, knownFailed: true})
 		}
 	}
 	// Only omitted cooled members are skips; a reserved fallback can actually
@@ -119,7 +126,18 @@ func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]asyncDNSEndpointCand
 	for _, state := range cooling[needed:] {
 		state.metrics.cooldownSkips.Add(1)
 	}
-	return candidates, len(cooling) - needed
+	snapshot := make([]asyncDNSPoolCandidateSample, len(p.states))
+	for i, state := range p.states {
+		snapshot[i] = asyncDNSPoolCandidateSample{Index: i, Ordinal: -1, Failures: state.failures, KnownFailed: state.failures > 0, Cooldown: max(0, state.cooldownUntil.Sub(now).Microseconds())}
+		for j := range candidates {
+			if candidates[j].endpoint == state.endpoint {
+				snapshot[i].Selected = true
+				snapshot[i].Ordinal = j
+				candidates[j].diagnostic = snapshot[i]
+			}
+		}
+	}
+	return candidates, len(cooling) - needed, snapshot
 }
 
 func (p *asyncDNSEndpointPool) record(endpoint string, failed bool, now time.Time) {
@@ -174,11 +192,12 @@ var (
 const asyncDNSPoolHedgeDelay = 50 * time.Millisecond
 
 type asyncDNSPoolResult struct {
-	endpoint string
-	response *asyncDNSClassifierResponse
-	err      error
-	cause    error
-	elapsed  time.Duration
+	endpoint   string
+	response   *asyncDNSClassifierResponse
+	err        error
+	cause      error
+	elapsed    time.Duration
+	diagnostic asyncDNSPoolAttemptSample
 }
 
 func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) (*asyncDNSClassifierResponse, error) {
@@ -187,10 +206,19 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 	defer deadlineCancel()
 	ctx, cancel := context.WithCancelCause(deadlineCtx)
 	defer cancel(nil)
-	candidates, skipped := m.pool.candidates(time.Now())
+	jobStarted := time.Now()
+	candidates, skipped, selection := m.pool.candidatesWithDiagnostic(jobStarted)
+	sample := asyncDNSPoolFailureSample{Budget: m.requestTimeout.Microseconds(), Candidates: selection}
+	defer func() {
+		if sample.Terminal != "" {
+			sample.Elapsed = time.Since(jobStarted).Microseconds()
+			m.pool.failureSamples.add(sample)
+		}
+	}()
 	m.stats.poolCooldownSkips.Add(uint64(skipped))
 	if len(candidates) == 0 {
 		m.stats.poolSyntheticCooldown.Add(1)
+		sample.Terminal = "transport"
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: errors.New("async DNS endpoint pool is cooling down")}
 	}
 	// Only the coordinator launches, observes and records attempts. A result
@@ -227,9 +255,17 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 			if attempts > 0 {
 				m.stats.poolFailovers.Add(1)
 			}
+			diag := asyncDNSPoolAttemptSample{Index: candidate.diagnostic.Index, Ordinal: i, KnownFailed: candidate.knownFailed, Hedge: active > 0, Launch: time.Since(jobStarted).Microseconds(), Acquire: -1, Wrote: -1, FirstByte: -1}
+			parentDeadline, _ := ctx.Deadline()
+			childDeadline, _ := attemptCtx.Deadline()
+			diag.Remaining = max(0, time.Until(parentDeadline).Microseconds())
+			diag.ChildBudget = max(0, time.Until(childDeadline).Microseconds())
+			sink := &asyncDNSPoolTraceSample{}
+			attemptCtx = context.WithValue(attemptCtx, asyncDNSPoolTraceKey{}, sink)
 			m.pool.startAttempt(candidate.endpoint, active > 0)
 			attempts++
 			active++
+			sample.MaxConcurrent = max(sample.MaxConcurrent, active)
 			m.stats.poolAttempts.Add(1)
 			go func(endpoint string, attemptCtx context.Context, attemptCancel context.CancelFunc) {
 				started := time.Now()
@@ -242,7 +278,12 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 					err = &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: context.Canceled}
 				}
 				attemptCancel()
-				results <- asyncDNSPoolResult{endpoint, response, err, cause, time.Since(started)}
+				elapsed := time.Since(started)
+				diag.TerminalOffset = time.Since(jobStarted).Microseconds()
+				diag.Terminal = asyncDNSPoolDiagnosticOutcome(response, err, cause)
+				diag.Cause = asyncDNSPoolDiagnosticCause(cause)
+				sink.copyTo(&diag, jobStarted)
+				results <- asyncDNSPoolResult{endpoint: endpoint, response: response, err: err, cause: cause, elapsed: elapsed, diagnostic: diag}
 			}(candidate.endpoint, attemptCtx, attemptCancel)
 			if !timer.Stop() {
 				select {
@@ -257,6 +298,7 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 		return false
 	}
 	observe := func(r asyncDNSPoolResult) {
+		sample.Attempts = append(sample.Attempts, r.diagnostic)
 		m.pool.observeCause(r.endpoint, r.response, r.err, r.elapsed, r.cause)
 		if r.err == nil {
 			m.pool.record(r.endpoint, false, time.Now())
@@ -272,6 +314,10 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 			r := <-results
 			active--
 			observe(r)
+		}
+		if err != nil {
+			sample.Terminal = asyncDNSPoolDiagnosticOutcome(response, err, cause)
+			sample.Deadline = deadlineCtx.Err() == context.DeadlineExceeded
 		}
 		return response, err
 	}
@@ -302,6 +348,8 @@ func (m *AsyncDNSRouteMatcher) fetchPool(parent context.Context, domain string) 
 	if lastErr == nil {
 		lastErr = &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: ctx.Err()}
 	}
+	sample.Terminal = asyncDNSPoolDiagnosticOutcome(nil, lastErr, context.Cause(ctx))
+	sample.Deadline = deadlineCtx.Err() == context.DeadlineExceeded
 	return nil, lastErr
 }
 
