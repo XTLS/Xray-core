@@ -99,9 +99,9 @@ func TestAsyncDNSPoolFailureSampleCancellationTaxonomy(t *testing.T) {
 	}
 }
 
-func TestAsyncDNSPoolFailureSampleDrainsBothCallerCanceledAttempts(t *testing.T) {
-	started := make(chan struct{}, 2)
-	ended := make(chan struct{}, 2)
+func TestAsyncDNSPoolFailureSampleDrainsAllThreeCallerCanceledAttempts(t *testing.T) {
+	started := make(chan struct{}, 3)
+	ended := make(chan struct{}, 3)
 	silent := func(w http.ResponseWriter, r *http.Request) {
 		started <- struct{}{}
 		<-r.Context().Done()
@@ -111,7 +111,7 @@ func TestAsyncDNSPoolFailureSampleDrainsBothCallerCanceledAttempts(t *testing.T)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { _, err := m.fetchContext(ctx, "PRIVATE.example"); done <- err }()
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		select {
 		case <-started:
 		case <-time.After(time.Second):
@@ -135,7 +135,7 @@ func TestAsyncDNSPoolFailureSampleDrainsBothCallerCanceledAttempts(t *testing.T)
 	if err := json.Unmarshal([]byte(raw[0]), &sample); err != nil {
 		t.Fatal(err)
 	}
-	if sample.Terminal != "caller_cancel" || sample.MaxConcurrent != 2 || len(sample.Attempts) != 2 || sample.Deadline {
+	if sample.Terminal != "caller_cancel" || sample.MaxConcurrent != 3 || len(sample.Attempts) != 3 || sample.Deadline {
 		t.Fatalf("bad job %+v", sample)
 	}
 	for _, a := range sample.Attempts {
@@ -143,7 +143,7 @@ func TestAsyncDNSPoolFailureSampleDrainsBothCallerCanceledAttempts(t *testing.T)
 			t.Fatalf("bad drained attempt %+v", a)
 		}
 	}
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		select {
 		case <-ended:
 		case <-time.After(time.Second):

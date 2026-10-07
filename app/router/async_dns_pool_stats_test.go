@@ -106,7 +106,7 @@ func TestAsyncDNSPoolAttemptStatsTimeoutAndCancellationPreserveHealth(t *testing
 		t.Fatal("known silent probe lost surviving endpoint")
 	}
 	s := m.pool.endpointStats()
-	if s[0].Timeout != 1 || s[0].Attempts != 1 || s[1].Attempts != 1 || s[0].ElapsedLE150+s[0].ElapsedGT150 != 1 {
+	if s[0].WinnerCanceled != 1 || s[0].Timeout != 0 || s[0].Attempts != 1 || s[1].Attempts != 1 || s[0].ElapsedLE150+s[0].ElapsedGT150 != 1 {
 		t.Fatalf("silent attempt not attributed: %+v", s)
 	}
 	if _, err = m.fetch("survivor.example"); err != nil {

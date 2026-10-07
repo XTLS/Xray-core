@@ -1,136 +1,128 @@
 # ADR-0005: Ограниченный hedge для private classifier pool
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-07
 - Repo-owner: `evasionlab/Xray-core`
 - Downstream consumers: `evasionlab/XrayR`, `vpn.infra`, `dns-route-cache`
 - Org-wide ADR required: Yes
-- Org-wide ADR link: https://github.com/evasionlab/infra/blob/main/docs/adr/ADR-20261001-01-dns-cache-first-connection-and-l1-persistence.md (ROOT владеет Proposed bounded concurrency addition).
-- Implementation: только source preparation; CI, pointer change и runtime не разрешены этим документом.
+- Org-wide ADR link: https://github.com/evasionlab/infra/blob/main/docs/adr/ADR-20261001-01-dns-cache-first-connection-and-l1-persistence.md
+- Org-wide addition status: Accepted; ROOT подготовил обновление существующего дополнения, source delivery pending.
+- Implementation status: решение принято в рамках поручения пользователя о HA; локальный source проверен focused race tests. Доставка через существующие required CI и existing scoped writer разрешается отдельно в согласованном scope. Production canary/HA acceptance и fleet rollout ещё не выполнены этим решением.
 
-## Context
+## Контекст и проблема
 
-ADR-0004 сохраняет общий configured request timeout и полное время здорового
-первого endpoint. Сейчас failover последовательный: never-failed silent member
-может потратить весь deadline. Actual default pool имеет три native endpoints и
-150 мс; generic accepted configuration содержит 2–6 endpoints. Fast REJECT тест
-не проверяет silent loss. Реальное наблюдение Rontgen содержит route timeout;
-оно сохранено отдельно и не превращается в accounting exception.
+ADR-0004 сохраняет configured request timeout и полное время здорового первого
+endpoint. Actual default pool содержит три native endpoints и бюджет150 мс;
+принятая generic configuration содержит2–6 endpoints. Sequential failover
+позволяет silent first потратить весь deadline. Ограниченный max2 hedge устранил
+этот случай для одного живого backup, но не гарантирует доступность неизвестного
+третьего: self headers stall + expired failed central могут занять оба slots,
+оставив живой cooled third без попытки. Это воспроизводимый независимый риск.
 
-## Problem
+Retained production fault954/1 остаётся FAIL; его единственная timeout причина
+не установлена по aggregate counters. Предыдущие cooldown synthetic errors
+также сохранены: cooldown нельзя считать запретом на резервную попытку.
+FIRST historical-health fixture показал, что child reserve50 отменяет sole
+recovered80 primary примерно на51 мс; два остальных silent members завершают
+job по parent150. Это отдельный воспроизведённый дефект, не доказательство причины954.
 
-Первый ранее здоровый endpoint должен выдерживать ответ80 мс, а его silent loss
-должен позволять живому peer ответить в той же операции150 мс. Последовательный
-cap50 мс на каждый healthy member отбрасывает здоровые80 мс ответы. Эти свойства
-требуют ограниченного параллельного запроса; новые goroutines и отмена losers
-меняют amplification и attempt accounting.
+## Принятое решение
 
-## Decision
+Job сохраняет parent context и configured `requestTimeoutMillis`; новый deadline
+не вводится. Primary rotating eligible member запускается сразу. Если он ещё
+не завершён через существующие50 мс, один hedge заполняет свободные slots:
+active <= min(3,N), каждый endpoint используется не более одного раза,
+unique total attempts <= configured N <=6. Освободившийся slot после retryable
+error может занять следующий member. Живой request не отменяется ради slot.
+Fast first<50 мс остаётся единственной попыткой; original80 response при двух
+alternates80 сохраняется победителем. Более быстрый backup может выиграть раньше.
 
-Один job сохраняет parent context и свой configured `requestTimeoutMillis`.
-Первый eligible rotating member начинает сразу и сохраняет весь deadline.
-Если через50 мс ответ ещё не завершён, начинается следующий eligible member.
-Timer использует существующий reserve50 мс; это не новый глобальный150 мс timeout.
-Одновременно не более двух HTTP attempts/job; каждый endpoint используется
-не более одного раза. Total attempts <= configured eligible members <=6;
-для actual default3 максимум3. При retryable terminal error освободившийся slot
-может использовать следующий member без нового полного timeout. Пока два
-attempts активны, третий ждёт slot; ради slot живой запрос не отменяется.
-Known-failed probe сохраняет существующий child budget и passive cooldown.
-Fully cooling pool остаётся synthetic error без HTTP. Worker count, job/queue
-admission, retries, routeWait, L1/SWR/TTL и итоговый static fallback не меняются.
+Passive cooldown остаётся предпочтением. Если eligible members меньше min(3,N),
+список дополняется до этого числа cooled members: меньше failures, затем ближайшее
+expiry, затем текущий round-robin tie order. Выбранный резерв knownFailed;
+`cooldownSkips` считает только фактически исключённые members. Default3 включает
+все три configured members независимо от history; background probes/half-open
+state не добавляются. Реальный успех очищает failure state; собственная отмена
+winner не штрафует здоровье.
 
-Первый успешный transport response является единственным результатом job,
-включая pending/stale/other; authoritative неретраибельный error также завершает
-job. До hedge deadline такие ответы не вызывают fanout. Начавшийся конкурентный
-request отменяется и полностью drained перед возвратом job. Auth, private pins,
-view/namespace и body остаются прежними. Никаких Redis writes/replay добавлять
-нельзя; speculative classifier request использует прежние lease/fill fences.
+Для configured N=2/3 все members могут занять slots, поэтому каждый использует
+прежний полный parent context даже при historical failure/cooldown. Child reserve
+не нужен для будущего slot и не должен убивать sole recovered80. Для N>3 прежняя
+условная политика knownFailed child reserve50/remaining/2 сохраняется. Generic
+six-fast503 fixture остаётся six unique attempts; универсальная гарантия
+sole-survivor80 для generic6 пока не установлена. Namespace/membership не меняются.
 
-Winner cancellation имеет отдельную cause и counter `winnerCanceled`, terminal
-nonretryable stop — `operationCanceled`; external caller cancellation остаётся
-`canceledErrors`. Только фактические transport/timeout/HTTP failures влияют на
-passive cooldown; own winner cancellation не доказывает unhealthy peer. Уже
-полученная настоящая ошибка сохраняется даже если другой attempt выиграл.
-Ни один attempt goroutine не остаётся после возврата coordinator; buffered result
-channel на max2 и context-aware private HTTP transport обеспечивают drain.
+Первый valid response — единственный результат job, включая pending/stale/other;
+authoritative nonretryable auth/terminal error завершает job без retry. Конкуренты
+отменяются и drained до возврата coordinator; buffered channel соответствует
+max3. Parent/external cancellation сохраняется. Workers, job/queue admission,
+routeWait, L1/SWR/TTL, final static fallback, private auth/view/namespace и payload
+не меняются; Redis writes/replay или новые probes не добавляются.
 
-Typed metrics разделяют started attempts, completed endpoint attempts, successes,
-real errors, winner cancellations и terminal cancellations. `poolAttempts` остаётся
-started, `poolFailovers` — starts после первого, `hedgeStarts` — starts при уже
-активном запросе. Route requests/outcomes остаются job counters. Нельзя требовать
-endpoint attempts == completed routes: успешный job может завершить winner и
-canceled loser. Измерение должно сохранять все реальные endpoint failures и own
-cancels; route errors должны оставаться0 для healthy business gate. В stable
-terminal fixture endpoint terminal partition равен attempts; на production
-snapshot inflight transport и inflight job учитываются раздельно, без произвольной
-числовой tolerance. Два overlapping attempts могут оба завершить decode до отмены:
-оба реальные successes сохраняются, но job возвращает один выбранный response.
-`attempts - winnerCanceled == route completions` тоже не является инвариантом:
-есть surplus successes. `elapsedGT150` относится ко всем attempts, включая
-cancel/drain loser, и само по себе не доказывает timeout. Новый reader сохраняет
-histogram целиком, но отличает реальные failures от own cancellation и проверяет
-business route outcome отдельно. На точной границе deadline/result-ready Go select
-может выбрать готовый valid result либо истёкший context; decoded endpoint success
-не переписывается в timeout/cancel из-за итогового deadline outcome job.
-Обновление reader/verifier требует отдельного full source review.
+## Наблюдаемость и проверка
 
-## Alternatives
+Winner cancellation — `winnerCanceled`, terminal stop — `operationCanceled`,
+external cancellation — прежний caller cancellation. Только реальные
+transport/timeout/HTTP failures влияют на passive cooldown. Реальная ошибка
+сохраняется даже когда другой attempt выиграл. Диагностический MaxConcurrent
+принимает3; остальные typed42/52 schemas неизменны.
 
-- Последовательный full budget сохраняет80 мс, но silent first может сорвать job.
-- Cap50 мс всем healthy members нарушает80 мс contract.
-- Fanout всем3/6 повышает amplification; максимум2 выбран вместо него.
-- Увеличение configured timeout или routeWait маскирует проблему и отклонено.
-- Новые фоновые probes и proxy добавляют lifecycle и не нужны.
+Started attempts и route jobs имеют разные счётчики. Несколько responses могут
+завершить decode до отмены: все настоящие endpoint successes сохраняются,
+возвращается один original winner. Поэтому ни endpoint completions==routes, ни
+attempts-minus-winnerCanceled==routes не являются инвариантами. Inflight jobs
+и attempts проверяются раздельно; произвольная tolerance не вводится. Полная
+terminal partition и histogram сохраняются. `elapsedGT150` включает canceled
+losers и сам по себе не доказывает реальный timeout; реальные поздние outcomes
+и собственные cancels различаются. На границе deadline/result-ready select
+может выбрать valid result либо expired context; endpoint success не переписывается.
 
-## Consequences
+Focused synthetic/race proof покрывает fast single, original80 winner, каждого
+sole healthy80 с двумя silent members, шесть historical-health permutations,
+configured2 recovered80, generic4 inherited reserve, generic6 fast503,
+реальные errors/auth, parent cancellation, all-fail deadline и drain/socket cleanup.
+Concurrent surplus-success fixture сохраняет три настоящих successes и один
+возвращённый original response. Это controlled source evidence, не production HA.
+Нужны exact CI binary, действующий writer, physical process Hello/ACK, natural
+business proof и bounded silent-loss canary с автоматическим restoration.
 
-При здоровом first<50 мс выполняется ровно1 request. При first80 мс выполняется
-ровно2: исходный first выигрывает, loser отменён без health penalty. Поэтому
-literal calls1 в прежнем80 мс fixture меняется намеренно; response identity,
-80 мс success и прежний общий deadline сохраняются. Silent first + secondary80 мс
-завершается около130 мс в actual150 мс budget. Это проверка controlled fixture,
-а не обещание сети/OS scheduling или доказательство physical host loss.
-Generic six-fast503 fixture сохраняет шесть последовательных attempts; pool
-validation и sorted namespace identity не меняются. Общий pressure может вырасти
-до двух active requests на существующий worker, без роста workers/queue caps.
-Backend limits HTTP500qps/burst100/maxInflight8/demand64 сохраняются; source fix
-не повышает их. Перед ALL-consumer HA claim aggregate demand при потере одного
-backend должен помещаться в observed surviving capacity. Rontgen timeout сам по
-себе не устанавливает capacity cause и не разрешает новую программу настройки.
+## Альтернативы
 
-Перед release нужны реальные isolated HTTP fixtures: original80 winner identity,
-fast<50 single, каждый selected-first silent member, retryable error visibility,
-all-fail bound, parent cancel, max2 active, unique attempts, repeated drain/socket
-cleanup. Затем exact CI binary и canary business/process ACK + silent endpoint
-loss с bounded restoration; runtime fleet пока HOLD. Rollback возвращает прежний
-immutable XrayR artifact и private operator preimage через действующий writer;
-L2/token/namespace не удаляются. Org-wide draft фиксирует тот же concurrency и
-measurement contract, без нового delivery workflow или feature flag.
+- Sequential full budget не оставляет времени после silent first.
+- Healthy child cap50 нарушает успешный80 мс contract.
+- Max2 с health ranking не покрывает неизвестные два silent members и third80
+  в150 мс; half-open80 может постоянно отменяться быстрым backup20@50.
+- Fanout сразу всем3/6 увеличивает обычную нагрузку; выбран delayed hedge и max3.
+- Parent/routeWait increase маскирует отказ и не принят.
+- Background probes и новые foreground limiters не входят в это решение.
 
-### Passive cooldown и сохранение доступности
+## Последствия, capacity и границы
 
-Canary silent-loss выявил отдельный дефект selection: после единичных timeout
-оба surviving endpoints попали в cooldown; job без eligible кандидатов возвращал
-synthetic transport error без сетевой попытки. Единственный eligible endpoint
-также остаётся без hedge по source, даже когда cooled backup уже мог ответить.
-Это воспроизводимый source-риск; причина одного production timeout не доказана.
+При controlled sole healthy80 backup начинает на50 мс и отвечает около130 мс;
+OS/network tail не гарантируется. Max3 повышает amplification: retained single
+caller740 jobs/776 attempts/36 own cancels за60.025 с дают conditional812 attempts
+при тех же36 slow events (+4.64%). All-slow worst3 requests/job вместо2 (+50%).
+Это историческая проекция одного caller, не измерение fleet capacity.
 
-Cooldown остаётся предпочтением, а не запретом резервной попытки. При минимум
-двух eligible endpoints прежний round-robin не меняется. При нуле или одном
-eligible selection дополняет список только до двух уникальных кандидатов:
-сначала меньше passive failures, затем ближайшее cooldown expiry; при равенстве
-сохраняется текущий round-robin порядок. Такие кандидаты `knownFailed=true`.
-Это предпочитает surviving endpoint с одним timeout dead primary с шестью,
-но не объявляет cooled endpoint здоровым. Истечение cooldown по-прежнему
-возвращает primary в обычный список; реальный успех очищает passive failure state.
+HTTP500QPS/burst100/inflight8 относятся только к `/v1/warm`. Foreground
+`/v1/classify` явного HTTP QPS/inflight admission cap не имеет. Backend
+backgroundfill64workers/256queue не ограничивает foreground HTTP. Redis component
+50 мс/GetEntry100 мс и actual connection-pool capacity нельзя вывести из warm
+limits; actual production pool capacity здесь не подтверждена. Hedge50 + backend100
+оставляют нулевой reserve на прочую обработку; remaining-budget contract отдельно.
 
-`cooldownSkips` считает только фактически исключённые cooled members; выбранный
-резерв сохраняет обычные attempt/timeout/success/cancel counters. Новых полей
-telemetry нет. При fast healthy <50 мс резерв не запускается. Общий configured
-job deadline, максимум две одновременные попытки, уникальные endpoints, workers,
-queue, auth/terminal responses и namespace не меняются. При полном отказе
-сохраняются реальные bounded attempts и errors вместо ложной synthetic cooldown
-недоступности. Давление на восстановившийся backend может возрасти в пределах
-уже принятого max2; лимиты backend не повышаются. Это SOURCE-коррекция внутри
-контракта; прежнее реальное fault failure остаётся evidence, runtime HOLD.
+Core job bounds — configured workers(default2,max64), queue(default256,max100000),
+cache/jobs(default4096,max100000). Cloned DefaultTransport MaxConnsPerHost0:
+idle bounds не ограничивают active requests. Изолированный fixed-offer32 fixture
+использует Workers2/queue4/jobs8 и Redis semaphore1/2 с acquire50/lookup100;
+наблюдает max6 HTTP и pool refusal, затем stop/cancel/drain. Это конечная synthetic
+модель, не actual Redis configuration и не production capacity acceptance.
+Лимиты backend не повышаются; перед ALL-consumer HA claim surviving capacity
+и реальный traffic outcome требуют самостоятельного evidence.
+
+Owner Core хранит scheduling/accounting; XrayR интегрирует точную зависимость через
+действующий scoped writer, infra/node writer сохраняет ownership.
+Rollback возвращает прежний immutable XrayR artifact и точный private preimage;
+L2/token/namespace не удаляются. Новых workflows/flags/ADR по названию bugfix нет.
+Status Accepted означает решение, не Rolled: retained954/1 и исходные failed
+fixtures не переинтерпретируются позднейшим успешным window.
