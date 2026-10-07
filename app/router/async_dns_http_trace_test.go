@@ -46,6 +46,7 @@ func TestAsyncDNSHTTPTraceDelayedHeadersAndBody(t *testing.T) {
 		})
 	}
 }
+
 func TestAsyncDNSHTTPTraceRefusedConnectionAndPrivacy(t *testing.T) {
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { t.Error("refused dial reached handler") }, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) })
 	tr := m.client.Transport.(*http.Transport)
@@ -72,6 +73,7 @@ func TestAsyncDNSHTTPTraceRefusedConnectionAndPrivacy(t *testing.T) {
 		}
 	}
 }
+
 func TestAsyncDNSHTTPTraceReusedConnection(t *testing.T) {
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) }, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, poolReady) })
 	for i := 0; i < 3; i++ {
@@ -84,6 +86,7 @@ func TestAsyncDNSHTTPTraceReusedConnection(t *testing.T) {
 		t.Fatalf("connection stats changed: %+v", s)
 	}
 }
+
 func TestAsyncDNSHTTPTraceParentCancelNoHealthPenalty(t *testing.T) {
 	entered := make(chan struct{})
 	m := newAsyncDNSPoolTestMatcher(t, &AsyncDnsRouteConfig{RequestTimeoutMillis: 150}, func(w http.ResponseWriter, r *http.Request) { close(entered); <-r.Context().Done() }, func(w http.ResponseWriter, r *http.Request) { t.Error("cancel retried") })
@@ -101,6 +104,7 @@ func TestAsyncDNSHTTPTraceParentCancelNoHealthPenalty(t *testing.T) {
 		t.Fatalf("cancel semantics changed: %+v", s)
 	}
 }
+
 func TestAsyncDNSHTTPTraceTerminalAuthPendingAndCooldown(t *testing.T) {
 	for _, status := range []int{401, 429, 200} {
 		t.Run(http.StatusText(status), func(t *testing.T) {

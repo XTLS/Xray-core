@@ -45,6 +45,7 @@ func (c *asyncDNSHTTPTraceCounters) snapshot() asyncDNSHTTPTraceStats {
 	}
 	return s
 }
+
 func (s asyncDNSHTTPTraceStats) logSuffix() string {
 	return fmt.Sprintf(" phaseRequest=%d phaseAcquire=%d phaseWrite=%d phaseHeaders=%d phaseFirstByte=%d phaseBody=%d phaseDecode=%d phaseComplete=%d newConnections=%d reusedConnections=%d firstResponseBytes=%d acquireLE50Millis=%d acquireLE100Millis=%d acquireLE150Millis=%d acquireGT150Millis=%d netOpNone=%d netOpDial=%d netOpRead=%d netOpWrite=%d netOpOther=%d", s.Phases[0], s.Phases[1], s.Phases[2], s.Phases[3], s.Phases[4], s.Phases[5], s.Phases[6], s.Phases[7], s.NewConn, s.ReusedConn, s.FirstByte, s.AcquireLE50, s.AcquireLE100, s.AcquireLE150, s.AcquireGT150, s.NetNone, s.NetDial, s.NetRead, s.NetWrite, s.NetOther)
 }
@@ -69,6 +70,7 @@ func (m *AsyncDNSRouteMatcher) newHTTPAttemptTrace(endpoint string) *asyncDNSHTT
 	}
 	return nil
 }
+
 func (t *asyncDNSHTTPAttemptTrace) phase(phase int) {
 	if t == nil {
 		return
@@ -79,6 +81,7 @@ func (t *asyncDNSHTTPAttemptTrace) phase(phase int) {
 		t.latest = phase
 	}
 }
+
 func (t *asyncDNSHTTPAttemptTrace) request(req *http.Request) *http.Request {
 	if t == nil {
 		return req
@@ -140,6 +143,7 @@ func (t *asyncDNSHTTPAttemptTrace) request(req *http.Request) *http.Request {
 	}
 	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
 }
+
 func (t *asyncDNSHTTPAttemptTrace) finish(err error) {
 	if t == nil {
 		return
