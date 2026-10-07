@@ -604,6 +604,13 @@ func (m *AsyncDNSRouteMatcher) runScheduler() {
 					" snapshotWrites=", s.SnapshotWrites, " snapshotErrors=", s.SnapshotErrors, " restoredEntries=", s.RestoredEntries,
 					" poolSize=", s.PoolSize, " poolAttempts=", s.PoolAttempts, " poolFailovers=", s.PoolFailovers, " poolCooldownSkips=", s.PoolCooldownSkips, " poolSyntheticCooldown=", s.PoolSyntheticCooldown)
 				if m.pool != nil {
+					samples, discarded := m.pool.failureSamples.take()
+					for _, sample := range samples {
+						errors.LogInfo(m.ctx, "async DNS pool failed job matcherID=", s.MatcherID, " sample=", sample)
+					}
+					if discarded > 0 {
+						errors.LogInfo(m.ctx, "async DNS pool failed jobs discarded matcherID=", s.MatcherID, " count=", discarded)
+					}
 					for i, endpoint := range m.pool.endpointStats() {
 						errors.LogInfo(m.ctx, endpoint.logLine(s.MatcherID, i))
 						samples, discarded := m.pool.states[i].metrics.trace.takeErrorSamples()
@@ -905,6 +912,9 @@ func (m *AsyncDNSRouteMatcher) fetchContext(ctx context.Context, domain string) 
 
 func (m *AsyncDNSRouteMatcher) fetchEndpoint(ctx context.Context, endpoint, domain string) (result *asyncDNSClassifierResponse, fetchErr error) {
 	trace := m.newHTTPAttemptTrace(endpoint)
+	if trace != nil {
+		trace.diagnostic, _ = ctx.Value(asyncDNSPoolTraceKey{}).(*asyncDNSPoolTraceSample)
+	}
 	defer func() { trace.finish(fetchErr) }()
 	body, err := json.Marshal(asyncDNSClassifierRequest{Domain: domain, AllowStale: m.staleGrace > 0})
 	if err != nil {
