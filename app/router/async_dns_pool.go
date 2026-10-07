@@ -29,6 +29,11 @@ type asyncDNSEndpointState struct {
 	metrics       *asyncDNSPoolEndpointCounters
 }
 
+type asyncDNSEndpointCandidate struct {
+	endpoint    string
+	knownFailed bool
+}
+
 // The fixed-size pool is operator transport configuration, never owner JSON.
 // Its allowlist is immutable; passive health state uses a separate mutex from L1.
 type asyncDNSEndpointPool struct {
@@ -77,12 +82,12 @@ func readAsyncDNSOverlayPool(overlay, token string) (*asyncDNSEndpointPool, erro
 	return p, nil
 }
 
-func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]string, int) {
+func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]asyncDNSEndpointCandidate, int) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	start := p.next
 	p.next = (p.next + 1) % len(p.states)
-	candidates := make([]string, 0, min(asyncDNSPoolMaxAttempts, len(p.states)))
+	candidates := make([]asyncDNSEndpointCandidate, 0, min(asyncDNSPoolMaxAttempts, len(p.states)))
 	skipped := 0
 	for offset := range len(p.states) {
 		state := &p.states[(start+offset)%len(p.states)]
@@ -92,7 +97,7 @@ func (p *asyncDNSEndpointPool) candidates(now time.Time) ([]string, int) {
 			continue
 		}
 		if len(candidates) < asyncDNSPoolMaxAttempts {
-			candidates = append(candidates, state.endpoint)
+			candidates = append(candidates, asyncDNSEndpointCandidate{state.endpoint, state.failures > 0})
 		}
 	}
 	return candidates, skipped
@@ -152,22 +157,44 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 	if len(candidates) == 0 {
 		return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: errors.New("async DNS endpoint pool is cooling down")}
 	}
-	// Healthy members keep the full remaining operation deadline. A silent
-	// failure may exhaust this job; passive cooldown protects later jobs.
+	// Never-failed members keep the full remaining deadline. An expired,
+	// known-failed probe reserves time for an available unpenalized successor.
 	var lastErr error
-	for i, endpoint := range candidates {
+	attempts := 0
+	for i, candidate := range candidates {
 		if err := ctx.Err(); err != nil {
 			return nil, &asyncDNSFetchError{kind: asyncDNSFailureTransport, err: err}
 		}
-		if i > 0 {
+		attemptCtx, attemptCancel := ctx, func() {}
+		if candidate.knownFailed {
+			for _, successor := range candidates[i+1:] {
+				if successor.knownFailed {
+					continue
+				}
+				deadline, _ := ctx.Deadline() // WithTimeout above always supplies it.
+				budget := min(50*time.Millisecond, time.Until(deadline)/2)
+				if budget < time.Millisecond {
+					attemptCtx = nil // Do not spend a sub-millisecond probe budget.
+				} else {
+					attemptCtx, attemptCancel = context.WithTimeout(ctx, budget)
+				}
+				break
+			}
+		}
+		if attemptCtx == nil {
+			continue
+		}
+		if attempts > 0 {
 			m.stats.poolFailovers.Add(1)
 		}
+		attempts++
 		m.stats.poolAttempts.Add(1)
 		started := time.Now()
-		response, err := m.fetchEndpoint(ctx, endpoint, domain)
-		m.pool.observe(endpoint, response, err, time.Since(started))
+		response, err := m.fetchEndpoint(attemptCtx, candidate.endpoint, domain)
+		attemptCancel()
+		m.pool.observe(candidate.endpoint, response, err, time.Since(started))
 		if err == nil {
-			m.pool.record(endpoint, false, time.Now())
+			m.pool.record(candidate.endpoint, false, time.Now())
 			return response, nil // Pending/stale/expired/invalid shape never fan out.
 		}
 		lastErr = err
@@ -175,7 +202,7 @@ func (m *AsyncDNSRouteMatcher) fetchPool(ctx context.Context, domain string) (*a
 		// Deadline exhaustion still demotes a failed backend. Explicit caller
 		// cancellation is not evidence that the backend is unhealthy.
 		if retryable && ctx.Err() != context.Canceled {
-			m.pool.record(endpoint, true, time.Now())
+			m.pool.record(candidate.endpoint, true, time.Now())
 		}
 		if !retryable || ctx.Err() != nil {
 			return nil, err // Auth, overload, redirects and invalid payloads stop here.
