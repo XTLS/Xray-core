@@ -155,12 +155,20 @@ func NewTun(options *Config) (Tun, error) {
 	fdStr := platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "" })
 	if fdStr != "" {
 		// iOS: use provided fd from NetworkExtension
-		fd, err := strconv.Atoi(fdStr)
+		providedFd, err := strconv.Atoi(fdStr)
+		if err != nil {
+			return nil, err
+		}
+
+		// duplicate NetworkExtension fd so Xray can close its own handle
+		// without closing the original.
+		fd, err := unix.FcntlInt(uintptr(providedFd), unix.F_DUPFD_CLOEXEC, 0)
 		if err != nil {
 			return nil, err
 		}
 
 		if err = unix.SetNonblock(fd, true); err != nil {
+			_ = unix.Close(fd)
 			return nil, err
 		}
 
@@ -232,11 +240,7 @@ func (t *DarwinTun) Close() error {
 		t.waitKq.close()
 	}
 	routeErr := t.unsetSystemRoutes()
-	if t.ownsFd {
-		return xerrors.Combine(routeErr, t.tunFile.Close())
-	}
-	// iOS: don't close the fd, it's owned by NetworkExtension
-	return routeErr
+	return xerrors.Combine(routeErr, t.tunFile.Close())
 }
 
 func (t *DarwinTun) monitorRouteChanges() {
