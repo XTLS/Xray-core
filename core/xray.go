@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"sync"
-	"sync/atomic"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -85,7 +84,7 @@ type Instance struct {
 	features                   []features.Feature
 	pendingResolutions         []resolution
 	pendingOptionalResolutions []resolution
-	running                    atomic.Bool
+	running                    bool
 	resolveLock                sync.Mutex
 
 	ctx context.Context
@@ -93,7 +92,9 @@ type Instance struct {
 
 // Instance state
 func (server *Instance) IsRunning() bool {
-	return server.running.Load()
+	server.statusLock.Lock()
+	defer server.statusLock.Unlock()
+	return server.running
 }
 
 func AddInboundHandler(server *Instance, config *InboundHandlerConfig) error {
@@ -263,7 +264,7 @@ func (s *Instance) Close() error {
 	s.statusLock.Lock()
 	defer s.statusLock.Unlock()
 
-	s.running.Store(false)
+	s.running = false
 
 	var errs []interface{}
 	for _, f := range s.features {
@@ -321,7 +322,7 @@ func (s *Instance) RequireFeatures(callback interface{}, optional bool) error {
 
 // AddFeature registers a feature into current Instance.
 func (s *Instance) AddFeature(feature features.Feature) error {
-	if s.running.Load() {
+	if s.IsRunning() {
 		if err := feature.Start(); err != nil {
 			errors.LogInfoInner(s.ctx, err, "failed to start feature")
 		}
@@ -389,7 +390,7 @@ func (s *Instance) Start() error {
 	s.statusLock.Lock()
 	defer s.statusLock.Unlock()
 
-	s.running.Store(true)
+	s.running = true
 	for _, f := range s.features {
 		if err := f.Start(); err != nil {
 			return err

@@ -29,6 +29,7 @@ import (
 type client struct {
 	sync.Mutex
 
+	instance     *core.Instance
 	dest         net.Destination
 	config       *Config
 	tlsConfig    *gotls.Config
@@ -36,17 +37,13 @@ type client struct {
 	finalMask    *finalmask.FinalMask
 	quicParams   *internet.QuicParams
 
-	conn     *quic.Conn
-	tr       *quic.Transport
-	pktConn  net.PacketConn
-	udpSM    *udpSessionManager
-	instance *core.Instance
+	conn    *quic.Conn
+	tr      *quic.Transport
+	pktConn net.PacketConn
+	udpSM   *udpSessionManager
 }
 
 func (c *client) status() status {
-	if c.instance != nil && !c.instance.IsRunning() {
-		return StatusClosed
-	}
 	if c.conn == nil {
 		return StatusNull
 	}
@@ -54,16 +51,17 @@ func (c *client) status() status {
 	case <-c.conn.Context().Done():
 		return StatusInactive
 	default:
-		return StatusActive
+		if c.instance == nil || c.instance.IsRunning() {
+			return StatusActive
+		}
+		return StatusInactive
 	}
 }
 
 func (c *client) close() {
-	if c.conn != nil {
-		c.conn.CloseWithError(closeErrCodeOK, "")
-	}
-	common.CloseIfExists(c.tr)
-	common.CloseIfExists(c.pktConn)
+	c.conn.CloseWithError(closeErrCodeOK, "")
+	c.tr.Close()
+	c.pktConn.Close()
 	c.conn = nil
 	c.tr = nil
 	c.pktConn = nil
@@ -71,9 +69,11 @@ func (c *client) close() {
 }
 
 func (c *client) dial(ctx context.Context) error {
-	switch c.status() {
-	case StatusClosed:
+	if c.instance != nil && !c.instance.IsRunning() {
 		return errors.New("client is closed")
+	}
+
+	switch c.status() {
 	case StatusActive:
 		return nil
 	case StatusInactive:
@@ -264,18 +264,13 @@ func (c *client) udp(ctx context.Context) (stat.Connection, error) {
 	return c.udpSM.udp()
 }
 
-func (c *client) clean() (shouldDelete bool) {
+func (c *client) clean() bool {
 	c.Lock()
 	defer c.Unlock()
-	switch c.status() {
-	case StatusClosed:
+	if c.status() == StatusInactive {
 		c.close()
-		return true
-	case StatusInactive:
-		c.close()
-		return false
 	}
-	return false
+	return c.status() == StatusNull
 }
 
 type dialerConf struct {
@@ -291,21 +286,13 @@ type clientManager struct {
 func (m *clientManager) clean() {
 	ticker := time.NewTicker(idleCleanupInterval)
 	for range ticker.C {
-		var toDelete []dialerConf
-		m.RLock()
+		m.Lock()
 		for k, c := range m.m {
 			if c.clean() {
-				toDelete = append(toDelete, k)
-			}
-		}
-		m.RUnlock()
-		if len(toDelete) > 0 {
-			m.Lock()
-			for _, k := range toDelete {
 				delete(m.m, k)
 			}
-			m.Unlock()
 		}
+		m.Unlock()
 	}
 }
 
@@ -331,6 +318,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	})
 
 	dialerConfKey := dialerConf{dest, streamSettings}
+
 	manager.RLock()
 	c := manager.m[dialerConfKey]
 	manager.RUnlock()
