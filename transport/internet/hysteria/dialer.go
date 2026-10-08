@@ -30,7 +30,7 @@ type client struct {
 	sync.Mutex
 
 	instance     *core.Instance
-	isRemoved    func() bool
+	forced       bool
 	dest         net.Destination
 	config       *Config
 	tlsConfig    *gotls.Config
@@ -52,10 +52,7 @@ func (c *client) status() status {
 	case <-c.conn.Context().Done():
 		return StatusInactive
 	default:
-		if c.instance == nil || c.instance.IsRunning() {
-			return StatusActive
-		}
-		return StatusInactive
+		return StatusActive
 	}
 }
 
@@ -70,7 +67,7 @@ func (c *client) close() {
 }
 
 func (c *client) dial(ctx context.Context) error {
-	if c.isRemoved() {
+	if c.forced {
 		return errors.New("client is closed")
 	}
 
@@ -265,13 +262,15 @@ func (c *client) udp(ctx context.Context) (stat.Connection, error) {
 	return c.udpSM.udp()
 }
 
-func (c *client) clean() bool {
+func (c *client) clean(force bool) {
 	c.Lock()
-	defer c.Unlock()
-	if c.status() == StatusInactive {
+	if force {
+		c.forced = true
+	}
+	if status := c.status(); force && status != StatusNull || status == StatusInactive {
 		c.close()
 	}
-	return c.instance != nil && !c.instance.IsRunning()
+	c.Unlock()
 }
 
 type dialerConf struct {
@@ -289,7 +288,9 @@ func (m *clientManager) clean() {
 	for range ticker.C {
 		m.Lock()
 		for k, c := range m.m {
-			if c.clean() {
+			forced := c.instance != nil && !c.instance.IsRunning()
+			c.clean(forced)
+			if forced {
 				delete(m.m, k)
 			}
 		}
@@ -336,11 +337,6 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				socketConfig: streamSettings.SocketSettings,
 				finalMask:    streamSettings.FinalMask,
 				quicParams:   streamSettings.QuicParams,
-			}
-			c.isRemoved = func() bool {
-				manager.RLock()
-				defer manager.RUnlock()
-				return manager.m[dialerConfKey] != c
 			}
 			manager.m[dialerConfKey] = c
 		}
