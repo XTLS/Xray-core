@@ -1,12 +1,12 @@
 # ADR-0003: Ограниченное ожидание L2, персистентный L1 и LRU
 
-- Status: Accepted
+- Status: Rolled
 - Date: 2026-10-01
 - Repo-owner: `evasionlab/Xray-core`
 - Downstream consumers: `evasionlab/XrayR`, `vpn.bot`, `vpn.infra`, `evasionlab/dns-route-cache`, клиентские DoH backend.
 - Org-wide ADR required: Yes.
 - Org-wide ADR: `evasionlab/infra/docs/adr/ADR-20261001-01-dns-cache-first-connection-and-l1-persistence.md` — канонический общий контракт, подготовлен вместе с этим документом.
-- Implementation status: source implementation подготовлена; production не внедрён. Accepted относится к решению.
+- Implementation status (2026-10-08): cache-v2 принят на 89 XrayR-процессах / 105 ID: bounded L2 wait, persistent L1 storage и canonical6 transport подтверждены owner ACK и свежей serving-сверкой. Клиентская часть общего ADR имеет отдельные gates.
 
 ## Контекст
 
@@ -114,3 +114,23 @@ L1 miss получает небольшой ограниченный latency, в
 policy owner. Route-wait budget 0 возвращает прежнее поведение; snapshot можно
 выключить независимо. При необходимости возвращается прежний CI artifact
 через текущего writer. Общий L2 и snapshots не нужно очищать при rollback.
+
+
+## Приёмка production 2026-10-08
+
+Финальная сверка **13:34:07.733 UTC / 16:34:07.733 МСК** подтвердила
+89/89 owner processes, canonical6 transport и cache-v2; 105 свежих Hello/enrollment.
+Последний owner ACK — Planck/77 в 13:32:18.693 UTC. Источник:
+`vpn/outputs/dns-cache-v2-finalize-20261008/owner-plan/final-audit-20261008T1334/accepted-scope.json`.
+Persistent RW storage принят существующим guarded Ansible writer с root0700,
+сохранением serving image/Cmd, unrelated config и статических rules/outbounds;
+Planck отдельно получил согласованный bootstrap и один matcher перед catchall.
+Process ACK не объявляется отдельным per-ID applied revision: такого поля нет.
+
+Реально выданный VLESS TCP smoke ID77/224/233: 9/9 запросов, 283–366ms;
+`vpn/outputs/online-state-fleet-rollout-20261007/cachev2-final-representative-20261008.json`.
+Это representative proof, не проверка холодного RU решения на каждом ID и не
+утверждение об отсутствии всех пользовательских failures. Namespace identity,
+TTL/grace, cold25ms/background150ms budgets и static-rule precedence сохранены.
+Клиентская promotion и испытание literal primary-IP outage резервного DoH
+не входят в утверждение о завершённой серверной приёмке этого ADR.
