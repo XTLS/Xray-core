@@ -1,7 +1,14 @@
 package conf_test
 
 import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"testing"
 
 	"github.com/xtls/xray-core/common/protocol"
@@ -60,6 +67,121 @@ func TestMasqueConfig(t *testing.T) {
 		`{"headers": {"X-Token": "a\r\nb"}}`,
 		`{"user": "u:v", "pass": "p"}`,
 		`{"user": "u", "pass": "p", "headers": {"authorization": "Basic dTpw"}}`,
+	} {
+		if _, err := loadJSON(creator)(input); err == nil {
+			t.Errorf("expected an error for %s", input)
+		}
+	}
+}
+
+func TestMasqueWarpConfig(t *testing.T) {
+	creator := func() Buildable {
+		return new(MasqueConfig)
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec1, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	quote := func(s string) string {
+		b, _ := json.Marshal(s)
+		return string(b)
+	}
+	server, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey, err := x509.MarshalPKIXPublicKey(&server.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicKey}))
+	warpInput := func(key string, extra string) string {
+		return `{` + extra + `"warp": {"privateKey": ` + quote(key) + `, "publicKey": ` + quote(publicPEM) + `, "address": ["172.16.0.2", "2606:4700:110:8a36::2/128"]}}`
+	}
+	address := []string{"172.16.0.2/32", "2606:4700:110:8a36::2/128"}
+
+	for _, input := range []string{
+		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})),
+		string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: sec1})),
+		base64.StdEncoding.EncodeToString(pkcs8),
+		base64.StdEncoding.EncodeToString(sec1),
+	} {
+		runMultiTestCase(t, []TestCase{
+			{
+				Input:  warpInput(input, ""),
+				Parser: loadJSON(creator),
+				Output: &masque.Config{
+					Host: "cloudflareaccess.com",
+					Path: "/",
+					Warp: &masque.Warp{PrivateKey: pkcs8, PublicKey: publicKey, Address: address},
+				},
+			},
+		})
+	}
+	runMultiTestCase(t, []TestCase{
+		{
+			Input:  warpInput(base64.StdEncoding.EncodeToString(sec1), `"host": "example.com", "path": "/warp", `),
+			Parser: loadJSON(creator),
+			Output: &masque.Config{
+				Host: "example.com",
+				Path: "/warp",
+				Warp: &masque.Warp{PrivateKey: pkcs8, PublicKey: publicKey, Address: address},
+			},
+		},
+	})
+
+	p384, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p384DER, err := x509.MarshalPKCS8PrivateKey(p384)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ed, err := x509.MarshalPKCS8PrivateKey(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	withAddress := func(address string) string {
+		return `{"warp": {"privateKey": ` + quote(base64.StdEncoding.EncodeToString(pkcs8)) + `, "publicKey": ` + quote(publicPEM) + `, "address": ` + address + `}}`
+	}
+	withPublicKey := func(key string) string {
+		return `{"warp": {"privateKey": ` + quote(base64.StdEncoding.EncodeToString(pkcs8)) + `, "publicKey": ` + quote(key) + `, "address": ["172.16.0.2"]}}`
+	}
+	runMultiTestCase(t, []TestCase{
+		{
+			Input:  withPublicKey(base64.StdEncoding.EncodeToString(publicKey)),
+			Parser: loadJSON(creator),
+			Output: &masque.Config{
+				Host: "cloudflareaccess.com",
+				Path: "/",
+				Warp: &masque.Warp{PrivateKey: pkcs8, PublicKey: publicKey, Address: []string{"172.16.0.2/32"}},
+			},
+		},
+	})
+	for _, input := range []string{
+		`{"warp": {}}`,
+		withAddress(`[]`),
+		withPublicKey(""),
+		withPublicKey("not a key"),
+		withPublicKey(base64.StdEncoding.EncodeToString([]byte("not a key"))),
+		withPublicKey(base64.StdEncoding.EncodeToString(pkcs8)),
+		withAddress(`["172.16.0"]`),
+		withAddress(`["172.16.0.2", "172.16.0.3"]`),
+		withAddress(`["2606:4700::1", "2606:4700::2/128"]`),
+		warpInput("not a key", ""),
+		warpInput(base64.StdEncoding.EncodeToString([]byte("not a key")), ""),
+		warpInput(base64.StdEncoding.EncodeToString(p384DER), ""),
+		warpInput(base64.StdEncoding.EncodeToString(ed), ""),
+		warpInput(base64.StdEncoding.EncodeToString(pkcs8), `"user": "u", "pass": "p", `),
 	} {
 		if _, err := loadJSON(creator)(input); err == nil {
 			t.Errorf("expected an error for %s", input)

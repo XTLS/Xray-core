@@ -140,6 +140,87 @@ func TestHTTP2Request(t *testing.T) {
 	require.Equal(t, maxCapsulePacketSize, conn.MaxPacketSize())
 }
 
+func TestCloudflareHTTP2Request(t *testing.T) {
+	for _, c := range []struct{ host, want string }{
+		{"cloudflareaccess.com", "cloudflareaccess.com:443"},
+		{"cloudflareaccess.com:8443", "cloudflareaccess.com:8443"},
+		{"[2001:db8::1]", "[2001:db8::1]:443"},
+	} {
+		requests := make(chan *http.Request, 1)
+		pr, pw := io.Pipe()
+		rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			requests <- r
+			return &http.Response{StatusCode: http.StatusOK, Body: pr}, nil
+		})
+		req, err := NewRequest(t.Context(), "https://"+c.host+"/")
+		require.NoError(t, err)
+		conn, _, err := NewCloudflareHTTP2ClientConn(rt).Dial(req)
+		require.NoError(t, err)
+
+		r := <-requests
+		require.Equal(t, http.MethodConnect, r.Method)
+		require.Equal(t, c.want, r.Host)
+		require.Empty(t, r.Header.Values(":protocol"))
+		require.Empty(t, r.Header.Values("Capsule-Protocol"))
+		require.Equal(t, cloudflareProtocol, r.Header.Get("Cf-Connect-Proto"))
+		require.Equal(t, "false", r.Header.Get("Pq-Enabled"))
+		require.Equal(t, "?1", req.Header().Get("Capsule-Protocol"))
+		conn.Close()
+		pw.Close()
+	}
+}
+
+func TestHTTP2BareDatagramCapsules(t *testing.T) {
+	str, pw := newTestHTTP2Stream()
+	defer pw.Close()
+	conn := newBareProxiedConn(str)
+	t.Cleanup(func() { conn.Close() })
+	require.NoError(t, conn.AdvertiseRoute([]IPRoute{
+		{StartIP: netip.IPv4Unspecified(), EndIP: netip.MustParseAddr("255.255.255.255")},
+	}))
+
+	capsule := func(payload []byte) []byte {
+		b := quicvarint.Append(nil, uint64(capsuleTypeDatagram))
+		b = quicvarint.Append(b, uint64(len(payload)))
+		return append(b, payload...)
+	}
+	packet := ipv4Packet(64, 17, testSrc4, testDst4, nil, []byte("foobar"))
+	go func() {
+		for _, c := range [][]byte{
+			capsule(packet),
+			capsule(append([]byte{0x02}, packet...)),
+			capsule(append(bytes.Clone(contextIDZero), packet...)),
+		} {
+			if _, err := pw.Write(c); err != nil {
+				return
+			}
+		}
+	}()
+	for range 2 {
+		b := make([]byte, 1500)
+		n, err := conn.ReadPacket(b)
+		require.NoError(t, err)
+		require.Equal(t, packet, b[:n])
+	}
+
+	_, err := conn.WritePacket(slices.Clone(packet))
+	require.NoError(t, err)
+	p := http3.NewCapsuleParser(str.body)
+	var sent []byte
+	for sent == nil {
+		typ, cr, err := p.Next()
+		require.NoError(t, err)
+		data, err := io.ReadAll(cr)
+		require.NoError(t, err)
+		if typ == capsuleTypeDatagram {
+			sent = data
+		}
+	}
+	require.Len(t, sent, len(packet))
+	require.Equal(t, packet[8]-1, sent[8])
+	require.Equal(t, packet[ipv4.HeaderLen:], sent[ipv4.HeaderLen:])
+}
+
 func TestHTTP2DialErrors(t *testing.T) {
 	newReq := func(ctx context.Context) *Request {
 		req, err := NewRequest(ctx, "https://example.org/connect-ip")

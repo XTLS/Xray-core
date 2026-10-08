@@ -9,20 +9,27 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/apernet/quic-go"
+	"github.com/apernet/quic-go/http3"
 )
 
 const maxStreamBuffer = 32 << 10
 
 type HTTP2ClientConn struct {
 	roundTripper http.RoundTripper
+	cloudflare   bool
 }
 
 func NewHTTP2ClientConn(rt http.RoundTripper) *HTTP2ClientConn {
 	return &HTTP2ClientConn{roundTripper: rt}
+}
+
+func NewCloudflareHTTP2ClientConn(rt http.RoundTripper) *HTTP2ClientConn {
+	return &HTTP2ClientConn{roundTripper: rt, cloudflare: true}
 }
 
 func (c *HTTP2ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
@@ -39,7 +46,16 @@ func (c *HTTP2ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
 	stop := context.AfterFunc(ctx, cancel)
 	body := NewStreamBuffer()
 	r := httpReq.Clone(streamCtx)
-	r.Header[":protocol"] = []string{requestProtocol}
+	if c.cloudflare {
+		r.Header.Del(http3.CapsuleProtocolHeader)
+		r.Header.Set("Cf-Connect-Proto", cloudflareProtocol)
+		r.Header.Set("Pq-Enabled", "false")
+		if _, _, err := net.SplitHostPort(r.Host); err != nil {
+			r.Host = net.JoinHostPort(strings.Trim(r.Host, "[]"), "443")
+		}
+	} else {
+		r.Header[":protocol"] = []string{requestProtocol}
+	}
 	r.Body = body
 	rsp, err := c.roundTripper.RoundTrip(r)
 	if !stop() {
@@ -57,12 +73,16 @@ func (c *HTTP2ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
 		rsp.Body.Close()
 		return nil, rsp, fmt.Errorf("connect-ip: server responded with %d", rsp.StatusCode)
 	}
-	return newProxiedConn(&http2Stream{
+	str := &http2Stream{
 		reader: bufio.NewReader(rsp.Body),
 		body:   body,
 		rsp:    rsp.Body,
 		cancel: cancel,
-	}), rsp, nil
+	}
+	if c.cloudflare {
+		return newBareProxiedConn(str), rsp, nil
+	}
+	return newProxiedConn(str), rsp, nil
 }
 
 type http2Stream struct {

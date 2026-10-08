@@ -14,14 +14,26 @@ import (
 
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
+	"github.com/apernet/quic-go/quicvarint"
+)
+
+const (
+	cloudflareProtocol = "cf-connect-ip"
+
+	SettingDatagramDraft00 uint64 = 0x276
 )
 
 type ClientConn struct {
 	clientConn *http3.ClientConn
+	quicConn   *quic.Conn
 }
 
 func NewClientConn(conn *http3.ClientConn) *ClientConn {
 	return &ClientConn{clientConn: conn}
+}
+
+func NewCloudflareClientConn(conn *http3.ClientConn, quicConn *quic.Conn) *ClientConn {
+	return &ClientConn{clientConn: conn, quicConn: quicConn}
 }
 
 func (c *ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
@@ -31,6 +43,11 @@ func (c *ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
 	}
 	if httpReq.Host == "" && httpReq.URL.Host == "" {
 		return nil, nil, errors.New("connect-ip: request needs a host")
+	}
+	cloudflare := c.quicConn != nil
+	if cloudflare {
+		httpReq = httpReq.Clone(httpReq.Context())
+		httpReq.Proto = cloudflareProtocol
 	}
 
 	select {
@@ -42,10 +59,11 @@ func (c *ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
 	}
 
 	settings := c.clientConn.Settings()
-	if !settings.EnableExtendedConnect {
+	if !settings.EnableExtendedConnect && !cloudflare {
 		return nil, nil, errors.New("connect-ip: server didn't enable Extended CONNECT")
 	}
-	if !settings.EnableDatagrams {
+	draftDatagrams := cloudflare && !settings.EnableDatagrams && settings.Other[SettingDatagramDraft00] == 1
+	if !settings.EnableDatagrams && !draftDatagrams {
 		return nil, nil, errors.New("connect-ip: server didn't enable datagrams")
 	}
 
@@ -71,5 +89,27 @@ func (c *ClientConn) Dial(req *Request) (*Conn, *http.Response, error) {
 		return nil, rsp, fmt.Errorf("connect-ip: server responded with %d", rsp.StatusCode)
 	}
 	keepStream = true
+	if draftDatagrams {
+		return newProxiedConn(&draftDatagramStream{RequestStream: rstr, conn: c.quicConn}), rsp, nil
+	}
 	return newProxiedConn(rstr), rsp, nil
+}
+
+type draftDatagramStream struct {
+	*http3.RequestStream
+	conn *quic.Conn
+}
+
+func (s *draftDatagramStream) ReceiveDatagram(ctx context.Context) ([]byte, error) {
+	for {
+		b, err := s.conn.ReceiveDatagram(ctx)
+		if err != nil {
+			return nil, err
+		}
+		quarterStreamID, n, err := quicvarint.Parse(b)
+		if err != nil || quic.StreamID(quarterStreamID*4) != s.StreamID() {
+			continue
+		}
+		return b[n:], nil
+	}
 }
