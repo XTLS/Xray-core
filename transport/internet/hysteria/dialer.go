@@ -286,15 +286,23 @@ type clientManager struct {
 func (m *clientManager) clean() {
 	ticker := time.NewTicker(idleCleanupInterval)
 	for range ticker.C {
-		m.Lock()
+		var forced []dialerConf
+
+		m.RLock()
 		for k, c := range m.m {
-			forced := c.instance != nil && !c.instance.IsRunning()
-			c.clean(forced)
-			if forced {
-				delete(m.m, k)
+			force := c.instance != nil && !c.instance.IsRunning()
+			c.clean(force)
+			if force {
+				forced = append(forced, k)
 			}
 		}
-		m.Unlock()
+		m.RUnlock()
+
+		for i := range forced {
+			m.Lock()
+			delete(m.m, forced[i])
+			m.Unlock()
+		}
 	}
 }
 
