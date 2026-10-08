@@ -30,6 +30,7 @@ type client struct {
 	sync.Mutex
 
 	instance     *core.Instance
+	isremoved    func() bool
 	dest         net.Destination
 	config       *Config
 	tlsConfig    *gotls.Config
@@ -71,6 +72,10 @@ func (c *client) close() {
 func (c *client) dial(ctx context.Context) error {
 	if c.instance != nil && !c.instance.IsRunning() {
 		return errors.New("client is closed")
+	}
+
+	if c.isremoved() {
+		return errors.New("conn is removed")
 	}
 
 	switch c.status() {
@@ -270,7 +275,7 @@ func (c *client) clean() bool {
 	if c.status() == StatusInactive {
 		c.close()
 	}
-	return c.status() == StatusNull
+	return c.instance != nil && !c.instance.IsRunning()
 }
 
 type dialerConf struct {
@@ -328,7 +333,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		c = manager.m[dialerConfKey]
 		if c == nil {
 			c = &client{
-				instance:     core.FromContext(ctx),
+				instance: core.FromContext(ctx),
+				isremoved: func() bool {
+					manager.Lock()
+					defer manager.Unlock()
+					return manager.m[dialerConfKey] == nil
+				},
 				dest:         dest,
 				config:       streamSettings.ProtocolSettings.(*Config),
 				tlsConfig:    tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
