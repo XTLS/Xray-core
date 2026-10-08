@@ -46,6 +46,7 @@ type WindowsTun struct {
 	luid     winipcfg.LUID
 	cbr      winipcfg.ChangeCallback
 	cbi      winipcfg.ChangeCallback
+	guard    outboundGuard
 	wfp      windows.Handle
 	resolver *savedResolver
 	skipStop chan struct{}
@@ -297,10 +298,21 @@ startOver:
 	}
 
 	if updater != nil {
+		// Xray's own connections have to stay out of the IP versions routed
+		// to the TUN, which needs Windows to honor the binding to updater's
+		// interface.
+		if route4 {
+			t.guard.families = append(t.guard.families, windows.AF_INET)
+		}
+		if route6 {
+			t.guard.families = append(t.guard.families, windows.AF_INET6)
+		}
+		t.guard.check()
 		// Only a registered callback goes into the fields: a nil pointer in
 		// them would not compare equal to nil in Close.
 		cbr, err := winipcfg.RegisterRouteChangeCallback(func(notificationType winipcfg.MibNotificationType, route *winipcfg.MibIPforwardRow2) {
 			updater.Update()
+			t.guard.check()
 		})
 		if err != nil {
 			return err
@@ -308,6 +320,7 @@ startOver:
 		t.cbr = cbr
 		cbi, err := winipcfg.RegisterInterfaceChangeCallback(func(notificationType winipcfg.MibNotificationType, iface *winipcfg.MibIPInterfaceRow) {
 			updater.Update()
+			t.guard.check()
 		})
 		if err != nil {
 			return err
@@ -331,6 +344,7 @@ func (t *WindowsTun) Close() error {
 	if t.cbi != nil {
 		t.cbi.Unregister()
 	}
+	t.guard.restore()
 	if t.luid != 0 {
 		t.luid.FlushRoutes(windows.AF_INET)
 		t.luid.FlushIPAddresses(windows.AF_INET)
