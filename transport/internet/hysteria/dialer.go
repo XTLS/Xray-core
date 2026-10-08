@@ -30,7 +30,7 @@ type client struct {
 	sync.Mutex
 
 	instance     *core.Instance
-	isremoved    func() bool
+	isRemoved    func() bool
 	dest         net.Destination
 	config       *Config
 	tlsConfig    *gotls.Config
@@ -70,12 +70,8 @@ func (c *client) close() {
 }
 
 func (c *client) dial(ctx context.Context) error {
-	if c.instance != nil && !c.instance.IsRunning() {
+	if c.isRemoved() {
 		return errors.New("client is closed")
-	}
-
-	if c.isremoved() {
-		return errors.New("conn is removed")
 	}
 
 	switch c.status() {
@@ -103,7 +99,7 @@ func (c *client) dial(ctx context.Context) error {
 		ChromeParrot:                   !quicParams.DisableChromeParrot,
 		EnableDatagrams:                true,
 		MaxDatagramFrameSize:           MaxDatagramFrameSize,
-		OmitMaxDatagramFrameSize:       time.Now().After(time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)),
+		OmitMaxDatagramFrameSize:       true,
 		DisablePathManager:             true,
 	}
 	if quicParams.InitStreamReceiveWindow == 0 {
@@ -333,18 +329,18 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		c = manager.m[dialerConfKey]
 		if c == nil {
 			c = &client{
-				instance: core.FromContext(ctx),
-				isremoved: func() bool {
-					manager.Lock()
-					defer manager.Unlock()
-					return manager.m[dialerConfKey] == nil
-				},
+				instance:     core.FromContext(ctx),
 				dest:         dest,
 				config:       streamSettings.ProtocolSettings.(*Config),
 				tlsConfig:    tlsConfig.GetTLSConfig(tls.WithDestination(dest)),
 				socketConfig: streamSettings.SocketSettings,
 				finalMask:    streamSettings.FinalMask,
 				quicParams:   streamSettings.QuicParams,
+			}
+			c.isRemoved = func() bool {
+				manager.RLock()
+				defer manager.RUnlock()
+				return manager.m[dialerConfKey] != c
 			}
 			manager.m[dialerConfKey] = c
 		}
