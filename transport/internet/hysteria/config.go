@@ -79,6 +79,7 @@ const (
 	StatusNull status = iota
 	StatusActive
 	StatusInactive
+	StatusClosed
 )
 
 const protocolName = "hysteria"

@@ -44,6 +44,9 @@ type client struct {
 }
 
 func (c *client) status() status {
+	if c.instance != nil && !c.instance.IsRunning() {
+		return StatusClosed
+	}
 	if c.conn == nil {
 		return StatusNull
 	}
@@ -68,11 +71,12 @@ func (c *client) close() {
 }
 
 func (c *client) dial(ctx context.Context) error {
-	status := c.status()
-	if status == StatusActive {
+	switch c.status() {
+	case StatusClosed:
+		return errors.New("client is closed")
+	case StatusActive:
 		return nil
-	}
-	if status == StatusInactive {
+	case StatusInactive:
 		c.close()
 	}
 
@@ -263,11 +267,11 @@ func (c *client) udp(ctx context.Context) (stat.Connection, error) {
 func (c *client) clean() (shouldDelete bool) {
 	c.Lock()
 	defer c.Unlock()
-	if c.instance != nil && !c.instance.IsRunning() {
+	switch c.status() {
+	case StatusClosed:
 		c.close()
 		return true
-	}
-	if c.status() == StatusInactive {
+	case StatusInactive:
 		c.close()
 		return false
 	}
