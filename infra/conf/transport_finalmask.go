@@ -724,10 +724,15 @@ func (c *Xdns) Build() (proto.Message, error) {
 }
 
 type XMC struct {
-	Hostname string       `json:"hostname"`
-	Profiles []XMCProfile `json:"profiles"`
-	Password string       `json:"password"`
-	Padding  []string     `json:"padding"`
+	Hostname string          `json:"hostname"`
+	Profiles []XMCProfile    `json:"profiles"`
+	Password string          `json:"password"`
+	Padding  []XMCPaddingTurn `json:"padding,omitempty"`
+}
+
+type XMCPaddingTurn struct {
+	Length    string `json:"length"`
+	Direction string `json:"direction"`
 }
 
 type XMCProfile struct {
@@ -771,14 +776,26 @@ func (c *XMC) Build() (proto.Message, error) {
 		return nil, fmt.Errorf("empty password")
 	}
 	config := &xmc.Config{Password: c.Password, Hostname: c.Hostname}
-	for i, value := range c.Padding {
-		minimum, maximum, err := ParseRangeString(value)
+	for i, turn := range c.Padding {
+		minimum, maximum, err := ParseRangeString(turn.Length)
 		if err != nil {
 			return nil, fmt.Errorf("minecraft padding turn %d: %w", i, err)
 		}
+
+		var direction int32
+		switch turn.Direction {
+		case "c2s", "client-to-server":
+			direction = 1
+		case "s2c", "server-to-client":
+			direction = 2
+		default:
+			return nil, fmt.Errorf("minecraft padding turn %d: invalid direction %q (must be \"c2s\" or \"s2c\")", i, turn.Direction)
+		}
+
 		config.Padding = append(config.Padding, &xmc.Padding{
 			LengthMin: int64(minimum),
 			LengthMax: int64(maximum),
+			Direction: direction,
 		})
 	}
 	if err := config.ValidatePadding(); err != nil {
