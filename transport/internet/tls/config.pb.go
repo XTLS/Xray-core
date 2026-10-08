@@ -206,6 +206,7 @@ type Config struct {
 	EchConfigList        string                 `protobuf:"bytes,19,opt,name=ech_config_list,json=echConfigList,proto3" json:"ech_config_list,omitempty"`
 	EchSocketSettings    *internet.SocketConfig `protobuf:"bytes,21,opt,name=ech_socket_settings,json=echSocketSettings,proto3" json:"ech_socket_settings,omitempty"`
 	PinnedPeerCertSha256 [][]byte               `protobuf:"bytes,22,rep,name=pinned_peer_cert_sha256,json=pinnedPeerCertSha256,proto3" json:"pinned_peer_cert_sha256,omitempty"`
+	UseSystemCa          bool                   `protobuf:"varint,23,opt,name=use_system_ca,json=useSystemCa,proto3" json:"use_system_ca,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -359,6 +360,13 @@ func (x *Config) GetPinnedPeerCertSha256() [][]byte {
 	return nil
 }
 
+func (x *Config) GetUseSystemCa() bool {
+	if x != nil {
+		return x.UseSystemCa
+	}
+	return false
+}
+
 var File_transport_internet_tls_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_tls_config_proto_rawDesc = "" +
@@ -377,7 +385,7 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\x05Usage\x12\x10\n" +
 	"\fENCIPHERMENT\x10\x00\x12\x14\n" +
 	"\x10AUTHORITY_VERIFY\x10\x01\x12\x13\n" +
-	"\x0fAUTHORITY_ISSUE\x10\x02\"\xa6\x06\n" +
+	"\x0fAUTHORITY_ISSUE\x10\x02\"\xca\x06\n" +
 	"\x06Config\x12J\n" +
 	"\vcertificate\x18\x02 \x03(\v2(.xray.transport.internet.tls.CertificateR\vcertificate\x12\x1f\n" +
 	"\vserver_name\x18\x03 \x01(\tR\n" +
@@ -398,7 +406,8 @@ const file_transport_internet_tls_config_proto_rawDesc = "" +
 	"\x0fech_server_keys\x18\x12 \x01(\fR\rechServerKeys\x12&\n" +
 	"\x0fech_config_list\x18\x13 \x01(\tR\rechConfigList\x12U\n" +
 	"\x13ech_socket_settings\x18\x15 \x01(\v2%.xray.transport.internet.SocketConfigR\x11echSocketSettings\x125\n" +
-	"\x17pinned_peer_cert_sha256\x18\x16 \x03(\fR\x14pinnedPeerCertSha256Bs\n" +
+	"\x17pinned_peer_cert_sha256\x18\x16 \x03(\fR\x14pinnedPeerCertSha256\x12\"\n" +
+	"\ruse_system_ca\x18\x17 \x01(\bR\vuseSystemCaBs\n" +
 	"\x1fcom.xray.transport.internet.tlsP\x01Z0github.com/xtls/xray-core/transport/internet/tls\xaa\x02\x1bXray.Transport.Internet.Tlsb\x06proto3"
 
 var (
