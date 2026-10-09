@@ -43,7 +43,10 @@ func TestFailoverPriority(t *testing.T) {
 	if actual := s.PickOutbound(tags); actual != "m-1" {
 		t.Errorf("expected: m-1, actual: %v", actual)
 	}
-	if actual := s.GetPrincipleTarget(tags); actual[0] != "m-1" || actual[1] != "z-2" || actual[2] != "a-3" {
+	if actual := s.GetPrincipleTarget(tags); len(actual) != 1 || actual[0] != "m-1" {
+		t.Errorf("expected: [m-1], actual: %v", actual)
+	}
+	if actual := s.sortByPriority(tags); actual[0] != "m-1" || actual[1] != "z-2" || actual[2] != "a-3" {
 		t.Errorf("expected: [m-1 z-2 a-3], actual: %v", actual)
 	}
 }

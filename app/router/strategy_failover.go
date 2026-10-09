@@ -51,7 +51,10 @@ func (s *FailoverStrategy) InjectContext(ctx context.Context) {
 }
 
 func (s *FailoverStrategy) GetPrincipleTarget(strings []string) []string {
-	return s.sortByPriority(strings)
+	if tag := s.PickOutbound(strings); tag != "" {
+		return []string{tag}
+	}
+	return nil
 }
 
 func (s *FailoverStrategy) PickOutbound(candidates []string) string {
