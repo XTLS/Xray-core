@@ -48,7 +48,7 @@ func executeOnlineStatsIpList(cmd *base.Command, args []string) {
 	all := cmd.Flag.Bool("all", false, "")
 	includeTraffic := cmd.Flag.Bool("include-traffic", false, "")
 	reset := cmd.Flag.Bool("reset", false, "")
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	if *all && *email != "" {
 		base.Fatalf("-all and -email are mutually exclusive")
 	}

@@ -37,7 +37,7 @@ func executeQueryStats(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
 	pattern := cmd.Flag.String("pattern", "", "")
 	reset := cmd.Flag.Bool("reset", false, "")
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 
 	conn, ctx, close := dialAPIServer()
 	defer close()

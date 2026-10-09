@@ -29,7 +29,7 @@ Example:
 
 func executeGetAllOnlineUsers(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	conn, ctx, close := dialAPIServer()
 	defer close()
 

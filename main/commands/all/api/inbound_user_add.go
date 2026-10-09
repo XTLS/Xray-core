@@ -42,7 +42,7 @@ Example:
 
 func executeAddInboundUsers(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	unnamedArgs := cmd.Flag.Args()
 	inbs := extractInboundsConfig(unnamedArgs)
 

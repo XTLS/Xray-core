@@ -32,7 +32,7 @@ func executeRemoveUsers(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
 	var tag string
 	cmd.Flag.StringVar(&tag, "tag", "", "")
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	emails := cmd.Flag.Args()
 	if len(tag) < 1 {
 		base.Fatalf("inbound tag not specified")

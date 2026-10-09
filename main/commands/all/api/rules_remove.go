@@ -31,7 +31,7 @@ Example:
 
 func executeRemoveRules(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	ruleTags := cmd.Flag.Args()
 	if len(ruleTags) == 0 {
 		fmt.Println("reading from stdin:")

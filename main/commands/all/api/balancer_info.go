@@ -37,7 +37,7 @@ Example:
 
 func executeBalancerInfo(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	unnamedArgs := cmd.Flag.Args()
 	if len(unnamedArgs) == 0 {
 		fmt.Println("set balancer tag")

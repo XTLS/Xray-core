@@ -40,7 +40,7 @@ func executeInboundUser(cmd *base.Command, args []string) {
 	var email string
 	cmd.Flag.StringVar(&tag, "tag", "", "")
 	cmd.Flag.StringVar(&email, "email", "", "")
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 
 	conn, ctx, close := dialAPIServer()
 	defer close()

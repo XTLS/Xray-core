@@ -41,7 +41,7 @@ func executeAddRules(cmd *base.Command, args []string) {
 	var shouldAppend bool
 	setSharedFlags(cmd)
 	cmd.Flag.BoolVar(&shouldAppend, "append", false, "")
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 
 	unnamedArgs := cmd.Flag.Args()
 	if len(unnamedArgs) == 0 {

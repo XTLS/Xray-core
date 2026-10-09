@@ -31,7 +31,7 @@ func executeListInbounds(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
 	var isOnlyTagsStr string
 	cmd.Flag.StringVar(&isOnlyTagsStr, "isOnlyTags", "", "")
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	isOnlyTags := isOnlyTagsStr == "true"
 
 	conn, ctx, close := dialAPIServer()

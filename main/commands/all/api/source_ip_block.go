@@ -59,7 +59,7 @@ func executeSourceIpBlock(cmd *base.Command, args []string) {
 	cmd.Flag.StringVar(&ruletag, "ruletag", "sourceIpBlock", "")
 	cmd.Flag.BoolVar(&reset, "reset", false, "")
 
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 
 	unnamedArgs := cmd.Flag.Args()
 	if len(unnamedArgs) == 0 {

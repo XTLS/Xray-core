@@ -47,20 +47,30 @@ func executeBalancerOverride(cmd *base.Command, args []string) {
 	cmd.Flag.BoolVar(&remove, "r", false, "")
 	cmd.Flag.BoolVar(&remove, "remove", false, "")
 	setSharedFlags(cmd)
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 
 	if balancer == "" {
 		base.Fatalf("balancer tag not specified")
+	}
+	target := ""
+	if remove {
+		if cmd.Flag.NArg() > 0 {
+			base.Fatalf("outbound tag can't be specified with -r")
+		}
+	} else {
+		if cmd.Flag.NArg() == 0 {
+			base.Fatalf("outbound tag not specified")
+		}
+		if cmd.Flag.NArg() > 1 {
+			base.Fatalf("only one outbound tag can be specified")
+		}
+		target = cmd.Flag.Arg(0)
 	}
 
 	conn, ctx, close := dialAPIServer()
 	defer close()
 
 	client := routerService.NewRoutingServiceClient(conn)
-	target := ""
-	if !remove {
-		target = cmd.Flag.Args()[0]
-	}
 	r := &routerService.OverrideBalancerTargetRequest{
 		BalancerTag: balancer,
 		Target:      target,
@@ -68,6 +78,6 @@ func executeBalancerOverride(cmd *base.Command, args []string) {
 
 	_, err := client.OverrideBalancerTarget(ctx, r)
 	if err != nil {
-		base.Fatalf("failed to perform balancer health checks: %s", err)
+		base.Fatalf("failed to override balancer: %s", err)
 	}
 }

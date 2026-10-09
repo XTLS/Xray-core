@@ -33,7 +33,7 @@ Example:
 
 func executeAddOutbounds(cmd *base.Command, args []string) {
 	setSharedFlags(cmd)
-	cmd.Flag.Parse(args)
+	parseFlags(cmd, args)
 	unnamedArgs := cmd.Flag.Args()
 	if len(unnamedArgs) == 0 {
 		fmt.Println("Reading from STDIN")

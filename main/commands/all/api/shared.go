@@ -38,6 +38,29 @@ func setSharedFlags(cmd *base.Command) {
 	cmd.Flag.BoolVar(&apiJSON, "json", false, "")
 }
 
+// parseFlags parses cmd.Flag like cmd.Flag.Parse(args), but also takes the flags that come after arguments: the flag
+// package stops at the first argument, so "xray api rmo tag -s 127.0.0.1:10085" would remove "tag", "-s" and
+// "127.0.0.1:10085" from the default server. "--" still ends the flags. Arguments are left in cmd.Flag.Args().
+func parseFlags(cmd *base.Command, args []string) {
+	var unnamedArgs []string
+	for {
+		cmd.Flag.Parse(args) // on errors, cmd.Usage() exits
+		rest := cmd.Flag.Args()
+		if len(rest) == 0 {
+			break
+		}
+		// Stopped right after "--": the rest are arguments. A flag value of "--" ("-s --") looks the same, which is rare
+		// enough to leave as it was.
+		if consumed := len(args) - len(rest); consumed > 0 && args[consumed-1] == "--" {
+			unnamedArgs = append(unnamedArgs, rest...)
+			break
+		}
+		unnamedArgs = append(unnamedArgs, rest[0])
+		args = rest[1:]
+	}
+	cmd.Flag.Parse(append([]string{"--"}, unnamedArgs...))
+}
+
 func dialAPIServer() (conn *grpc.ClientConn, ctx context.Context, close func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(apiTimeout)*time.Second)
 	conn, err := grpc.DialContext(ctx, apiServerAddrPtr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
