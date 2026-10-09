@@ -3,6 +3,7 @@ package outbound
 import (
 	"context"
 	gonet "net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,10 +17,16 @@ import (
 type testDialer struct {
 	up    atomic.Bool
 	dials atomic.Int32
+
+	access  sync.Mutex
+	lastCtx context.Context
 }
 
-func (d *testDialer) Dial(context.Context, net.Destination) (stat.Connection, error) {
+func (d *testDialer) Dial(ctx context.Context, _ net.Destination) (stat.Connection, error) {
 	d.dials.Add(1)
+	d.access.Lock()
+	d.lastCtx = ctx
+	d.access.Unlock()
 	if d.up.Load() {
 		conn, _ := gonet.Pipe()
 		return conn, nil
@@ -79,6 +86,28 @@ func TestGetPreConnWakesBackedOffPreConnect(t *testing.T) {
 	conn.Close()
 	if elapsed := time.Since(start); elapsed > time.Millisecond*500 {
 		t.Error("expected a waiting request to wake the pre-connect, but it waited", elapsed)
+	}
+}
+
+func TestPreConnectDialContextOutlivesClose(t *testing.T) {
+	h := newTestpreHandler()
+	d := &testDialer{}
+	d.up.Store(true)
+	go h.preConnect(d, net.TCPDestination(net.LocalHostIP, 1))
+	conn, err := h.getPreConn(context.Background())
+	if conn == nil || err != nil {
+		t.Fatal("expected a pre-connected connection, but got", conn, err)
+	}
+	defer conn.Close()
+
+	// Transports such as gRPC tie the connection to the context it was dialed with,
+	// so closing the handler must not end connections that requests already use.
+	h.Close()
+	d.access.Lock()
+	ctx := d.lastCtx
+	d.access.Unlock()
+	if ctx.Err() != nil {
+		t.Error("expected Close not to cancel the dial context of handed-out connections")
 	}
 }
 

@@ -153,13 +153,15 @@ func (h *Handler) Close() error {
 }
 
 func (h *Handler) preConnect(dialer internet.Dialer, dest net.Destination) {
-	ctx := xctx.ContextWithID(h.preCtx, session.NewID())
+	// Not h.preCtx: transports such as gRPC tie the connection to the context it was dialed with,
+	// and Close() must not end connections that requests already use.
+	ctx := xctx.ContextWithID(context.Background(), session.NewID())
 	backoff := time.Millisecond * 200
 	for {
 		wait := time.Millisecond * 200 // TODO: customize & randomize
 		conn, err := dialer.Dial(ctx, dest)
 		if err != nil {
-			if ctx.Err() != nil {
+			if h.preCtx.Err() != nil {
 				return
 			}
 			errors.LogWarningInner(ctx, err, "pre-connect failed")
@@ -170,7 +172,7 @@ func (h *Handler) preConnect(dialer internet.Dialer, dest net.Destination) {
 			backoff = time.Millisecond * 200
 			select {
 			case h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)}: // TODO: customize & randomize
-			case <-ctx.Done():
+			case <-h.preCtx.Done():
 				conn.Close()
 				return
 			}
@@ -178,7 +180,7 @@ func (h *Handler) preConnect(dialer internet.Dialer, dest net.Destination) {
 		select {
 		case <-time.After(wait):
 		case <-h.preWake: // a request is waiting
-		case <-ctx.Done():
+		case <-h.preCtx.Done():
 			return
 		}
 	}
