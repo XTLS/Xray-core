@@ -56,9 +56,12 @@ type Handler struct {
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
 
-	testpre  uint32
-	initpre  sync.Once
-	preConns chan *ConnExpire
+	testpre   uint32
+	initpre   sync.Once
+	preConns  chan *ConnExpire
+	preWake   chan struct{}
+	preCtx    context.Context
+	preCancel context.CancelFunc
 }
 
 type ConnExpire struct {
@@ -129,19 +132,88 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	handler.testpre = a.Testpre
+	if handler.testpre > 0 {
+		handler.preConns = make(chan *ConnExpire)
+		handler.preWake = make(chan struct{}, 1)
+		handler.preCtx, handler.preCancel = context.WithCancel(context.Background())
+	}
 
 	return handler, nil
 }
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	if h.preConns != nil {
-		close(h.preConns)
+	if h.preCancel != nil {
+		h.preCancel()
 	}
 	if h.reverse != nil {
 		return h.reverse.Close()
 	}
 	return nil
+}
+
+func (h *Handler) preConnect(dialer internet.Dialer, dest net.Destination) {
+	ctx := xctx.ContextWithID(h.preCtx, session.NewID())
+	backoff := time.Millisecond * 200
+	for {
+		wait := time.Millisecond * 200 // TODO: customize & randomize
+		conn, err := dialer.Dial(ctx, dest)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			errors.LogWarningInner(ctx, err, "pre-connect failed")
+			// Back off, otherwise an unreachable server makes this spin and flood the log.
+			wait = backoff
+			backoff = min(backoff*2, time.Second*10)
+		} else {
+			backoff = time.Millisecond * 200
+			select {
+			case h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)}: // TODO: customize & randomize
+			case <-ctx.Done():
+				conn.Close()
+				return
+			}
+		}
+		select {
+		case <-time.After(wait):
+		case <-h.preWake: // a request is waiting
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// getPreConn returns nil if no pre-connected connection comes in time, so that Process dials directly,
+// as nothing else would end the wait while the server is unreachable.
+func (h *Handler) getPreConn(ctx context.Context) (stat.Connection, error) {
+	timeout := time.NewTimer(time.Second * 2) // TODO: customize
+	defer timeout.Stop()
+	for {
+		var connTime *ConnExpire
+		select {
+		case connTime = <-h.preConns:
+		default:
+			// None is ready: don't make the request wait out a pre-connect's backoff.
+			select {
+			case h.preWake <- struct{}{}:
+			default:
+			}
+			select {
+			case connTime = <-h.preConns:
+			case <-timeout.C:
+				return nil, nil
+			case <-h.preCtx.Done():
+				return nil, errors.New("closed handler")
+			case <-ctx.Done():
+				return nil, errors.New("failed to get a pre-connected connection").Base(ctx.Err())
+			}
+		}
+		if time.Now().Before(connTime.Expire) {
+			return connTime.Conn, nil
+		}
+		connTime.Conn.Close()
+	}
 }
 
 // Process implements proxy.Outbound.Process().
@@ -158,33 +230,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	if h.testpre > 0 && h.reverse == nil {
 		h.initpre.Do(func() {
-			h.preConns = make(chan *ConnExpire)
 			for range h.testpre { // TODO: randomize
-				go func() {
-					defer func() { recover() }()
-					ctx := xctx.ContextWithID(context.Background(), session.NewID())
-					for {
-						conn, err := dialer.Dial(ctx, rec.Destination)
-						if err != nil {
-							errors.LogWarningInner(ctx, err, "pre-connect failed")
-							continue
-						}
-						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
-						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
-					}
-				}()
+				go h.preConnect(dialer, rec.Destination)
 			}
 		})
-		for {
-			connTime := <-h.preConns
-			if connTime == nil {
-				return errors.New("closed handler")
-			}
-			if time.Now().Before(connTime.Expire) {
-				conn = connTime.Conn
-				break
-			}
-			connTime.Conn.Close()
+		var err error
+		if conn, err = h.getPreConn(ctx); err != nil {
+			return err
 		}
 	}
 
