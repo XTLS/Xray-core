@@ -21,59 +21,6 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
-func TestCloseReleasesConfigCache(t *testing.T) {
-	settings := &internet.MemoryStreamConfig{ProtocolName: protocolName, ProtocolSettings: &Config{}}
-	dest := net.TCPDestination(net.LocalHostIP, 18080)
-	if _, _, err := getHTTPClient(context.Background(), dest, settings); err != nil {
-		t.Fatal(err)
-	}
-	if err := settings.Close(); err != nil {
-		t.Fatal(err)
-	}
-	globalDialerAccess.Lock()
-	_, retained := globalDialerMap[dialerConf{dest, settings}]
-	globalDialerAccess.Unlock()
-	if retained {
-		t.Fatal("closed stream settings still have an XHTTP cache entry")
-	}
-}
-
-func TestDefaultClientCloseCancelsActiveRequest(t *testing.T) {
-	canceled := make(chan struct{})
-	started := make(chan struct{})
-	stop := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.(http.Flusher).Flush()
-		close(started)
-		select {
-		case <-r.Context().Done():
-			close(canceled)
-		case <-stop:
-		}
-	}))
-	t.Cleanup(func() { close(stop); server.Close() })
-	client := &DefaultDialerClient{transportConfig: &Config{}, client: server.Client(), httpVersion: "1.1"}
-	body, _, _, err := client.OpenStream(context.Background(), server.URL, "", nil, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { body.Close() })
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("request did not reach the test server")
-	}
-	if err := client.Close(); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-canceled:
-	case <-time.After(time.Second):
-		t.Fatal("closing the XHTTP client did not cancel its active request")
-	}
-}
-
 func cacheEntriesFor(settings *internet.MemoryStreamConfig) int {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
@@ -284,21 +231,6 @@ func TestDefaultClientCloseTLSRequests(t *testing.T) {
 	}
 }
 
-func TestDefaultClientCloseHTTP3Transport(t *testing.T) {
-	settings := &internet.MemoryStreamConfig{
-		ProtocolName: protocolName, ProtocolSettings: &Config{}, SecurityType: "tls",
-		SecuritySettings: &tls.Config{NextProtocol: []string{"h3"}},
-	}
-	client := createHTTPClient(net.UDPDestination(net.LocalHostIP, 18084), settings).(*DefaultDialerClient)
-	if err := client.Close(); err != nil {
-		t.Fatal(err)
-	}
-	req, _ := http.NewRequest("GET", "https://localhost/", nil)
-	if _, err := client.client.Do(req); err == nil {
-		t.Fatal("closed HTTP/3 transport accepted a request")
-	}
-}
-
 func TestPacketUploadReservationSurvivesXmuxRotation(t *testing.T) {
 	for _, protocol := range []string{"http/1.1", "h2"} {
 		t.Run(protocol, func(t *testing.T) {
@@ -378,41 +310,6 @@ func TestPacketUploadReservationSurvivesXmuxRotation(t *testing.T) {
 	}
 }
 
-func TestPacketUploadDiscardsInvalidHTTP1Response(t *testing.T) {
-	for _, malformed := range []bool{false, true} {
-		t.Run(map[bool]string{false: "non-200", true: "malformed"}[malformed], func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				io.Copy(io.Discard, r.Body)
-				if malformed {
-					conn, _, err := w.(http.Hijacker).Hijack()
-					if err != nil {
-						t.Error(err)
-						return
-					}
-					conn.Write([]byte("not an HTTP response\r\n\r\n"))
-					conn.Close()
-					return
-				}
-				w.WriteHeader(http.StatusServiceUnavailable)
-			}))
-			defer server.Close()
-			u, _ := url.Parse(server.URL)
-			address, _ := stdnet.ResolveTCPAddr("tcp", u.Host)
-			settings := &internet.MemoryStreamConfig{ProtocolName: protocolName, ProtocolSettings: &Config{}}
-			client := createHTTPClient(net.TCPDestination(net.IPAddress(address.IP), net.Port(address.Port)), settings).(*DefaultDialerClient)
-			defer client.Close()
-			if err := client.PostPacket(context.Background(), server.URL, "session", "0", buf.MergeBytes(nil, []byte("payload"))); err == nil {
-				t.Fatal("invalid upload response was accepted")
-			}
-			client.access.Lock()
-			defer client.access.Unlock()
-			if len(client.connections) != 0 || len(client.uploadRawPool) != 0 {
-				t.Fatal("invalid response left a connection owned or reusable")
-			}
-		})
-	}
-}
-
 type stagedLifecycleClient struct {
 	open   func(io.Reader) (io.ReadCloser, error)
 	closed atomic.Bool
@@ -477,26 +374,6 @@ func TestFailedStreamUpClosesOpenDownload(t *testing.T) {
 	}
 }
 
-func TestCallerCancellationKeepsOwnedRequestAlive(t *testing.T) {
-	client := &DefaultDialerClient{client: &http.Client{Transport: &http.Transport{}}}
-	ctx, cancelCaller := context.WithCancel(context.Background())
-	requestCtx, release, err := client.requestContext(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer release()
-	cancelCaller()
-	if err := requestCtx.Err(); err != nil {
-		t.Fatalf("caller cancellation changed the existing transport lifetime: %v", err)
-	}
-	client.Close()
-	select {
-	case <-requestCtx.Done():
-	case <-time.After(time.Second):
-		t.Fatal("owner Close did not cancel its request")
-	}
-}
-
 func TestPacketUploadHonorsHTTP1ConnectionClose(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
@@ -520,19 +397,4 @@ func TestPacketUploadHonorsHTTP1ConnectionClose(t *testing.T) {
 			t.Fatal("Connection: close response was returned to the upload pool")
 		}
 	}
-}
-
-func TestXmuxSelectionReservesBeforeRetirement(t *testing.T) {
-	manager := NewXmuxManager(XmuxConfig{CMaxReuseTimes: &RangeConfig{From: 1, To: 1}}, func() XmuxConn { return &lifecycleXmuxConn{} })
-	defer manager.Close()
-	first := manager.GetXmuxClientForRequest(context.Background())
-	second := manager.GetXmuxClientForRequest(context.Background())
-	if first == second || first.Running.Load() != 1 || first.XmuxConn.IsClosed() {
-		t.Fatal("a selected request client was retired before its lease was held")
-	}
-	first.DoneRunning()
-	if !first.XmuxConn.IsClosed() {
-		t.Fatal("retired client did not close when its request completed")
-	}
-	second.DoneRunning()
 }

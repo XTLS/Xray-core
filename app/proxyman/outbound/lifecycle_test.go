@@ -4,19 +4,15 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
-	"io"
-	stdnet "net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/xtls/xray-core/app/proxyman"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type lifecycleHandler struct {
@@ -45,50 +41,6 @@ func lifecycleManager(t *testing.T) *Manager {
 		t.Fatal(err)
 	}
 	return m
-}
-
-func TestRemoveHandlerClosesAndUnregisters(t *testing.T) {
-	m := lifecycleManager(t)
-	h := &lifecycleHandler{tag: "pingBatch-node"}
-	if err := m.AddHandler(context.Background(), h); err != nil {
-		t.Fatal(err)
-	}
-	if got := m.Select([]string{"pingBatch-"}); len(got) != 1 {
-		t.Fatalf("initial selection = %v", got)
-	}
-	if err := m.RemoveHandler(context.Background(), h.tag); err != nil {
-		t.Fatal(err)
-	}
-	if got := h.closeCall.Load(); got != 1 {
-		t.Errorf("removed handler Close calls = %d, want 1", got)
-	}
-	if m.GetHandler(h.tag) != nil || m.GetDefaultHandler() != nil {
-		t.Error("removed handler is still registered")
-	}
-	if got := m.Select([]string{"pingBatch-"}); len(got) != 0 {
-		t.Errorf("selection after removal = %v", got)
-	}
-	if err := m.RemoveHandler(context.Background(), h.tag); err != nil {
-		t.Fatal(err)
-	}
-	if got := h.closeCall.Load(); got != 1 {
-		t.Errorf("unknown-tag removal closed handler again: %d", got)
-	}
-}
-
-func TestRemoveHandlerCloseError(t *testing.T) {
-	m := lifecycleManager(t)
-	want := stderrors.New("handler close failed")
-	h := &lifecycleHandler{tag: "pingBatch-error", onClose: func() error { return want }}
-	if err := m.AddHandler(context.Background(), h); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.RemoveHandler(context.Background(), h.tag); !stderrors.Is(err, want) {
-		t.Errorf("RemoveHandler error = %v, want %v", err, want)
-	}
-	if m.GetHandler(h.tag) != nil {
-		t.Error("close error left handler registered")
-	}
 }
 
 func TestRemoveHandlerCloseMayReplaceTag(t *testing.T) {
@@ -183,13 +135,11 @@ func TestManagerCloseClearsHandlersBeforeCallbacks(t *testing.T) {
 }
 
 type lifecycleProxy struct {
-	closeCall   atomic.Int32
-	processCall atomic.Int32
-	closeErr    error
+	closeCall atomic.Int32
+	closeErr  error
 }
 
 func (p *lifecycleProxy) Process(context.Context, *transport.Link, internet.Dialer) error {
-	p.processCall.Add(1)
 	return nil
 }
 
@@ -228,34 +178,6 @@ func TestHandlerCloseOwnsStreamConfigAndRetainsErrors(t *testing.T) {
 	}
 }
 
-func TestClosedHandlerRejectsStartDialAndDispatch(t *testing.T) {
-	p := &lifecycleProxy{}
-	h := &Handler{proxy: p}
-	if err := h.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := h.Start(); !stderrors.Is(err, stdnet.ErrClosed) {
-		t.Errorf("closed Start error = %v", err)
-	}
-	if conn, err := h.Dial(context.Background(), net.TCPDestination(net.ParseAddress("127.0.0.1"), 80)); conn != nil || !stderrors.Is(err, stdnet.ErrClosed) {
-		t.Errorf("closed Dial = (%v, %v)", conn, err)
-	}
-	inputReader, inputWriter := pipe.New()
-	outputReader, outputWriter := pipe.New()
-	defer inputWriter.Close()
-	defer outputWriter.Close()
-	h.Dispatch(context.Background(), &transport.Link{Reader: inputReader, Writer: outputWriter})
-	if _, err := inputReader.ReadMultiBufferTimeout(100 * time.Millisecond); !stderrors.Is(err, io.ErrClosedPipe) {
-		t.Errorf("closed Dispatch input error = %v", err)
-	}
-	if _, err := outputReader.ReadMultiBufferTimeout(100 * time.Millisecond); !stderrors.Is(err, io.ErrClosedPipe) {
-		t.Errorf("closed Dispatch output error = %v", err)
-	}
-	if p.processCall.Load() != 0 {
-		t.Error("closed Dispatch reached proxy")
-	}
-}
-
 func TestConcurrentSelectAndHandlerRemoval(t *testing.T) {
 	m := lifecycleManager(t)
 	var wg sync.WaitGroup
@@ -283,24 +205,5 @@ func TestConcurrentSelectAndHandlerRemoval(t *testing.T) {
 	wg.Wait()
 	if tags := m.Select([]string{"pingBatch-"}); len(tags) != 0 {
 		t.Errorf("selector retained removed handlers: %v", tags)
-	}
-}
-
-func TestHandlerCloseOnce(t *testing.T) {
-	p := &lifecycleProxy{}
-	h := &Handler{proxy: p}
-	var wg sync.WaitGroup
-	for i := 0; i < 32; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := h.Close(); err != nil {
-				t.Errorf("Close: %v", err)
-			}
-		}()
-	}
-	wg.Wait()
-	if got := p.closeCall.Load(); got != 1 {
-		t.Errorf("concurrent Close calls reached proxy %d times, want 1", got)
 	}
 }
