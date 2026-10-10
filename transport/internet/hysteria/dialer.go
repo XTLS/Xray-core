@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/signal/semaphore"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
@@ -27,7 +28,7 @@ import (
 )
 
 type client struct {
-	sync.Mutex
+	access *semaphore.Instance
 
 	instance     *core.Instance
 	forced       bool
@@ -67,6 +68,9 @@ func (c *client) close() {
 }
 
 func (c *client) dial(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if c.forced {
 		return errors.New("client is closed")
 	}
@@ -177,8 +181,11 @@ func (c *client) dial(ctx context.Context) error {
 			CommonHeaderPadding: []string{AuthRequestPadding.String()},
 		},
 	}
-	resp, err := rt.RoundTrip(req)
+	resp, err := rt.RoundTrip(req.WithContext(ctx))
 	if err != nil {
+		// Join HTTP/3's asynchronous Dial callback before reading conn and
+		// releasing the provisional transport and socket.
+		_ = rt.Close()
 		if conn != nil {
 			_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		}
@@ -187,6 +194,8 @@ func (c *client) dial(ctx context.Context) error {
 		return err
 	}
 	if resp.StatusCode != StatusAuthOK {
+		_ = resp.Body.Close()
+		_ = rt.Close()
 		_ = conn.CloseWithError(closeErrCodeProtocolError, "")
 		_ = tr.Close()
 		_ = pktConn.Close()
@@ -228,8 +237,12 @@ func (c *client) dial(ctx context.Context) error {
 }
 
 func (c *client) tcp(ctx context.Context) (stat.Connection, error) {
-	c.Lock()
-	defer c.Unlock()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.access.Wait():
+	}
+	defer c.access.Signal()
 
 	err := c.dial(ctx)
 	if err != nil {
@@ -251,8 +264,12 @@ func (c *client) tcp(ctx context.Context) (stat.Connection, error) {
 }
 
 func (c *client) udp(ctx context.Context) (stat.Connection, error) {
-	c.Lock()
-	defer c.Unlock()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.access.Wait():
+	}
+	defer c.access.Signal()
 
 	err := c.dial(ctx)
 	if err != nil {
@@ -263,14 +280,14 @@ func (c *client) udp(ctx context.Context) (stat.Connection, error) {
 }
 
 func (c *client) clean(force bool) {
-	c.Lock()
+	<-c.access.Wait()
+	defer c.access.Signal()
 	if force {
 		c.forced = true
 	}
 	if status := c.status(); force && status != StatusNull || status == StatusInactive {
 		c.close()
 	}
-	c.Unlock()
 }
 
 type dialerConf struct {
@@ -338,6 +355,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		c = manager.m[dialerConfKey]
 		if c == nil {
 			c = &client{
+				access:       semaphore.New(1),
 				instance:     core.FromContext(ctx),
 				dest:         dest,
 				config:       streamSettings.ProtocolSettings.(*Config),
