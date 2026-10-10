@@ -54,25 +54,25 @@ func useWarp(config *Config, tlsConfig *gotls.Config) error {
 	tlsConfig.GetClientCertificate = func(*gotls.CertificateRequestInfo) (*gotls.Certificate, error) {
 		return cert, nil
 	}
-	if publicKey := config.Warp.PublicKey; len(publicKey) > 0 {
-		verify := tlsConfig.VerifyPeerCertificate
-		tlsConfig.InsecureSkipVerify = true
-		tlsConfig.VerifyPeerCertificate = func(raw [][]byte, chains [][]*x509.Certificate) error {
-			if len(raw) == 0 {
-				return errors.New("the WARP endpoint sent no certificate")
-			}
-			leaf, err := x509.ParseCertificate(raw[0])
-			if err != nil {
-				return err
-			}
-			if !bytes.Equal(leaf.RawSubjectPublicKeyInfo, publicKey) {
-				return errors.New("the WARP endpoint's key doesn't match \"publicKey\"")
-			}
-			if verify != nil {
-				return verify(raw, chains)
-			}
-			return nil
+	if tlsConfig.InsecureSkipVerify == true {
+		return nil // pcs or vcn or both
+	}
+	if _, err = x509.ParsePKIXPublicKey(config.Warp.PublicKey); err != nil {
+		return err
+	}
+	tlsConfig.InsecureSkipVerify = true
+	tlsConfig.VerifyPeerCertificate = func(raw [][]byte, chains [][]*x509.Certificate) error {
+		if len(raw) == 0 {
+			return errors.New("the WARP endpoint sent no certificate")
 		}
+		leaf, err := x509.ParseCertificate(raw[0])
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(leaf.RawSubjectPublicKeyInfo, config.Warp.PublicKey) {
+			return errors.New("the WARP endpoint's key doesn't match \"publicKey\"")
+		}
+		return nil
 	}
 	return nil
 }
