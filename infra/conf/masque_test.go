@@ -16,7 +16,60 @@ import (
 	. "github.com/xtls/xray-core/infra/conf"
 	masqueproxy "github.com/xtls/xray-core/proxy/masque"
 	"github.com/xtls/xray-core/transport/internet/masque"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 )
+
+func defaultMasqueXmux() *splithttp.XmuxConfig {
+	return &splithttp.XmuxConfig{
+		MaxConcurrency:   &splithttp.RangeConfig{},
+		MaxConnections:   &splithttp.RangeConfig{From: 3, To: 3},
+		CMaxReuseTimes:   &splithttp.RangeConfig{},
+		HMaxRequestTimes: &splithttp.RangeConfig{},
+		HMaxReusableSecs: &splithttp.RangeConfig{From: 1800, To: 3000},
+	}
+}
+
+func TestMasqueXmuxConfig(t *testing.T) {
+	creator := func() Buildable {
+		return new(MasqueConfig)
+	}
+
+	runMultiTestCase(t, []TestCase{
+		{
+			Input:  `{"xmux": {"maxConnections": "2-4", "hMaxReusableSecs": 60, "hKeepAlivePeriod": -1}}`,
+			Parser: loadJSON(creator),
+			Output: &masque.Config{
+				Path: "/.well-known/masque/ip/*/*/",
+				Xmux: &splithttp.XmuxConfig{
+					MaxConcurrency:   &splithttp.RangeConfig{},
+					MaxConnections:   &splithttp.RangeConfig{From: 2, To: 4},
+					CMaxReuseTimes:   &splithttp.RangeConfig{},
+					HMaxRequestTimes: &splithttp.RangeConfig{},
+					HMaxReusableSecs: &splithttp.RangeConfig{From: 60, To: 60},
+					HKeepAlivePeriod: -1,
+				},
+			},
+		},
+		{
+			Input:  `{"xmux": {"maxConcurrency": 8}}`,
+			Parser: loadJSON(creator),
+			Output: &masque.Config{
+				Path: "/.well-known/masque/ip/*/*/",
+				Xmux: &splithttp.XmuxConfig{
+					MaxConcurrency:   &splithttp.RangeConfig{From: 8, To: 8},
+					MaxConnections:   &splithttp.RangeConfig{},
+					CMaxReuseTimes:   &splithttp.RangeConfig{},
+					HMaxRequestTimes: &splithttp.RangeConfig{},
+					HMaxReusableSecs: &splithttp.RangeConfig{},
+				},
+			},
+		},
+	})
+
+	if _, err := loadJSON(creator)(`{"xmux": {"maxConnections": 2, "maxConcurrency": 8}}`); err == nil {
+		t.Error("expected an error for maxConnections with maxConcurrency")
+	}
+}
 
 func TestMasqueConfig(t *testing.T) {
 	creator := func() Buildable {
@@ -27,7 +80,7 @@ func TestMasqueConfig(t *testing.T) {
 		{
 			Input:  `{}`,
 			Parser: loadJSON(creator),
-			Output: &masque.Config{Path: "/.well-known/masque/ip/*/*/"},
+			Output: &masque.Config{Path: "/.well-known/masque/ip/*/*/", Xmux: defaultMasqueXmux()},
 		},
 		{
 			Input: `{
@@ -40,12 +93,13 @@ func TestMasqueConfig(t *testing.T) {
 				Host:    "example.com:8443",
 				Path:    "/.well-known/masque/ip/*/*/",
 				Headers: map[string]string{"Authorization": "Basic dTpw"},
+				Xmux:    defaultMasqueXmux(),
 			},
 		},
 		{
 			Input:  `{"path": "/masque/ip{?target,ipproto}"}`,
 			Parser: loadJSON(creator),
-			Output: &masque.Config{Path: "/masque/ip?target=*&ipproto=*"},
+			Output: &masque.Config{Path: "/masque/ip?target=*&ipproto=*", Xmux: defaultMasqueXmux()},
 		},
 		{
 			Input:  `{"user": "u", "pass": "p:q", "headers": {"X-Token": "a"}}`,
@@ -53,6 +107,7 @@ func TestMasqueConfig(t *testing.T) {
 			Output: &masque.Config{
 				Path:    "/.well-known/masque/ip/*/*/",
 				Headers: map[string]string{"Authorization": "Basic dTpwOnE=", "X-Token": "a"},
+				Xmux:    defaultMasqueXmux(),
 			},
 		},
 	})
@@ -122,6 +177,7 @@ func TestMasqueWarpConfig(t *testing.T) {
 					Host: "cloudflareaccess.com",
 					Path: "/",
 					Warp: &masque.Warp{PrivateKey: pkcs8, PublicKey: publicKey, Address: address},
+					Xmux: defaultMasqueXmux(),
 				},
 			},
 		})
@@ -134,6 +190,7 @@ func TestMasqueWarpConfig(t *testing.T) {
 				Host: "example.com",
 				Path: "/warp",
 				Warp: &masque.Warp{PrivateKey: pkcs8, PublicKey: publicKey, Address: address},
+				Xmux: defaultMasqueXmux(),
 			},
 		},
 	})
@@ -164,6 +221,7 @@ func TestMasqueWarpConfig(t *testing.T) {
 				Host: "cloudflareaccess.com",
 				Path: "/",
 				Warp: &masque.Warp{PrivateKey: pkcs8, PublicKey: publicKey, Address: []string{"172.16.0.2/32"}},
+				Xmux: defaultMasqueXmux(),
 			},
 		},
 	})

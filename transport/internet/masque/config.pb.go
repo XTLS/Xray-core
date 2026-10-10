@@ -7,6 +7,7 @@
 package masque
 
 import (
+	splithttp "github.com/xtls/xray-core/transport/internet/splithttp"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -27,6 +28,7 @@ type Config struct {
 	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	Headers       map[string]string      `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	Warp          *Warp                  `protobuf:"bytes,4,opt,name=warp,proto3" json:"warp,omitempty"`
+	Xmux          *splithttp.XmuxConfig  `protobuf:"bytes,5,opt,name=xmux,proto3" json:"xmux,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -85,6 +87,13 @@ func (x *Config) GetHeaders() map[string]string {
 func (x *Config) GetWarp() *Warp {
 	if x != nil {
 		return x.Warp
+	}
+	return nil
+}
+
+func (x *Config) GetXmux() *splithttp.XmuxConfig {
+	if x != nil {
+		return x.Xmux
 	}
 	return nil
 }
@@ -153,12 +162,13 @@ var File_transport_internet_masque_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_masque_config_proto_rawDesc = "" +
 	"\n" +
-	"&transport/internet/masque/config.proto\x12\x1exray.transport.internet.masque\"\xf5\x01\n" +
+	"&transport/internet/masque/config.proto\x12\x1exray.transport.internet.masque\x1a)transport/internet/splithttp/config.proto\"\xb8\x02\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12M\n" +
 	"\aheaders\x18\x03 \x03(\v23.xray.transport.internet.masque.Config.HeadersEntryR\aheaders\x128\n" +
-	"\x04warp\x18\x04 \x01(\v2$.xray.transport.internet.masque.WarpR\x04warp\x1a:\n" +
+	"\x04warp\x18\x04 \x01(\v2$.xray.transport.internet.masque.WarpR\x04warp\x12A\n" +
+	"\x04xmux\x18\x05 \x01(\v2-.xray.transport.internet.splithttp.XmuxConfigR\x04xmux\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"`\n" +
@@ -184,18 +194,20 @@ func file_transport_internet_masque_config_proto_rawDescGZIP() []byte {
 
 var file_transport_internet_masque_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_transport_internet_masque_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.transport.internet.masque.Config
-	(*Warp)(nil),   // 1: xray.transport.internet.masque.Warp
-	nil,            // 2: xray.transport.internet.masque.Config.HeadersEntry
+	(*Config)(nil),               // 0: xray.transport.internet.masque.Config
+	(*Warp)(nil),                 // 1: xray.transport.internet.masque.Warp
+	nil,                          // 2: xray.transport.internet.masque.Config.HeadersEntry
+	(*splithttp.XmuxConfig)(nil), // 3: xray.transport.internet.splithttp.XmuxConfig
 }
 var file_transport_internet_masque_config_proto_depIdxs = []int32{
 	2, // 0: xray.transport.internet.masque.Config.headers:type_name -> xray.transport.internet.masque.Config.HeadersEntry
 	1, // 1: xray.transport.internet.masque.Config.warp:type_name -> xray.transport.internet.masque.Warp
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 2: xray.transport.internet.masque.Config.xmux:type_name -> xray.transport.internet.splithttp.XmuxConfig
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_masque_config_proto_init() }

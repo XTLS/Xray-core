@@ -52,7 +52,7 @@ func newHTTP2Peer(t *testing.T, settings ...http2.Setting) (*http2ClientConn, *h
 	var cc *http2ClientConn
 	go func() {
 		var err error
-		cc, err = newHTTP2ClientConn(client)
+		cc, err = newHTTP2ClientConn(client, http2KeepAlivePeriod)
 		ccErr <- err
 	}()
 	preface := make([]byte, len(http2.ClientPreface))
