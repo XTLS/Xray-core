@@ -429,6 +429,8 @@ type Reverse struct {
 	handler     *Handler
 	workers     []*reverse.BridgeWorker
 	monitorTask *task.Periodic
+	access      sync.Mutex
+	closed      bool
 }
 
 func (r *Reverse) monitor() error {
@@ -479,9 +481,18 @@ func (r *Reverse) monitor() error {
 }
 
 func (r *Reverse) Start() error {
+	r.access.Lock()
+	defer r.access.Unlock()
+	// New() starts it after a delay, by which time the outbound may have been closed already.
+	if r.closed {
+		return nil
+	}
 	return r.monitorTask.Start()
 }
 
 func (r *Reverse) Close() error {
+	r.access.Lock()
+	defer r.access.Unlock()
+	r.closed = true
 	return r.monitorTask.Close()
 }
