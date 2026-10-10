@@ -285,19 +285,30 @@ var _ Tun = (*LinuxTun)(nil)
 
 // NewTun builds new tun interface handler (linux specific)
 func NewTun(options *Config) (Tun, error) {
-	tunFd, tunLink, fdProvided, err := openFromEnv(options.Name)
+	tunFd, vnet, tunLink, fdProvided, err := openFromEnv(options.Name)
 	if err != nil {
 		return nil, err
 	}
 	if fdProvided {
 		return &LinuxTun{
-			fdTun:   newFdTun(tunFd),
+			fdTun:   newFdTun(tunFd, vnet),
 			tunLink: tunLink,
 			options: options,
 		}, nil
 	}
 
-	tunFd, err = open(options.Name)
+	// with a virtio_net_hdr on every packet the system leaves its TCP segments as large as they are,
+	// with their checksums not completed, and takes such segments. Without it where that is refused
+	vnet = vnetSize
+	tunFd, err = open(options.Name, unix.IFF_VNET_HDR)
+	if err == nil && unix.IoctlSetInt(tunFd, unix.TUNSETOFFLOAD, unix.TUN_F_CSUM|unix.TUN_F_TSO4|unix.TUN_F_TSO6) != nil {
+		_ = unix.Close(tunFd)
+		err = unix.EINVAL
+	}
+	if err != nil {
+		vnet = 0
+		tunFd, err = open(options.Name, 0)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +320,7 @@ func NewTun(options *Config) (Tun, error) {
 	}
 
 	linuxTun := &LinuxTun{
-		fdTun:   newFdTun(tunFd),
+		fdTun:   newFdTun(tunFd, vnet),
 		tunLink: tunLink,
 		options: options,
 		ownsTun: true,
@@ -318,55 +329,62 @@ func NewTun(options *Config) (Tun, error) {
 	return linuxTun, nil
 }
 
-func openFromEnv(expectedName string) (int, netlink.Link, bool, error) {
+// openFromEnv takes the tun that was given to the process, with the size of the virtio_net_hdr of its packets
+func openFromEnv(expectedName string) (int, int, netlink.Link, bool, error) {
 	fdStr := platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "" })
 	if fdStr == "" {
-		return -1, nil, false, nil
+		return -1, 0, nil, false, nil
 	}
 
 	fd, err := strconv.Atoi(fdStr)
 	if err != nil {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey).Base(err)
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey).Base(err)
 	}
 	if fd < 3 {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor must be >= 3")
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor must be >= 3")
 	}
 
 	ifr, err := unix.NewIfreq("")
 	if err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 	if err = unix.IoctlIfreq(fd, unix.TUNGETIFF, ifr); err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 
 	flags := ifr.Uint16()
 	if flags&unix.IFF_TUN == 0 {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor is not a TUN device")
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor is not a TUN device")
 	}
 	if flags&unix.IFF_NO_PI == 0 {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device must use IFF_NO_PI")
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device must use IFF_NO_PI")
+	}
+	vnet := 0
+	if flags&unix.IFF_VNET_HDR != 0 {
+		if vnet, err = unix.IoctlGetInt(fd, unix.TUNGETVNETHDRSZ); err != nil || vnet < vnetSize || vnet > packetRoom {
+			return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": virtio_net_hdr of ", vnet, " bytes").Base(err)
+		}
 	}
 
 	actualName := ifr.Name()
 	if expectedName != "" && actualName != expectedName {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device name ", actualName, " does not match configured name ", expectedName)
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device name ", actualName, " does not match configured name ", expectedName)
 	}
 
 	tunLink, err := netlink.LinkByName(actualName)
 	if err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 
 	if err = unix.SetNonblock(fd, true); err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 
-	return fd, tunLink, true, nil
+	return fd, vnet, tunLink, true, nil
 }
 
 // open the file that implements tun interface in the OS
-func open(name string) (int, error) {
+func open(name string, features int) (int, error) {
 	fd, err := unix.Open("/dev/net/tun", unix.O_RDWR, 0)
 	if err != nil {
 		return -1, err
@@ -378,7 +396,7 @@ func open(name string) (int, error) {
 		return 0, err
 	}
 
-	flags := unix.IFF_TUN | unix.IFF_NO_PI
+	flags := unix.IFF_TUN | unix.IFF_NO_PI | features
 	ifr.SetUint16(uint16(flags))
 	err = unix.IoctlIfreq(fd, unix.TUNSETIFF, ifr)
 	if err != nil {

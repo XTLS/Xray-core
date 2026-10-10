@@ -110,12 +110,16 @@ func setIPLength(ip []byte, size int) {
 // transportChecksum is the checksum of a TCP or UDP segment, header and payload, of a packet with the header ip.
 // The checksum field of header is zero
 func transportChecksum(ip []byte, proto byte, header, payload []byte) uint16 {
+	return checksum(sum(payload, sum(header, pseudoSum(ip, proto, len(header)+len(payload)))))
+}
+
+// pseudoSum is what the header ip of a packet adds to the checksum of its TCP or UDP segment of size bytes
+func pseudoSum(ip []byte, proto byte, size int) uint64 {
 	addresses := ip[12:ipv4HeaderSize]
 	if len(ip) == ipv6HeaderSize {
 		addresses = ip[8:]
 	}
-	s := sum(addresses, uint64(proto)+uint64(len(header)+len(payload)))
-	return checksum(sum(payload, sum(header, s)))
+	return sum(addresses, uint64(proto)+uint64(size))
 }
 
 // sum adds the 16-bit words of b to s, with the carry of every addition added back

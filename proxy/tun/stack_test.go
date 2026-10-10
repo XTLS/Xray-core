@@ -32,9 +32,12 @@ type link struct {
 	// in is what the stack reads
 	in chan []byte
 	// out takes what the stack writes
-	out  func(packet []byte)
-	done chan struct{}
-	once sync.Once
+	out func(packet []byte)
+	// segments is set if the link takes segments that are larger than the MTU, wrong tells what was wrong with one
+	segments bool
+	wrong    func(args ...any)
+	done     chan struct{}
+	once     sync.Once
 }
 
 func newLink() *link {
@@ -64,8 +67,43 @@ func (l *link) WritePacket(header, payload []byte) error {
 	return nil
 }
 
+// Segments implements segmenter
+func (l *link) Segments() bool {
+	return l.segments
+}
+
+// WriteSegment implements segmenter as the system does when it sends a segment on: a packet for every mss bytes
+func (l *link) WriteSegment(header []byte, payload [][]byte, mss int) error {
+	data := bytes.Join(payload, nil)
+	size := ipv4HeaderSize
+	if header[0]>>4 == 6 {
+		size = ipv6HeaderSize
+	}
+	if expected := ^checksum(pseudoSum(header[:size], protoTCP, len(header)-size+len(data))); binary.BigEndian.Uint16(header[size+16:]) != expected {
+		l.wrong("checksum of a segment for the link to split: ", header[size+16:size+18], ", expected ", expected)
+	}
+	for sent := 0; sent < len(data); {
+		n := min(mss, len(data)-sent)
+		h := bytes.Clone(header)
+		t := h[size:]
+		binary.BigEndian.PutUint32(t[4:], binary.BigEndian.Uint32(t[4:])+uint32(sent))
+		if sent+n < len(data) {
+			t[13] &^= tcpFin | tcpPsh
+		}
+		t[16], t[17] = 0, 0
+		setIPLength(h[:size], len(h)+n)
+		binary.BigEndian.PutUint16(t[16:], transportChecksum(h[:size], protoTCP, t, data[sent:sent+n]))
+		l.out(append(h, data[sent:sent+n]...))
+		sent += n
+	}
+	return nil
+}
+
 func newTestStack(t *testing.T, l *link, handle func(net.Conn, net.Destination)) *stack {
-	s := &stack{ctx: context.Background(), tun: l, mtu: testMTU, handle: handle, conns: make(map[flow]*tcpConn)}
+	s := &stack{ctx: context.Background(), tun: l, mtu: testMTU, window: tcpWindow, handle: handle, conns: make(map[flow]*tcpConn)}
+	if l.segments {
+		s.segmenter, s.window, l.wrong = l, tcpLargeWindow, t.Error
+	}
 	s.udp = newUdpConnectionHandler(handle, s.writeUDP)
 	s.Start()
 	t.Cleanup(func() {
@@ -114,13 +152,18 @@ func TestTCPEcho(t *testing.T) {
 		// one packet of lose is lost
 		lose int
 		size int
+		// the tun takes segments that are larger than its MTU
+		segments bool
 	}{
-		{"lossless", 0, 16 << 20},
-		{"lossy", 100, 4 << 20},
-		{"very lossy", 20, 512 << 10},
+		{"lossless", 0, 16 << 20, false},
+		{"lossy", 100, 4 << 20, false},
+		{"very lossy", 20, 512 << 10, false},
+		{"lossless, large segments", 0, 16 << 20, true},
+		{"lossy, large segments", 100, 4 << 20, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			l := newLink()
+			l.segments = test.segments
 			random := mrand.New(mrand.NewPCG(1, uint64(test.lose)))
 			var mu sync.Mutex
 			lost := func() bool {
@@ -456,6 +499,33 @@ func TestTCPOutOfOrder(t *testing.T) {
 		t.Fatal("ack ", s.ack, " with options ", s.options)
 	}
 	read(t, a.conn, "jklmno")
+}
+
+// A segment is as large as the system makes it when the tun does not split what it reads.
+func TestTCPLargeSegment(t *testing.T) {
+	conns := make(chan accepted, 1)
+	p, l := newPeer(t, "10.0.0.1:1234", "10.0.0.2:80")
+	newTestStack(t, l, accept(conns))
+	p.connect(nil)
+	a := take(t, conns)
+
+	sent := make([]byte, 60000)
+	rand.Read(sent)
+	p.send(p.seq, tcpAck|tcpPsh, nil, sent)
+	var received []byte
+	for len(received) < len(sent) {
+		mb, err := a.conn.(buf.Reader).ReadMultiBuffer()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, b := range mb {
+			received = append(received, b.Bytes()...)
+		}
+		buf.ReleaseMulti(mb)
+	}
+	if !bytes.Equal(received, sent) {
+		t.Fatal("read something else than what was sent")
+	}
 }
 
 // What the system does not acknowledge is sent again: at once when it says what it has past it, or after a while.

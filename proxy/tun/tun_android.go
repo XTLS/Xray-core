@@ -38,7 +38,7 @@ func NewTun(options *Config) (Tun, error) {
 	}
 
 	return &AndroidTun{
-		fdTun:   newFdTun(fd),
+		fdTun:   newFdTun(fd, 0),
 		options: options,
 	}, nil
 }

@@ -27,17 +27,24 @@ const (
 	// and the most that it sends to the system before that is acknowledged. More than that, for several
 	// connections at once, is more packets than the queue of a tun holds (500 on Linux)
 	tcpWindow = 256 << 10
-	// tcpWindowShift makes tcpWindow fit the 16 bits of a window
-	tcpWindowShift = 3
+	// tcpLargeWindow is the same for a tun that takes and gives segments that are larger than its MTU: those are
+	// few, and a way with a longer round trip, as a router has to what is behind it, is not held back by it
+	tcpLargeWindow = 1 << 20
+	// tcpWindowShift makes them fit the 16 bits of a window
+	tcpWindowShift = 5
 	// tcpHeld is how many segments wait for one that was lost before them,
 	// and of how many parts what the system says it has is known
-	tcpHeld = 512
+	tcpHeld = 1024
 	// tcpSmallest is the smallest mss that the system is believed, the one of Linux
 	tcpSmallest = 48
 	// tcpOpening is how many connections can be waiting for the answer to their SYN-ACK
 	tcpOpening = 65535
 	// tcpStart is how many segments are sent before any of them is acknowledged
 	tcpStart = 10
+	// tcpSegment is the largest payload of a segment that the tun splits by itself,
+	// tcpParts of how many parts of what was written it is made at most
+	tcpSegment = math.MaxUint16 - ipv6HeaderSize - tcpHeaderSize
+	tcpParts   = 7
 
 	// tcpTick is how often a connection that waits for something looks at what it waits for
 	tcpTick = 100 * time.Millisecond
@@ -101,6 +108,8 @@ type tcpConn struct {
 	ipSize int
 	// mss is the largest payload of a segment that is sent
 	mss int
+	// window is tcpWindow or tcpLargeWindow
+	window int32
 	// sndShift and rcvShift are the window scale of what the system and we advertise
 	sndShift, rcvShift uint8
 	// sack is set if the system takes selective acknowledgments
@@ -139,8 +148,8 @@ type tcpConn struct {
 	// sndBase is the sequence number of the first byte of sndQueue
 	sndBase uint32
 	sndFin  bool
-	// writing is the one of sndQueue that WriteMultiBuffer is sending, it is the only one to release it
-	writing *buf.Buffer
+	// writing is how many of the last of sndQueue WriteMultiBuffer is sending, it is the only one to release them
+	writing int
 	// blocked is set while WriteMultiBuffer waits for the window
 	blocked bool
 	// sending is set while WriteMultiBuffer writes a segment without mu, ackWanted if sendAck was called meanwhile
@@ -178,7 +187,8 @@ func newTCPConn(s *stack, f flow, syn segment) *tcpConn {
 		dst:             net.TCPDestination(net.IPAddress(f.dst.Addr().AsSlice()), net.Port(f.dst.Port())),
 		rcvNxt:          syn.seq + 1,
 		sndWnd:          uint32(syn.window),
-		ssthresh:        tcpWindow,
+		window:          s.window,
+		ssthresh:        uint32(s.window),
 		timedAt:         time.Now(),
 		retransmitTicks: tcpRetransmitTicks,
 	}
@@ -215,7 +225,7 @@ func (c *tcpConn) header(b []byte, seq uint32, flags byte, options []byte, size 
 	binary.BigEndian.PutUint32(t[8:], c.rcvNxt)
 	t[12] = byte(len(t)/4) << 4
 	t[13] = flags
-	window := max(tcpWindow-c.rcvLen, 0)
+	window := max(c.window-c.rcvLen, 0)
 	if flags&tcpSyn != 0 {
 		// the window of a SYN is not scaled
 		binary.BigEndian.PutUint16(t[14:], uint16(min(window, math.MaxUint16)))
@@ -306,7 +316,7 @@ func (c *tcpConn) input(s segment) bool {
 	}
 	if s.flags&tcpRst != 0 {
 		// from where the system is, or was before its FIN, not from someone who knows no more than the addresses
-		if s.seq-c.rcvNxt <= tcpWindow || c.rcvFin && s.seq+1 == c.rcvNxt {
+		if s.seq-c.rcvNxt <= uint32(c.window) || c.rcvFin && s.seq+1 == c.rcvNxt {
 			c.abort(errTCPReset)
 		}
 		return true
@@ -390,7 +400,7 @@ func (c *tcpConn) acknowledge(s segment) {
 				c.cwnd = min(c.cwnd+acked, c.ssthresh)
 			} else if !c.recovering {
 				// a segment more for every cwnd that arrives
-				c.cwnd = min(c.cwnd+max(uint32(uint64(c.mss)*uint64(acked)/uint64(c.cwnd)), 1), tcpWindow)
+				c.cwnd = min(c.cwnd+max(uint32(uint64(c.mss)*uint64(acked)/uint64(c.cwnd)), 1), uint32(c.window))
 			}
 		}
 	} else if sent != 0 && window == c.sndWnd && len(s.payload) == 0 && s.flags&tcpFin == 0 {
@@ -419,7 +429,7 @@ func (c *tcpConn) acknowledge(s segment) {
 	// the writer goes on when it can write a good part of the window, not for every segment that is acknowledged.
 	// Unless the way to the system is what holds it back: that takes what the acknowledgments say has left it,
 	// and what is sent as they come does not come to it all at once
-	limit := min(c.sndWnd, tcpWindow)
+	limit := min(c.sndWnd, uint32(c.window))
 	enough := limit / 2
 	if c.cwnd < limit {
 		enough = uint32(c.mss)
@@ -540,7 +550,7 @@ func (c *tcpConn) resend() {
 
 // space is how much can be sent now: what the system takes, and what the way to it takes. c.mu is held
 func (c *tcpConn) space() uint32 {
-	window, sent, flight := min(c.sndWnd, tcpWindow), c.sndNxt-c.sndUna, c.flight()
+	window, sent, flight := min(c.sndWnd, uint32(c.window)), c.sndNxt-c.sndUna, c.flight()
 	if sent >= window || flight >= c.cwnd {
 		return 0
 	}
@@ -576,7 +586,7 @@ func (c *tcpConn) receive(s segment) {
 	}
 	// the system is told at once when something is wrong, or it sends more of the same
 	now := len(c.rcvHeld) > 0
-	if room := int(tcpWindow - c.rcvLen - int32(seq-c.rcvNxt)); len(payload) > room {
+	if room := int(c.window - c.rcvLen - int32(seq-c.rcvNxt)); len(payload) > room {
 		payload, fin, now = payload[:max(room, 0)], false, true
 	}
 	if seq != c.rcvNxt {
@@ -618,7 +628,7 @@ func (c *tcpConn) receive(s segment) {
 
 // release releases what of sndQueue is acknowledged. c.mu is held
 func (c *tcpConn) release() {
-	for len(c.sndQueue) > 0 && c.sndQueue[0] != c.writing {
+	for len(c.sndQueue) > c.writing {
 		end := c.sndBase + uint32(c.sndQueue[0].Len())
 		if int32(c.sndUna-end) < 0 {
 			break
@@ -671,24 +681,39 @@ func (c *tcpConn) retransmit(seq, end uint32) {
 			end--
 		}
 	}
-	skip := int32(seq - c.sndBase)
+	for int32(end-seq) > 0 {
+		var part [1][]byte
+		_, n := c.queued(part[:0], seq, min(c.mss, int(end-seq)))
+		if n == 0 {
+			break
+		}
+		c.send(seq, tcpAck, nil, part[0])
+		seq += uint32(n)
+	}
+	if fin && seq == end {
+		c.send(end, tcpFin|tcpAck, nil, nil)
+	}
+}
+
+// queued adds to parts what of sndQueue starts at seq, size bytes at most and as many parts as it has room for,
+// and returns them with their size. c.mu is held
+func (c *tcpConn) queued(parts [][]byte, seq uint32, size int) ([][]byte, int) {
+	skip, n := int32(seq-c.sndBase), 0
 	for _, b := range c.sndQueue {
 		if skip >= b.Len() {
 			skip -= b.Len()
 			continue
 		}
+		if n == size || len(parts) == cap(parts) {
+			break
+		}
 		p := b.BytesFrom(skip)
 		skip = 0
-		for len(p) > 0 && int32(end-seq) > 0 {
-			n := min(len(p), c.mss, int(end-seq))
-			c.send(seq, tcpAck, nil, p[:n])
-			seq += uint32(n)
-			p = p[n:]
-		}
+		p = p[:min(len(p), size-n)]
+		parts = append(parts, p)
+		n += len(p)
 	}
-	if fin && seq == end {
-		c.send(end, tcpFin|tcpAck, nil, nil)
-	}
+	return parts, n
 }
 
 // arm makes tick run after d, unless it is going to run already. c.mu is held
@@ -771,10 +796,8 @@ func (c *tcpConn) abort(err error) {
 		h.data.Release()
 	}
 	c.rcvHeld = nil
-	for _, b := range c.sndQueue {
-		if b != c.writing {
-			b.Release()
-		}
+	for _, b := range c.sndQueue[:len(c.sndQueue)-c.writing] {
+		b.Release()
 	}
 	c.sndQueue = nil
 	c.readable.Broadcast()
@@ -800,7 +823,7 @@ func (c *tcpConn) wait() error {
 func (c *tcpConn) taken(size int32) {
 	c.rcvLen -= size
 	// the system may also have stopped at the window that it was told
-	if c.err == nil && (c.rcvAcked != c.rcvNxt || c.rcvAdvertised < tcpWindow/2) {
+	if c.err == nil && (c.rcvAcked != c.rcvNxt || c.rcvAdvertised < c.window/2) {
 		c.sendAck()
 	}
 }
@@ -831,71 +854,93 @@ func (c *tcpConn) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// WriteMultiBuffer implements buf.Writer
+// WriteMultiBuffer implements buf.Writer. It is not called again before it returns
 func (c *tcpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for i, b := range mb {
+	// without the empty ones
+	n, size := 0, uint32(0)
+	for _, b := range mb {
 		if b.IsEmpty() {
 			b.Release()
 			continue
 		}
-		if c.err != nil || c.closed {
-			buf.ReleaseMulti(mb[i:])
-			return io.ErrClosedPipe
-		}
-		c.sndQueue = append(c.sndQueue, b)
-		c.writing = b
-		for p := b.Bytes(); len(p) > 0; {
-			// not a part of a segment when all of it can go later, with what is acknowledged by then
-			for c.err == nil {
-				if space := c.space(); space >= uint32(min(len(p), c.mss)) || space != 0 && c.sndUna == c.sndNxt {
-					break
-				}
-				c.blocked = true
-				c.arm(tcpTick)
-				c.writable.Wait()
-				c.blocked = false
-			}
-			var n int
-			if c.err == nil {
-				n = min(len(p), c.mss, int(c.space()))
-				flags := byte(tcpAck)
-				if n == len(p) && i == len(mb)-1 {
-					flags |= tcpPsh
-				}
-				var h [ipv6HeaderSize + tcpHeaderSize]byte
-				size := c.header(h[:], c.sndNxt, flags, nil, n)
-				if c.sndUna == c.sndNxt {
-					// the ticks without an acknowledgment are counted from the first segment that waits for one
-					c.stalled = 0
-				}
-				c.sndNxt += uint32(n)
-				if c.timedAt.IsZero() {
-					c.timed, c.timedAt = c.sndNxt, time.Now()
-				}
-				c.arm(tcpTick)
-				// segments that come in the meantime are taken while this one is written, and acknowledged after it
-				c.sending = true
-				c.mu.Unlock()
-				c.write(h[:size], p[:n])
-				c.mu.Lock()
-				c.sending = false
-				if c.ackWanted && c.err == nil {
-					c.sendAck()
-				}
-				c.ackWanted = false
-			}
-			if c.err != nil {
-				c.writing = nil
-				buf.ReleaseMulti(mb[i:])
-				return io.ErrClosedPipe
-			}
-			p = p[n:]
-		}
-		c.writing = nil
-		c.release()
+		mb[n] = b
+		n++
+		size += uint32(b.Len())
 	}
+	mb = mb[:n]
+	if c.err != nil || c.closed {
+		buf.ReleaseMulti(mb)
+		return io.ErrClosedPipe
+	}
+	// what is written is in sndQueue until it is acknowledged, and is not released before all of it is sent
+	c.sndQueue = append(c.sndQueue, mb...)
+	c.writing = len(mb)
+	// a segment is one part of a Buffer, or as much as there is to send if the tun splits it by itself
+	var room [tcpParts][]byte
+	limit, parts := c.mss, room[:0:1]
+	if c.stack.segmenter != nil {
+		limit, parts = tcpSegment, room[:0]
+	}
+	for end := c.sndNxt + size; c.sndNxt != end; {
+		// not a part of a segment when all of it can go later, with what is acknowledged by then
+		for c.err == nil {
+			if space := c.space(); space >= min(end-c.sndNxt, uint32(c.mss)) || space != 0 && c.sndUna == c.sndNxt {
+				break
+			}
+			c.blocked = true
+			c.arm(tcpTick)
+			c.writable.Wait()
+			c.blocked = false
+		}
+		if c.err != nil {
+			break
+		}
+		most := min(limit, int(c.space()))
+		if most > c.mss {
+			// the same for what the tun splits
+			most -= most % c.mss
+		}
+		p, n := c.queued(parts, c.sndNxt, most)
+		flags := byte(tcpAck)
+		if c.sndNxt+uint32(n) == end {
+			flags |= tcpPsh
+		}
+		var b [ipv6HeaderSize + tcpHeaderSize]byte
+		h := b[:c.header(b[:], c.sndNxt, flags, nil, n)]
+		if c.sndUna == c.sndNxt {
+			// the ticks without an acknowledgment are counted from the first segment that waits for one
+			c.stalled = 0
+		}
+		c.sndNxt += uint32(n)
+		if c.timedAt.IsZero() {
+			c.timed, c.timedAt = c.sndNxt, time.Now()
+		}
+		c.arm(tcpTick)
+		// segments that come in the meantime are taken while this one is written, and acknowledged after it
+		c.sending = true
+		c.mu.Unlock()
+		if s := c.stack.segmenter; s != nil {
+			t := h[c.ipSize:]
+			binary.BigEndian.PutUint16(t[16:], ^checksum(pseudoSum(h[:c.ipSize], protoTCP, len(t)+n)))
+			_ = s.WriteSegment(h, p, c.mss)
+		} else {
+			c.write(h, p[0])
+		}
+		c.mu.Lock()
+		c.sending = false
+		if c.ackWanted && c.err == nil {
+			c.sendAck()
+		}
+		c.ackWanted = false
+	}
+	c.writing = 0
+	if c.err != nil {
+		buf.ReleaseMulti(mb)
+		return io.ErrClosedPipe
+	}
+	c.release()
 	return nil
 }
 
@@ -920,7 +965,7 @@ func (c *tcpConn) Close() error {
 	if c.err != nil {
 		return nil
 	}
-	if unread || c.writing != nil {
+	if unread || c.writing != 0 {
 		// something was not read or not written, the system has to know
 		c.reset()
 		return nil

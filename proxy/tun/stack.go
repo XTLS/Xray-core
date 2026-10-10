@@ -38,6 +38,10 @@ type stack struct {
 	ctx context.Context
 	tun Tun
 	mtu int
+	// segmenter is the tun if it takes segments that are larger than its MTU
+	segmenter segmenter
+	// window is the window of every connection
+	window int32
 	// handle is given every new connection
 	handle func(conn net.Conn, destination net.Destination)
 	udp    *udpConnectionHandler
@@ -55,8 +59,13 @@ func NewStack(ctx context.Context, options StackOptions, handler *Handler) (Stac
 		ctx:    ctx,
 		tun:    options.Tun,
 		mtu:    int(options.MTU),
+		window: tcpWindow,
 		handle: handler.HandleConnection,
 		conns:  make(map[flow]*tcpConn),
+	}
+	if t, ok := options.Tun.(segmenter); ok && t.Segments() {
+		s.segmenter = t
+		s.window = tcpLargeWindow
 	}
 	s.udp = newUdpConnectionHandler(s.handle, s.writeUDP)
 	return s, nil
@@ -89,7 +98,8 @@ func (s *stack) Close() error {
 
 // read takes the packets of the tun until it is closed
 func (s *stack) read() {
-	b := make([]byte, packetRoom+s.mtu)
+	// a tun that does not split segments gives them as large as a packet can be
+	b := make([]byte, packetRoom+1<<16)
 	for {
 		b, err := s.tun.ReadPacket(b)
 		if err != nil {
