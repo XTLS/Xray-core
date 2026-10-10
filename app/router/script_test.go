@@ -101,7 +101,7 @@ func TestRouterScriptRouting(t *testing.T) {
 		{name: "route", body: `return "lua-out", "lua-rule"`, wantTag: "lua-out", wantRule: "lua-rule", wantCalls: "2"},
 		{name: "no match", body: `return nil`, wantErr: common.ErrNoClue, wantCalls: "2"},
 		{name: "empty tag", body: `return ""`, wantErr: common.ErrNoClue, wantCalls: "2"},
-		{name: "balancer error", body: `local tag, err = router:PickOutbound("missing"); return tag, nil, err`, wantMessage: "not found", wantCalls: "2"},
+		{name: "balancer error", body: `local tag, err = router.PickOutbound("missing"); return tag, nil, err`, wantMessage: "not found", wantCalls: "2"},
 		{name: "string error", body: `return nil, nil, "blocked"`, wantMessage: "blocked", wantCalls: "2"},
 		{name: "invalid tag", body: `return false`, wantMessage: "outboundTag", wantCalls: "2"},
 		{name: "invalid rule", body: `return "lua-out", false`, wantMessage: "ruleTag", wantCalls: "2"},
@@ -202,7 +202,7 @@ func TestRouterScriptBalancerReload(t *testing.T) {
 	r := startLuaRouter(t, `
 local router = require("xray.router")
 function HandleRoute()
-    local tag, err = router:PickOutbound("balance")
+    local tag, err = router.PickOutbound("balance")
     return tag, "balanced", err
 end`, nil, config("old"))
 	pick := func(want string) {
@@ -236,7 +236,7 @@ func TestRouterScriptConcurrentBalancerReload(t *testing.T) {
 	r := startLuaRouter(t, `
 local router = require("xray.router")
 function HandleRoute()
-    local tag, err = router:PickOutbound("balance")
+    local tag, err = router.PickOutbound("balance")
     return tag, nil, err
 end`, nil, config("a"))
 
