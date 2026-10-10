@@ -6,6 +6,9 @@ import (
 	goerrors "errors"
 	"io"
 	"math/big"
+	stdnet "net"
+	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/dice"
 
@@ -65,6 +68,9 @@ type Handler struct {
 	udp443          string
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
+	closeOnce       sync.Once
+	closed          atomic.Bool
+	closeErr        error
 }
 
 // NewHandler creates a new Handler based on the given configuration.
@@ -176,6 +182,12 @@ func (h *Handler) Tag() string {
 
 // Dispatch implements proxy.Outbound.Dispatch.
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
+	if h.closed.Load() {
+		session.SubmitOutboundErrorToOriginator(ctx, stdnet.ErrClosed)
+		common.Interrupt(link.Writer)
+		common.Interrupt(link.Reader)
+		return
+	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	content := session.ContentFromContext(ctx)
@@ -266,6 +278,9 @@ func (h *Handler) DestIpAddress() net.IP {
 
 // Dial implements internet.Dialer.
 func (h *Handler) Dial(ctx context.Context, dest net.Destination) (stat.Connection, error) {
+	if h.closed.Load() {
+		return nil, stdnet.ErrClosed
+	}
 	if h.senderSettings != nil && h.senderSettings.Via != nil {
 		outbounds := session.OutboundsFromContext(ctx)
 		ob := outbounds[len(outbounds)-1]
@@ -324,14 +339,19 @@ func (h *Handler) GetOutbound() proxy.Outbound {
 
 // Start implements common.Runnable.
 func (h *Handler) Start() error {
+	if h.closed.Load() {
+		return stdnet.ErrClosed
+	}
 	return nil
 }
 
 // Close implements common.Closable.
 func (h *Handler) Close() error {
-	common.Close(h.mux)
-	common.Close(h.proxy)
-	return nil
+	h.closeOnce.Do(func() {
+		h.closed.Store(true)
+		h.closeErr = goerrors.Join(h.streamSettings.Close(), common.Close(h.mux), common.Close(h.proxy))
+	})
+	return h.closeErr
 }
 
 // SenderSettings implements outbound.Handler.

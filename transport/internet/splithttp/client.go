@@ -3,8 +3,10 @@ package splithttp
 import (
 	"bytes"
 	"context"
+	stderrors "errors"
 	"fmt"
 	"io"
+	stdnet "net"
 	"net/http"
 	"net/http/httptrace"
 	"sync"
@@ -35,16 +37,124 @@ type DefaultDialerClient struct {
 	client          *http.Client
 	closed          atomic.Bool
 	httpVersion     string
-	// pool of net.Conn, created using dialUploadConn
-	uploadRawPool  *sync.Pool
-	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
+	access          sync.Mutex
+	lifetime        context.Context
+	cancel          context.CancelFunc
+	connections     map[*clientConn]struct{}
+	uploadRawPool   []*H1Conn
+	closeOnce       sync.Once
+	closeErr        error
+	dialUploadConn  func(ctxInner context.Context) (net.Conn, error)
 }
 
 func (c *DefaultDialerClient) IsClosed() bool {
 	return c.closed.Load()
 }
 
+func (c *DefaultDialerClient) lifetimeContext() context.Context {
+	c.access.Lock()
+	defer c.access.Unlock()
+	if c.lifetime == nil {
+		c.lifetime, c.cancel = context.WithCancel(context.Background())
+		if c.closed.Load() {
+			c.cancel()
+		}
+	}
+	return c.lifetime
+}
+
+// Keep the existing request lifetime independent of the caller, but allow the
+// owning outbound to terminate it when its transport configuration is closed.
+func (c *DefaultDialerClient) requestContext(ctx context.Context) (context.Context, func(), error) {
+	if c.closed.Load() {
+		return nil, nil, stdnet.ErrClosed
+	}
+	requestCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	stop := context.AfterFunc(c.lifetimeContext(), cancel)
+	return requestCtx, func() { stop(); cancel() }, nil
+}
+
+type clientConn struct {
+	net.Conn
+	owner     *DefaultDialerClient
+	closeOnce sync.Once
+	closeErr  error
+}
+
+func (c *clientConn) Close() error {
+	c.closeOnce.Do(func() {
+		c.closeErr = c.Conn.Close()
+		c.owner.access.Lock()
+		delete(c.owner.connections, c)
+		c.owner.access.Unlock()
+	})
+	return c.closeErr
+}
+
+// A connection that finishes dialing during Close must never enter a pool.
+func (c *DefaultDialerClient) ownConnection(conn net.Conn) (net.Conn, error) {
+	if owned, ok := conn.(*clientConn); ok && owned.owner == c {
+		if c.closed.Load() {
+			owned.Close()
+			return nil, stdnet.ErrClosed
+		}
+		return owned, nil
+	}
+	c.access.Lock()
+	if c.closed.Load() {
+		c.access.Unlock()
+		conn.Close()
+		return nil, stdnet.ErrClosed
+	}
+	owned := &clientConn{Conn: conn, owner: c}
+	if c.connections == nil {
+		c.connections = make(map[*clientConn]struct{})
+	}
+	c.connections[owned] = struct{}{}
+	c.access.Unlock()
+	return owned, nil
+}
+
+func (c *DefaultDialerClient) takeUploadConnection(ctx context.Context) (*H1Conn, bool, error) {
+	c.access.Lock()
+	if c.closed.Load() {
+		c.access.Unlock()
+		return nil, false, stdnet.ErrClosed
+	}
+	if n := len(c.uploadRawPool); n > 0 {
+		conn := c.uploadRawPool[n-1]
+		c.uploadRawPool[n-1] = nil
+		c.uploadRawPool = c.uploadRawPool[:n-1]
+		c.access.Unlock()
+		return conn, false, nil
+	}
+	c.access.Unlock()
+	conn, err := c.dialUploadConn(ctx)
+	if err != nil {
+		return nil, true, err
+	}
+	// dialUploadConn uses the same owned TCP dialer as the HTTP transport;
+	// preserve any TLS or REALITY wrapper around that registered connection.
+	return NewH1Conn(conn), true, nil
+}
+
+func (c *DefaultDialerClient) returnUploadConnection(conn *H1Conn) {
+	c.access.Lock()
+	if !c.closed.Load() {
+		c.uploadRawPool = append(c.uploadRawPool, conn)
+		c.access.Unlock()
+		return
+	}
+	c.access.Unlock()
+	conn.Close()
+}
+
 func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessionId string, body io.Reader, uploadOnly bool) (wrc io.ReadCloser, remoteAddr, localAddr net.Addr, err error) {
+	ctx, cancel, err := c.requestContext(ctx)
+	if err != nil {
+		common.Close(body)
+		return nil, nil, nil, err
+	}
 	// this is done when the TCP/UDP connection to the server was established,
 	// and we can unblock the Dial function and print correct net addresses in
 	// logs
@@ -61,16 +171,19 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	if body != nil {
 		method = c.transportConfig.GetNormalizedUplinkHTTPMethod() // stream-up/one
 	}
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
+		cancel()
+		common.Close(body)
 		errors.LogInfoInner(ctx, err, "failed to create HTTP request for "+url)
 		return nil, nil, nil, err
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
-	wrc = &WaitReadCloser{wait: done.New()}
+	wrc = &WaitReadCloser{wait: done.New(), onClose: cancel}
 	go func() {
 		resp, err := c.client.Do(req)
+		gotConn.Close()
 		if err != nil {
 			if !uploadOnly { // stream-down is enough
 				c.closed.Store(true)
@@ -99,12 +212,22 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 }
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {
-	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, nil)
+	ctx, cancel, err := c.requestContext(ctx)
 	if err != nil {
+		buf.ReleaseMulti(payload)
 		return err
 	}
-	c.transportConfig.FillPacketRequest(req, sessionId, seqStr, payload)
+	defer cancel()
+	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		buf.ReleaseMulti(payload)
+		return err
+	}
+	if err := c.transportConfig.FillPacketRequest(req, sessionId, seqStr, payload); err != nil {
+		return err
+	}
+	defer common.Close(req.Body)
 
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)
@@ -128,38 +251,14 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		requestBuff.Grow(512 + int(req.ContentLength))
 		common.Must(req.Write(requestBuff))
 
-		var uploadConn any
 		var h1UploadConn *H1Conn
 
 		for {
-			uploadConn = c.uploadRawPool.Get()
-			newConnection := uploadConn == nil
-			if newConnection {
-				newConn, err := c.dialUploadConn(context.WithoutCancel(ctx))
-				if err != nil {
-					return err
-				}
-				h1UploadConn = NewH1Conn(newConn)
-				uploadConn = h1UploadConn
-			} else {
-				h1UploadConn = uploadConn.(*H1Conn)
-
-				// TODO: Replace 0 here with a config value later
-				// Or add some other condition for optimization purposes
-				if h1UploadConn.UnreadedResponsesCount > 0 {
-					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
-					if err != nil {
-						c.closed.Store(true)
-						return fmt.Errorf("error while reading response: %s", err.Error())
-					}
-					io.Copy(io.Discard, resp.Body)
-					defer resp.Body.Close()
-					if resp.StatusCode != 200 {
-						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
-					}
-				}
+			var newConnection bool
+			h1UploadConn, newConnection, err = c.takeUploadConnection(ctx)
+			if err != nil {
+				return err
 			}
-
 			_, err := h1UploadConn.Write(requestBuff.Bytes())
 			// if the write failed, we try another connection from
 			// the pool, until the write on a new connection fails.
@@ -167,29 +266,71 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 			// the connection has been closed in the meantime.
 			if err == nil {
 				break
-			} else if newConnection {
-				return err
+			} else {
+				h1UploadConn.Close()
+				if newConnection {
+					return err
+				}
 			}
 		}
 
-		c.uploadRawPool.Put(uploadConn)
+		// The upload lease must cover the response as well as the write, so
+		// normal XMUX retirement cannot abort a POST still being processed.
+		resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
+		if err != nil {
+			h1UploadConn.Close()
+			c.closed.Store(true)
+			return fmt.Errorf("error while reading response: %w", err)
+		}
+		_, readErr := io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if readErr != nil || resp.StatusCode != http.StatusOK {
+			h1UploadConn.Close()
+			if readErr != nil {
+				return readErr
+			}
+			return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
+		}
+		if resp.Close {
+			h1UploadConn.Close()
+			return nil
+		}
+		c.returnUploadConnection(h1UploadConn)
 	}
 
 	return nil
 }
 
-// HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
 func (c *DefaultDialerClient) Close() error {
-	transport := c.client.Transport
-	if h3Transport, ok := transport.(*http3.Transport); ok {
-		h3Transport.Close()
-	}
-	return nil
+	c.closeOnce.Do(func() {
+		c.closed.Store(true)
+		c.access.Lock()
+		cancel := c.cancel
+		connections := make([]*clientConn, 0, len(c.connections))
+		for conn := range c.connections {
+			connections = append(connections, conn)
+		}
+		c.uploadRawPool = nil
+		c.access.Unlock()
+		if cancel != nil {
+			cancel()
+		}
+		for _, conn := range connections {
+			c.closeErr = stderrors.Join(c.closeErr, conn.Close())
+		}
+		c.client.CloseIdleConnections()
+		if transport, ok := c.client.Transport.(*http3.Transport); ok {
+			c.closeErr = stderrors.Join(c.closeErr, transport.Close())
+		}
+	})
+	return c.closeErr
 }
 
 type WaitReadCloser struct {
-	wait   *done.Instance
-	reader atomic.Pointer[io.ReadCloser]
+	wait      *done.Instance
+	reader    atomic.Pointer[io.ReadCloser]
+	onClose   func()
+	closeOnce sync.Once
 }
 
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
@@ -214,6 +355,11 @@ func (w *WaitReadCloser) Read(b []byte) (int, error) {
 }
 
 func (w *WaitReadCloser) Close() error {
+	w.closeOnce.Do(func() {
+		if w.onClose != nil {
+			w.onClose()
+		}
+	})
 	w.wait.Close()
 	if p := w.reader.Swap(nil); p != nil {
 		return (*p).Close()

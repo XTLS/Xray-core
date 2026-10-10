@@ -3,6 +3,7 @@ package internet
 import (
 	"context"
 	"fmt"
+	stdnet "net"
 	"strings"
 
 	"github.com/xtls/xray-core/common"
@@ -46,6 +47,9 @@ func RegisterTransportDialer(protocol string, dialer dialFunc) error {
 
 // Dial dials a internet connection towards the given destination.
 func Dial(ctx context.Context, dest net.Destination, streamSettings *MemoryStreamConfig) (stat.Connection, error) {
+	if streamSettings.IsClosed() {
+		return nil, stdnet.ErrClosed
+	}
 	if dest.Network == net.Network_TCP {
 		if streamSettings == nil {
 			s, err := ToMemoryStreamConfig(nil)

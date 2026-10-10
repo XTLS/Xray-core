@@ -3,8 +3,10 @@ package splithttp
 import (
 	"context"
 	gotls "crypto/tls"
+	stderrors "errors"
 	"fmt"
 	"io"
+	stdnet "net"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -44,15 +46,26 @@ var (
 	globalDialerAccess sync.Mutex
 )
 
-func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient) {
+func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient, error) {
+	return getHTTPClientWithReservation(ctx, dest, streamSettings, false)
+}
+
+func getHTTPClientForRequest(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (DialerClient, *XmuxClient, error) {
+	return getHTTPClientWithReservation(ctx, dest, streamSettings, true)
+}
+
+func getHTTPClientWithReservation(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig, reserve bool) (DialerClient, *XmuxClient, error) {
+	globalDialerAccess.Lock()
+	if streamSettings.IsClosed() {
+		globalDialerAccess.Unlock()
+		return nil, nil, stdnet.ErrClosed
+	}
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
 	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
-		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
+		globalDialerAccess.Unlock()
+		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil, nil
 	}
-
-	globalDialerAccess.Lock()
-	defer globalDialerAccess.Unlock()
 
 	if globalDialerMap == nil {
 		globalDialerMap = make(map[dialerConf]*XmuxManager)
@@ -74,9 +87,39 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 		})
 		globalDialerMap[key] = xmuxManager
 	}
+	globalDialerAccess.Unlock()
 
-	xmuxClient := xmuxManager.GetXmuxClient(ctx)
-	return xmuxClient.XmuxConn.(DialerClient), xmuxClient
+	var xmuxClient *XmuxClient
+	if reserve {
+		xmuxClient = xmuxManager.GetXmuxClientForRequest(ctx)
+	} else {
+		xmuxClient = xmuxManager.GetXmuxClient(ctx)
+	}
+	if xmuxClient == nil {
+		return nil, nil, stdnet.ErrClosed
+	}
+	return xmuxClient.XmuxConn.(DialerClient), xmuxClient, nil
+}
+
+func closeHTTPClients(streamSettings *internet.MemoryStreamConfig) error {
+	globalDialerAccess.Lock()
+	downloadSettings := streamSettings.DownloadSettings
+	var managers []*XmuxManager
+	for key, manager := range globalDialerMap {
+		if key.MemoryStreamConfig == streamSettings {
+			delete(globalDialerMap, key)
+			managers = append(managers, manager)
+		}
+	}
+	globalDialerAccess.Unlock()
+	var err error
+	if downloadSettings != nil {
+		err = downloadSettings.Close()
+	}
+	for _, manager := range managers {
+		err = stderrors.Join(err, manager.Close())
+	}
+	return err
 }
 
 func decideHTTPVersion(tlsConfig *tls.Config, realityConfig *reality.Config) string {
@@ -99,6 +142,7 @@ func decideHTTPVersion(tlsConfig *tls.Config, realityConfig *reality.Config) str
 }
 
 func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStreamConfig) DialerClient {
+	client := &DefaultDialerClient{}
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
@@ -126,15 +170,23 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		if err != nil {
 			return nil, err
 		}
-
-		if realityConfig != nil {
-			return reality.UClient(conn, realityConfig, ctxInner, dest)
+		conn, err = client.ownConnection(conn)
+		if err != nil {
+			return nil, err
 		}
 
-		if gotlsConfig != nil {
+		if realityConfig != nil {
+			secured, err := reality.UClient(conn, realityConfig, ctxInner, dest)
+			if err != nil {
+				conn.Close()
+				return nil, err
+			}
+			conn = secured
+		} else if gotlsConfig != nil {
 			if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 				conn = tls.UClient(conn, gotlsConfig, fingerprint)
 				if err := conn.(*tls.UConn).HandshakeContext(ctxInner); err != nil {
+					conn.Close()
 					return nil, err
 				}
 			} else {
@@ -227,6 +279,8 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				conn, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 				if err != nil {
+					tr.Close()
+					pktConn.Close()
 					return nil, err
 				}
 				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
@@ -273,24 +327,20 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		}
 	}
 
-	client := &DefaultDialerClient{
-		transportConfig: transportConfig,
-		client: &http.Client{
-			Transport: transport,
-		},
-		httpVersion:    httpVersion,
-		uploadRawPool:  &sync.Pool{},
-		dialUploadConn: dialContext,
-	}
+	client.transportConfig = transportConfig
+	client.client = &http.Client{Transport: transport}
+	client.httpVersion = httpVersion
+	client.dialUploadConn = dialContext
 
 	return client
 }
 
 func init() {
 	common.Must(internet.RegisterTransportDialer(protocolName, Dial))
+	common.Must(internet.RegisterTransportCloser(protocolName, closeHTTPClients))
 }
 
-func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (stat.Connection, error) {
+func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (connection stat.Connection, err error) {
 	tlsConfig := tls.ConfigFromStreamSettings(streamSettings)
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
@@ -327,7 +377,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	requestURL.Path = transportConfiguration.GetNormalizedPath()
 	requestURL.RawQuery = transportConfiguration.GetNormalizedQuery()
 
-	httpClient, xmuxClient := getHTTPClient(ctx, dest, streamSettings)
+	httpClient, xmuxClient, err := getHTTPClientForRequest(ctx, dest, streamSettings)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil && xmuxClient != nil {
+			xmuxClient.DoneRunning()
+		}
+	}()
 
 	mode := transportConfiguration.Mode
 	if mode == "" || mode == "auto" {
@@ -352,6 +410,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	xmuxClient2 := xmuxClient
 	if transportConfiguration.DownloadSettings != nil {
 		globalDialerAccess.Lock()
+		if streamSettings.IsClosed() {
+			globalDialerAccess.Unlock()
+			return nil, stdnet.ErrClosed
+		}
 		if streamSettings.DownloadSettings == nil {
 			streamSettings.DownloadSettings = common.Must2(internet.ToMemoryStreamConfig(transportConfiguration.DownloadSettings))
 			if streamSettings.SocketSettings != nil && streamSettings.SocketSettings.Penetrate {
@@ -391,16 +453,18 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		requestURL2.Path = config2.GetNormalizedPath()
 		requestURL2.RawQuery = config2.GetNormalizedQuery()
-		httpClient2, xmuxClient2 = getHTTPClient(ctx, dest2, memory2)
+		httpClient2, xmuxClient2, err = getHTTPClientForRequest(ctx, dest2, memory2)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err != nil && xmuxClient2 != nil {
+				xmuxClient2.DoneRunning()
+			}
+		}()
 		errors.LogInfo(ctx, fmt.Sprintf("XHTTP is downloading from %s, mode %s, HTTP version %s, host %s", dest2, "stream-down", httpVersion2, requestURL2.Host))
 	}
 
-	if xmuxClient != nil {
-		xmuxClient.AddRunning()
-	}
-	if xmuxClient2 != nil && xmuxClient2 != xmuxClient {
-		xmuxClient2.AddRunning()
-	}
 	var closed atomic.Int32
 
 	reader, writer := io.Pipe()
@@ -418,8 +482,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			}
 		},
 	}
+	defer func() {
+		if err != nil {
+			// Leases are released by the earlier error defers. The split
+			// connection's resources may already include an open download.
+			common.Close(conn.reader)
+			common.Close(conn.writer)
+		}
+	}()
 
-	var err error
 	if mode == "stream-one" {
 		requestURL.Path = transportConfiguration.GetNormalizedPath()
 		if xmuxClient != nil {
@@ -470,6 +541,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 
 	go func() {
+		if client, ok := httpClient.(*DefaultDialerClient); ok {
+			stop := context.AfterFunc(client.lifetimeContext(), uploadPipeReader.Interrupt)
+			defer stop()
+		}
 		var seq int64
 		var lastWrite time.Time
 
@@ -510,11 +585,22 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				lastWrite = time.Now()
 
 				if dynamicXmuxClient != nil && (dynamicXmuxClient.LeftRequests.Add(-1) <= 0 ||
-					(dynamicXmuxClient.UnreusableAt != time.Time{} && lastWrite.After(dynamicXmuxClient.UnreusableAt))) {
-					dynamicHTTPClient, dynamicXmuxClient = getHTTPClient(ctx, dest, streamSettings)
+					(dynamicXmuxClient.UnreusableAt != time.Time{} && lastWrite.After(dynamicXmuxClient.UnreusableAt)) ||
+					!dynamicXmuxClient.TryAddRunning()) {
+					nextHTTPClient, nextXmuxClient, acquireErr := getHTTPClientForRequest(ctx, dest, streamSettings)
+					if acquireErr != nil {
+						buf.ReleaseMulti(chunk)
+						buf.ReleaseMulti(remainder)
+						uploadPipeReader.Interrupt()
+						return
+					}
+					dynamicHTTPClient, dynamicXmuxClient = nextHTTPClient, nextXmuxClient
 				}
 
-				go func(hClient DialerClient) {
+				go func(hClient DialerClient, xClient *XmuxClient) {
+					if xClient != nil {
+						defer xClient.DoneRunning()
+					}
 					err := hClient.PostPacket(
 						ctx,
 						requestURL.String(),
@@ -528,7 +614,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 						uploadPipeReader.Interrupt()
 						doSplit.Store(false)
 					}
-				}(dynamicHTTPClient)
+				}(dynamicHTTPClient, dynamicXmuxClient)
 
 				if _, ok := dynamicHTTPClient.(*DefaultDialerClient); ok {
 					<-wroteRequest.Wait()

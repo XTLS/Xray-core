@@ -62,16 +62,20 @@ func (m *Manager) Start() error {
 // Close implements core.Feature
 func (m *Manager) Close() error {
 	m.access.Lock()
-	defer m.access.Unlock()
-
 	m.running = false
+	handlers := make([]outbound.Handler, 0, len(m.taggedHandler)+len(m.untaggedHandlers))
+	for _, h := range m.taggedHandler {
+		handlers = append(handlers, h)
+	}
+	handlers = append(handlers, m.untaggedHandlers...)
+	m.taggedHandler = make(map[string]outbound.Handler)
+	m.untaggedHandlers = nil
+	m.defaultHandler = nil
+	m.tagsCache = &sync.Map{}
+	m.access.Unlock()
 
 	var errs []error
-	for _, h := range m.taggedHandler {
-		errs = append(errs, h.Close())
-	}
-
-	for _, h := range m.untaggedHandlers {
+	for _, h := range handlers {
 		errs = append(errs, h.Close())
 	}
 
@@ -133,15 +137,19 @@ func (m *Manager) RemoveHandler(ctx context.Context, tag string) error {
 		return common.ErrNoClue
 	}
 	m.access.Lock()
-	defer m.access.Unlock()
-
 	m.tagsCache = &sync.Map{}
-
+	handler := m.taggedHandler[tag]
 	delete(m.taggedHandler, tag)
 	if m.defaultHandler != nil && m.defaultHandler.Tag() == tag {
 		m.defaultHandler = nil
 	}
+	m.access.Unlock()
 
+	// Cleanup can wait for transport workers or call back into the manager.
+	// Keep it outside the lock, and close only the handler we removed.
+	if handler != nil {
+		return handler.Close()
+	}
 	return nil
 }
 
@@ -162,13 +170,13 @@ func (m *Manager) ListHandlers(ctx context.Context) []outbound.Handler {
 
 // Select implements outbound.HandlerSelector.
 func (m *Manager) Select(selectors []string) []string {
+	m.access.RLock()
+	defer m.access.RUnlock()
+
 	key := strings.Join(selectors, ",")
 	if cache, ok := m.tagsCache.Load(key); ok {
 		return cache.([]string)
 	}
-
-	m.access.RLock()
-	defer m.access.RUnlock()
 
 	tags := make([]string, 0, len(selectors))
 

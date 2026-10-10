@@ -3,6 +3,8 @@ package internet
 import (
 	"context"
 	"reflect"
+	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
@@ -21,6 +23,9 @@ type MemoryStreamConfig struct {
 	QuicParams       *QuicParams
 	SocketSettings   *SocketConfig
 	DownloadSettings *MemoryStreamConfig
+	closeOnce        sync.Once
+	closed           atomic.Bool
+	closeErr         error
 }
 
 // ToMemoryStreamConfig converts a StreamConfig to MemoryStreamConfig. It returns a default non-nil MemoryStreamConfig for nil input.
