@@ -5,10 +5,13 @@ package tun
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"slices"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -41,8 +44,17 @@ func procyield(cycles uint32)
 type FreeBSDTun struct {
 	device        tun.Device
 	options       *Config
+	name          string
 	tunIndex      int
 	autoInterface bool
+	// local is the address the system itself has on the TUN; gateway is the
+	// address before it, which nothing owns, so a packet to it is routed into
+	// the TUN (see selectFreeBSDGateway).
+	gateway netip.Prefix
+	local   netip.Addr
+
+	systemDNSSet   bool
+	systemDNSDirty bool
 
 	systemRoutes     []netip.Prefix
 	escapeMu         sync.Mutex
@@ -108,8 +120,11 @@ func NewTun(options *Config) (Tun, error) {
 	return &FreeBSDTun{
 		device:        tunDev,
 		options:       options,
+		name:          name,
 		tunIndex:      iface.Index,
 		autoInterface: options.AutoOutboundsInterface != "",
+		gateway:       gateway,
+		local:         local,
 	}, nil
 }
 
@@ -205,6 +220,7 @@ func (t *FreeBSDTun) Close() error {
 			_ = t.routeMonitor.Close()
 		}
 	})
+	t.unsetSystemDNS()
 	t.unsetEscapeFib()
 	routeErr := t.unsetSystemRoutes()
 	name, nameErr := t.Name()
@@ -216,6 +232,195 @@ func (t *FreeBSDTun) Close() error {
 		destroyInterface(name)
 	}
 	return xerrors.Combine(routeErr, closeErr)
+}
+
+// resolvconfRunner runs resolvconf(8) with the given stdin. Overridable for
+// tests.
+var resolvconfRunner = func(stdin string, args ...string) ([]byte, error) {
+	cmd := exec.Command("resolvconf", args...)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	return cmd.CombinedOutput()
+}
+
+// readResolverFile reads one of the files the applied check looks at.
+// Overridable for tests.
+var readResolverFile = os.ReadFile
+
+// resolvconfApplied reports whether the nameserver resolvconf was handed
+// reached a resolver. resolvconf exits 0 with resolvconf=NO in
+// resolvconf.conf, and still records the entry for the interface, but runs no
+// subscriber, so the exit status and `resolvconf -l` prove nothing; what the
+// subscribers wrote does. The libc subscriber writes /etc/resolv.conf, where
+// the nameserver also has to be the exclusive one. With
+// local_unbound, local-unbound-setup turns that subscriber off and names
+// unbound's forwarders file as unbound_conf instead, with resolv.conf left
+// pointed at loopback, so that file is checked next.
+func resolvconfApplied(addr netip.Addr) (bool, error) {
+	resolvConf, err := readResolverFile("/etc/resolv.conf")
+	if err != nil {
+		return false, err
+	}
+	if exclusiveNameserver(resolvConf, addr) {
+		return true, nil
+	}
+	resolvconfConf, err := readResolverFile("/etc/resolvconf.conf")
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	if path := shellAssignment(resolvconfConf, "unbound_conf"); path != "" {
+		forwarders, err := readResolverFile(path)
+		if err != nil {
+			return false, err
+		}
+		if hasDirective(forwarders, "forward-addr:", addr) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// exclusiveNameserver reports whether resolv.conf lists addr as a nameserver
+// and no other one except on loopback. With inclusive_interfaces in
+// resolvconf.conf the exclusive marking of -x is ignored and the nameservers
+// DHCP supplied stay listed, and the system falls back to them: that is the
+// leak the takeover exists to close, so it does not count as applied. A
+// loopback nameserver alongside is a local resolver that resolvconf feeds.
+func exclusiveNameserver(resolvConf []byte, addr netip.Addr) bool {
+	found := false
+	for _, line := range strings.Split(string(resolvConf), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[0] != "nameserver" {
+			continue
+		}
+		if fields[1] == addr.String() {
+			found = true
+			continue
+		}
+		if other, err := netip.ParseAddr(fields[1]); err != nil || !other.IsLoopback() {
+			return false
+		}
+	}
+	return found
+}
+
+// hasDirective reports whether a line of content is the keyword followed by
+// the address, as in `forward-addr: 10.0.0.1`.
+func hasDirective(content []byte, keyword string, addr netip.Addr) bool {
+	for _, line := range strings.Split(string(content), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 && fields[0] == keyword && fields[1] == addr.String() {
+			return true
+		}
+	}
+	return false
+}
+
+// shellAssignment returns the value of `name=value` in a sh-style config such
+// as resolvconf.conf, without surrounding quotes, or empty when it is not set.
+func shellAssignment(content []byte, name string) string {
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		value, ok := strings.CutPrefix(line, name+"=")
+		if !ok {
+			continue
+		}
+		return strings.Trim(value, `"'`)
+	}
+	return ""
+}
+
+// ConfigureSystemDNS hands the TUN's gateway address to resolvconf(8) as the
+// exclusive nameserver, so name lookups resolve through Xray instead of
+// leaking to the physical link.
+//
+// It acts only when the config opts in, and it verifies the data path first:
+// unless a query to the gateway would actually be handled, host-wide
+// resolution is left to the OS and an error returned. The caller does not
+// start the TUN on an error, as the system DNS would bypass it.
+func (t *FreeBSDTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) error {
+	if !t.options.AutoSystemDnsToGateway {
+		return nil
+	}
+	if t.systemDNSSet {
+		return nil
+	}
+
+	// A previous removal may have failed. Retry before applying anything, so a
+	// stale entry does not silently outlive the attempt to clean it up.
+	if t.systemDNSDirty {
+		if err := t.revertSystemDNS(); err != nil {
+			return xerrors.New("previous system DNS removal still failing").Base(err)
+		}
+	}
+
+	// The resolver is pointed at the gateway: on FreeBSD the system has no
+	// address there, so a query to it is routed into the TUN and answered
+	// inside Xray. A query from this host carries the local address.
+	address := t.gateway.Addr()
+	if err := verifyDNSRouting(ctx, inboundTag, t.local.String(), address.String()); err != nil {
+		return xerrors.New("no DNS path at ", address.String(), ":53").Base(err)
+	}
+
+	// -x makes this interface's nameserver the only one in use, the
+	// equivalent of resolvectl's `domain ~.` plus `default-route true`:
+	// without it openresolv keeps the nameservers dhclient supplied listed
+	// alongside the gateway, and the system falls back to them.
+	if _, err := resolvconfRunner("nameserver "+address.String()+"\n", "-a", t.name, "-x"); err != nil {
+		return xerrors.New("resolvconf -a failed").Base(err)
+	}
+	applied, err := resolvconfApplied(address)
+	if err != nil {
+		return t.rollbackSystemDNS(xerrors.New("cannot confirm the system DNS").Base(err))
+	}
+	if !applied {
+		return t.rollbackSystemDNS(xerrors.New("resolvconf did not apply ", address.String(), " to any resolver (resolvconf=NO or inclusive_interfaces in resolvconf.conf?)"))
+	}
+
+	t.systemDNSSet = true
+	xerrors.LogInfo(ctx, "[tun] system DNS set to ", address.String(), " on ", t.name)
+	return nil
+}
+
+// rollbackSystemDNS undoes a takeover that did not take. A failed removal is
+// recorded so the next attempt retries it, and is reported rather than
+// swallowed.
+func (t *FreeBSDTun) rollbackSystemDNS(cause error) error {
+	if _, err := resolvconfRunner("", "-d", t.name); err != nil {
+		t.systemDNSDirty = true
+		// Combine, because Base overwrites: reporting only the cause would hide
+		// the removal failure, and reporting only the removal failure would
+		// hide why the removal was attempted.
+		return xerrors.New("resolvconf -d failed, the entry may remain").Base(xerrors.Combine(err, cause))
+	}
+	return cause
+}
+
+// revertSystemDNS issues the removal and keeps the dirty flag in step with the
+// outcome.
+func (t *FreeBSDTun) revertSystemDNS() error {
+	_, err := resolvconfRunner("", "-d", t.name)
+	t.systemDNSDirty = err != nil
+	if err != nil {
+		return err
+	}
+	t.systemDNSSet = false
+	return nil
+}
+
+// unsetSystemDNS hands DNS back to the OS. Only meaningful when
+// ConfigureSystemDNS applied something, or a previous removal failed.
+func (t *FreeBSDTun) unsetSystemDNS() {
+	if !t.systemDNSSet && !t.systemDNSDirty {
+		return
+	}
+	if err := t.revertSystemDNS(); err != nil {
+		xerrors.LogInfoInner(context.Background(), err, "[tun] failed to remove the system DNS entry; run `resolvconf -d ", t.name, "` to clean up")
+	}
 }
 
 func destroyInterface(name string) {
