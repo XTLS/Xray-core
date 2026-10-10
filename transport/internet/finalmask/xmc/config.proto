@@ -23,4 +23,15 @@ message Config {
     bytes rsa_public_key = 9;
     string hostname = 10;
     repeated Profile profiles = 11;
+    // Startup padding turns. Empty uses the built-in preset.
+    repeated Padding paddings = 12;
+}
+
+message Padding {
+    int64 length_min = 1;
+    int64 length_max = 2;
+    // 1 = client to server, 2 = server to client
+    int32 direction = 3;
+    // Delay in milliseconds after sending this turn
+    int64 delay = 4;
 }

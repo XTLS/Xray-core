@@ -866,9 +866,16 @@ func (c *XDNS) Build() (proto.Message, error) {
 }
 
 type XMC struct {
-	Hostname string       `json:"hostname"`
-	Profiles []XMCProfile `json:"profiles"`
-	Password string       `json:"password"`
+	Hostname string             `json:"hostname"`
+	Profiles []XMCProfile       `json:"profiles"`
+	Password string             `json:"password"`
+	Paddings []XMCPaddingTurn   `json:"paddings,omitempty"`
+}
+
+type XMCPaddingTurn struct {
+	Length    string `json:"length"`
+	Direction string `json:"direction"`
+	Delay     int64  `json:"delay,omitempty"`
 }
 
 type XMCProfile struct {
@@ -911,6 +918,33 @@ func (c *XMC) Build() (proto.Message, error) {
 	if c.Password == "" {
 		return nil, fmt.Errorf("empty password")
 	}
+	config := &xmc.Config{Password: c.Password, Hostname: c.Hostname}
+	for i, turn := range c.Paddings {
+		minimum, maximum, err := ParseRangeString(turn.Length)
+		if err != nil {
+			return nil, fmt.Errorf("minecraft padding turn %d: %w", i, err)
+		}
+
+		var direction int32
+		switch turn.Direction {
+		case "c2s", "client-to-server":
+			direction = 1
+		case "s2c", "server-to-client":
+			direction = 2
+		default:
+			return nil, fmt.Errorf("minecraft padding turn %d: invalid direction %q (must be \"c2s\" or \"s2c\")", i, turn.Direction)
+		}
+
+		config.Paddings = append(config.Paddings, &xmc.Padding{
+			LengthMin: int64(minimum),
+			LengthMax: int64(maximum),
+			Direction: direction,
+			Delay:     turn.Delay,
+		})
+	}
+	if err := config.ValidatePadding(); err != nil {
+		return nil, fmt.Errorf("minecraft padding: %w", err)
+	}
 
 	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
 	if err != nil {
@@ -931,13 +965,10 @@ func (c *XMC) Build() (proto.Message, error) {
 		profiles = append(profiles, profile)
 	}
 
-	return &xmc.Config{
-		Password:      c.Password,
-		Hostname:      c.Hostname,
-		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
-		RsaPublicKey:  rsaPublicKey,
-		Profiles:      profiles,
-	}, nil
+	config.RsaPrivateKey = x509.MarshalPKCS1PrivateKey(rsaPrivateKey)
+	config.RsaPublicKey = rsaPublicKey
+	config.Profiles = profiles
+	return config, nil
 }
 
 type Xicmp struct {

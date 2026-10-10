@@ -328,7 +328,7 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.deadlines.setWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte) (*serverConn, error) {
+func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, padding []*Padding) (*serverConn, error) {
 	if len(profiles) == 0 {
 		return nil, fmt.Errorf("empty profiles")
 	}
@@ -342,7 +342,7 @@ func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPri
 	if err != nil {
 		return nil, fmt.Errorf("parse rsa private key: %w", err)
 	}
-	paddingSchedule, err := newServerPaddingSchedule2612()
+	paddingSchedule, err := newPaddingSchedule(padding, false)
 	if err != nil {
 		return nil, fmt.Errorf("select padding profile: %w", err)
 	}
