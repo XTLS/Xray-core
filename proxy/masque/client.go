@@ -110,6 +110,9 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 	ob.Name = "masque"
 	ob.CanSpliceCopy = 3
+	if ob.Target.Address.Family().IsDomain() && ob.Target.Address.Domain() == "v1.mux.cool" {
+		return errors.New("MASQUE doesn't support Mux.Cool")
+	}
 
 	xmuxClient, t, err := c.getTunnel(ctx, dialer)
 	if err != nil {
