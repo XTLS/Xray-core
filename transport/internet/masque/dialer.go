@@ -220,22 +220,7 @@ func establish(ctx context.Context, client tunnelClient, hconn httpConn, abort f
 	for k, v := range config.Headers {
 		header.Set(k, v)
 	}
-	switch header.Get("User-Agent") {
-	case "":
-		header["User-Agent"] = nil
-	case "chrome":
-		header.Set("User-Agent", utils.ChromeUA)
-	case "firefox":
-		header.Set("User-Agent", utils.FirefoxUA)
-	case "safari":
-		header.Set("User-Agent", utils.SafariUA)
-	case "edge":
-		header.Set("User-Agent", utils.MSEdgeUA)
-	case "curl":
-		header.Set("User-Agent", utils.CurlUA)
-	case "golang":
-		header.Del("User-Agent")
-	}
+	setUserAgent(header)
 
 	ipConn, _, err := client.Dial(req)
 	if err != nil {
@@ -333,6 +318,28 @@ func authority(config *Config, serverName string, port net.Port) string {
 		return host
 	}
 	return net.JoinHostPort(host, port.String())
+}
+
+func setUserAgent(header http.Header) {
+	if _, ok := header["User-Agent"]; !ok {
+		header.Set("User-Agent", "chrome")
+	}
+	switch header.Get("User-Agent") {
+	case "":
+		header["User-Agent"] = nil
+	case "chrome":
+		header.Set("User-Agent", utils.ChromeUA)
+	case "firefox":
+		header.Set("User-Agent", utils.FirefoxUA)
+	case "safari":
+		header.Set("User-Agent", utils.SafariUA)
+	case "edge":
+		header.Set("User-Agent", utils.MSEdgeUA)
+	case "curl":
+		header.Set("User-Agent", utils.CurlUA)
+	case "golang":
+		header.Del("User-Agent")
+	}
 }
 
 func init() {
