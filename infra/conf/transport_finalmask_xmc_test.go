@@ -11,10 +11,10 @@ import (
 func TestXMCBuildProfile(t *testing.T) {
 	built, err := (&XMC{
 		Password: "test-password",
-		Padding: []XMCPaddingTurn{
-			{Length: "3", Direction: "c2s"},
-			{Length: "127-129", Direction: "s2c"},
-			{Length: "8388608", Direction: "c2s"},
+		Paddings: []XMCPaddingTurn{
+			{Length: "3", Direction: "c2s", Delay: 0},
+			{Length: "127-129", Direction: "s2c", Delay: 100},
+			{Length: "8388608", Direction: "c2s", Delay: 50},
 		},
 		Profiles: []XMCProfile{
 			{
@@ -32,13 +32,16 @@ func TestXMCBuildProfile(t *testing.T) {
 	if len(config.Profiles) != 1 || len(config.Profiles[0].Uuid) != 16 {
 		t.Fatalf("unexpected profiles: %+v", config.Profiles)
 	}
-	if len(config.Padding) != 3 || config.Padding[0].LengthMin != 3 || config.Padding[0].LengthMax != 3 ||
-		config.Padding[1].LengthMin != 127 || config.Padding[1].LengthMax != 129 ||
-		config.Padding[2].LengthMin != 8388608 || config.Padding[2].LengthMax != 8388608 {
-		t.Fatalf("unexpected padding: %v", config.Padding)
+	if len(config.Paddings) != 3 || config.Paddings[0].LengthMin != 3 || config.Paddings[0].LengthMax != 3 ||
+		config.Paddings[1].LengthMin != 127 || config.Paddings[1].LengthMax != 129 ||
+		config.Paddings[2].LengthMin != 8388608 || config.Paddings[2].LengthMax != 8388608 {
+		t.Fatalf("unexpected padding: %v", config.Paddings)
 	}
-	if config.Padding[0].Direction != 1 || config.Padding[1].Direction != 2 || config.Padding[2].Direction != 1 {
-		t.Fatalf("unexpected padding directions: %v, %v, %v", config.Padding[0].Direction, config.Padding[1].Direction, config.Padding[2].Direction)
+	if config.Paddings[0].Direction != 1 || config.Paddings[1].Direction != 2 || config.Paddings[2].Direction != 1 {
+		t.Fatalf("unexpected padding directions: %v, %v, %v", config.Paddings[0].Direction, config.Paddings[1].Direction, config.Paddings[2].Direction)
+	}
+	if config.Paddings[0].Delay != 0 || config.Paddings[1].Delay != 100 || config.Paddings[2].Delay != 50 {
+		t.Fatalf("unexpected padding delays: %v, %v, %v", config.Paddings[0].Delay, config.Paddings[1].Delay, config.Paddings[2].Delay)
 	}
 }
 
@@ -64,10 +67,11 @@ func TestXMCBuildRejectsPadding(t *testing.T) {
 		"invalid_direction":    `[{"length": "3", "direction": "invalid"}]`,
 		"missing_direction":    `[{"length": "3"}]`,
 		"numeric_direction":    `[{"length": "3", "direction": "1"}]`,
+		"negative_delay":       `[{"length": "3", "direction": "c2s", "delay": -1}]`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			var config XMC
-			if err := json.Unmarshal([]byte(`{"padding":`+padding+`}`), &config); err != nil {
+			if err := json.Unmarshal([]byte(`{"paddings":`+padding+`}`), &config); err != nil {
 				t.Fatal(err)
 			}
 			config.Password = "test-password"

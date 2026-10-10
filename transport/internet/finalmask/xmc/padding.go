@@ -34,6 +34,7 @@ type paddingTurn struct {
 	direction           paddingDirection
 	minLength           int
 	maxLength           int
+	delay               int  // milliseconds delay after sending this turn
 	variants            []paddingVariant
 	startDelay          paddingDelayRange
 	chunkDelay          paddingDelayRange
@@ -60,6 +61,9 @@ func runPaddingSchedule(reader io.Reader, writer io.Writer, isClient bool, first
 		if localSends {
 			if err := writePaddingTurnWithBuffer(writer, turn, prefixLength, time.Sleep, &writeBuffer); err != nil {
 				return fmt.Errorf("write padding turn %d: %w", i, err)
+			}
+			if turn.delay > 0 {
+				time.Sleep(time.Duration(turn.delay) * time.Millisecond)
 			}
 			continue
 		}

@@ -10,7 +10,7 @@ func (c *Config) WrapConnClient(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
-	cc, err := newClientConn(conn, profiles, c.Password, c.RsaPublicKey, c.Hostname, c.Padding)
+	cc, err := newClientConn(conn, profiles, c.Password, c.RsaPublicKey, c.Hostname, c.Paddings)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -23,7 +23,7 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
-	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, c.Padding)
+	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, c.Paddings)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -33,18 +33,21 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 
 // ValidatePadding checks custom startup turns without selecting a built-in preset.
 func (c *Config) ValidatePadding() error {
-	_, err := paddingScheduleFromConfig(c.Padding)
+	_, err := paddingScheduleFromConfig(c.Paddings)
 	return err
 }
 
-func paddingScheduleFromConfig(padding []*Padding) ([]paddingTurn, error) {
-	if len(padding) == 0 {
+func paddingScheduleFromConfig(paddings []*Padding) ([]paddingTurn, error) {
+	if len(paddings) == 0 {
 		return nil, nil
 	}
-	schedule := make([]paddingTurn, len(padding))
-	for i, turn := range padding {
+	schedule := make([]paddingTurn, len(paddings))
+	for i, turn := range paddings {
 		if turn == nil || turn.LengthMin < 1 || turn.LengthMax < turn.LengthMin || turn.LengthMax > maxPaddingTurnLength {
 			return nil, fmt.Errorf("invalid padding length range at turn %d", i)
+		}
+		if turn.Delay < 0 {
+			return nil, fmt.Errorf("invalid padding delay %d at turn %d (must be non-negative)", turn.Delay, i)
 		}
 		var direction paddingDirection
 		switch turn.Direction {
@@ -59,6 +62,7 @@ func paddingScheduleFromConfig(padding []*Padding) ([]paddingTurn, error) {
 			direction: direction,
 			minLength: int(turn.LengthMin),
 			maxLength: int(turn.LengthMax),
+			delay:     int(turn.Delay),
 		}
 	}
 	// The first turn includes the two-byte Login Acknowledged packet.
@@ -68,8 +72,8 @@ func paddingScheduleFromConfig(padding []*Padding) ([]paddingTurn, error) {
 	return schedule, nil
 }
 
-func newPaddingSchedule(padding []*Padding, isClient bool) ([]paddingTurn, error) {
-	schedule, err := paddingScheduleFromConfig(padding)
+func newPaddingSchedule(paddings []*Padding, isClient bool) ([]paddingTurn, error) {
+	schedule, err := paddingScheduleFromConfig(paddings)
 	if err != nil || schedule != nil {
 		return schedule, err
 	}

@@ -38,17 +38,17 @@ func TestPacketStreamUsesPlainFraming(t *testing.T) {
 }
 
 func TestPacketStreamRoundTrip(t *testing.T) {
-	for name, padding := range map[string][]*Padding{
+	for name, paddings := range map[string][]*Padding{
 		"default": nil,
-		"single":  {{LengthMin: 3, LengthMax: 3, Direction: 1}},
-		"even":    {{LengthMin: 127, LengthMax: 129, Direction: 1}, {LengthMin: 16383, LengthMax: 16385, Direction: 2}},
-		"odd":     {{LengthMin: 3, LengthMax: 3, Direction: 1}, {LengthMin: 1, LengthMax: 1, Direction: 2}, {LengthMin: 32768, LengthMax: 32768, Direction: 1}},
+		"single":  {{LengthMin: 3, LengthMax: 3, Direction: 1, Delay: 0}},
+		"even":    {{LengthMin: 127, LengthMax: 129, Direction: 1, Delay: 10}, {LengthMin: 16383, LengthMax: 16385, Direction: 2, Delay: 0}},
+		"odd":     {{LengthMin: 3, LengthMax: 3, Direction: 1, Delay: 0}, {LengthMin: 1, LengthMax: 1, Direction: 2, Delay: 5}, {LengthMin: 32768, LengthMax: 32768, Direction: 1, Delay: 0}},
 	} {
-		t.Run(name, func(t *testing.T) { testPacketStreamRoundTrip(t, padding) })
+		t.Run(name, func(t *testing.T) { testPacketStreamRoundTrip(t, paddings) })
 	}
 }
 
-func testPacketStreamRoundTrip(t *testing.T, padding []*Padding) {
+func testPacketStreamRoundTrip(t *testing.T, paddings []*Padding) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -61,7 +61,7 @@ func testPacketStreamRoundTrip(t *testing.T, padding []*Padding) {
 	profile := testLoginProfile("packet_user")
 	config := &Config{
 		Password: password, RsaPrivateKey: privateKey, RsaPublicKey: publicKey,
-		Hostname: "localhost", Padding: padding,
+		Hostname: "localhost", Paddings: paddings,
 		Profiles: []*Profile{{
 			Username: profile.Username, Uuid: profile.UUID[:],
 			TexturesValue: profile.TexturesValue, TexturesSignature: profile.TexturesSignature,
@@ -89,7 +89,7 @@ func testPacketStreamRoundTrip(t *testing.T, padding []*Padding) {
 			return
 		}
 		defer server.Close()
-		if len(padding) > 0 && len(server.(*serverConn).paddingSchedule) != len(padding) {
+		if len(paddings) > 0 && len(server.(*serverConn).paddingSchedule) != len(paddings) {
 			t.Error("server did not use configured padding")
 		}
 		got := make([]byte, len(clientPayload))
@@ -119,7 +119,7 @@ func testPacketStreamRoundTrip(t *testing.T, padding []*Padding) {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	if len(padding) > 0 && len(client.(*clientConn).paddingSchedule) != len(padding) {
+	if len(paddings) > 0 && len(client.(*clientConn).paddingSchedule) != len(paddings) {
 		t.Fatal("client did not use configured padding")
 	}
 	if _, err = client.Write(clientPayload); err != nil {
