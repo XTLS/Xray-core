@@ -286,28 +286,22 @@ type clientManager struct {
 func (m *clientManager) clean() {
 	ticker := time.NewTicker(idleCleanupInterval)
 	for range ticker.C {
-		m.cleanOnce()
-	}
-}
-
-func (m *clientManager) cleanOnce() {
-	m.RLock()
-	entries := make(map[dialerConf]*client, len(m.m))
-	for k, c := range m.m {
-		entries[k] = c
-	}
-	m.RUnlock()
-
-	// Waiting for one client must not hold the shared client map lock.
-	for k, c := range entries {
-		force := c.instance != nil && !c.instance.IsRunning()
-		c.clean(force)
-		if force {
-			m.Lock()
-			if m.m[k] == c {
-				delete(m.m, k)
+		m.RLock()
+		entries := make(map[dialerConf]*client, len(m.m))
+		for k, c := range m.m {
+			entries[k] = c
+		}
+		m.RUnlock()
+		for k, c := range entries {
+			force := c.instance != nil && !c.instance.IsRunning()
+			c.clean(force)
+			if force {
+				m.Lock()
+				if m.m[k] == c {
+					delete(m.m, k)
+				}
+				m.Unlock()
 			}
-			m.Unlock()
 		}
 	}
 }
