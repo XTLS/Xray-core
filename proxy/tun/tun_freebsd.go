@@ -130,8 +130,9 @@ func NewTun(options *Config) (Tun, error) {
 
 // selectFreeBSDGateway picks the first IPv4 prefix from the configured gateway
 // list and the local address derived from it (the darwin semantics: the
-// gateway is the remote side of the point-to-point pair, the local address is
-// the next one after it), falling back to the same link-local default.
+// interface gets the address right after the gateway, and the gateway, which
+// nothing owns, is routed into the TUN), falling back to the same link-local
+// default.
 func selectFreeBSDGateway(configured []string) (netip.Prefix, netip.Addr, error) {
 	gateway := netip.MustParsePrefix(defaultFreeBSDGateway)
 	if len(configured) > 0 {
@@ -531,7 +532,8 @@ const (
 )
 
 // ifAliasReq4 is struct in_aliasreq from netinet/in_var.h in the 64-byte
-// layout unix.SIOCAIFADDR encodes (name + addr/dstaddr/mask sockaddrs).
+// layout unix.SIOCAIFADDR encodes (name + addr/dstaddr/mask sockaddrs; the
+// dstaddr slot is the broadcast address on a broadcast interface).
 type ifAliasReq4 struct {
 	Name    [unix.IFNAMSIZ]byte
 	Addr    unix.RawSockaddrInet4
@@ -566,7 +568,7 @@ type addrLifetime6 struct {
 // header macro does.
 const siocaifaddrIn6 = 0x80000000 | (uintptr(unsafe.Sizeof(ifAliasReq6{})) << 16) | ('i' << 8) | 27
 
-// setIPAddress assigns the local/remote point-to-point IPv4 pair and a
+// setIPAddress assigns the local IPv4 address with the gateway's mask and a
 // link-local IPv6 address to the interface, required for the routing to work
 // (same scheme as the darwin implementation: local address is the one right
 // after the gateway address).
@@ -579,16 +581,19 @@ func setIPAddress(name string, gateway netip.Prefix, local netip.Addr, ifIndex i
 
 	local4 := local.As4()
 
+	// The interface runs in broadcast mode (the wireguard tun library puts it
+	// there), so the second address slot of the request is the broadcast
+	// address, not a point-to-point peer. It stays empty and the kernel
+	// derives the broadcast address from the mask; the gateway is then an
+	// ordinary on-link address, reachable through the interface route, which
+	// is what the system routes and the system DNS takeover need. Filling it
+	// with the gateway made the gateway the broadcast address, and a plain
+	// socket cannot send to that.
 	ifReq4 := ifAliasReq4{
 		Addr: unix.RawSockaddrInet4{
 			Len:    unix.SizeofSockaddrInet4,
 			Family: unix.AF_INET,
 			Addr:   local4,
-		},
-		Dstaddr: unix.RawSockaddrInet4{
-			Len:    unix.SizeofSockaddrInet4,
-			Family: unix.AF_INET,
-			Addr:   gateway.Addr().As4(),
 		},
 		Mask: unix.RawSockaddrInet4{
 			Len:    unix.SizeofSockaddrInet4,
@@ -676,10 +681,9 @@ func (t *FreeBSDTun) setSystemRoutes() error {
 		return err
 	}
 	// Route through the interface, not a gateway: the tun(4) device is a
-	// broadcast interface here, so its point-to-point peer address doubles as
-	// the subnet broadcast and the kernel refuses to route to it (EACCES).
-	// Interface routes sidestep the gateway entirely (what wg-quick does on
-	// FreeBSD).
+	// broadcast interface here with no address resolution, so a next hop adds
+	// nothing. Interface routes sidestep the gateway entirely (what wg-quick
+	// does on FreeBSD).
 	for _, destination := range routes {
 		if err := execRoute(-1, unix.RTM_ADD, t.tunIndex, destination, netip.Addr{}); err != nil {
 			_ = t.unsetSystemRoutes()
