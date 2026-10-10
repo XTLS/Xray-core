@@ -19,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
+	"golang.org/x/crypto/x509roots/fallback/bundle"
 )
 
 var globalSessionCache = tls.NewLRUClientSessionCache(128)
@@ -577,4 +578,40 @@ func verifyChain(certs []*x509.Certificate, pinnedPeerCertSha256 [][]byte) (veri
 		}
 	}
 	return certNotFound, nil
+}
+
+var bundleCertPool = sync.OnceValue(func() *x509.CertPool {
+	pool := x509.NewCertPool()
+	for r := range bundle.Roots() {
+		cert, err := x509.ParseCertificate(r.Certificate)
+		if err != nil {
+			continue
+		}
+		if r.Constraint != nil {
+			pool.AddCertWithConstraint(cert, r.Constraint)
+		} else {
+			pool.AddCert(cert)
+		}
+	}
+	return pool
+})
+
+var systemCertPool = sync.OnceValue(func() *x509.CertPool {
+	pool, err := x509.SystemCertPool()
+	if err != nil {
+		// use bundle cert pool as fallback
+		pool = bundleCertPool()
+	}
+	return pool
+})
+
+// pool should not be modified directly, use CertPool.Clone() if needed.
+func loadCA(useSystem bool) *x509.CertPool {
+	var pool *x509.CertPool
+	if useSystem {
+		pool = systemCertPool()
+	} else {
+		pool = bundleCertPool()
+	}
+	return pool
 }
