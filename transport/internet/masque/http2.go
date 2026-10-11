@@ -367,20 +367,28 @@ func (c *http2ClientConn) abortStream(err error, reset bool) {
 }
 
 func (c *http2ClientConn) keepAlive(period time.Duration) {
-	ticker := time.NewTicker(max(period/3, time.Second))
+	ticker := time.NewTicker(max(min(period, http2PingTimeout)/3, time.Second))
 	defer ticker.Stop()
+	var pingAt time.Time
 	for {
 		select {
 		case <-c.done:
 			return
 		case <-ticker.C:
 		}
-		idle := time.Since(time.Unix(0, c.lastFrame.Load()))
-		if idle >= period+http2PingTimeout {
-			c.fail(errHTTP2IdleTimeout)
-			return
+		lastFrame := time.Unix(0, c.lastFrame.Load())
+		if !pingAt.IsZero() {
+			if lastFrame.Before(pingAt) {
+				if time.Since(pingAt) >= http2PingTimeout {
+					c.fail(errHTTP2IdleTimeout)
+					return
+				}
+				continue
+			}
+			pingAt = time.Time{}
 		}
-		if idle >= period {
+		if time.Since(lastFrame) >= period {
+			pingAt = time.Now()
 			go c.write(func(fr *http2.Framer) error {
 				return fr.WritePing(false, [8]byte{})
 			})
