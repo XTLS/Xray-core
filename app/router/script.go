@@ -16,16 +16,20 @@ import (
 const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
-	pool *xlua.Pool
+	program *xlua.Program
+	pool    *xlua.Pool
 }
 
-func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
-	program, err := xlua.CompileFile(path)
+func newScriptEngine(script string) (*scriptEngine, error) {
+	program, err := xlua.Compile(script)
 	if err != nil {
 		return nil, err
 	}
+	return &scriptEngine{program: program}, nil
+}
 
-	pool, err := xlua.NewPool(router.ctx, scriptExecutionTimeout, program.NewStateFactory(
+func (e *scriptEngine) start(router *Router) error {
+	pool, err := xlua.NewPool(router.ctx, scriptExecutionTimeout, e.program.NewStateFactory(
 		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
@@ -40,15 +44,18 @@ func newScriptEngine(path string, router *Router) (*scriptEngine, error) {
 			return nil
 		}))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	errors.LogInfo(router.ctx, "routing script initialized from ", path)
-	return &scriptEngine{pool: pool}, nil
+	e.pool = pool
+	errors.LogInfo(router.ctx, "routing script initialized")
+	return nil
 }
 
 func (e *scriptEngine) close() {
-	e.pool.Close()
+	if e.pool != nil {
+		e.pool.Close()
+	}
 }
 
 func (e *scriptEngine) pickRoute(ctx routing.Context) (routing.Route, error) {

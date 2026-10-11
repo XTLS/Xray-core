@@ -14,7 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 )
 
 type NameServerConfig struct {
@@ -282,14 +281,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
 		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
-	}
-
-	if c.Script != "" {
-		path, err := platform.ResolveLuaFile(c.Script)
-		if err != nil {
-			return nil, errors.New("failed to resolve DNS script: ", c.Script).Base(err)
-		}
-		config.Script = path
+		Script:                 c.Script,
 	}
 
 	if c.ClientIP != nil {

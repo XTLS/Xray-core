@@ -75,6 +75,5 @@ message Config {
 
   bool enableParallelQuery = 14;
 
-  // Absolute path to the Lua DNS query script.
   string script = 15;
 }

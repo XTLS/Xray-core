@@ -1,11 +1,17 @@
 package lua
 
 import (
-	"bufio"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"io"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/platform"
 	glua "github.com/yuin/gopher-lua"
 	"github.com/yuin/gopher-lua/parse"
 )
@@ -19,22 +25,52 @@ type Program struct {
 // Implementations must close partial states on failure; callers own successful states.
 type LStateFactory func(context.Context) (*glua.LState, error)
 
-// CompileFile reads and compiles a Lua file once.
-func CompileFile(path string) (*Program, error) {
-	f, err := os.Open(path)
+// Compile reads a Lua file or decodes an inline script and compiles it into an immutable program.
+func Compile(script string) (*Program, error) {
+	var code []byte
+	var err error
+	name := "[inline]"
+	if s, ok := strings.CutPrefix(script, "base64+gzip:"); ok {
+		code, err = decode(s, true)
+	} else if s, ok := strings.CutPrefix(script, "base64:"); ok {
+		code, err = decode(s, false)
+	} else if name, err = platform.ResolveLuaFile(script); err == nil {
+		code, err = os.ReadFile(name)
+	}
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	chunk, err := parse.Parse(bufio.NewReader(f), path)
+
+	chunk, err := parse.Parse(bytes.NewReader(code), name)
 	if err != nil {
 		return nil, err
 	}
-	proto, err := glua.Compile(chunk, path)
+	proto, err := glua.Compile(chunk, name)
 	if err != nil {
 		return nil, err
 	}
 	return &Program{proto: proto}, nil
+}
+
+func decode(s string, zip bool) ([]byte, error) {
+	code, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return nil, errors.New("failed to decode base64").Base(err)
+	}
+	if !zip {
+		return code, nil
+	}
+
+	reader, err := gzip.NewReader(bytes.NewReader(code))
+	if err != nil {
+		return nil, errors.New("failed to decompress gzip").Base(err)
+	}
+	defer reader.Close()
+	code, err = io.ReadAll(reader)
+	if err != nil {
+		return nil, errors.New("failed to decompress gzip").Base(err)
+	}
+	return code, nil
 }
 
 // NewState creates a state, runs register, executes the program under ctx, and

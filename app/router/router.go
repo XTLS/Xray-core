@@ -20,7 +20,6 @@ import (
 type Router struct {
 	domainStrategy Config_DomainStrategy
 	rules          atomic.Pointer[[]*Rule]
-	scriptPath     string
 	script         *scriptEngine
 	balancers      atomic.Pointer[map[string]*Balancer]
 	dns            dns.Client
@@ -42,11 +41,18 @@ type Route struct {
 // Init initializes the Router.
 func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm outbound.Manager, dispatcher routing.Dispatcher) error {
 	r.domainStrategy = config.DomainStrategy
-	r.scriptPath = config.Script
 	r.dns = d
 	r.ctx = ctx
 	r.ohm = ohm
 	r.dispatcher = dispatcher
+
+	if config.Script != "" {
+		script, err := newScriptEngine(config.Script)
+		if err != nil {
+			return errors.New("failed to prepare routing script").Base(err)
+		}
+		r.script = script
+	}
 
 	r.rules.Store(new([]*Rule))
 	r.balancers.Store(&map[string]*Balancer{})
@@ -228,12 +234,10 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 
 // Start implements common.Runnable.
 func (r *Router) Start() error {
-	if r.scriptPath != "" {
-		engine, err := newScriptEngine(r.scriptPath, r)
-		if err != nil {
+	if r.script != nil {
+		if err := r.script.start(r); err != nil {
 			return errors.New("failed to initialize routing script").Base(err)
 		}
-		r.script = engine
 	}
 	return nil
 }
