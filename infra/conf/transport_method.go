@@ -808,6 +808,7 @@ type MasqueConfig struct {
 	Pass    string            `json:"pass"`
 	Headers map[string]string `json:"headers"`
 	Warp    *MasqueWarpConfig `json:"warp"`
+	Xmux    XmuxConfig        `json:"xmux"`
 }
 
 func (c *MasqueConfig) Build() (proto.Message, error) {
@@ -878,11 +879,28 @@ func (c *MasqueConfig) Build() (proto.Message, error) {
 		}
 		headers["Authorization"] = "Basic " + base64.StdEncoding.EncodeToString([]byte(c.User+":"+c.Pass))
 	}
+	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
+		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
+	}
+	if c.Xmux == (XmuxConfig{}) {
+		c.Xmux.MaxConnections.From = 3
+		c.Xmux.MaxConnections.To = 3
+		c.Xmux.HMaxReusableSecs.From = 1800
+		c.Xmux.HMaxReusableSecs.To = 3000
+	}
 	return &masque.Config{
 		Host:    host,
 		Path:    path,
 		Headers: headers,
 		Warp:    warp,
+		Xmux: &splithttp.XmuxConfig{
+			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
+			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),
+			CMaxReuseTimes:   newRangeConfig(c.Xmux.CMaxReuseTimes),
+			HMaxRequestTimes: newRangeConfig(c.Xmux.HMaxRequestTimes),
+			HMaxReusableSecs: newRangeConfig(c.Xmux.HMaxReusableSecs),
+			HKeepAlivePeriod: c.Xmux.HKeepAlivePeriod,
+		},
 	}, nil
 }
 

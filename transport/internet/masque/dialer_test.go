@@ -1,11 +1,13 @@
 package masque
 
 import (
+	"net/http"
 	"net/netip"
 	"slices"
 	"testing"
 
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet/masque/connectip"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -75,5 +77,28 @@ func TestLocalAddrs(t *testing.T) {
 		if got := localAddrs(c.assigned); !slices.Equal(got, c.want) {
 			t.Errorf("localAddrs(%v) = %v, want %v", c.assigned, got, c.want)
 		}
+	}
+}
+
+func TestSetUserAgent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		header http.Header
+		want   []string
+	}{
+		{"default", http.Header{}, []string{utils.ChromeUA}},
+		{"empty", http.Header{"User-Agent": {""}}, nil},
+		{"preset", http.Header{"User-Agent": {"firefox"}}, []string{utils.FirefoxUA}},
+		{"custom", http.Header{"User-Agent": {"custom/1.0"}}, []string{"custom/1.0"}},
+	} {
+		setUserAgent(tc.header)
+		if got := tc.header["User-Agent"]; !slices.Equal(got, tc.want) {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+	header := http.Header{"User-Agent": {"golang"}}
+	setUserAgent(header)
+	if _, ok := header["User-Agent"]; ok {
+		t.Errorf("golang: the header should be removed, got %q", header["User-Agent"])
 	}
 }

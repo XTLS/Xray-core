@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.zx2c4.com/wireguard/tun"
@@ -26,6 +25,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/masque"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -43,11 +43,15 @@ type Client struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	tunnel atomic.Pointer[tunnel]
-
 	mu        sync.Mutex
+	xmux      *splithttp.XmuxManager
+	dialCtx   context.Context
+	dialer    internet.Dialer
 	lastErr   error
 	lastErrAt time.Time
+
+	tunnelsMu sync.Mutex
+	tunnels   map[*tunnel]struct{}
 }
 
 func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
@@ -55,7 +59,8 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 	p := v.GetFeature(policy.ManagerType()).(policy.Manager)
 
 	streamSettings := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig)
-	if _, ok := streamSettings.ProtocolSettings.(*masque.Config); !ok {
+	transportConfig, ok := streamSettings.ProtocolSettings.(*masque.Config)
+	if !ok {
 		return nil, errors.New("not masque transport")
 	}
 	if tls.ConfigFromStreamSettings(streamSettings) == nil {
@@ -86,7 +91,13 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Client, error) {
 		server:        server,
 		policyManager: p,
 		remoteDNS:     remoteDNS,
+		tunnels:       make(map[*tunnel]struct{}),
 	}
+	xmuxConfig := transportConfig.Xmux
+	if xmuxConfig == nil {
+		xmuxConfig = &splithttp.XmuxConfig{}
+	}
+	c.xmux = splithttp.NewXmuxManager(*xmuxConfig, c.newXmuxConn)
 	c.ctx, c.cancel = context.WithCancel(context.Background())
 	return c, nil
 }
@@ -99,11 +110,15 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	}
 	ob.Name = "masque"
 	ob.CanSpliceCopy = 3
+	if ob.Target.Address.Family().IsDomain() && ob.Target.Address.Domain() == "v1.mux.cool" {
+		return errors.New("MASQUE doesn't support Mux.Cool")
+	}
 
-	t, err := c.getTunnel(ctx, dialer)
+	xmuxClient, t, err := c.getTunnel(ctx, dialer)
 	if err != nil {
 		return errors.New("failed to establish CONNECT-IP tunnel").Base(err)
 	}
+	defer xmuxClient.DoneRunning()
 
 	var newCtx context.Context
 	var newCancel context.CancelFunc
@@ -180,40 +195,63 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	return nil
 }
 
-func (c *Client) getTunnel(ctx context.Context, dialer internet.Dialer) (*tunnel, error) {
+func (c *Client) getTunnel(ctx context.Context, dialer internet.Dialer) (*splithttp.XmuxClient, *tunnel, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.ctx.Err() != nil {
-		return nil, errors.New("closed")
-	}
-	if t := c.tunnel.Load(); t != nil {
-		select {
-		case <-t.done:
-		default:
-			return t, nil
-		}
+		return nil, nil, errors.New("closed")
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	var xmuxClient *splithttp.XmuxClient
 	if c.lastErr != nil && time.Since(c.lastErrAt) < retryInterval {
-		return nil, c.lastErr
+		if xmuxClient = c.xmux.GetExistingXmuxClient(ctx); xmuxClient == nil {
+			return nil, nil, c.lastErr
+		}
+	} else {
+		c.dialCtx, c.dialer = ctx, dialer
+		xmuxClient = c.xmux.GetXmuxClient(ctx)
+		c.dialCtx, c.dialer = nil, nil
+		if err := xmuxClient.XmuxConn.(*tunnel).err; err != nil {
+			if xmuxClient = c.xmux.GetExistingXmuxClient(ctx); xmuxClient == nil {
+				return nil, nil, err
+			}
+		}
 	}
+	t := xmuxClient.XmuxConn.(*tunnel)
+	if c.ctx.Err() != nil {
+		return nil, nil, errors.New("closed")
+	}
+	xmuxClient.AddRunning()
+	return xmuxClient, t, nil
+}
 
-	t, err := c.establish(ctx, dialer)
+func (c *Client) newXmuxConn() splithttp.XmuxConn {
+	t, err := c.establish(c.dialCtx, c.dialer)
 	if err != nil {
 		c.lastErr, c.lastErrAt = err, time.Now()
-		return nil, err
+		return failedTunnel(err)
 	}
 	c.lastErr = nil
-	c.tunnel.Store(t)
-	if c.ctx.Err() != nil {
-		if c.tunnel.CompareAndSwap(t, nil) {
-			t.close()
-		}
-		return nil, errors.New("closed")
+	c.tunnelsMu.Lock()
+	if c.tunnels == nil {
+		c.tunnelsMu.Unlock()
+		t.close()
+		return failedTunnel(errors.New("closed"))
 	}
-	return t, nil
+	c.tunnels[t] = struct{}{}
+	c.tunnelsMu.Unlock()
+	if t.IsClosed() {
+		c.removeTunnel(t)
+	}
+	return t
+}
+
+func (c *Client) removeTunnel(t *tunnel) {
+	c.tunnelsMu.Lock()
+	delete(c.tunnels, t)
+	c.tunnelsMu.Unlock()
 }
 
 func (c *Client) establish(ctx context.Context, dialer internet.Dialer) (*tunnel, error) {
@@ -229,7 +267,7 @@ func (c *Client) establish(ctx context.Context, dialer internet.Dialer) (*tunnel
 		conn.Close()
 		return nil, errors.New("not a CONNECT-IP connection")
 	}
-	t, err := newTunnel(conn, mconn.LocalAddrs(), c.remoteDNS)
+	t, err := newTunnel(conn, mconn.LocalAddrs(), c.remoteDNS, c.removeTunnel)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -240,7 +278,11 @@ func (c *Client) establish(ctx context.Context, dialer internet.Dialer) (*tunnel
 
 func (c *Client) Close() error {
 	c.cancel()
-	if t := c.tunnel.Swap(nil); t != nil {
+	c.tunnelsMu.Lock()
+	tunnels := c.tunnels
+	c.tunnels = nil
+	c.tunnelsMu.Unlock()
+	for t := range tunnels {
 		t.close()
 	}
 	return nil
@@ -252,9 +294,31 @@ type tunnel struct {
 	tnet      *wireguard.Net
 	done      chan struct{}
 	closeOnce sync.Once
+	onClose   func(*tunnel)
+	err       error
 }
 
-func newTunnel(conn stat.Connection, local []netip.Addr, remoteDNS []netip.Addr) (*tunnel, error) {
+func failedTunnel(err error) *tunnel {
+	t := &tunnel{err: err, done: make(chan struct{})}
+	t.close()
+	return t
+}
+
+func (t *tunnel) IsClosed() bool {
+	select {
+	case <-t.done:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *tunnel) Close() error {
+	t.close()
+	return nil
+}
+
+func newTunnel(conn stat.Connection, local []netip.Addr, remoteDNS []netip.Addr, onClose func(*tunnel)) (*tunnel, error) {
 	var dns []netip.Addr
 	for _, addr := range remoteDNS {
 		if slices.ContainsFunc(local, func(l netip.Addr) bool { return l.Is4() == addr.Is4() }) {
@@ -271,10 +335,11 @@ func newTunnel(conn stat.Connection, local []netip.Addr, remoteDNS []netip.Addr)
 		return nil, err
 	}
 	t := &tunnel{
-		conn: conn,
-		dev:  dev,
-		tnet: tnet,
-		done: make(chan struct{}),
+		conn:    conn,
+		dev:     dev,
+		tnet:    tnet,
+		done:    make(chan struct{}),
+		onClose: onClose,
 	}
 	go t.readFromTunnel()
 	go t.writeToTunnel()
@@ -316,8 +381,15 @@ func (t *tunnel) writeToTunnel() {
 func (t *tunnel) close() {
 	t.closeOnce.Do(func() {
 		close(t.done)
-		t.conn.Close()
-		t.dev.Close()
+		if t.conn != nil {
+			t.conn.Close()
+		}
+		if t.dev != nil {
+			t.dev.Close()
+		}
+		if t.onClose != nil {
+			t.onClose(t)
+		}
 	})
 }
 

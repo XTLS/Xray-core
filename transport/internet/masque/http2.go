@@ -32,6 +32,7 @@ const (
 	http2WindowUpdateSize  = 1 << 20
 	http2KeepAlivePeriod   = 10 * time.Second
 	http2IdleTimeout       = 30 * time.Second
+	http2PingTimeout       = 15 * time.Second
 	http2DefaultUserAgent  = "Go-http-client/2.0"
 )
 
@@ -79,7 +80,7 @@ type http2ClientConn struct {
 	recvUnacked      int64
 }
 
-func newHTTP2ClientConn(conn net.Conn) (*http2ClientConn, error) {
+func newHTTP2ClientConn(conn net.Conn, keepAlivePeriod time.Duration) (*http2ClientConn, error) {
 	c := &http2ClientConn{
 		conn:             conn,
 		bw:               bufio.NewWriter(conn),
@@ -119,7 +120,9 @@ func newHTTP2ClientConn(conn net.Conn) (*http2ClientConn, error) {
 		return nil, err
 	}
 	go c.readLoop()
-	go c.keepAlive()
+	if keepAlivePeriod > 0 {
+		go c.keepAlive(keepAlivePeriod)
+	}
 	return c, nil
 }
 
@@ -363,21 +366,29 @@ func (c *http2ClientConn) abortStream(err error, reset bool) {
 	}
 }
 
-func (c *http2ClientConn) keepAlive() {
-	ticker := time.NewTicker(http2KeepAlivePeriod)
+func (c *http2ClientConn) keepAlive(period time.Duration) {
+	ticker := time.NewTicker(max(min(period, http2PingTimeout)/3, time.Second))
 	defer ticker.Stop()
+	var pingAt time.Time
 	for {
 		select {
 		case <-c.done:
 			return
 		case <-ticker.C:
 		}
-		idle := time.Since(time.Unix(0, c.lastFrame.Load()))
-		if idle >= http2IdleTimeout {
-			c.fail(errHTTP2IdleTimeout)
-			return
+		lastFrame := time.Unix(0, c.lastFrame.Load())
+		if !pingAt.IsZero() {
+			if lastFrame.Before(pingAt) {
+				if time.Since(pingAt) >= http2PingTimeout {
+					c.fail(errHTTP2IdleTimeout)
+					return
+				}
+				continue
+			}
+			pingAt = time.Time{}
 		}
-		if idle >= http2KeepAlivePeriod {
+		if time.Since(lastFrame) >= period {
+			pingAt = time.Now()
 			go c.write(func(fr *http2.Framer) error {
 				return fr.WritePing(false, [8]byte{})
 			})
