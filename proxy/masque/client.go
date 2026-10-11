@@ -204,13 +204,22 @@ func (c *Client) getTunnel(ctx context.Context, dialer internet.Dialer) (*splith
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	c.dialCtx, c.dialer = ctx, dialer
-	xmuxClient := c.xmux.GetXmuxClient(ctx)
-	c.dialCtx, c.dialer = nil, nil
-	t := xmuxClient.XmuxConn.(*tunnel)
-	if t.err != nil {
-		return nil, nil, t.err
+	var xmuxClient *splithttp.XmuxClient
+	if c.lastErr != nil && time.Since(c.lastErrAt) < retryInterval {
+		if xmuxClient = c.xmux.GetExistingXmuxClient(ctx); xmuxClient == nil {
+			return nil, nil, c.lastErr
+		}
+	} else {
+		c.dialCtx, c.dialer = ctx, dialer
+		xmuxClient = c.xmux.GetXmuxClient(ctx)
+		c.dialCtx, c.dialer = nil, nil
+		if err := xmuxClient.XmuxConn.(*tunnel).err; err != nil {
+			if xmuxClient = c.xmux.GetExistingXmuxClient(ctx); xmuxClient == nil {
+				return nil, nil, err
+			}
+		}
 	}
+	t := xmuxClient.XmuxConn.(*tunnel)
 	if c.ctx.Err() != nil {
 		return nil, nil, errors.New("closed")
 	}
@@ -219,9 +228,6 @@ func (c *Client) getTunnel(ctx context.Context, dialer internet.Dialer) (*splith
 }
 
 func (c *Client) newXmuxConn() splithttp.XmuxConn {
-	if c.lastErr != nil && time.Since(c.lastErrAt) < retryInterval {
-		return failedTunnel(c.lastErr)
-	}
 	t, err := c.establish(c.dialCtx, c.dialer)
 	if err != nil {
 		c.lastErr, c.lastErrAt = err, time.Now()
