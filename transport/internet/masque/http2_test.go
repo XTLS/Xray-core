@@ -1,13 +1,16 @@
 package masque
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"io"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -422,4 +425,63 @@ func TestHTTP2ClientAnswersPings(t *testing.T) {
 	require.IsType(t, &http2.PingFrame{}, f)
 	require.True(t, f.(*http2.PingFrame).IsAck())
 	require.Equal(t, data, f.(*http2.PingFrame).Data)
+}
+
+func TestHTTP2ClientKeepAlive(t *testing.T) {
+	for _, answer := range []bool{false, true} {
+		synctest.Test(t, func(t *testing.T) {
+			client, server := net.Pipe()
+			defer server.Close()
+			var mu sync.Mutex
+			var pings []time.Duration
+			start := time.Now()
+			go func() {
+				br := bufio.NewReader(server)
+				if _, err := io.ReadFull(br, make([]byte, len(http2.ClientPreface))); err != nil {
+					return
+				}
+				fr := http2.NewFramer(server, br)
+				time.Sleep(2 * time.Second)
+				if fr.WriteSettings() != nil {
+					return
+				}
+				for {
+					f, err := fr.ReadFrame()
+					if err != nil {
+						return
+					}
+					if p, ok := f.(*http2.PingFrame); ok && !p.IsAck() {
+						mu.Lock()
+						pings = append(pings, time.Since(start))
+						mu.Unlock()
+						if answer && fr.WritePing(true, p.Data) != nil {
+							return
+						}
+					}
+				}
+			}()
+			cc, err := newHTTP2ClientConn(client, 60*time.Second)
+			require.NoError(t, err)
+			if answer {
+				time.Sleep(200 * time.Second)
+				select {
+				case <-cc.done:
+					t.Fatal("the connection closed although every PING was answered")
+				default:
+				}
+				cc.conn.Close()
+				<-cc.done
+				mu.Lock()
+				defer mu.Unlock()
+				require.GreaterOrEqual(t, len(pings), 2)
+				return
+			}
+			<-cc.done
+			closed := time.Since(start)
+			mu.Lock()
+			defer mu.Unlock()
+			require.Len(t, pings, 1, "the connection must send a PING before closing")
+			require.GreaterOrEqual(t, closed-pings[0], http2PingTimeout)
+		})
+	}
 }
