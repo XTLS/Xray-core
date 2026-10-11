@@ -25,15 +25,13 @@ import (
 	routingsession "github.com/xtls/xray-core/features/routing/session"
 	"github.com/xtls/xray-core/proxy/dns"
 	"golang.org/x/sys/unix"
-	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 // LinuxTun is an object that handles tun network interface on linux
 // current version is heavily stripped to do nothing more,
-// then create a network interface, to be provided as file descriptor to gVisor ip stack
+// then create a network interface, whose packets are read and written through its file descriptor
 type LinuxTun struct {
-	tunFd   int
+	*fdTun
 	tunLink netlink.Link
 	options *Config
 	ownsTun bool
@@ -293,7 +291,7 @@ func NewTun(options *Config) (Tun, error) {
 	}
 	if fdProvided {
 		return &LinuxTun{
-			tunFd:   tunFd,
+			fdTun:   newFdTun(tunFd),
 			tunLink: tunLink,
 			options: options,
 		}, nil
@@ -311,7 +309,7 @@ func NewTun(options *Config) (Tun, error) {
 	}
 
 	linuxTun := &LinuxTun{
-		tunFd:   tunFd,
+		fdTun:   newFdTun(tunFd),
 		tunLink: tunLink,
 		options: options,
 		ownsTun: true,
@@ -457,7 +455,7 @@ func (t *LinuxTun) Close() error {
 	if t.ownsTun {
 		_ = netlink.LinkSetDown(t.tunLink)
 	}
-	_ = unix.Close(t.tunFd)
+	_ = t.closeFile()
 
 	return nil
 }
@@ -468,15 +466,6 @@ func (t *LinuxTun) Name() (string, error) {
 
 func (t *LinuxTun) Index() (int, error) {
 	return t.tunLink.Attrs().Index, nil
-}
-
-// newEndpoint builds new gVisor stack.LinkEndpoint from the tun interface file descriptor
-func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return fdbased.New(&fdbased.Options{
-		FDs:               []int{t.tunFd},
-		MTU:               t.options.MTU,
-		RXChecksumOffload: true,
-	})
 }
 
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {
