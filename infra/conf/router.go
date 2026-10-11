@@ -94,6 +94,9 @@ func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
 func (c *RouterConfig) Build() (*router.Config, error) {
 	config := new(router.Config)
 
+	if c.Script != "" && (c.DomainStrategy != nil || len(c.RuleList) > 0) {
+		return nil, errors.New("routing script cannot be used with domainStrategy or rules")
+	}
 	config.Script = c.Script
 
 	config.DomainStrategy = c.getDomainStrategy()

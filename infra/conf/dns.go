@@ -272,6 +272,17 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 
 // Build implements Buildable
 func (c *DNSConfig) Build() (*dns.Config, error) {
+	if c.Script != "" {
+		if c.DisableFallback || c.DisableFallbackIfMatch || c.EnableParallelQuery {
+			return nil, errors.New("DNS script cannot be used with disableFallback, disableFallbackIfMatch or enableParallelQuery")
+		}
+		for i, server := range c.Servers {
+			if len(server.Domains) > 0 || server.SkipFallback || server.FinalQuery {
+				return nil, errors.New("DNS script cannot be used with domains, skipFallback or finalQuery in server ", i)
+			}
+		}
+	}
+
 	config := &dns.Config{
 		Tag:                    c.Tag,
 		DisableCache:           c.DisableCache,
