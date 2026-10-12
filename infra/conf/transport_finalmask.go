@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	googleuuid "github.com/google/uuid"
@@ -800,6 +801,9 @@ type XDNSDomain struct {
 
 type XDNSResolver struct {
 	Addrs []string `json:"addrs"`
+	ServerName string `json:"serverName"`
+	Bootstrap string `json:"bootstrap"`
+	Certificates []*TLSCertConfig `json:"certificates"`
 }
 
 type XDNS struct {
@@ -834,6 +838,17 @@ func (c *XDNS) Build() (proto.Message, error) {
 		}
 	}
 	for i := range c.Resolvers {
+		group := &c.Resolvers[i]
+		if group.Bootstrap != "" && net.ParseIP(group.Bootstrap) == nil { return nil, errors.New("xdns bootstrap must be a single IP") }
+		if strings.ContainsAny(group.ServerName, " \t\r\n/@?#") { return nil, errors.New("invalid xdns serverName") }
+		var certificates []*tls.Certificate
+		for _, cert := range group.Certificates {
+			if cert == nil { return nil, errors.New("invalid xdns certificate") }
+			built, err := cert.Build()
+			if err != nil { return nil, err }
+			if built.Usage != tls.Certificate_AUTHORITY_VERIFY || !x509.NewCertPool().AppendCertsFromPEM(built.Certificate) { return nil, errors.New("xdns certificates require valid verify roots") }
+			certificates = append(certificates, built)
+		}
 		for j := range c.Resolvers[i].Addrs {
 			var u *url.URL
 			var e error
@@ -845,8 +860,9 @@ func (c *XDNS) Build() (proto.Message, error) {
 			if e != nil {
 				return nil, e
 			}
+			if u.Hostname() == "" || strings.ContainsAny(u.Hostname(), " \t\r\n/@?#") || (strings.Contains(u.Hostname(), ":") && net.ParseIP(u.Hostname()) == nil) || u.User != nil || u.Fragment != "" || u.Opaque != "" { return nil, errors.New("invalid xdns resolver address") }
 			switch u.Scheme {
-			case "tcp", "udp":
+			case "tcp", "udp", "tls", "quic", "https", "https+h3":
 			default:
 				return nil, errors.New("invalid protocol")
 			}
@@ -854,9 +870,27 @@ func (c *XDNS) Build() (proto.Message, error) {
 			host = u.Hostname()
 			port = u.Port()
 			if port == "" {
-				port = "53"
+				switch u.Scheme {
+				case "tls", "quic": port = "853"
+				case "https", "https+h3": port = "443"
+				default: port = "53"
+				}
 			}
-			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: net.JoinHostPort(host, port)})
+			portNumber, err := strconv.ParseUint(port, 10, 16)
+			if err != nil || portNumber == 0 || (u.Scheme == "quic" && portNumber == 53) { return nil, errors.New("invalid xdns resolver port") }
+			protocol := u.Scheme
+			address := net.JoinHostPort(host, port)
+			if protocol == "https" || protocol == "https+h3" {
+				if group.ServerName != "" && !strings.EqualFold(group.ServerName, host) { return nil, errors.New("HTTP resolver serverName must match URL hostname") }
+				u.Scheme = "https"
+				u.Host = address
+				if u.Path == "" { u.Path = "/dns-query" }
+				address = u.String()
+			} else if u.Path != "" || u.RawQuery != "" || u.ForceQuery { return nil, errors.New("non-HTTP resolver address cannot contain path or query") }
+			if protocol == "udp" || protocol == "tcp" {
+				if group.Bootstrap != "" || group.ServerName != "" || len(certificates) != 0 { return nil, errors.New("TLS identity and bootstrap options require an encrypted resolver") }
+			}
+			resolvers = append(resolvers, &xdns.ResolverProto{Type: protocol, Addr: address, ServerName: group.ServerName, Bootstrap: group.Bootstrap, Certificates: certificates})
 		}
 	}
 	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {

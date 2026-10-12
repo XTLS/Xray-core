@@ -14,6 +14,17 @@ import (
 type Dialer struct {
 	DialTCP func(net.Destination) (net.Conn, error)
 	DialUDP func(net.Destination) (net.Conn, error)
+	DialTCPContext func(context.Context, net.Destination) (net.Conn, error)
+	DialUDPContext func(context.Context, net.Destination) (net.Conn, error)
+}
+
+func contextForDial(parent, request context.Context) (context.Context, context.CancelFunc) {
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if deadline, ok := request.Deadline(); ok { ctx, cancel = context.WithDeadline(parent, deadline) } else { ctx, cancel = context.WithCancel(parent) }
+	stop := context.AfterFunc(request, cancel)
+	if request.Err() != nil { cancel() }
+	return ctx, func() { stop(); cancel() }
 }
 
 type ListenConfig struct {
@@ -74,6 +85,18 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 		}
 	}
 	dialer := &Dialer{
+		DialTCPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			return fm.dialTCP(dialCtx, dest)
+		},
+		DialUDPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			conn, addr, err := fm.dialUDP(dialCtx, dest)
+			if err != nil { return nil, err }
+			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, nil
+		},
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},
@@ -163,6 +186,18 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 		}
 	}
 	dialer := &Dialer{
+		DialTCPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			return fm.dialTCP(dialCtx, dest)
+		},
+		DialUDPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			conn, addr, err := fm.dialUDP(dialCtx, dest)
+			if err != nil { return nil, err }
+			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, nil
+		},
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},

@@ -17,13 +17,9 @@ func TestXDNSResolverEncryptedAddresses(t *testing.T) {
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			built, err := (&XDNS{Resolvers: []XDNSResolver{{Addrs: []string{tc.input}}}}).Build()
-			if err != nil {
-				t.Fatal(err)
-			}
+			if err != nil { t.Fatal(err) }
 			r := built.(*xdns.Config).Resolvers[0]
-			if r.Type != tc.protocol || r.Addr != tc.address {
-				t.Fatalf("got %s %s; want %s %s", r.Type, r.Addr, tc.protocol, tc.address)
-			}
+			if r.Type != tc.protocol || r.Addr != tc.address { t.Fatalf("got %s %s; want %s %s", r.Type, r.Addr, tc.protocol, tc.address) }
 		})
 	}
 }
