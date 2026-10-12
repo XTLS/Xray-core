@@ -10,17 +10,17 @@ import (
 )
 
 var cmdDecode = &base.Command{
-	UsageLine: "{{.Exec}} base64 decode [-gzip] [file | stdin:]",
+	UsageLine: "{{.Exec}} base64 decode [-gzip] [file | - | stdin:]",
 	Short:     "Decode Base64",
 	Long: fmt.Sprintf(`
-Decode Base64 from a file or stdin:.
+Decode Base64 from a file; omit file or pass "-" or "stdin:" to read stdin.
 Accepts %s, %s, or no prefix.
 Use -gzip to decompress gzip; %s is decompressed automatically.
 
 Examples:
 
 	{{.Exec}} base64 decode encoded.txt
-	{{.Exec}} base64 decode -gzip stdin:
+	{{.Exec}} base64 decode -gzip -
 `, xbase64.Prefix, xbase64.GzipPrefix, xbase64.GzipPrefix),
 }
 
@@ -31,10 +31,10 @@ func init() {
 }
 
 func executeDecode(cmd *base.Command, args []string) {
-	if len(args) != 1 {
+	if len(args) > 1 {
 		cmd.Usage()
 	}
-	input, err := readInput(args[0])
+	input, err := readInput(args)
 	if err != nil {
 		base.Fatalf("failed to read input: %s", err)
 	}

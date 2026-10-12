@@ -18,9 +18,9 @@ var CmdBase64 = &base.Command{
 	},
 }
 
-func readInput(name string) ([]byte, error) {
-	if name == "stdin:" {
+func readInput(args []string) ([]byte, error) {
+	if len(args) == 0 || args[0] == "-" || args[0] == "stdin:" {
 		return io.ReadAll(os.Stdin)
 	}
-	return os.ReadFile(name)
+	return os.ReadFile(args[0])
 }
