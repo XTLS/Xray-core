@@ -50,14 +50,14 @@ jobs:
             git commit -m "chore(xdns): generate configuration and format source"
             git push origin HEAD:cptdnsv2
           fi
-      - name: Resolver, finalmask, and configuration tests
+      - name: Resolver, finalmask, DNS, and configuration tests
         run: |
           mkdir -p resources
           for asset in geoip geosite; do
             curl --fail --location --retry 3 -o "resources/$asset.dat" "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/$asset.dat"
           done
-          go test -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask ./infra/conf
+          go test -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask ./infra/conf ./app/dns
       - name: Race tests
         run: go test -race -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask ./transport/internet ./app/dns ./features/dns/localdns
-      - name: DNS, TLS, and HTTP transport regressions
-        run: go test -timeout 10m ./app/dns ./features/dns/localdns ./transport/internet/tls ./transport/internet/splithttp
+      - name: Local DNS, TLS, and HTTP transport regressions
+        run: go test -timeout 10m ./features/dns/localdns ./transport/internet/tls ./transport/internet/splithttp
