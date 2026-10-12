@@ -30,9 +30,9 @@ func (r *Router) RegisterLua(L *lua.LState) {
 		module.RawSetString("LocalOS", lua.LString(runtime.GOOS))
 
 		module.RawSetString("PickOutbound", L.NewFunction(func(L *lua.LState) int {
-			tag, ok := L.Get(2).(lua.LString)
+			tag, ok := L.Get(1).(lua.LString)
 			if !ok {
-				L.ArgError(2, "balancer tag must be a string")
+				L.ArgError(1, "balancer tag must be a string")
 				return 0
 			}
 			balancer, found := (*r.balancers.Load())[string(tag)]

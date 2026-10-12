@@ -1,11 +1,14 @@
 package lua
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/xtls/xray-core/common/base64"
+	"github.com/xtls/xray-core/common/platform"
 	glua "github.com/yuin/gopher-lua"
 	"github.com/yuin/gopher-lua/parse"
 )
@@ -19,18 +22,25 @@ type Program struct {
 // Implementations must close partial states on failure; callers own successful states.
 type LStateFactory func(context.Context) (*glua.LState, error)
 
-// CompileFile reads and compiles a Lua file once.
-func CompileFile(path string) (*Program, error) {
-	f, err := os.Open(path)
+// Compile reads a Lua file or decodes an inline script and compiles it into an immutable program.
+func Compile(script string) (*Program, error) {
+	var code []byte
+	var err error
+	name := "[inline]"
+	if strings.HasPrefix(script, base64.GzipPrefix) || strings.HasPrefix(script, base64.Prefix) {
+		code, err = base64.Decode(script)
+	} else if name, err = platform.ResolveLuaFile(script); err == nil {
+		code, err = os.ReadFile(name)
+	}
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	chunk, err := parse.Parse(bufio.NewReader(f), path)
+
+	chunk, err := parse.Parse(bytes.NewReader(code), name)
 	if err != nil {
 		return nil, err
 	}
-	proto, err := glua.Compile(chunk, path)
+	proto, err := glua.Compile(chunk, name)
 	if err != nil {
 		return nil, err
 	}

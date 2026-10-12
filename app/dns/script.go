@@ -15,16 +15,20 @@ import (
 const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
-	pool *xlua.Pool
+	program *xlua.Program
+	pool    *xlua.Pool
 }
 
-func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
-	program, err := xlua.CompileFile(path)
+func newScriptEngine(script string) (*scriptEngine, error) {
+	program, err := xlua.Compile(script)
 	if err != nil {
 		return nil, err
 	}
+	return &scriptEngine{program: program}, nil
+}
 
-	pool, err := xlua.NewPool(server.ctx, scriptExecutionTimeout, program.NewStateFactory(
+func (e *scriptEngine) start(server *DNS) error {
+	pool, err := xlua.NewPool(server.ctx, scriptExecutionTimeout, e.program.NewStateFactory(
 		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
@@ -38,15 +42,18 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 			return nil
 		}))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	errors.LogInfo(server.ctx, "DNS script initialized from ", path)
-	return &scriptEngine{pool: pool}, nil
+	e.pool = pool
+	errors.LogInfo(server.ctx, "DNS script initialized")
+	return nil
 }
 
 func (e *scriptEngine) close() {
-	e.pool.Close()
+	if e.pool != nil {
+		e.pool.Close()
+	}
 }
 
 func (e *scriptEngine) query(domain string, option dns.IPOption) (ips []net.IP, ttl uint32, queryErr error) {

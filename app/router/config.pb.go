@@ -587,10 +587,9 @@ type Config struct {
 	DomainStrategy Config_DomainStrategy  `protobuf:"varint,1,opt,name=domain_strategy,json=domainStrategy,proto3,enum=xray.app.router.Config_DomainStrategy" json:"domain_strategy,omitempty"`
 	Rule           []*RoutingRule         `protobuf:"bytes,2,rep,name=rule,proto3" json:"rule,omitempty"`
 	BalancingRule  []*BalancingRule       `protobuf:"bytes,3,rep,name=balancing_rule,json=balancingRule,proto3" json:"balancing_rule,omitempty"`
-	// Absolute path to the Lua routing script.
-	Script        string `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Script         string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {

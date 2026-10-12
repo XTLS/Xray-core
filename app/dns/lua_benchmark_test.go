@@ -72,8 +72,11 @@ end
 	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
 		b.Fatal(err)
 	}
-	engine, err := newScriptEngine(path, server)
+	engine, err := newScriptEngine(path)
 	if err != nil {
+		b.Fatal(err)
+	}
+	if err := engine.start(server); err != nil {
 		b.Fatal(err)
 	}
 	b.Cleanup(engine.close)
