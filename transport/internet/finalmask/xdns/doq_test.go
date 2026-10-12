@@ -238,7 +238,7 @@ func TestDoQClosesConnectionOnProtocolErrors(t *testing.T) {
 type doQTrackedPacketConn struct {
 	net.PacketConn
 	closed chan struct{}
-	once   sync.Once
+	once sync.Once
 }
 
 func (c *doQTrackedPacketConn) Close() error {
@@ -318,10 +318,7 @@ func TestDoQCancellationStopsStreamAndNextQueryWorks(t *testing.T) {
 	t.Cleanup(r.Close)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	go func() {
-		_, err := r.(*DoQResolver).exchange(ctx, tlsResolverTestQuery(t, "first.example.", 42))
-		done <- err
-	}()
+	go func() { _, err := r.(*DoQResolver).exchange(ctx, tlsResolverTestQuery(t, "first.example.", 42)); done <- err }()
 	select {
 	case <-started:
 	case <-time.After(time.Second):
@@ -566,4 +563,39 @@ func TestDoQRejectsWrongALPNAndUntrustedCertificate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDoQDNSFailureDoesNotCloseConnection(t *testing.T) {
+	connections := make(chan *quic.Conn, 2)
+	var count atomic.Int32
+	config, dialer := startDoQServer(t, func(ctx context.Context, conn *quic.Conn, stream *quic.Stream) {
+		query, err := tlsResolverReadFrame(stream)
+		if err != nil { return }
+		var extra [1]byte
+		if _, err := io.ReadFull(stream, extra[:]); err != io.EOF { return }
+		connections <- conn
+		response, _ := tlsResolverTestResponse(query)
+		if count.Add(1) == 1 {
+			var message dnsmessage.Message
+			message.Unpack(response)
+			message.RCode = dnsmessage.RCodeServerFailure
+			message.Answers = nil
+			response, _ = message.Pack()
+		}
+		tlsResolverWriteFrame(stream, response)
+		stream.Close()
+	})
+	r, err := NewDoQResolver(config, dialer)
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(r.Close)
+	if err := r.Send(tlsResolverTestQuery(t, "failed.example.", 99)); err != nil { t.Fatal(err) }
+	var failed dnsmessage.Message
+	if err := failed.Unpack(tlsResolverRead(t, r)); err != nil { t.Fatal(err) }
+	if failed.ID != 99 || failed.RCode != dnsmessage.RCodeServerFailure { t.Fatal("DoQ discarded or changed the DNS failure response") }
+	query := tlsResolverTestQuery(t, "next.example.", 100)
+	if err := r.Send(query); err != nil { t.Fatal(err) }
+	want, _ := tlsResolverTestResponse(query)
+	if !bytes.Equal(tlsResolverRead(t, r), want) { t.Fatal("subsequent DNS query failed") }
+	first, second := <-connections, <-connections
+	if first != second { t.Fatal("ordinary DNS failure closed the shared DoQ connection") }
 }

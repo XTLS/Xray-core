@@ -22,11 +22,11 @@ import (
 func tlsResolverTestQuery(t *testing.T, name string, id uint16) []byte {
 	t.Helper()
 	m := dnsmessage.Message{
-		Header:    dnsmessage.Header{ID: id, RecursionDesired: true},
+		Header: dnsmessage.Header{ID: id, RecursionDesired: true},
 		Questions: []dnsmessage.Question{{Name: dnsmessage.MustNewName(name), Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET}},
 		Additionals: []dnsmessage.Resource{{
 			Header: dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName("."), Type: dnsmessage.TypeOPT, Class: 4096},
-			Body:   &dnsmessage.OPTResource{Options: []dnsmessage.Option{{Code: 12, Data: []byte{0, 255, 1}}}},
+			Body: &dnsmessage.OPTResource{Options: []dnsmessage.Option{{Code: 12, Data: []byte{0, 255, 1}}}},
 		}},
 	}
 	p, err := m.Pack()
@@ -44,7 +44,7 @@ func tlsResolverTestResponse(query []byte) ([]byte, error) {
 	m.Header.Response = true
 	m.Answers = []dnsmessage.Resource{{
 		Header: dnsmessage.ResourceHeader{Name: m.Questions[0].Name, Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET},
-		Body:   &dnsmessage.TXTResource{TXT: []string{string([]byte{0, 255, 1, 128})}},
+		Body: &dnsmessage.TXTResource{TXT: []string{string([]byte{0, 255, 1, 128})}},
 	}}
 	return m.Pack()
 }
@@ -459,5 +459,61 @@ func TestDoTRejectsUntrustedCertificateAndWrongALPN(t *testing.T) {
 				t.Fatalf("accepted %s DoT endpoint", mode)
 			}
 		})
+	}
+}
+
+type doTResetAfterCloseConn struct {
+	net.Conn
+	closed chan struct{}
+	once sync.Once
+}
+
+func (c *doTResetAfterCloseConn) Close() error {
+	var err error
+	c.once.Do(func() { err = c.Conn.Close(); close(c.closed) })
+	return err
+}
+
+func (c *doTResetAfterCloseConn) SetWriteDeadline(deadline time.Time) error {
+	if !deadline.IsZero() {
+		return c.Conn.SetWriteDeadline(deadline)
+	}
+	select {
+	case <-c.closed:
+		return net.ErrClosed
+	case <-time.After(time.Second):
+		return errors.New("peer close was not observed before clearing write deadline")
+	}
+}
+
+func TestDoTDeliversResponseWhenDeadlineResetRacesPeerClose(t *testing.T) {
+	config, dialer := startDoTServer(t, []string{"dot"}, func(ctx context.Context, conn *tls.Conn) {
+		query, err := tlsResolverReadFrame(conn)
+		if err != nil {
+			return
+		}
+		response, _ := tlsResolverTestResponse(query)
+		tlsResolverWriteFrame(conn, response)
+	})
+	dial := dialer.DialTCPContext
+	dialer.DialTCPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+		conn, err := dial(ctx, dest)
+		if err != nil {
+			return nil, err
+		}
+		return &doTResetAfterCloseConn{Conn: conn, closed: make(chan struct{})}, nil
+	}
+	r, err := NewDoTResolver(config, dialer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(r.Close)
+	query := tlsResolverTestQuery(t, "test.example.", 42)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	response, err := r.(*DoTResolver).exchange(ctx, query)
+	want, _ := tlsResolverTestResponse(query)
+	if err != nil || !bytes.Equal(response, want) {
+		t.Fatalf("deadline cleanup discarded a complete DNS response: %v", err)
 	}
 }

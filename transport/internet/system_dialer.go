@@ -2,6 +2,8 @@ package internet
 
 import (
 	"context"
+	stdnet "net"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -50,8 +52,34 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 	errors.LogDebug(ctx, "dialing to "+dest.String())
 
 	if dest.Network == net.Network_UDP {
-		destAddr, err := net.ResolveUDPAddr("udp", dest.NetAddr())
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		host, _, err := net.SplitHostPort(dest.NetAddr())
 		if err != nil {
+			return nil, err
+		}
+		destAddr := &net.UDPAddr{Port: int(dest.Port)}
+		if host != "" {
+			addresses, err := stdnet.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, err
+			}
+			if len(addresses) == 0 {
+				return nil, &net.AddrError{Err: "no suitable address", Addr: dest.NetAddr()}
+			}
+			selected := addresses[0]
+			// Match ResolveUDPAddr's IPv4 preference unless the endpoint is an IPv6 literal.
+			preferIPv6 := strings.Contains(dest.NetAddr(), "[")
+			for _, address := range addresses {
+				if preferIPv6 && address.IP.To4() == nil || !preferIPv6 && address.IP.To4() != nil {
+					selected = address
+					break
+				}
+			}
+			destAddr.IP, destAddr.Zone = selected.IP, selected.Zone
+		}
+		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		srcAddr := resolveSrcAddr(net.Network_UDP, src)

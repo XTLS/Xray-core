@@ -37,12 +37,12 @@ func NewDoHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 	}
 	state := newDoHDialState()
 	transport := &http2.Transport{
-		TLSClientConfig:            tlsConfig,
-		DisableCompression:         true,
+		TLSClientConfig: tlsConfig,
+		DisableCompression: true,
 		StrictMaxConcurrentStreams: true,
-		IdleConnTimeout:            xnet.ConnIdleTimeout,
-		WriteByteTimeout:           resolverRequestTimeout,
-		MaxHeaderListSize:          16 * 1024,
+		IdleConnTimeout: xnet.ConnIdleTimeout,
+		WriteByteTimeout: resolverRequestTimeout,
+		MaxHeaderListSize: 16 * 1024,
 		DialTLSContext: func(ctx context.Context, network, target string, cfg *tls.Config) (net.Conn, error) {
 			if network != "tcp" || !strings.EqualFold(target, authority) {
 				return nil, fmt.Errorf("DoH dial changed HTTPS origin")
@@ -164,10 +164,10 @@ func exchangeDoH(ctx context.Context, client *http.Client, endpoint string, quer
 
 // HTTP transport dials can outlive the request that starts them.
 type dohDialState struct {
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	wg        sync.WaitGroup
+	ctx context.Context
+	cancel context.CancelFunc
+	mu sync.Mutex
+	wg sync.WaitGroup
 	resources map[io.Closer]struct{}
 }
 
@@ -224,8 +224,8 @@ func (s *dohDialState) Close() {
 type dohTCPConn struct {
 	net.Conn
 	state *dohDialState
-	once  sync.Once
-	err   error
+	once sync.Once
+	err error
 }
 
 func (c *dohTCPConn) Close() error {

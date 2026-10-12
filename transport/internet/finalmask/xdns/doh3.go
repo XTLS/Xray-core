@@ -38,10 +38,10 @@ func NewDoH3Resolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver,
 		TLSClientConfig: tlsConfig,
 		QUICConfig: &quic.Config{
 			HandshakeIdleTimeout: resolverRequestTimeout,
-			MaxIdleTimeout:       xnet.ConnIdleTimeout,
-			MaxIncomingStreams:   -1,
+			MaxIdleTimeout: xnet.ConnIdleTimeout,
+			MaxIncomingStreams: -1,
 		},
-		DisableCompression:     true,
+		DisableCompression: true,
 		MaxResponseHeaderBytes: 16 * 1024,
 		Dial: func(ctx context.Context, target string, cfg *tls.Config, quicConfig *quic.Config) (*quic.Conn, error) {
 			if !strings.EqualFold(target, authority) {
@@ -70,8 +70,8 @@ func NewDoH3Resolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver,
 			}
 			socket := &doh3Socket{
 				packetConn: wrapper.PacketConn,
-				transport:  &quic.Transport{Conn: wrapper.PacketConn},
-				state:      state,
+				transport: &quic.Transport{Conn: wrapper.PacketConn},
+				state: state,
 			}
 			if err := state.add(socket); err != nil {
 				return nil, err
@@ -102,9 +102,9 @@ func NewDoH3Resolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver,
 
 type doh3Socket struct {
 	packetConn net.PacketConn
-	transport  *quic.Transport
-	state      *dohDialState
-	once       sync.Once
+	transport *quic.Transport
+	state *dohDialState
+	once sync.Once
 }
 
 func (s *doh3Socket) Close() error {
