@@ -2,6 +2,7 @@ package base64
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	xbase64 "github.com/xtls/xray-core/common/base64"
@@ -9,17 +10,17 @@ import (
 )
 
 var cmdEncode = &base.Command{
-	UsageLine: "{{.Exec}} base64 encode [-gzip] [file | - | stdin:]",
+	UsageLine: "{{.Exec}} base64 encode [-gzip] [input-file | - | stdin:]",
 	Short:     "Encode as Base64",
 	Long: fmt.Sprintf(`
-Encode a file as Base64 with the %s prefix.
-Omit file or pass "-" or "stdin:" to read stdin. Use -gzip to compress and output %s.
+Encode input-file as Base64 with the %s prefix.
+Omit input-file or pass "-" or "stdin:" to read stdin.
+Use -gzip to compress and output %s.
 
 Examples:
 
-	{{.Exec}} base64 encode data.bin
-	{{.Exec}} base64 encode -gzip data.bin
-	{{.Exec}} base64 encode
+	{{.Exec}} base64 encode input.bin
+	{{.Exec}} base64 encode -gzip input.bin
 `, xbase64.Prefix, xbase64.GzipPrefix),
 }
 
@@ -33,14 +34,23 @@ func executeEncode(cmd *base.Command, args []string) {
 	if len(args) > 1 {
 		cmd.Usage()
 	}
-	data, err := readInput(args)
+
+	var data []byte
+	var err error
+	if len(args) == 0 || args[0] == "-" || args[0] == "stdin:" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(args[0])
+	}
 	if err != nil {
 		base.Fatalf("failed to read input: %s", err)
 	}
+
 	value, err := xbase64.Encode(data, *gzipEnabled)
 	if err != nil {
 		base.Fatalf("failed to encode input: %s", err)
 	}
+
 	if _, err := fmt.Fprintln(os.Stdout, value); err != nil {
 		base.Fatalf("failed to write encoded output: %s", err)
 	}

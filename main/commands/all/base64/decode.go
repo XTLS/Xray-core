@@ -2,6 +2,7 @@ package base64
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -10,17 +11,17 @@ import (
 )
 
 var cmdDecode = &base.Command{
-	UsageLine: "{{.Exec}} base64 decode [-gzip] [file | - | stdin:]",
+	UsageLine: "{{.Exec}} base64 decode [-gzip] [value | - | stdin:] [output-file]",
 	Short:     "Decode Base64",
 	Long: fmt.Sprintf(`
-Decode Base64 from a file; omit file or pass "-" or "stdin:" to read stdin.
-Accepts %s, %s, or no prefix.
-Use -gzip to decompress gzip; %s is decompressed automatically.
+Decode a Base64 value; omit value or pass "-" or "stdin:" to read stdin.
+Write to output-file, or stdout if omitted.
+Accepts %s, %s, or no prefix; gzip is enabled by %s or -gzip.
 
 Examples:
 
-	{{.Exec}} base64 decode encoded.txt
-	{{.Exec}} base64 decode -gzip -
+	{{.Exec}} base64 decode eA== out.bin
+	{{.Exec}} base64 decode -gzip H4sIAAAAAAAC/6sAAIMW3IwBAAAA out.bin
 `, xbase64.Prefix, xbase64.GzipPrefix, xbase64.GzipPrefix),
 }
 
@@ -31,22 +32,37 @@ func init() {
 }
 
 func executeDecode(cmd *base.Command, args []string) {
-	if len(args) > 1 {
+	if len(args) > 2 {
 		cmd.Usage()
 	}
-	input, err := readInput(args)
-	if err != nil {
-		base.Fatalf("failed to read input: %s", err)
+
+	var value string
+	if len(args) == 0 || args[0] == "-" || args[0] == "stdin:" {
+		input, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			base.Fatalf("failed to read input: %s", err)
+		}
+		value = string(input)
+	} else {
+		value = args[0]
 	}
-	value := strings.TrimSpace(string(input))
+
+	value = strings.TrimSpace(value)
 	if *decodeGzipEnabled && !strings.HasPrefix(value, xbase64.GzipPrefix) {
 		value = xbase64.GzipPrefix + strings.TrimPrefix(value, xbase64.Prefix)
 	}
+
 	data, err := xbase64.Decode(value)
 	if err != nil {
 		base.Fatalf("failed to decode input: %s", err)
 	}
-	if _, err := os.Stdout.Write(data); err != nil {
+
+	if len(args) == 2 && args[1] != "-" {
+		err = os.WriteFile(args[1], data, 0o666)
+	} else {
+		_, err = os.Stdout.Write(data)
+	}
+	if err != nil {
 		base.Fatalf("failed to write decoded output: %s", err)
 	}
 }

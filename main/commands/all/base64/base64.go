@@ -1,11 +1,6 @@
 package base64
 
-import (
-	"io"
-	"os"
-
-	"github.com/xtls/xray-core/main/commands/base"
-)
+import "github.com/xtls/xray-core/main/commands/base"
 
 // CmdBase64 holds all Base64 subcommands.
 var CmdBase64 = &base.Command{
@@ -16,11 +11,4 @@ var CmdBase64 = &base.Command{
 		cmdEncode,
 		cmdDecode,
 	},
-}
-
-func readInput(args []string) ([]byte, error) {
-	if len(args) == 0 || args[0] == "-" || args[0] == "stdin:" {
-		return io.ReadAll(os.Stdin)
-	}
-	return os.ReadFile(args[0])
 }
