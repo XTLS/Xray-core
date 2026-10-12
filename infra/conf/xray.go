@@ -344,11 +344,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, err
 	}
 
-	if _, ok := ts.(*masque.ClientConfig); ok {
-		if ms := senderSettings.MultiplexSettings; ms != nil && ms.Enabled {
-			return nil, errors.New(`masque outbound does not support "mux"`)
-		}
-	} else if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.ProtocolName == "masque" {
+	if _, ok := ts.(*masque.ClientConfig); !ok && senderSettings.StreamSettings != nil && senderSettings.StreamSettings.ProtocolName == "masque" {
 		return nil, errors.New("the masque transport can only be used by the masque outbound")
 	}
 

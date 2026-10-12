@@ -127,7 +127,7 @@ func TestHTTP2ServerRoundTrip(t *testing.T) {
 		_, err := io.Copy(w, r.Body)
 		assert.NoError(t, err)
 	})
-	cc, err := newHTTP2ClientConn(serveHTTP2Pipe(t, handler))
+	cc, err := newHTTP2ClientConn(serveHTTP2Pipe(t, handler), http2KeepAlivePeriod)
 	require.NoError(t, err)
 	defer cc.Close()
 
