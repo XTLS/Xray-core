@@ -238,7 +238,7 @@ func TestDoQClosesConnectionOnProtocolErrors(t *testing.T) {
 type doQTrackedPacketConn struct {
 	net.PacketConn
 	closed chan struct{}
-	once sync.Once
+	once   sync.Once
 }
 
 func (c *doQTrackedPacketConn) Close() error {
@@ -318,7 +318,10 @@ func TestDoQCancellationStopsStreamAndNextQueryWorks(t *testing.T) {
 	t.Cleanup(r.Close)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	go func() { _, err := r.(*DoQResolver).exchange(ctx, tlsResolverTestQuery(t, "first.example.", 42)); done <- err }()
+	go func() {
+		_, err := r.(*DoQResolver).exchange(ctx, tlsResolverTestQuery(t, "first.example.", 42))
+		done <- err
+	}()
 	select {
 	case <-started:
 	case <-time.After(time.Second):
