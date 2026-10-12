@@ -883,8 +883,8 @@ func (c *MasqueConfig) Build() (proto.Message, error) {
 		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
 	}
 	if c.Xmux == (XmuxConfig{}) {
-		c.Xmux.MaxConnections.From = 3
-		c.Xmux.MaxConnections.To = 3
+		c.Xmux.MaxConnections.From = 1
+		c.Xmux.MaxConnections.To = 1
 		c.Xmux.HMaxReusableSecs.From = 1800
 		c.Xmux.HMaxReusableSecs.To = 3000
 	}

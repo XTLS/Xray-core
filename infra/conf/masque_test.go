@@ -22,7 +22,7 @@ import (
 func defaultMasqueXmux() *splithttp.XmuxConfig {
 	return &splithttp.XmuxConfig{
 		MaxConcurrency:   &splithttp.RangeConfig{},
-		MaxConnections:   &splithttp.RangeConfig{From: 3, To: 3},
+		MaxConnections:   &splithttp.RangeConfig{From: 1, To: 1},
 		CMaxReuseTimes:   &splithttp.RangeConfig{},
 		HMaxRequestTimes: &splithttp.RangeConfig{},
 		HMaxReusableSecs: &splithttp.RangeConfig{From: 1800, To: 3000},
