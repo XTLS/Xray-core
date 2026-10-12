@@ -15,7 +15,8 @@ func TestDecodeFormats(t *testing.T) {
 	}{
 		{"unprefixed", "eA==", "x"},
 		{"base64", Prefix + "eA==", "x"},
-		{"gzip", compressed, "x"},
+		{"zstd", compressed, "x"},
+		{"zstd raw block", ZstdPrefix + "KLUv/SABCQAAeA==", "x"},
 		{"empty", Prefix, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

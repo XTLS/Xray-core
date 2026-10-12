@@ -1,19 +1,17 @@
 package base64
 
 import (
-	"bytes"
-	"compress/gzip"
 	"encoding/base64"
-	"io"
 	"strings"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/xtls/xray-core/common/errors"
 )
 
-// Decode decodes Base64 text with an optional [Prefix] or [GzipPrefix].
+// Decode decodes Base64 text with an optional [Prefix] or [ZstdPrefix].
 func Decode(value string) ([]byte, error) {
-	value, zip := strings.CutPrefix(value, GzipPrefix)
-	if !zip {
+	value, compressed := strings.CutPrefix(value, ZstdPrefix)
+	if !compressed {
 		value = strings.TrimPrefix(value, Prefix)
 	}
 
@@ -21,18 +19,18 @@ func Decode(value string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("failed to decode base64").Base(err)
 	}
-	if !zip {
+	if !compressed {
 		return data, nil
 	}
 
-	reader, err := gzip.NewReader(bytes.NewReader(data))
+	reader, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
 	if err != nil {
-		return nil, errors.New("failed to decompress gzip").Base(err)
+		return nil, errors.New("failed to decompress zstd").Base(err)
 	}
 	defer reader.Close()
-	data, err = io.ReadAll(reader)
+	data, err = reader.DecodeAll(data, nil)
 	if err != nil {
-		return nil, errors.New("failed to decompress gzip").Base(err)
+		return nil, errors.New("failed to decompress zstd").Base(err)
 	}
 	return data, nil
 }

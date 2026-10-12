@@ -2,11 +2,11 @@ package base64
 
 import (
 	"bytes"
-	"compress/gzip"
 	"encoding/base64"
-	"io"
 	"strings"
 	"testing"
+
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestEncodeFormats(t *testing.T) {
@@ -16,15 +16,16 @@ func TestEncodeFormats(t *testing.T) {
 	}{
 		{"empty", nil},
 		{"bytes", []byte("你好\r\n\x00\xff")},
+		{"multiple blocks", bytes.Repeat([]byte("local value = '你好'\n"), 8192)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, zip := range []bool{false, true} {
+			for _, compress := range []bool{false, true} {
 				prefix := Prefix
-				if zip {
-					prefix = GzipPrefix
+				if compress {
+					prefix = ZstdPrefix
 				}
 				t.Run(prefix, func(t *testing.T) {
-					value, err := Encode(tc.data, zip)
+					value, err := Encode(tc.data, compress)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -37,17 +38,16 @@ func TestEncodeFormats(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if zip {
-						// gzip's XFL byte identifies the compression level we selected.
-						if len(data) < 10 || data[8] != 2 {
-							t.Fatal("gzip output does not use the highest compression level")
+					if compress {
+						if !bytes.HasPrefix(data, []byte{0x28, 0xb5, 0x2f, 0xfd}) {
+							t.Fatal("compressed output is not a zstd frame")
 						}
-						reader, err := gzip.NewReader(bytes.NewReader(data))
+						reader, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
 						if err != nil {
 							t.Fatal(err)
 						}
 						defer reader.Close()
-						data, err = io.ReadAll(reader)
+						data, err = reader.DecodeAll(data, nil)
 						if err != nil {
 							t.Fatal(err)
 						}

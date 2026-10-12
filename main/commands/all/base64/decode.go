@@ -11,21 +11,21 @@ import (
 )
 
 var cmdDecode = &base.Command{
-	UsageLine: "{{.Exec}} base64 decode [-gzip] <value | - | stdin:> [output-file]",
+	UsageLine: "{{.Exec}} base64 decode [-zstd] <value | - | stdin:> [output-file]",
 	Short:     "Decode Base64",
 	Long: fmt.Sprintf(`
 Decode a Base64 value, or pass "-" or "stdin:" to read stdin.
 Write to output-file, or stdout if omitted.
-Accepts %s, %s, or no prefix; gzip is enabled by %s or -gzip.
+Accepts %s, %s, or no prefix; zstd is enabled by %s or -zstd.
 
 Examples:
 
 	{{.Exec}} base64 decode eA== out.bin
-	{{.Exec}} base64 decode -gzip H4sIAAAAAAAC/6sAAIMW3IwBAAAA out.bin
-`, xbase64.Prefix, xbase64.GzipPrefix, xbase64.GzipPrefix),
+	{{.Exec}} base64 decode -zstd KLUv/SABCQAAeA== out.bin
+`, xbase64.Prefix, xbase64.ZstdPrefix, xbase64.ZstdPrefix),
 }
 
-var decodeGzipEnabled = cmdDecode.Flag.Bool("gzip", false, "Decompress the decoded bytes with gzip.")
+var decodeZstdEnabled = cmdDecode.Flag.Bool("zstd", false, "Decompress the decoded bytes with zstd.")
 
 func init() {
 	cmdDecode.Run = executeDecode
@@ -46,8 +46,8 @@ func executeDecode(cmd *base.Command, args []string) {
 	}
 
 	value = strings.TrimSpace(value)
-	if *decodeGzipEnabled && !strings.HasPrefix(value, xbase64.GzipPrefix) {
-		value = xbase64.GzipPrefix + strings.TrimPrefix(value, xbase64.Prefix)
+	if *decodeZstdEnabled && !strings.HasPrefix(value, xbase64.ZstdPrefix) {
+		value = xbase64.ZstdPrefix + strings.TrimPrefix(value, xbase64.Prefix)
 	}
 
 	data, err := xbase64.Decode(value)

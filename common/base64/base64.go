@@ -2,5 +2,5 @@ package base64
 
 const (
 	Prefix     = "base64:"
-	GzipPrefix = "base64+gzip:"
+	ZstdPrefix = "base64+zstd:"
 )
