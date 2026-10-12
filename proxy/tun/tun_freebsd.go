@@ -13,9 +13,6 @@ import (
 	"unsafe"
 
 	"golang.zx2c4.com/wireguard/tun"
-	"gvisor.dev/gvisor/pkg/buffer"
-	"gvisor.dev/gvisor/pkg/tcpip"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"golang.org/x/net/route"
 	"golang.org/x/sys/unix"
@@ -59,10 +56,7 @@ type escapeRoute struct {
 	gateway netip.Addr
 }
 
-var (
-	_ Tun          = (*FreeBSDTun)(nil)
-	_ GVisorDevice = (*FreeBSDTun)(nil)
-)
+var _ Tun = (*FreeBSDTun)(nil)
 
 // NewTun builds new tun interface handler
 func NewTun(options *Config) (Tun, error) {
@@ -242,82 +236,48 @@ func (t *FreeBSDTun) Index() (int, error) {
 	return t.tunIndex, nil
 }
 
-// WritePacket implements GVisorDevice method to write one packet to the tun device
-func (t *FreeBSDTun) WritePacket(packet *stack.PacketBuffer) tcpip.Error {
-	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU) + tunHeaderSize)
-	defer b.Release()
-
-	// prepare Unix specific packet header
-	_, _ = b.Write([]byte{0x0, 0x0, 0x0, 0x0})
-	// copy the bytes of slices that compose the packet into the allocated buffer
-	for _, packetElement := range packet.AsSlices() {
-		_, _ = b.Write(packetElement)
-	}
-	// fill Unix specific header from the first raw packet byte, that we can access now
+// WritePacket implements Tun: the two parts are copied behind the header that the system wants in front of a packet
+func (t *FreeBSDTun) WritePacket(header, payload []byte) error {
 	var family byte
-	switch b.Byte(4) >> 4 {
+	switch header[0] >> 4 {
 	case 4:
 		family = unix.AF_INET
 	case 6:
 		family = unix.AF_INET6
 	default:
-		return &tcpip.ErrAborted{}
+		return xerrors.New("not an ip packet")
 	}
-	b.SetByte(3, family)
 
-	if _, err := t.device.File().Write(b.Bytes()); err != nil {
-		if errors.Is(err, unix.EAGAIN) {
-			return &tcpip.ErrWouldBlock{}
-		}
-		return &tcpip.ErrAborted{}
-	}
-	return nil
+	// request memory to write from reusable buffer pool
+	b := buf.NewWithSize(int32(tunHeaderSize + len(header) + len(payload)))
+	defer b.Release()
+	b.Extend(tunHeaderSize)[3] = family
+	_, _ = b.Write(header)
+	_, _ = b.Write(payload)
+
+	_, err := t.device.File().Write(b.Bytes())
+	return err
 }
 
-// ReadPacket implements GVisorDevice method to read one packet from the tun device
-// It is expected that the method will not block, rather return ErrQueueEmpty when there is nothing on the line,
-// which will make the stack call Wait which should implement desired push-back
-func (t *FreeBSDTun) ReadPacket() (byte, *stack.PacketBuffer, error) {
-	// request memory to write from reusable buffer pool
-	b := buf.NewWithSize(int32(t.options.MTU) + tunHeaderSize)
-
-	// read the bytes to the interface file
-	n, err := b.ReadFrom(t.device.File())
-	if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
-		b.Release()
-		return 0, nil, ErrQueueEmpty
+// ReadPacket implements Tun: it reads into b, the packet follows the header that the system puts in front of it
+func (t *FreeBSDTun) ReadPacket(b []byte) ([]byte, error) {
+	for {
+		n, err := t.device.File().Read(b)
+		if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) || err == nil && n <= tunHeaderSize {
+			// nothing on the line, or an empty packet
+			t.Wait()
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		return b[tunHeaderSize:n], nil
 	}
-	if err != nil {
-		b.Release()
-		return 0, nil, err
-	}
-
-	// discard empty or sub-empty packets
-	if n <= tunHeaderSize {
-		b.Release()
-		return 0, nil, ErrQueueEmpty
-	}
-
-	// network protocol version from first byte of the raw packet, the one that follows Unix specific header
-	version := b.Byte(tunHeaderSize) >> 4
-	packetBuffer := buffer.MakeWithData(b.BytesFrom(tunHeaderSize))
-	return version, stack.NewPacketBuffer(stack.PacketBufferOptions{
-		Payload:           packetBuffer,
-		IsForwardedPacket: true,
-		OnRelease: func() {
-			b.Release()
-		},
-	}), nil
 }
 
 // Wait some cpu cycles
 func (t *FreeBSDTun) Wait() {
 	procyield(1)
-}
-
-func (t *FreeBSDTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return &LinkEndpoint{deviceMTU: t.options.MTU, device: t}, nil
 }
 
 const (
