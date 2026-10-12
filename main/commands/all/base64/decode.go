@@ -11,10 +11,10 @@ import (
 )
 
 var cmdDecode = &base.Command{
-	UsageLine: "{{.Exec}} base64 decode [-gzip] [value | - | stdin:] [output-file]",
+	UsageLine: "{{.Exec}} base64 decode [-gzip] <value | - | stdin:> [output-file]",
 	Short:     "Decode Base64",
 	Long: fmt.Sprintf(`
-Decode a Base64 value; omit value or pass "-" or "stdin:" to read stdin.
+Decode a Base64 value, or pass "-" or "stdin:" to read stdin.
 Write to output-file, or stdout if omitted.
 Accepts %s, %s, or no prefix; gzip is enabled by %s or -gzip.
 
@@ -32,19 +32,17 @@ func init() {
 }
 
 func executeDecode(cmd *base.Command, args []string) {
-	if len(args) > 2 {
+	if len(args) == 0 || len(args) > 2 {
 		cmd.Usage()
 	}
 
-	var value string
-	if len(args) == 0 || args[0] == "-" || args[0] == "stdin:" {
+	value := args[0]
+	if value == "-" || value == "stdin:" {
 		input, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			base.Fatalf("failed to read input: %s", err)
 		}
 		value = string(input)
-	} else {
-		value = args[0]
 	}
 
 	value = strings.TrimSpace(value)
