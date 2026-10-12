@@ -2,15 +2,12 @@ package lua
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/base64"
-	"io"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/base64"
 	"github.com/xtls/xray-core/common/platform"
 	glua "github.com/yuin/gopher-lua"
 	"github.com/yuin/gopher-lua/parse"
@@ -30,10 +27,8 @@ func Compile(script string) (*Program, error) {
 	var code []byte
 	var err error
 	name := "[inline]"
-	if s, ok := strings.CutPrefix(script, "base64+gzip:"); ok {
-		code, err = decode(s, true)
-	} else if s, ok := strings.CutPrefix(script, "base64:"); ok {
-		code, err = decode(s, false)
+	if strings.HasPrefix(script, base64.GzipPrefix) || strings.HasPrefix(script, base64.Prefix) {
+		code, err = base64.Decode(script)
 	} else if name, err = platform.ResolveLuaFile(script); err == nil {
 		code, err = os.ReadFile(name)
 	}
@@ -50,27 +45,6 @@ func Compile(script string) (*Program, error) {
 		return nil, err
 	}
 	return &Program{proto: proto}, nil
-}
-
-func decode(s string, zip bool) ([]byte, error) {
-	code, err := base64.StdEncoding.DecodeString(s)
-	if err != nil {
-		return nil, errors.New("failed to decode base64").Base(err)
-	}
-	if !zip {
-		return code, nil
-	}
-
-	reader, err := gzip.NewReader(bytes.NewReader(code))
-	if err != nil {
-		return nil, errors.New("failed to decompress gzip").Base(err)
-	}
-	defer reader.Close()
-	code, err = io.ReadAll(reader)
-	if err != nil {
-		return nil, errors.New("failed to decompress gzip").Base(err)
-	}
-	return code, nil
 }
 
 // NewState creates a state, runs register, executes the program under ctx, and

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	xbase64 "github.com/xtls/xray-core/common/base64"
 	glua "github.com/yuin/gopher-lua"
 )
 
@@ -101,9 +102,9 @@ func TestCompileInline(t *testing.T) {
 		name, script string
 		value        glua.LValue
 	}{
-		{"base64", "base64:" + base64.StdEncoding.EncodeToString([]byte(code)), glua.LString("你好")},
-		{"base64+gzip", "base64+gzip:" + base64.StdEncoding.EncodeToString(compressSource(t, code)), glua.LString("你好")},
-		{"empty base64", "base64:", glua.LNil},
+		{"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code)), glua.LString("你好")},
+		{"base64+gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code)), glua.LString("你好")},
+		{"empty base64", xbase64.Prefix, glua.LNil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			program, err := Compile(tc.script)
@@ -133,10 +134,10 @@ func TestCompileRejectsInvalidInline(t *testing.T) {
 		wantErr      error
 		wantMessage  string
 	}{
-		{"base64", "base64:%", base64.CorruptInputError(0), "failed to decode base64"},
-		{"gzip base64", "base64+gzip:%", base64.CorruptInputError(0), "failed to decode base64"},
-		{"gzip header", "base64+gzip:" + base64.StdEncoding.EncodeToString([]byte("value = 'uncompressed'")), gzip.ErrHeader, "failed to decompress gzip"},
-		{"gzip checksum", "base64+gzip:" + base64.StdEncoding.EncodeToString(corrupt), gzip.ErrChecksum, "failed to decompress gzip"},
+		{"base64", xbase64.Prefix + "%", base64.CorruptInputError(0), "failed to decode base64"},
+		{"gzip base64", xbase64.GzipPrefix + "%", base64.CorruptInputError(0), "failed to decode base64"},
+		{"gzip header", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString([]byte("value = 'uncompressed'")), gzip.ErrHeader, "failed to decompress gzip"},
+		{"gzip checksum", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(corrupt), gzip.ErrChecksum, "failed to decompress gzip"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			program, err := Compile(tc.script)
@@ -155,7 +156,7 @@ func TestCompileInlineDiagnostics(t *testing.T) {
 		{"function broken(", true},
 		{`error("initialization failed")`, false},
 	} {
-		program, err := Compile("base64:" + base64.StdEncoding.EncodeToString([]byte(tc.code)))
+		program, err := Compile(xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(tc.code)))
 		if tc.compileError {
 			if program != nil || err == nil {
 				t.Fatalf("Compile = %v, %v; want nil program and syntax error", program, err)
