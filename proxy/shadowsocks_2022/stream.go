@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -626,9 +627,16 @@ func InitServerStream(conn net.Conn, method *CipherMethod, psk, saltSlice []byte
 	return reader, reqHeader, nil
 }
 
+// TransportTCP copies a server stream through the dispatch link. Request EOF
+// closes only the link writer so the peer can still send its final response.
+// On return, including errors and cancellation, it interrupts both link sides
+// and finishes its activity timer. The caller owns the underlying connection.
 func TransportTCP(ctx context.Context, sessionPolicy policy.Session, reader buf.Reader, writer buf.Writer, link *transport.Link) error {
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	defer timer.SetTimeout(0)
+	defer common.Interrupt(link.Reader)
+	defer common.Interrupt(link.Writer)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
 	requestDone := func() error {
@@ -644,6 +652,6 @@ func TransportTCP(ctx context.Context, sessionPolicy policy.Session, reader buf.
 		return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
 	}
 
-	responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
-	return task.Run(ctx, requestDone, responseDoneAndCloseWriter)
+	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
+	return task.Run(ctx, requestDoneAndCloseWriter, responseDone)
 }

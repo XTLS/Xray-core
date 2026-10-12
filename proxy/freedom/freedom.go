@@ -419,6 +419,11 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err := buf.Copy(input, writer, buf.UpdateActivity(timer)); err != nil {
 			return errors.New("failed to process request").Base(err)
 		}
+		if destination.Network == net.Network_TCP {
+			if closer, ok := stat.TryUnwrapStatsConn(conn).(interface{ CloseWrite() error }); ok {
+				return closer.CloseWrite()
+			}
+		}
 
 		return nil
 	}
