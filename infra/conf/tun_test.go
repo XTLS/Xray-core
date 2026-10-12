@@ -3,6 +3,7 @@ package conf_test
 import (
 	"encoding/json"
 	"runtime"
+	"slices"
 	"testing"
 
 	. "github.com/xtls/xray-core/infra/conf"
@@ -43,18 +44,18 @@ func TestTunConfigAutoSystem(t *testing.T) {
 func TestTunConfigAutoSystemNeeds(t *testing.T) {
 	for _, c := range []struct {
 		input string
-		goos  string // where it is rejected
+		goos  []string // where it is rejected
 	}{
-		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["misconfigtun"]}`, "windows"},
-		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["misconfigtun"]}`, ""},
-		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["dns"]}`, "windows"},
-		{`{"name": "xray0", "autoSystemDnsToGateway": true}`, "linux"},
+		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["misconfigtun"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["misconfigtun"]}`, nil},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["dns"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemDnsToGateway": true}`, []string{"linux", "freebsd"}},
 	} {
 		config := new(TunConfig)
 		if err := json.Unmarshal([]byte(c.input), config); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := config.Build(); (err != nil) != (runtime.GOOS == c.goos) {
+		if _, err := config.Build(); (err != nil) != slices.Contains(c.goos, runtime.GOOS) {
 			t.Errorf("%s on %s: error = %v", c.input, runtime.GOOS, err)
 		}
 	}

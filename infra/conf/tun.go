@@ -59,7 +59,7 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		if slices.Contains(config.AutoSystemWfpBlockLeak, "dns") && len(v.DNS) == 0 {
 			return nil, errors.New(`autoSystemWfpBlockLeak "dns" needs dns to be set`)
 		}
-	case "linux":
+	case "linux", "freebsd":
 		if v.AutoSystemDnsToGateway && len(v.Gateway) == 0 {
 			return nil, errors.New("autoSystemDnsToGateway needs gateway to be set")
 		}
