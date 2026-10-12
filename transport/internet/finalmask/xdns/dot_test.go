@@ -22,11 +22,11 @@ import (
 func tlsResolverTestQuery(t *testing.T, name string, id uint16) []byte {
 	t.Helper()
 	m := dnsmessage.Message{
-		Header:    dnsmessage.Header{ID: id, RecursionDesired: true},
+		Header: dnsmessage.Header{ID: id, RecursionDesired: true},
 		Questions: []dnsmessage.Question{{Name: dnsmessage.MustNewName(name), Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET}},
 		Additionals: []dnsmessage.Resource{{
 			Header: dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName("."), Type: dnsmessage.TypeOPT, Class: 4096},
-			Body:   &dnsmessage.OPTResource{Options: []dnsmessage.Option{{Code: 12, Data: []byte{0, 255, 1}}}},
+			Body: &dnsmessage.OPTResource{Options: []dnsmessage.Option{{Code: 12, Data: []byte{0, 255, 1}}}},
 		}},
 	}
 	p, err := m.Pack()
@@ -44,7 +44,7 @@ func tlsResolverTestResponse(query []byte) ([]byte, error) {
 	m.Header.Response = true
 	m.Answers = []dnsmessage.Resource{{
 		Header: dnsmessage.ResourceHeader{Name: m.Questions[0].Name, Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET},
-		Body:   &dnsmessage.TXTResource{TXT: []string{string([]byte{0, 255, 1, 128})}},
+		Body: &dnsmessage.TXTResource{TXT: []string{string([]byte{0, 255, 1, 128})}},
 	}}
 	return m.Pack()
 }
@@ -465,7 +465,7 @@ func TestDoTRejectsUntrustedCertificateAndWrongALPN(t *testing.T) {
 type doTResetAfterCloseConn struct {
 	net.Conn
 	closed chan struct{}
-	once   sync.Once
+	once sync.Once
 }
 
 func (c *doTResetAfterCloseConn) Close() error {

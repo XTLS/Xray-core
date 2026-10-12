@@ -12,6 +12,7 @@ import (
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
 	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
@@ -38,10 +39,10 @@ func NewDoH3Resolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver,
 		TLSClientConfig: tlsConfig,
 		QUICConfig: &quic.Config{
 			HandshakeIdleTimeout: resolverRequestTimeout,
-			MaxIdleTimeout:       xnet.ConnIdleTimeout,
-			MaxIncomingStreams:   -1,
+			MaxIdleTimeout: xnet.ConnIdleTimeout,
+			MaxIncomingStreams: -1,
 		},
-		DisableCompression:     true,
+		DisableCompression: true,
 		MaxResponseHeaderBytes: 16 * 1024,
 		Dial: func(ctx context.Context, target string, cfg *tls.Config, quicConfig *quic.Config) (*quic.Conn, error) {
 			if !strings.EqualFold(target, authority) {
@@ -64,14 +65,16 @@ func NewDoH3Resolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver,
 				return nil, fmt.Errorf("DoH3 dialer must return a PacketConnWrapper")
 			}
 			remote, ok := wrapper.RemoteAddr().(*net.UDPAddr)
-			if !ok || remote == nil || remote.IP.To16() == nil || remote.Port <= 0 || remote.Port > 65535 {
+			_, virtual := wrapper.PacketConn.(*internet.FakePacketConn)
+			zeroPeer := virtual && remote != nil && remote.IP.IsUnspecified() && remote.Port == 0
+			if !ok || remote == nil || remote.IP.To16() == nil || (remote.Port <= 0 && !zeroPeer) || remote.Port > 65535 {
 				_ = wrapper.Close()
 				return nil, fmt.Errorf("DoH3 dialer returned an invalid UDP peer")
 			}
 			socket := &doh3Socket{
 				packetConn: wrapper.PacketConn,
-				transport:  &quic.Transport{Conn: wrapper.PacketConn},
-				state:      state,
+				transport: &quic.Transport{Conn: wrapper.PacketConn},
+				state: state,
 			}
 			if err := state.add(socket); err != nil {
 				return nil, err
@@ -102,9 +105,9 @@ func NewDoH3Resolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver,
 
 type doh3Socket struct {
 	packetConn net.PacketConn
-	transport  *quic.Transport
-	state      *dohDialState
-	once       sync.Once
+	transport *quic.Transport
+	state *dohDialState
+	once sync.Once
 }
 
 func (s *doh3Socket) Close() error {

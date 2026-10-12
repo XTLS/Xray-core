@@ -180,6 +180,11 @@ type SystemDialerAdapter interface {
 	Dial(network string, address string) (net.Conn, error)
 }
 
+// SystemDialerContextAdapter is an optional cancelable extension to a legacy adapter.
+type SystemDialerContextAdapter interface {
+	DialContext(context.Context, string, string) (net.Conn, error)
+}
+
 type SimpleSystemDialer struct {
 	adapter SystemDialerAdapter
 }
@@ -191,6 +196,9 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 }
 
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
+	if adapter, ok := v.adapter.(SystemDialerContextAdapter); ok {
+		return adapter.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
+	}
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
 }
 

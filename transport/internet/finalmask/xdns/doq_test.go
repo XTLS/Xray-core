@@ -15,6 +15,7 @@ import (
 
 	"github.com/apernet/quic-go"
 	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	xtls "github.com/xtls/xray-core/transport/internet/tls"
 	"golang.org/x/net/dns/dnsmessage"
@@ -238,7 +239,7 @@ func TestDoQClosesConnectionOnProtocolErrors(t *testing.T) {
 type doQTrackedPacketConn struct {
 	net.PacketConn
 	closed chan struct{}
-	once   sync.Once
+	once sync.Once
 }
 
 func (c *doQTrackedPacketConn) Close() error {
@@ -318,10 +319,7 @@ func TestDoQCancellationStopsStreamAndNextQueryWorks(t *testing.T) {
 	t.Cleanup(r.Close)
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
-	go func() {
-		_, err := r.(*DoQResolver).exchange(ctx, tlsResolverTestQuery(t, "first.example.", 42))
-		done <- err
-	}()
+	go func() { _, err := r.(*DoQResolver).exchange(ctx, tlsResolverTestQuery(t, "first.example.", 42)); done <- err }()
 	select {
 	case <-started:
 	case <-time.After(time.Second):
@@ -573,13 +571,9 @@ func TestDoQDNSFailureDoesNotCloseConnection(t *testing.T) {
 	var count atomic.Int32
 	config, dialer := startDoQServer(t, func(ctx context.Context, conn *quic.Conn, stream *quic.Stream) {
 		query, err := tlsResolverReadFrame(stream)
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		var extra [1]byte
-		if _, err := io.ReadFull(stream, extra[:]); err != io.EOF {
-			return
-		}
+		if _, err := io.ReadFull(stream, extra[:]); err != io.EOF { return }
 		connections <- conn
 		response, _ := tlsResolverTestResponse(query)
 		if count.Add(1) == 1 {
@@ -593,30 +587,74 @@ func TestDoQDNSFailureDoesNotCloseConnection(t *testing.T) {
 		stream.Close()
 	})
 	r, err := NewDoQResolver(config, dialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(r.Close)
-	if err := r.Send(tlsResolverTestQuery(t, "failed.example.", 99)); err != nil {
-		t.Fatal(err)
-	}
+	if err := r.Send(tlsResolverTestQuery(t, "failed.example.", 99)); err != nil { t.Fatal(err) }
 	var failed dnsmessage.Message
-	if err := failed.Unpack(tlsResolverRead(t, r)); err != nil {
-		t.Fatal(err)
-	}
-	if failed.ID != 99 || failed.RCode != dnsmessage.RCodeServerFailure {
-		t.Fatal("DoQ discarded or changed the DNS failure response")
-	}
+	if err := failed.Unpack(tlsResolverRead(t, r)); err != nil { t.Fatal(err) }
+	if failed.ID != 99 || failed.RCode != dnsmessage.RCodeServerFailure { t.Fatal("DoQ discarded or changed the DNS failure response") }
 	query := tlsResolverTestQuery(t, "next.example.", 100)
-	if err := r.Send(query); err != nil {
-		t.Fatal(err)
-	}
+	if err := r.Send(query); err != nil { t.Fatal(err) }
 	want, _ := tlsResolverTestResponse(query)
-	if !bytes.Equal(tlsResolverRead(t, r), want) {
-		t.Fatal("subsequent DNS query failed")
-	}
+	if !bytes.Equal(tlsResolverRead(t, r), want) { t.Fatal("subsequent DNS query failed") }
 	first, second := <-connections, <-connections
-	if first != second {
-		t.Fatal("ordinary DNS failure closed the shared DoQ connection")
+	if first != second { t.Fatal("ordinary DNS failure closed the shared DoQ connection") }
+}
+
+type doQVirtualPeerConn struct {
+	net.Conn
+	closed chan struct{}
+	once sync.Once
+}
+
+func (c *doQVirtualPeerConn) RemoteAddr() net.Addr { return &net.TCPAddr{IP: net.IPv4zero} }
+func (c *doQVirtualPeerConn) Close() error {
+	var err error
+	c.once.Do(func() { err = c.Conn.Close(); close(c.closed) })
+	return err
+}
+
+func TestDoQProductionFakePacketConnVirtualPeer(t *testing.T) {
+	config, _ := startDoQGateway(t, func(ctx context.Context, query []byte) ([]byte, error) { return tlsResolverTestResponse(query) })
+	opened := make(chan *doQVirtualPeerConn, 1)
+	dialer := &finalmask.Dialer{DialUDPContext: func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+		conn, err := (&net.Dialer{}).DialContext(ctx, "udp", dest.NetAddr())
+		if err != nil { return nil, err }
+		virtual := &doQVirtualPeerConn{Conn: conn, closed: make(chan struct{})}
+		opened <- virtual
+		return &xnet.PacketConnWrapper{PacketConn: &internet.FakePacketConn{Conn: virtual}, Dest: &net.UDPAddr{IP: net.IPv4zero}}, nil
+	}}
+	r, err := NewDoQResolver(config, dialer)
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(r.Close)
+	query := tlsResolverTestQuery(t, "virtual.example.", 42)
+	if err := r.Send(query); err != nil { t.Fatal(err) }
+	want, _ := tlsResolverTestResponse(query)
+	if !bytes.Equal(tlsResolverRead(t, r), want) { t.Fatal("production FakePacketConn lost DoQ payload or transaction ID") }
+	virtual := <-opened
+	r.Close()
+	select {
+	case <-virtual.closed:
+	default: t.Fatal("DoQ Close left virtual outbound connection open")
+	}
+}
+
+func TestDoQRejectsZeroPortOnRealPacketConn(t *testing.T) {
+	packet, err := net.ListenPacket("udp4", "127.0.0.1:0")
+	if err != nil { t.Fatal(err) }
+	tracked := &doQTrackedPacketConn{PacketConn: packet, closed: make(chan struct{})}
+	t.Cleanup(func() { tracked.Close() })
+	dialer := &finalmask.Dialer{DialUDPContext: func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+		return &xnet.PacketConnWrapper{PacketConn: tracked, Dest: &net.UDPAddr{IP: net.IPv4zero}}, nil
+	}}
+	r, err := NewDoQResolver(&ResolverProto{Addr: "resolver.test:853", Bootstrap: "127.0.0.1"}, dialer)
+	if err != nil { t.Fatal(err) }
+	t.Cleanup(r.Close)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	if _, err := r.(*DoQResolver).exchange(ctx, tlsResolverTestQuery(t, "bad-peer.example.", 42)); err == nil { t.Fatal("real UDP socket accepted a zero-port peer") }
+	select {
+	case <-tracked.closed:
+	default: t.Fatal("invalid UDP peer leaked socket")
 	}
 }

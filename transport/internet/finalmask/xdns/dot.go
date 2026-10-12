@@ -16,35 +16,35 @@ import (
 
 type doTResult struct {
 	message []byte
-	err     error
+	err error
 }
 
 type doTPending struct {
-	query      []byte
+	query []byte
 	originalID uint16
-	result     chan doTResult
+	result chan doTResult
 }
 
 type doTConnection struct {
-	conn      *tls.Conn
+	conn *tls.Conn
 	writeGate chan struct{}
-	done      chan struct{}
-	pending   map[uint16]*doTPending
-	nextID    uint32
-	closed    bool
-	err       error
+	done chan struct{}
+	pending map[uint16]*doTPending
+	nextID uint32
+	closed bool
+	err error
 }
 
 type DoTResolver struct {
 	*requestResolver
-	dest            xnet.Destination
-	dialer          *finalmask.Dialer
-	tlsConfig       *tls.Config
-	dialGate        chan struct{}
-	mu              sync.Mutex
-	conn            *doTConnection
+	dest xnet.Destination
+	dialer *finalmask.Dialer
+	tlsConfig *tls.Config
+	dialGate chan struct{}
+	mu sync.Mutex
+	conn *doTConnection
 	transportClosed bool
-	wg              sync.WaitGroup
+	wg sync.WaitGroup
 }
 
 func NewDoTResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, error) {

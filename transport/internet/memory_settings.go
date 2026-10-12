@@ -96,6 +96,10 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 			return ListenSystemPacket(ctx, addr, mss.SocketSettings)
 		}
 		mss.FinalMask = finalmask.NewFinalMask(tcpMasks, udpMasks, dialTCP, listen, dialUDP, listenPacket)
+		if dialer, ok := effectiveSystemDialer.(*SimpleSystemDialer); ok {
+			_, supportsContext := dialer.adapter.(SystemDialerContextAdapter)
+			mss.FinalMask.DisableContextDial = !supportsContext
+		}
 	}
 
 	if s != nil && s.QuicParams != nil {

@@ -6,6 +6,10 @@ on:
     paths:
       - 'transport/internet/finalmask/**'
       - 'transport/internet/system_dialer*'
+      - 'transport/internet/dialer*'
+      - 'transport/internet/memory_settings.go'
+      - 'app/dns/**'
+      - 'features/dns/**'
       - 'infra/conf/transport_finalmask*'
       - '.github/workflows/xdns.yml'
   workflow_dispatch:
@@ -39,7 +43,7 @@ jobs:
       - name: Format source and publish generated changes
         run: |
           go run ./infra/vformat/main.go -mode format -pwd ./
-          git add transport/internet/finalmask transport/internet/system_dialer.go transport/internet/system_dialer_test.go infra/conf/transport_finalmask.go infra/conf/transport_finalmask_test.go
+          git add transport/internet/finalmask transport/internet/system_dialer.go transport/internet/system_dialer_test.go transport/internet/dialer.go transport/internet/dialer_context_test.go transport/internet/memory_settings.go app/dns features/dns infra/conf/transport_finalmask.go infra/conf/transport_finalmask_test.go
           if ! git diff --cached --quiet; then
             git config user.name HPPC114514
             git config user.email hppc_114514@outlook.com
@@ -54,6 +58,6 @@ jobs:
           done
           go test -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask ./infra/conf
       - name: Race tests
-        run: go test -race -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask ./transport/internet
+        run: go test -race -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask ./transport/internet ./app/dns ./features/dns/localdns
       - name: DNS, TLS, and HTTP transport regressions
-        run: go test -timeout 10m ./app/dns ./transport/internet/tls ./transport/internet/splithttp
+        run: go test -timeout 10m ./app/dns ./features/dns/localdns ./transport/internet/tls ./transport/internet/splithttp

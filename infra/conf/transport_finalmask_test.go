@@ -26,13 +26,9 @@ func TestXDNSResolverEncryptedAddresses(t *testing.T) {
 	} {
 		t.Run(tc.input, func(t *testing.T) {
 			built, err := (&XDNS{Resolvers: []XDNSResolver{{Addrs: []string{tc.input}}}}).Build()
-			if err != nil {
-				t.Fatal(err)
-			}
+			if err != nil { t.Fatal(err) }
 			r := built.(*xdns.Config).Resolvers[0]
-			if r.Type != tc.protocol || r.Addr != tc.address {
-				t.Fatalf("got %s %s; want %s %s", r.Type, r.Addr, tc.protocol, tc.address)
-			}
+			if r.Type != tc.protocol || r.Addr != tc.address { t.Fatalf("got %s %s; want %s %s", r.Type, r.Addr, tc.protocol, tc.address) }
 		})
 	}
 }
@@ -40,9 +36,7 @@ func TestXDNSResolverEncryptedAddresses(t *testing.T) {
 func buildXDNSMaskJSON(document string) (*xdns.Config, error) {
 	settings := json.RawMessage(document)
 	built, err := (&Mask{Type: "xdns", Settings: &settings}).Build(false)
-	if err != nil {
-		return nil, err
-	}
+	if err != nil { return nil, err }
 	return built.(*xdns.Config), nil
 }
 
@@ -56,23 +50,17 @@ func TestXDNSJSONRejectsInvalidResolverAddress(t *testing.T) {
 		"tcp://resolver.test/path", "udp://resolver.test?query=x", "tls://resolver.test/", "quic://resolver.test?", "quic://resolver.test:53",
 	} {
 		t.Run(address, func(t *testing.T) {
-			document := `{"resolvers":[{"addrs":[` + strconv.Quote(address) + `]}]}`
+			document := `{"resolvers":[{"addrs":[`+strconv.Quote(address)+`]}]}`
 			var decoded XDNS
-			if err := json.Unmarshal([]byte(document), &decoded); err != nil {
-				t.Fatal(err)
-			}
-			if decoded.Resolvers[0].Addrs[0] != address {
-				t.Fatal("JSON decode changed original resolver address")
-			}
-			if _, err := buildXDNSMaskJSON(document); err == nil {
-				t.Fatal("JSON/Build accepted an invalid resolver address")
-			}
+			if err := json.Unmarshal([]byte(document), &decoded); err != nil { t.Fatal(err) }
+			if decoded.Resolvers[0].Addrs[0] != address { t.Fatal("JSON decode changed original resolver address") }
+			if _, err := buildXDNSMaskJSON(document); err == nil { t.Fatal("JSON/Build accepted an invalid resolver address") }
 		})
 	}
 }
 
 func TestXDNSJSONResolverAddresses(t *testing.T) {
-	for _, tc := range []struct{ address, protocol, want string }{
+	for _, tc := range []struct { address, protocol, want string }{
 		{"127.0.0.1", "udp", "127.0.0.1:53"},
 		{"[::1]", "udp", "[::1]:53"},
 		{"udp://resolver.test:5353", "udp", "resolver.test:5353"},
@@ -92,14 +80,10 @@ func TestXDNSJSONResolverAddresses(t *testing.T) {
 		{"https://resolver.test/?token=a", "https", "https://resolver.test:443/?token=a"},
 	} {
 		t.Run(tc.address, func(t *testing.T) {
-			document := `{"resolvers":[{"addrs":[` + strconv.Quote(tc.address) + `]}]}`
+			document := `{"resolvers":[{"addrs":[`+strconv.Quote(tc.address)+`]}]}`
 			built, err := buildXDNSMaskJSON(document)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(built.Resolvers) != 1 || built.Resolvers[0].Type != tc.protocol || built.Resolvers[0].Addr != tc.want {
-				t.Fatalf("JSON/Build changed resolver semantics: %+v", built.Resolvers)
-			}
+			if err != nil { t.Fatal(err) }
+			if len(built.Resolvers) != 1 || built.Resolvers[0].Type != tc.protocol || built.Resolvers[0].Addr != tc.want { t.Fatalf("JSON/Build changed resolver semantics: %+v", built.Resolvers) }
 		})
 	}
 }
@@ -123,30 +107,24 @@ func TestXDNSJSONRejectsResolverOptions(t *testing.T) {
 		`{"addrs":["https://resolver.test"],"certificates":[{"usage":"verify","certificate":["not PEM"]}]}`,
 	} {
 		t.Run(group, func(t *testing.T) {
-			if _, err := buildXDNSMaskJSON(`{"resolvers":[` + group + `]}`); err == nil {
-				t.Fatal("JSON/Build accepted invalid resolver options")
-			}
+			if _, err := buildXDNSMaskJSON(`{"resolvers":[`+group+`]}`); err == nil { t.Fatal("JSON/Build accepted invalid resolver options") }
 		})
 	}
 }
 
 func TestXDNSJSONResolverIdentityAndBootstrap(t *testing.T) {
-	for _, tc := range []struct{ address, identity, bootstrap string }{
+	for _, tc := range []struct { address, identity, bootstrap string }{
 		{"tls://127.0.0.1", "resolver.test", "::1"},
 		{"quic://127.0.0.1", "resolver.test", "127.0.0.2"},
 		{"https://resolver.test", "RESOLVER.TEST", "127.0.0.1"},
 		{"https+h3://[::1]", "::1", "127.0.0.1"},
 	} {
 		t.Run(tc.address, func(t *testing.T) {
-			document := `{"resolvers":[{"addrs":[` + strconv.Quote(tc.address) + `],"serverName":` + strconv.Quote(tc.identity) + `,"bootstrap":` + strconv.Quote(tc.bootstrap) + `}]}`
+			document := `{"resolvers":[{"addrs":[`+strconv.Quote(tc.address)+`],"serverName":`+strconv.Quote(tc.identity)+`,"bootstrap":`+strconv.Quote(tc.bootstrap)+`}]}`
 			built, err := buildXDNSMaskJSON(document)
-			if err != nil {
-				t.Fatal(err)
-			}
+			if err != nil { t.Fatal(err) }
 			r := built.Resolvers[0]
-			if r.ServerName != tc.identity || r.Bootstrap != tc.bootstrap {
-				t.Fatalf("identity/bootstrap were changed: %+v", r)
-			}
+			if r.ServerName != tc.identity || r.Bootstrap != tc.bootstrap { t.Fatalf("identity/bootstrap were changed: %+v", r) }
 		})
 	}
 }
@@ -156,14 +134,10 @@ func xdnsTestResolverWireFields(t *testing.T, wire []byte) map[protowire.Number]
 	fields := make(map[protowire.Number][]byte)
 	for len(wire) != 0 {
 		number, typ, n := protowire.ConsumeTag(wire)
-		if n < 0 || typ != protowire.BytesType {
-			t.Fatal("invalid resolver protobuf field")
-		}
+		if n < 0 || typ != protowire.BytesType { t.Fatal("invalid resolver protobuf field") }
 		wire = wire[n:]
 		value, n := protowire.ConsumeBytes(wire)
-		if n < 0 {
-			t.Fatal("invalid resolver protobuf value")
-		}
+		if n < 0 { t.Fatal("invalid resolver protobuf value") }
 		fields[number] = value
 		wire = wire[n:]
 	}
@@ -171,29 +145,18 @@ func xdnsTestResolverWireFields(t *testing.T, wire []byte) map[protowire.Number]
 }
 
 func TestXDNSResolverLegacyProtoCompatibility(t *testing.T) {
-	for _, tc := range []struct {
-		protocol string
-		wire     []byte
-	}{
+	for _, tc := range []struct { protocol string; wire []byte }{
 		{"udp", []byte("\x0a\x03udp\x12\x0c127.0.0.1:53")},
 		{"tcp", []byte("\x0a\x03tcp\x12\x0c127.0.0.1:53")},
 	} {
 		t.Run(tc.protocol, func(t *testing.T) {
 			var decoded xdns.ResolverProto
-			if err := proto.Unmarshal(tc.wire, &decoded); err != nil {
-				t.Fatal(err)
-			}
-			if decoded.Type != tc.protocol || decoded.Addr != "127.0.0.1:53" || decoded.ServerName != "" || decoded.Bootstrap != "" || len(decoded.Certificates) != 0 {
-				t.Fatalf("old field 1/2 wire data changed: %+v", &decoded)
-			}
+			if err := proto.Unmarshal(tc.wire, &decoded); err != nil { t.Fatal(err) }
+			if decoded.Type != tc.protocol || decoded.Addr != "127.0.0.1:53" || decoded.ServerName != "" || decoded.Bootstrap != "" || len(decoded.Certificates) != 0 { t.Fatalf("old field 1/2 wire data changed: %+v", &decoded) }
 			encoded, err := proto.Marshal(&decoded)
-			if err != nil {
-				t.Fatal(err)
-			}
+			if err != nil { t.Fatal(err) }
 			fields := xdnsTestResolverWireFields(t, encoded)
-			if string(fields[1]) != tc.protocol || string(fields[2]) != "127.0.0.1:53" {
-				t.Fatal("old protobuf field numbers changed")
-			}
+			if string(fields[1]) != tc.protocol || string(fields[2]) != "127.0.0.1:53" { t.Fatal("old protobuf field numbers changed") }
 		})
 	}
 }
@@ -204,67 +167,39 @@ func TestXDNSJSONProtoRoundTrip(t *testing.T) {
 	document, err := json.Marshal(&XDNS{
 		Domains: []XDNSDomain{{Names: []string{"tunnel.example"}, LenLimit: 255, LabelLimit: 63, Types: []int32{16}, Edns0: 1232}},
 		Resolvers: []XDNSResolver{{
-			Addrs:      []string{"https+h3://resolver.test/custom%2Fpath?token=a%2Fb&x=1&x=2"},
+			Addrs: []string{"https+h3://resolver.test/custom%2Fpath?token=a%2Fb&x=1&x=2"},
 			ServerName: "resolver.test", Bootstrap: "127.0.0.1",
 			Certificates: []*TLSCertConfig{{Usage: "verify", CertStr: strings.Split(strings.TrimSpace(string(rootPEM)), "\n")}},
 		}},
 		ExtraPoll: 2,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	built, err := buildXDNSMaskJSON(string(document))
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	encoded, err := proto.Marshal(built)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	var decoded xdns.Config
-	if err := proto.Unmarshal(encoded, &decoded); err != nil {
-		t.Fatal(err)
-	}
-	if decoded.ExtraPoll != 2 || len(decoded.Domains) != 1 || decoded.Domains[0].Name != "tunnel.example" || decoded.Domains[0].Edns0 != 1232 || len(decoded.Resolvers) != 1 {
-		t.Fatalf("config proto round trip lost fields: %+v", &decoded)
-	}
+	if err := proto.Unmarshal(encoded, &decoded); err != nil { t.Fatal(err) }
+	if decoded.ExtraPoll != 2 || len(decoded.Domains) != 1 || decoded.Domains[0].Name != "tunnel.example" || decoded.Domains[0].Edns0 != 1232 || len(decoded.Resolvers) != 1 { t.Fatalf("config proto round trip lost fields: %+v", &decoded) }
 	r := decoded.Resolvers[0]
 	const wantURL = "https://resolver.test:443/custom%2Fpath?token=a%2Fb&x=1&x=2"
-	if r.Type != "https+h3" || r.Addr != wantURL || r.ServerName != "resolver.test" || r.Bootstrap != "127.0.0.1" {
-		t.Fatalf("resolver proto round trip lost fields: %+v", r)
-	}
-	if len(r.Certificates) != 1 || r.Certificates[0].Usage != xtls.Certificate_AUTHORITY_VERIFY || !bytes.Equal(r.Certificates[0].Certificate, bytes.TrimSpace(rootPEM)) {
-		t.Fatal("proto round trip lost certificate root or verify usage")
-	}
+	if r.Type != "https+h3" || r.Addr != wantURL || r.ServerName != "resolver.test" || r.Bootstrap != "127.0.0.1" { t.Fatalf("resolver proto round trip lost fields: %+v", r) }
+	if len(r.Certificates) != 1 || r.Certificates[0].Usage != xtls.Certificate_AUTHORITY_VERIFY || !bytes.Equal(r.Certificates[0].Certificate, bytes.TrimSpace(rootPEM)) { t.Fatal("proto round trip lost certificate root or verify usage") }
 	resolverWire, err := proto.Marshal(r)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	fields := xdnsTestResolverWireFields(t, resolverWire)
-	if string(fields[1]) != "https+h3" || string(fields[2]) != wantURL || string(fields[3]) != "resolver.test" || string(fields[4]) != "127.0.0.1" {
-		t.Fatal("resolver protobuf field numbers 1-4 changed")
-	}
+	if string(fields[1]) != "https+h3" || string(fields[2]) != wantURL || string(fields[3]) != "resolver.test" || string(fields[4]) != "127.0.0.1" { t.Fatal("resolver protobuf field numbers 1-4 changed") }
 	var root xtls.Certificate
-	if err := proto.Unmarshal(fields[5], &root); err != nil {
-		t.Fatal(err)
-	}
-	if root.Usage != xtls.Certificate_AUTHORITY_VERIFY || !bytes.Equal(root.Certificate, bytes.TrimSpace(rootPEM)) {
-		t.Fatal("certificate protobuf field 5 changed")
-	}
+	if err := proto.Unmarshal(fields[5], &root); err != nil { t.Fatal(err) }
+	if root.Usage != xtls.Certificate_AUTHORITY_VERIFY || !bytes.Equal(root.Certificate, bytes.TrimSpace(rootPEM)) { t.Fatal("certificate protobuf field 5 changed") }
 	for _, usage := range []string{"encipherment", "issue", "unknown"} {
 		t.Run(usage, func(t *testing.T) {
 			var input XDNS
-			if err := json.Unmarshal(document, &input); err != nil {
-				t.Fatal(err)
-			}
+			if err := json.Unmarshal(document, &input); err != nil { t.Fatal(err) }
 			input.Resolvers[0].Certificates[0].Usage = usage
 			invalidJSON, err := json.Marshal(&input)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := buildXDNSMaskJSON(string(invalidJSON)); err == nil {
-				t.Fatal("resolver certificate accepted a non-verify usage")
-			}
+			if err != nil { t.Fatal(err) }
+			if _, err := buildXDNSMaskJSON(string(invalidJSON)); err == nil { t.Fatal("resolver certificate accepted a non-verify usage") }
 		})
 	}
 }

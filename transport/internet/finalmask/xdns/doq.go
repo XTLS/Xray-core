@@ -11,20 +11,21 @@ import (
 
 	"github.com/apernet/quic-go"
 	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
 const (
 	doQProtocolErrorCode quic.ApplicationErrorCode = 2
-	doQRequestCancelled  quic.StreamErrorCode      = 3
+	doQRequestCancelled quic.StreamErrorCode = 3
 )
 
 type doQConnection struct {
-	conn      *quic.Conn
+	conn *quic.Conn
 	transport *quic.Transport
-	packet    net.PacketConn
-	once      sync.Once
+	packet net.PacketConn
+	once sync.Once
 }
 
 func (c *doQConnection) close(code quic.ApplicationErrorCode, reason string) {
@@ -40,14 +41,14 @@ func (c *doQConnection) close(code quic.ApplicationErrorCode, reason string) {
 
 type DoQResolver struct {
 	*requestResolver
-	dest            xnet.Destination
-	dialer          *finalmask.Dialer
-	tlsConfig       *tls.Config
-	dialGate        chan struct{}
-	mu              sync.Mutex
-	conn            *doQConnection
+	dest xnet.Destination
+	dialer *finalmask.Dialer
+	tlsConfig *tls.Config
+	dialGate chan struct{}
+	mu sync.Mutex
+	conn *doQConnection
 	transportClosed bool
-	wg              sync.WaitGroup
+	wg sync.WaitGroup
 }
 
 func NewDoQResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
@@ -117,10 +118,15 @@ func (r *DoQResolver) connection(ctx context.Context) (*doQConnection, error) {
 		wrapper.Close()
 		return nil, errors.New("DoQ UDP dialer returned no UDP destination")
 	}
+	_, virtual := wrapper.PacketConn.(*internet.FakePacketConn)
+	if remote.IP.To16() == nil || remote.Port < 0 || remote.Port > 65535 || remote.Port == 0 && !(virtual && remote.IP.IsUnspecified()) {
+		wrapper.Close()
+		return nil, errors.New("DoQ UDP dialer returned an invalid peer")
+	}
 	c := &doQConnection{packet: wrapper.PacketConn, transport: &quic.Transport{Conn: wrapper.PacketConn}}
 	c.conn, err = c.transport.Dial(ctx, remote, r.tlsConfig.Clone(), &quic.Config{
-		HandshakeIdleTimeout:  resolverRequestTimeout,
-		MaxIncomingStreams:    -1,
+		HandshakeIdleTimeout: resolverRequestTimeout,
+		MaxIncomingStreams: -1,
 		MaxIncomingUniStreams: -1,
 	})
 	if err != nil {
@@ -244,7 +250,7 @@ func (r *DoQResolver) exchange(ctx context.Context, query []byte) ([]byte, error
 	return response, nil
 }
 
-type doQProtocolError struct{ message string }
+type doQProtocolError struct { message string }
 
 func (e *doQProtocolError) Error() string { return e.message }
 

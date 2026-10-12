@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"context"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -16,6 +17,8 @@ const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
 	pool *xlua.Pool
+	ctx context.Context
+	cancel context.CancelFunc
 }
 
 func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
@@ -24,7 +27,8 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 		return nil, err
 	}
 
-	pool, err := xlua.NewPool(server.ctx, scriptExecutionTimeout, program.NewStateFactory(
+	ctx, cancel := context.WithCancel(server.ctx)
+	pool, err := xlua.NewPool(ctx, scriptExecutionTimeout, program.NewStateFactory(
 		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
@@ -38,25 +42,38 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 			return nil
 		}))
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
 	errors.LogInfo(server.ctx, "DNS script initialized from ", path)
-	return &scriptEngine{pool: pool}, nil
+	return &scriptEngine{pool: pool, ctx: ctx, cancel: cancel}, nil
 }
 
 func (e *scriptEngine) close() {
+	e.cancel()
 	e.pool.Close()
 }
 
 func (e *scriptEngine) query(domain string, option dns.IPOption) (ips []net.IP, ttl uint32, queryErr error) {
-	if err := e.pool.WithState(nil, 0, func(L *lua.LState) error {
+	return e.queryContext(nil, domain, option)
+}
+
+func (e *scriptEngine) queryContext(ctx context.Context, domain string, option dns.IPOption) (ips []net.IP, ttl uint32, queryErr error) {
+	if ctx == nil { ctx = e.ctx }
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(e.ctx, cancel)
+	defer func() { stop(); cancel() }()
+	if err := ctx.Err(); err != nil { return nil, 0, err }
+	err := e.pool.WithState(ctx, 0, func(L *lua.LState) error {
 		if err := callLuaQuery(L, domain, option); err != nil {
 			return err
 		}
 		ips, ttl, queryErr = readLuaQueryResult(L)
 		return nil
-	}); err != nil {
+	})
+	if contextErr := ctx.Err(); contextErr != nil { return nil, 0, contextErr }
+	if err != nil {
 		return nil, 0, err
 	}
 	return ips, ttl, queryErr

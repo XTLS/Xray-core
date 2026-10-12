@@ -23,10 +23,8 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-type (
-	httpResolverTestFactory func(*ResolverProto, *finalmask.Dialer) (Resolver, error)
-	httpResolverTestGateway func(*testing.T, http.Handler) (string, *ResolverProto, *finalmask.Dialer)
-)
+type httpResolverTestFactory func(*ResolverProto, *finalmask.Dialer) (Resolver, error)
+type httpResolverTestGateway func(*testing.T, http.Handler) (string, *ResolverProto, *finalmask.Dialer)
 
 func startDoHTestGateway(t *testing.T, handler http.Handler) (string, *ResolverProto, *finalmask.Dialer) {
 	t.Helper()
@@ -57,11 +55,11 @@ func startDoHTestGateway(t *testing.T, handler http.Handler) (string, *ResolverP
 func httpTestQuery(t *testing.T, id uint16, name string) []byte {
 	t.Helper()
 	msg := dnsmessage.Message{
-		Header:    dnsmessage.Header{ID: id, RecursionDesired: true},
+		Header: dnsmessage.Header{ID: id, RecursionDesired: true},
 		Questions: []dnsmessage.Question{{Name: dnsmessage.MustNewName(name), Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET}},
 		Additionals: []dnsmessage.Resource{{
 			Header: dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName("."), Type: dnsmessage.TypeOPT, Class: 1232},
-			Body:   &dnsmessage.OPTResource{Options: []dnsmessage.Option{{Code: 65001, Data: []byte{0, 255, 1, 128}}}},
+			Body: &dnsmessage.OPTResource{Options: []dnsmessage.Option{{Code: 65001, Data: []byte{0, 255, 1, 128}}}},
 		}},
 	}
 	wire, err := msg.Pack()
@@ -81,7 +79,7 @@ func httpTestResponse(t *testing.T, query []byte) []byte {
 	msg.Header.Response = true
 	msg.Answers = []dnsmessage.Resource{{
 		Header: dnsmessage.ResourceHeader{Name: msg.Questions[0].Name, Type: dnsmessage.TypeTXT, Class: dnsmessage.ClassINET, TTL: 60},
-		Body:   &dnsmessage.TXTResource{TXT: []string{"\x00\xff\x01\x80wire", "second"}},
+		Body: &dnsmessage.TXTResource{TXT: []string{"\x00\xff\x01\x80wire", "second"}},
 	}}
 	wire, err := msg.Pack()
 	if err != nil {
@@ -92,10 +90,7 @@ func httpTestResponse(t *testing.T, query []byte) []byte {
 
 func httpTestRead(t *testing.T, resolver Resolver) []byte {
 	t.Helper()
-	type result struct {
-		p   []byte
-		err error
-	}
+	type result struct { p []byte; err error }
 	ch := make(chan result, 1)
 	go func() {
 		p := make([]byte, 4096)
@@ -145,16 +140,10 @@ func testHTTPResolverWire(t *testing.T, factory httpResolverTestFactory, gateway
 	var dials atomic.Int32
 	if proto == 2 {
 		dial := dialer.DialTCPContext
-		dialer.DialTCPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
-			dials.Add(1)
-			return dial(ctx, dest)
-		}
+		dialer.DialTCPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) { dials.Add(1); return dial(ctx, dest) }
 	} else {
 		dial := dialer.DialUDPContext
-		dialer.DialUDPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
-			dials.Add(1)
-			return dial(ctx, dest)
-		}
+		dialer.DialUDPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) { dials.Add(1); return dial(ctx, dest) }
 	}
 	resolver, err := factory(config, dialer)
 	if err != nil {
@@ -175,9 +164,7 @@ func testHTTPResolverWire(t *testing.T, factory httpResolverTestFactory, gateway
 	}
 }
 
-func TestDoHWireAndReuse(t *testing.T) {
-	testHTTPResolverWire(t, NewDoHResolver, startDoHTestGateway, 2)
-}
+func TestDoHWireAndReuse(t *testing.T) { testHTTPResolverWire(t, NewDoHResolver, startDoHTestGateway, 2) }
 
 func testHTTPResolverClose(t *testing.T, factory httpResolverTestFactory, gateway httpResolverTestGateway) {
 	t.Helper()
@@ -192,47 +179,34 @@ func testHTTPResolverClose(t *testing.T, factory httpResolverTestFactory, gatewa
 		close(canceled)
 	}))
 	resolver, err := factory(config, dialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(resolver.Close)
-	if err := resolver.Send(httpTestQuery(t, 9, "slow.example.")); err != nil {
-		t.Fatal(err)
-	}
+	if err := resolver.Send(httpTestQuery(t, 9, "slow.example.")); err != nil { t.Fatal(err) }
 	select {
 	case <-started:
-	case <-time.After(3 * time.Second):
-		t.Fatal("HTTP request did not start")
+	case <-time.After(3 * time.Second): t.Fatal("HTTP request did not start")
 	}
 	closed := make(chan struct{})
 	go func() { resolver.Close(); resolver.Close(); close(closed) }()
 	select {
 	case <-closed:
-	case <-time.After(time.Second):
-		t.Fatal("Close blocked on response body")
+	case <-time.After(time.Second): t.Fatal("Close blocked on response body")
 	}
 	select {
 	case <-canceled:
-	case <-time.After(time.Second):
-		t.Fatal("Close did not cancel HTTP stream")
+	case <-time.After(time.Second): t.Fatal("Close did not cancel HTTP stream")
 	}
-	if err := resolver.Send(httpTestQuery(t, 10, "closed.example.")); !errors.Is(err, io.ErrClosedPipe) {
-		t.Fatalf("Send after Close: %v", err)
-	}
-	if _, err := resolver.Read(make([]byte, 4096)); !errors.Is(err, io.ErrClosedPipe) {
-		t.Fatalf("Read after Close: %v", err)
-	}
+	if err := resolver.Send(httpTestQuery(t, 10, "closed.example.")); !errors.Is(err, io.ErrClosedPipe) { t.Fatalf("Send after Close: %v", err) }
+	if _, err := resolver.Read(make([]byte, 4096)); !errors.Is(err, io.ErrClosedPipe) { t.Fatalf("Read after Close: %v", err) }
 }
 
-func TestDoHCloseCancelsBody(t *testing.T) {
-	testHTTPResolverClose(t, NewDoHResolver, startDoHTestGateway)
-}
+func TestDoHCloseCancelsBody(t *testing.T) { testHTTPResolverClose(t, NewDoHResolver, startDoHTestGateway) }
 
 func testHTTPResolverCloseDial(t *testing.T, factory httpResolverTestFactory, h3 bool) {
 	t.Helper()
 	started := make(chan struct{})
 	canceled := make(chan struct{})
-	block := func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+	block := func(ctx context.Context, dest xnet.Destination) (net.Conn,error) {
 		close(started)
 		<-ctx.Done()
 		close(canceled)
@@ -240,36 +214,16 @@ func testHTTPResolverCloseDial(t *testing.T, factory httpResolverTestFactory, h3
 	}
 	config := &ResolverProto{Type: "https", Addr: "https://resolver.test/dns-query", Bootstrap: "127.0.0.1"}
 	dialer := &finalmask.Dialer{DialTCPContext: block}
-	if h3 {
-		config.Type = "https+h3"
-		dialer.DialTCPContext = nil
-		dialer.DialUDPContext = block
-	}
+	if h3 { config.Type = "https+h3"; dialer.DialTCPContext = nil; dialer.DialUDPContext = block }
 	resolver, err := factory(config, dialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(resolver.Close)
-	if err := resolver.Send(httpTestQuery(t, 1, "dial.example.")); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("dial did not start")
-	}
+	if err := resolver.Send(httpTestQuery(t, 1, "dial.example.")); err != nil { t.Fatal(err) }
+	select { case <-started: case <-time.After(time.Second): t.Fatal("dial did not start") }
 	done := make(chan struct{})
 	go func() { resolver.Close(); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("Close did not interrupt dial")
-	}
-	select {
-	case <-canceled:
-	default:
-		t.Fatal("dial still running after Close")
-	}
+	select { case <-done: case <-time.After(time.Second): t.Fatal("Close did not interrupt dial") }
+	select { case <-canceled: default: t.Fatal("dial still running after Close") }
 }
 
 func TestDoHCloseCancelsDial(t *testing.T) { testHTTPResolverCloseDial(t, NewDoHResolver, false) }
@@ -280,56 +234,30 @@ func testHTTPResolverOutOfOrder(t *testing.T, factory httpResolverTestFactory, g
 	release := make(chan struct{})
 	_, config, dialer := gateway(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Error(err)
-			return
-		}
+		if err != nil { t.Error(err); return }
 		var msg dnsmessage.Message
-		if err := msg.Unpack(body); err != nil {
-			t.Error(err)
-			return
-		}
+		if err := msg.Unpack(body); err != nil { t.Error(err); return }
 		if msg.Questions[0].Name.String() == "first.example." {
 			close(firstStarted)
-			select {
-			case <-release:
-			case <-r.Context().Done():
-				return
-			}
+			select { case <-release: case <-r.Context().Done(): return }
 		}
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(httpTestResponse(t, body))
 	}))
 	resolver, err := factory(config, dialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(resolver.Close)
 	first := httpTestQuery(t, 77, "first.example.")
 	second := httpTestQuery(t, 77, "second.example.")
-	if err := resolver.Send(first); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-firstStarted:
-	case <-time.After(3 * time.Second):
-		t.Fatal("first request did not start")
-	}
-	if err := resolver.Send(second); err != nil {
-		t.Fatal(err)
-	}
-	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, second)) {
-		t.Fatal("out-of-order response associated with wrong query")
-	}
+	if err := resolver.Send(first); err != nil { t.Fatal(err) }
+	select { case <-firstStarted: case <-time.After(3*time.Second): t.Fatal("first request did not start") }
+	if err := resolver.Send(second); err != nil { t.Fatal(err) }
+	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, second)) { t.Fatal("out-of-order response associated with wrong query") }
 	close(release)
-	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, first)) {
-		t.Fatal("first response associated with wrong query")
-	}
+	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, first)) { t.Fatal("first response associated with wrong query") }
 }
 
-func TestDoHOutOfOrder(t *testing.T) {
-	testHTTPResolverOutOfOrder(t, NewDoHResolver, startDoHTestGateway)
-}
+func TestDoHOutOfOrder(t *testing.T) { testHTTPResolverOutOfOrder(t, NewDoHResolver, startDoHTestGateway) }
 
 func testHTTPResolverErrors(t *testing.T, factory httpResolverTestFactory, gateway httpResolverTestGateway) {
 	t.Helper()
@@ -345,29 +273,19 @@ func testHTTPResolverErrors(t *testing.T, factory httpResolverTestFactory, gatew
 					return
 				}
 				body, err := io.ReadAll(r.Body)
-				if err != nil {
-					t.Error(err)
-					return
-				}
+				if err != nil { t.Error(err); return }
 				var msg dnsmessage.Message
-				if err := msg.Unpack(body); err != nil {
-					t.Error(err)
-					return
-				}
+				if err := msg.Unpack(body); err != nil { t.Error(err); return }
 				isBad := msg.Questions[0].Name.String() == "bad.example."
 				response := httpTestResponse(t, body)
 				w.Header().Set("Content-Type", "application/dns-message")
 				if isBad {
 					defer close(badServed)
 					switch failure {
-					case "status":
-						w.WriteHeader(http.StatusTooManyRequests)
-					case "media":
-						w.Header().Set("Content-Type", "application/json")
-					case "id":
-						response[1] = 1
-					case "question":
-						response = httpTestResponse(t, httpTestQuery(t, 0, "other.example."))
+					case "status": w.WriteHeader(http.StatusTooManyRequests)
+					case "media": w.Header().Set("Content-Type", "application/json")
+					case "id": response[1] = 1
+					case "question": response = httpTestResponse(t, httpTestQuery(t, 0, "other.example."))
 					case "redirect":
 						w.Header().Set("Location", "https://"+r.Host+"/forward")
 						w.WriteHeader(http.StatusSeeOther)
@@ -376,44 +294,25 @@ func testHTTPResolverErrors(t *testing.T, factory httpResolverTestFactory, gatew
 				_, _ = w.Write(response)
 			}))
 			resolver, err := factory(config, dialer)
-			if err != nil {
-				t.Fatal(err)
-			}
+			if err != nil { t.Fatal(err) }
 			t.Cleanup(resolver.Close)
-			if err := resolver.Send(httpTestQuery(t, 77, "bad.example.")); err != nil {
-				t.Fatal(err)
-			}
-			select {
-			case <-badServed:
-			case <-time.After(3 * time.Second):
-				t.Fatal("bad request did not arrive")
-			}
+			if err := resolver.Send(httpTestQuery(t, 77, "bad.example.")); err != nil { t.Fatal(err) }
+			select { case <-badServed: case <-time.After(3*time.Second): t.Fatal("bad request did not arrive") }
 			good := httpTestQuery(t, 77, "good.example.")
-			if err := resolver.Send(good); err != nil {
-				t.Fatal(err)
-			}
-			if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, good)) {
-				t.Fatal("invalid response delivered or resolver stopped receiving")
-			}
-			if calls.Load() != 2 {
-				t.Fatalf("request was replayed or redirected: %d calls", calls.Load())
-			}
+			if err := resolver.Send(good); err != nil { t.Fatal(err) }
+			if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, good)) { t.Fatal("invalid response delivered or resolver stopped receiving") }
+			if calls.Load() != 2 { t.Fatalf("request was replayed or redirected: %d calls", calls.Load()) }
 		})
 	}
 }
 
-func TestDoHRequestErrorsDoNotStopRead(t *testing.T) {
-	testHTTPResolverErrors(t, NewDoHResolver, startDoHTestGateway)
-}
+func TestDoHRequestErrorsDoNotStopRead(t *testing.T) { testHTTPResolverErrors(t, NewDoHResolver, startDoHTestGateway) }
 
 func TestDoHRejectsEndpoint(t *testing.T) {
 	for _, endpoint := range []string{"http://resolver.test/dns-query", "https:///dns-query", "https://u:p@resolver.test/", "https://resolver.test/#fragment", "https://resolver.test/#", "https://resolver.test:0/", "https://resolver.test:70000/", "https://resolver.test:/"} {
 		t.Run(endpoint, func(t *testing.T) {
-			dialer := &finalmask.Dialer{DialTCPContext: func(context.Context, xnet.Destination) (net.Conn, error) { return nil, io.ErrClosedPipe }}
-			if resolver, err := NewDoHResolver(&ResolverProto{Type: "https", Addr: endpoint}, dialer); err == nil {
-				resolver.Close()
-				t.Fatal("invalid endpoint accepted")
-			}
+			dialer := &finalmask.Dialer{DialTCPContext: func(context.Context, xnet.Destination) (net.Conn,error) { return nil, io.ErrClosedPipe }}
+			if resolver, err := NewDoHResolver(&ResolverProto{Type: "https", Addr: endpoint}, dialer); err == nil { resolver.Close(); t.Fatal("invalid endpoint accepted") }
 		})
 	}
 }
@@ -421,53 +320,30 @@ func TestDoHRejectsEndpoint(t *testing.T) {
 func TestDoHRejectsWrongALPN(t *testing.T) {
 	cert, ca := resolverTestCertificate(t)
 	listener, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(func() { _ = listener.Close() })
 	checked := make(chan struct{})
 	go func() {
 		defer close(checked)
 		conn, err := listener.Accept()
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		defer conn.Close()
-		_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
-		if err := conn.(*tls.Conn).Handshake(); err != nil {
-			return
-		}
-		if n, _ := conn.Read(make([]byte, 1)); n != 0 {
-			t.Error("DoH sent HTTP bytes without negotiating h2")
-		}
+		_ = conn.SetDeadline(time.Now().Add(2*time.Second))
+		if err := conn.(*tls.Conn).Handshake(); err != nil { return }
+		if n, _ := conn.Read(make([]byte, 1)); n != 0 { t.Error("DoH sent HTTP bytes without negotiating h2") }
 	}()
 	_, port, _ := net.SplitHostPort(listener.Addr().String())
-	config := &ResolverProto{Type: "https", Addr: "https://resolver.test:" + port + "/dns-query", Bootstrap: "127.0.0.1", Certificates: []*xtls.Certificate{{Usage: xtls.Certificate_AUTHORITY_VERIFY, Certificate: ca}}}
-	dialer := &finalmask.Dialer{DialTCPContext: func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, "tcp", dest.NetAddr())
-	}}
+	config := &ResolverProto{Type: "https", Addr: "https://resolver.test:"+port+"/dns-query", Bootstrap: "127.0.0.1", Certificates: []*xtls.Certificate{{Usage: xtls.Certificate_AUTHORITY_VERIFY, Certificate: ca}}}
+	dialer := &finalmask.Dialer{DialTCPContext: func(ctx context.Context, dest xnet.Destination) (net.Conn,error) { return (&net.Dialer{}).DialContext(ctx, "tcp", dest.NetAddr()) }}
 	resolver, err := NewDoHResolver(config, dialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(resolver.Close)
-	if err := resolver.Send(httpTestQuery(t, 1, "alpn.example.")); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-checked:
-	case <-time.After(3 * time.Second):
-		t.Fatal("DoH did not finish rejected ALPN handshake")
-	}
+	if err := resolver.Send(httpTestQuery(t, 1, "alpn.example.")); err != nil { t.Fatal(err) }
+	select { case <-checked: case <-time.After(3*time.Second): t.Fatal("DoH did not finish rejected ALPN handshake") }
 	resolver.Close()
 }
 
-type httpTestTrackedConn struct {
-	net.Conn
-	once   sync.Once
-	closed chan struct{}
-}
-
+type httpTestTrackedConn struct { net.Conn; once sync.Once; closed chan struct{} }
 func (c *httpTestTrackedConn) Close() error {
 	var err error
 	c.once.Do(func() { err = c.Conn.Close(); close(c.closed) })
@@ -478,40 +354,21 @@ func TestDoHRejectsCertificate(t *testing.T) {
 	for _, failure := range []string{"untrusted", "hostname"} {
 		t.Run(failure, func(t *testing.T) {
 			var served atomic.Int32
-			_, config, dialer := startDoHTestGateway(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				served.Add(1)
-				w.WriteHeader(http.StatusInternalServerError)
-			}))
-			if failure == "untrusted" {
-				config.Certificates = nil
-			} else {
-				config.Addr = strings.Replace(config.Addr, "resolver.test", "wrong.example", 1)
-			}
+			_, config, dialer := startDoHTestGateway(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { served.Add(1); w.WriteHeader(http.StatusInternalServerError) }))
+			if failure == "untrusted" { config.Certificates = nil } else { config.Addr = strings.Replace(config.Addr, "resolver.test", "wrong.example", 1) }
 			closed := make(chan struct{})
 			dial := dialer.DialTCPContext
-			dialer.DialTCPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+			dialer.DialTCPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn,error) {
 				conn, err := dial(ctx, dest)
-				if err != nil {
-					return nil, err
-				}
+				if err != nil { return nil, err }
 				return &httpTestTrackedConn{Conn: conn, closed: closed}, nil
 			}
 			resolver, err := NewDoHResolver(config, dialer)
-			if err != nil {
-				t.Fatal(err)
-			}
+			if err != nil { t.Fatal(err) }
 			t.Cleanup(resolver.Close)
-			if err := resolver.Send(httpTestQuery(t, 1, "identity.example.")); err != nil {
-				t.Fatal(err)
-			}
-			select {
-			case <-closed:
-			case <-time.After(3 * time.Second):
-				t.Fatal("rejected TLS identity leaked TCP connection")
-			}
-			if served.Load() != 0 {
-				t.Fatal("DoH submitted tunnel query without a verified certificate")
-			}
+			if err := resolver.Send(httpTestQuery(t, 1, "identity.example.")); err != nil { t.Fatal(err) }
+			select { case <-closed: case <-time.After(3*time.Second): t.Fatal("rejected TLS identity leaked TCP connection") }
+			if served.Load() != 0 { t.Fatal("DoH submitted tunnel query without a verified certificate") }
 		})
 	}
 }
@@ -522,10 +379,7 @@ func testHTTPResolverReconnect(t *testing.T, factory httpResolverTestFactory, ga
 	_, config, dialer := gateway(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Error(err)
-			return
-		}
+		if err != nil { t.Error(err); return }
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(httpTestResponse(t, body))
 	}))
@@ -535,11 +389,9 @@ func testHTTPResolverReconnect(t *testing.T, factory httpResolverTestFactory, ga
 	var dials atomic.Int32
 	if proto == 2 {
 		dial := dialer.DialTCPContext
-		dialer.DialTCPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+		dialer.DialTCPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn,error) {
 			conn, err := dial(ctx, dest)
-			if err != nil {
-				return nil, err
-			}
+			if err != nil { return nil, err }
 			if dials.Add(1) == 1 {
 				raw = conn
 				close(created)
@@ -549,11 +401,9 @@ func testHTTPResolverReconnect(t *testing.T, factory httpResolverTestFactory, ga
 		}
 	} else {
 		dial := dialer.DialUDPContext
-		dialer.DialUDPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+		dialer.DialUDPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn,error) {
 			conn, err := dial(ctx, dest)
-			if err != nil {
-				return nil, err
-			}
+			if err != nil { return nil, err }
 			if dials.Add(1) == 1 {
 				wrapper := conn.(*xnet.PacketConnWrapper)
 				raw = wrapper.PacketConn
@@ -564,53 +414,28 @@ func testHTTPResolverReconnect(t *testing.T, factory httpResolverTestFactory, ga
 		}
 	}
 	resolver, err := factory(config, dialer)
-	if err != nil {
-		t.Fatal(err)
-	}
+	if err != nil { t.Fatal(err) }
 	t.Cleanup(resolver.Close)
 	first := httpTestQuery(t, 20, "before.example.")
-	if err := resolver.Send(first); err != nil {
-		t.Fatal(err)
-	}
-	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, first)) {
-		t.Fatal("first exchange failed")
-	}
+	if err := resolver.Send(first); err != nil { t.Fatal(err) }
+	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, first)) { t.Fatal("first exchange failed") }
 	<-created
 	_ = raw.Close()
-	select {
-	case <-closed:
-	case <-time.After(time.Second):
-		t.Fatal("broken connection was not retired")
-	}
+	select { case <-closed: case <-time.After(time.Second): t.Fatal("broken connection was not retired") }
 	second := httpTestQuery(t, 21, "after.example.")
-	if err := resolver.Send(second); err != nil {
-		t.Fatal(err)
-	}
-	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, second)) {
-		t.Fatal("resolver did not recover with a subsequent query")
-	}
-	if dials.Load() != 2 || requests.Load() != 2 {
-		t.Fatalf("reconnect replayed a submitted query: dials=%d requests=%d", dials.Load(), requests.Load())
-	}
+	if err := resolver.Send(second); err != nil { t.Fatal(err) }
+	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, second)) { t.Fatal("resolver did not recover with a subsequent query") }
+	if dials.Load() != 2 || requests.Load() != 2 { t.Fatalf("reconnect replayed a submitted query: dials=%d requests=%d", dials.Load(), requests.Load()) }
 }
 
-func TestDoHReconnectsWithoutReplay(t *testing.T) {
-	testHTTPResolverReconnect(t, NewDoHResolver, startDoHTestGateway, 2)
-}
+func TestDoHReconnectsWithoutReplay(t *testing.T) { testHTTPResolverReconnect(t, NewDoHResolver, startDoHTestGateway, 2) }
 
 func TestDoHResponseValidation(t *testing.T) {
 	query := httpTestQuery(t, 0x1234, "checks.example.")
 	wireQuery := bytes.Clone(query)
 	wireQuery[0], wireQuery[1] = 0, 0
 	valid := httpTestResponse(t, wireQuery)
-	for _, tc := range []struct {
-		name      string
-		status    int
-		media     string
-		body      []byte
-		streaming bool
-		wantError bool
-	}{
+	for _, tc := range []struct { name string; status int; media string; body []byte; streaming bool; wantError bool }{
 		{"ok", 200, "application/dns-message", valid, false, false},
 		{"media-parameters", 200, "Application/DNS-Message; charset=binary", valid, false, false},
 		{"status", 429, "application/dns-message", valid, false, true},
@@ -626,52 +451,37 @@ func TestDoHResponseValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", tc.media)
-				if !tc.streaming {
-					w.Header().Set("Content-Length", strconv.Itoa(len(tc.body)))
-				}
+				if !tc.streaming { w.Header().Set("Content-Length", strconv.Itoa(len(tc.body))) }
 				w.WriteHeader(tc.status)
-				if tc.streaming {
-					w.(http.Flusher).Flush()
-				}
+				if tc.streaming { w.(http.Flusher).Flush() }
 				_, _ = w.Write(tc.body)
 			}))
 			defer server.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			got, err := exchangeDoH(ctx, server.Client(), server.URL, bytes.Clone(query))
-			if (err != nil) != tc.wantError {
-				t.Fatalf("response validation error: %v", err)
-			}
+			if (err != nil) != tc.wantError { t.Fatalf("response validation error: %v", err) }
 			if !tc.wantError {
 				want := bytes.Clone(valid)
 				binary.BigEndian.PutUint16(want[:2], 0x1234)
-				if !bytes.Equal(got, want) {
-					t.Fatal("response ID not restored")
-				}
+				if !bytes.Equal(got, want) { t.Fatal("response ID not restored") }
 			}
 		})
 	}
 }
 
 type httpTestRoundTripper func(*http.Request) (*http.Response, error)
-
 func (f httpTestRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestDoHPostCannotReplayBody(t *testing.T) {
 	query := httpTestQuery(t, 42, "replay.example.")
-	client := &http.Client{Transport: httpTestRoundTripper(func(req *http.Request) (*http.Response, error) {
+	client := &http.Client{Transport: httpTestRoundTripper(func(req *http.Request) (*http.Response,error) {
 		defer req.Body.Close()
-		if req.GetBody != nil {
-			t.Error("POST permits replay of tunnel data")
-		}
-		if req.Header.Get("Cache-Control") != "no-store" {
-			t.Error("request permits local HTTP caching")
-		}
+		if req.GetBody != nil { t.Error("POST permits replay of tunnel data") }
+		if req.Header.Get("Cache-Control") != "no-store" { t.Error("request permits local HTTP caching") }
 		return nil, io.ErrUnexpectedEOF
 	})}
-	if _, err := exchangeDoH(context.Background(), client, "https://resolver.test/dns-query", query); err == nil {
-		t.Fatal("transport failure ignored")
-	}
+	if _, err := exchangeDoH(context.Background(), client, "https://resolver.test/dns-query", query); err == nil { t.Fatal("transport failure ignored") }
 }
 
 func TestDoHBodyDeadline(t *testing.T) {
@@ -689,18 +499,10 @@ func TestDoHBodyDeadline(t *testing.T) {
 	result := make(chan error, 1)
 	query := httpTestQuery(t, 1, "deadline.example.")
 	go func() { _, err := exchangeDoH(ctx, server.Client(), server.URL, query); result <- err }()
-	select {
-	case <-started:
-	case <-time.After(time.Second):
-		t.Fatal("response body did not start")
-	}
+	select { case <-started: case <-time.After(time.Second): t.Fatal("response body did not start") }
 	cancel()
 	select {
-	case err := <-result:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("body ignored request cancellation: %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("body read did not cancel")
+	case err := <-result: if !errors.Is(err, context.Canceled) { t.Fatalf("body ignored request cancellation: %v", err) }
+	case <-time.After(time.Second): t.Fatal("body read did not cancel")
 	}
 }
