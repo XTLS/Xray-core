@@ -2,8 +2,7 @@ package conf_test
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -125,41 +124,7 @@ func TestDNSConfigParsing(t *testing.T) {
 	}
 }
 
-func TestDNSScriptConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("xray.location.confdir", dir)
-	path := filepath.Join(dir, "lookup.lua")
-	if err := os.WriteFile(path, []byte("function HandleDNSQuery(domain, ipv4, ipv6, fake) end"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, tc := range []struct {
-		name      string
-		script    string
-		wantError bool
-	}{
-		{"relative", "lookup.lua", false},
-		{"absolute", path, false},
-		{"missing", "missing.lua", true},
-		{"directory", dir, true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			built, err := (&DNSConfig{Script: tc.script}).Build()
-			if tc.wantError {
-				if err == nil {
-					t.Fatal("Build accepted an invalid script path")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if built.Script != path {
-				t.Fatalf("script path = %q, want %q", built.Script, path)
-			}
-		})
-	}
-
+func TestDNSNameServerID(t *testing.T) {
 	var parsed DNSConfig
 	if err := json.Unmarshal([]byte(`{"servers":[{"id":"primary","address":"1.1.1.1"}]}`), &parsed); err != nil {
 		t.Fatal(err)
@@ -170,5 +135,45 @@ func TestDNSScriptConfig(t *testing.T) {
 	}
 	if len(built.NameServer) != 1 || built.NameServer[0].Id != "primary" {
 		t.Fatalf("nameserver IDs = %v, want primary", built.NameServer)
+	}
+}
+
+func TestDNSScriptConfig(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		input     string
+		wantError string
+	}{
+		{name: "script only", input: `{"script":"script.lua"}`},
+		{name: "compatible fields", input: `{"script":"script.lua","servers":["1.1.1.1",{"id":"primary","address":"8.8.8.8","expectedIPs":["8.8.8.8"],"queryStrategy":"UseIPv4","disableCache":true}],"hosts":{"example.com":"127.0.0.1"},"disableCache":true}`},
+		{name: "disabled options", input: `{"script":"script.lua","disableFallback":false,"disableFallbackIfMatch":false,"enableParallelQuery":false,"servers":[{"address":"1.1.1.1","domains":[],"skipFallback":false,"finalQuery":false}]}`},
+		{name: "domains", input: `{"script":"script.lua","servers":[{"address":"1.1.1.1","domains":["domain:example.com"]}]}`, wantError: "domains"},
+		{name: "skip fallback", input: `{"script":"script.lua","servers":[{"address":"1.1.1.1","skipFallback":true}]}`, wantError: "skipFallback"},
+		{name: "final query", input: `{"script":"script.lua","servers":[{"address":"1.1.1.1","finalQuery":true}]}`, wantError: "finalQuery"},
+		{name: "later server", input: `{"script":"script.lua","servers":["1.1.1.1",{"address":"8.8.8.8","finalQuery":true}]}`, wantError: "server 1"},
+		{name: "disable fallback", input: `{"script":"script.lua","disableFallback":true}`, wantError: "disableFallback"},
+		{name: "disable fallback if match", input: `{"script":"script.lua","disableFallbackIfMatch":true}`, wantError: "disableFallbackIfMatch"},
+		{name: "parallel query", input: `{"script":"script.lua","enableParallelQuery":true}`, wantError: "enableParallelQuery"},
+		{name: "empty script", input: `{"script":"","disableFallback":true,"disableFallbackIfMatch":true,"enableParallelQuery":true,"servers":[{"address":"1.1.1.1","domains":["example.com"],"skipFallback":true,"finalQuery":true}]}`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var config DNSConfig
+			if err := json.Unmarshal([]byte(test.input), &config); err != nil {
+				t.Fatal(err)
+			}
+			built, err := config.Build()
+			if test.wantError != "" {
+				if built != nil || err == nil || !strings.Contains(err.Error(), "DNS script cannot be used with ") || !strings.Contains(err.Error(), test.wantError) {
+					t.Fatalf("Build() = %v, %v; want nil config and script conflict error mentioning %s", built, err, test.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if built.Script != config.Script || len(built.NameServer) != len(config.Servers) {
+				t.Fatalf("Build() did not preserve script or servers: %v", built)
+			}
+		})
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/xtls/xray-core/app/router"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/serial"
 
 	"google.golang.org/protobuf/proto"
@@ -95,13 +94,10 @@ func (c *RouterConfig) getDomainStrategy() router.Config_DomainStrategy {
 func (c *RouterConfig) Build() (*router.Config, error) {
 	config := new(router.Config)
 
-	if c.Script != "" {
-		path, err := platform.ResolveLuaFile(c.Script)
-		if err != nil {
-			return nil, errors.New("failed to resolve routing script").Base(err)
-		}
-		config.Script = path
+	if c.Script != "" && (c.DomainStrategy != nil || len(c.RuleList) > 0) {
+		return nil, errors.New("routing script cannot be used with domainStrategy or rules")
 	}
+	config.Script = c.Script
 
 	config.DomainStrategy = c.getDomainStrategy()
 

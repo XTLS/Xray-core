@@ -2,8 +2,7 @@ package conf_test
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 	_ "unsafe"
@@ -240,36 +239,37 @@ func TestRouterConfig(t *testing.T) {
 }
 
 func TestRouterScriptConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("xray.location.confdir", dir)
-	path := filepath.Join(dir, "route.lua")
-	if err := os.WriteFile(path, []byte("function HandleRoute() end"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, tc := range []struct {
+	for _, test := range []struct {
 		name      string
-		script    string
+		input     string
 		wantError bool
 	}{
-		{"relative", "route.lua", false},
-		{"absolute", path, false},
-		{"missing", "missing.lua", true},
-		{"directory", dir, true},
+		{name: "script only", input: `{"script":"missing.lua"}`},
+		{name: "empty rules", input: `{"script":"missing.lua","rules":[]}`},
+		{name: "balancers", input: `{"script":"missing.lua","balancers":[{"tag":"b1","selector":["direct"]}]}`},
+		{name: "default domain strategy", input: `{"script":"missing.lua","domainStrategy":"AsIs"}`, wantError: true},
+		{name: "IP domain strategy", input: `{"script":"missing.lua","domainStrategy":"IPIfNonMatch"}`, wantError: true},
+		{name: "empty domain strategy", input: `{"script":"missing.lua","domainStrategy":""}`, wantError: true},
+		{name: "rules", input: `{"script":"missing.lua","rules":[{"outboundTag":"direct","domain":["example.com"]}]}`, wantError: true},
+		{name: "empty script", input: `{"script":"","domainStrategy":"IPOnDemand","rules":[{"outboundTag":"direct","domain":["example.com"]}]}`},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			built, err := (&RouterConfig{Script: tc.script}).Build()
-			if tc.wantError {
-				if err == nil {
-					t.Fatal("Build accepted invalid script path")
+		t.Run(test.name, func(t *testing.T) {
+			var config RouterConfig
+			if err := json.Unmarshal([]byte(test.input), &config); err != nil {
+				t.Fatal(err)
+			}
+			built, err := config.Build()
+			if test.wantError {
+				if built != nil || err == nil || !strings.Contains(err.Error(), "routing script cannot be used with domainStrategy or rules") {
+					t.Fatalf("Build() = %v, %v; want nil config and script conflict error", built, err)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			if built.Script != path {
-				t.Fatalf("script path = %q, want %q", built.Script, path)
+			if built.Script != config.Script || len(built.Rule) != len(config.RuleList) || len(built.BalancingRule) != len(config.Balancers) {
+				t.Fatalf("Build() did not preserve script, rules or balancers: %v", built)
 			}
 		})
 	}
