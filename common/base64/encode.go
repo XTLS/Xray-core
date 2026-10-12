@@ -1,26 +1,29 @@
 package base64
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/base64"
 
-	"github.com/klauspost/compress/zstd"
 	"github.com/xtls/xray-core/common/errors"
 )
 
-// Encode returns prefixed Base64 text, optionally compressed with zstd's highest available level.
-func Encode(data []byte, compress bool) (string, error) {
-	if !compress {
+// Encode returns prefixed Base64 text, optionally compressed with gzip at the highest level.
+func Encode(data []byte, zip bool) (string, error) {
+	if !zip {
 		return Prefix + base64.StdEncoding.EncodeToString(data), nil
 	}
 
-	writer, err := zstd.NewWriter(nil,
-		zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(22)),
-		zstd.WithEncoderConcurrency(1),
-		zstd.WithZeroFrames(true),
-	)
+	var buf bytes.Buffer
+	writer, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
 	if err != nil {
-		return "", errors.New("failed to compress zstd").Base(err)
+		return "", errors.New("failed to compress gzip").Base(err)
 	}
-	defer writer.Close()
-	return ZstdPrefix + base64.StdEncoding.EncodeToString(writer.EncodeAll(data, nil)), nil
+	if _, err := writer.Write(data); err != nil {
+		return "", errors.New("failed to compress gzip").Base(err)
+	}
+	if err := writer.Close(); err != nil {
+		return "", errors.New("failed to compress gzip").Base(err)
+	}
+	return GzipPrefix + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }

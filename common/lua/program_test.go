@@ -1,6 +1,8 @@
 package lua
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -9,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/klauspost/compress/zstd"
 	xbase64 "github.com/xtls/xray-core/common/base64"
 	glua "github.com/yuin/gopher-lua"
 )
@@ -84,12 +85,15 @@ func TestNewStateClosesFailedValidation(t *testing.T) {
 
 func compressSource(t *testing.T, code string) []byte {
 	t.Helper()
-	writer, err := zstd.NewWriter(nil, zstd.WithEncoderConcurrency(1), zstd.WithZeroFrames(true))
-	if err != nil {
+	var data bytes.Buffer
+	writer := gzip.NewWriter(&data)
+	if _, err := writer.Write([]byte(code)); err != nil {
 		t.Fatal(err)
 	}
-	defer writer.Close()
-	return writer.EncodeAll([]byte(code), nil)
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return data.Bytes()
 }
 
 func TestCompileInline(t *testing.T) {
@@ -99,9 +103,8 @@ func TestCompileInline(t *testing.T) {
 		value        glua.LValue
 	}{
 		{"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code)), glua.LString("你好")},
-		{"base64+zstd", xbase64.ZstdPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code)), glua.LString("你好")},
+		{"base64+gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code)), glua.LString("你好")},
 		{"empty base64", xbase64.Prefix, glua.LNil},
-		{"empty zstd", xbase64.ZstdPrefix + base64.StdEncoding.EncodeToString(compressSource(t, "")), glua.LNil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			program, err := Compile(tc.script)
@@ -125,16 +128,16 @@ func TestCompileInline(t *testing.T) {
 
 func TestCompileRejectsInvalidInline(t *testing.T) {
 	corrupt := compressSource(t, "value = 1")
-	corrupt[len(corrupt)-1] ^= 0xff
+	corrupt[len(corrupt)-8] ^= 0xff
 	for _, tc := range []struct {
 		name, script string
 		wantErr      error
 		wantMessage  string
 	}{
 		{"base64", xbase64.Prefix + "%", base64.CorruptInputError(0), "failed to decode base64"},
-		{"zstd base64", xbase64.ZstdPrefix + "%", base64.CorruptInputError(0), "failed to decode base64"},
-		{"zstd header", xbase64.ZstdPrefix + base64.StdEncoding.EncodeToString([]byte("value = 'uncompressed'")), zstd.ErrMagicMismatch, "failed to decompress zstd"},
-		{"zstd checksum", xbase64.ZstdPrefix + base64.StdEncoding.EncodeToString(corrupt), zstd.ErrCRCMismatch, "failed to decompress zstd"},
+		{"gzip base64", xbase64.GzipPrefix + "%", base64.CorruptInputError(0), "failed to decode base64"},
+		{"gzip header", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString([]byte("value = 'uncompressed'")), gzip.ErrHeader, "failed to decompress gzip"},
+		{"gzip checksum", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(corrupt), gzip.ErrChecksum, "failed to decompress gzip"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			program, err := Compile(tc.script)

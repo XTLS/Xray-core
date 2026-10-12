@@ -10,21 +10,21 @@ import (
 )
 
 var cmdEncode = &base.Command{
-	UsageLine: "{{.Exec}} base64 encode [-zstd] <input-file | - | stdin:>",
+	UsageLine: "{{.Exec}} base64 encode [-gzip] <input-file | - | stdin:>",
 	Short:     "Encode as Base64",
 	Long: fmt.Sprintf(`
 Encode input-file as Base64 with the %s prefix.
 Pass "-" or "stdin:" to read stdin.
-Use -zstd to compress and output %s.
+Use -gzip to compress and output %s.
 
 Examples:
 
 	{{.Exec}} base64 encode input.bin
-	{{.Exec}} base64 encode -zstd input.bin
-`, xbase64.Prefix, xbase64.ZstdPrefix),
+	{{.Exec}} base64 encode -gzip input.bin
+`, xbase64.Prefix, xbase64.GzipPrefix),
 }
 
-var zstdEnabled = cmdEncode.Flag.Bool("zstd", false, "Compress the input with zstd.")
+var gzipEnabled = cmdEncode.Flag.Bool("gzip", false, "Compress the input with gzip.")
 
 func init() {
 	cmdEncode.Run = executeEncode
@@ -46,7 +46,7 @@ func executeEncode(cmd *base.Command, args []string) {
 		base.Fatalf("failed to read input: %s", err)
 	}
 
-	value, err := xbase64.Encode(data, *zstdEnabled)
+	value, err := xbase64.Encode(data, *gzipEnabled)
 	if err != nil {
 		base.Fatalf("failed to encode input: %s", err)
 	}
