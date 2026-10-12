@@ -31,10 +31,16 @@ func blockSystemTestDNS(t *testing.T) (<-chan struct{}, <-chan struct{}) {
 	release := make(chan struct{})
 	testCtx := t.Context()
 	useSystemTestResolver(t, &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-		select { case started <- struct{}{}: default: }
+		select {
+		case started <- struct{}{}:
+		default:
+		}
 		select {
 		case <-ctx.Done():
-			select { case cancelled <- struct{}{}: default: }
+			select {
+			case cancelled <- struct{}{}:
+			default:
+			}
 			return nil, ctx.Err()
 		case <-release:
 			return nil, errors.New("test DNS stopped")
@@ -61,7 +67,9 @@ func TestDefaultSystemDialerUDPResolutionCancellation(t *testing.T) {
 			done := make(chan error, 1)
 			go func() {
 				conn, err := (&internet.DefaultSystemDialer{}).Dial(ctx, nil, xnet.UDPDestination(xnet.DomainAddress("blocked.xdns-test.invalid"), 853), nil)
-				if conn != nil { conn.Close() }
+				if conn != nil {
+					conn.Close()
+				}
 				done <- err
 			}()
 			select {
@@ -69,10 +77,14 @@ func TestDefaultSystemDialerUDPResolutionCancellation(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("system dial did not enter the configured DNS resolver")
 			}
-			if mode == "cancel" { cancel() }
+			if mode == "cancel" {
+				cancel()
+			}
 			select {
 			case err := <-done:
-				if ctx.Err() == nil || !errors.Is(err, ctx.Err()) { t.Fatalf("cancelled DNS dial returned %v, context %v", err, ctx.Err()) }
+				if ctx.Err() == nil || !errors.Is(err, ctx.Err()) {
+					t.Fatalf("cancelled DNS dial returned %v, context %v", err, ctx.Err())
+				}
 			case <-time.After(time.Second):
 				t.Fatal("UDP hostname lookup ignored request cancellation")
 			}
@@ -88,15 +100,21 @@ func TestDefaultSystemDialerUDPResolutionCancellation(t *testing.T) {
 func TestXDNSCloseCancelsProductionUDPHostnameLookup(t *testing.T) {
 	started, cancelled := blockSystemTestDNS(t)
 	mask := &xdns.Config{
-		Domains: []*xdns.DomainProto{{Name: "tunnel.test", LenLimit: 255, LabelLimit: 63, Types: []int32{16}, Edns0: 4096}},
+		Domains:   []*xdns.DomainProto{{Name: "tunnel.test", LenLimit: 255, LabelLimit: 63, Types: []int32{16}, Edns0: 4096}},
 		Resolvers: []*xdns.ResolverProto{{Type: "quic", Addr: "blocked.xdns-test.invalid:853"}},
 	}
 	settings, err := internet.ToMemoryStreamConfig(&internet.StreamConfig{Udpmasks: []*serial.TypedMessage{serial.ToTypedMessage(mask)}})
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	conn, err := settings.FinalMask.DialUDP(t.Context(), xnet.UDPDestination(xnet.LocalHostIP, 443))
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { conn.Close() })
-	if _, err := conn.Write([]byte("start DNS tunnel lookup")); err != nil { t.Fatal(err) }
+	if _, err := conn.Write([]byte("start DNS tunnel lookup")); err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case <-started:
 	case <-time.After(time.Second):
@@ -106,7 +124,9 @@ func TestXDNSCloseCancelsProductionUDPHostnameLookup(t *testing.T) {
 	go func() { done <- conn.Close() }()
 	select {
 	case err := <-done:
-		if err != nil { t.Fatal(err) }
+		if err != nil {
+			t.Fatal(err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("xdns Close did not cancel the production UDP hostname lookup")
 	}
@@ -120,16 +140,22 @@ func TestXDNSCloseCancelsProductionUDPHostnameLookup(t *testing.T) {
 func serveSystemTestDNS(t *testing.T, ipv4, ipv6 bool) {
 	t.Helper()
 	server, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
 		var packet [512]byte
 		for {
 			n, addr, err := server.ReadFrom(packet[:])
-			if err != nil { return }
+			if err != nil {
+				return
+			}
 			var request dnsmessage.Message
-			if request.Unpack(packet[:n]) != nil { continue }
+			if request.Unpack(packet[:n]) != nil {
+				continue
+			}
 			response := dnsmessage.Message{Header: dnsmessage.Header{ID: request.ID, Response: true, Authoritative: true, RecursionDesired: request.RecursionDesired, RecursionAvailable: true}, Questions: request.Questions}
 			for _, question := range request.Questions {
 				resource := dnsmessage.Resource{Header: dnsmessage.ResourceHeader{Name: question.Name, Type: question.Type, Class: dnsmessage.ClassINET, TTL: 60}}
@@ -137,10 +163,14 @@ func serveSystemTestDNS(t *testing.T, ipv4, ipv6 bool) {
 					resource.Body = &dnsmessage.AResource{A: [4]byte{127, 0, 0, 1}}
 				} else if question.Type == dnsmessage.TypeAAAA && ipv6 {
 					resource.Body = &dnsmessage.AAAAResource{AAAA: [16]byte{15: 1}}
-				} else { continue }
+				} else {
+					continue
+				}
 				response.Answers = append(response.Answers, resource)
 			}
-			if p, err := response.Pack(); err == nil { server.WriteTo(p, addr) }
+			if p, err := response.Pack(); err == nil {
+				server.WriteTo(p, addr)
+			}
 		}
 	}()
 	useSystemTestResolver(t, &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -154,15 +184,23 @@ func TestDefaultSystemDialerUDPAddressSelectionAndSocketControl(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			if mode == "ipv6-only" || mode == "ipv6-literal" {
 				probe, err := net.ListenPacket("udp6", "[::1]:0")
-				if err != nil { t.Skip("IPv6 sockets are unavailable") }
+				if err != nil {
+					t.Skip("IPv6 sockets are unavailable")
+				}
 				probe.Close()
 			}
 			serveSystemTestDNS(t, mode != "ipv6-only", true)
 			destination := xnet.UDPDestination(xnet.DomainAddress("dual.xdns-test.invalid"), 853)
 			want := net.ParseIP("127.0.0.1")
-			if mode == "ipv4-literal" { destination.Address = xnet.LocalHostIP }
-			if mode == "ipv6-only" || mode == "ipv6-literal" { want = net.ParseIP("::1") }
-			if mode == "ipv6-literal" { destination.Address = xnet.LocalHostIPv6 }
+			if mode == "ipv4-literal" {
+				destination.Address = xnet.LocalHostIP
+			}
+			if mode == "ipv6-only" || mode == "ipv6-literal" {
+				want = net.ParseIP("::1")
+			}
+			if mode == "ipv6-literal" {
+				destination.Address = xnet.LocalHostIPv6
+			}
 			var controlled atomic.Bool
 			controllers := internet.Controllers
 			internet.Controllers = append(append([]func(string, string, syscall.RawConn) error(nil), controllers...), func(network, address string, conn syscall.RawConn) error { controlled.Store(true); return nil })
@@ -170,13 +208,21 @@ func TestDefaultSystemDialerUDPAddressSelectionAndSocketControl(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 			defer cancel()
 			conn, err := (&internet.DefaultSystemDialer{}).Dial(ctx, nil, destination, &internet.SocketConfig{})
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			defer conn.Close()
 			remote := conn.RemoteAddr().(*net.UDPAddr)
-			if !remote.IP.Equal(want) || remote.Port != 853 { t.Fatalf("resolved endpoint %v, want %v:853", remote, want) }
+			if !remote.IP.Equal(want) || remote.Port != 853 {
+				t.Fatalf("resolved endpoint %v, want %v:853", remote, want)
+			}
 			local := conn.LocalAddr().(*net.UDPAddr)
-			if (local.IP.To4() != nil) != (want.To4() != nil) { t.Fatalf("local socket family %v differs from destination %v", local, remote) }
-			if !controlled.Load() { t.Fatal("UDP resolution bypassed existing socket control") }
+			if (local.IP.To4() != nil) != (want.To4() != nil) {
+				t.Fatalf("local socket family %v differs from destination %v", local, remote)
+			}
+			if !controlled.Load() {
+				t.Fatal("UDP resolution bypassed existing socket control")
+			}
 		})
 	}
 }
