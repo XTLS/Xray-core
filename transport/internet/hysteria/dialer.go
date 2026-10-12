@@ -297,9 +297,7 @@ func (m *clientManager) clean() {
 			c.clean(force)
 			if force {
 				m.Lock()
-				if m.m[k] == c {
-					delete(m.m, k)
-				}
+				delete(m.m, k)
 				m.Unlock()
 			}
 		}
