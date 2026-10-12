@@ -1,0 +1,53 @@
+name: xdns resolver CI
+
+on:
+  push:
+    branches: [cptdnsv2]
+    paths:
+      - 'transport/internet/finalmask/**'
+      - 'infra/conf/transport_finalmask*'
+      - '.github/workflows/xdns.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: xdns-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/cptdnsv2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Generate xdns configuration
+        run: |
+          curl --fail --location --retry 3 -o "$RUNNER_TEMP/protoc.zip" https://github.com/protocolbuffers/protobuf/releases/download/v33.5/protoc-33.5-linux-x86_64.zip
+          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          "$RUNNER_TEMP/protoc/bin/protoc" -I . --go_out=. --go_opt=paths=source_relative transport/internet/finalmask/xdns/config.proto
+      - name: Format source and publish generated changes
+        run: |
+          go run ./infra/vformat/main.go -mode format -pwd ./
+          git add transport/internet/finalmask infra/conf/transport_finalmask.go infra/conf/transport_finalmask_test.go
+          if ! git diff --cached --quiet; then
+            git config user.name HPPC114514
+            git config user.email hppc_114514@outlook.com
+            git commit -m "chore(xdns): generate configuration and format source"
+            git push origin HEAD:cptdnsv2
+          fi
+      - name: Resolver, finalmask, and configuration tests
+        run: go test -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask ./infra/conf
+      - name: Race tests
+        run: go test -race -timeout 10m ./transport/internet/finalmask/xdns ./transport/internet/finalmask
+      - name: DNS, TLS, and HTTP transport regressions
+        run: go test -timeout 10m ./app/dns ./transport/internet/tls ./transport/internet/splithttp
