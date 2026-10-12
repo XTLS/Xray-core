@@ -36,7 +36,9 @@ func (c *Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, e
 
 // LookupIPContext implements dns.ContextClient.
 func (c *Client) LookupIPContext(ctx context.Context, host string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if err := ctx.Err(); err != nil { return nil, 0, err }
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	var ips []net.IP
 	var err error
 	if len(internet.Controllers) > 0 {
@@ -44,7 +46,9 @@ func (c *Client) LookupIPContext(ctx context.Context, host string, option dns.IP
 	} else {
 		ips, err = stdnet.DefaultResolver.LookupIP(ctx, "ip", host)
 	}
-	if contextErr := ctx.Err(); contextErr != nil { return nil, 0, contextErr }
+	if contextErr := ctx.Err(); contextErr != nil {
+		return nil, 0, contextErr
+	}
 	if err != nil {
 		return nil, 0, err
 	}

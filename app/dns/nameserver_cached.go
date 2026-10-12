@@ -20,7 +20,9 @@ type CachedNameserver interface {
 
 // queryIP is called from dns.Server->queryIPTimeout
 func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if err := ctx.Err(); err != nil { return nil, 0, err }
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	fqdn := Fqdn(domain)
 
 	cache := s.getCacheController()
@@ -56,7 +58,9 @@ func pull(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOpt
 }
 
 func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if err := ctx.Err(); err != nil { return nil, 0, err }
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	key := fqdn
 	switch {
 	case option.IPv4Enable && option.IPv6Enable:
@@ -71,9 +75,12 @@ func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOp
 		return doFetch(ctx, s, fqdn, option), nil
 	})
 	select {
-	case <-ctx.Done(): return nil, 0, ctx.Err()
+	case <-ctx.Done():
+		return nil, 0, ctx.Err()
 	case value := <-results:
-		if err := ctx.Err(); err != nil { return nil, 0, err }
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		ret := value.Val.(result)
 		return ret.ips, ret.ttl, ret.error
 	}

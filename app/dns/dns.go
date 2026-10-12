@@ -254,7 +254,9 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 
 // LookupIPContext implements dns.ContextClient.
 func (s *DNS) LookupIPContext(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if err := ctx.Err(); err != nil { return nil, 0, err }
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	// Normalize the FQDN form query
 	domain = strings.TrimSuffix(domain, ".")
 	if domain == "" {
@@ -409,17 +411,23 @@ func (s *DNS) serialQuery(domain string, option dns.IPOption) ([]net.IP, uint32,
 }
 
 func (s *DNS) serialQueryContext(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if err := ctx.Err(); err != nil { return nil, 0, err }
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	var errs []error
 	for _, client := range s.sortClients(domain) {
-		if err := ctx.Err(); err != nil { return nil, 0, err }
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
 			errors.LogDebug(ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
 			continue
 		}
 
 		ips, ttl, err := client.QueryIP(ctx, domain, option)
-		if contextErr := ctx.Err(); contextErr != nil { return nil, 0, contextErr }
+		if contextErr := ctx.Err(); contextErr != nil {
+			return nil, 0, contextErr
+		}
 
 		if len(ips) > 0 {
 			return ips, ttl, nil
@@ -439,7 +447,9 @@ func (s *DNS) parallelQuery(domain string, option dns.IPOption) ([]net.IP, uint3
 }
 
 func (s *DNS) parallelQueryContext(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if err := ctx.Err(); err != nil { return nil, 0, err }
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	var errs []error
 	clients := s.sortClients(domain)
 
@@ -456,10 +466,13 @@ func (s *DNS) parallelQueryContext(ctx context.Context, domain string, option dn
 	for range clients {
 		var result queryResult
 		select {
-		case <-ctx.Done(): return nil, 0, ctx.Err()
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
 		case result = <-resultsChan:
 		}
-		if err := ctx.Err(); err != nil { return nil, 0, err }
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		results[result.index] = &result
 
 		gi := groupOf[result.index]

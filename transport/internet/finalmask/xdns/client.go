@@ -46,11 +46,11 @@ type xdnsClient struct {
 	resolverSends []atomic.Uint32
 	resolverIndex atomic.Uint32
 
-	readCh  chan packet
-	poolCh  chan struct{}
-	closeCh chan struct{}
-	wg      sync.WaitGroup
-	mu      sync.Mutex
+	readCh    chan packet
+	poolCh    chan struct{}
+	closeCh   chan struct{}
+	wg        sync.WaitGroup
+	mu        sync.Mutex
 	closeOnce sync.Once
 }
 
@@ -208,7 +208,9 @@ func (c *xdnsClient) send(p []byte) error {
 			data[14] = byte(fragN)
 			size := min(len(p), domain.cap-15)
 			copy(data[15:], p[:size])
-			if err := send(data[:15+size]); err != nil { return err }
+			if err := send(data[:15+size]); err != nil {
+				return err
+			}
 			p = p[size:]
 		}
 		return nil
@@ -307,7 +309,10 @@ func (c *xdnsClient) recv(i int) {
 			if c.closed() {
 				return
 			}
-			if err == io.ErrShortBuffer { errors.LogWarningInner(context.Background(), err, "xdns resolver response exceeds receive buffer"); continue }
+			if err == io.ErrShortBuffer {
+				errors.LogWarningInner(context.Background(), err, "xdns resolver response exceeds receive buffer")
+				continue
+			}
 			errors.LogErrorInner(context.Background(), err, "recv err ", i)
 			return
 		}
@@ -347,9 +352,13 @@ func (c *xdnsClient) poll() {
 			return
 		}
 		ticker.Reset(delay)
-		if err := c.send(nil); err != nil { errors.LogWarningInner(context.Background(), err, "xdns poll send failed") }
+		if err := c.send(nil); err != nil {
+			errors.LogWarningInner(context.Background(), err, "xdns poll send failed")
+		}
 		for range c.extraPoll {
-			if err := c.send(nil); err != nil { errors.LogWarningInner(context.Background(), err, "xdns extra poll send failed") }
+			if err := c.send(nil); err != nil {
+				errors.LogWarningInner(context.Background(), err, "xdns extra poll send failed")
+			}
 		}
 	}
 }
@@ -372,9 +381,13 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		errors.LogError(context.Background(), "err size ", len(p))
 		return 0, errors.New("err size")
 	}
-	if err := c.send(p); err != nil { return 0, err }
+	if err := c.send(p); err != nil {
+		return 0, err
+	}
 	for range c.extraPoll {
-		if err := c.send(nil); err != nil { errors.LogWarningInner(context.Background(), err, "xdns extra poll send failed") }
+		if err := c.send(nil); err != nil {
+			errors.LogWarningInner(context.Background(), err, "xdns extra poll send failed")
+		}
 	}
 	return len(p), nil
 }
@@ -382,7 +395,9 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 func (c *xdnsClient) Close() error {
 	c.closeOnce.Do(func() {
 		close(c.closeCh)
-		for i := range c.resolvers { c.resolvers[i].Close() }
+		for i := range c.resolvers {
+			c.resolvers[i].Close()
+		}
 	})
 	c.wg.Wait()
 	return nil

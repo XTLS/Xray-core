@@ -18,14 +18,14 @@ import (
 
 const (
 	doQProtocolErrorCode quic.ApplicationErrorCode = 2
-	doQRequestCancelled quic.StreamErrorCode = 3
+	doQRequestCancelled  quic.StreamErrorCode      = 3
 )
 
 type doQConnection struct {
-	conn *quic.Conn
+	conn      *quic.Conn
 	transport *quic.Transport
-	packet net.PacketConn
-	once sync.Once
+	packet    net.PacketConn
+	once      sync.Once
 }
 
 func (c *doQConnection) close(code quic.ApplicationErrorCode, reason string) {
@@ -41,14 +41,14 @@ func (c *doQConnection) close(code quic.ApplicationErrorCode, reason string) {
 
 type DoQResolver struct {
 	*requestResolver
-	dest xnet.Destination
-	dialer *finalmask.Dialer
-	tlsConfig *tls.Config
-	dialGate chan struct{}
-	mu sync.Mutex
-	conn *doQConnection
+	dest            xnet.Destination
+	dialer          *finalmask.Dialer
+	tlsConfig       *tls.Config
+	dialGate        chan struct{}
+	mu              sync.Mutex
+	conn            *doQConnection
 	transportClosed bool
-	wg sync.WaitGroup
+	wg              sync.WaitGroup
 }
 
 func NewDoQResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
@@ -125,8 +125,8 @@ func (r *DoQResolver) connection(ctx context.Context) (*doQConnection, error) {
 	}
 	c := &doQConnection{packet: wrapper.PacketConn, transport: &quic.Transport{Conn: wrapper.PacketConn}}
 	c.conn, err = c.transport.Dial(ctx, remote, r.tlsConfig.Clone(), &quic.Config{
-		HandshakeIdleTimeout: resolverRequestTimeout,
-		MaxIncomingStreams: -1,
+		HandshakeIdleTimeout:  resolverRequestTimeout,
+		MaxIncomingStreams:    -1,
 		MaxIncomingUniStreams: -1,
 	})
 	if err != nil {
@@ -250,7 +250,7 @@ func (r *DoQResolver) exchange(ctx context.Context, query []byte) ([]byte, error
 	return response, nil
 }
 
-type doQProtocolError struct { message string }
+type doQProtocolError struct{ message string }
 
 func (e *doQProtocolError) Error() string { return e.message }
 

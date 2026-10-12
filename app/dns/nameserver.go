@@ -167,7 +167,9 @@ func (c *Client) Name() string {
 
 // QueryIP sends DNS query to the name server with the client's IP.
 func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
-	if err := ctx.Err(); err != nil { return nil, 0, err }
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	if c.checkSystem {
 		supportIPv4, supportIPv6 := utils.CheckRoutes()
 		option.IPv4Enable = option.IPv4Enable && supportIPv4
@@ -182,12 +184,16 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 	}
 
 	cancel := func() {}
-	if c.timeoutMs > 0 { ctx, cancel = context.WithTimeout(ctx, c.timeoutMs) }
+	if c.timeoutMs > 0 {
+		ctx, cancel = context.WithTimeout(ctx, c.timeoutMs)
+	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: c.tag})
 	ips, ttl, err := c.server.QueryIP(ctx, domain, option)
 	contextErr := ctx.Err()
 	cancel()
-	if contextErr != nil { return nil, 0, contextErr }
+	if contextErr != nil {
+		return nil, 0, contextErr
+	}
 
 	if err != nil {
 		return nil, 0, err

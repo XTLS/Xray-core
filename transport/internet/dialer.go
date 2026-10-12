@@ -80,8 +80,8 @@ func DestIpAddress() net.IP {
 }
 
 var (
-	dnsClient dns.Client
-	obm       outbound.Manager
+	dnsClient                dns.Client
+	obm                      outbound.Manager
 	errDNSContextUnsupported = errors.New("DNS client cannot cancel lookups; configure a bootstrap IP or provide a ContextClient")
 )
 
@@ -94,22 +94,36 @@ func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) 
 
 // LookupForIPContext requires ContextClient when ctx can be canceled.
 func LookupForIPContext(ctx context.Context, domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
-	if err := ctx.Err(); err != nil { return nil, err }
-	if ctx.Done() == nil { return LookupForIP(domain, strategy, localAddr) }
-	if dnsClient == nil { return nil, errors.New("DNS client not initialized") }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if ctx.Done() == nil {
+		return LookupForIP(domain, strategy, localAddr)
+	}
+	if dnsClient == nil {
+		return nil, errors.New("DNS client not initialized")
+	}
 	client, ok := dnsClient.(dns.ContextClient)
-	if !ok { return nil, errDNSContextUnsupported }
-	return lookupForIP(ctx, domain, strategy, localAddr, func(domain string, option dns.IPOption) ([]net.IP, uint32, error) { return client.LookupIPContext(ctx, domain, option) })
+	if !ok {
+		return nil, errDNSContextUnsupported
+	}
+	return lookupForIP(ctx, domain, strategy, localAddr, func(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+		return client.LookupIPContext(ctx, domain, option)
+	})
 }
 
 func lookupForIP(ctx context.Context, domain string, strategy DomainStrategy, localAddr net.Address, lookup func(string, dns.IPOption) ([]net.IP, uint32, error)) ([]net.IP, error) {
-	if err := ctx.Err(); err != nil { return nil, err }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	ips, _, err := lookup(domain, dns.IPOption{
 		IPv4Enable: (localAddr == nil && strategy.PreferIP4()) || (localAddr != nil && localAddr.Family().IsIPv4() && (strategy.PreferIP4() || strategy.FallbackIP4())),
 		IPv6Enable: (localAddr == nil && strategy.PreferIP6()) || (localAddr != nil && localAddr.Family().IsIPv6() && (strategy.PreferIP6() || strategy.FallbackIP6())),
 	})
-	if err := ctx.Err(); err != nil { return nil, err }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	{ // Resolve fallback
 		if (len(ips) == 0 || err != nil) && strategy.HasFallback() && localAddr == nil {
 			ips, _, err = lookup(domain, dns.IPOption{
@@ -118,7 +132,9 @@ func lookupForIP(ctx context.Context, domain string, strategy DomainStrategy, lo
 			})
 		}
 	}
-	if err := ctx.Err(); err != nil { return nil, err }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if err == nil && len(ips) == 0 {
 		return nil, dns.ErrEmptyResponse
@@ -242,7 +258,9 @@ func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt
 
 // DialSystem calls system dialer to create a network connection.
 func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
-	if err := ctx.Err(); err != nil { return nil, err }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var src net.Address
 	outbounds := session.OutboundsFromContext(ctx)
 	var outboundName string
@@ -266,7 +284,9 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		errors.LogInfo(ctx, "replace destination with "+newDest.String())
 		dest = *newDest
 	}
-	if err := ctx.Err(); err != nil { return nil, err }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() {
 		finalStrategy := sockopt.DomainStrategy
@@ -275,8 +295,12 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		}
 		ips, err := LookupForIPContext(ctx, dest.Address.Domain(), finalStrategy, src)
 		if err != nil {
-			if ctx.Err() != nil { return nil, ctx.Err() }
-			if err == errDNSContextUnsupported { return nil, err }
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if err == errDNSContextUnsupported {
+				return nil, err
+			}
 			errors.LogErrorInner(ctx, err, "failed to resolve ip")
 			if sockopt.DomainStrategy.ForceIP() {
 				return nil, err
@@ -288,7 +312,9 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 			return TcpRaceDial(ctx, src, ips, dest.Port, sockopt, dest.Address.String())
 		}
 	}
-	if err := ctx.Err(); err != nil { return nil, err }
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	if len(sockopt.DialerProxy) > 0 {
 		if obm == nil {

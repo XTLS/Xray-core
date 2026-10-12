@@ -27,8 +27,8 @@ func RegisterLua(L *lua.LState, client featureDNS.Client) {
 		servers = luaServers(client)
 	case *localdns.Client:
 		servers = []luaDNSServer{{
-			id:   "localhost",
-			name: "localhost",
+			id:    "localhost",
+			name:  "localhost",
 			query: client.LookupIPContext,
 		}}
 	}
