@@ -4,18 +4,21 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"weak"
 
 	xbase64 "github.com/xtls/xray-core/common/base64"
-	"github.com/xtls/xray-core/common/platform"
 	glua "github.com/yuin/gopher-lua"
 )
 
@@ -160,7 +163,7 @@ func TestCompileInlineDiagnostics(t *testing.T) {
 	}{
 		{"function broken(", true, ""},
 		{`error("initialization failed")`, false, ""},
-		{"\n-- @xray:privileged-psk=secret\n\nerror('failure')", false, "[inline]:4: failure"},
+		{"\n-- @xray:privileged-signature=invalid\n\nerror('failure')", false, "[inline]:4: failure"},
 	} {
 		program, err := Compile(xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(tc.code)))
 		if tc.compileError {
@@ -181,8 +184,8 @@ func TestCompileInlineDiagnostics(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "[inline]") {
 			t.Fatalf("Lua error = %v, want [inline] diagnostic", err)
 		}
-		if tc.wantMessage != "" && (!strings.Contains(err.Error(), tc.wantMessage) || strings.Contains(err.Error(), "secret")) {
-			t.Fatalf("Lua error = %v, want %q without the PSK", err, tc.wantMessage)
+		if tc.wantMessage != "" && !strings.Contains(err.Error(), tc.wantMessage) {
+			t.Fatalf("Lua error = %v, want %q", err, tc.wantMessage)
 		}
 	}
 }
@@ -213,54 +216,326 @@ func compileTestProgram(t *testing.T, code string) *Program {
 	return program
 }
 
-func TestProgramPrivilegedPSK(t *testing.T) {
-	const header = "-- @xray:privileged-psk="
-	for _, tc := range []struct {
-		name, psk, code string
-		privileged      bool
-	}{
-		{"match", "secret", header + "secret", true},
-		{"no comment space", "secret", "--@xray:privileged-psk=secret", true},
-		{"comment whitespace", "secret", "-- \t  @xray:privileged-psk=secret", true},
-		{"mismatch", "secret", header + "other", false},
-		{"both empty", "", header, false},
-		{"missing header", "secret", "value = 1", false},
-		{"empty header", "secret", header, false},
-		{"blank lines and indentation", "secret", " \t\n\n \t" + header + "secret", true},
-		{"CRLF", "secret", "\r\n" + header + "secret\r\nvalue = 1\r\n", true},
-		{"key whitespace", " \tsecret \t", header + " secret ", true},
-		{"whitespace-only keys", " \t", header + " \t", false},
-		{"after comment", "secret", "-- ordinary comment\n" + header + "secret", false},
-		{"after code", "secret", "value = 1\n" + header + "secret", false},
-		{"inside string", "secret", `value = "-- @xray:privileged-psk=secret"`, false},
-		{"wrong marker", "secret", "-- xray:privileged-psk=secret", false},
-		{"later match", "secret", header + "other\n" + header + "secret", false},
+const privilegedSignatureHeader = "-- @xray:privileged-signature="
+
+// RFC 8032 test-vector key. The fixture signature was independently computed
+// with Node's OpenSSL-backed crypto.sign(null, SHA256(body), privateKey), rather
+// than by the signing helper or the production verifier.
+const privilegedTestSeed = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+const privilegedTestPublicKey = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+const privilegedFixtureSignature = "rFbZtaaphe_69UEgSvfYwZcLZYHTXLFxdcukfEuLq6pzvmj8qtw6r60fD-7L5dwqSvnE7F1oAV0G_vHP3rLVBA"
+const privilegedFixtureDigest = "edef639ae641bacc9b76cea27473eed11369fbad65e223a87990864e899e578a"
+const privilegedFixtureBody = `-- Ordinary comments participate in the signed digest.
+value = 1
+
+function HasPrivilegedLibraries()
+    return io ~= nil and os ~= nil and debug ~= nil and channel ~= nil
+end`
+
+func setTestPrivilegedPublicKey(t *testing.T, key string) {
+	t.Helper()
+	// Each test setup represents a new process with its own startup key.
+	privilegedKey.Once = sync.Once{}
+	privilegedKey.publicKey = nil
+	t.Cleanup(func() {
+		privilegedKey.Once = sync.Once{}
+		privilegedKey.publicKey = nil
+	})
+	if err := SetPrivilegedPublicKey(key); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeTestScript(t *testing.T, code string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "script.lua")
+	if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func testSignature(t *testing.T, body string) string {
+	t.Helper()
+	seed, err := hex.DecodeString(privilegedTestSeed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(bytes.TrimSpace([]byte(body)))
+	return base64.RawURLEncoding.EncodeToString(ed25519.Sign(ed25519.NewKeyFromSeed(seed), digest[:]))
+}
+
+func TestSetPrivilegedPublicKey(t *testing.T) {
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	path := writeTestScript(t, privilegedSignatureHeader+privilegedFixtureSignature+"\n"+privilegedFixtureBody)
+	for _, tc := range []struct{ name, key string }{
+		{"invalid base64", "%"},
+		{"padding", privilegedTestPublicKey + "="},
+		{"standard base64 alphabet", strings.ReplaceAll(privilegedTestPublicKey, "_", "/")},
+		{"short key", base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize-1))},
+		{"long key", base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize+1))},
+		{"leading whitespace", " " + privilegedTestPublicKey},
+		{"trailing whitespace", privilegedTestPublicKey + "\t"},
+		{"embedded newline", privilegedTestPublicKey[:8] + "\n" + privilegedTestPublicKey[8:]},
+		{"embedded carriage return", privilegedTestPublicKey[:8] + "\r" + privilegedTestPublicKey[8:]},
+		{"nonzero unused bits", privilegedTestPublicKey[:len(privilegedTestPublicKey)-1] + "p"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(platform.LuaPrivilegedPSK, tc.psk)
-			path := filepath.Join(t.TempDir(), "psk.lua")
-			if err := os.WriteFile(path, []byte(tc.code), 0o600); err != nil {
-				t.Fatal(err)
+			if err := SetPrivilegedPublicKey(tc.key); err == nil {
+				t.Fatal("invalid public key was accepted")
 			}
-			for _, source := range []struct {
-				name, script string
-				privileged   bool
-			}{
-				{"file", path, tc.privileged},
-				{"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(tc.code)), false},
-				{"gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, tc.code)), false},
-			} {
-				t.Run(source.name, func(t *testing.T) {
-					program, err := Compile(source.script)
-					if err != nil {
-						t.Fatal(err)
-					}
-					if program.privileged != source.privileged {
-						t.Fatalf("privileged = %t, want %t", program.privileged, source.privileged)
-					}
-				})
+			program, err := Compile(path)
+			if err != nil || program == nil || !program.privileged {
+				t.Fatalf("invalid setter changed the trusted key: Compile = %v, %v", program, err)
 			}
 		})
+	}
+	setTestPrivilegedPublicKey(t, "")
+	if program, err := Compile(path); program != nil || err == nil {
+		t.Fatalf("signed script after disabling authorization = %v, %v; want rejection", program, err)
+	}
+	unsigned, err := Compile(writeTestScript(t, privilegedFixtureBody))
+	if err != nil || unsigned == nil || unsigned.privileged {
+		t.Fatalf("unsigned script with authorization disabled = %v, %v; want sandbox", unsigned, err)
+	}
+}
+
+func TestPrivilegedPublicKeyIsFixed(t *testing.T) {
+	wrongKey := base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.PublicKeySize))
+	for _, key := range []string{"", privilegedTestPublicKey} {
+		name := "disabled"
+		if key != "" {
+			name = "configured"
+		}
+		t.Run(name, func(t *testing.T) {
+			setTestPrivilegedPublicKey(t, key)
+			path := writeTestScript(t, privilegedSignatureHeader+privilegedFixtureSignature+"\n"+privilegedFixtureBody)
+			for _, replacement := range []string{privilegedTestPublicKey, "", wrongKey} {
+				if err := SetPrivilegedPublicKey(replacement); err != nil {
+					t.Fatal(err)
+				}
+				program, err := Compile(path)
+				if key == "" {
+					if program != nil || err == nil {
+						t.Fatalf("disabled startup key changed: Compile = %v, %v", program, err)
+					}
+				} else if err != nil || program == nil || !program.privileged {
+					t.Fatalf("trusted startup key changed: Compile = %v, %v", program, err)
+				}
+			}
+		})
+	}
+}
+
+func TestProgramPrivilegedSignatureFixture(t *testing.T) {
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	digest := sha256.Sum256([]byte(privilegedFixtureBody))
+	if got := hex.EncodeToString(digest[:]); got != privilegedFixtureDigest {
+		t.Fatalf("fixture SHA-256 = %s, want %s", got, privilegedFixtureDigest)
+	}
+	for _, signed := range []bool{false, true} {
+		name, code := "unsigned", privilegedFixtureBody
+		if signed {
+			name, code = "signed", privilegedSignatureHeader+privilegedFixtureSignature+"\n"+code
+		}
+		t.Run(name, func(t *testing.T) {
+			program, err := Compile(writeTestScript(t, code))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if program.privileged != signed {
+				t.Fatalf("privileged = %t, want %t", program.privileged, signed)
+			}
+			L, err := program.NewState(context.Background(), nil, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer L.Close()
+			if err := L.CallByParam(glua.P{Fn: L.GetGlobal("HasPrivilegedLibraries"), NRet: 1, Protect: true}); err != nil {
+				t.Fatal(err)
+			}
+			if got := L.Get(-1); got != glua.LBool(signed) {
+				t.Fatalf("privileged libraries available = %v, want %t", got, signed)
+			}
+		})
+	}
+}
+
+func TestProgramPrivilegedSignatureHeader(t *testing.T) {
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	header := privilegedSignatureHeader + privilegedFixtureSignature
+	for _, tc := range []struct {
+		name, code string
+		privileged bool
+	}{
+		{"match", header + "\n" + privilegedFixtureBody, true},
+		{"no comment space", "--@xray:privileged-signature=" + privilegedFixtureSignature + "\n" + privilegedFixtureBody, true},
+		{"comment whitespace", "-- \t  @xray:privileged-signature=" + privilegedFixtureSignature + "\n" + privilegedFixtureBody, true},
+		{"signature whitespace", privilegedSignatureHeader + " \t" + privilegedFixtureSignature + " \t\n" + privilegedFixtureBody, true},
+		{"blank lines and indentation", " \t\r\n\n \t" + header + "\n" + privilegedFixtureBody, true},
+		{"CRLF header only", "\r\n" + header + "\r\n" + privilegedFixtureBody, true},
+		{"body boundary whitespace", header + "\n \t\r\n\n" + privilegedFixtureBody + " \t\r\n\n", true},
+		{"missing header", privilegedFixtureBody, false},
+		{"after comment", "-- ordinary comment\n" + header + "\n" + privilegedFixtureBody, false},
+		{"after code", "value = 1\n" + header + "\n" + privilegedFixtureBody, false},
+		{"inside string", `value = "` + header + `"`, false},
+		{"wrong marker", "-- xray:privileged-signature=" + privilegedFixtureSignature + "\n" + privilegedFixtureBody, false},
+		{"old PSK first", "-- @xray:privileged-psk=secret\n" + header + "\n" + privilegedFixtureBody, false},
+		{"invalid marker after comment", "-- ordinary comment\n" + privilegedSignatureHeader + "%\nvalue = 1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			program, err := Compile(writeTestScript(t, tc.code))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if program.privileged != tc.privileged {
+				t.Fatalf("privileged = %t, want %t", program.privileged, tc.privileged)
+			}
+		})
+	}
+}
+
+func TestProgramRejectsInvalidPrivilegedSignatures(t *testing.T) {
+	seed, err := hex.DecodeString(privilegedTestSeed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongKey := base64.RawURLEncoding.EncodeToString(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)).Public().(ed25519.PublicKey))
+	bodySignature := base64.RawURLEncoding.EncodeToString(ed25519.Sign(ed25519.NewKeyFromSeed(seed), []byte(privilegedFixtureBody)))
+	for _, tc := range []struct{ name, key, signature string }{
+		{"missing key", "", privilegedFixtureSignature},
+		{"wrong key", wrongKey, privilegedFixtureSignature},
+		{"empty signature", privilegedTestPublicKey, ""},
+		{"whitespace-only signature", privilegedTestPublicKey, " \t"},
+		{"invalid base64", privilegedTestPublicKey, "%"},
+		{"padding", privilegedTestPublicKey, privilegedFixtureSignature + "=="},
+		{"standard base64 alphabet", privilegedTestPublicKey, strings.ReplaceAll(privilegedFixtureSignature, "_", "/")},
+		{"short signature", privilegedTestPublicKey, base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize-1))},
+		{"long signature", privilegedTestPublicKey, base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize+1))},
+		{"embedded carriage return", privilegedTestPublicKey, privilegedFixtureSignature[:8] + "\r" + privilegedFixtureSignature[8:]},
+		{"nonzero unused bits", privilegedTestPublicKey, privilegedFixtureSignature[:len(privilegedFixtureSignature)-1] + "B"},
+		{"damaged signature", privilegedTestPublicKey, "s" + privilegedFixtureSignature[1:]},
+		{"signature over body instead of digest", privilegedTestPublicKey, bodySignature},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setTestPrivilegedPublicKey(t, tc.key)
+			program, err := Compile(writeTestScript(t, privilegedSignatureHeader+tc.signature+"\n"+privilegedFixtureBody))
+			if program != nil || err == nil {
+				t.Fatalf("Compile = %v, %v; want nil program and signature rejection", program, err)
+			}
+		})
+	}
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	code := privilegedSignatureHeader + "%\n" + privilegedSignatureHeader + privilegedFixtureSignature + "\n" + privilegedFixtureBody
+	if program, err := Compile(writeTestScript(t, code)); program != nil || err == nil {
+		t.Fatalf("later signature replaced invalid first signature: %v, %v", program, err)
+	}
+}
+
+func TestProgramSignedBodyTampering(t *testing.T) {
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	for _, tc := range []struct{ name, body string }{
+		{"statement", strings.Replace(privilegedFixtureBody, "value = 1", "value = 2", 1)},
+		{"comment", strings.Replace(privilegedFixtureBody, "Ordinary", "Modified", 1)},
+		{"added comment", "-- added comment\n" + privilegedFixtureBody},
+		{"indentation", strings.Replace(privilegedFixtureBody, "    return", "  return", 1)},
+		{"internal spaces", strings.Replace(privilegedFixtureBody, "value = 1", "value  = 1", 1)},
+		{"internal trailing spaces", strings.Replace(privilegedFixtureBody, "value = 1\n", "value = 1 \t\n", 1)},
+		{"removed blank line", strings.Replace(privilegedFixtureBody, "\n\n", "\n", 1)},
+		{"added blank line", strings.Replace(privilegedFixtureBody, "\n\n", "\n\n\n", 1)},
+		{"LF to CRLF", strings.ReplaceAll(privilegedFixtureBody, "\n", "\r\n")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code := privilegedSignatureHeader + privilegedFixtureSignature + "\n" + tc.body
+			if program, err := Compile(writeTestScript(t, code)); program != nil || err == nil {
+				t.Fatalf("tampered body Compile = %v, %v; want signature rejection", program, err)
+			}
+		})
+	}
+	crlfBody := strings.ReplaceAll(privilegedFixtureBody, "\n", "\r\n")
+	crlfSignature := testSignature(t, crlfBody)
+	program, err := Compile(writeTestScript(t, privilegedSignatureHeader+crlfSignature+"\r\n"+crlfBody))
+	if err != nil || program == nil || !program.privileged {
+		t.Fatalf("correctly signed CRLF body = %v, %v; want privileged program", program, err)
+	}
+	if program, err := Compile(writeTestScript(t, privilegedSignatureHeader+crlfSignature+"\n"+privilegedFixtureBody)); program != nil || err == nil {
+		t.Fatalf("CRLF to LF tampering = %v, %v; want signature rejection", program, err)
+	}
+}
+
+func TestProgramInlineSignaturesCannotAuthorize(t *testing.T) {
+	for _, key := range []string{"", privilegedTestPublicKey} {
+		setTestPrivilegedPublicKey(t, key)
+		for _, signature := range []string{privilegedFixtureSignature, "%", ""} {
+			code := privilegedSignatureHeader + signature + "\n" + privilegedFixtureBody
+			for _, script := range []string{
+				xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code)),
+				xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code)),
+			} {
+				program, err := Compile(script)
+				if err != nil || program == nil || program.privileged {
+					t.Fatalf("inline signed source Compile = %v, %v; want sandbox without verification", program, err)
+				}
+				L, err := program.NewState(context.Background(), nil, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := L.GetGlobal("os"); got != glua.LNil {
+					L.Close()
+					t.Fatalf("inline os = %v, want nil", got)
+				}
+				L.Close()
+			}
+		}
+	}
+}
+
+func TestProgramLegacyPSKCannotAuthorize(t *testing.T) {
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	t.Setenv("xray.lua.privileged.psk", "secret")
+	t.Setenv("XRAY_LUA_PRIVILEGED_PSK", "secret")
+	program, err := Compile(writeTestScript(t, "-- @xray:privileged-psk=secret\n"+privilegedFixtureBody))
+	if err != nil || program == nil || program.privileged {
+		t.Fatalf("old PSK authorization = %v, %v; want sandbox", program, err)
+	}
+	L, err := program.NewState(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer L.Close()
+	if got := L.GetGlobal("os"); got != glua.LNil {
+		t.Fatalf("old PSK os = %v, want nil", got)
+	}
+	setTestPrivilegedPublicKey(t, "")
+	if program, err := Compile(writeTestScript(t, privilegedSignatureHeader+privilegedFixtureSignature+"\n"+privilegedFixtureBody)); program != nil || err == nil {
+		t.Fatalf("legacy environment substituted for public key: %v, %v", program, err)
+	}
+}
+
+func TestProgramSignedDiagnostics(t *testing.T) {
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	const invalidBody = "\n\nlocal = 1"
+	invalidPath := writeTestScript(t, "\n"+privilegedSignatureHeader+"%\n"+invalidBody)
+	if program, err := Compile(invalidPath); program != nil || err == nil || !strings.Contains(err.Error(), "signature") {
+		t.Fatalf("invalid signature and invalid syntax = %v, %v; want signature error before parsing", program, err)
+	}
+	validPath := writeTestScript(t, "\n"+privilegedSignatureHeader+testSignature(t, invalidBody)+"\n"+invalidBody)
+	if program, err := Compile(validPath); program != nil || err == nil || !strings.Contains(err.Error(), validPath+" line:5(") {
+		t.Fatalf("verified invalid syntax = %v, %v; want original source line 5", program, err)
+	}
+	const body = "\n\nerror('signed failure')"
+	path := writeTestScript(t, "\n"+privilegedSignatureHeader+testSignature(t, body)+"\n"+body)
+	program, err := Compile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	L, err := program.NewState(context.Background(), nil, nil)
+	if L != nil {
+		L.Close()
+		t.Fatal("failing signed script returned a state")
+	}
+	if err == nil || !strings.Contains(err.Error(), path+":5: signed failure") {
+		t.Fatalf("signed initialization error = %v; want original source line 5", err)
 	}
 }
 
@@ -444,9 +719,8 @@ func TestProgramSandboxClosesFailedInitialization(t *testing.T) {
 }
 
 func TestProgramPrivilegedLibraries(t *testing.T) {
-	t.Setenv(platform.LuaPrivilegedPSK, "secret")
-	const code = `-- @xray:privileged-psk=secret
-assert(require("io") == io and require("os") == os)
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
+	const body = `assert(require("io") == io and require("os") == os)
 assert(require("debug") == debug and require("channel") == channel)
 assert(type(coroutine.create) == "function" and require("coroutine") == coroutine)
 assert(type(dofile) == "function" and type(loadfile) == "function")
@@ -458,6 +732,7 @@ assert(assert(loadstring("return 42"))() == 42)
 local file = assert(io.open(testPath, "w"))
 file:write("privileged")
 file:close()`
+	code := privilegedSignatureHeader + testSignature(t, body) + "\n" + body
 	path := filepath.Join(t.TempDir(), "privileged.lua")
 	if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
 		t.Fatal(err)
@@ -482,7 +757,7 @@ file:close()`
 			if !tc.privileged {
 				if L != nil {
 					L.Close()
-					t.Fatal("inline script with a matching PSK accessed privileged libraries")
+					t.Fatal("inline script with a valid signature accessed privileged libraries")
 				}
 				if err == nil || !strings.Contains(err.Error(), "no preloaded module: io") {
 					t.Fatalf("NewState error = %v, want io module unavailable", err)
@@ -505,18 +780,18 @@ file:close()`
 }
 
 func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
+	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
 	for _, privileged := range []bool{false, true} {
 		name := "sandboxed"
 		if privileged {
 			name = "privileged"
 		}
 		t.Run(name, func(t *testing.T) {
-			before, after := "other", "secret"
+			const body = "value = 1"
+			code := body
 			if privileged {
-				before, after = after, before
+				code = privilegedSignatureHeader + testSignature(t, body) + "\n" + body
 			}
-			t.Setenv(platform.LuaPrivilegedPSK, before)
-			const code = "-- @xray:privileged-psk=secret\nvalue = 1"
 			path := filepath.Join(t.TempDir(), "snapshot.lua")
 			if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
 				t.Fatal(err)
@@ -525,7 +800,14 @@ func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv(platform.LuaPrivilegedPSK, after)
+			// Source edits cannot change an already compiled Program's authorization.
+			changed := privilegedSignatureHeader + testSignature(t, body) + "\n" + body
+			if privileged {
+				changed = body
+			}
+			if err := os.WriteFile(path, []byte(changed), 0o600); err != nil {
+				t.Fatal(err)
+			}
 			check := func(L *glua.LState) {
 				t.Helper()
 				if got := L.GetGlobal("os").Type() == glua.LTTable; got != privileged {
@@ -546,7 +828,7 @@ func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
 				t.Fatal(err)
 			}
 			if recompiled.privileged == privileged {
-				t.Fatal("recompilation did not observe the changed environment")
+				t.Fatal("recompilation did not observe the changed source")
 			}
 		})
 	}

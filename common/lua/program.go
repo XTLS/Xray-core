@@ -32,8 +32,9 @@ func Compile(script string) (*Program, error) {
 	if strings.HasPrefix(script, base64.GzipPrefix) || strings.HasPrefix(script, base64.Prefix) {
 		code, err = base64.Decode(script)
 	} else if name, err = platform.ResolveLuaFile(script); err == nil {
-		code, err = os.ReadFile(name)
-		privileged = hasPrivilegedPSK(code)
+		if code, err = os.ReadFile(name); err == nil {
+			privileged, err = verifyPrivilegedSignature(code)
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -48,30 +49,6 @@ func Compile(script string) (*Program, error) {
 		return nil, err
 	}
 	return &Program{proto: proto, privileged: privileged}, nil
-}
-
-func hasPrivilegedPSK(code []byte) bool {
-	expected := strings.TrimSpace(platform.NewEnvFlag(platform.LuaPrivilegedPSK).GetValue(func() string { return "" }))
-	if expected == "" {
-		return false
-	}
-
-	for len(code) != 0 {
-		line, rest, _ := bytes.Cut(code, []byte{'\n'})
-		code = rest
-		line = bytes.TrimSuffix(line, []byte{'\r'})
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		line, found := bytes.CutPrefix(bytes.TrimLeft(line, " \t"), []byte("--"))
-		if !found {
-			return false
-		}
-		key, found := bytes.CutPrefix(bytes.TrimLeft(line, " \t"), []byte("@xray:privileged-psk="))
-		key = bytes.TrimSpace(key)
-		return found && len(key) != 0 && string(key) == expected
-	}
-	return false
 }
 
 // NewState creates a state, runs register, executes the program under ctx, and
