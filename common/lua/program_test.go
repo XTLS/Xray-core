@@ -221,16 +221,18 @@ const privilegedSignatureHeader = "-- @xray:privileged-signature="
 // RFC 8032 test-vector key. The fixture signature was independently computed
 // with Node's OpenSSL-backed crypto.sign(null, SHA256(body), privateKey), rather
 // than by the signing helper or the production verifier.
-const privilegedTestSeed = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
-const privilegedTestPublicKey = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
-const privilegedFixtureSignature = "rFbZtaaphe_69UEgSvfYwZcLZYHTXLFxdcukfEuLq6pzvmj8qtw6r60fD-7L5dwqSvnE7F1oAV0G_vHP3rLVBA"
-const privilegedFixtureDigest = "edef639ae641bacc9b76cea27473eed11369fbad65e223a87990864e899e578a"
-const privilegedFixtureBody = `-- Ordinary comments participate in the signed digest.
+const (
+	privilegedTestSeed         = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+	privilegedTestPublicKey    = "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+	privilegedFixtureSignature = "rFbZtaaphe_69UEgSvfYwZcLZYHTXLFxdcukfEuLq6pzvmj8qtw6r60fD-7L5dwqSvnE7F1oAV0G_vHP3rLVBA"
+	privilegedFixtureDigest    = "edef639ae641bacc9b76cea27473eed11369fbad65e223a87990864e899e578a"
+	privilegedFixtureBody      = `-- Ordinary comments participate in the signed digest.
 value = 1
 
 function HasPrivilegedLibraries()
     return io ~= nil and os ~= nil and debug ~= nil and channel ~= nil
 end`
+)
 
 func setTestPrivilegedPublicKey(t *testing.T, key string) {
 	t.Helper()
