@@ -43,8 +43,9 @@ type stack struct {
 	// window is the window of every connection
 	window int32
 	// handle is given every new connection
-	handle func(conn net.Conn, destination net.Destination)
-	udp    *udpConnectionHandler
+	handle    func(conn net.Conn, destination net.Destination)
+	udp       *udpConnectionHandler
+	fragments fragmentReassembler
 
 	mu     sync.Mutex
 	conns  map[flow]*tcpConn
@@ -79,6 +80,7 @@ func (s *stack) Start() error {
 
 // Close is called by Handler to shut down the stack
 func (s *stack) Close() error {
+	s.fragments.close()
 	s.mu.Lock()
 	s.closed = true
 	conns := make([]*tcpConn, 0, len(s.conns))
@@ -98,6 +100,7 @@ func (s *stack) Close() error {
 
 // read takes the packets of the tun until it is closed
 func (s *stack) read() {
+	defer s.fragments.close()
 	// a tun that does not split segments gives them as large as a packet can be
 	b := make([]byte, packetRoom+1<<16)
 	for {
@@ -111,7 +114,11 @@ func (s *stack) read() {
 			}
 			return
 		}
-		p, ok := parsePacket(b)
+		packetBytes := s.fragments.process(b)
+		if packetBytes == nil {
+			continue
+		}
+		p, ok := parsePacket(packetBytes)
 		if !ok {
 			continue
 		}

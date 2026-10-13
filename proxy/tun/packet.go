@@ -26,7 +26,7 @@ type packet struct {
 	payload []byte
 }
 
-// parsePacket reads the IP header of b. Fragments are not accepted: what the system sends to the tun fits its MTU
+// parsePacket reads the IP header of b after fragment reassembly.
 func parsePacket(b []byte) (p packet, ok bool) {
 	if len(b) < ipv4HeaderSize {
 		return p, false
@@ -64,6 +64,9 @@ func parsePacket(b []byte) (p packet, ok bool) {
 				return p, false
 			}
 			p.proto, p.payload = p.payload[0], p.payload[size:]
+		}
+		if p.proto == 44 {
+			return p, false
 		}
 	default:
 		return p, false
