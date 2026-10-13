@@ -2,8 +2,12 @@ package conf
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 
+	"github.com/xtls/xray-core/common/base64"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 )
 
@@ -132,5 +136,104 @@ func TestNoiseExpFromJSON(t *testing.T) {
 	}
 	if len(items[3].Segments) != 0 || items[3].RandMin != 10 || items[3].RandMax != 20 {
 		t.Errorf("item 3 = %+v", items[3])
+	}
+}
+
+const noiseScript = `local noise = require("xray.finalmask.noise")
+function HandleNoise(address) noise.Send("n") end
+`
+
+func writeNoiseScript(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "noise.lua")
+	if err := os.WriteFile(path, []byte(noiseScript), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func buildNoiseMask(t *testing.T, mask *NoiseMask) *noise.Config {
+	t.Helper()
+	msg, err := mask.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return msg.(*noise.Config)
+}
+
+func TestNoiseScriptFromFile(t *testing.T) {
+	path := writeNoiseScript(t)
+	cfg := buildNoiseMask(t, &NoiseMask{Script: path, Reset: Int32Range{From: 30, To: 60}})
+
+	if cfg.Script != path {
+		t.Errorf("got script %q, want the path", cfg.Script)
+	}
+	if len(cfg.Items) != 0 {
+		t.Errorf("got %d items, want none", len(cfg.Items))
+	}
+	if cfg.ResetMin != 30 || cfg.ResetMax != 60 {
+		t.Errorf("got reset %d-%d, want 30-60", cfg.ResetMin, cfg.ResetMax)
+	}
+}
+
+func TestNoiseScriptInline(t *testing.T) {
+	for name, zip := range map[string]bool{"base64": false, "base64+gzip": true} {
+		t.Run(name, func(t *testing.T) {
+			script, err := base64.Encode([]byte(noiseScript), zip)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg := buildNoiseMask(t, &NoiseMask{Script: script}); cfg.Script != script {
+				t.Errorf("got script %q, want it unchanged", cfg.Script)
+			}
+		})
+	}
+}
+
+func TestNoiseScriptFromJSON(t *testing.T) {
+	path := writeNoiseScript(t)
+	inline, err := base64.Encode([]byte(noiseScript), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, input := range map[string]string{
+		"file":   `{"script": ` + strconv.Quote(path) + `, "reset": "30-60"}`,
+		"inline": `{"script": ` + strconv.Quote(inline) + `}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var mask NoiseMask
+			if err := json.Unmarshal([]byte(input), &mask); err != nil {
+				t.Fatal(err)
+			}
+			if buildNoiseMask(t, &mask).Script == "" {
+				t.Error("the built config does not carry the script")
+			}
+		})
+	}
+}
+
+func TestNoiseScriptRejected(t *testing.T) {
+	path := writeNoiseScript(t)
+	encode := func(code string) string {
+		script, err := base64.Encode([]byte(code), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return script
+	}
+
+	for name, mask := range map[string]*NoiseMask{
+		"script with noise": {Script: path, Noise: []NoiseItem{{Rand: Int32Range{From: 10, To: 20}}}},
+		"missing file":      {Script: filepath.Join(t.TempDir(), "absent.lua")},
+		"not base64":        {Script: "base64:not base64!"},
+		"not gzip":          {Script: "base64+gzip:" + encode(noiseScript)[len("base64:"):]},
+		"not lua":           {Script: encode("function HandleNoise(")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := mask.Build(); err == nil {
+				t.Error("expected an error")
+			}
+		})
 	}
 }
