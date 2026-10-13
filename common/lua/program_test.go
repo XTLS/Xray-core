@@ -8,9 +8,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"weak"
 
 	xbase64 "github.com/xtls/xray-core/common/base64"
 	"github.com/xtls/xray-core/common/platform"
@@ -252,20 +254,16 @@ func TestProgramSandbox(t *testing.T) {
 	t.Setenv("LUA_PATH", filepath.ToSlash(filepath.Join(dir, "?.lua")))
 	program := compileTestProgram(t, `
 local function check()
+    assert(package == nil)
     assert(require("_G") == _G)
     for _, name in ipairs({"io", "os", "debug", "channel", "dofile", "loadfile",
         "load", "loadstring", "getfenv", "setfenv", "collectgarbage", "module",
         "newproxy", "print", "_printregs"}) do
         assert(_G[name] == nil, name)
     end
-    for _, name in ipairs({"io", "os", "debug", "channel", "escape"}) do
-        assert(package.loaded[name] == nil and package.preload[name] == nil, name)
+    for _, name in ipairs({"io", "os", "debug", "channel", "package", "escape"}) do
         assert(not pcall(require, name), name)
     end
-    for name in pairs(package) do
-        assert(name == "preload" or name == "loaded" or name == "loaders", name)
-    end
-    assert(type(package.loaders[1]) == "function" and package.loaders[2] == nil)
     for _, name in ipairs({"math", "string", "table", "coroutine"}) do
         assert(require(name) == _G[name], name)
     end
@@ -278,21 +276,39 @@ check()
 function CheckSandbox()
     local thread = coroutine.create(check)
     assert(coroutine.resume(thread))
-    package.path = testPath
-    package.cpath = testPath
+    local injected = false
+    package = {
+        preload = {
+            escape = function() injected = true; return "escaped" end,
+            ["xray.late"] = function() injected = true; return "injected" end,
+        },
+        loaded = {escape = "escaped", ["cached.only"] = "injected"},
+        loaders = {function() injected = true; return function() return "escaped" end end},
+        path = testPath,
+        cpath = testPath,
+    }
     assert(not pcall(require, "escape") and disk_loaded == nil)
-    package.path = nil
-    package.cpath = nil
+    assert(not pcall(require, "cached.only") and not pcall(require, "package"))
+    assert(require("xray.late") == "host" and require("xray.late") == "host")
+    assert(require("xray.test").value == "ok" and not injected)
+    package = nil
 end`)
+	var helperLoads, lateLoads int
 	L, err := program.NewState(context.Background(), func(L *glua.LState) {
 		if L.GetGlobal("io") != glua.LNil || L.GetGlobal("loadfile") != glua.LNil {
 			t.Fatal("sandbox was not configured before module registration")
 		}
 		L.SetGlobal("testPath", glua.LString(filepath.ToSlash(filepath.Join(dir, "?.lua"))))
 		L.PreloadModule("xray.test", func(L *glua.LState) int {
+			helperLoads++
 			module := L.NewTable()
 			module.RawSetString("value", glua.LString("ok"))
 			L.Push(module)
+			return 1
+		})
+		L.PreloadModule("xray.late", func(L *glua.LState) int {
+			lateLoads++
+			L.Push(glua.LString("host"))
 			return 1
 		})
 	}, nil)
@@ -306,13 +322,96 @@ end`)
 	if err := L.CallByParam(glua.P{Fn: L.GetGlobal("CheckSandbox"), Protect: true}); err != nil {
 		t.Fatal(err)
 	}
+	if helperLoads != 1 || lateLoads != 1 {
+		t.Fatalf("module initialization calls = (%d, %d), want (1, 1)", helperLoads, lateLoads)
+	}
+}
+
+func TestProgramSandboxModuleFailures(t *testing.T) {
+	program := compileTestProgram(t, `
+assert(package == nil)
+local ok, err = pcall(require, "xray.failure")
+assert(not ok and string.find(err, "module initialization failed", 1, true))
+package = {loaded = {["xray.failure"] = "injected"}}
+ok, err = pcall(require, "xray.failure")
+assert(not ok and string.find(err, "loop or previous error loading module", 1, true))
+for i = 1, 2 do
+    ok, err = pcall(require, "xray.cycle")
+    assert(not ok and string.find(err, "loop or previous error loading module", 1, true))
+end
+package = nil
+`)
+	var failedLoads, cycleLoads int
+	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+		L.PreloadModule("xray.failure", func(L *glua.LState) int {
+			failedLoads++
+			L.RaiseError("module initialization failed")
+			return 0
+		})
+		L.PreloadModule("xray.cycle", func(L *glua.LState) int {
+			cycleLoads++
+			L.Push(L.GetGlobal("require"))
+			L.Push(glua.LString("xray.cycle"))
+			L.Call(1, 1)
+			return 1
+		})
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer L.Close()
+	if failedLoads != 1 || cycleLoads != 1 {
+		t.Fatalf("module initialization calls = (%d, %d), want (1, 1)", failedLoads, cycleLoads)
+	}
+	if L.GetTop() != 0 {
+		t.Fatalf("stack top = %d, want 0", L.GetTop())
+	}
+}
+
+func TestProgramSandboxModulesAreCollected(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		name := "success"
+		if fail {
+			name = "failure"
+		}
+		t.Run(name, func(t *testing.T) {
+			ref := func() weak.Pointer[glua.LTable] {
+				program := compileTestProgram(t, `payload = string.rep("x", 1024 * 1024); assert(pcall(require, "xray.test") == expectedSuccess)`)
+				L, err := program.NewState(context.Background(), func(L *glua.LState) {
+					L.SetGlobal("expectedSuccess", glua.LBool(!fail))
+					L.PreloadModule("xray.test", func(L *glua.LState) int {
+						if fail {
+							L.RaiseError("module initialization failed")
+						}
+						L.Push(L.NewTable())
+						return 1
+					})
+				}, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ref := weak.Make(L.G.Global)
+				L.Close()
+				return ref
+			}()
+			runtime.GC()
+			runtime.GC()
+			if ref.Value() != nil {
+				t.Fatal("closed sandbox's global table was not collected")
+			}
+		})
+	}
 }
 
 func TestProgramSandboxClosesFailedInitialization(t *testing.T) {
-	program := compileTestProgram(t, `require("io")`)
+	program := compileTestProgram(t, `require("xray.failure")`)
 	var partial *glua.LState
 	L, err := program.NewState(context.Background(), func(L *glua.LState) {
 		partial = L
+		L.PreloadModule("xray.failure", func(L *glua.LState) int {
+			L.RaiseError("module initialization failed")
+			return 0
+		})
 	}, func(*glua.LState) error {
 		t.Error("validation ran after failed initialization")
 		return nil
@@ -321,7 +420,7 @@ func TestProgramSandboxClosesFailedInitialization(t *testing.T) {
 		L.Close()
 		t.Fatal("sandbox initialization returned a state")
 	}
-	if err == nil || partial == nil || !partial.IsClosed() {
+	if err == nil || !strings.Contains(err.Error(), "module initialization failed") || partial == nil || !partial.IsClosed() {
 		t.Fatalf("error = %v, partial state closed = %t", err, partial != nil && partial.IsClosed())
 	}
 }
@@ -331,6 +430,7 @@ func TestProgramPrivilegedLibraries(t *testing.T) {
 	const code = `-- @xray:privileged-psk=secret
 assert(require("io") == io and require("os") == os)
 assert(require("debug") == debug and require("channel") == channel)
+assert(type(coroutine.create) == "function" and require("coroutine") == coroutine)
 assert(type(dofile) == "function" and type(loadfile) == "function")
 assert(type(getfenv) == "function" and type(setfenv) == "function")
 assert(type(collectgarbage) == "function" and type(print) == "function")

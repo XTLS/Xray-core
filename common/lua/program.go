@@ -95,6 +95,10 @@ func (p *Program) NewState(ctx context.Context, register func(*glua.LState), val
 	if register != nil {
 		register(L)
 	}
+	if !p.privileged {
+		// Host registration needs package.preload; scripts must not access the cache or loaders.
+		L.SetGlobal(glua.LoadLibName, glua.LNil)
+	}
 	L.Push(L.NewFunctionFromProto(p.proto))
 	// Execute the Lua script's top level.
 	if err := L.PCall(0, 0, nil); err != nil {
@@ -135,10 +139,19 @@ func newSandboxedState() *glua.LState {
 		L.SetGlobal(name, glua.LNil)
 	}
 
-	// require() reads loaders from the registry.
+	// Capture preload before package is hidden; require() reads loaders from the registry.
 	module := L.GetGlobal(glua.LoadLibName).(*glua.LTable)
+	preload := module.RawGetString("preload").(*glua.LTable)
 	loaders := L.NewTable()
-	loaders.RawSetInt(1, module.RawGetString("loaders").(*glua.LTable).RawGetInt(1))
+	loaders.RawSetInt(1, L.NewFunction(func(L *glua.LState) int {
+		name := L.CheckString(1)
+		loader := preload.RawGetString(name)
+		if loader == glua.LNil {
+			loader = glua.LString("no preloaded module: " + name)
+		}
+		L.Push(loader)
+		return 1
+	}))
 	module.RawSetString("loaders", loaders)
 	L.SetField(L.Get(glua.RegistryIndex), "_LOADERS", loaders)
 	for _, name := range []string{"loadlib", "seeall", "path", "cpath", "config"} {
