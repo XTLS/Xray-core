@@ -868,22 +868,21 @@ func (c *XDNS) Build() (proto.Message, error) {
 			if e != nil {
 				return nil, e
 			}
-			var defaultPort string
+			var addr string
 			switch u.Scheme {
 			case "tcp", "udp":
-				defaultPort = "53"
+				host := u.Hostname()
+				port := u.Port()
+				if port == "" {
+					port = "53"
+				}
+				addr = net.JoinHostPort(host, port)
 			case "doh":
-				defaultPort = "443"
+				addr = u.Host + u.Path
 			default:
 				return nil, errors.New("invalid protocol")
 			}
-			var host, port string
-			host = u.Hostname()
-			port = u.Port()
-			if port == "" {
-				port = defaultPort
-			}
-			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: net.JoinHostPort(host, port), Worker: worker, TlsConfig: tlsConfig, QuicConfig: quicConfig})
+			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: addr, Worker: worker, TlsConfig: tlsConfig, QuicConfig: quicConfig})
 		}
 	}
 	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
