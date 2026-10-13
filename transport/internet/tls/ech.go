@@ -219,10 +219,12 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 					}
 
 					if !h2c {
-						conn = utls.UClient(conn, &utls.Config{ServerName: host}, utls.HelloChrome_Auto)
-						if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
+						uConn := utls.UClient(conn, &utls.Config{ServerName: host}, utls.HelloChrome_Auto)
+						if err := uConn.HandshakeContext(ctx); err != nil {
+							_ = conn.Close()
 							return nil, err
 						}
+						conn = uConn
 					}
 					return conn, nil
 				},
@@ -288,14 +290,18 @@ func dnsQuery(server string, domain string, sockopt *internet.SocketConfig) ([]b
 		if err != nil {
 			return nil, 0, err
 		}
-		conn.Write(msg)
+		if _, err = conn.Write(msg); err != nil {
+			return nil, 0, err
+		}
 		udpResponse := make([]byte, 512)
 		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		_, err = conn.Read(udpResponse)
+		n, err := conn.Read(udpResponse)
 		if err != nil {
 			return nil, 0, err
 		}
-		dnsResolve = udpResponse
+		dnsResolve = udpResponse[:n]
+	} else {
+		return nil, 0, errors.New("unsupported ECH DNS server protocol: ", server)
 	}
 	respMsg := new(dns.Msg)
 	err := respMsg.Unpack(dnsResolve)
