@@ -28,16 +28,16 @@ func Compile(script string) (*Program, error) {
 	var code []byte
 	var err error
 	name := "[inline]"
+	privileged := false
 	if strings.HasPrefix(script, base64.GzipPrefix) || strings.HasPrefix(script, base64.Prefix) {
 		code, err = base64.Decode(script)
 	} else if name, err = platform.ResolveLuaFile(script); err == nil {
 		code, err = os.ReadFile(name)
+		privileged = hasPrivilegedPSK(code)
 	}
 	if err != nil {
 		return nil, err
 	}
-
-	privileged := hasPrivilegedPSK(code)
 
 	chunk, err := parse.Parse(bytes.NewReader(code), name)
 	if err != nil {

@@ -238,9 +238,27 @@ func TestProgramPrivilegedPSK(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(platform.LuaPrivilegedPSK, tc.psk)
-			program := compileTestProgram(t, tc.code)
-			if program.privileged != tc.privileged {
-				t.Fatalf("privileged = %t, want %t", program.privileged, tc.privileged)
+			path := filepath.Join(t.TempDir(), "psk.lua")
+			if err := os.WriteFile(path, []byte(tc.code), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			for _, source := range []struct {
+				name, script string
+				privileged   bool
+			}{
+				{"file", path, tc.privileged},
+				{"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(tc.code)), false},
+				{"gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, tc.code)), false},
+			} {
+				t.Run(source.name, func(t *testing.T) {
+					program, err := Compile(source.script)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if program.privileged != source.privileged {
+						t.Fatalf("privileged = %t, want %t", program.privileged, source.privileged)
+					}
+				})
 			}
 		})
 	}
@@ -446,10 +464,11 @@ file:close()`
 	}
 	for _, tc := range []struct {
 		name, script string
+		privileged   bool
 	}{
-		{"file", path},
-		{"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code))},
-		{"gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code))},
+		{"file", path, true},
+		{"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code)), false},
+		{"gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code)), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			program, err := Compile(tc.script)
@@ -460,6 +479,19 @@ file:close()`
 			L, err := program.NewState(context.Background(), func(L *glua.LState) {
 				L.SetGlobal("testPath", glua.LString(output))
 			}, nil)
+			if !tc.privileged {
+				if L != nil {
+					L.Close()
+					t.Fatal("inline script with a matching PSK accessed privileged libraries")
+				}
+				if err == nil || !strings.Contains(err.Error(), "no preloaded module: io") {
+					t.Fatalf("NewState error = %v, want io module unavailable", err)
+				}
+				if _, err := os.Stat(output); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("inline script output stat error = %v, want file not found", err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -485,7 +517,14 @@ func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
 			}
 			t.Setenv(platform.LuaPrivilegedPSK, before)
 			const code = "-- @xray:privileged-psk=secret\nvalue = 1"
-			program := compileTestProgram(t, code)
+			path := filepath.Join(t.TempDir(), "snapshot.lua")
+			if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			program, err := Compile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
 			t.Setenv(platform.LuaPrivilegedPSK, after)
 			check := func(L *glua.LState) {
 				t.Helper()
@@ -502,7 +541,11 @@ func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
 				defer L.Close()
 				check(L)
 			}
-			if recompiled := compileTestProgram(t, code); recompiled.privileged == privileged {
+			recompiled, err := Compile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if recompiled.privileged == privileged {
 				t.Fatal("recompilation did not observe the changed environment")
 			}
 		})
