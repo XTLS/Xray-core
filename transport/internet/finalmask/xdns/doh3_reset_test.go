@@ -23,7 +23,7 @@ type doH3ResetEvent struct {
 	upstreamAlive bool
 }
 
-func startDoH3ResetTestGateway(t *testing.T, handler http.Handler, resetStreams int32, resets chan<- doH3ResetEvent) (*ResolverProto, *finalmask.Dialer) {
+func startDoH3ResetTestGateway(t *testing.T, handler http.Handler, shouldReset func(int32) bool, resets chan<- doH3ResetEvent) (*ResolverProto, *finalmask.Dialer) {
 	t.Helper()
 	cert, ca := resolverTestCertificate(t)
 	packetConn, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -46,7 +46,7 @@ func startDoH3ResetTestGateway(t *testing.T, handler http.Handler, resetStreams 
 			return ctx
 		},
 		StreamDispatcher: func(_ http3.FrameType, stream *quic.Stream, _ error) (bool, error) {
-			if streams.Add(1) <= resetStreams {
+			if shouldReset(streams.Add(1)) {
 				conn := serverConn.Load()
 				alive := conn != nil && conn.Context().Err() == nil
 				stream.CancelRead(quic.StreamErrorCode(http3.ErrCodeRequestRejected))
@@ -107,7 +107,7 @@ func TestDoH3RetiresConnectionAfterRequestStreamReset(t *testing.T) {
 		queries <- bytes.Clone(body)
 		w.Header().Set("Content-Type", "application/dns-message")
 		_, _ = w.Write(httpTestResponse(t, body))
-	}), resetCount, resets)
+	}), func(index int32) bool { return index <= resetCount }, resets)
 
 	var dials atomic.Int32
 	created := make(chan *httpTestTrackedPacketConn, resetCount+1)
@@ -213,5 +213,173 @@ func TestDoH3RetiresConnectionAfterRequestStreamReset(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatalf("retired H3 PacketConn %d remained open until resolver.Close", i+1)
 		}
+	}
+}
+
+func TestDoH3RetiredGenerationKeepsInFlightResponse(t *testing.T) {
+	resets := make(chan doH3ResetEvent, 1)
+	responseStarted := make(chan []byte, 1)
+	releaseResponse := make(chan struct{})
+	requestBodies := make(chan []byte, 2)
+	var handled atomic.Int32
+	config, dialer := startDoH3ResetTestGateway(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read H3 request: %v", err)
+			return
+		}
+		requestBodies <- bytes.Clone(body)
+		if handled.Add(1) == 1 {
+			w.Header().Set("Content-Type", "application/dns-message")
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+			responseStarted <- bytes.Clone(body)
+			select {
+			case <-releaseResponse:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/dns-message")
+		_, _ = w.Write(httpTestResponse(t, body))
+	}), func(index int32) bool { return index == 2 }, resets)
+
+	var dials atomic.Int32
+	created := make(chan *httpTestTrackedPacketConn, 2)
+	dial := dialer.DialUDPContext
+	dialer.DialUDPContext = func(ctx context.Context, dest xnet.Destination) (net.Conn, error) {
+		conn, err := dial(ctx, dest)
+		if err != nil {
+			return nil, err
+		}
+		wrapper := conn.(*xnet.PacketConnWrapper)
+		tracked := &httpTestTrackedPacketConn{PacketConn: wrapper.PacketConn, closed: make(chan struct{})}
+		wrapper.PacketConn = tracked
+		created <- tracked
+		dials.Add(1)
+		return wrapper, nil
+	}
+	resolver, err := NewDoH3Resolver(config, dialer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(resolver.Close)
+	type exchangeResult struct {
+		id     uint16
+		err    error
+		ctxErr error
+	}
+	exchanges := make(chan exchangeResult, 3)
+	rr := resolver.(*requestResolver)
+	exchange := rr.exchange
+	rr.exchange = func(ctx context.Context, query []byte) ([]byte, error) {
+		response, err := exchange(ctx, query)
+		exchanges <- exchangeResult{id: uint16(query[0])<<8 | uint16(query[1]), err: err, ctxErr: ctx.Err()}
+		return response, err
+	}
+	readExchange := func(wantID uint16, wantErr bool) {
+		t.Helper()
+		select {
+		case result := <-exchanges:
+			if result.id != wantID || (result.err != nil) != wantErr || result.ctxErr != nil {
+				t.Fatalf("exchange id=%d err=%v context=%v; want id=%d error=%t uncanceled", result.id, result.err, result.ctxErr, wantID, wantErr)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("exchange %d did not return", wantID)
+		}
+	}
+
+	first := httpTestQuery(t, 101, "body-in-flight.example.")
+	if err := resolver.Send(first); err != nil {
+		t.Fatal(err)
+	}
+	var oldConn *httpTestTrackedPacketConn
+	select {
+	case oldConn = <-created:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first H3 request did not dial")
+	}
+	select {
+	case body := <-responseStarted:
+		expected := bytes.Clone(first)
+		expected[0], expected[1] = 0, 0
+		if !bytes.Equal(body, expected) {
+			t.Fatal("in-flight response belongs to a different query")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("first response headers were not sent")
+	}
+
+	reset := httpTestQuery(t, 102, "reset-while-body-in-flight.example.")
+	if err := resolver.Send(reset); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-resets:
+		if !event.upstreamAlive {
+			t.Fatal("upstream QUIC connection was already closed before stream reset")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("second H3 request stream was not reset")
+	}
+	readExchange(102, true)
+	select {
+	case <-oldConn.closed:
+		t.Fatal("retiring a generation closed a connection with an active response body")
+	default:
+	}
+
+	last := httpTestQuery(t, 103, "new-generation.example.")
+	if err := resolver.Send(last); err != nil {
+		t.Fatal(err)
+	}
+	var newConn *httpTestTrackedPacketConn
+	select {
+	case newConn = <-created:
+	case <-time.After(3 * time.Second):
+		t.Fatal("request after retirement did not dial a new generation")
+	}
+	readExchange(103, false)
+	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, last)) {
+		t.Fatal("new generation query failed")
+	}
+	select {
+	case body := <-requestBodies:
+		expected := bytes.Clone(first)
+		expected[0], expected[1] = 0, 0
+		if !bytes.Equal(body, expected) {
+			t.Fatal("first request body changed")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("first request body was not observed")
+	}
+	select {
+	case body := <-requestBodies:
+		expected := bytes.Clone(last)
+		expected[0], expected[1] = 0, 0
+		if !bytes.Equal(body, expected) {
+			t.Fatal("new generation request body changed")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("new generation request body was not observed")
+	}
+
+	close(releaseResponse)
+	readExchange(101, false)
+	if got := httpTestRead(t, resolver); !bytes.Equal(got, httpTestResponse(t, first)) {
+		t.Fatal("in-flight response did not survive retirement")
+	}
+	select {
+	case <-oldConn.closed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("retired generation socket remained open after its body closed")
+	}
+	select {
+	case <-newConn.closed:
+		t.Fatal("current generation socket closed before resolver.Close")
+	default:
+	}
+	if got := dials.Load(); got != 2 {
+		t.Fatalf("expected two H3 generations, got %d dials", got)
 	}
 }
