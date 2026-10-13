@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"time"
 
-	utls "github.com/refraction-networking/utls"
+	utls "github.com/xtls/utls"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"

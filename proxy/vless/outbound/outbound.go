@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	utls "github.com/refraction-networking/utls"
+	utls "github.com/xtls/utls"
 	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
 	proxyman "github.com/xtls/xray-core/app/proxyman/outbound"
 	"github.com/xtls/xray-core/app/reverse"
