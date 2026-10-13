@@ -193,10 +193,6 @@ func (r *DOHResolver) do(p []byte) error {
 				break
 			}
 		}
-		if off == 0 {
-			pool4K.Put(p[:cap(p)])
-			return nil
-		}
 		select {
 		case <-r.closeCh:
 			pool4K.Put(p[:cap(p)])
