@@ -135,14 +135,14 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 
 	if option.IPv4Enable {
 		ips, ttl, err := rec4.getIPs() // it's safe
-		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
+		if !mergeReq {
 			return ips, ttl, err
-		}
-		if ttl < rTTL {
-			rTTL = ttl
 		}
 		if len(ips) > 0 {
 			allIPs = append(allIPs, ips...)
+			if ttl < rTTL {
+				rTTL = ttl
+			}
 		} else {
 			errs = append(errs, err)
 		}
@@ -150,14 +150,14 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 
 	if option.IPv6Enable {
 		ips, ttl, err := rec6.getIPs() // it's safe
-		if !mergeReq || go_errors.Is(err, errRecordNotFound) {
+		if !mergeReq {
 			return ips, ttl, err
-		}
-		if ttl < rTTL {
-			rTTL = ttl
 		}
 		if len(ips) > 0 {
 			allIPs = append(allIPs, ips...)
+			if ttl < rTTL {
+				rTTL = ttl
+			}
 		} else {
 			errs = append(errs, err)
 		}
@@ -167,7 +167,7 @@ func merge(option dns.IPOption, rec4 *IPRecord, rec6 *IPRecord, errs ...error) (
 		return allIPs, rTTL, nil
 	}
 	if len(errs) == 2 && go_errors.Is(errs[0], errs[1]) {
-		return nil, rTTL, errs[0]
+		return nil, 0, errs[0]
 	}
-	return nil, rTTL, errors.Combine(errs...)
+	return nil, 0, errors.Combine(errs...)
 }
