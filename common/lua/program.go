@@ -142,7 +142,7 @@ func newSandboxedState() *glua.LState {
 	// Capture preload before package is hidden; require() reads loaders from the registry.
 	module := L.GetGlobal(glua.LoadLibName).(*glua.LTable)
 	preload := module.RawGetString("preload").(*glua.LTable)
-	loaders := L.NewTable()
+	loaders := L.CreateTable(1, 0)
 	loaders.RawSetInt(1, L.NewFunction(func(L *glua.LState) int {
 		name := L.CheckString(1)
 		loader := preload.RawGetString(name)
