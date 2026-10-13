@@ -1,13 +1,11 @@
 package conf
 
 import (
-	"os"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 )
 
 type TransportProtocol string
@@ -228,102 +226,25 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 
 	if c.FinalMask != nil {
 		for _, mask := range c.FinalMask.Tcp {
-			u, err := mask.Build(true)
+			proto, err := mask.Build(true)
 			if err != nil {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
-			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(u))
+			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(proto))
 		}
 		for _, mask := range c.FinalMask.Udp {
-			u, err := mask.Build(false)
+			proto, err := mask.Build(false)
 			if err != nil {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
-			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(proto))
 		}
 		if c.FinalMask.QuicParams != nil {
-			profile := strings.ToLower(c.FinalMask.QuicParams.BbrProfile)
-			switch profile {
-			case "", string(bbr.ProfileConservative), string(bbr.ProfileStandard), string(bbr.ProfileAggressive):
-				if profile == "" {
-					profile = string(bbr.ProfileStandard)
-				}
-			default:
-				return nil, errors.New("unknown bbr profile")
-			}
-
-			up, err := c.FinalMask.QuicParams.BrutalUp.Bps()
+			proto, err := c.FinalMask.QuicParams.Build()
 			if err != nil {
 				return nil, err
 			}
-			down, err := c.FinalMask.QuicParams.BrutalDown.Bps()
-			if err != nil {
-				return nil, err
-			}
-
-			if up > 0 && up < 65536 {
-				return nil, errors.New("BrutalUp must be at least 65536 bytes per second")
-			}
-			if down > 0 && down < 65536 {
-				return nil, errors.New("BrutalDown must be at least 65536 bytes per second")
-			}
-
-			c.FinalMask.QuicParams.Congestion = strings.ToLower(c.FinalMask.QuicParams.Congestion)
-			switch c.FinalMask.QuicParams.Congestion {
-			case "", "brutal", "reno", "bbr":
-			case "force-brutal":
-				if up == 0 {
-					return nil, errors.New("force-brutal requires up")
-				}
-			default:
-				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
-			}
-
-			if c.FinalMask.QuicParams.InitStreamReceiveWindow > 0 && c.FinalMask.QuicParams.InitStreamReceiveWindow < 16384 {
-				return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.MaxStreamReceiveWindow > 0 && c.FinalMask.QuicParams.MaxStreamReceiveWindow < 16384 {
-				return nil, errors.New("MaxStreamReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.InitConnectionReceiveWindow > 0 && c.FinalMask.QuicParams.InitConnectionReceiveWindow < 16384 {
-				return nil, errors.New("InitConnectionReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.MaxConnectionReceiveWindow > 0 && c.FinalMask.QuicParams.MaxConnectionReceiveWindow < 16384 {
-				return nil, errors.New("MaxConnectionReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.MaxIdleTimeout != 0 && (c.FinalMask.QuicParams.MaxIdleTimeout < 4 || c.FinalMask.QuicParams.MaxIdleTimeout > 120) {
-				return nil, errors.New("MaxIdleTimeout must be between 4 and 120")
-			}
-			if c.FinalMask.QuicParams.KeepAlivePeriod != 0 && (c.FinalMask.QuicParams.KeepAlivePeriod < 2 || c.FinalMask.QuicParams.KeepAlivePeriod > 60) {
-				return nil, errors.New("KeepAlivePeriod must be between 2 and 60")
-			}
-			if c.FinalMask.QuicParams.MaxIncomingStreams != 0 && c.FinalMask.QuicParams.MaxIncomingStreams < 8 {
-				return nil, errors.New("MaxIncomingStreams must be at least 8")
-			}
-
-			if c.FinalMask.QuicParams.Debug {
-				os.Setenv("HYSTERIA_BBR_DEBUG", "true")
-				os.Setenv("HYSTERIA_BRUTAL_DEBUG", "true")
-			}
-
-			config.QuicParams = &internet.QuicParams{
-				Congestion:                    c.FinalMask.QuicParams.Congestion,
-				BbrProfile:                    profile,
-				BrutalUp:                      up,
-				BrutalDown:                    down,
-				BrutalDisableLossCompensation: c.FinalMask.QuicParams.BrutalDisableLossCompensation,
-				InitStreamReceiveWindow:       c.FinalMask.QuicParams.InitStreamReceiveWindow,
-				MaxStreamReceiveWindow:        c.FinalMask.QuicParams.MaxStreamReceiveWindow,
-				InitConnReceiveWindow:         c.FinalMask.QuicParams.InitConnectionReceiveWindow,
-				MaxConnReceiveWindow:          c.FinalMask.QuicParams.MaxConnectionReceiveWindow,
-				MaxIdleTimeout:                c.FinalMask.QuicParams.MaxIdleTimeout,
-				KeepAlivePeriod:               c.FinalMask.QuicParams.KeepAlivePeriod,
-				DisablePathMtuDiscovery:       c.FinalMask.QuicParams.DisablePathMTUDiscovery,
-				DisableChromeParrot:           c.FinalMask.QuicParams.DisableChromeParrot,
-				DisableGSO:                    c.FinalMask.QuicParams.DisableGSO,
-				MaxIncomingStreams:            c.FinalMask.QuicParams.MaxIncomingStreams,
-				DisableStatelessReset:         c.FinalMask.QuicParams.DisableStatelessReset,
-			}
+			config.QuicParams = proto.(*internet.QuicParams)
 		}
 	}
 

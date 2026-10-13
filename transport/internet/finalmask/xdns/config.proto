@@ -7,6 +7,8 @@ option java_package = "com.xray.transport.internet.finalmask.xdns";
 option java_multiple_files = true;
 
 import "common/serial/typed_message.proto";
+import "transport/internet/tls/config.proto";
+import "transport/internet/config.proto";
 
 message DomainProto {
   string name = 1;
@@ -19,6 +21,9 @@ message DomainProto {
 message ResolverProto {
   string type = 1;
   string addr = 2;
+  int32 worker = 3;
+  xray.transport.internet.tls.Config tls_config = 4;
+  xray.transport.internet.QuicParams quic_config = 5;
 }
 
 message Config {
