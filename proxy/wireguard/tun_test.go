@@ -13,7 +13,7 @@ import (
 func BenchmarkUDPManagerNewSession(b *testing.B) {
 	m := &udpManager{
 		handler: func(conn net.Conn, dest net.Destination) {},
-		m:       make(map[string]*udpConn),
+		m:       make(map[udpFlowKey]*udpConn),
 	}
 	dst := net.UDPDestination(net.ParseAddress("1.1.1.1"), 443)
 	payload := make([]byte, 1200)

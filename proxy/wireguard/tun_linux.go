@@ -100,6 +100,26 @@ func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun
 		}
 	}
 
+	var ipv4TableIndex int
+	if v4 != nil {
+		r := &netlink.Route{}
+		for {
+			ipv4TableIndex = int(tableIndex.Add(1)) - 1
+			r.Table = ipv4TableIndex
+			routeList, fErr := netlink.RouteListFiltered(netlink.FAMILY_V4, r, netlink.RT_FILTER_TABLE)
+			if fErr != nil {
+				return nil, nil, errors.New("failed to pre check routes for table: ", ipv4TableIndex).Base(fErr)
+			}
+			if len(routeList) == 0 {
+				errors.LogInfo(context.Background(), "allocate new ipv4 table index: ", ipv4TableIndex)
+				break
+			}
+			if ipv4TableIndex > 65535 {
+				return nil, nil, errors.New("failed to find available ipv4 table index")
+			}
+		}
+	}
+
 	var ipv6TableIndex int
 	if v6 != nil {
 		r := &netlink.Route{}
@@ -148,6 +168,17 @@ func createKernelTun(localAddresses, dnsServers []netip.Addr, mtu int) (tdev tun
 			},
 		}
 		t.linkAddrs = append(t.linkAddrs, addr)
+		t.routes = append(t.routes, &netlink.Route{
+			LinkIndex: l.Attrs().Index,
+			Dst:       &net.IPNet{IP: net.IPv4zero, Mask: net.CIDRMask(0, 32)},
+			Table:     ipv4TableIndex,
+		})
+		r := netlink.NewRule()
+		r.Table, r.Family, r.Src = ipv4TableIndex, unix.AF_INET, addr.IPNet
+		t.rules = append(t.rules, r)
+		r = netlink.NewRule()
+		r.Table, r.Family, r.OifName = ipv4TableIndex, unix.AF_INET, n
+		t.rules = append(t.rules, r)
 	}
 	if v6 != nil {
 		addr := netlink.Addr{

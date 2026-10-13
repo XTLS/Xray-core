@@ -57,14 +57,16 @@ func handleICMPEcho(gstack *stack.Stack, netProto tcpip.NetworkProtocolNumber, i
 }
 
 func writeRawICMPPacket(gstack *stack.Stack, netProto tcpip.NetworkProtocolNumber, message []byte, srcIP, dstIP tcpip.Address) error {
-	pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
-		ReserveHeaderBytes: header.IPv6MinimumSize,
-		Payload:            buffer.MakeWithData(message),
-	})
-	defer pkt.DecRef()
+	ipHdrSize := header.IPv6MinimumSize
+	if netProto == header.IPv4ProtocolNumber {
+		ipHdrSize = header.IPv4MinimumSize
+	}
+	view := buffer.NewViewSize(ipHdrSize + len(message))
+	packet := view.AsSlice()
+	copy(packet[ipHdrSize:], message)
 
 	if netProto == header.IPv4ProtocolNumber {
-		ipHdr := header.IPv4(pkt.NetworkHeader().Push(header.IPv4MinimumSize))
+		ipHdr := header.IPv4(packet[:ipHdrSize])
 		ipHdr.Encode(&header.IPv4Fields{
 			TotalLength: uint16(header.IPv4MinimumSize + len(message)),
 			TTL:         64,
@@ -74,7 +76,7 @@ func writeRawICMPPacket(gstack *stack.Stack, netProto tcpip.NetworkProtocolNumbe
 		})
 		ipHdr.SetChecksum(^ipHdr.CalculateChecksum())
 	} else {
-		ipHdr := header.IPv6(pkt.NetworkHeader().Push(header.IPv6MinimumSize))
+		ipHdr := header.IPv6(packet[:ipHdrSize])
 		ipHdr.Encode(&header.IPv6Fields{
 			PayloadLength:     uint16(len(message)),
 			TransportProtocol: header.ICMPv6ProtocolNumber,
@@ -84,7 +86,7 @@ func writeRawICMPPacket(gstack *stack.Stack, netProto tcpip.NetworkProtocolNumbe
 		})
 	}
 
-	if err := gstack.WriteRawPacket(1, netProto, buffer.MakeWithView(pkt.ToView())); err != nil {
+	if err := gstack.WriteRawPacket(1, netProto, buffer.MakeWithView(view)); err != nil {
 		return errors.New("failed to write raw icmp packet back to stack ", err)
 	}
 	return nil

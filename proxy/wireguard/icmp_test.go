@@ -27,8 +27,7 @@ func newICMPTestStack(t *testing.T) *netTun {
 	return dev.(*netTun)
 }
 
-// startReader must run before the request is written: the stack may answer
-// synchronously inside Write, and netTun hands packets over an unbuffered channel.
+// startReader collects a reply asynchronously while the test injects its request.
 func startReader(dev *netTun) <-chan []byte {
 	got := make(chan []byte, 1)
 	go func() {

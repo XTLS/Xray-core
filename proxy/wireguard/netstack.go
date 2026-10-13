@@ -18,10 +18,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	xnet "github.com/xtls/xray-core/common/net"
+	"golang.zx2c4.com/wireguard/conn"
 	"golang.zx2c4.com/wireguard/tun"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -39,36 +41,46 @@ import (
 )
 
 type netTun struct {
-	ep             *channel.Endpoint
-	stack          *stack.Stack
-	events         chan tun.Event
-	notifyHandle   *channel.NotificationHandle
-	incomingPacket chan *buffer.View
-	closed         chan struct{}
-	mtu            int
-	dnsServers     []netip.Addr
-	hasV4, hasV6   bool
+	ep           *channel.Endpoint
+	stack        *stack.Stack
+	events       chan tun.Event
+	notifyHandle *channel.NotificationHandle
+	notifyCh     chan struct{}
+	closed       chan struct{}
+	closeOnce    sync.Once
+	mtu          int
+	dnsServers   []netip.Addr
+	hasV4, hasV6 bool
 }
 
 func CreateNetTUN(localAddresses, dnsServers []netip.Addr, mtu int, handleLocal bool) (tun.Device, *Net, *stack.Stack, error) {
 	opts := stack.Options{
 		NetworkProtocols:   []stack.NetworkProtocolFactory{ipv4.NewProtocol, ipv6.NewProtocol},
-		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocol, udp.NewProtocol, icmp.NewProtocol6, icmp.NewProtocol4},
+		TransportProtocols: []stack.TransportProtocolFactory{tcp.NewProtocolCUBIC, udp.NewProtocol, icmp.NewProtocol6, icmp.NewProtocol4},
 		HandleLocal:        handleLocal,
 	}
 	dev := &netTun{
-		ep:             channel.New(1024, uint32(mtu), ""),
-		stack:          stack.New(opts),
-		events:         make(chan tun.Event, 10),
-		incomingPacket: make(chan *buffer.View),
-		closed:         make(chan struct{}),
-		dnsServers:     dnsServers,
-		mtu:            mtu,
+		ep:         channel.New(conn.IdealBatchSize*32, uint32(mtu), ""),
+		stack:      stack.New(opts),
+		events:     make(chan tun.Event, 10),
+		notifyCh:   make(chan struct{}, 1),
+		closed:     make(chan struct{}),
+		dnsServers: dnsServers,
+		mtu:        mtu,
 	}
 	sackEnabledOpt := tcpip.TCPSACKEnabled(true) // TCP SACK is disabled by default
 	tcpipErr := dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, &sackEnabledOpt)
 	if tcpipErr != nil {
 		return nil, nil, nil, fmt.Errorf("could not enable TCP SACK: %v", tcpipErr)
+	}
+	moderateReceive := tcpip.TCPModerateReceiveBufferOption(true)
+	sendBuffer := tcpip.TCPSendBufferSizeRangeOption{Min: tcp.MinBufferSize, Default: 4 << 20, Max: 16 << 20}
+	receiveBuffer := tcpip.TCPReceiveBufferSizeRangeOption{Min: tcp.MinBufferSize, Default: 4 << 20, Max: 16 << 20}
+	for _, option := range []tcpip.SettableTransportProtocolOption{&moderateReceive, &sendBuffer, &receiveBuffer} {
+		if err := dev.stack.SetTransportProtocolOption(tcp.ProtocolNumber, option); err != nil {
+			dev.stack.Close()
+			return nil, nil, nil, fmt.Errorf("could not configure TCP buffers: %v", err)
+		}
 	}
 	dev.notifyHandle = dev.ep.AddNotify(dev)
 	tcpipErr = dev.stack.CreateNIC(1, dev.ep)
@@ -128,20 +140,47 @@ func (tun *netTun) Events() <-chan tun.Event {
 }
 
 func (tun *netTun) Read(buf [][]byte, sizes []int, offset int) (int, error) {
-	var view *buffer.View
-	select {
-	case view = <-tun.incomingPacket:
-	case <-tun.closed:
-		return 0, os.ErrClosed
+	if len(buf) == 0 {
+		return 0, nil
 	}
-
-	n, err := view.Read(buf[0][offset:])
-	view.Release()
-	if err != nil {
-		return 0, err
+	var pkt *stack.PacketBuffer
+	for pkt == nil {
+		select {
+		case <-tun.closed:
+			return 0, os.ErrClosed
+		default:
+		}
+		pkt = tun.ep.Read()
+		if pkt == nil {
+			select {
+			case <-tun.notifyCh:
+			case <-tun.closed:
+				return 0, os.ErrClosed
+			}
+		}
 	}
-	sizes[0] = n
-	return 1, nil
+	count := 0
+	for pkt != nil {
+		views, skip := pkt.AsViewList()
+		n := 0
+		for v := views.Front(); v != nil; v = v.Next() {
+			s := v.AsSlice()
+			if skip >= len(s) {
+				skip -= len(s)
+				continue
+			}
+			n += copy(buf[count][offset+n:], s[skip:])
+			skip = 0
+		}
+		pkt.DecRef()
+		sizes[count] = n
+		count++
+		if count == len(buf) {
+			break
+		}
+		pkt = tun.ep.Read()
+	}
+	return count, nil
 }
 
 func (tun *netTun) Write(buf [][]byte, offset int) (int, error) {
@@ -155,9 +194,12 @@ func (tun *netTun) Write(buf [][]byte, offset int) (int, error) {
 		switch packet[0] >> 4 {
 		case 4:
 			tun.ep.InjectInbound(header.IPv4ProtocolNumber, pkb)
+			pkb.DecRef()
 		case 6:
 			tun.ep.InjectInbound(header.IPv6ProtocolNumber, pkb)
+			pkb.DecRef()
 		default:
+			pkb.DecRef()
 			return 0, syscall.EAFNOSUPPORT
 		}
 	}
@@ -165,36 +207,21 @@ func (tun *netTun) Write(buf [][]byte, offset int) (int, error) {
 }
 
 func (tun *netTun) WriteNotify() {
-	pkt := tun.ep.Read()
-	if pkt == nil {
-		return
-	}
-
-	view := pkt.ToView()
-	pkt.DecRef()
-
 	select {
-	case tun.incomingPacket <- view:
-	case <-tun.closed:
-		view.Release()
+	case tun.notifyCh <- struct{}{}:
+	default:
 	}
 }
 
 func (tun *netTun) Close() error {
-	tun.stack.RemoveNIC(1)
-	tun.stack.Close()
-	tun.ep.RemoveNotify(tun.notifyHandle)
-	tun.ep.Close()
-
-	if tun.events != nil {
-		close(tun.events)
-	}
-
-	// we don't close incomingPacket, because WriteNotify may be mid-send on it (DNS lookup) and would panic.
-	if tun.closed != nil {
+	tun.closeOnce.Do(func() {
 		close(tun.closed)
-	}
-
+		tun.ep.RemoveNotify(tun.notifyHandle)
+		tun.stack.RemoveNIC(1)
+		tun.stack.Close()
+		tun.ep.Close()
+		close(tun.events)
+	})
 	return nil
 }
 
@@ -203,7 +230,7 @@ func (tun *netTun) MTU() (int, error) {
 }
 
 func (tun *netTun) BatchSize() int {
-	return 1
+	return conn.IdealBatchSize
 }
 
 func (tun *netTun) DialContextTCPAddrPort(ctx context.Context, addr netip.AddrPort) (net.Conn, error) {

@@ -272,17 +272,12 @@ func (s *Server) Start() error {
 		if err != nil {
 			return nil, err
 		}
-		if s.uplinkCounter != nil || s.downlinkCounter != nil {
-			pktConn = &PacketCounterConnection{
-				PacketConn:   pktConn,
-				ReadCounter:  s.uplinkCounter,
-				WriteCounter: s.downlinkCounter,
-			}
-		}
 		return pktConn, nil
 	}
 	bind := &bind{
-		listenFunc: listenFunc,
+		listenFunc:   listenFunc,
+		readCounter:  s.uplinkCounter,
+		writeCounter: s.downlinkCounter,
 	}
 	logger := &device.Logger{
 		Verbosef: func(format string, args ...any) {

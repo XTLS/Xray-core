@@ -278,21 +278,16 @@ func (h *Handler) init(ctx context.Context) error {
 				panic(reflect.TypeOf(c))
 			}
 		}
-		if h.uplinkCounter != nil || h.downlinkCounter != nil {
-			pktConn = &PacketCounterConnection{
-				PacketConn:   pktConn,
-				ReadCounter:  h.downlinkCounter,
-				WriteCounter: h.uplinkCounter,
-			}
-		}
 		return pktConn, nil
 	}
 	// device.NewDevice may use the bind right away (Up -> BindUpdate -> Open),
 	// so everything it reads must be set before creating the device.
 	bind := &bind{
-		resolveFunc: resolveFunc,
-		listenFunc:  listenFunc,
-		reserved:    h.conf.Reserved,
+		resolveFunc:  resolveFunc,
+		listenFunc:   listenFunc,
+		reserved:     h.conf.Reserved,
+		readCounter:  h.downlinkCounter,
+		writeCounter: h.uplinkCounter,
 	}
 	logger := &device.Logger{
 		Verbosef: func(format string, args ...any) {
@@ -424,28 +419,6 @@ func (c *UDPConnClient) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		b.Release()
 	}
 	return nil
-}
-
-type PacketCounterConnection struct {
-	net.PacketConn
-	ReadCounter  stats.Counter
-	WriteCounter stats.Counter
-}
-
-func (c *PacketCounterConnection) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	n, addr, err = c.PacketConn.ReadFrom(p)
-	if err == nil && c.ReadCounter != nil {
-		c.ReadCounter.Add(int64(n))
-	}
-	return
-}
-
-func (c *PacketCounterConnection) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	n, err = c.PacketConn.WriteTo(p, addr)
-	if err == nil && c.WriteCounter != nil {
-		c.WriteCounter.Add(int64(n))
-	}
-	return
 }
 
 type entry struct {
