@@ -83,6 +83,25 @@ func (s *handlerServer) RemoveInbound(ctx context.Context, request *RemoveInboun
 }
 
 func (s *handlerServer) AlterInbound(ctx context.Context, request *AlterInboundRequest) (*AlterInboundResponse, error) {
+	// Explicit capability handshake: stock cores reject this operation, so an
+	// Agent cannot mistake authentication-only removal for session revocation.
+	if request.Operation != nil && request.Operation.Type == "xwork.vless.RevokeUserSessions.v1" {
+		handler, err := s.ihm.GetHandler(ctx, request.Tag)
+		if err != nil {
+			return nil, err
+		}
+		p, err := getInbound(handler)
+		if err != nil {
+			return nil, err
+		}
+		revoker, ok := p.(interface {
+			RevokeUserSessions(context.Context, string) error
+		})
+		if !ok {
+			return nil, errors.New("inbound does not support user session revocation")
+		}
+		return &AlterInboundResponse{}, revoker.RevokeUserSessions(ctx, string(request.Operation.Value))
+	}
 	rawOperation, err := request.Operation.GetInstance()
 	if err != nil {
 		return nil, errors.New("unknown operation").Base(err)
