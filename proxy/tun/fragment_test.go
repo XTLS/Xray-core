@@ -39,6 +39,7 @@ func (f *fragmentTestTun) Close() error {
 	f.once.Do(func() { close(f.done) })
 	return nil
 }
+
 func (f *fragmentTestTun) ReadPacket(b []byte) ([]byte, error) {
 	if f.pending != nil {
 		close(f.pending)
@@ -111,9 +112,11 @@ func (d *fragmentTestDispatcher) Close() error {
 	}
 	return nil
 }
+
 func (d *fragmentTestDispatcher) Dispatch(context.Context, net.Destination) (*transport.Link, error) {
 	return nil, fmt.Errorf("test requires DispatchLink")
 }
+
 func (d *fragmentTestDispatcher) DispatchLink(ctx context.Context, destination net.Destination, link *transport.Link) error {
 	reader, ok := link.Reader.(*buf.TimeoutWrapperReader)
 	if !ok {

@@ -347,10 +347,12 @@ func (f *fragmentStateTun) Index() (int, error)   { return 1, nil }
 func (f *fragmentStateTun) WritePacket([]byte, []byte) error {
 	return nil
 }
+
 func (f *fragmentStateTun) Close() error {
 	f.once.Do(func() { close(f.stop) })
 	return nil
 }
+
 func (f *fragmentStateTun) ReadPacket(b []byte) ([]byte, error) {
 	if !f.first {
 		f.first = true
