@@ -261,16 +261,23 @@ func (h *Handler) RevokeUserSessions(ctx context.Context, e string) error {
 	}
 	h.userSessionsMu.Lock()
 	u := h.validator.GetByEmail(e)
-	if u == nil {
-		h.userSessionsMu.Unlock()
-		return nil
+	if u != nil {
+		if err := h.validator.Del(e); err != nil {
+			h.userSessionsMu.Unlock()
+			return err
+		}
 	}
-	if err := h.validator.Del(e); err != nil {
-		h.userSessionsMu.Unlock()
-		return err
+	// Include older generations already removed with stock rmu. This also
+	// makes authentication withdrawal followed by session termination safe.
+	sessions := make(map[*userSession]struct{})
+	for identity, active := range h.userSessions {
+		if strings.EqualFold(identity.Email, e) {
+			for s := range active {
+				sessions[s] = struct{}{}
+			}
+			delete(h.userSessions, identity)
+		}
 	}
-	sessions := h.userSessions[u]
-	delete(h.userSessions, u)
 	h.userSessionsMu.Unlock()
 	// Close only logical connections authenticated as this user. In particular,
 	// an XHTTP connection is a stream, not the shared underlying HTTP transport.
