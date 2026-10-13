@@ -69,6 +69,7 @@ type requestResolver struct {
 	addr           *net.UDPAddr
 	requests       chan resolverRequest
 	responses      chan []byte
+	exchange       func(context.Context, []byte) ([]byte, error)
 	wg             sync.WaitGroup
 	mu             sync.Mutex
 	once           sync.Once
@@ -77,7 +78,7 @@ type requestResolver struct {
 
 func newRequestResolver(addr *net.UDPAddr, exchange func(context.Context, []byte) ([]byte, error), closeTransport func()) *requestResolver {
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &requestResolver{ctx: ctx, cancel: cancel, addr: addr, requests: make(chan resolverRequest, resolverQueueSize), responses: make(chan []byte, resolverQueueSize), closeTransport: closeTransport}
+	r := &requestResolver{ctx: ctx, cancel: cancel, addr: addr, requests: make(chan resolverRequest, resolverQueueSize), responses: make(chan []byte, resolverQueueSize), exchange: exchange, closeTransport: closeTransport}
 	for range resolverConcurrency {
 		r.wg.Add(1)
 		go func() {
@@ -91,7 +92,7 @@ func newRequestResolver(addr *net.UDPAddr, exchange func(context.Context, []byte
 					var response []byte
 					var err error
 					if err = requestCtx.Err(); err == nil {
-						response, err = exchange(requestCtx, request.message)
+						response, err = r.exchange(requestCtx, request.message)
 						if err == nil {
 							err = validateDNSResponse(request.message, response)
 						}

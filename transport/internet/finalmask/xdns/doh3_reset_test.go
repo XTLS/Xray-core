@@ -131,6 +131,18 @@ func TestDoH3RetiresConnectionAfterRequestStreamReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(resolver.Close)
+	type exchangeResult struct {
+		err    error
+		ctxErr error
+	}
+	exchanges := make(chan exchangeResult, resetCount+1)
+	rr := resolver.(*requestResolver)
+	exchange := rr.exchange
+	rr.exchange = func(ctx context.Context, query []byte) ([]byte, error) {
+		response, err := exchange(ctx, query)
+		exchanges <- exchangeResult{err: err, ctxErr: ctx.Err()}
+		return response, err
+	}
 
 	for i := 0; i < resetCount; i++ {
 		query := httpTestQuery(t, uint16(90+i), "reset-"+strconv.Itoa(i)+".example.")
@@ -151,11 +163,27 @@ func TestDoH3RetiresConnectionAfterRequestStreamReset(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatalf("H3 request stream %d was not reset", i+1)
 		}
+		select {
+		case result := <-exchanges:
+			if result.err == nil || result.ctxErr != nil {
+				t.Fatalf("reset exchange %d did not finish with an uncanceled request error: err=%v context=%v", i+1, result.err, result.ctxErr)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("reset exchange %d did not return", i+1)
+		}
 	}
 
 	good := httpTestQuery(t, 99, "recovered.example.")
 	if err := resolver.Send(good); err != nil {
 		t.Fatal(err)
+	}
+	select {
+	case result := <-exchanges:
+		if result.err != nil || result.ctxErr != nil {
+			t.Fatalf("healthy exchange failed: err=%v context=%v", result.err, result.ctxErr)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("healthy exchange did not return")
 	}
 	select {
 	case conn := <-created:
