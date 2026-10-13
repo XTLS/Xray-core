@@ -10,6 +10,7 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	featureDNS "github.com/xtls/xray-core/features/dns"
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 type dnsContextCachedServer struct{ cache *CacheController }
@@ -165,5 +166,44 @@ func TestDNSSharedFetchLeaderCancellationDoesNotFailFollower(t *testing.T) {
 	}
 	if got := server.queryCount.Load(); got != 2 {
 		t.Fatalf("backend query count = %d, want retry with follower context", got)
+	}
+}
+
+type dnsFailedQueryServer struct {
+	cache      *CacheController
+	queryCount atomic.Int32
+}
+
+func (s *dnsFailedQueryServer) getCacheController() *CacheController { return s.cache }
+func (s *dnsFailedQueryServer) sendQuery(_ context.Context, _ chan<- error, domain string, _ featureDNS.IPOption) {
+	s.queryCount.Add(1)
+	s.cache.pub.Publish(domain+"4", &IPRecord{
+		Expire: time.Now().Add(45 * time.Second),
+		RCode:  dnsmessage.RCodeNameError,
+	})
+}
+
+func TestDNSSharedFetchReturnsUpstreamFailureWithoutRetry(t *testing.T) {
+	server := &dnsFailedQueryServer{
+		cache: NewCacheController("shared-failure-test", false, false, 0),
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := queryIP(t.Context(), server, "failed.invalid", featureDNS.IPOption{IPv4Enable: true})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("negative DNS response returned no error")
+		}
+		if code := featureDNS.RCodeFromError(err); code != uint16(dnsmessage.RCodeNameError) {
+			t.Fatalf("DNS response code = %d, want %d (NXDOMAIN)", code, dnsmessage.RCodeNameError)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("upstream failure was retried instead of returned")
+	}
+	if got := server.queryCount.Load(); got != 1 {
+		t.Fatalf("backend query count = %d, want 1", got)
 	}
 }

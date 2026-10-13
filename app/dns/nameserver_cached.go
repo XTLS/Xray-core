@@ -71,18 +71,28 @@ func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOp
 		key = key + "6"
 	}
 
-	results := s.getCacheController().requestGroup.DoChan(key, func() (any, error) {
-		return doFetch(ctx, s, fqdn, option), nil
-	})
-	select {
-	case <-ctx.Done():
-		return nil, 0, ctx.Err()
-	case value := <-results:
+	for {
 		if err := ctx.Err(); err != nil {
 			return nil, 0, err
 		}
-		ret := value.Val.(result)
-		return ret.ips, ret.ttl, ret.error
+		results := s.getCacheController().requestGroup.DoChan(key, func() (any, error) {
+			ret := doFetch(ctx, s, fqdn, option)
+			return ret, ctx.Err()
+		})
+		select {
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
+		case value := <-results:
+			if err := ctx.Err(); err != nil {
+				return nil, 0, err
+			}
+			if value.Err != nil {
+				// A canceled flight owner must not fail another caller that is still active.
+				continue
+			}
+			ret := value.Val.(result)
+			return ret.ips, ret.ttl, ret.error
+		}
 	}
 }
 
