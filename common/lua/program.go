@@ -15,7 +15,8 @@ import (
 
 // Program holds immutable bytecode that can be run by independent LStates.
 type Program struct {
-	proto *glua.FunctionProto
+	proto      *glua.FunctionProto
+	privileged bool
 }
 
 // LStateFactory returns a fully initialized state or nil and an error.
@@ -36,6 +37,8 @@ func Compile(script string) (*Program, error) {
 		return nil, err
 	}
 
+	privileged := hasPrivilegedPSK(code)
+
 	chunk, err := parse.Parse(bytes.NewReader(code), name)
 	if err != nil {
 		return nil, err
@@ -44,14 +47,43 @@ func Compile(script string) (*Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Program{proto: proto}, nil
+	return &Program{proto: proto, privileged: privileged}, nil
+}
+
+func hasPrivilegedPSK(code []byte) bool {
+	expected := strings.TrimSpace(platform.NewEnvFlag(platform.LuaPrivilegedPSK).GetValue(func() string { return "" }))
+	if expected == "" {
+		return false
+	}
+
+	for len(code) != 0 {
+		line, rest, _ := bytes.Cut(code, []byte{'\n'})
+		code = rest
+		line = bytes.TrimSuffix(line, []byte{'\r'})
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		line, found := bytes.CutPrefix(bytes.TrimLeft(line, " \t"), []byte("--"))
+		if !found {
+			return false
+		}
+		key, found := bytes.CutPrefix(bytes.TrimLeft(line, " \t"), []byte("@xray:privileged-psk="))
+		key = bytes.TrimSpace(key)
+		return found && len(key) != 0 && string(key) == expected
+	}
+	return false
 }
 
 // NewState creates a state, runs register, executes the program under ctx, and
 // runs validate. It removes the initialization context before returning a state
 // owned by the caller.
 func (p *Program) NewState(ctx context.Context, register func(*glua.LState), validate func(*glua.LState) error) (*glua.LState, error) {
-	L := glua.NewState()
+	var L *glua.LState
+	if p.privileged {
+		L = glua.NewState()
+	} else {
+		L = newSandboxedState()
+	}
 	valid := false
 	defer func() {
 		if !valid {
@@ -75,6 +107,45 @@ func (p *Program) NewState(ctx context.Context, register func(*glua.LState), val
 	}
 	valid = true
 	return L, nil
+}
+
+func newSandboxedState() *glua.LState {
+	L := glua.NewState(glua.Options{SkipOpenLibs: true})
+
+	for _, lib := range []struct {
+		name string
+		open glua.LGFunction
+	}{
+		{glua.LoadLibName, glua.OpenPackage},
+		{glua.BaseLibName, glua.OpenBase},
+		{glua.TabLibName, glua.OpenTable},
+		{glua.StringLibName, glua.OpenString},
+		{glua.MathLibName, glua.OpenMath},
+		{glua.CoroutineLibName, glua.OpenCoroutine},
+	} {
+		L.Push(L.NewFunction(lib.open))
+		L.Push(glua.LString(lib.name))
+		L.Call(1, 0)
+	}
+
+	for _, name := range []string{
+		"dofile", "loadfile", "load", "loadstring", "getfenv", "setfenv",
+		"collectgarbage", "module", "newproxy", "print", "_printregs",
+	} {
+		L.SetGlobal(name, glua.LNil)
+	}
+
+	// require() reads loaders from the registry.
+	module := L.GetGlobal(glua.LoadLibName).(*glua.LTable)
+	loaders := L.NewTable()
+	loaders.RawSetInt(1, module.RawGetString("loaders").(*glua.LTable).RawGetInt(1))
+	module.RawSetString("loaders", loaders)
+	L.SetField(L.Get(glua.RegistryIndex), "_LOADERS", loaders)
+	for _, name := range []string{"loadlib", "seeall", "path", "cpath", "config"} {
+		module.RawSetString(name, glua.LNil)
+	}
+
+	return L
 }
 
 // NewStateFactory returns a factory that gives each state an initialization timeout.

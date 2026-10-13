@@ -25,6 +25,7 @@ const (
 	BrowserDialerAddress = "xray.browser.dialer"
 	XUDPLog              = "xray.xudp.show"
 	XUDPBaseKey          = "xray.xudp.basekey"
+	LuaPrivilegedPSK     = "xray.lua.privileged.psk"
 
 	TunFdKey = "xray.tun.fd"
 )
