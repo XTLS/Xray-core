@@ -36,7 +36,7 @@ type DOHResolver struct {
 }
 
 func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
-	if config.Worker <= 0 {
+	if config.Worker < 1 {
 		return nil, errors.New("invalid worker")
 	}
 	if config.TlsConfig == nil {
@@ -121,7 +121,7 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 
 		udpAddr: &net.UDPAddr{IP: []byte{0, 0, 0, 0}},
 		readCh:  make(chan []byte),
-		sendCh:  make(chan []byte, 128),
+		sendCh:  make(chan []byte),
 		closeCh: make(chan struct{}),
 	}
 	for range config.Worker {
@@ -252,17 +252,17 @@ func (r *DOHResolver) Read(p []byte) (n int, err error) {
 }
 
 func (r *DOHResolver) Send(p []byte) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.closed() {
-		return
-	}
-	b := make([]byte, len(p))
-	copy(b, p)
 	select {
 	case <-r.closeCh:
 		return
-	case r.sendCh <- b:
+	default:
+		b := make([]byte, len(p))
+		copy(b, p)
+		select {
+		case <-r.closeCh:
+			return
+		case r.sendCh <- b:
+		}
 	}
 }
 
@@ -277,5 +277,5 @@ func (r *DOHResolver) Close() {
 	r.wg.Wait()
 	r.client.CloseIdleConnections()
 	close(r.readCh)
-	close(r.sendCh)
+	// close(r.sendCh)
 }
