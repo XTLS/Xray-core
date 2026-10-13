@@ -255,6 +255,7 @@ type Config struct {
 	ResetMin      int64                  `protobuf:"varint,1,opt,name=reset_min,json=resetMin,proto3" json:"reset_min,omitempty"`
 	ResetMax      int64                  `protobuf:"varint,2,opt,name=reset_max,json=resetMax,proto3" json:"reset_max,omitempty"`
 	Items         []*Item                `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -310,6 +311,13 @@ func (x *Config) GetItems() []*Item {
 	return nil
 }
 
+func (x *Config) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
 var File_transport_internet_finalmask_noise_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_noise_config_proto_rawDesc = "" +
@@ -337,11 +345,12 @@ const file_transport_internet_finalmask_noise_config_proto_rawDesc = "" +
 	"\x06packet\x18\x05 \x01(\fR\x06packet\x12\x1b\n" +
 	"\tdelay_min\x18\x06 \x01(\x03R\bdelayMin\x12\x1b\n" +
 	"\tdelay_max\x18\a \x01(\x03R\bdelayMax\x12L\n" +
-	"\bsegments\x18\b \x03(\v20.xray.transport.internet.finalmask.noise.SegmentR\bsegments\"\x87\x01\n" +
+	"\bsegments\x18\b \x03(\v20.xray.transport.internet.finalmask.noise.SegmentR\bsegments\"\x9f\x01\n" +
 	"\x06Config\x12\x1b\n" +
 	"\treset_min\x18\x01 \x01(\x03R\bresetMin\x12\x1b\n" +
 	"\treset_max\x18\x02 \x01(\x03R\bresetMax\x12C\n" +
-	"\x05items\x18\x03 \x03(\v2-.xray.transport.internet.finalmask.noise.ItemR\x05itemsB\x97\x01\n" +
+	"\x05items\x18\x03 \x03(\v2-.xray.transport.internet.finalmask.noise.ItemR\x05items\x12\x16\n" +
+	"\x06script\x18\x04 \x01(\tR\x06scriptB\x97\x01\n" +
 	"+com.xray.transport.internet.finalmask.noiseP\x01Z<github.com/xtls/xray-core/transport/internet/finalmask/noise\xaa\x02'Xray.Transport.Internet.Finalmask.Noiseb\x06proto3"
 
 var (
