@@ -253,10 +253,16 @@ func (i *RelayInbound) processUDP(ctx context.Context, conn stat.Connection, dis
 				}
 				sessionItem.Unlock()
 			}
-			link, err := sessionItem.EnsureLink(ctx, conn, dest, dispatcher, i.policyManager, nil)
-			if err != nil {
-				b.Release()
-				continue
+			link := sessionItem.link.Load()
+			if link != nil {
+				sessionItem.UpdateConn(conn)
+			} else {
+				var err error
+				link, err = sessionItem.EnsureLink(ctx, conn, dest, dispatcher, i.policyManager, nil)
+				if err != nil {
+					b.Release()
+					continue
+				}
 			}
 
 			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{b})
