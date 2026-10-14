@@ -841,6 +841,9 @@ func (c *XDNS) Build() (proto.Message, error) {
 	}
 	for i := range c.Resolvers {
 		worker := c.Resolvers[i].Worker
+		if worker == 0 {
+			worker = 32
+		}
 		var tlsConfig *tls.Config
 		var quicConfig *internet.QuicParams
 		if c.Resolvers[i].TlsConfig != nil {
