@@ -253,7 +253,7 @@ func ReadClientRequestHeaderWithFixed(reader *StreamReader, fixedChunk []byte) (
 	}
 
 	epoch := binary.BigEndian.Uint64(plainFixed[1:9])
-	diff := int(math.Abs(float64(time.Now().Unix() - int64(epoch))))
+	diff := math.Abs(float64(time.Now().Unix() - int64(epoch)))
 	if diff > 30 {
 		return nil, ErrBadTimestamp
 	}
@@ -430,7 +430,7 @@ func ReadTCPResponse(r io.Reader, method *CipherMethod, psk []byte, clientSalt [
 	}
 
 	serverEpoch := binary.BigEndian.Uint64(decryptedFixed[1:9])
-	diff := int(math.Abs(float64(time.Now().Unix() - int64(serverEpoch))))
+	diff := math.Abs(float64(time.Now().Unix() - int64(serverEpoch)))
 	if diff > 30 {
 		return nil, ErrBadTimestamp
 	}

@@ -153,7 +153,7 @@ func parsePlainUDPPacket(sessionID, packetID uint64, bodyPlain []byte) (DecodedU
 		return DecodedUDPPacket{}, ErrBadHeaderType
 	}
 	epoch := binary.BigEndian.Uint64(bodyPlain[1:9])
-	diff := int(math.Abs(float64(time.Now().Unix() - int64(epoch))))
+	diff := math.Abs(float64(time.Now().Unix() - int64(epoch)))
 	if diff > 30 {
 		return DecodedUDPPacket{}, ErrBadTimestamp
 	}
