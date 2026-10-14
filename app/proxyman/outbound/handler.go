@@ -65,6 +65,10 @@ type Handler struct {
 	udp443          string
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
+
+	// ctx is canceled when the handler is closed, which ends its connections.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewHandler creates a new Handler based on the given configuration.
@@ -76,6 +80,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
 	}
+	h.ctx, h.cancel = context.WithCancel(context.Background())
 
 	if config.SenderSettings != nil {
 		senderSettings, err := config.SenderSettings.GetInstance()
@@ -176,6 +181,13 @@ func (h *Handler) Tag() string {
 
 // Dispatch implements proxy.Outbound.Dispatch.
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(h.ctx, func() {
+		cancel()
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
+	})()
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	content := session.ContentFromContext(ctx)
@@ -329,6 +341,7 @@ func (h *Handler) Start() error {
 
 // Close implements common.Closable.
 func (h *Handler) Close() error {
+	h.cancel()
 	common.Close(h.mux)
 	common.Close(h.proxy)
 	return nil

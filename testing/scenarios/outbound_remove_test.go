@@ -64,6 +64,31 @@ func TestRemoveOutboundWireGuard(t *testing.T) {
 	}
 }
 
+func TestRemoveOutboundFreedom(t *testing.T) {
+	tcpServer := tcp.Server{MsgProcessor: xor}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	apiPort, clientPort := tcp.PickPort(), tcp.PickPort()
+	servers := startXrayFromJSON(t, fmt.Sprintf(`{
+	"log": {"loglevel": "info"},
+	"api": {"tag": "api", "listen": "127.0.0.1:%d", "services": ["HandlerService"]},
+	"inbounds": [{"listen": "127.0.0.1", "port": %d, "protocol": "tunnel", "settings": {"rewriteAddress": "127.0.0.1", "rewritePort": %d, "allowedNetwork": "tcp"}}],
+	"outbounds": [{"tag": "out", "protocol": "freedom", "settings": {"finalRules": [{"action": "allow"}]}}]
+}`, apiPort, clientPort, dest.Port))
+	defer CloseAllServers(servers)
+
+	conn := dialWorking(t, clientPort)
+	defer conn.Close()
+
+	removeOutbound(t, apiPort, "out")
+
+	if !waitBroken(conn, 5*time.Second) {
+		t.Fatal("the connection through the removed outbound still works")
+	}
+}
+
 // startXrayFromJSON starts one xray per JSON config and waits for them like
 // InitializeServerConfigs does.
 func startXrayFromJSON(t *testing.T, configs ...string) []*exec.Cmd {
