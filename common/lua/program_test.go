@@ -382,7 +382,6 @@ func TestProgramPrivilegedSignatureHeader(t *testing.T) {
 		{"after code", "value = 1\n" + header + "\n" + privilegedFixtureBody, false},
 		{"inside string", `value = "` + header + `"`, false},
 		{"wrong marker", "-- xray:privileged-signature=" + privilegedFixtureSignature + "\n" + privilegedFixtureBody, false},
-		{"old PSK first", "-- @xray:privileged-psk=secret\n" + header + "\n" + privilegedFixtureBody, false},
 		{"invalid marker after comment", "-- ordinary comment\n" + privilegedSignatureHeader + "%\nvalue = 1", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -489,28 +488,6 @@ func TestProgramInlineSignaturesCannotAuthorize(t *testing.T) {
 				L.Close()
 			}
 		}
-	}
-}
-
-func TestProgramLegacyPSKCannotAuthorize(t *testing.T) {
-	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
-	t.Setenv("xray.lua.privileged.psk", "secret")
-	t.Setenv("XRAY_LUA_PRIVILEGED_PSK", "secret")
-	program, err := Compile(writeTestScript(t, "-- @xray:privileged-psk=secret\n"+privilegedFixtureBody))
-	if err != nil || program == nil || program.privileged {
-		t.Fatalf("old PSK authorization = %v, %v; want sandbox", program, err)
-	}
-	L, err := program.NewState(context.Background(), nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer L.Close()
-	if got := L.GetGlobal("os"); got != glua.LNil {
-		t.Fatalf("old PSK os = %v, want nil", got)
-	}
-	setTestPrivilegedPublicKey(t, "")
-	if program, err := Compile(writeTestScript(t, privilegedSignatureHeader+privilegedFixtureSignature+"\n"+privilegedFixtureBody)); program != nil || err == nil {
-		t.Fatalf("legacy environment substituted for public key: %v, %v", program, err)
 	}
 }
 
