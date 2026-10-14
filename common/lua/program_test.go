@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,6 +19,7 @@ import (
 	"weak"
 
 	glua "github.com/yuin/gopher-lua"
+	luar "layeh.com/gopher-luar"
 )
 
 func TestProgramStatesAreIndependent(t *testing.T) {
@@ -631,7 +633,12 @@ for _, convert in ipairs({tostring, require("_G").tostring}) do
     assert(convert("") == "" and convert("hello") == "hello")
     assert(convert(42, {}) == "42")
     assert(not pcall(convert))
-    for _, value in ipairs({{}, function() end, convert, testUserdata, testThread, testChannel}) do
+    assert(convert(testIPv4) == "192.0.2.1")
+    assert(convert(testIPv6) == "2001:db8::1")
+    assert(convert(testNativeIP) == "198.51.100.1")
+    assert(convert(testNativeStringer) == "0xdeadbeef")
+    assert(convert(testNativeError) == "lookup failed")
+    for _, value in ipairs({{}, function() end, convert, testUserdata, testThread, testChannel, testGoStruct, testIPs}) do
         local ok, result = pcall(convert, value)
         assert(ok and result == "<opaque>")
     end
@@ -642,6 +649,21 @@ string.__tostring = nil
 `)
 	var metamethodCalls int
 	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+		L.SetGlobal("testIPv4", luar.New(L, net.ParseIP("192.0.2.1")))
+		L.SetGlobal("testIPv6", luar.New(L, net.ParseIP("2001:db8::1")))
+		PushUserData(L, net.ParseIP("198.51.100.1"))
+		L.SetGlobal("testNativeIP", L.Get(-1))
+		L.Pop(1)
+		PushUserData(L, bytes.NewBufferString("0xdeadbeef"))
+		L.SetGlobal("testNativeStringer", L.Get(-1))
+		L.Pop(1)
+		PushError(L, errors.New("lookup failed"))
+		L.SetGlobal("testNativeError", L.Get(-1))
+		L.Pop(1)
+		L.SetGlobal("testGoStruct", luar.New(L, &struct{ Value string }{"readable field"}))
+		NewSlicePusher[net.IP](L)(L, []net.IP{net.ParseIP("192.0.2.1")})
+		L.SetGlobal("testIPs", L.Get(-1))
+		L.Pop(1)
 		userdata := L.NewUserData()
 		metatable := L.NewTable()
 		metatable.RawSetString("__tostring", L.NewFunction(func(L *glua.LState) int {

@@ -3,6 +3,7 @@ package lua
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -121,15 +122,22 @@ func newSandboxedState() *glua.LState {
 	L.GetGlobal(glua.StringLibName).(*glua.LTable).RawSetString("dump", glua.LNil)
 	L.GetGlobal(glua.MathLibName).(*glua.LTable).RawSetString("randomseed", glua.LNil)
 
-	// Hide object addresses without invoking __tostring.
+	// Preserve native Stringer/error output without using Lua's address-based defaults.
 	L.SetGlobal("tostring", L.NewFunction(func(L *glua.LState) int {
 		value := L.CheckAny(1)
+		result := "<opaque>"
 		switch value.Type() {
 		case glua.LTNil, glua.LTBool, glua.LTNumber, glua.LTString:
-			L.Push(glua.LString(value.String()))
-		default:
-			L.Push(glua.LString("<opaque>"))
+			result = value.String()
+		case glua.LTUserData:
+			switch native := value.(*glua.LUserData).Value.(type) {
+			case fmt.Stringer:
+				result = native.String()
+			case error:
+				result = native.Error()
+			}
 		}
+		L.Push(glua.LString(result))
 		return 1
 	}))
 
