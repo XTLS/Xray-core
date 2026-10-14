@@ -3,7 +3,7 @@ package xdns
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
+	gotls "crypto/tls"
 	"io"
 	"net/http"
 	"runtime"
@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 type DOHResolver struct {
@@ -66,7 +67,7 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 		tr = &http3.Transport{
 			TLSClientConfig: config.TlsConfig.GetTLSConfig(),
 			QUICConfig:      quicConfig,
-			Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (*quic.Conn, error) {
+			Dial: func(ctx context.Context, addr string, tlsCfg *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
 				dest, err := net.ParseDestination("udp:" + addr)
 				if err != nil {
 					return nil, err
@@ -75,6 +76,7 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 				if err != nil {
 					return nil, err
 				}
+				setaddr(conn.RemoteAddr())
 				tr := &quic.Transport{Conn: conn.(*net.PacketConnWrapper).PacketConn, DisableGSO: quicParams.DisableGSO}
 				if !quicParams.DisableChromeParrot {
 					tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
@@ -94,14 +96,14 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 				default:
 					panic(quicParams.Congestion)
 				}
-				setaddr(conn.RemoteAddr())
 				return qc, nil
 			},
 		}
 	default:
+		tlsConfig := config.TlsConfig.GetTLSConfig()
 		tr = &http.Transport{
-			TLSClientConfig: config.TlsConfig.GetTLSConfig(),
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			TLSClientConfig: tlsConfig,
+			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				dest, err := net.ParseDestination("tcp:" + addr)
 				if err != nil {
 					return nil, err
@@ -111,7 +113,19 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 					return nil, err
 				}
 				setaddr(conn.RemoteAddr())
-				return conn, nil
+				var tlsConn net.Conn
+				if fingerprint := tls.GetFingerprint(config.TlsConfig.Fingerprint); fingerprint != nil {
+					tlsConn = tls.UClient(conn, tlsConfig, fingerprint)
+					err = tlsConn.(*tls.UConn).HandshakeContext(ctx)
+				} else {
+					tlsConn = gotls.Client(conn, tlsConfig)
+					err = tlsConn.(*gotls.Conn).HandshakeContext(ctx)
+				}
+				if err != nil {
+					_ = conn.Close()
+					return nil, err
+				}
+				return tlsConn, nil
 			},
 		}
 	}
