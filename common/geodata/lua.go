@@ -45,7 +45,7 @@ func RegisterLua(L *lua.LState) {
 				"AnyMatch":  luaIPAnyMatch,
 				"Matches":   luaIPMatches,
 				"FilterIPs": newLuaIPFilterIPs(xlua.NewSlicePusher[net.IP](L)),
-			})
+			}, "SetReverse", "ToggleReverse")
 			return 1
 		}))
 
