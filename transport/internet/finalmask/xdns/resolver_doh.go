@@ -23,6 +23,8 @@ import (
 )
 
 type DOHResolver struct {
+	ctx    context.Context
+	cancel func()
 	client *http.Client
 	url    string
 	time   time.Time
@@ -42,6 +44,7 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 	if config.TlsConfig == nil {
 		return nil, errors.New("empty tls config")
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	var tr http.RoundTripper
 	var setaddr func(addr net.Addr)
 	switch {
@@ -116,6 +119,8 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 		Transport: tr,
 	}
 	r := &DOHResolver{
+		ctx:    ctx,
+		cancel: cancel,
 		client: client,
 		url:    "https://" + config.Addr,
 
@@ -167,7 +172,7 @@ func (r *DOHResolver) cooldown(t time.Time) bool {
 }
 
 func (r *DOHResolver) do(p []byte) error {
-	req := common.Must2(http.NewRequest("POST", r.url, bytes.NewReader(p)))
+	req := common.Must2(http.NewRequestWithContext(r.ctx, "POST", r.url, bytes.NewReader(p)))
 	req.Header.Set("Accept", "application/dns-message")
 	req.Header.Set("Content-Type", "application/dns-message")
 	req.Header.Set("User-Agent", "")
@@ -274,6 +279,7 @@ func (r *DOHResolver) Close() {
 	}
 	close(r.closeCh)
 	r.mu.Unlock()
+	r.cancel()
 	r.wg.Wait()
 	r.client.CloseIdleConnections()
 	close(r.readCh)
