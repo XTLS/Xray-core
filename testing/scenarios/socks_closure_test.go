@@ -144,6 +144,17 @@ func testTCPClosure(t *testing.T, dialer xproxy.Dialer) {
 					if _, err := io.ReadFull(target, make([]byte, len(request))); err != nil {
 						t.Fatal(err)
 					}
+					if !fromTarget {
+						// Ensure the response copier has started before the client FIN
+						// sets the downlink-only timeout (splice installs its own timer).
+						if _, err := target.Write([]byte{1}); err != nil {
+							t.Fatal(err)
+						}
+						ready := make([]byte, 1)
+						if _, err := io.ReadFull(client, ready); err != nil || ready[0] != 1 {
+							t.Fatalf("response copier readiness: %v, %v", ready, err)
+						}
+					}
 
 					sender, receiver := client, io.Reader(target)
 					if fromTarget {
