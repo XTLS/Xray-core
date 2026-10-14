@@ -113,11 +113,18 @@ func ResolveLuaFile(path string) (string, error) {
 			}
 		}
 	}
-	path, err := resolveFile(paths)
+	path, info, err := resolveFile(paths)
 	if err != nil {
 		return "", err
 	}
-	return resolveLuaTarget(path)
+	path, err = resolveLuaTarget(path)
+	if err != nil {
+		return "", err
+	}
+	if isConfigFile(path, info) {
+		return "", fmt.Errorf("Lua file was loaded as a configuration file: %s", path)
+	}
+	return path, nil
 }
 
 func resolveLuaTarget(path string) (string, error) {
@@ -131,12 +138,12 @@ func resolveLuaTarget(path string) (string, error) {
 	return path, nil
 }
 
-func resolveFile(paths []string) (string, error) {
+func resolveFile(paths []string) (string, os.FileInfo, error) {
 	var tried []string
 	for _, path := range paths {
 		path, err := filepath.Abs(path)
 		if err != nil {
-			return "", fmt.Errorf("failed to resolve file path: %w", err)
+			return "", nil, fmt.Errorf("failed to resolve file path: %w", err)
 		}
 		tried = append(tried, path)
 		info, err := os.Stat(path)
@@ -144,12 +151,12 @@ func resolveFile(paths []string) (string, error) {
 			continue
 		}
 		if err != nil {
-			return "", fmt.Errorf("failed to inspect file %q: %w", path, err)
+			return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
 		}
 		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("file is not a regular file: %s", path)
+			return "", nil, fmt.Errorf("file is not a regular file: %s", path)
 		}
-		return path, nil
+		return path, info, nil
 	}
-	return "", fmt.Errorf("file not found; tried %q: %w", tried, os.ErrNotExist)
+	return "", nil, fmt.Errorf("file not found; tried %q: %w", tried, os.ErrNotExist)
 }
