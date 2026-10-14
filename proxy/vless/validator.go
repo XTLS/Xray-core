@@ -55,6 +55,7 @@ func (v *MemoryValidator) Del(e string) error {
 	}
 	v.email.Delete(le)
 	v.users.Delete(ProcessUUID(u.(*protocol.MemoryUser).Account.(*MemoryAccount).ID.UUID()))
+	u.(*protocol.MemoryUser).Cancel()
 	return nil
 }
 

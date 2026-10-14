@@ -537,6 +537,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.User = request.User
 	inbound.VlessRoute = net.PortFromBytes(userSentID[6:8])
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(request.User.Context(), func() {
+		cancel()
+		connection.Close()
+	})()
+
 	account := request.User.Account.(*vless.MemoryAccount)
 
 	if account.Reverse != nil && request.Command != protocol.RequestCommandRvs {
