@@ -1,6 +1,9 @@
 package protocol
 
 import (
+	"context"
+	"sync"
+
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 )
@@ -52,4 +55,41 @@ type MemoryUser struct {
 	Account Account
 	Email   string
 	Level   uint32
+
+	origin *MemoryUser
+	once   sync.Once
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// Context returns a context that is canceled once the user is removed.
+// Connections of the user are tied to it.
+func (u *MemoryUser) Context() context.Context {
+	if u.origin != nil {
+		return u.origin.Context()
+	}
+	u.once.Do(func() {
+		u.ctx, u.cancel = context.WithCancel(context.Background())
+	})
+	return u.ctx
+}
+
+// Cancel cancels the context returned by Context. It does nothing for a user
+// made by Derive.
+func (u *MemoryUser) Cancel() {
+	if u.origin == nil {
+		u.Context()
+		u.cancel()
+	}
+}
+
+// Derive returns a copy of u with the given account. Its Context is the one of
+// u, so removing u also ends the connections made with the copy.
+func (u *MemoryUser) Derive(account Account) *MemoryUser {
+	return &MemoryUser{
+		Account: account,
+		Email:   u.Email,
+		Level:   u.Level,
+		origin:  u,
+	}
 }
