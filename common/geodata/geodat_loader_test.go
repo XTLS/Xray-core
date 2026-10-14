@@ -28,6 +28,29 @@ func TestLoadFileRejectsVarintOverflow(t *testing.T) {
 	}
 }
 
+func TestLoadFileRejectsOversizedEntry(t *testing.T) {
+	payload := []byte{
+		0x0a, 0x03, 0x0a, 0x01, 'A', // A valid entry before the oversized one.
+		0x0a, 0x80, 0x80, 0x80, 0x80, 0x04, // Entry length: 1 GiB.
+		0x0a, 0x04, 'T', 'E', 'S', 'T',
+	}
+	dir := t.TempDir()
+	t.Setenv("xray.location.asset", dir)
+	if err := os.WriteFile(filepath.Join(dir, "oversized.dat"), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Check without allocating the body first, so a regression fails safely.
+	if err := checkFile("oversized.dat", "TEST"); err == nil {
+		t.Fatal("accepted an entry length larger than the file")
+	}
+	if _, err := loadFile("oversized.dat", "TEST"); err == nil || !strings.Contains(err.Error(), "invalid body length") {
+		t.Fatalf("want invalid body length, got %v", err)
+	}
+	if err := loadSite("oversized.dat", "TEST", "", func(Domain_Type, []byte) {}); err == nil || !strings.Contains(err.Error(), "invalid body length") {
+		t.Fatalf("want invalid body length, got %v", err)
+	}
+}
+
 type siteEntry struct {
 	Type  Domain_Type
 	Value string
