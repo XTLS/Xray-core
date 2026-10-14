@@ -40,11 +40,18 @@ func TestDownloadOneLuaGuard(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			data, err := os.ReadFile(staged.temp)
+			tx, err := swapAll([]stage{staged})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.commit(); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(staged.target)
 			if err != nil || string(data) != luaGuardHeader+tc.body {
 				t.Fatalf("downloaded data = % x, %v", data, err)
 			}
-			program, err := xlua.Compile(staged.temp)
+			program, err := xlua.Compile(staged.target)
 			var syntaxErr *parse.Error
 			if program != nil || !errors.As(err, &syntaxErr) || syntaxErr.Pos.Line != 1 || syntaxErr.Pos.Column != 1 {
 				t.Fatalf("want Lua rejection at the first byte, got %v, %v", program, err)
@@ -57,7 +64,7 @@ func TestDownloadOneLuaGuard(t *testing.T) {
 				if len(list.Entry) != 1 || list.Entry[0].Code != tc.code {
 					t.Fatalf("header changed geodata: %v", &list)
 				}
-				if _, err := commongeodata.ParseDomainRules([]string{"ext:" + filepath.Base(staged.temp) + ":" + tc.code}, commongeodata.Domain_Full); err != nil {
+				if _, err := commongeodata.ParseDomainRules([]string{"ext:" + filepath.Base(staged.target) + ":" + tc.code}, commongeodata.Domain_Full); err != nil {
 					t.Fatalf("geodata loader rejected the header: %v", err)
 				}
 			}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
@@ -88,6 +89,10 @@ func TestResolveLuaFile(t *testing.T) {
 	for _, path := range paths[:3] {
 		common.Must(os.WriteFile(path, nil, 0o600))
 	}
+	for i, path := range paths {
+		paths[i], err = filepath.EvalSymlinks(path)
+		common.Must(err)
+	}
 	if got, err := ResolveLuaFile(paths[2]); err != nil || got != paths[2] {
 		t.Fatalf("absolute path = %q, %v; want %q", got, err, paths[2])
 	}
@@ -113,5 +118,37 @@ func TestResolveLuaFile(t *testing.T) {
 		if _, err := ResolveLuaFile(path); err == nil {
 			t.Fatalf("accepted invalid path %q", path)
 		}
+	}
+}
+
+func TestResolveLuaFileSymlink(t *testing.T) {
+	for _, tc := range []struct {
+		link, target string
+		valid        bool
+	}{
+		{"alias.lua", "data.dat", false},
+		{"alias.dat", "script.lua", true},
+	} {
+		t.Run(tc.link, func(t *testing.T) {
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			common.Must(err)
+			target := filepath.Join(dir, tc.target)
+			common.Must(os.WriteFile(target, nil, 0o600))
+			link := filepath.Join(dir, tc.link)
+			if err := os.Symlink(tc.target, link); err != nil {
+				if runtime.GOOS == "windows" {
+					t.Skipf("cannot create symlinks: %v", err)
+				}
+				t.Fatal(err)
+			}
+			got, err := ResolveLuaFile(link)
+			if tc.valid {
+				if err != nil || got != target {
+					t.Fatalf("ResolveLuaFile(%q) = %q, %v; want %q", link, got, err, target)
+				}
+			} else if err == nil || got != "" || !strings.Contains(err.Error(), "Lua file extension must be .lua") {
+				t.Fatalf("ResolveLuaFile(%q) = %q, %v; want .lua extension error", link, got, err)
+			}
+		})
 	}
 }

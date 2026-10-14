@@ -93,7 +93,7 @@ func GetConfDirPath() string {
 	return configPath
 }
 
-// ResolveLuaFile finds a local Lua script and returns its absolute path.
+// ResolveLuaFile finds a local .lua script and returns its resolved absolute path.
 // Relative paths: XRAY_LOCATION_CONFDIR > XRAY_LOCATION_CONFIG > working dir > executable dir.
 func ResolveLuaFile(path string) (string, error) {
 	if path == "" {
@@ -113,7 +113,22 @@ func ResolveLuaFile(path string) (string, error) {
 			}
 		}
 	}
-	return resolveFile(paths)
+	path, err := resolveFile(paths)
+	if err != nil {
+		return "", err
+	}
+	return resolveLuaTarget(path)
+}
+
+func resolveLuaTarget(path string) (string, error) {
+	path, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve Lua file symlinks: %w", err)
+	}
+	if filepath.Ext(path) != ".lua" {
+		return "", errors.New("Lua file extension must be .lua")
+	}
+	return path, nil
 }
 
 func resolveFile(paths []string) (string, error) {
