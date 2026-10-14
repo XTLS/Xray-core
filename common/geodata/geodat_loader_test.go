@@ -1,6 +1,7 @@
 package geodata
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,19 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
+
+func TestFindChecksEntryAndCodeTags(t *testing.T) {
+	for _, payload := range [][]byte{
+		{0x12, 6, 0x0a, 4, 'T', 'E', 'S', 'T'}, // Unknown field posing as entry.
+		{0x08, 6, 0x0a, 4, 'T', 'E', 'S', 'T'}, // Wrong entry wire type.
+		{0x0a, 6, 0x1a, 4, 'T', 'E', 'S', 'T'}, // Unknown field posing as code.
+		{0x0a, 6, 0x08, 4, 'T', 'E', 'S', 'T'}, // Wrong code wire type.
+	} {
+		if _, err := find(bytes.NewReader(payload), []byte("TEST"), true, int64(len(payload))); err == nil {
+			t.Fatalf("matched incorrect entry/code tags in %x", payload)
+		}
+	}
+}
 
 func TestLoadFileRejectsVarintOverflow(t *testing.T) {
 	payload := []byte{

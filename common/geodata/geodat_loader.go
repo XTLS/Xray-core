@@ -148,7 +148,8 @@ func seek(br *bufio.Reader, code []byte, size int64) (int, error) {
 	need := 2 + codeL // TODO: if code too long
 
 	for {
-		if _, err := br.ReadByte(); err != nil {
+		tag, err := br.ReadByte()
+		if err != nil {
 			return 0, err
 		}
 
@@ -170,7 +171,8 @@ func seek(br *bufio.Reader, code []byte, size int64) (int, error) {
 			}
 			return 0, err
 		}
-		if bodyL >= need && len(prefix) >= need && int(prefix[1]) == codeL && bytes.Equal(prefix[2:], code) {
+		if tag == 0x0a && bodyL >= need && len(prefix) >= need &&
+			prefix[0] == 0x0a && int(prefix[1]) == codeL && bytes.Equal(prefix[2:], code) {
 			return bodyL, nil
 		}
 		if _, err := br.Discard(bodyL); err != nil {
