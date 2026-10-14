@@ -102,7 +102,6 @@ func newSandboxedState() *glua.LState {
 		{glua.TabLibName, glua.OpenTable},
 		{glua.StringLibName, glua.OpenString},
 		{glua.MathLibName, glua.OpenMath},
-		{glua.CoroutineLibName, glua.OpenCoroutine},
 	} {
 		L.Push(L.NewFunction(lib.open))
 		L.Push(glua.LString(lib.name))
@@ -111,10 +110,25 @@ func newSandboxedState() *glua.LState {
 
 	for _, name := range []string{
 		"dofile", "loadfile", "load", "loadstring", "getfenv", "setfenv",
+		"getmetatable", "setmetatable", "rawget", "rawset",
 		"collectgarbage", "module", "newproxy", "print", "_printregs",
 	} {
 		L.SetGlobal(name, glua.LNil)
 	}
+	L.GetGlobal(glua.StringLibName).(*glua.LTable).RawSetString("dump", glua.LNil)
+	L.GetGlobal(glua.MathLibName).(*glua.LTable).RawSetString("randomseed", glua.LNil)
+
+	// Hide object addresses without invoking __tostring.
+	L.SetGlobal("tostring", L.NewFunction(func(L *glua.LState) int {
+		value := L.CheckAny(1)
+		switch value.Type() {
+		case glua.LTNil, glua.LTBool, glua.LTNumber, glua.LTString:
+			L.Push(glua.LString(value.String()))
+		default:
+			L.Push(glua.LString("<opaque>"))
+		}
+		return 1
+	}))
 
 	// Capture preload before package is hidden; require() reads loaders from the registry.
 	module := L.GetGlobal(glua.LoadLibName).(*glua.LTable)

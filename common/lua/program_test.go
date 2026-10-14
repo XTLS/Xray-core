@@ -528,17 +528,19 @@ func TestProgramSandbox(t *testing.T) {
 local function check()
     assert(package == nil)
     assert(require("_G") == _G)
-    for _, name in ipairs({"io", "os", "debug", "channel", "dofile", "loadfile",
+    for _, name in ipairs({"io", "os", "debug", "channel", "coroutine", "dofile", "loadfile",
         "load", "loadstring", "getfenv", "setfenv", "collectgarbage", "module",
-        "newproxy", "print", "_printregs"}) do
+        "getmetatable", "setmetatable", "rawget", "rawset", "newproxy", "print", "_printregs"}) do
         assert(_G[name] == nil, name)
     end
-    for _, name in ipairs({"io", "os", "debug", "channel", "package", "escape"}) do
+    for _, name in ipairs({"io", "os", "debug", "channel", "coroutine", "package", "escape"}) do
         assert(not pcall(require, name), name)
     end
-    for _, name in ipairs({"math", "string", "table", "coroutine"}) do
+    for _, name in ipairs({"math", "string", "table"}) do
         assert(require(name) == _G[name], name)
     end
+    assert(string.dump == nil and ("").dump == nil and require("string").dump == nil)
+    assert(math.randomseed == nil and require("math").randomseed == nil)
     local helper = require("xray.test")
     assert(helper.value == "ok" and helper == require("xray.test"))
     assert(math.abs(-2) == 2 and string.upper("ok") == "OK")
@@ -546,8 +548,7 @@ local function check()
 end
 check()
 function CheckSandbox()
-    local thread = coroutine.create(check)
-    assert(coroutine.resume(thread))
+    check()
     local injected = false
     package = {
         preload = {
@@ -596,6 +597,52 @@ end`)
 	}
 	if helperLoads != 1 || lateLoads != 1 {
 		t.Fatalf("module initialization calls = (%d, %d), want (1, 1)", helperLoads, lateLoads)
+	}
+}
+
+func TestProgramSandboxToString(t *testing.T) {
+	program := compileTestProgram(t, `
+assert(tostring == require("_G").tostring)
+for _, convert in ipairs({tostring, require("_G").tostring}) do
+    assert(convert(nil) == "nil")
+    assert(convert(true) == "true" and convert(false) == "false")
+    assert(convert(0) == "0" and convert(-42) == "-42" and convert(1.25) == "1.25")
+    assert(convert("") == "" and convert("hello") == "hello")
+    assert(convert(42, {}) == "42")
+    assert(not pcall(convert))
+    for _, value in ipairs({{}, function() end, convert, testUserdata, testThread, testChannel}) do
+        local ok, result = pcall(convert, value)
+        assert(ok and result == "<opaque>")
+    end
+end
+string.__tostring = function() error("string __tostring must not run") end
+assert(tostring("hello") == "hello")
+string.__tostring = nil
+`)
+	var metamethodCalls int
+	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+		userdata := L.NewUserData()
+		metatable := L.NewTable()
+		metatable.RawSetString("__tostring", L.NewFunction(func(L *glua.LState) int {
+			metamethodCalls++
+			L.Push(glua.LString("custom"))
+			return 1
+		}))
+		L.SetMetatable(userdata, metatable)
+		L.SetGlobal("testUserdata", userdata)
+		thread, cancel := L.NewThread()
+		if cancel != nil {
+			t.Cleanup(cancel)
+		}
+		L.SetGlobal("testThread", thread)
+		L.SetGlobal("testChannel", glua.LChannel(make(chan glua.LValue)))
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer L.Close()
+	if metamethodCalls != 0 {
+		t.Fatalf("__tostring calls = %d, want 0", metamethodCalls)
 	}
 }
 
@@ -705,6 +752,11 @@ assert(type(coroutine.create) == "function" and require("coroutine") == coroutin
 assert(type(dofile) == "function" and type(loadfile) == "function")
 assert(type(getfenv) == "function" and type(setfenv) == "function")
 assert(type(collectgarbage) == "function" and type(print) == "function")
+assert(type(getmetatable) == "function" and type(setmetatable) == "function")
+assert(type(rawget) == "function" and type(rawset) == "function")
+assert(tostring(42) == "42" and type(tostring({})) == "string")
+assert(tostring(setmetatable({}, {__tostring = function() return "custom" end})) == "custom")
+assert(type(string.dump) == "function" and type(math.randomseed) == "function")
 assert(type(package.loaders[2]) == "function" and type(package.path) == "string")
 assert(type(debug.traceback()) == "string" and type(os.time()) == "number")
 assert(assert(loadstring("return 42"))() == 42)
