@@ -39,6 +39,7 @@ func (v *Validator) Del(e string) error {
 	}
 	v.email.Delete(le)
 	v.users.Delete(hexString(u.(*protocol.MemoryUser).Account.(*MemoryAccount).Key))
+	u.(*protocol.MemoryUser).Cancel()
 	return nil
 }
 
