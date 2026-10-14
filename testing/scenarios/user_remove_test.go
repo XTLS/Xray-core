@@ -35,6 +35,12 @@ var removeUserIDs = map[string]string{
 	"b": "27e2bd8b-8ad6-4d2a-b3cf-1a8a3a0fe2b2",
 }
 
+// SS2022 keys: the server's, then one per user.
+var (
+	removeUserSSKey  = "MTIzNDU2Nzg5MGFiY2RlZg=="
+	removeUserSSKeys = map[string]string{"a": "YWFhYWFhYWFhYWFhYWFhYQ==", "b": "YmJiYmJiYmJiYmJiYmJiYg=="}
+)
+
 // removeUserServer is the server: an API, the inbounds, and a freedom
 // outbound that sends everything to the echo server.
 const removeUserServer = `{
@@ -148,6 +154,26 @@ var removeUserCases = []removeUserCase{
 		},
 		outbound: func(u string, port net.Port, _ string) string {
 			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"address": "127.0.0.1", "port": %d, "method": "aes-128-gcm", "password": "pass-%s"}`, port, u)
+		},
+	},
+	{
+		name:    "Shadowsocks2022TCP",
+		network: "tcp",
+		inbound: func(string) string {
+			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"method": "2022-blake3-aes-128-gcm", "password": "%s", "network": "tcp,udp", "clients": [{"password": "%s", "email": "a@test"}, {"password": "%s", "email": "b@test"}]}`, removeUserSSKey, removeUserSSKeys["a"], removeUserSSKeys["b"])
+		},
+		outbound: func(u string, port net.Port, _ string) string {
+			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"address": "127.0.0.1", "port": %d, "method": "2022-blake3-aes-128-gcm", "password": "%s:%s"}`, port, removeUserSSKey, removeUserSSKeys[u])
+		},
+	},
+	{
+		name:    "Shadowsocks2022UDP",
+		network: "udp",
+		inbound: func(string) string {
+			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"method": "2022-blake3-aes-128-gcm", "password": "%s", "network": "tcp,udp", "clients": [{"password": "%s", "email": "a@test"}, {"password": "%s", "email": "b@test"}]}`, removeUserSSKey, removeUserSSKeys["a"], removeUserSSKeys["b"])
+		},
+		outbound: func(u string, port net.Port, _ string) string {
+			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"address": "127.0.0.1", "port": %d, "method": "2022-blake3-aes-128-gcm", "password": "%s:%s"}`, port, removeUserSSKey, removeUserSSKeys[u])
 		},
 	},
 }

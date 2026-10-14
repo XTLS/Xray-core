@@ -153,6 +153,7 @@ func (i *MultiUserInbound) RemoveUser(ctx context.Context, email string) error {
 	pskHash := DeriveUserPSKHash(u.Account.(*MemoryAccount).Key)
 	i.usersByHash.Delete(pskHash)
 	i.userCount.Add(-1)
+	u.Cancel()
 
 	return nil
 }
@@ -246,6 +247,13 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 	// Dispatch Connection to Xray routing with matched User
 	inbound := session.InboundFromContext(ctx)
 	inbound.User = user
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(user.Context(), func() {
+		cancel()
+		conn.Close()
+	})()
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   conn.RemoteAddr(),

@@ -96,6 +96,15 @@ func (s *ServerUDPSession) EnsureLink(
 		cancel()
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 	s.link.Store(link)
+	if s.User != nil {
+		// Removing the user ends the session the way its idle timeout does.
+		stop := context.AfterFunc(s.User.Context(), func() {
+			s.timer.SetTimeout(0)
+		})
+		context.AfterFunc(sessCtx, func() {
+			stop()
+		})
+	}
 
 	go handleUDPResponse(s, link, dest, responseEncoder)
 	return link, nil
