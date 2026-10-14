@@ -114,6 +114,9 @@ func decodeVarint(br *bufio.Reader) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
+		if shift == 63 && b > 1 {
+			break // Only one value bit fits in the tenth byte.
+		}
 		x |= (uint64(b) & 0x7F) << shift
 		if (b & 0x80) == 0 {
 			return x, nil

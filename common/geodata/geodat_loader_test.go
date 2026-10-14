@@ -12,6 +12,22 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func TestLoadFileRejectsVarintOverflow(t *testing.T) {
+	payload := []byte{
+		0x0a,
+		0x86, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x02, // 2^64 + 6
+		0x0a, 0x04, 'T', 'E', 'S', 'T',
+	}
+	dir := t.TempDir()
+	t.Setenv("xray.location.asset", dir)
+	if err := os.WriteFile(filepath.Join(dir, "overflow.dat"), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadFile("overflow.dat", "TEST"); err == nil || !strings.Contains(err.Error(), "varint overflow") {
+		t.Fatalf("want varint overflow, got %v", err)
+	}
+}
+
 type siteEntry struct {
 	Type  Domain_Type
 	Value string
