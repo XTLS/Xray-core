@@ -2,13 +2,14 @@ package scenarios
 
 import (
 	"testing"
-	//"time"
+	"time"
 
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	clog "github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
@@ -17,7 +18,7 @@ import (
 	"github.com/xtls/xray-core/proxy/wireguard"
 	"github.com/xtls/xray-core/testing/servers/tcp"
 	"github.com/xtls/xray-core/testing/servers/udp"
-	//"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestWireguard(t *testing.T) {
@@ -29,9 +30,9 @@ func TestWireguard(t *testing.T) {
 	defer tcpServer.Close()
 
 	serverPrivate, _ := conf.ParseWireGuardKey("EGs4lTSJPmgELx6YiJAmPR2meWi6bY+e9rTdCipSj10=")
-	serverPublic, _ := conf.ParseWireGuardKey("osAMIyil18HeZXGGBDC9KpZoM+L2iGyXWVSYivuM9B0=")
+	serverPublic, _ := conf.ParseWireGuardKey("MmLJ5iHFVVBp7VsB0hxfpQ0wEzAbT2KQnpQpj0+RtBw=")
 	clientPrivate, _ := conf.ParseWireGuardKey("CPQSpgxgdQRZa5SUbT3HLv+mmDVHLW5YR/rQlzum/2I=")
-	clientPublic, _ := conf.ParseWireGuardKey("MmLJ5iHFVVBp7VsB0hxfpQ0wEzAbT2KQnpQpj0+RtBw=")
+	clientPublic, _ := conf.ParseWireGuardKey("osAMIyil18HeZXGGBDC9KpZoM+L2iGyXWVSYivuM9B0=")
 
 	serverPort := udp.PickPort()
 	serverConfig := &core.Config{
@@ -53,16 +54,26 @@ func TestWireguard(t *testing.T) {
 					Endpoint:    []string{"10.0.0.1"},
 					Mtu:         1420,
 					SecretKey:   serverPrivate,
-					Peers: []*wireguard.PeerConfig{{
-						PublicKey:  serverPublic,
-						AllowedIps: []string{"0.0.0.0/0", "::0/0"},
+					Users: []*protocol.User{{
+						Account: serial.ToTypedMessage(&wireguard.PeerConfig{
+							PublicKey:  clientPublic,
+							AllowedIps: []string{"0.0.0.0/0", "::0/0"},
+						}),
 					}},
 				}),
 			},
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
+				// The server's netstack drops loopback destinations, so the
+				// client targets the server's tunnel address instead.
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					DestinationOverride: &freedom.DestinationOverride{
+						Server: &protocol.ServerEndpoint{
+							Address: net.NewIPOrDomain(dest.Address),
+							Port:    uint32(dest.Port),
+						},
+					},
 					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{}),
@@ -85,7 +96,7 @@ func TestWireguard(t *testing.T) {
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 				}),
 				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewriteAddress:  net.NewIPOrDomain(net.ParseAddress("10.0.0.1")),
 					RewritePort:     uint32(dest.Port),
 					AllowedNetworks: []net.Network{net.Network_TCP},
 				}),
@@ -101,7 +112,7 @@ func TestWireguard(t *testing.T) {
 					SecretKey:   clientPrivate,
 					Peers: []*wireguard.PeerConfig{{
 						Endpoint:   "127.0.0.1:" + serverPort.String(),
-						PublicKey:  clientPublic,
+						PublicKey:  serverPublic,
 						AllowedIps: []string{"0.0.0.0/0", "::0/0"},
 					}},
 				}),
@@ -114,13 +125,11 @@ func TestWireguard(t *testing.T) {
 	common.Must(err)
 	defer CloseAllServers(servers)
 
-	// FIXME: for some reason wg server does not receive
-
-	// var errg errgroup.Group
-	// for i := 0; i < 1; i++ {
-	// 	errg.Go(testTCPConn(clientPort, 1024, time.Second*2))
-	// }
-	// if err := errg.Wait(); err != nil {
-	// 	t.Error(err)
-	// }
+	var errg errgroup.Group
+	for i := 0; i < 3; i++ {
+		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*5))
+	}
+	if err := errg.Wait(); err != nil {
+		t.Error(err)
+	}
 }
