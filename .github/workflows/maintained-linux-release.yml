@@ -1,0 +1,90 @@
+name: Maintained Linux Release
+
+on:
+  pull_request:
+    branches: [release/xwork-v26.3.27]
+  push:
+    tags: ['v*-uat-r*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test -count=1 ./proxy/vless/inbound ./common/session ./app/proxyman/command
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {arch: amd64, asset: '64'}
+          - {arch: arm64, asset: arm64-v8a}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build the maintained Linux binary
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p bundle artifacts
+          go build -trimpath -ldflags='-s -w' -o bundle/xray ./main
+          cp LICENSE bundle/LICENSE
+      - name: Resolve and checksum the geodata inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          geo_tag=$(gh api repos/Loyalsoldier/v2ray-rules-dat/releases/latest --jq .tag_name)
+          for name in geoip.dat geosite.dat; do
+            curl -fsSL --retry 3 "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/$geo_tag/$name" -o "bundle/$name"
+          done
+          printf '%s\n' "$geo_tag" > bundle/GEODATA_VERSION
+          printf '%s\n' "$GITHUB_SHA" > bundle/SOURCE_COMMIT
+          (cd bundle && sha256sum xray geoip.dat geosite.dat > SHA256SUMS)
+      - name: Package the installer-compatible archive
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          if [[ "$ASSET" == 64 ]]; then
+            bundle/xray help api rmus
+          fi
+          (cd bundle && zip -q -r "../artifacts/Xray-linux-$ASSET.zip" .)
+          sha256sum "artifacts/Xray-linux-$ASSET.zip" | awk '{print "SHA256= "$1}' > "artifacts/Xray-linux-$ASSET.zip.dgst"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maintained-linux-${{ matrix.arch }}
+          path: artifacts/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: maintained-linux-*
+          merge-multiple: true
+          path: artifacts
+      - name: Publish the immutable UAT release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Maintained Xray $GITHUB_REF_NAME" --notes "Linux amd64/arm64 UAT binaries with user session revocation. Source: $GITHUB_SHA. Every archive contains SOURCE_COMMIT, GEODATA_VERSION and SHA256SUMS; .dgst files are compatible with the Xray installer." artifacts/*
