@@ -39,10 +39,11 @@ type Handler struct {
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
-	tun  tun.Device
-	tnet *Net
-	dev  *device.Device
-	mu   sync.Mutex
+	tun        tun.Device
+	tnet       *Net
+	dev        *device.Device
+	configured bool
+	mu         sync.Mutex
 }
 
 func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
@@ -249,7 +250,7 @@ func (h *Handler) init(ctx context.Context) error {
 		return errors.New("closed")
 	}
 	if h.dev != nil {
-		return h.dev.Up()
+		return h.configure()
 	}
 	resolveFunc := h.resolveLocal
 	listenFunc := func() (net.PacketConn, error) {
@@ -308,8 +309,18 @@ func (h *Handler) init(ctx context.Context) error {
 			})
 		},
 	}
-	dev := device.NewDevice(h.tun, bind, logger)
-	bind.setDownFunc(dev.Down)
+	// The device takes over h.tun, so it is kept even if configure fails, and
+	// the next call retries.
+	h.dev = device.NewDevice(h.tun, bind, logger)
+	bind.setDownFunc(h.dev.Down)
+	return h.configure()
+}
+
+// configure applies the peers once and brings the device up.
+func (h *Handler) configure() error {
+	if h.configured {
+		return h.dev.Up()
+	}
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + h.conf.SecretKey + "\n")
 	for _, peer := range h.conf.Peers {
@@ -325,16 +336,11 @@ func (h *Handler) init(ctx context.Context) error {
 			cfg.WriteString("persistent_keepalive_interval=" + peer.KeepAlive + "\n")
 		}
 	}
-	err := dev.IpcSet(cfg.String())
-	if err != nil {
+	if err := h.dev.IpcSet(cfg.String()); err != nil {
 		return err
 	}
-	err = dev.Up()
-	if err != nil {
-		return err
-	}
-	h.dev = dev
-	return nil
+	h.configured = true
+	return h.dev.Up()
 }
 
 func (h *Handler) resolveLocal(host string) (net.IP, error) {
