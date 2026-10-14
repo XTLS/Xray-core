@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"context"
+	"reflect"
 	"sync"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -81,6 +82,15 @@ func (u *MemoryUser) Cancel() {
 		u.Context()
 		u.cancel()
 	}
+}
+
+// Equal reports whether u and v have the same account, email and level. The
+// context is runtime state and is left out.
+func (u *MemoryUser) Equal(v *MemoryUser) bool {
+	if u == nil || v == nil {
+		return u == v
+	}
+	return reflect.DeepEqual(u.Account, v.Account) && u.Email == v.Email && u.Level == v.Level
 }
 
 // Derive returns a copy of u with the given account. Its Context is the one of

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	. "github.com/xtls/xray-core/common/protocol"
 )
 
@@ -78,5 +79,16 @@ func TestMemoryUserDerive(t *testing.T) {
 	u.Cancel()
 	if d.Context().Err() == nil {
 		t.Fatal("derived user's context is not done after the original's Cancel")
+	}
+}
+
+func TestMemoryUserEqualIgnoresContext(t *testing.T) {
+	u := &MemoryUser{Email: "a@test", Level: 1}
+	u.Cancel()
+	if !cmp.Equal(u, &MemoryUser{Email: "a@test", Level: 1}) {
+		t.Fatal("users that differ only in their context are not equal")
+	}
+	if cmp.Equal(u, &MemoryUser{Email: "b@test", Level: 1}) {
+		t.Fatal("users with different emails are equal")
 	}
 }
