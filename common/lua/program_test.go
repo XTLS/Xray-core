@@ -553,16 +553,24 @@ func TestProgramSandbox(t *testing.T) {
 local function check()
     assert(package == nil)
     assert(require("_G") == _G)
-    for _, name in ipairs({"io", "os", "debug", "channel", "coroutine", "dofile", "loadfile",
+    for _, name in ipairs({"io", "debug", "channel", "ch", "coroutine", "dofile", "loadfile",
         "load", "loadstring", "getfenv", "setfenv", "collectgarbage", "module",
         "getmetatable", "setmetatable", "rawget", "rawset", "newproxy", "print", "_printregs"}) do
         assert(_G[name] == nil, name)
     end
-    for _, name in ipairs({"io", "os", "debug", "channel", "coroutine", "package", "escape"}) do
+    for _, name in ipairs({"io", "debug", "channel", "ch", "coroutine", "package", "escape"}) do
         assert(not pcall(require, name), name)
     end
-    for _, name in ipairs({"math", "string", "table"}) do
+    for _, name in ipairs({"math", "string", "table", "os"}) do
         assert(require(name) == _G[name], name)
+    end
+    for _, lib in ipairs({os, require("os")}) do
+        for _, name in ipairs({"clock", "date", "difftime", "time"}) do
+            assert(type(lib[name]) == "function", "os." .. name)
+        end
+        for _, name in ipairs({"execute", "exit", "getenv", "remove", "rename", "setenv", "setlocale", "tmpname"}) do
+            assert(lib[name] == nil, "os." .. name)
+        end
     end
     assert(string.dump == nil and ("").dump == nil and require("string").dump == nil)
     assert(math.randomseed == nil and require("math").randomseed == nil)
@@ -1144,8 +1152,8 @@ func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
 			}
 			check := func(L *glua.LState) {
 				t.Helper()
-				if got := L.GetGlobal("os").Type() == glua.LTTable; got != privileged {
-					t.Fatalf("os available = %t, want compile-time value %t", got, privileged)
+				if got := L.GetField(L.GetGlobal("os"), "execute").Type() == glua.LTFunction; got != privileged {
+					t.Fatalf("os.execute available = %t, want compile-time value %t", got, privileged)
 				}
 			}
 			factory := program.NewStateFactory(time.Second, nil, nil)

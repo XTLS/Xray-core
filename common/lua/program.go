@@ -107,6 +107,7 @@ func newSandboxedState() *glua.LState {
 		{glua.TabLibName, glua.OpenTable},
 		{glua.StringLibName, glua.OpenString},
 		{glua.MathLibName, glua.OpenMath},
+		{glua.OsLibName, glua.OpenOs},
 	} {
 		L.Push(L.NewFunction(lib.open))
 		L.Push(glua.LString(lib.name))
@@ -193,6 +194,16 @@ func newSandboxedState() *glua.LState {
 
 	// Prevent seed output from compromising cryptographic security.
 	L.GetGlobal(glua.MathLibName).(*glua.LTable).RawSetString("randomseed", glua.LNil)
+
+	// Keep only time functions, including when os is accessed through require.
+	osLib := L.GetGlobal(glua.OsLibName).(*glua.LTable)
+	osLib.ForEach(func(key, _ glua.LValue) {
+		switch key {
+		case glua.LString("clock"), glua.LString("date"), glua.LString("difftime"), glua.LString("time"):
+		default:
+			osLib.RawSet(key, glua.LNil)
+		}
+	})
 
 	// Prevent module injection through the global package table.
 	module := L.GetGlobal(glua.LoadLibName).(*glua.LTable)
