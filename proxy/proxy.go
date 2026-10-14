@@ -78,7 +78,7 @@ type UserManager interface {
 	// AddUser adds a new user.
 	AddUser(context.Context, *protocol.MemoryUser) error
 
-	// RemoveUser removes a user by email.
+	// RemoveUser removes a user by email and ends the user's connections.
 	RemoveUser(context.Context, string) error
 
 	// Get user by email.
