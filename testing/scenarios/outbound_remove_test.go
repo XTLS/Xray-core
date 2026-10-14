@@ -89,6 +89,48 @@ func TestRemoveOutboundFreedom(t *testing.T) {
 	}
 }
 
+// TestRemoveOutboundMux feeds the mux outbound from a Shadowsocks inbound,
+// which hands it a pipe, so its session lives on in a shared mux connection.
+func TestRemoveOutboundMux(t *testing.T) {
+	tcpServer := tcp.Server{MsgProcessor: xor}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	serverPort, apiPort, clientPort, hopPort := tcp.PickPort(), tcp.PickPort(), tcp.PickPort(), tcp.PickPort()
+	id := "27e2bd8b-8ad6-4d2a-b3cf-1a8a3a0fe2b1"
+	servers := startXrayFromJSON(t, fmt.Sprintf(`{
+	"log": {"loglevel": "info"},
+	"inbounds": [{"listen": "127.0.0.1", "port": %d, "protocol": "vless", "settings": {"decryption": "none", "clients": [{"id": "%s"}]}}],
+	"outbounds": [{"protocol": "freedom", "settings": {"finalRules": [{"action": "allow"}]}}]
+}`, serverPort, id), fmt.Sprintf(`{
+	"log": {"loglevel": "info"},
+	"api": {"tag": "api", "listen": "127.0.0.1:%d", "services": ["HandlerService"]},
+	"inbounds": [
+		{"tag": "front", "listen": "127.0.0.1", "port": %d, "protocol": "tunnel", "settings": {"rewriteAddress": "127.0.0.1", "rewritePort": %d, "allowedNetwork": "tcp"}},
+		{"tag": "ss", "listen": "127.0.0.1", "port": %d, "protocol": "shadowsocks", "settings": {"method": "aes-128-gcm", "password": "pass", "network": "tcp"}}
+	],
+	"outbounds": [
+		{"tag": "out", "protocol": "vless", "settings": {"address": "127.0.0.1", "port": %d, "id": "%s", "encryption": "none"}, "mux": {"enabled": true}},
+		{"tag": "hop", "protocol": "shadowsocks", "settings": {"address": "127.0.0.1", "port": %d, "method": "aes-128-gcm", "password": "pass"}}
+	],
+	"routing": {"rules": [
+		{"inboundTag": ["front"], "outboundTag": "hop"},
+		{"inboundTag": ["ss"], "outboundTag": "out"}
+	]}
+}`, apiPort, clientPort, dest.Port, hopPort, serverPort, id, hopPort))
+	defer CloseAllServers(servers)
+
+	conn := dialWorking(t, clientPort)
+	defer conn.Close()
+
+	removeOutbound(t, apiPort, "out")
+
+	if !waitBroken(conn, 5*time.Second) {
+		t.Fatal("the connection through the removed mux outbound still works")
+	}
+}
+
 // startXrayFromJSON starts one xray per JSON config and waits for them like
 // InitializeServerConfigs does.
 func startXrayFromJSON(t *testing.T, configs ...string) []*exec.Cmd {

@@ -133,6 +133,8 @@ type DialingWorkerFactory struct {
 	Proxy    proxy.Outbound
 	Dialer   internet.Dialer
 	Strategy ClientStrategy
+	// Context, if set, ends the connections of the workers once it is done.
+	Context context.Context
 }
 
 func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
@@ -148,11 +150,15 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 		return nil, err
 	}
 
+	parent := f.Context
+	if parent == nil {
+		parent = context.Background()
+	}
 	go func(p proxy.Outbound, d internet.Dialer, c common.Closable) {
 		outbounds := []*session.Outbound{{
 			Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
 		}}
-		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
+		ctx := session.ContextWithOutbounds(parent, outbounds)
 		ctx, cancel := context.WithCancel(ctx)
 
 		if errP := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); errP != nil {
