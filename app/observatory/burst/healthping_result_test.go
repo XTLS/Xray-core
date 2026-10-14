@@ -104,3 +104,14 @@ func TestHealthPingResultsIgnoreOutdated(t *testing.T) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}
 }
+
+func TestHealthPingResultsLargeSum(t *testing.T) {
+	// 10 x 400ms adds up to 4s, more than a 32-bit int holds in nanoseconds.
+	hr := burst.NewHealthPingResult(10, time.Hour)
+	for i := 0; i < 10; i++ {
+		hr.Put(400 * time.Millisecond)
+	}
+	if actual := hr.Get().Average; actual != 400*time.Millisecond {
+		t.Errorf("expected average 400ms, actual: %v", actual)
+	}
+}
