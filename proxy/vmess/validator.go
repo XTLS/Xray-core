@@ -102,6 +102,7 @@ func (v *TimedUserValidator) Remove(email string) bool {
 	if idx == -1 {
 		return false
 	}
+	v.users[idx].Cancel()
 	ulen := len(v.users)
 
 	v.users[idx] = v.users[ulen-1]

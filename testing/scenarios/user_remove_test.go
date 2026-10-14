@@ -110,6 +110,16 @@ var removeUserCases = []removeUserCase{
 			return fmt.Sprintf(`"protocol": "vless", "settings": {"address": "127.0.0.1", "port": %d, "id": "%s", "flow": "xtls-rprx-vision", "encryption": "none"}, "streamSettings": {"network": "raw", %s}`, port, removeUserIDs[u], tls)
 		},
 	},
+	{
+		name:    "VMess",
+		network: "tcp",
+		inbound: func(string) string {
+			return fmt.Sprintf(`"protocol": "vmess", "settings": {"clients": [{"id": "%s", "email": "a@test"}, {"id": "%s", "email": "b@test"}]}`, removeUserIDs["a"], removeUserIDs["b"])
+		},
+		outbound: func(u string, port net.Port, _ string) string {
+			return fmt.Sprintf(`"protocol": "vmess", "settings": {"address": "127.0.0.1", "port": %d, "id": "%s"}`, port, removeUserIDs[u])
+		},
+	},
 }
 
 func TestRemoveUser(t *testing.T) {
