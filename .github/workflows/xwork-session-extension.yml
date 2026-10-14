@@ -1,0 +1,29 @@
+name: XWork Session Extension
+on:
+  pull_request:
+    branches: [release/xwork-v26.3.27]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify core races and build
+        run: |
+          go test -race ./proxy/vless/inbound ./app/proxyman/command
+          go build -trimpath -o "$RUNNER_TEMP/xray-sessions" ./main
+      - uses: actions/checkout@v4
+        with:
+          repository: ai-workspace-xstream/xconnect-edge-agent
+          ref: 3e1c8ec1d7212a2c2e9d563eecc9111aa0c5a1f3
+          path: edge-agent-tests
+      - name: Verify real transport isolation and recovery
+        working-directory: edge-agent-tests
+        env:
+          XRAY_SESSION_TEST_BINARY: ${{ runner.temp }}/xray-sessions
+        run: go test -tags xrayintegration ./internal/xrayconfig -run TestExtended -count=1 -v

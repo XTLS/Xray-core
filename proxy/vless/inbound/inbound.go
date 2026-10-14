@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -84,6 +85,8 @@ type Handler struct {
 	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
+	userSessionsMu         sync.Mutex
+	userSessions           map[*protocol.MemoryUser]map[*userSession]struct{}
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
 
@@ -238,13 +241,85 @@ func (h *Handler) Close() error {
 
 // AddUser implements proxy.UserManager.AddUser().
 func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	h.userSessionsMu.Lock()
+	defer h.userSessionsMu.Unlock()
 	return h.validator.Add(u)
 }
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
+	h.userSessionsMu.Lock()
+	defer h.userSessionsMu.Unlock()
 	h.RemoveReverse(h.validator.GetByEmail(e))
 	return h.validator.Del(e)
+}
+
+// RevokeUserSessions withdraws authentication and closes this user's sessions.
+func (h *Handler) RevokeUserSessions(ctx context.Context, e string) error {
+	if strings.TrimSpace(e) == "" {
+		return errors.New("user email required")
+	}
+	h.userSessionsMu.Lock()
+	u := h.validator.GetByEmail(e)
+	if u != nil {
+		if err := h.validator.Del(e); err != nil {
+			h.userSessionsMu.Unlock()
+			return err
+		}
+	}
+	// Include older generations already removed with stock rmu. This also
+	// makes authentication withdrawal followed by session termination safe.
+	sessions := make(map[*userSession]struct{})
+	for identity, active := range h.userSessions {
+		if strings.EqualFold(identity.Email, e) {
+			for s := range active {
+				sessions[s] = struct{}{}
+			}
+			delete(h.userSessions, identity)
+		}
+	}
+	h.userSessionsMu.Unlock()
+	// Close only logical connections authenticated as this user. In particular,
+	// an XHTTP connection is a stream, not the shared underlying HTTP transport.
+	for s := range sessions {
+		s.cancel()
+		_ = s.conn.Close()
+	}
+	h.RemoveReverse(u)
+	return nil
+}
+
+type userSession struct {
+	conn   stat.Connection
+	cancel context.CancelFunc
+}
+
+func (h *Handler) trackUserSession(ctx context.Context, user *protocol.MemoryUser, conn stat.Connection) (context.Context, func(), error) {
+	h.userSessionsMu.Lock()
+	defer h.userSessionsMu.Unlock()
+	// Authentication may race with RemoveUser (including remove/re-add of the
+	// same UUID). Pointer equality rejects sessions authenticated before revoke.
+	if user.Email != "" && h.validator.GetByEmail(user.Email) != user {
+		return ctx, nil, errors.New("user revoked during authentication")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	s := &userSession{conn: conn, cancel: cancel}
+	if h.userSessions == nil {
+		h.userSessions = make(map[*protocol.MemoryUser]map[*userSession]struct{})
+	}
+	if h.userSessions[user] == nil {
+		h.userSessions[user] = make(map[*userSession]struct{})
+	}
+	h.userSessions[user][s] = struct{}{}
+	return ctx, func() {
+		cancel()
+		h.userSessionsMu.Lock()
+		defer h.userSessionsMu.Unlock()
+		delete(h.userSessions[user], s)
+		if len(h.userSessions[user]) == 0 {
+			delete(h.userSessions, user)
+		}
+	}, nil
 }
 
 // GetUser implements proxy.UserManager.GetUser().
@@ -523,6 +598,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 		return err
 	}
+
+	var releaseSession func()
+	ctx, releaseSession, err = h.trackUserSession(ctx, request.User, connection)
+	if err != nil {
+		_ = connection.Close()
+		return err
+	}
+	defer releaseSession()
 
 	if err := connection.SetReadDeadline(time.Time{}); err != nil {
 		errors.LogWarningInner(ctx, err, "unable to set back read deadline")
