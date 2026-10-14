@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet/finalmask/brutal"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -74,6 +76,7 @@ var (
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
 		"xmc":           func() interface{} { return new(XMC) },
+		"brutal":        func() interface{} { return new(Brutal) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -88,6 +91,49 @@ var (
 		"udphop":        func() interface{} { return new(UDPHop) },
 	}, "type", "settings")
 )
+
+type Brutal struct {
+	Version int    `json:"version"`
+	Rate    uint64 `json:"rate"`
+	Cwnd    uint32 `json:"cwnd"`
+	Group   uint64 `json:"group"`
+}
+
+func (c *Brutal) Build() (proto.Message, error) {
+	if c.Version != 1 && c.Version != 2 {
+		return nil, errors.New("invalid version")
+	}
+	rate := c.Rate
+	cwnd := c.Cwnd
+	group := c.Group
+	if rate == 0 {
+		rate = 125000
+	}
+	if cwnd == 0 {
+		cwnd = 20
+	}
+	if rate < 62500 {
+		return nil, errors.New("invalid rate")
+	}
+	if cwnd < 5 || cwnd > 80 {
+		return nil, errors.New("invalid cwnd")
+	}
+	var params []byte
+	switch c.Version {
+	case 1:
+		params = make([]byte, 16)
+		binary.NativeEndian.PutUint64(params, rate)
+		binary.NativeEndian.PutUint32(params[8:12], cwnd)
+	case 2:
+		params = make([]byte, 20)
+		binary.LittleEndian.PutUint64(params, rate)
+		binary.LittleEndian.PutUint32(params[8:12], cwnd)
+		binary.LittleEndian.PutUint64(params[12:20], group)
+	}
+	return &brutal.Config{
+		Params: params,
+	}, nil
+}
 
 type TCPItem struct {
 	Delay     Int32Range       `json:"delay"`
