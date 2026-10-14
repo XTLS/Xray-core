@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -629,6 +630,7 @@ func InitServerStream(conn net.Conn, method *CipherMethod, psk, saltSlice []byte
 func TransportTCP(ctx context.Context, sessionPolicy policy.Session, reader buf.Reader, writer buf.Writer, link *transport.Link) error {
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	defer timer.SetTimeout(0)
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 
 	requestDone := func() error {
@@ -644,6 +646,12 @@ func TransportTCP(ctx context.Context, sessionPolicy policy.Session, reader buf.
 		return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
 	}
 
-	responseDoneAndCloseWriter := task.OnSuccess(responseDone, task.Close(link.Writer))
-	return task.Run(ctx, requestDone, responseDoneAndCloseWriter)
+	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
+	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
+		return errors.New("connection ends").Base(err)
+	}
+
+	return nil
 }
