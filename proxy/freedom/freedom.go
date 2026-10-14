@@ -3,6 +3,7 @@ package freedom
 import (
 	"context"
 	"crypto/rand"
+	goerrors "errors"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -451,6 +452,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	if err := task.Run(ctx, requestDone, task.OnSuccess(responseDone, task.Close(output))); err != nil {
+		cause := errors.Cause(err)
+		// A failed relay must not look like successful EOF to the TCP peer.
+		// Policy cancellation after a normal half-close is still graceful.
+		if !goerrors.Is(cause, context.Canceled) && !goerrors.Is(cause, io.EOF) && !goerrors.Is(cause, io.ErrClosedPipe) {
+			if tcpConn, ok := stat.TryUnwrapStatsConn(conn).(*net.TCPConn); ok {
+				_ = tcpConn.SetLinger(0)
+			}
+		}
 		return errors.New("connection ends").Base(err)
 	}
 

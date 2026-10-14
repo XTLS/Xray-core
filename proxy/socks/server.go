@@ -154,10 +154,14 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		if inbound.CanSpliceCopy == 2 {
 			inbound.CanSpliceCopy = 1
 		}
+		writer := buf.NewWriter(conn)
+		if tcpConn, ok := stat.TryUnwrapStatsConn(conn).(*net.TCPConn); ok {
+			writer = &tcpResponseWriter{Writer: writer, conn: tcpConn}
+		}
 		if err := dispatcher.DispatchLink(
 			ctx, dest, &transport.Link{
 				Reader: reader,
-				Writer: buf.NewWriter(conn),
+				Writer: writer,
 			},
 		); err != nil {
 			return errors.New("failed to dispatch request").Base(err)
@@ -190,6 +194,18 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		return <-errCh
 	}
 	return nil
+}
+
+// tcpResponseWriter preserves a failed outbound stream as a connection error.
+// It leaves graceful closing to the inbound worker, as before.
+type tcpResponseWriter struct {
+	buf.Writer
+	conn *net.TCPConn
+}
+
+func (w *tcpResponseWriter) Interrupt() {
+	_ = w.conn.SetLinger(0)
+	w.conn.Close()
 }
 
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
