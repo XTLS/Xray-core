@@ -18,9 +18,7 @@ import (
 )
 
 func (s *ServerUDPSession) UpdateConn(conn stat.Connection) {
-	if s.currentConn.Load() == nil {
-		s.currentConn.Store(conn)
-	}
+	s.currentConn.Store(conn)
 	if s.timer != nil {
 		s.timer.Update()
 	}
@@ -70,6 +68,8 @@ func (s *ServerUDPSession) EnsureLink(
 		return link, nil
 	}
 
+	s.currentConn.Store(conn)
+
 	sessCtx, cancel := context.WithCancel(ctx)
 	inbound := session.InboundFromContext(sessCtx)
 	if inbound != nil && s.User != nil {
@@ -94,7 +94,6 @@ func (s *ServerUDPSession) EnsureLink(
 		return nil, err
 	}
 
-	s.link.Store(link)
 	sessionPolicy := policyManager.ForLevel(level)
 	s.timer = signal.CancelAfterInactivity(sessCtx, func() {
 		if s.manager != nil {
@@ -103,6 +102,7 @@ func (s *ServerUDPSession) EnsureLink(
 		s.Close()
 		cancel()
 	}, sessionPolicy.Timeouts.ConnectionIdle)
+	s.link.Store(link)
 
 	go handleUDPResponse(s, link, dest, responseEncoder)
 	return link, nil
