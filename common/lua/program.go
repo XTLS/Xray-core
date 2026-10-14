@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -128,10 +129,10 @@ func newSandboxedState() *glua.LState {
 			result = value.String()
 		case glua.LTUserData:
 			switch native := value.(*glua.LUserData).Value.(type) {
+			case error: // Errors can also implement fmt.Stringer; redact them first.
+				result = redactMemoryAddresses(native.Error())
 			case fmt.Stringer:
 				result = native.String()
-			case error:
-				result = native.Error()
 			}
 		}
 		return glua.LString(result)
@@ -160,6 +161,36 @@ func newSandboxedState() *glua.LState {
 		return 1
 	}))
 
+	// Redact addresses before caught errors become readable by the script.
+	redactError := func(value glua.LValue) glua.LValue {
+		if message, ok := value.(glua.LString); ok {
+			return glua.LString(redactMemoryAddresses(string(message)))
+		}
+		return value
+	}
+	for _, name := range []string{"pcall", "xpcall"} {
+		call := L.GetGlobal(name)
+		L.SetGlobal(name, L.NewFunction(func(L *glua.LState) int {
+			nargs := L.GetTop()
+			if name == "xpcall" {
+				L.CheckFunction(1)
+				handler := L.CheckFunction(2)
+				L.Replace(2, L.NewFunction(func(L *glua.LState) int {
+					L.Replace(1, redactError(L.Get(1)))
+					L.Insert(handler, 1)
+					L.Call(1, 1)
+					return 1
+				}))
+			}
+			L.Insert(call, 1)
+			L.Call(nargs, glua.MultRet)
+			if L.Get(1) == glua.LFalse {
+				L.Replace(2, redactError(L.Get(2)))
+			}
+			return L.GetTop()
+		}))
+	}
+
 	// Prevent seed output from compromising cryptographic security.
 	L.GetGlobal(glua.MathLibName).(*glua.LTable).RawSetString("randomseed", glua.LNil)
 
@@ -183,6 +214,12 @@ func newSandboxedState() *glua.LState {
 	}
 
 	return L
+}
+
+var memoryAddressPattern = regexp.MustCompile(`0[xX][0-9a-fA-F]+`)
+
+func redactMemoryAddresses(message string) string {
+	return memoryAddressPattern.ReplaceAllString(message, "<address>")
 }
 
 // NewStateFactory returns a factory that gives each state an initialization timeout.

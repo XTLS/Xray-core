@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"time"
 	"weak"
 
+	xerrors "github.com/xtls/xray-core/common/errors"
 	glua "github.com/yuin/gopher-lua"
 	luar "layeh.com/gopher-luar"
 )
@@ -631,6 +633,7 @@ for _, convert in ipairs({tostring, require("_G").tostring}) do
     assert(convert(true) == "true" and convert(false) == "false")
     assert(convert(0) == "0" and convert(-42) == "-42" and convert(1.25) == "1.25")
     assert(convert("") == "" and convert("hello") == "hello")
+    assert(convert("0xdeadbeef") == "0xdeadbeef")
     assert(convert(42, {}) == "42")
     assert(not pcall(convert))
     assert(convert(testIPv4) == "192.0.2.1")
@@ -695,6 +698,7 @@ assert(string.format == require("string").format and string.format == ("").forma
 for _, format in ipairs({string.format, require("string").format, ("").format}) do
     assert(format("%s %04d %.2f %t", "hello", 42, 1.25, true) == "hello 0042 1.25 true")
     assert(format("%q", "hello") == '"hello"')
+    assert(format("%s", "0xdeadbeef") == "0xdeadbeef")
     assert(format("%[2]s:%[1]d", 42, "hello") == "hello:42")
     assert(format("%%p") == "%p")
     assert(format("%%p", {}) == format("%%p", "<opaque>"))
@@ -751,6 +755,189 @@ assert(("%s"):format({}) == "<opaque>")
 	defer L.Close()
 	if L.GetTop() != 0 {
 		t.Fatalf("stack top = %d, want 0", L.GetTop())
+	}
+}
+
+func TestProgramSandboxProtectedCalls(t *testing.T) {
+	program := compileTestProgram(t, `
+assert(pcall == require("_G").pcall and xpcall == require("_G").xpcall)
+local object = {}
+local function succeed(a, b, c)
+    assert(a == 42 and b == nil and c == object)
+    return nil, object, "0xdeadbeef"
+end
+local ok, a, b, c = pcall(succeed, 42, nil, object)
+assert(ok and a == nil and b == object and c == "0xdeadbeef")
+assert(select("#", pcall(succeed, 42, nil, object)) == 4)
+local function noArguments(...)
+    assert(select("#", ...) == 0)
+    return nil, object, nil
+end
+local function unexpectedHandler() error("handler must not run") end
+ok, a, b, c = xpcall(noArguments, unexpectedHandler, "ignored")
+assert(ok and a == nil and b == object and c == nil)
+assert(select("#", xpcall(noArguments, unexpectedHandler)) == 4)
+ok, a = pcall(testCallable, 42)
+assert(ok and a == 42)
+ok, a = pcall(nil)
+assert(not ok and a == "attempt to call a nil value")
+ok, a = pcall(pcall)
+assert(not ok and string.find(a, "bad argument #1", 1, true))
+ok, a = pcall(xpcall, nil, nil)
+assert(not ok and string.find(a, "bad argument #1", 1, true))
+ok, a = pcall(xpcall, noArguments, nil)
+assert(not ok and string.find(a, "bad argument #2", 1, true))
+
+local businessError = "DNS lookup timed out (192.0.2.1)"
+ok, a = pcall(error, businessError, 0)
+assert(not ok and a == businessError)
+ok, a = xpcall(function() error(businessError, 0) end, function(message)
+    assert(message == businessError)
+    return "handled: " .. message, "ignored"
+end)
+assert(not ok and a == "handled: " .. businessError)
+local message = "lookup at 0x12Ab / 0XFE90; 2001:db8::1; 0x"
+local redacted = "lookup at <address> / <address>; 2001:db8::1; 0x"
+ok, a = pcall(error, message, 0)
+assert(not ok and a == redacted)
+ok, a = pcall(error, "business id=0xdeadbeef", 0)
+assert(not ok and a == "business id=<address>")
+for _, value in ipairs({object, testObject, true, 42}) do
+    ok, a = pcall(error, value, 0)
+    assert(not ok and a == value)
+    ok, a = xpcall(function() error(value, 0) end, function(caught)
+        assert(caught == value)
+        return caught
+    end)
+    assert(not ok and a == value)
+end
+ok, a = pcall(error, nil, 0)
+assert(not ok and a == nil)
+
+local conversion = "cannot use function: <address> (type *lua.LFunction) as type string"
+ok, a = pcall(testTakeString, function() end)
+assert(not ok and string.find(a, conversion, 1, true))
+ok, a = xpcall(function() testTakeString(function() end) end, function(caught)
+    testSendError(caught)
+    return caught
+end)
+assert(not ok and string.find(a, conversion, 1, true))
+ok, a = pcall(function() testValues[1] = testObject end)
+assert(not ok and string.find(a, "<address>", 1, true) and not string.find(a, "0x", 1, true))
+assert(string.find(a, "as type int", 1, true))
+testValues[1] = 7
+local extended = testValues + 9
+assert(testValues[1] == 7 and #extended == 2 and extended[2] == 9)
+ok, a = pcall(testPanic)
+assert(not ok and a == "{<address> <address>}")
+ok, a = xpcall(testPanic, function(caught)
+    testSendError(caught)
+    return caught
+end)
+assert(not ok and a == "{<address> <address>}")
+ok, a = xpcall(function() error(message, 0) end, function(caught)
+    assert(caught == redacted)
+    error("handler failed at 0xABCD", 0)
+end)
+assert(not ok and a == "handler failed at <address>")
+ok, a = xpcall(function() error(businessError, 0) end, testPanic)
+assert(not ok and a == "{<address> <address>}")
+`)
+	var sent []string
+	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+		callable := L.NewTable()
+		metatable := L.NewTable()
+		metatable.RawSetString("__call", L.NewFunction(func(L *glua.LState) int {
+			L.Push(L.Get(2))
+			return 1
+		}))
+		L.SetMetatable(callable, metatable)
+		L.SetGlobal("testCallable", callable)
+		L.SetGlobal("testTakeString", luar.New(L, func(string) {}))
+		target := 42
+		PushUserData(L, struct{ Pointer *int }{&target})
+		L.SetGlobal("testObject", L.Get(-1))
+		L.Pop(1)
+		NewSlicePusher[int](L)(L, []int{1})
+		L.SetGlobal("testValues", L.Get(-1))
+		L.Pop(1)
+		L.SetGlobal("testPanic", L.NewFunction(func(L *glua.LState) int {
+			panic(struct{ First, Second *int }{&target, &target})
+		}))
+		L.SetGlobal("testSendError", L.NewFunction(func(L *glua.LState) int {
+			message := L.CheckString(1)
+			if strings.Contains(message, "0x") || strings.Contains(message, "0X") {
+				t.Errorf("outbound error contains an address: %q", message)
+			}
+			sent = append(sent, message)
+			return 0
+		}))
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer L.Close()
+	if len(sent) != 2 || !strings.Contains(sent[0], "cannot use function: <address>") || sent[1] != "{<address> <address>}" {
+		t.Fatalf("outbound errors = %q", sent)
+	}
+	if L.GetTop() != 0 {
+		t.Fatalf("stack top = %d, want 0", L.GetTop())
+	}
+}
+
+func TestProgramSandboxGoErrorStrings(t *testing.T) {
+	program := compileTestProgram(t, `
+for name, expected in pairs(testErrorMessages) do
+    local value = _G[name]
+    assert(tostring(value) == expected, name)
+    assert(string.format("%s", value) == expected, name)
+    assert(string.format("%p", value) == string.format("%p", expected), name)
+    assert(string.format("%#v", value) == string.format("%#v", expected), name)
+    local ok, caught = pcall(error, value, 0)
+    assert(not ok and caught == value and tostring(caught) == expected, name)
+    ok, caught = xpcall(function() error(value, 0) end, function(caught)
+        assert(caught == value and tostring(caught) == expected, name)
+        return caught
+    end)
+    assert(not ok and caught == value, name)
+end
+`)
+	nativeErrors := make(map[string]error)
+	originalMessages := make(map[string]string)
+	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+		luaError := &glua.ApiError{Object: L.NewFunction(func(*glua.LState) int { return 0 })}
+		stringerError := xerrors.New("DNS query failed").Base(luaError)
+		messages := L.NewTable()
+		for _, tc := range []struct {
+			name     string
+			err      error
+			expected string
+		}{
+			{"nativeError", errors.New("lookup failed at 0x12Ab and 0XFe90"), "lookup failed at <address> and <address>"},
+			{"luaError", luaError, "function: <address>"},
+			{"wrappedError", fmt.Errorf("DNS query failed: %w", luaError), "DNS query failed: function: <address>"},
+			{"stringerError", stringerError, strings.ReplaceAll(stringerError.Error(), luaError.Object.String(), "function: <address>")},
+		} {
+			nativeErrors[tc.name] = tc.err
+			originalMessages[tc.name] = tc.err.Error()
+			PushError(L, tc.err)
+			L.SetGlobal(tc.name, L.Get(-1))
+			L.Pop(1)
+			messages.RawSetString(tc.name, glua.LString(tc.expected))
+		}
+		L.SetGlobal("testErrorMessages", messages)
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer L.Close()
+	for name, native := range nativeErrors {
+		if got := ReadError(L.GetGlobal(name), "invalid"); got != native {
+			t.Fatalf("%s error identity changed", name)
+		}
+		if got := native.Error(); got != originalMessages[name] {
+			t.Fatalf("%s host error = %q, want %q", name, got, originalMessages[name])
+		}
 	}
 }
 
@@ -864,6 +1051,13 @@ assert(type(getmetatable) == "function" and type(setmetatable) == "function")
 assert(type(rawget) == "function" and type(rawset) == "function")
 assert(tostring(42) == "42" and type(tostring({})) == "string")
 assert(tostring(setmetatable({}, {__tostring = function() return "custom" end})) == "custom")
+local ok, message = pcall(error, "lookup failed at 0x12Ab", 0)
+assert(not ok and message == "lookup failed at 0x12Ab")
+ok, message = xpcall(function() error("lookup failed at 0x12Ab", 0) end, function(caught)
+    assert(caught == "lookup failed at 0x12Ab")
+    return caught
+end)
+assert(not ok and message == "lookup failed at 0x12Ab")
 assert(type(string.dump) == "function" and type(math.randomseed) == "function")
 assert(type(package.loaders[2]) == "function" and type(package.path) == "string")
 assert(type(debug.traceback()) == "string" and type(os.time()) == "number")
