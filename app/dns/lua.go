@@ -52,7 +52,7 @@ func luaServers(s *DNS) []luaDNSServer {
 
 func registerLua(L *lua.LState, servers []luaDNSServer, client featureDNS.Client) {
 	L.PreloadModule("xray.dns", func(L *lua.LState) int {
-		pushIPs := xlua.NewSlicePusher[net.IP](L)
+		pushIPs := xlua.NewReadOnlySlicePusher[net.IP](L)
 
 		serverList := L.CreateTable(len(servers), 0)
 		for i, client := range servers {

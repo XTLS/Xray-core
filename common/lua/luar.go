@@ -1,6 +1,9 @@
 package lua
 
 import (
+	"net"
+	"reflect"
+
 	glua "github.com/yuin/gopher-lua"
 	luar "layeh.com/gopher-luar"
 )
@@ -20,6 +23,52 @@ func NewSlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
 		userdata.Metatable = metatable
 		L.Push(userdata)
 	}
+}
+
+// NewReadOnlySlicePusher borrows slices without copying and recursively makes
+// nested slice types read-only through their shared metatables. IP byte views
+// and masks are also read-only. Other referenced elements retain their mutability.
+func NewReadOnlySlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
+	sliceMetatable := luar.MT(L, []T{})
+	if sliceMetatable.RawGetString("__readonly") != glua.LTrue {
+		readOnly := L.NewFunction(func(L *glua.LState) int {
+			L.RaiseError("slice is read-only")
+			return 0
+		})
+		setSliceReadOnly[[]T](L, readOnly)
+	}
+	return NewSlicePusher[T](L)
+}
+
+func setSliceReadOnly[S ~[]E, E any](L *glua.LState, readOnly *glua.LFunction) {
+	var visit func(reflect.Type)
+	visit = func(typ reflect.Type) {
+		if typ.Kind() != reflect.Slice {
+			return
+		}
+		metatable := luar.MT(L, reflect.Zero(typ).Interface())
+		if metatable.RawGetString("__readonly") == glua.LTrue {
+			return
+		}
+		// Mark before descending because named slice types can be recursive.
+		metatable.RawSetString("__readonly", glua.LTrue)
+		metatable.RawSetString("__newindex", readOnly)
+		// Reject explicitly so Lua cannot fall back to the other operand.
+		metatable.RawSetString("__add", readOnly)
+		if typ == reflect.TypeFor[net.IP]() {
+			// A nil receiver lets AppendText return its argument as a writable []byte.
+			methods := metatable.RawGetString("methods").(*glua.LTable)
+			appendText := methods.RawGetString("AppendText")
+			methods.ForEach(func(key, method glua.LValue) {
+				if method == appendText {
+					methods.RawSet(key, glua.LNil)
+				}
+			})
+			visit(reflect.TypeFor[net.IPMask]())
+		}
+		visit(typ.Elem())
+	}
+	visit(reflect.TypeFor[S]())
 }
 
 // DirectMethod handles a Lua call without luar's reflected method invocation.
