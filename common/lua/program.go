@@ -77,7 +77,7 @@ func (p *Program) NewState(ctx context.Context, register func(*glua.LState), val
 		register(L)
 	}
 	if !p.privileged {
-		// Host registration needs package.preload; scripts must not access the cache or loaders.
+		// Hide package internals to prevent data snooping and sandbox escape.
 		L.SetGlobal(glua.LoadLibName, glua.LNil)
 	}
 	L.Push(L.NewFunctionFromProto(p.proto))
@@ -119,12 +119,9 @@ func newSandboxedState() *glua.LState {
 	} {
 		L.SetGlobal(name, glua.LNil)
 	}
-	L.GetGlobal(glua.StringLibName).(*glua.LTable).RawSetString("dump", glua.LNil)
-	L.GetGlobal(glua.MathLibName).(*glua.LTable).RawSetString("randomseed", glua.LNil)
 
-	// Preserve native Stringer/error output without using Lua's address-based defaults.
-	L.SetGlobal("tostring", L.NewFunction(func(L *glua.LState) int {
-		value := L.CheckAny(1)
+	// Prevent printing memory addresses that reveal the memory layout.
+	toString := func(value glua.LValue) glua.LString {
 		result := "<opaque>"
 		switch value.Type() {
 		case glua.LTNil, glua.LTBool, glua.LTNumber, glua.LTString:
@@ -137,11 +134,36 @@ func newSandboxedState() *glua.LState {
 				result = native.Error()
 			}
 		}
-		L.Push(glua.LString(result))
+		return glua.LString(result)
+	}
+	L.SetGlobal("tostring", L.NewFunction(func(L *glua.LState) int {
+		L.Push(toString(L.CheckAny(1)))
 		return 1
 	}))
 
-	// Capture preload before package is hidden; require() reads loaders from the registry.
+	// Prevent printing memory addresses that reveal the memory layout.
+	stringLib := L.GetGlobal(glua.StringLibName).(*glua.LTable)
+	stringLib.RawSetString("dump", glua.LNil)
+	format := stringLib.RawGetString("format")
+	stringLib.RawSetString("format", L.NewFunction(func(L *glua.LState) int {
+		nargs := L.GetTop()
+		for i := 2; i <= nargs; i++ {
+			value := L.Get(i)
+			switch value.Type() {
+			case glua.LTBool, glua.LTNumber, glua.LTString:
+				continue
+			}
+			L.Replace(i, toString(value))
+		}
+		L.Insert(format, 1)
+		L.Call(nargs, 1)
+		return 1
+	}))
+
+	// Prevent seed output from compromising cryptographic security.
+	L.GetGlobal(glua.MathLibName).(*glua.LTable).RawSetString("randomseed", glua.LNil)
+
+	// Prevent module injection through the global package table.
 	module := L.GetGlobal(glua.LoadLibName).(*glua.LTable)
 	preload := module.RawGetString("preload").(*glua.LTable)
 	loaders := L.CreateTable(1, 0)

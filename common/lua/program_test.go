@@ -689,6 +689,71 @@ string.__tostring = nil
 	}
 }
 
+func TestProgramSandboxStringFormat(t *testing.T) {
+	program := compileTestProgram(t, `
+assert(string.format == require("string").format and string.format == ("").format)
+for _, format in ipairs({string.format, require("string").format, ("").format}) do
+    assert(format("%s %04d %.2f %t", "hello", 42, 1.25, true) == "hello 0042 1.25 true")
+    assert(format("%q", "hello") == '"hello"')
+    assert(format("%[2]s:%[1]d", 42, "hello") == "hello:42")
+    assert(format("%%p") == "%p")
+    assert(format("%%p", {}) == format("%%p", "<opaque>"))
+    assert(format("%s", 42) == "42")
+    assert(format("%s", nil) == "nil")
+    assert(format("%s", testIP) == "192.0.2.1")
+    assert(format("%#v", testIP) == '"192.0.2.1"')
+    assert(format("%p", testIP) == format("%p", "192.0.2.1"))
+    assert(format("%s", testNativeStringer) == "0xdeadbeef")
+    assert(format("%s", testNativeError) == "lookup failed")
+    assert(not pcall(format))
+    for _, value in ipairs({{}, function() end, format, testUserdata, testThread, testChannel}) do
+        assert(format("%s", value) == "<opaque>")
+        assert(format("%v", value) == "<opaque>")
+        assert(format("%q", value) == '"<opaque>"')
+        assert(format("%#v", value) == '"<opaque>"')
+        for _, pattern in ipairs({"%p", "%#p", "%+020p", "%[1]p", "%[1]p %#[1]v",
+            "%x", "%X", "%#x", "%d", "%t", "%w"}) do
+            local result = format(pattern, value)
+            assert(result == format(pattern, "<opaque>"), pattern .. ": " .. result)
+        end
+    end
+    assert(format("%p", nil) == format("%p", "nil"))
+end
+assert(("%s"):format({}) == "<opaque>")
+`)
+	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+		L.SetGlobal("testIP", luar.New(L, net.ParseIP("192.0.2.1")))
+		PushUserData(L, bytes.NewBufferString("0xdeadbeef"))
+		L.SetGlobal("testNativeStringer", L.Get(-1))
+		L.Pop(1)
+		PushError(L, errors.New("lookup failed"))
+		L.SetGlobal("testNativeError", L.Get(-1))
+		L.Pop(1)
+		userdata := L.NewUserData()
+		metatable := L.NewTable()
+		metatable.RawSetString("__tostring", L.NewFunction(func(L *glua.LState) int {
+			t.Error("string.format must not call __tostring")
+			L.Push(glua.LString("custom"))
+			return 1
+		}))
+		L.SetMetatable(userdata, metatable)
+		L.SetGlobal("testUserdata", userdata)
+		thread, cancel := L.NewThread()
+		if cancel != nil {
+			t.Cleanup(cancel)
+		}
+		L.SetGlobal("testThread", thread)
+		L.SetGlobal("testChannel", glua.LChannel(make(chan glua.LValue)))
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer L.Close()
+	if L.GetTop() != 0 {
+		t.Fatalf("stack top = %d, want 0", L.GetTop())
+	}
+}
+
 func TestProgramSandboxModuleFailures(t *testing.T) {
 	program := compileTestProgram(t, `
 assert(package == nil)
