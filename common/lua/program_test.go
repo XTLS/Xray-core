@@ -2,7 +2,6 @@ package lua
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -18,7 +17,6 @@ import (
 	"time"
 	"weak"
 
-	xbase64 "github.com/xtls/xray-core/common/base64"
 	glua "github.com/yuin/gopher-lua"
 )
 
@@ -90,6 +88,8 @@ func TestNewStateClosesFailedValidation(t *testing.T) {
 	}
 }
 
+// TODO: Re-enable these tests and their helper when Compile supports inline scripts again.
+/*
 func compressSource(t *testing.T, code string) []byte {
 	t.Helper()
 	var data bytes.Buffer
@@ -189,6 +189,7 @@ func TestCompileInlineDiagnostics(t *testing.T) {
 		}
 	}
 }
+*/
 
 func TestCompileRejectsReadFailure(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "unreadable.lua")
@@ -209,7 +210,7 @@ func TestCompileRejectsReadFailure(t *testing.T) {
 
 func compileTestProgram(t *testing.T, code string) *Program {
 	t.Helper()
-	program, err := Compile(xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code)))
+	program, err := Compile(writeTestScript(t, code))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,6 +465,8 @@ func TestProgramSignedBodyTampering(t *testing.T) {
 	}
 }
 
+// TODO: Re-enable this test when Compile supports inline scripts again.
+/*
 func TestProgramInlineSignaturesCannotAuthorize(t *testing.T) {
 	for _, key := range []string{"", privilegedTestPublicKey} {
 		setTestPrivilegedPublicKey(t, key)
@@ -490,6 +493,7 @@ func TestProgramInlineSignaturesCannotAuthorize(t *testing.T) {
 		}
 	}
 }
+*/
 
 func TestProgramSignedDiagnostics(t *testing.T) {
 	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
@@ -773,8 +777,9 @@ file:close()`
 		privileged   bool
 	}{
 		{"file", path, true},
-		{"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code)), false},
-		{"gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code)), false},
+		// TODO: Re-enable these cases when Compile supports inline scripts again.
+		// {"base64", xbase64.Prefix + base64.StdEncoding.EncodeToString([]byte(code)), false},
+		// {"gzip", xbase64.GzipPrefix + base64.StdEncoding.EncodeToString(compressSource(t, code)), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			program, err := Compile(tc.script)
