@@ -102,6 +102,7 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 	default:
 		tlsConfig := config.TlsConfig.GetTLSConfig()
 		tr = &http.Transport{
+			ForceAttemptHTTP2: true,
 			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				dest, err := net.ParseDestination("tcp:" + addr)
 				if err != nil {
