@@ -14,7 +14,7 @@ import (
 // grpcUtlsInfo contains the auth information for a TLS authenticated connection.
 // It implements the AuthInfo interface.
 type grpcUtlsInfo struct {
-	State utls.ConnectionState
+	State gotls.ConnectionState
 	credentials.CommonAuthInfo
 	// This API is experimental.
 	SPIFFEID *url.URL
