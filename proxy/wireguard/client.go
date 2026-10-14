@@ -117,8 +117,8 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		errors.LogWarning(context.Background(), "Using kernel TUN")
 		tun, tnet, err = createKernelTun(localAddresses, dnses, int(conf.Mtu))
 	} else {
-		errors.LogWarning(context.Background(), "Using gVisor TUN")
-		tun, tnet, _, err = CreateNetTUN(localAddresses, dnses, int(conf.Mtu), true)
+		errors.LogWarning(context.Background(), "Using built-in TCP/IP stack")
+		tun, tnet, err = CreateNetTUN(localAddresses, dnses, int(conf.Mtu), nil)
 	}
 	if err != nil {
 		return nil, err
