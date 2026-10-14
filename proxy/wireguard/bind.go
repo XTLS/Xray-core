@@ -12,6 +12,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/features/stats"
 	"golang.zx2c4.com/wireguard/conn"
 )
 
@@ -22,8 +23,16 @@ type bind struct {
 	reserved    []byte
 
 	net.PacketConn
-	closeCh chan struct{}
-	mu      sync.Mutex
+	// gso is the socket under PacketConn when it takes UDP_SEGMENT. Sends
+	// through it bypass PacketCounterConnection, so they count to writeCounter.
+	gso          msgWriter
+	writeCounter stats.Counter
+	closeCh      chan struct{}
+	mu           sync.Mutex
+}
+
+type msgWriter interface {
+	WriteMsgUDPAddrPort(b, oob []byte, addr netip.AddrPort) (n, oobn int, err error)
 }
 
 func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err error) {
@@ -39,6 +48,7 @@ func (b *bind) Open(port uint16) (fns []conn.ReceiveFunc, actualPort uint16, err
 		return nil, 0, err
 	}
 	b.PacketConn = c
+	b.gso, b.writeCounter = gsoConn(c)
 	ch := make(chan struct{})
 	b.closeCh = ch
 
@@ -93,6 +103,7 @@ func (b *bind) Close() error {
 		close(b.closeCh)
 		_ = b.PacketConn.Close()
 		b.PacketConn = nil
+		b.gso = nil
 	}
 	return nil
 }
@@ -103,7 +114,7 @@ func (b *bind) SetMark(mark uint32) error {
 
 func (b *bind) Send(bufs [][]byte, ep conn.Endpoint) (err error) {
 	b.mu.Lock()
-	c := b.PacketConn
+	c, gso, wc := b.PacketConn, b.gso, b.writeCounter
 	b.mu.Unlock()
 
 	if c == nil {
@@ -116,6 +127,27 @@ func (b *bind) Send(bufs [][]byte, ep conn.Endpoint) (err error) {
 			bufs[i][2] = b.reserved[1]
 			bufs[i][3] = b.reserved[2]
 		}
+	}
+	if gso != nil && len(bufs) > 1 {
+		var sent int
+		sent, err = sendGSO(gso, bufs, ep.(*conn.StdNetEndpoint).AddrPort, wc)
+		if err == nil || !gsoFailed(err) {
+			if err != nil {
+				errors.LogErrorInner(context.Background(), err, "bind send err")
+			}
+			return err
+		}
+		// The route does not take UDP_SEGMENT, e.g. no checksum offload or a
+		// path MTU below the datagram size. Send one by one from now on.
+		errors.LogInfoInner(context.Background(), err, "bind: UDP GSO disabled")
+		b.mu.Lock()
+		if b.gso == gso {
+			b.gso = nil
+		}
+		b.mu.Unlock()
+		bufs = bufs[sent:]
+	}
+	for i := range bufs {
 		_, err = c.WriteTo(bufs[i], net.UDPAddrFromAddrPort(ep.(*conn.StdNetEndpoint).AddrPort))
 		if err != nil {
 			errors.LogErrorInner(context.Background(), err, "bind send err")
