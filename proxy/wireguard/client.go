@@ -257,6 +257,16 @@ func (h *Handler) init(ctx context.Context) error {
 		if err != nil {
 			return nil, err
 		}
+		// A direct dial would resolve the name with the system resolver, so
+		// resolve it like the peer endpoints. dialerProxy and finalmask get
+		// the name as before.
+		if dest.Address.Family().IsDomain() && h.streamSettings.FinalMask == nil && h.streamSettings.SocketSettings.GetDialerProxy() == "" {
+			ip, err := h.resolveLocal(dest.Address.Domain())
+			if err != nil {
+				return nil, err
+			}
+			dest.Address = net.IPAddress(ip)
+		}
 		var pktConn net.PacketConn
 		if h.streamSettings.FinalMask != nil {
 			conn, err := h.streamSettings.FinalMask.DialUDP(ctx, dest)
