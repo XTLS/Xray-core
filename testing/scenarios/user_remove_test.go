@@ -41,6 +41,16 @@ var (
 	removeUserSSKeys = map[string]string{"a": "YWFhYWFhYWFhYWFhYWFhYQ==", "b": "YmJiYmJiYmJiYmJiYmJiYg=="}
 )
 
+// WireGuard keys of the server, then per user the private key, the public key
+// and the tunnel address.
+var (
+	removeUserWGServer = [2]string{"CAVR/i06MRIXIAkaxBPcm22HR/4ysXozQts0k70CAFY=", "szB6HtF+/8zWQEljyFKKO8J3PAbnRJvcwTEXhINIkCM="}
+	removeUserWG       = map[string][3]string{
+		"a": {"wLlk5z+PrEQnnLOBfd8aIe/p+Ly2ukDPBttPpWca2ng=", "E8vVtPmuVMsqokMjuFNAYpNheY+Ks0PIJ4RuyCthAEs=", "10.0.0.2"},
+		"b": {"ANOI5GOcX1PMYNbUODnBkxYyOfTB5a2VchP8sS7/jGA=", "R0cQLrEa6A8Nmf2aTPakSz6meu+tmt61ki4m4rNaF1g=", "10.0.0.3"},
+	}
+)
+
 // removeUserServer is the server: an API, the inbounds, and a freedom
 // outbound that sends everything to the echo server.
 const removeUserServer = `{
@@ -185,6 +195,17 @@ var removeUserCases = []removeUserCase{
 		},
 		outbound: func(u string, port net.Port, tls string) string {
 			return fmt.Sprintf(`"protocol": "hysteria", "settings": {"version": 2, "address": "127.0.0.1", "port": %d}, "streamSettings": {"network": "hysteria", "hysteriaSettings": {"version": 2, "auth": "pass-%s"}, %s}`, port, u, tls)
+		},
+	},
+	{
+		name:      "WireGuard",
+		network:   "tcp",
+		udpServer: true,
+		inbound: func(string) string {
+			return fmt.Sprintf(`"protocol": "wireguard", "settings": {"secretKey": "%s", "address": ["10.0.0.1"], "mtu": 1420, "peers": [{"publicKey": "%s", "allowedIPs": ["10.0.0.2/32"], "email": "a@test"}, {"publicKey": "%s", "allowedIPs": ["10.0.0.3/32"], "email": "b@test"}]}`, removeUserWGServer[0], removeUserWG["a"][1], removeUserWG["b"][1])
+		},
+		outbound: func(u string, port net.Port, _ string) string {
+			return fmt.Sprintf(`"protocol": "wireguard", "settings": {"secretKey": "%s", "address": ["%s"], "mtu": 1420, "noKernelTun": true, "peers": [{"endpoint": "127.0.0.1:%d", "publicKey": "%s", "allowedIPs": ["0.0.0.0/0"]}]}`, removeUserWG[u][0], removeUserWG[u][2], port, removeUserWGServer[1])
 		},
 	},
 }

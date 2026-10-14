@@ -181,6 +181,7 @@ func (s *Server) RemoveUser(ctx context.Context, email string) error {
 			return err
 		}
 		s.users.Delete(peer.Pub)
+		user.Cancel()
 	}
 	return nil
 }
@@ -355,6 +356,10 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 		errors.LogError(context.Background(), "nil user form ", remote, " to ", dest)
 		return
 	}
+	defer context.AfterFunc(user.Context(), func() {
+		cancel()
+		conn.Close()
+	})()
 
 	source := net.DestinationFromAddr(remote)
 	inbound := session.Inbound{
