@@ -13,7 +13,6 @@ import (
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/main/confloader"
 )
@@ -29,15 +28,10 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 		data, err = FetchHTTPContent(arg)
 
 	case arg == "stdin:":
-		data, err = platform.ReadConfigFile(os.Stdin)
+		data, err = io.ReadAll(os.Stdin)
 
 	default:
-		file, openErr := os.Open(arg)
-		if openErr != nil {
-			return nil, openErr
-		}
-		defer file.Close()
-		data, err = platform.ReadConfigFile(file)
+		data, err = os.ReadFile(arg)
 	}
 
 	if err != nil {
