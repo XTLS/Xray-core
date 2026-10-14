@@ -130,6 +130,26 @@ var removeUserCases = []removeUserCase{
 			return fmt.Sprintf(`"protocol": "trojan", "settings": {"address": "127.0.0.1", "port": %d, "password": "pass-%s"}`, port, u)
 		},
 	},
+	{
+		name:    "ShadowsocksTCP",
+		network: "tcp",
+		inbound: func(string) string {
+			return `"protocol": "shadowsocks", "settings": {"network": "tcp,udp", "clients": [{"method": "aes-128-gcm", "password": "pass-a", "email": "a@test"}, {"method": "aes-128-gcm", "password": "pass-b", "email": "b@test"}]}`
+		},
+		outbound: func(u string, port net.Port, _ string) string {
+			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"address": "127.0.0.1", "port": %d, "method": "aes-128-gcm", "password": "pass-%s"}`, port, u)
+		},
+	},
+	{
+		name:    "ShadowsocksUDP",
+		network: "udp",
+		inbound: func(string) string {
+			return `"protocol": "shadowsocks", "settings": {"network": "tcp,udp", "clients": [{"method": "aes-128-gcm", "password": "pass-a", "email": "a@test"}, {"method": "aes-128-gcm", "password": "pass-b", "email": "b@test"}]}`
+		},
+		outbound: func(u string, port net.Port, _ string) string {
+			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"address": "127.0.0.1", "port": %d, "method": "aes-128-gcm", "password": "pass-%s"}`, port, u)
+		},
+	},
 }
 
 func TestRemoveUser(t *testing.T) {

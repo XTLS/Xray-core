@@ -65,6 +65,7 @@ func (v *Validator) Del(email string) error {
 	if idx == -1 {
 		return errors.New("User ", email, " not found.")
 	}
+	v.users[idx].Cancel()
 	ulen := len(v.users)
 
 	v.users[idx] = v.users[ulen-1]
