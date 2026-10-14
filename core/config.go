@@ -175,9 +175,13 @@ func init() {
 			switch v := input.(type) {
 			case cmdarg.Arg:
 				r, err := confloader.LoadConfig(v[0])
-				common.Must(err)
+				if err != nil {
+					return nil, err
+				}
 				data, err := buf.ReadAllToBytes(r)
-				common.Must(err)
+				if err != nil {
+					return nil, err
+				}
 				return loadProtobufConfig(data)
 			case io.Reader:
 				data, err := buf.ReadAllToBytes(v)
