@@ -176,6 +176,17 @@ var removeUserCases = []removeUserCase{
 			return fmt.Sprintf(`"protocol": "shadowsocks", "settings": {"address": "127.0.0.1", "port": %d, "method": "2022-blake3-aes-128-gcm", "password": "%s:%s"}`, port, removeUserSSKey, removeUserSSKeys[u])
 		},
 	},
+	{
+		name:      "Hysteria",
+		network:   "tcp",
+		udpServer: true,
+		inbound: func(tls string) string {
+			return fmt.Sprintf(`"protocol": "hysteria", "settings": {"version": 2, "clients": [{"auth": "pass-a", "email": "a@test"}, {"auth": "pass-b", "email": "b@test"}]}, "streamSettings": {"network": "hysteria", "hysteriaSettings": {"version": 2}, %s}`, tls)
+		},
+		outbound: func(u string, port net.Port, tls string) string {
+			return fmt.Sprintf(`"protocol": "hysteria", "settings": {"version": 2, "address": "127.0.0.1", "port": %d}, "streamSettings": {"network": "hysteria", "hysteriaSettings": {"version": 2, "auth": "pass-%s"}, %s}`, port, u, tls)
+		},
+	},
 }
 
 func TestRemoveUser(t *testing.T) {

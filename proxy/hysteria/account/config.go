@@ -71,6 +71,7 @@ func (v *Validator) DelByEmail(email string) (err error) {
 			id[7] = 0
 			v.ids.Delete(id)
 		}
+		user.Cancel()
 	}
 	v.mu.Unlock()
 	return
@@ -81,14 +82,10 @@ func (v *Validator) Get(auth string) (user *protocol.MemoryUser) {
 		if user = v.GetByID(id); user != nil {
 			VR := net.PortFromBytes(id[6:8])
 			if user.Account.(*MemoryAccount).VR != VR {
-				user = &protocol.MemoryUser{
-					Email: user.Email,
-					Level: user.Level,
-					Account: &MemoryAccount{
-						Auth: auth,
-						VR:   VR,
-					},
-				}
+				user = user.Derive(&MemoryAccount{
+					Auth: auth,
+					VR:   VR,
+				})
 			}
 		}
 		return
