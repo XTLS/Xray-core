@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 )
 
@@ -253,6 +254,17 @@ func (s *DNS) MayUseSystemResolver() bool {
 
 // LookupIP implements dns.Client.
 func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	return s.LookupIPContext(s.ctx, domain, option)
+}
+
+// LookupIPContext implements dns.ContextClient.
+func (s *DNS) LookupIPContext(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	if instance := core.FromContext(s.ctx); instance != nil {
+		ctx = context.WithValue(ctx, core.XrayKey(1), instance)
+	}
 	// Normalize the FQDN form query
 	domain = strings.TrimSuffix(domain, ".")
 	if domain == "" {
@@ -284,10 +296,10 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 	case len(addrs) == 0: // Domain recorded, but no valid IP returned (e.g. IPv4 address with only IPv6 enabled)
 		return nil, 0, dns.ErrEmptyResponse
 	case len(addrs) == 1 && addrs[0].Family().IsDomain(): // Domain replacement
-		errors.LogInfo(s.ctx, "domain replaced: ", domain, " -> ", addrs[0].Domain())
+		errors.LogInfo(ctx, "domain replaced: ", domain, " -> ", addrs[0].Domain())
 		domain = addrs[0].Domain()
 	default: // Successfully found ip records in static host
-		errors.LogInfo(s.ctx, "returning ", len(addrs), " IP(s) for domain ", domain, " -> ", addrs)
+		errors.LogInfo(ctx, "returning ", len(addrs), " IP(s) for domain ", domain, " -> ", addrs)
 		ips, err := toNetIP(addrs)
 		if err != nil {
 			return nil, 0, err
@@ -297,12 +309,12 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 
 	// Name servers lookup
 	if s.script != nil {
-		return s.script.query(domain, option)
+		return s.script.queryContext(ctx, domain, option)
 	}
 	if s.enableParallelQuery {
-		return s.parallelQuery(domain, option)
+		return s.parallelQueryContext(ctx, domain, option)
 	} else {
-		return s.serialQuery(domain, option)
+		return s.serialQueryContext(ctx, domain, option)
 	}
 }
 
@@ -403,20 +415,33 @@ func mergeQueryErrors(domain string, errs []error) error {
 }
 
 func (s *DNS) serialQuery(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	return s.serialQueryContext(s.ctx, domain, option)
+}
+
+func (s *DNS) serialQueryContext(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	var errs []error
 	for _, client := range s.sortClients(domain) {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		if !option.FakeEnable && strings.EqualFold(client.Name(), "FakeDNS") {
-			errors.LogDebug(s.ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
+			errors.LogDebug(ctx, "skip DNS resolution for domain ", domain, " at server ", client.Name())
 			continue
 		}
 
-		ips, ttl, err := client.QueryIP(s.ctx, domain, option)
+		ips, ttl, err := client.QueryIP(ctx, domain, option)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return nil, 0, contextErr
+		}
 
 		if len(ips) > 0 {
 			return ips, ttl, nil
 		}
 
-		errors.LogInfoInner(s.ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name(), " in serial query mode")
+		errors.LogInfoInner(ctx, err, "failed to lookup ip for domain ", domain, " at server ", client.Name(), " in serial query mode")
 		if err == nil {
 			err = dns.ErrEmptyResponse
 		}
@@ -426,10 +451,17 @@ func (s *DNS) serialQuery(domain string, option dns.IPOption) ([]net.IP, uint32,
 }
 
 func (s *DNS) parallelQuery(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	return s.parallelQueryContext(s.ctx, domain, option)
+}
+
+func (s *DNS) parallelQueryContext(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	var errs []error
 	clients := s.sortClients(domain)
 
-	resultsChan := asyncQueryAll(domain, option, clients, s.ctx)
+	resultsChan := asyncQueryAll(domain, option, clients, ctx)
 
 	groups, groupOf := makeGroups( /*s.ctx,*/ clients)
 	results := make([]*queryResult, len(clients))
@@ -440,7 +472,15 @@ func (s *DNS) parallelQuery(domain string, option dns.IPOption) ([]net.IP, uint3
 
 	nextGroup := 0
 	for range clients {
-		result := <-resultsChan
+		var result queryResult
+		select {
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
+		case result = <-resultsChan:
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
 		results[result.index] = &result
 
 		gi := groupOf[result.index]
@@ -469,7 +509,7 @@ func (s *DNS) parallelQuery(domain string, option dns.IPOption) ([]net.IP, uint3
 				if e == nil {
 					e = dns.ErrEmptyResponse
 				}
-				errors.LogInfoInner(s.ctx, e, "failed to lookup ip for domain ", domain, " at server ", clients[j].Name(), " in parallel query mode")
+				errors.LogInfoInner(ctx, e, "failed to lookup ip for domain ", domain, " at server ", clients[j].Name(), " in parallel query mode")
 				errs = append(errs, e)
 			}
 			nextGroup++

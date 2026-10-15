@@ -12,8 +12,40 @@ import (
 )
 
 type Dialer struct {
-	DialTCP func(net.Destination) (net.Conn, error)
-	DialUDP func(net.Destination) (net.Conn, error)
+	DialTCP        func(net.Destination) (net.Conn, error)
+	DialUDP        func(net.Destination) (net.Conn, error)
+	DialTCPContext func(context.Context, net.Destination) (net.Conn, error)
+	DialUDPContext func(context.Context, net.Destination) (net.Conn, error)
+}
+
+type requiredContextDialKey struct{}
+
+// ContextWithRequiredDial requires the underlying dialer and DNS lookup to support cancellation.
+func ContextWithRequiredDial(ctx context.Context) context.Context {
+	return context.WithValue(ctx, requiredContextDialKey{}, true)
+}
+
+func RequiresContextDial(ctx context.Context) bool {
+	required, _ := ctx.Value(requiredContextDialKey{}).(bool)
+	return required
+}
+
+func contextForDial(parent, request context.Context) (context.Context, context.CancelFunc) {
+	if RequiresContextDial(request) {
+		parent = ContextWithRequiredDial(parent)
+	}
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if deadline, ok := request.Deadline(); ok {
+		ctx, cancel = context.WithDeadline(parent, deadline)
+	} else {
+		ctx, cancel = context.WithCancel(parent)
+	}
+	stop := context.AfterFunc(request, cancel)
+	if request.Err() != nil {
+		cancel()
+	}
+	return ctx, func() { stop(); cancel() }
 }
 
 type ListenConfig struct {
@@ -33,12 +65,14 @@ type UDPMask interface {
 }
 
 type FinalMask struct {
-	tcpMasks     []TCPMask
-	udpMasks     []UDPMask
-	dialTCP      func(context.Context, net.Destination) (net.Conn, error)
-	listen       func(context.Context, net.Addr) (net.Listener, error)
-	dialUDP      func(context.Context, net.Destination) (net.PacketConn, net.Addr, error)
-	listenPacket func(context.Context, net.Addr) (net.PacketConn, error)
+	// DisableContextDial marks a known legacy underlying dialer that cannot cancel.
+	DisableContextDial bool
+	tcpMasks           []TCPMask
+	udpMasks           []UDPMask
+	dialTCP            func(context.Context, net.Destination) (net.Conn, error)
+	listen             func(context.Context, net.Addr) (net.Listener, error)
+	dialUDP            func(context.Context, net.Destination) (net.PacketConn, net.Addr, error)
+	listenPacket       func(context.Context, net.Addr) (net.PacketConn, error)
 }
 
 func NewFinalMask(tcpMasks []TCPMask, udpMasks []UDPMask, dialTCP func(context.Context, net.Destination) (net.Conn, error), listen func(context.Context, net.Addr) (net.Listener, error), dialUDP func(context.Context, net.Destination) (net.PacketConn, net.Addr, error), listenPacket func(context.Context, net.Addr) (net.PacketConn, error)) *FinalMask {
@@ -74,6 +108,20 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 		}
 	}
 	dialer := &Dialer{
+		DialTCPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			return fm.dialTCP(dialCtx, dest)
+		},
+		DialUDPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			conn, addr, err := fm.dialUDP(dialCtx, dest)
+			if err != nil {
+				return nil, err
+			}
+			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, nil
+		},
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},
@@ -84,6 +132,9 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 			}
 			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, err
 		},
+	}
+	if fm.DisableContextDial {
+		dialer.DialTCPContext, dialer.DialUDPContext = nil, nil
 	}
 	for i := range fm.tcpMasks {
 		var newConn net.Conn
@@ -163,6 +214,20 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 		}
 	}
 	dialer := &Dialer{
+		DialTCPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			return fm.dialTCP(dialCtx, dest)
+		},
+		DialUDPContext: func(requestCtx context.Context, dest net.Destination) (net.Conn, error) {
+			dialCtx, cancel := contextForDial(ctx, requestCtx)
+			defer cancel()
+			conn, addr, err := fm.dialUDP(dialCtx, dest)
+			if err != nil {
+				return nil, err
+			}
+			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, nil
+		},
 		DialTCP: func(dest net.Destination) (net.Conn, error) {
 			return fm.dialTCP(ctx, dest)
 		},
@@ -176,6 +241,9 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 	}
 	var sizes []int
 	var conns []net.PacketConn
+	if fm.DisableContextDial {
+		dialer.DialTCPContext, dialer.DialUDPContext = nil, nil
+	}
 	for i := range fm.udpMasks {
 		var newConn net.PacketConn
 		if _, ok := fm.udpMasks[i].(interface{ HeaderConn() }); ok {

@@ -8,6 +8,7 @@ package xdns
 
 import (
 	_ "github.com/xtls/xray-core/common/serial"
+	tls "github.com/xtls/xray-core/transport/internet/tls"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -102,6 +103,9 @@ type ResolverProto struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	Addr          string                 `protobuf:"bytes,2,opt,name=addr,proto3" json:"addr,omitempty"`
+	ServerName    string                 `protobuf:"bytes,3,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	Bootstrap     string                 `protobuf:"bytes,4,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
+	Certificates  []*tls.Certificate     `protobuf:"bytes,5,rep,name=certificates,proto3" json:"certificates,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -148,6 +152,27 @@ func (x *ResolverProto) GetAddr() string {
 		return x.Addr
 	}
 	return ""
+}
+
+func (x *ResolverProto) GetServerName() string {
+	if x != nil {
+		return x.ServerName
+	}
+	return ""
+}
+
+func (x *ResolverProto) GetBootstrap() string {
+	if x != nil {
+		return x.Bootstrap
+	}
+	return ""
+}
+
+func (x *ResolverProto) GetCertificates() []*tls.Certificate {
+	if x != nil {
+		return x.Certificates
+	}
+	return nil
 }
 
 type Config struct {
@@ -214,17 +239,21 @@ var File_transport_internet_finalmask_xdns_config_proto protoreflect.FileDescrip
 
 const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\n" +
-	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\x1a!common/serial/typed_message.proto\"\x8b\x01\n" +
+	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\x1a!common/serial/typed_message.proto\x1a#transport/internet/tls/config.proto\"\x8b\x01\n" +
 	"\vDomainProto\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tlen_limit\x18\x02 \x01(\x05R\blenLimit\x12\x1f\n" +
 	"\vlabel_limit\x18\x03 \x01(\x05R\n" +
 	"labelLimit\x12\x14\n" +
 	"\x05types\x18\x04 \x03(\x05R\x05types\x12\x14\n" +
-	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"7\n" +
+	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"\xc4\x01\n" +
 	"\rResolverProto\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
-	"\x04addr\x18\x02 \x01(\tR\x04addr\"\xcb\x01\n" +
+	"\x04addr\x18\x02 \x01(\tR\x04addr\x12\x1f\n" +
+	"\vserver_name\x18\x03 \x01(\tR\n" +
+	"serverName\x12\x1c\n" +
+	"\tbootstrap\x18\x04 \x01(\tR\tbootstrap\x12L\n" +
+	"\fcertificates\x18\x05 \x03(\v2(.xray.transport.internet.tls.CertificateR\fcertificates\"\xcb\x01\n" +
 	"\x06Config\x12M\n" +
 	"\adomains\x18\x01 \x03(\v23.xray.transport.internet.finalmask.xdns.DomainProtoR\adomains\x12S\n" +
 	"\tresolvers\x18\x02 \x03(\v25.xray.transport.internet.finalmask.xdns.ResolverProtoR\tresolvers\x12\x1d\n" +
@@ -246,18 +275,20 @@ func file_transport_internet_finalmask_xdns_config_proto_rawDescGZIP() []byte {
 
 var file_transport_internet_finalmask_xdns_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_transport_internet_finalmask_xdns_config_proto_goTypes = []any{
-	(*DomainProto)(nil),   // 0: xray.transport.internet.finalmask.xdns.DomainProto
-	(*ResolverProto)(nil), // 1: xray.transport.internet.finalmask.xdns.ResolverProto
-	(*Config)(nil),        // 2: xray.transport.internet.finalmask.xdns.Config
+	(*DomainProto)(nil),     // 0: xray.transport.internet.finalmask.xdns.DomainProto
+	(*ResolverProto)(nil),   // 1: xray.transport.internet.finalmask.xdns.ResolverProto
+	(*Config)(nil),          // 2: xray.transport.internet.finalmask.xdns.Config
+	(*tls.Certificate)(nil), // 3: xray.transport.internet.tls.Certificate
 }
 var file_transport_internet_finalmask_xdns_config_proto_depIdxs = []int32{
-	0, // 0: xray.transport.internet.finalmask.xdns.Config.domains:type_name -> xray.transport.internet.finalmask.xdns.DomainProto
-	1, // 1: xray.transport.internet.finalmask.xdns.Config.resolvers:type_name -> xray.transport.internet.finalmask.xdns.ResolverProto
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 0: xray.transport.internet.finalmask.xdns.ResolverProto.certificates:type_name -> xray.transport.internet.tls.Certificate
+	0, // 1: xray.transport.internet.finalmask.xdns.Config.domains:type_name -> xray.transport.internet.finalmask.xdns.DomainProto
+	1, // 2: xray.transport.internet.finalmask.xdns.Config.resolvers:type_name -> xray.transport.internet.finalmask.xdns.ResolverProto
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_xdns_config_proto_init() }
