@@ -16,19 +16,23 @@ import (
 const scriptExecutionTimeout = 6 * time.Second
 
 type scriptEngine struct {
-	pool   *xlua.Pool
-	ctx    context.Context
-	cancel context.CancelFunc
+	program *xlua.Program
+	pool    *xlua.Pool
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
-func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
-	program, err := xlua.CompileFile(path)
+func newScriptEngine(script string) (*scriptEngine, error) {
+	program, err := xlua.Compile(script)
 	if err != nil {
 		return nil, err
 	}
+	return &scriptEngine{program: program}, nil
+}
 
+func (e *scriptEngine) start(server *DNS) error {
 	ctx, cancel := context.WithCancel(server.ctx)
-	pool, err := xlua.NewPool(ctx, scriptExecutionTimeout, program.NewStateFactory(
+	pool, err := xlua.NewPool(ctx, scriptExecutionTimeout, e.program.NewStateFactory(
 		scriptExecutionTimeout*20,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
@@ -43,16 +47,22 @@ func newScriptEngine(path string, server *DNS) (*scriptEngine, error) {
 		}))
 	if err != nil {
 		cancel()
-		return nil, err
+		return err
 	}
 
-	errors.LogInfo(server.ctx, "DNS script initialized from ", path)
-	return &scriptEngine{pool: pool, ctx: ctx, cancel: cancel}, nil
+	e.pool = pool
+	e.ctx, e.cancel = ctx, cancel
+	errors.LogInfo(server.ctx, "DNS script initialized")
+	return nil
 }
 
 func (e *scriptEngine) close() {
-	e.cancel()
-	e.pool.Close()
+	if e.cancel != nil {
+		e.cancel()
+	}
+	if e.pool != nil {
+		e.pool.Close()
+	}
 }
 
 func (e *scriptEngine) query(domain string, option dns.IPOption) (ips []net.IP, ttl uint32, queryErr error) {

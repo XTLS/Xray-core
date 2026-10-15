@@ -72,21 +72,60 @@ func startLuaRouter(t *testing.T, script string, d featureDNS.Client, config *Co
 }
 
 func TestRouterScriptStartup(t *testing.T) {
-	for _, tc := range []struct{ name, script string }{
-		{"syntax error", "function HandleRoute("},
-		{"missing hook", "value = 1"},
-		{"initialization error", `error("setup failed")`},
+	for _, tc := range []struct {
+		name, script string
+		compileError bool
+	}{
+		{"syntax error", "function HandleRoute(", true},
+		{"missing hook", "value = 1", false},
+		{"invalid hook", "HandleRoute = true", false},
+		{"initialization error", `error("setup failed")`, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := new(Router)
-			if err := r.Init(context.Background(), &Config{Script: writeRouteScript(t, tc.script)}, nil, nil, nil); err != nil {
+			err := r.Init(context.Background(), &Config{Script: writeRouteScript(t, tc.script)}, nil, nil, nil)
+			if tc.compileError {
+				if r.script != nil || err == nil || !strings.Contains(err.Error(), "failed to prepare routing script") {
+					t.Fatalf("Init = %v; want no engine and script preparation error", err)
+				}
+				return
+			}
+			if err != nil {
 				t.Fatal(err)
 			}
 			defer r.Close()
+			if r.script.program == nil || r.script.pool != nil {
+				t.Fatal("Init did not compile the script without starting its pool")
+			}
+			if err := r.Close(); err != nil {
+				t.Fatal(err)
+			}
 			if err := r.Start(); err == nil {
 				t.Fatal("Start accepted an invalid routing script")
 			}
+			if r.script.pool != nil {
+				t.Fatal("Start retained a script pool after failure")
+			}
 		})
+	}
+}
+
+func TestRouterScriptProgramSnapshot(t *testing.T) {
+	path := writeRouteScript(t, `function HandleRoute() return "compiled", "compiled-rule" end`)
+	engine, err := newScriptEngine(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.close()
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.start(&Router{ctx: context.Background()}); err != nil {
+		t.Fatal(err)
+	}
+	route, err := engine.pickRoute(newLuaRouteTestContext())
+	if err != nil || route == nil || route.GetOutboundTag() != "compiled" || route.GetRuleTag() != "compiled-rule" {
+		t.Fatalf("route = %v, %v; want compiled, compiled-rule", route, err)
 	}
 }
 
@@ -101,7 +140,7 @@ func TestRouterScriptRouting(t *testing.T) {
 		{name: "route", body: `return "lua-out", "lua-rule"`, wantTag: "lua-out", wantRule: "lua-rule", wantCalls: "2"},
 		{name: "no match", body: `return nil`, wantErr: common.ErrNoClue, wantCalls: "2"},
 		{name: "empty tag", body: `return ""`, wantErr: common.ErrNoClue, wantCalls: "2"},
-		{name: "balancer error", body: `local tag, err = router:PickOutbound("missing"); return tag, nil, err`, wantMessage: "not found", wantCalls: "2"},
+		{name: "balancer error", body: `local tag, err = router.PickOutbound("missing"); return tag, nil, err`, wantMessage: "not found", wantCalls: "2"},
 		{name: "string error", body: `return nil, nil, "blocked"`, wantMessage: "blocked", wantCalls: "2"},
 		{name: "invalid tag", body: `return false`, wantMessage: "outboundTag", wantCalls: "2"},
 		{name: "invalid rule", body: `return "lua-out", false`, wantMessage: "ruleTag", wantCalls: "2"},
@@ -202,7 +241,7 @@ func TestRouterScriptBalancerReload(t *testing.T) {
 	r := startLuaRouter(t, `
 local router = require("xray.router")
 function HandleRoute()
-    local tag, err = router:PickOutbound("balance")
+    local tag, err = router.PickOutbound("balance")
     return tag, "balanced", err
 end`, nil, config("old"))
 	pick := func(want string) {
@@ -236,7 +275,7 @@ func TestRouterScriptConcurrentBalancerReload(t *testing.T) {
 	r := startLuaRouter(t, `
 local router = require("xray.router")
 function HandleRoute()
-    local tag, err = router:PickOutbound("balance")
+    local tag, err = router.PickOutbound("balance")
     return tag, nil, err
 end`, nil, config("a"))
 
@@ -367,10 +406,10 @@ end`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer instance.Close()
 	if err := instance.Start(); err != nil {
 		t.Fatal(err)
 	}
+	defer instance.Close()
 	r := instance.GetFeature(routing.RouterType()).(*Router)
 	route, err := r.PickRoute(newLuaRouteTestContext())
 	if err != nil || route.GetOutboundTag() != "direct" || route.GetRuleTag() != "outer-route" {

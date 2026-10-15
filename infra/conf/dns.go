@@ -14,7 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 )
 
 type NameServerConfig struct {
@@ -273,6 +272,17 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 
 // Build implements Buildable
 func (c *DNSConfig) Build() (*dns.Config, error) {
+	if c.Script != "" {
+		if c.DisableFallback || c.DisableFallbackIfMatch || c.EnableParallelQuery {
+			return nil, errors.New("DNS script cannot be used with disableFallback, disableFallbackIfMatch or enableParallelQuery")
+		}
+		for i, server := range c.Servers {
+			if len(server.Domains) > 0 || server.SkipFallback || server.FinalQuery {
+				return nil, errors.New("DNS script cannot be used with domains, skipFallback or finalQuery in server ", i)
+			}
+		}
+	}
+
 	config := &dns.Config{
 		Tag:                    c.Tag,
 		DisableCache:           c.DisableCache,
@@ -282,14 +292,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
 		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
-	}
-
-	if c.Script != "" {
-		path, err := platform.ResolveLuaFile(c.Script)
-		if err != nil {
-			return nil, errors.New("failed to resolve DNS script: ", c.Script).Base(err)
-		}
-		config.Script = path
+		Script:                 c.Script,
 	}
 
 	if c.ClientIP != nil {

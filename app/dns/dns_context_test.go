@@ -86,8 +86,11 @@ function HandleDNSQuery(domain, ipv4, ipv6, fake)
 end`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	engine, err := newScriptEngine(path, server)
+	engine, err := newScriptEngine(path)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.start(server); err != nil {
 		t.Fatal(err)
 	}
 	server.script = engine

@@ -72,7 +72,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		quicConfig.MaxIdleTimeout = 30 * time.Second
 	}
 	if quicParams.KeepAlivePeriod == 0 {
-		quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
+		if keepAlivePeriod := config.keepAlivePeriod(); keepAlivePeriod == 0 {
+			quicConfig.KeepAlivePeriod = net.QuicgoH3KeepAlivePeriod
+		} else if keepAlivePeriod > 0 {
+			quicConfig.KeepAlivePeriod = keepAlivePeriod
+		}
 	}
 
 	var pktConn net.PacketConn
@@ -179,7 +183,11 @@ func dialHTTP2(ctx context.Context, dest net.Destination, streamSettings *intern
 		return nil, errors.New("the server negotiated ", strconv.Quote(protocol), " instead of h2")
 	}
 
-	cc, err := newHTTP2ClientConn(conn)
+	keepAlivePeriod := config.keepAlivePeriod()
+	if keepAlivePeriod == 0 {
+		keepAlivePeriod = net.ChromeH2KeepAlivePeriod
+	}
+	cc, err := newHTTP2ClientConn(conn, keepAlivePeriod)
 	if err != nil {
 		conn.Close()
 		return nil, err
@@ -212,22 +220,7 @@ func establish(ctx context.Context, client tunnelClient, hconn httpConn, abort f
 	for k, v := range config.Headers {
 		header.Set(k, v)
 	}
-	switch header.Get("User-Agent") {
-	case "":
-		header["User-Agent"] = nil
-	case "chrome":
-		header.Set("User-Agent", utils.ChromeUA)
-	case "firefox":
-		header.Set("User-Agent", utils.FirefoxUA)
-	case "safari":
-		header.Set("User-Agent", utils.SafariUA)
-	case "edge":
-		header.Set("User-Agent", utils.MSEdgeUA)
-	case "curl":
-		header.Set("User-Agent", utils.CurlUA)
-	case "golang":
-		header.Del("User-Agent")
-	}
+	setUserAgent(header)
 
 	ipConn, _, err := client.Dial(req)
 	if err != nil {
@@ -325,6 +318,28 @@ func authority(config *Config, serverName string, port net.Port) string {
 		return host
 	}
 	return net.JoinHostPort(host, port.String())
+}
+
+func setUserAgent(header http.Header) {
+	if _, ok := header["User-Agent"]; !ok {
+		header.Set("User-Agent", "chrome")
+	}
+	switch header.Get("User-Agent") {
+	case "":
+		header["User-Agent"] = nil
+	case "chrome":
+		header.Set("User-Agent", utils.ChromeUA)
+	case "firefox":
+		header.Set("User-Agent", utils.FirefoxUA)
+	case "safari":
+		header.Set("User-Agent", utils.SafariUA)
+	case "edge":
+		header.Set("User-Agent", utils.MSEdgeUA)
+	case "curl":
+		header.Set("User-Agent", utils.CurlUA)
+	case "golang":
+		header.Del("User-Agent")
+	}
 }
 
 func init() {
