@@ -292,6 +292,7 @@ type SplitHTTPConfig struct {
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
 	Xmux                 XmuxConfig        `json:"xmux"`
+	PacketDown           *PacketDownConfig `json:"packetDown"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
 	Extra                json.RawMessage   `json:"extra"`
 }
@@ -303,6 +304,12 @@ type XmuxConfig struct {
 	HMaxRequestTimes Int32Range `json:"hMaxRequestTimes"`
 	HMaxReusableSecs Int32Range `json:"hMaxReusableSecs"`
 	HKeepAlivePeriod int64      `json:"hKeepAlivePeriod"`
+}
+
+type PacketDownConfig struct {
+	KeepAlive       bool       `json:"keepAlive"`
+	KeepAlivePeriod Int32Range `json:"keepAlivePeriod"`
+	KeepAliveLength Int32Range `json:"keepAliveLength"`
 }
 
 func newRangeConfig(input Int32Range) *splithttp.RangeConfig {
@@ -503,6 +510,17 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 			HMaxReusableSecs: newRangeConfig(c.Xmux.HMaxReusableSecs),
 			HKeepAlivePeriod: c.Xmux.HKeepAlivePeriod,
 		},
+	}
+
+	if c.PacketDown != nil {
+		if c.PacketDown.KeepAlivePeriod.From < 0 || c.PacketDown.KeepAliveLength.From < 0 {
+			return nil, errors.New("invalid negative value in packetDown")
+		}
+		config.PacketDown = &splithttp.PacketDownConfig{
+			KeepAlive:       c.PacketDown.KeepAlive,
+			KeepAlivePeriod: newRangeConfig(c.PacketDown.KeepAlivePeriod),
+			KeepAliveLength: newRangeConfig(c.PacketDown.KeepAliveLength),
+		}
 	}
 
 	if c.DownloadSettings != nil {

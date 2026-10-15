@@ -465,3 +465,121 @@ func Test_maxUpload(t *testing.T) {
 
 	common.Must(listen.Close())
 }
+
+func Test_ListenXHAndDial_PacketDown(t *testing.T) {
+	packetDown := &PacketDownConfig{
+		KeepAlive:       true,
+		KeepAlivePeriod: &RangeConfig{From: 2, To: 2},
+		KeepAliveLength: &RangeConfig{From: 24, To: 64},
+	}
+
+	payload := make([]byte, 100*1024)
+	rand.Read(payload)
+
+	listenPort := tcp.PickPort()
+	serverStreamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path:       "/sh",
+			PacketDown: packetDown,
+		},
+	}
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, serverStreamSettings, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+
+			var b [32]byte
+			c.SetReadDeadline(time.Now().Add(5 * time.Second))
+			_, err := c.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			written := 0
+			for written < len(payload) {
+				step := 8192
+				if written+step > len(payload) {
+					step = len(payload) - written
+				}
+				if _, err := c.Write(payload[written : written+step]); err != nil {
+					return
+				}
+				written += step
+			}
+		}(conn)
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	ctx := context.Background()
+	clientStreamSettings := &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path:       "sh",
+			PacketDown: packetDown,
+		},
+	}
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), clientStreamSettings)
+	common.Must(err)
+
+	_, err = conn.Write([]byte("Test connection 1"))
+	common.Must(err)
+
+	got := make([]byte, len(payload))
+	_, err = io.ReadFull(conn, got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(payload, got) {
+		t.Error("100 KiB came back different through packet-down")
+	}
+
+	common.Must(conn.Close())
+}
+
+func Test_ListenXHAndDial_PacketDownWithoutServer(t *testing.T) {
+	// client asks, server has no packetDown: the response is still raw
+	listenPort := tcp.PickPort()
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path: "/sh",
+		},
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+
+			var b [32]byte
+			c.SetReadDeadline(time.Now().Add(5 * time.Second))
+			_, err := c.Read(b[:])
+			if err != nil {
+				return
+			}
+
+			common.Must2(c.Write([]byte("Response")))
+		}(conn)
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	ctx := context.Background()
+	conn, err := Dial(ctx, net.TCPDestination(net.DomainAddress("localhost"), listenPort), &internet.MemoryStreamConfig{
+		ProtocolName: "splithttp",
+		ProtocolSettings: &Config{
+			Path:       "sh",
+			PacketDown: &PacketDownConfig{KeepAlive: true},
+		},
+	})
+	common.Must(err)
+
+	_, err = conn.Write([]byte("Test connection 1"))
+	common.Must(err)
+
+	var b [1024]byte
+	n, _ := io.ReadFull(conn, b[:])
+	if string(b[:n]) != "Response" {
+		t.Error("response: ", string(b[:n]))
+	}
+
+	common.Must(conn.Close())
+}

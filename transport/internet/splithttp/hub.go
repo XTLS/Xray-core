@@ -361,6 +361,14 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		// teeing the response stream into their cache, causing slowdowns.
 		writer.Header().Set("Cache-Control", "no-store")
 
+		// packet-down runs in this response body, if we have the feature on
+		// and the client asked for it. only round-trip agreement routes the
+		// body through the framers.
+		usePacketDown := h.config.PacketDown != nil && request.Header.Get(pdRequestHeader) == "1"
+		if usePacketDown {
+			writer.Header().Set(pdResponseHeader, "1")
+		}
+
 		if !h.config.NoSSEHeader {
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
 			writer.Header().Set("Content-Type", "text/event-stream")
@@ -374,12 +382,19 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Reader:         request.Body,
 			ResponseWriter: writer,
 		}
+		var downlinkWriter io.WriteCloser = httpSC
+		var packetDownWriterInstance *packetDownWriter
+		if usePacketDown {
+			packetDownWriterInstance = newPacketDownWriter(httpSC, sessionId, h.config.PacketDown)
+			defer packetDownWriterInstance.Stop()
+			downlinkWriter = packetDownWriterInstance
+		}
 		localAddr := h.localAddr
 		if la, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && la != nil {
 			localAddr = la
 		}
 		conn := splitConn{
-			writer:     httpSC,
+			writer:     downlinkWriter,
 			reader:     httpSC,
 			remoteAddr: remoteAddr,
 			localAddr:  localAddr,
