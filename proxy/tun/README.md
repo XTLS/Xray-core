@@ -114,6 +114,7 @@ It is ignored on other platforms.
 
 - Only ICMP Echo request/reply is supported; other ICMP message types are ignored
 - ICMP Echo replies are generated locally by the TUN stack; they do not validate real remote ICMP reachability
+- Set `disableFakeICMP` to `true` to turn these local replies off
 - Connections are established to any host, as connection success is only a mark of successful accepting packet for proxying. Hosts that are not accepting connections or don't even exists, will look like they opened a connection (SYN-ACK), and never send back a single byte, closing connection (RST) after some time. This is the side effect of the whole process actually being a proxy, and not real network layer 3 vpn
 
 ## CONSIDERATIONS

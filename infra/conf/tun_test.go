@@ -36,6 +36,11 @@ func TestTunConfigAutoSystem(t *testing.T) {
 			Parser: loadJSON(creator),
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"dns"}},
 		},
+		{
+			Input:  `{"name": "xray0", "disableFakeICMP": true}`,
+			Parser: loadJSON(creator),
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DisableFakeIcmp: true},
+		},
 	})
 }
 

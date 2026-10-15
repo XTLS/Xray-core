@@ -51,6 +51,8 @@ type stack struct {
 	closed bool
 	// opening is how many of conns wait for the answer to their SYN-ACK
 	opening atomic.Int32
+	// disableFakeICMP drops echo requests instead of answering them
+	disableFakeICMP bool
 }
 
 // NewStack builds new ip stack
@@ -62,6 +64,8 @@ func NewStack(ctx context.Context, options StackOptions, handler *Handler) (Stac
 		window: tcpWindow,
 		handle: handler.HandleConnection,
 		conns:  make(map[flow]*tcpConn),
+
+		disableFakeICMP: handler.config.DisableFakeIcmp,
 	}
 	if t, ok := options.Tun.(segmenter); ok && t.Segments() {
 		s.segmenter = t
@@ -258,6 +262,9 @@ func (s *stack) writeUDP(payload []byte, src net.Destination, dst net.Destinatio
 
 // handleICMP answers an echo request as its destination would
 func (s *stack) handleICMP(p packet) {
+	if s.disableFakeICMP {
+		return
+	}
 	m := p.payload
 	request, reply := byte(8), byte(0)
 	if p.proto == protoICMPv6 {

@@ -17,4 +17,5 @@ message Config {
   string desc = 8;
   bool auto_system_dns_to_gateway = 9;
   repeated string auto_system_wfp_block_leak = 10;
+  bool disable_fake_icmp = 11;
 }

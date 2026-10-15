@@ -34,6 +34,7 @@ type Config struct {
 	Desc                   string                 `protobuf:"bytes,8,opt,name=desc,proto3" json:"desc,omitempty"`
 	AutoSystemDnsToGateway bool                   `protobuf:"varint,9,opt,name=auto_system_dns_to_gateway,json=autoSystemDnsToGateway,proto3" json:"auto_system_dns_to_gateway,omitempty"`
 	AutoSystemWfpBlockLeak []string               `protobuf:"bytes,10,rep,name=auto_system_wfp_block_leak,json=autoSystemWfpBlockLeak,proto3" json:"auto_system_wfp_block_leak,omitempty"`
+	DisableFakeIcmp        bool                   `protobuf:"varint,11,opt,name=disable_fake_icmp,json=disableFakeIcmp,proto3" json:"disable_fake_icmp,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -138,11 +139,18 @@ func (x *Config) GetAutoSystemWfpBlockLeak() []string {
 	return nil
 }
 
+func (x *Config) GetDisableFakeIcmp() bool {
+	if x != nil {
+		return x.DisableFakeIcmp
+	}
+	return false
+}
+
 var File_proxy_tun_config_proto protoreflect.FileDescriptor
 
 const file_proxy_tun_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\xfa\x02\n" +
+	"\x16proxy/tun/config.proto\x12\x0exray.proxy.tun\"\xa6\x03\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03MTU\x18\x02 \x01(\rR\x03MTU\x12\x18\n" +
@@ -155,7 +163,8 @@ const file_proxy_tun_config_proto_rawDesc = "" +
 	"\x04desc\x18\b \x01(\tR\x04desc\x12:\n" +
 	"\x1aauto_system_dns_to_gateway\x18\t \x01(\bR\x16autoSystemDnsToGateway\x12:\n" +
 	"\x1aauto_system_wfp_block_leak\x18\n" +
-	" \x03(\tR\x16autoSystemWfpBlockLeakBL\n" +
+	" \x03(\tR\x16autoSystemWfpBlockLeak\x12*\n" +
+	"\x11disable_fake_icmp\x18\v \x01(\bR\x0fdisableFakeIcmpBL\n" +
 	"\x12com.xray.proxy.tunP\x01Z#github.com/xtls/xray-core/proxy/tun\xaa\x02\x0eXray.Proxy.Tunb\x06proto3"
 
 var (

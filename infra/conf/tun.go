@@ -26,6 +26,7 @@ type TunConfig struct {
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
 	AutoSystemDnsToGateway bool     `json:"autoSystemDnsToGateway"`
 	AutoSystemWfpBlockLeak []string `json:"autoSystemWfpBlockLeak"`
+	DisableFakeICMP        bool     `json:"disableFakeICMP"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -38,6 +39,7 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
 		AutoSystemDnsToGateway: v.AutoSystemDnsToGateway,
+		DisableFakeIcmp:        v.DisableFakeICMP,
 	}
 	for _, leak := range v.AutoSystemWfpBlockLeak {
 		switch leak := strings.ToLower(leak); leak {
