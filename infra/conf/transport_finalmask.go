@@ -880,8 +880,8 @@ func (c *XDNS) Build() (proto.Message, error) {
 					port = "53"
 				}
 				addr = net.JoinHostPort(host, port)
-			case "doh":
-				addr = u.Host + u.Path
+			case "https":
+				addr = u.String()
 			default:
 				return nil, errors.New("invalid protocol")
 			}

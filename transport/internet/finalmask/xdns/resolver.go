@@ -20,7 +20,7 @@ func NewResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, err
 		return NewTCPResolver(config, dialer)
 	case "udp":
 		return NewUDPResolver(config, dialer)
-	case "doh":
+	case "https":
 		return NewDOHResolver(config, dialer)
 	default:
 		return nil, errors.New("unknown type")
