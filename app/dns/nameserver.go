@@ -188,6 +188,7 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 		ctx, cancel = context.WithTimeout(ctx, c.timeoutMs)
 	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: c.tag})
+	ctx = session.ContextWithContent(ctx, new(session.Content))
 	ips, ttl, err := c.server.QueryIP(ctx, domain, option)
 	contextErr := ctx.Err()
 	cancel()

@@ -77,7 +77,7 @@ type requestResolver struct {
 }
 
 func newRequestResolver(addr *net.UDPAddr, exchange func(context.Context, []byte) ([]byte, error), closeTransport func()) *requestResolver {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(finalmask.ContextWithRequiredDial(context.Background()))
 	r := &requestResolver{ctx: ctx, cancel: cancel, addr: addr, requests: make(chan resolverRequest, resolverQueueSize), responses: make(chan []byte, resolverQueueSize), exchange: exchange, closeTransport: closeTransport}
 	for range resolverConcurrency {
 		r.wg.Add(1)

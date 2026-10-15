@@ -14,6 +14,7 @@ import (
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -92,20 +93,20 @@ func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) 
 	return lookupForIP(context.Background(), domain, strategy, localAddr, dnsClient.LookupIP)
 }
 
-// LookupForIPContext requires ContextClient when ctx can be canceled.
+// LookupForIPContext requires ContextClient for dials that require cancellation.
 func LookupForIPContext(ctx context.Context, domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	if ctx.Done() == nil {
-		return LookupForIP(domain, strategy, localAddr)
 	}
 	if dnsClient == nil {
 		return nil, errors.New("DNS client not initialized")
 	}
 	client, ok := dnsClient.(dns.ContextClient)
 	if !ok {
-		return nil, errDNSContextUnsupported
+		if finalmask.RequiresContextDial(ctx) {
+			return nil, errDNSContextUnsupported
+		}
+		return lookupForIP(ctx, domain, strategy, localAddr, dnsClient.LookupIP)
 	}
 	return lookupForIP(ctx, domain, strategy, localAddr, func(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
 		return client.LookupIPContext(ctx, domain, option)

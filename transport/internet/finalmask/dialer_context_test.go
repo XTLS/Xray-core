@@ -46,3 +46,17 @@ func TestDialContextHonorsBothDeadlines(t *testing.T) {
 		t.Fatal("parent cancellation did not cancel dial")
 	}
 }
+
+func TestDialContextTransfersCancellationRequirement(t *testing.T) {
+	ordinary, cancelOrdinary := contextForDial(context.Background(), context.Background())
+	defer cancelOrdinary()
+	if RequiresContextDial(ordinary) {
+		t.Fatal("ordinary dial unexpectedly requires cancellation support")
+	}
+	request := ContextWithRequiredDial(context.Background())
+	strict, cancelStrict := contextForDial(context.Background(), request)
+	defer cancelStrict()
+	if !RequiresContextDial(strict) {
+		t.Fatal("strict request lost its cancellation requirement")
+	}
+}

@@ -177,7 +177,8 @@ func (r *DoTResolver) exchange(ctx context.Context, query []byte) ([]byte, error
 	}
 	writeCancelled := make(chan struct{})
 	stopWrite := context.AfterFunc(ctx, func() {
-		c.conn.SetWriteDeadline(time.Now())
+		// Virtual connections may ignore deadlines, so cancellation must close the raw connection.
+		r.dropConnection(c, ctx.Err())
 		close(writeCancelled)
 	})
 	if err == nil {
@@ -185,10 +186,14 @@ func (r *DoTResolver) exchange(ctx context.Context, query []byte) ([]byte, error
 	}
 	if !stopWrite() {
 		<-writeCancelled
+		err = ctx.Err()
 	}
 	// Deadline cleanup must not overwrite a complete response received before peer close.
 	_ = c.conn.SetWriteDeadline(time.Time{})
 	if err != nil {
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		r.dropConnection(c, err)
 		<-c.writeGate
 		return nil, err

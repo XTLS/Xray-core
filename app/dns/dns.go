@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 )
 
@@ -256,6 +257,9 @@ func (s *DNS) LookupIP(domain string, option dns.IPOption) ([]net.IP, uint32, er
 func (s *DNS) LookupIPContext(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, 0, err
+	}
+	if instance := core.FromContext(s.ctx); instance != nil {
+		ctx = context.WithValue(ctx, core.XrayKey(1), instance)
 	}
 	// Normalize the FQDN form query
 	domain = strings.TrimSuffix(domain, ".")

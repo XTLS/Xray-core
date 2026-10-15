@@ -360,7 +360,7 @@ func systemAdapterTestMask(protocol, address string) *xdns.Config {
 	return &xdns.Config{Domains: []*xdns.DomainProto{{Name: "tunnel.test", LenLimit: 255, LabelLimit: 63, Types: []int32{16}, Edns0: 4096}}, Resolvers: []*xdns.ResolverProto{{Type: protocol, Addr: address}}}
 }
 
-func TestLegacyAdapterRejectsEncryptedResolverConstruction(t *testing.T) {
+func TestLegacyAdapterRejectsEncryptedResolverDial(t *testing.T) {
 	for _, protocol := range []string{"tls", "quic", "https", "https+h3"} {
 		t.Run(protocol, func(t *testing.T) {
 			var dialed atomic.Int32
@@ -378,12 +378,29 @@ func TestLegacyAdapterRejectsEncryptedResolverConstruction(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			observed := &observedSystemDialer{SystemDialer: internet.WithAdapter(&systemLegacyAdapter{dial: func(string, string) (net.Conn, error) {
+				dialed.Add(1)
+				return nil, errors.New("legacy dial should not start")
+			}}), entered: make(chan struct{}, 64), returned: make(chan error, 64)}
+			internet.UseAlternativeSystemDialer(observed)
 			conn, err := settings.FinalMask.DialUDP(t.Context(), xnet.UDPDestination(xnet.LocalHostIP, 443))
-			if conn != nil {
-				conn.Close()
+			if err != nil {
+				t.Fatal(err)
 			}
-			if err == nil || conn != nil || dialed.Load() != 0 {
-				t.Fatalf("unsupported adapter accepted %s or dialed: conn=%v, err=%v, calls=%d", protocol, conn, err, dialed.Load())
+			t.Cleanup(func() { conn.Close() })
+			if _, err := conn.Write([]byte("trigger strict dial rejection")); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-observed.returned:
+				if err == nil {
+					t.Fatal("unsupported adapter accepted an encrypted resolver dial")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("encrypted resolver did not attempt its runtime dial")
+			}
+			if dialed.Load() != 0 {
+				t.Fatalf("encrypted resolver called legacy Dial %d times", dialed.Load())
 			}
 		})
 	}

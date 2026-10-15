@@ -95,3 +95,10 @@ jobs:
           enableCrossOsArchive: true
       - name: Test
         run: go test -timeout 1h -v ./...
+      - name: DNS and transport race tests
+        if: runner.os == 'Linux' && !cancelled()
+        run: >-
+          go test -race -count=1 -timeout 10m
+          -skip 'Test(QUICNameServer|TCPLocalNameServer|DOHNameServer|LocalNameServer)'
+          ./app/dns ./features/dns/localdns ./transport/internet
+          ./transport/internet/finalmask ./transport/internet/finalmask/xdns

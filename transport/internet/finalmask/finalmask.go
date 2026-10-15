@@ -18,7 +18,22 @@ type Dialer struct {
 	DialUDPContext func(context.Context, net.Destination) (net.Conn, error)
 }
 
+type requiredContextDialKey struct{}
+
+// ContextWithRequiredDial requires the underlying dialer and DNS lookup to support cancellation.
+func ContextWithRequiredDial(ctx context.Context) context.Context {
+	return context.WithValue(ctx, requiredContextDialKey{}, true)
+}
+
+func RequiresContextDial(ctx context.Context) bool {
+	required, _ := ctx.Value(requiredContextDialKey{}).(bool)
+	return required
+}
+
 func contextForDial(parent, request context.Context) (context.Context, context.CancelFunc) {
+	if RequiresContextDial(request) {
+		parent = ContextWithRequiredDial(parent)
+	}
 	var ctx context.Context
 	var cancel context.CancelFunc
 	if deadline, ok := request.Deadline(); ok {

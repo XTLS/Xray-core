@@ -11,11 +11,39 @@ import (
 	"time"
 
 	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/core"
 	featureDNS "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
 type dnsContextTestKey struct{}
+
+func TestDNSDetachedTransportContextOwnsContent(t *testing.T) {
+	for _, protocol := range []string{"dns", "https"} {
+		t.Run(protocol, func(t *testing.T) {
+			content := &session.Content{Protocol: protocol, SkipDNSResolve: true}
+			ctx := session.ContextWithContent(context.WithValue(t.Context(), core.XrayKey(1), new(core.Instance)), content)
+			ctx, cancel := context.WithCancel(ctx)
+			dnsCtx := toDnsContext(ctx, "test-upstream")
+			cancel()
+			dnsContent := session.ContentFromContext(dnsCtx)
+			if dnsContent == content {
+				t.Fatal("detached transport shares mutable query Content")
+			}
+			if dnsContent.Protocol != protocol || !dnsContent.SkipDNSResolve {
+				t.Fatal("detached transport lost own protocol or resolver recursion guard")
+			}
+			dnsContent.SetAttribute("transport", "own")
+			if content.Attributes != nil {
+				t.Fatal("transport modified original query Content")
+			}
+			if dnsCtx.Err() != nil {
+				t.Fatal("query cancellation terminated detached pooled transport")
+			}
+		})
+	}
+}
 
 func dnsContextSystemResolver(t *testing.T) (<-chan context.Context, <-chan struct{}, func()) {
 	t.Helper()

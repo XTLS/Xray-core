@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	fdns "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 )
 
@@ -118,29 +118,66 @@ func TestLookupForIPContextCancellationPreventsFallback(t *testing.T) {
 	}
 }
 
-func TestLookupForIPLegacyRemainsUsableAndCancelableCallsRejectLegacy(t *testing.T) {
+func TestLookupForIPContextUsesLegacyClientForOrdinaryTCPAndUDP(t *testing.T) {
 	var calls atomic.Int32
 	client := &dialerLegacyDNS{lookup: func(string, fdns.IPOption) ([]net.IP, uint32, error) {
 		calls.Add(1)
 		return []net.IP{net.ParseIP("127.0.0.1")}, 60, nil
 	}}
 	useDialerTestDNS(t, client)
-	ips, err := internet.LookupForIP("legacy.test", internet.DomainStrategy_USE_IP4, nil)
-	if err != nil || len(ips) != 1 || !ips[0].Equal(net.ParseIP("127.0.0.1")) {
-		t.Fatalf("legacy lookup returned %v, %v", ips, err)
-	}
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	if _, err := internet.LookupForIPContext(ctx, "legacy.test", internet.DomainStrategy_USE_IP4, nil); err == nil || !strings.Contains(err.Error(), "ContextClient") {
-		t.Fatalf("unsupported cancelable lookup returned %v", err)
-	}
-	sockets := watchDialerTestSockets(t)
-	conn, err := internet.DialSystem(ctx, xnet.UDPDestination(xnet.DomainAddress("legacy.test"), 853), &internet.SocketConfig{DomainStrategy: internet.DomainStrategy_USE_IP4})
-	if conn != nil {
+
+	t.Run("tcp", func(t *testing.T) {
+		listener, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		accepted := make(chan struct{})
+		go func() {
+			conn, err := listener.Accept()
+			if err == nil {
+				conn.Close()
+				close(accepted)
+			}
+		}()
+		conn, err := internet.DialSystem(ctx, xnet.TCPDestination(xnet.DomainAddress("legacy.test"), xnet.Port(listener.Addr().(*net.TCPAddr).Port)), &internet.SocketConfig{DomainStrategy: internet.DomainStrategy_USE_IP4})
+		if err != nil {
+			t.Fatal(err)
+		}
 		conn.Close()
-	}
-	if err == nil || calls.Load() != 1 || sockets.Load() != 0 {
-		t.Fatalf("unsupported client was called or opened a socket: %v, calls=%d, sockets=%d", err, calls.Load(), sockets.Load())
+		select {
+		case <-accepted:
+		case <-time.After(time.Second):
+			t.Fatal("legacy DNS result did not reach the TCP listener")
+		}
+	})
+
+	t.Run("udp", func(t *testing.T) {
+		receiver, err := net.ListenPacket("udp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer receiver.Close()
+		conn, err := internet.DialSystem(ctx, xnet.UDPDestination(xnet.DomainAddress("legacy.test"), xnet.Port(receiver.LocalAddr().(*net.UDPAddr).Port)), &internet.SocketConfig{DomainStrategy: internet.DomainStrategy_USE_IP4})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		payload := []byte("legacy DNS UDP")
+		if n, err := conn.Write(payload); err != nil || n != len(payload) {
+			t.Fatalf("UDP write = %d, %v", n, err)
+		}
+		receiver.SetReadDeadline(time.Now().Add(time.Second))
+		buf := make([]byte, len(payload))
+		n, _, err := receiver.ReadFrom(buf)
+		if err != nil || !bytes.Equal(buf[:n], payload) {
+			t.Fatalf("UDP packet = %q, %v", buf[:n], err)
+		}
+	})
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("legacy DNS calls = %d, want one per transport", got)
 	}
 }
 
@@ -339,5 +376,21 @@ func TestDialSystemContextLookupPreservesOutboundGatewayAndSocketControl(t *test
 	}
 	if !source.(*net.UDPAddr).IP.Equal(net.ParseIP("127.0.0.1")) {
 		t.Fatalf("outbound gateway was lost: %v", source)
+	}
+}
+
+func TestLookupForIPContextRejectsLegacyClientForRequiredCancellation(t *testing.T) {
+	var calls atomic.Int32
+	useDialerTestDNS(t, &dialerLegacyDNS{lookup: func(string, fdns.IPOption) ([]net.IP, uint32, error) {
+		calls.Add(1)
+		return []net.IP{net.ParseIP("127.0.0.1")}, 60, nil
+	}})
+	ctx, cancel := context.WithCancel(finalmask.ContextWithRequiredDial(t.Context()))
+	defer cancel()
+	if _, err := internet.LookupForIPContext(ctx, "strict.test", internet.DomainStrategy_USE_IP46, nil); err == nil {
+		t.Fatal("strict dial accepted a legacy DNS client")
+	}
+	if calls.Load() != 0 {
+		t.Fatal("strict dial entered a legacy DNS lookup")
 	}
 }

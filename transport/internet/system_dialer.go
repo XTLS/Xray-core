@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 var (
@@ -198,6 +199,9 @@ func WithAdapter(dialer SystemDialerAdapter) SystemDialer {
 func (v *SimpleSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
 	if adapter, ok := v.adapter.(SystemDialerContextAdapter); ok {
 		return adapter.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
+	}
+	if finalmask.RequiresContextDial(ctx) {
+		return nil, errors.New("system dialer adapter cannot cancel dials; provide a SystemDialerContextAdapter")
 	}
 	return v.adapter.Dial(dest.Network.SystemString(), dest.NetAddr())
 }

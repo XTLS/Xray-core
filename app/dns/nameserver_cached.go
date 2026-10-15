@@ -88,6 +88,15 @@ func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOp
 			}
 			if value.Err != nil {
 				// A canceled flight owner must not fail another caller that is still active.
+				cache := s.getCacheController()
+				if !cache.disableCache {
+					if rec := cache.findRecords(fqdn); rec != nil {
+						ips, ttl, err := merge(option, rec.A, rec.AAAA)
+						if err == nil && ttl > 0 && len(ips) > 0 {
+							return ips, uint32(ttl), nil
+						}
+					}
+				}
 				continue
 			}
 			ret := value.Val.(result)
