@@ -3,10 +3,6 @@ package lua
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -14,9 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 	"weak"
 
 	xerrors "github.com/xtls/xray-core/common/errors"
@@ -234,6 +228,21 @@ func compileTestProgram(t *testing.T, code string) *Program {
 	return program
 }
 
+func writeTestScript(t *testing.T, code string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "script.lua")
+	if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TODO: Re-enable these tests and helpers when Compile supports privileged signature authorization again.
+/*
 const privilegedSignatureHeader = "-- @xray:privileged-signature="
 
 // RFC 8032 test-vector key. The fixture signature was independently computed
@@ -264,19 +273,6 @@ func setTestPrivilegedPublicKey(t *testing.T, key string) {
 	if err := SetPrivilegedPublicKey(key); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func writeTestScript(t *testing.T, code string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "script.lua")
-	if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	path, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return path
 }
 
 func testSignature(t *testing.T, body string) string {
@@ -486,6 +482,8 @@ func TestProgramSignedBodyTampering(t *testing.T) {
 	}
 }
 
+*/
+
 // TODO: Re-enable this test when Compile supports inline scripts again.
 /*
 func TestProgramInlineSignaturesCannotAuthorize(t *testing.T) {
@@ -516,6 +514,8 @@ func TestProgramInlineSignaturesCannotAuthorize(t *testing.T) {
 }
 */
 
+// TODO: Re-enable this test when Compile supports privileged signature authorization again.
+/*
 func TestProgramSignedDiagnostics(t *testing.T) {
 	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
 	const invalidBody = "\n\nlocal = 1"
@@ -542,6 +542,8 @@ func TestProgramSignedDiagnostics(t *testing.T) {
 		t.Fatalf("signed initialization error = %v; want original source line 5", err)
 	}
 }
+
+*/
 
 func TestProgramSandbox(t *testing.T) {
 	dir := t.TempDir()
@@ -1047,6 +1049,8 @@ func TestProgramSandboxClosesFailedInitialization(t *testing.T) {
 	}
 }
 
+// TODO: Re-enable these tests when Compile supports privileged signature authorization again.
+/*
 func TestProgramPrivilegedLibraries(t *testing.T) {
 	setTestPrivilegedPublicKey(t, privilegedTestPublicKey)
 	const body = `assert(require("io") == io and require("os") == os)
@@ -1175,3 +1179,4 @@ func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
 		})
 	}
 }
+*/
