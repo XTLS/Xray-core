@@ -262,7 +262,12 @@ func toDnsContext(ctx context.Context, addr string) context.Context {
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		dnsCtx = session.ContextWithInbound(dnsCtx, inbound)
 	}
-	dnsCtx = session.ContextWithContent(dnsCtx, session.ContentFromContext(ctx))
+	content := new(session.Content)
+	if queryContent := session.ContentFromContext(ctx); queryContent != nil {
+		content.Protocol = queryContent.Protocol
+		content.SkipDNSResolve = queryContent.SkipDNSResolve
+	}
+	dnsCtx = session.ContextWithContent(dnsCtx, content)
 	dnsCtx = log.ContextWithAccessMessage(dnsCtx, &log.AccessMessage{
 		From:   "DNS",
 		To:     addr,

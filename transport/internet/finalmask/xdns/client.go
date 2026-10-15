@@ -46,11 +46,12 @@ type xdnsClient struct {
 	resolverSends []atomic.Uint32
 	resolverIndex atomic.Uint32
 
-	readCh  chan packet
-	poolCh  chan struct{}
-	closeCh chan struct{}
-	wg      sync.WaitGroup
-	mu      sync.Mutex
+	readCh    chan packet
+	poolCh    chan struct{}
+	closeCh   chan struct{}
+	wg        sync.WaitGroup
+	mu        sync.Mutex
+	closeOnce sync.Once
 }
 
 func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
@@ -103,6 +104,7 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 		poolCh:  make(chan struct{}, pollLimit),
 		closeCh: make(chan struct{}),
 	}
+	client.wg.Add(len(resolvers) + 1)
 	go client.run()
 	return client, nil
 }
@@ -116,14 +118,14 @@ func (c *xdnsClient) closed() bool {
 	}
 }
 
-func (c *xdnsClient) send(p []byte) {
+func (c *xdnsClient) send(p []byte) error {
 	domain := c.domains[mrand.Intn(len(c.domains))]
 	qtype := domain.types[mrand.Intn(len(domain.types))]
 
 	var buf [512]byte
 	var data [255]byte
 
-	send := func(p []byte) {
+	send := func(p []byte) error {
 		msg := dnsmessage.Message{
 			Header: dnsmessage.Header{
 				RecursionDesired: true,
@@ -168,7 +170,7 @@ func (c *xdnsClient) send(p []byte) {
 			}
 		}
 		c.resolverIndex.Store(i)
-		c.resolvers[index].Send(pack)
+		return c.resolvers[index].Send(pack)
 	}
 
 	if len(p) == 0 {
@@ -176,8 +178,7 @@ func (c *xdnsClient) send(p []byte) {
 		data[0] |= TypeMap[qtype]
 		data[8] = 8
 		common.Must2(rand.Read(data[9:17]))
-		send(data[:17])
-		return
+		return send(data[:17])
 	}
 
 	if len(p) <= domain.cap-12 {
@@ -186,8 +187,7 @@ func (c *xdnsClient) send(p []byte) {
 		data[8] = 3
 		common.Must2(rand.Read(data[9:12]))
 		copy(data[12:], p)
-		send(data[:12+len(p)])
-		return
+		return send(data[:12+len(p)])
 	}
 
 	if len(p) <= 255*(domain.cap-15) {
@@ -208,13 +208,15 @@ func (c *xdnsClient) send(p []byte) {
 			data[14] = byte(fragN)
 			size := min(len(p), domain.cap-15)
 			copy(data[15:], p[:size])
-			send(data[:15+size])
+			if err := send(data[:15+size]); err != nil {
+				return err
+			}
 			p = p[size:]
 		}
-		return
+		return nil
 	}
 
-	errors.LogError(context.Background(), "err size ", len(p))
+	return errors.New("invalid xdns packet size: ", len(p))
 }
 
 func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
@@ -287,11 +289,9 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 
 func (c *xdnsClient) run() {
 	for i := range len(c.resolvers) {
-		c.wg.Add(1)
 		go c.recv(i)
 	}
 
-	c.wg.Add(1)
 	go c.poll()
 
 	c.wg.Wait()
@@ -308,6 +308,10 @@ func (c *xdnsClient) recv(i int) {
 		if err != nil {
 			if c.closed() {
 				return
+			}
+			if err == io.ErrShortBuffer {
+				errors.LogWarningInner(context.Background(), err, "xdns resolver response exceeds receive buffer")
+				continue
 			}
 			errors.LogErrorInner(context.Background(), err, "recv err ", i)
 			return
@@ -348,9 +352,13 @@ func (c *xdnsClient) poll() {
 			return
 		}
 		ticker.Reset(delay)
-		c.send(nil)
+		if err := c.send(nil); err != nil {
+			errors.LogWarningInner(context.Background(), err, "xdns poll send failed")
+		}
 		for range c.extraPoll {
-			c.send(nil)
+			if err := c.send(nil); err != nil {
+				errors.LogWarningInner(context.Background(), err, "xdns extra poll send failed")
+			}
 		}
 	}
 }
@@ -373,23 +381,25 @@ func (c *xdnsClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		errors.LogError(context.Background(), "err size ", len(p))
 		return 0, errors.New("err size")
 	}
-	c.send(p)
+	if err := c.send(p); err != nil {
+		return 0, err
+	}
 	for range c.extraPoll {
-		c.send(nil)
+		if err := c.send(nil); err != nil {
+			errors.LogWarningInner(context.Background(), err, "xdns extra poll send failed")
+		}
 	}
 	return len(p), nil
 }
 
 func (c *xdnsClient) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.closed() {
-		return nil
-	}
-	close(c.closeCh)
-	for i := range c.resolvers {
-		c.resolvers[i].Close()
-	}
+	c.closeOnce.Do(func() {
+		close(c.closeCh)
+		for i := range c.resolvers {
+			c.resolvers[i].Close()
+		}
+	})
+	c.wg.Wait()
 	return nil
 }
 

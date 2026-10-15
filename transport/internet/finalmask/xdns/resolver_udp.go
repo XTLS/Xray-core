@@ -1,132 +1,45 @@
 package xdns
 
 import (
+	"context"
 	"errors"
-	"io"
-	"sync"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
-type UDPResolver struct {
-	dest   net.Destination
-	dialer *finalmask.Dialer
-
-	conn    net.PacketConn
-	udpAddr *net.UDPAddr
-
-	readCh  chan []byte
-	closeCh chan struct{}
-	wg      sync.WaitGroup
-	mu      sync.Mutex
-}
+type UDPResolver struct{ *socketResolver }
 
 func NewUDPResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, error) {
-	dest, err := net.ParseDestination("udp:" + config.Addr)
+	dest, addr, err := resolverTarget(config.Addr, "", net.Network_UDP)
 	if err != nil {
 		return nil, err
 	}
-	r := &UDPResolver{
-		dest:    dest,
-		dialer:  dialer,
-		readCh:  make(chan []byte),
-		closeCh: make(chan struct{}),
+	if dialer == nil || (dialer.DialUDPContext == nil && dialer.DialUDP == nil) {
+		return nil, errors.New("missing UDP dialer")
 	}
-	if err := r.dial(); err != nil {
-		r.Close()
-		return nil, err
-	}
-	return r, nil
-}
-
-func (r *UDPResolver) closed() bool {
-	select {
-	case <-r.closeCh:
-		return true
-	default:
-		return false
-	}
-}
-
-func (r *UDPResolver) dial() error {
-	if r.closed() {
-		return errors.New("closed")
-	}
-	if r.conn != nil {
-		return nil
-	}
-	conn, err := r.dialer.DialUDP(r.dest)
-	if err != nil {
-		return err
-	}
-	r.conn = conn.(*net.PacketConnWrapper).PacketConn
-	r.udpAddr = conn.RemoteAddr().(*net.UDPAddr)
-	r.wg.Add(1)
-	go r.recv(conn.(*net.PacketConnWrapper).PacketConn)
-	return nil
-}
-
-func (r *UDPResolver) recv(conn net.PacketConn) {
-	defer r.wg.Done()
-
-	var buf [4096]byte
-	for {
-		n, _, err := conn.ReadFrom(buf[:])
+	r, err := newSocketResolver(addr, false, func(ctx context.Context) (net.Conn, error) {
+		var conn net.Conn
+		var err error
+		if dialer.DialUDPContext != nil {
+			conn, err = dialer.DialUDPContext(ctx, dest)
+		} else {
+			conn, err = dialer.DialUDP(dest)
+		}
 		if err != nil {
-			break
+			return nil, err
 		}
-		p := pool4K.Get().([]byte)
-		copy(p, buf[:n])
-		select {
-		case <-r.closeCh:
-			pool4K.Put(p[:cap(p)])
-		case r.readCh <- p[:n]:
+		wrapper, ok := conn.(*net.PacketConnWrapper)
+		if !ok || wrapper.PacketConn == nil || wrapper.Dest == nil {
+			if conn != nil {
+				conn.Close()
+			}
+			return nil, errors.New("UDP dialer must return a PacketConnWrapper with a destination")
 		}
+		return conn, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	_ = conn.Close()
-	r.conn = nil
-}
-
-func (r *UDPResolver) Addr() *net.UDPAddr {
-	return r.udpAddr
-}
-
-func (r *UDPResolver) Read(p []byte) (n int, err error) {
-	packet, ok := <-r.readCh
-	if ok {
-		n = copy(p, packet)
-		pool4K.Put(packet[:cap(packet)])
-		return n, nil
-	}
-	return 0, io.ErrClosedPipe
-}
-
-func (r *UDPResolver) Send(p []byte) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if err := r.dial(); err != nil {
-		return
-	}
-	_, _ = r.conn.WriteTo(p, r.udpAddr)
-}
-
-func (r *UDPResolver) Close() {
-	r.mu.Lock()
-	if r.closed() {
-		r.mu.Unlock()
-		return
-	}
-	close(r.closeCh)
-	conn := r.conn
-	r.mu.Unlock()
-	if conn != nil {
-		_ = conn.Close()
-	}
-	r.wg.Wait()
-	close(r.readCh)
+	return &UDPResolver{r}, nil
 }

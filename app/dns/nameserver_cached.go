@@ -20,6 +20,9 @@ type CachedNameserver interface {
 
 // queryIP is called from dns.Server->queryIPTimeout
 func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	fqdn := Fqdn(domain)
 
 	cache := s.getCacheController()
@@ -55,6 +58,9 @@ func pull(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOpt
 }
 
 func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) ([]net.IP, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	key := fqdn
 	switch {
 	case option.IPv4Enable && option.IPv6Enable:
@@ -65,12 +71,38 @@ func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOp
 		key = key + "6"
 	}
 
-	v, _, _ := s.getCacheController().requestGroup.Do(key, func() (any, error) {
-		return doFetch(ctx, s, fqdn, option), nil
-	})
-	ret := v.(result)
-
-	return ret.ips, ret.ttl, ret.error
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
+		results := s.getCacheController().requestGroup.DoChan(key, func() (any, error) {
+			ret := doFetch(ctx, s, fqdn, option)
+			return ret, ctx.Err()
+		})
+		select {
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
+		case value := <-results:
+			if err := ctx.Err(); err != nil {
+				return nil, 0, err
+			}
+			if value.Err != nil {
+				// A canceled flight owner must not fail another caller that is still active.
+				cache := s.getCacheController()
+				if !cache.disableCache {
+					if rec := cache.findRecords(fqdn); rec != nil {
+						ips, ttl, err := merge(option, rec.A, rec.AAAA)
+						if err == nil && ttl > 0 && len(ips) > 0 {
+							return ips, uint32(ttl), nil
+						}
+					}
+				}
+				continue
+			}
+			ret := value.Val.(result)
+			return ret.ips, ret.ttl, ret.error
+		}
+	}
 }
 
 type result struct {

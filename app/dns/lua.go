@@ -27,11 +27,9 @@ func RegisterLua(L *lua.LState, client featureDNS.Client) {
 		servers = luaServers(client)
 	case *localdns.Client:
 		servers = []luaDNSServer{{
-			id:   "localhost",
-			name: "localhost",
-			query: func(_ context.Context, domain string, option featureDNS.IPOption) ([]net.IP, uint32, error) {
-				return client.LookupIP(domain, option)
-			},
+			id:    "localhost",
+			name:  "localhost",
+			query: client.LookupIPContext,
 		}}
 	}
 	registerLua(L, servers, client)
@@ -116,11 +114,21 @@ func newLuaClientQuery(L *lua.LState, client featureDNS.Client, pushIPs func(*lu
 			IPv6Enable: L.CheckBool(3),
 			FakeEnable: L.CheckBool(4),
 		}
-		if L.Context() == nil {
+		ctx := L.Context()
+		if ctx == nil {
 			L.RaiseError("dns.Query requires an active DNS query")
 			return 0
 		}
-		ips, ttl, err := client.LookupIP(string(domain), option)
+		var ips []net.IP
+		var ttl uint32
+		var err error
+		if err = ctx.Err(); err == nil {
+			if contextual, ok := client.(featureDNS.ContextClient); ok {
+				ips, ttl, err = contextual.LookupIPContext(ctx, string(domain), option)
+			} else {
+				ips, ttl, err = client.LookupIP(string(domain), option)
+			}
+		}
 		pushIPs(L, ips)
 		xlua.PushNumber(L, ttl)
 		xlua.PushError(L, err)

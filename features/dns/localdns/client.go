@@ -2,6 +2,7 @@ package localdns
 
 import (
 	"context"
+	stdnet "net"
 	"syscall"
 	"time"
 
@@ -30,12 +31,23 @@ func (*Client) Close() error { return nil }
 
 // LookupIP implements Client.
 func (c *Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, error) {
+	return c.LookupIPContext(context.Background(), host, option)
+}
+
+// LookupIPContext implements dns.ContextClient.
+func (c *Client) LookupIPContext(ctx context.Context, host string, option dns.IPOption) ([]net.IP, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	var ips []net.IP
 	var err error
 	if len(internet.Controllers) > 0 {
-		ips, err = c.r.LookupIP(context.Background(), "ip", host)
+		ips, err = c.r.LookupIP(ctx, "ip", host)
 	} else {
-		ips, err = net.LookupIP(host)
+		ips, err = stdnet.DefaultResolver.LookupIP(ctx, "ip", host)
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return nil, 0, contextErr
 	}
 	if err != nil {
 		return nil, 0, err

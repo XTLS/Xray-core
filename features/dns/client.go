@@ -1,6 +1,8 @@
 package dns
 
 import (
+	"context"
+
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
@@ -22,6 +24,12 @@ type Client interface {
 
 	// LookupIP returns IP address for the given domain. IPs may contain IPv4 and/or IPv6 addresses.
 	LookupIP(domain string, option IPOption) ([]net.IP, uint32, error)
+}
+
+// ContextClient supports DNS lookups that end when the caller cancels.
+// Client remains unchanged for existing implementations.
+type ContextClient interface {
+	LookupIPContext(context.Context, string, IPOption) ([]net.IP, uint32, error)
 }
 
 // ClientType returns the type of Client interface. Can be used for implementing common.HasType.

@@ -5,6 +5,8 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
+func (c *Config) HandleDial() {}
+
 func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
 	return NewClient(c, dialer)
 }
