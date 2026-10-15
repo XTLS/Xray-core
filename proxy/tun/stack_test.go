@@ -583,6 +583,246 @@ func TestTCPCongestion(t *testing.T) {
 	segments(fresh(tcpStart + 2)...)
 }
 
+// A loss is paid for once. Acknowledgments that repeat themselves tell of one only when the system cannot say what
+// it has. A segment that was sent again is sent once more when the system still asks for it after an answer had the
+// time to come, and the timer waits for that one. When the timer runs out all the same, the way takes no less
+// afterwards than after the loss, and it is not given at once what one acknowledgment then says has arrived.
+func TestTCPLossAgain(t *testing.T) {
+	conns := make(chan accepted, 5)
+	// start opens a connection that says what it has if sack is set, with twenty segments sent and not acknowledged
+	start := func(src string, sack bool) (*peer, *tcpConn) {
+		t.Helper()
+		p, l := newPeer(t, src, "10.0.0.2:80")
+		newTestStack(t, l, accept(conns))
+		options := []byte{2, 4, 0, 100}
+		if sack {
+			options = append(options, 4, 2, 0, 0)
+		}
+		p.connect(options)
+		a := take(t, conns)
+		go a.conn.(buf.Writer).WriteMultiBuffer(buf.MergeBytes(nil, make([]byte, 8000)))
+		for range tcpStart {
+			p.receive()
+		}
+		p.ack += 100 * tcpStart
+		p.send(p.seq, tcpAck, nil, nil)
+		for range 2 * tcpStart {
+			p.receive()
+		}
+		return p, a.conn.(*tcpConn)
+	}
+	// has says that the system has what it was sent from from to to, past what it acknowledges
+	has := func(p *peer, from, to uint32) []byte {
+		return binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32([]byte{1, 1, 5, 10}, p.ack+from), p.ack+to)
+	}
+	again := func(p *peer, what string) {
+		t.Helper()
+		if s := p.receive(); s.seq != p.ack || len(s.payload) != 100 {
+			t.Fatal(what, ": seq ", s.seq-p.ack, " with ", len(s.payload), " bytes")
+		}
+	}
+
+	p, c := start("10.0.0.1:1234", true)
+	state := func() (cwnd, ssthresh uint32, stalled, retransmits int) {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return c.cwnd, c.ssthresh, c.stalled, c.retransmits
+	}
+	// the system repeats itself, as it does for a segment that it got twice: it would say what it has if one were lost
+	for range 3 {
+		p.send(p.seq, tcpAck, nil, nil)
+	}
+	p.silent(tcpTick / 2)
+	if cwnd, _, _, _ := state(); cwnd != 2*tcpStart*100 {
+		t.Fatal("the way takes ", cwnd, " after acknowledgments that repeat themselves")
+	}
+
+	// an answer takes a while, and so does the system before it says that the first of them is missing
+	c.mu.Lock()
+	c.srtt, c.rttvar = tcpTick, 0
+	c.mu.Unlock()
+	time.Sleep(tcpTick - tcpTick/5)
+	p.send(p.seq, tcpAck, has(p, 100, 2000), nil)
+	again(p, "the lost one")
+	// the timer waits for the answer from when that was sent again, and half as much is on its way as before
+	if _, ssthresh, stalled, _ := state(); ssthresh != tcpStart*100 || stalled != 0 {
+		t.Fatal("after a loss the way takes ", ssthresh, ", the timer has waited ", stalled, " ticks")
+	}
+	for range tcpStart - 1 {
+		p.receive()
+	}
+	// it says so again before the answer to what was sent again could be there: nothing
+	time.Sleep(tcpTick / 2)
+	p.send(p.seq, tcpAck, has(p, 100, 2000), nil)
+	p.silent(tcpTick)
+	// and again after that time: what was sent again is lost as well, and is sent once more
+	p.send(p.seq, tcpAck, has(p, 100, 2000), nil)
+	again(p, "the lost one once more")
+	if _, _, stalled, retransmits := state(); stalled != 0 || retransmits != 0 {
+		t.Fatal("sent once more by the timer ", retransmits, " times, which has waited ", stalled, " ticks")
+	}
+	// that was the one time. The timer waits for the answer to it, then it runs out: the way is tried with one
+	// segment, and takes no less afterwards than after the loss
+	time.Sleep(tcpTick + tcpTick/3)
+	p.send(p.seq, tcpAck, has(p, 100, 2000), nil)
+	p.silent(tcpTick / 4)
+	again(p, "the lost one after the timer")
+	if cwnd, ssthresh, _, retransmits := state(); cwnd != 100 || ssthresh != tcpStart*100 || retransmits != 1 {
+		t.Fatal("after the timer the way takes ", cwnd, " and then ", ssthresh, ", sent again ", retransmits, " times")
+	}
+	// all of it arrives with the one that was sent again: that is not how much the way takes at once
+	p.ack += 100 * (3*tcpStart - 1)
+	p.send(p.seq, tcpAck, nil, nil)
+	for range 3 {
+		p.receive()
+	}
+	p.silent(tcpTick / 2)
+	if cwnd, _, _, _ := state(); cwnd != 300 {
+		t.Fatal("the way takes ", cwnd, " after one acknowledgment for all that was lost")
+	}
+	// the next loss on the connection: its first segment is sent again once, whatever time the last loss has left
+	time.Sleep(tcpTick)
+	p.send(p.seq, tcpAck, has(p, 100, 300), nil)
+	again(p, "the first of the next loss")
+	if s := p.receive(); s.seq == p.ack {
+		t.Fatal("the first of the next loss is sent again twice")
+	}
+	p.silent(tcpTick / 2)
+
+	// two are lost. When the first has come, the second is waited for as long as an answer takes
+	p, c = start("10.0.0.1:1235", true)
+	c.mu.Lock()
+	c.srtt, c.rttvar = tcpTick, 0
+	c.mu.Unlock()
+	p.send(p.seq, tcpAck, has(p, 200, 2000), nil)
+	again(p, "the first of two")
+	if s := p.receive(); s.seq != p.ack+100 {
+		t.Fatal("not the second of two: seq ", s.seq-p.ack)
+	}
+	for range tcpStart - 2 {
+		p.receive()
+	}
+	time.Sleep(tcpTick + tcpTick/2)
+	p.ack += 100
+	p.send(p.seq, tcpAck, has(p, 100, 1900), nil)
+	if s := p.receive(); s.seq == p.ack {
+		t.Fatal("the second of two is sent again with the answer to the first")
+	}
+	p.send(p.seq, tcpAck, has(p, 100, 1900), nil)
+	p.silent(tcpTick / 2)
+
+	// an answer that takes next to no time is given some all the same: the stack may get to what the system said
+	// before only after it
+	p, c = start("10.0.0.1:1237", true)
+	c.mu.Lock()
+	c.srtt, c.rttvar = time.Millisecond, 0
+	c.mu.Unlock()
+	p.send(p.seq, tcpAck, has(p, 100, 2000), nil)
+	again(p, "the lost one of a near system")
+	for range tcpStart - 1 {
+		p.receive()
+	}
+	time.Sleep(tcpTick / 20)
+	p.send(p.seq, tcpAck, has(p, 100, 2000), nil)
+	p.silent(tcpTick / 20)
+	time.Sleep(tcpTick / 4)
+	p.send(p.seq, tcpAck, has(p, 100, 2000), nil)
+	again(p, "the lost one of a near system once more")
+	if _, _, _, retransmits := state(); retransmits != 0 {
+		t.Fatal("sent once more by the timer")
+	}
+
+	// a timer that runs out with no loss seen before does halve what the way takes
+	p, c = start("10.0.0.1:1238", true)
+	again(p, "the first segment after the timer")
+	if cwnd, ssthresh, _, retransmits := state(); cwnd != 100 || ssthresh != tcpStart*100 || retransmits != 1 {
+		t.Fatal("after the timer the way takes ", cwnd, " and then ", ssthresh, ", sent again ", retransmits, " times")
+	}
+
+	// a system that cannot say what it has: the third time it says the same, the segment is lost
+	p, c = start("10.0.0.1:1236", false)
+	for range 2 {
+		p.send(p.seq, tcpAck, nil, nil)
+	}
+	p.silent(tcpTick / 2)
+	p.send(p.seq, tcpAck, nil, nil)
+	again(p, "the first segment")
+	if _, _, _, retransmits := state(); retransmits != 0 {
+		t.Fatal("sent again by the timer")
+	}
+}
+
+// while the way to the system is away an open connection sends again every two seconds at most, so that it goes on
+// soon after the way is back, while the next segment still waits the doubled time, and it is given up when nothing
+// was acknowledged for long enough
+func TestTCPWayBack(t *testing.T) {
+	conns := make(chan accepted, 1)
+	p, l := newPeer(t, "10.0.0.1:1234", "10.0.0.2:80")
+	s := newTestStack(t, l, accept(conns))
+	p.connect([]byte{2, 4, 0, 100})
+	a := take(t, conns)
+	c := a.conn.(*tcpConn)
+
+	// an answer takes a while: the timer waits as long once, and then no longer than two seconds
+	c.mu.Lock()
+	c.retransmitTicks = tcpRetransmitTicksOpen * 4 / 5
+	c.mu.Unlock()
+	start := time.Now()
+	go a.conn.(buf.Writer).WriteMultiBuffer(buf.MergeBytes(nil, make([]byte, 100)))
+	p.receive()
+	for i, most := range []time.Duration{tcpRetransmitTicksOpen * 4 / 5 * tcpTick, tcpRetransmitTicksOpen * tcpTick} {
+		if s := p.receive(); s.seq != p.ack || len(s.payload) != 100 {
+			t.Fatal("not sent again: seq ", s.seq-p.ack, " with ", len(s.payload), " bytes")
+		}
+		if d := time.Since(start); d > most+most/4 || d < most-2*tcpTick {
+			t.Fatal("sent again ", i+1, " after ", d, ", not after ", most)
+		}
+		start = time.Now()
+	}
+	c.mu.Lock()
+	ticks := c.retransmitTicks
+	c.mu.Unlock()
+	if ticks != tcpRetransmitTicksOpen*4/5*4 {
+		t.Fatal("the next segment waits ", ticks, " ticks")
+	}
+
+	// the way is back
+	p.ack += 100
+	p.send(p.seq, tcpAck, nil, nil)
+	p.silent(tcpTick)
+	c.mu.Lock()
+	retransmits := c.retransmits
+	c.mu.Unlock()
+	if retransmits != 0 {
+		t.Fatal("sent again ", retransmits, " times after the acknowledgment")
+	}
+
+	// it is away again, now for longer than the connection waits
+	c.mu.Lock()
+	c.retransmitTicks = tcpRetransmitTicks
+	c.mu.Unlock()
+	go a.conn.(buf.Writer).WriteMultiBuffer(buf.MergeBytes(nil, make([]byte, 100)))
+	p.receive()
+	p.receive()
+	c.mu.Lock()
+	c.lostTicks = tcpGiveUpTicks
+	c.mu.Unlock()
+	result := make(chan error, 1)
+	go func() {
+		_, err := a.conn.Read(make([]byte, 1))
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		if err != errTCPTimeout {
+			t.Fatal("not given up: ", err)
+		}
+	case <-time.After(2*tcpRetransmitTicksOpen*tcpTick + time.Second):
+		t.Fatal("not given up")
+	}
+	forgotten(t, s)
+}
+
 // No more is sent than the system takes, and the writer goes on when it takes more.
 // The FIN that comes with a segment before the one in front of it is taken when that one has come.
 func TestTCPEndOutOfOrder(t *testing.T) {
@@ -1264,6 +1504,14 @@ func TestTCPTooLarge(t *testing.T) {
 			}
 			if len(received) == 0 {
 				p.silent(50 * time.Millisecond)
+				// and its answer is waited for from when it was sent again
+				c := a.conn.(*tcpConn)
+				c.mu.Lock()
+				waited := !c.headAt.IsZero()
+				c.mu.Unlock()
+				if !waited {
+					t.Fatal("the time when the first segment was sent again is not kept")
+				}
 			}
 			received = append(received, s.payload...)
 			p.ack += uint32(len(s.payload))

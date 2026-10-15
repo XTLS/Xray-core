@@ -52,12 +52,18 @@ const (
 
 	// tcpTick is how often a connection that waits for something looks at what it waits for
 	tcpTick = 100 * time.Millisecond
-	// ticks without anything acknowledged before it is sent again, twice as many every next time, a minute at most
+	// ticks without anything acknowledged before it is sent again, twice as many every next time, a minute at most,
+	// while an open connection that waits sends again every two seconds at most or as often as an answer takes,
+	// twice as seldom every next minute: when its way was away for a while it goes on soon after the way is back,
+	// and the next segment still waits the doubled time, so that its answer can be timed
 	tcpRetransmitTicks     = 3
+	tcpRetransmitTicksOpen = 20
 	tcpRetransmitTicksMost = 600
-	// how many times it is sent again before the connection is given up: that is after four minutes, as what is
-	// behind a wireless link may be away for a while, and after twenty seconds for one that never answered
-	tcpRetransmits    = 10
+	tcpMinuteTicks         = int(time.Minute / tcpTick)
+	// an open connection is given up after four minutes of ticks without an acknowledgment since the timer first sent
+	// it again, as what is behind a wireless link may be away for a while (ticks, so that the time a computer sleeps
+	// is not counted), and one that never answered after it was sent again that many times, after twenty seconds
+	tcpGiveUpTicks    = 4 * tcpMinuteTicks
 	tcpSynRetransmits = 5
 	// ticks between the probes of a window that stays closed
 	tcpProbeTicks = 10
@@ -183,6 +189,9 @@ type tcpConn struct {
 	recover    uint32
 	// lost is the end of what is lost past the last of sacked, resent the end of what was sent again since then
 	lost, resent uint32
+	// headAt is when the segment at sndUna was sent again, or took that place while something was lost.
+	// It is zero when that segment is not sent once more for the system still asking for it: it was already
+	headAt time.Time
 	// timed is the end of a segment that was sent at timedAt and not again, to see how long its acknowledgment takes.
 	// The first one is the SYN-ACK
 	timed   uint32
@@ -194,7 +203,9 @@ type tcpConn struct {
 	armed bool
 	// stalled counts ticks without an acknowledgment of what waits for one
 	stalled, retransmitTicks, retransmits int
-	lingered                              bool
+	// lostTicks counts the ticks since the timer sent again the first time since something was acknowledged
+	lostTicks int
+	lingered  bool
 }
 
 func newTCPConn(s *stack, f flow) *tcpConn {
@@ -537,6 +548,7 @@ func (c *tcpConn) acknowledge(s segment) {
 		if !c.timedAt.IsZero() && int32(c.sndUna-c.timed) >= 0 {
 			c.clocked()
 		}
+		recovering := c.recovering
 		switch {
 		case c.recovering && int32(c.sndUna-c.recover) >= 0:
 			c.recovering = false
@@ -545,11 +557,18 @@ func (c *tcpConn) acknowledge(s segment) {
 			if end := c.sndUna + min(uint32(c.mss), c.recover-c.sndUna); int32(end-c.lost) > 0 {
 				c.lost = end
 			}
+			c.headAt = time.Now()
 		}
 		// the way takes more if what it was given has arrived, as long as it was given about as much as it takes
 		if sent >= c.cwnd/2 {
 			if c.cwnd < c.ssthresh {
-				c.cwnd = min(c.cwnd+acked, c.ssthresh)
+				grow := acked
+				if recovering {
+					// after a timeout: one segment that is sent again can acknowledge all that came after it,
+					// which says nothing about how much the way takes at once
+					grow = min(grow, 2*uint32(c.mss))
+				}
+				c.cwnd = min(c.cwnd+grow, c.ssthresh)
 			} else if !c.recovering {
 				// a segment more for every cwnd that arrives
 				c.cwnd = min(c.cwnd+max(uint32(uint64(c.mss)*uint64(acked)/uint64(c.cwnd)), 1), uint32(c.window))
@@ -569,12 +588,22 @@ func (c *tcpConn) acknowledge(s segment) {
 			}
 		}
 	}
-	if !c.recovering && c.sndUna != c.sndNxt && (len(c.sacked) > 0 || c.dupAcks >= 3) {
-		// the system has something past sndUna, or says the same for the third time: the segment at sndUna is lost
+	if !c.recovering && c.sndUna != c.sndNxt && (len(c.sacked) > 0 || !c.sack && c.dupAcks >= 3) {
+		// the system has something past sndUna, or says the same for the third time when it cannot say what it has:
+		// the segment at sndUna is lost. One that can say it repeats itself also for what it got twice
 		c.congested()
 		c.lost = c.sndUna + min(uint32(c.mss), c.sndNxt-c.sndUna)
 	}
 	if c.recovering {
+		if acked == 0 && c.srtt != 0 && !c.headAt.IsZero() && time.Since(c.headAt) > max(c.srtt+max(c.srtt/4, 4*c.rttvar), tcpTick/4) {
+			// the segment that the system waits for was sent again longer ago than an answer takes, and the system
+			// still answers what comes after it: that one was lost as well. It is sent once more, and only once:
+			// the timer would find it too, but late, and then nothing is known anymore of how much the way takes
+			if start, end := c.hole(c.sndUna); start == c.sndUna && start != end {
+				c.retransmit(start, start+min(end-start, uint32(c.mss)))
+				c.headAt, c.stalled = time.Time{}, 0
+			}
+		}
 		c.resend()
 	}
 	c.sndWnd = window
@@ -603,7 +632,12 @@ func (c *tcpConn) clocked() {
 		c.rttvar += ((c.srtt - d).Abs() - c.rttvar) / 4
 		c.srtt += (d - c.srtt) / 8
 	}
-	c.retransmitTicks = max(tcpRetransmitTicks, int((c.srtt+4*c.rttvar)/tcpTick)+2)
+	c.retransmitTicks = c.answerTicks()
+}
+
+// answerTicks is how many ticks an acknowledgment is waited for as long as nothing was sent again. c.mu is held
+func (c *tcpConn) answerTicks() int {
+	return max(tcpRetransmitTicks, int((c.srtt+4*c.rttvar)/tcpTick)+2)
 }
 
 // sackAdd puts what the system says it has into sacked. c.mu is held
@@ -633,7 +667,7 @@ func (c *tcpConn) congested() {
 	c.ssthresh = max(min(c.cwnd, c.sndNxt-c.sndUna)/2, 2*uint32(c.mss))
 	c.cwnd = c.ssthresh
 	c.recovering, c.recover, c.resent = true, c.sndNxt, c.sndUna
-	c.timedAt = time.Time{}
+	c.timedAt, c.headAt = time.Time{}, time.Time{}
 }
 
 // hole returns the first part at or after seq of what is lost: what the system does not have
@@ -695,6 +729,10 @@ func (c *tcpConn) resend() {
 			room = c.cwnd - flight
 		}
 		end = start + min(end-start, room)
+		if start == c.sndUna {
+			// its answer is waited for from now on
+			c.headAt, c.stalled = time.Now(), 0
+		}
 		c.retransmit(start, end)
 		c.resent = end
 	}
@@ -888,6 +926,7 @@ func (c *tcpConn) shrink(seq uint32, mtu int) {
 	c.recovering, c.recover, c.lost = true, c.sndNxt, c.sndNxt
 	c.timedAt = time.Time{}
 	c.resent = c.sndUna + min(uint32(mss), c.sndNxt-c.sndUna)
+	c.headAt = time.Now()
 	c.retransmit(c.sndUna, c.resent)
 }
 
@@ -926,8 +965,18 @@ func (c *tcpConn) tick() {
 	}
 	switch {
 	case c.sndUna != c.sndNxt:
-		if c.stalled++; c.stalled >= c.retransmitTicks {
-			if c.retransmits++; c.retransmits > tcpRetransmits || !c.established && c.retransmits > tcpSynRetransmits {
+		c.stalled++
+		due := c.stalled >= c.retransmitTicks
+		if c.established && c.retransmits > 0 {
+			due = due || c.stalled >= max(tcpRetransmitTicksOpen, c.answerTicks())<<(c.lostTicks/tcpMinuteTicks)
+		}
+		if due {
+			if c.retransmits++; c.retransmits == 1 {
+				c.lostTicks = 0
+			} else {
+				c.lostTicks += c.stalled
+			}
+			if c.established && c.lostTicks > tcpGiveUpTicks || !c.established && c.retransmits > tcpSynRetransmits {
 				c.abort(errTCPTimeout)
 				return
 			}
@@ -937,8 +986,13 @@ func (c *tcpConn) tick() {
 				c.sendSyn()
 				c.timedAt = time.Time{}
 			} else {
-				// what the system does not say it has is lost, and the way to it is tried with a segment again
+				// what the system does not say it has is lost, and the way to it is tried with a segment again.
+				// It takes half of what it took before the loss, not half of that again if the loss was seen already
+				ssthresh, recovering := c.ssthresh, c.recovering
 				c.congested()
+				if recovering {
+					c.ssthresh = ssthresh
+				}
 				c.cwnd, c.lost = uint32(c.mss), c.sndNxt
 				c.resend()
 			}
