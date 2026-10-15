@@ -3,6 +3,7 @@ package xdrive
 import (
 	"context"
 	gotls "crypto/tls"
+	"io"
 	"net/http"
 	"time"
 
@@ -14,19 +15,84 @@ import (
 	"golang.org/x/net/http2"
 )
 
+var errStalled = errors.New("the request made no progress")
+
 type serviceTransport struct {
 	plain  http.RoundTripper
 	secure http.RoundTripper
+	stall  time.Duration
 }
 
+// RoundTrip ends a request that stands still for t.stall, with no answer that
+// long after its body went out or no byte of either body, but not one that just
+// runs long: a large object on a slow link takes minutes and is fine as long as
+// its bytes move
 func (t *serviceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	next := t.plain
 	if r.URL.Scheme == "https" {
-		return t.secure.RoundTrip(r)
+		next = t.secure
 	}
-	return t.plain.RoundTrip(r)
+
+	ctx, cancel := context.WithCancelCause(r.Context())
+	timer := time.AfterFunc(t.stall, func() { cancel(errStalled) })
+	alive := func() { timer.Reset(t.stall) }
+	end := func() {
+		timer.Stop()
+		cancel(nil)
+	}
+	r = r.WithContext(ctx)
+	if r.Body != nil && r.Body != http.NoBody {
+		r.Body = &progressBody{ReadCloser: r.Body, alive: alive}
+	}
+	// a body sent again by the transport itself, after a GOAWAY or on a reused
+	// connection that failed, moves just the same
+	if getBody := r.GetBody; getBody != nil {
+		r.GetBody = func() (io.ReadCloser, error) {
+			body, err := getBody()
+			if err != nil || body == http.NoBody {
+				return body, err
+			}
+			return &progressBody{ReadCloser: body, alive: alive}, nil
+		}
+	}
+
+	resp, err := next.RoundTrip(r)
+	if err != nil {
+		end()
+		return nil, err
+	}
+	alive()
+	resp.Body = &progressBody{ReadCloser: resp.Body, alive: alive, end: end}
+	return resp, nil
 }
 
-func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.Duration, maxConns int) *http.Client {
+type progressBody struct {
+	io.ReadCloser
+	alive func()
+	end   func()
+}
+
+func (b *progressBody) Read(p []byte) (int, error) {
+	// http2 reads a request body up to 512 KiB at a time and sends it all before
+	// the next read, which on a slow link could look like no progress
+	n, err := b.ReadCloser.Read(p[:min(len(p), 16<<10)])
+	if n > 0 {
+		b.alive()
+	}
+	return n, err
+}
+
+func (b *progressBody) Close() error {
+	err := b.ReadCloser.Close()
+	if b.end != nil {
+		b.end()
+	}
+	return err
+}
+
+// newServiceClient returns a client whose requests end after stall without
+// progress, see serviceTransport.RoundTrip
+func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Duration, maxConns int) *http.Client {
 	var (
 		tlsConfig     *tls.Config
 		realityConfig *reality.Config
@@ -137,8 +203,8 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, timeout time.
 				MaxConnsPerHost:     maxConns,
 			},
 			secure: secure,
+			stall:  stall,
 		},
-		Timeout: timeout,
 	}
 }
 
