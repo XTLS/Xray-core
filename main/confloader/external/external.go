@@ -30,7 +30,7 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 		data, err = FetchHTTPContent(arg)
 
 	case arg == "stdin:":
-		data, err = readConfigFile(os.Stdin)
+		data, err = io.ReadAll(os.Stdin)
 
 	default:
 		file, openErr := os.Open(arg)

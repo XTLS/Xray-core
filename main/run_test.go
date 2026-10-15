@@ -52,7 +52,7 @@ func TestRunConfigCommands(t *testing.T) {
 		{"merged source", []string{"run", "-test", "-format", "json", "-c", config, "-c", script}, 23, nil},
 		{"dump", []string{"run", "-dump", "-c", config}, 0, nil},
 		{"stdin pipe", []string{"run", "-test", "-c", "stdin:"}, 0, nil},
-		{"stdin file", []string{"run", "-test", "-c", "stdin:"}, 23, file},
+		{"stdin file", []string{"run", "-test", "-c", "stdin:"}, 0, file},
 		{"convert json", []string{"convert", "json", message}, 0, nil},
 		{"convert pb", []string{"convert", "pb", "-debug", config}, 0, nil},
 		{"convert pb stdin", []string{"convert", "pb", "-debug", "stdin:"}, 0, file},
@@ -65,6 +65,9 @@ func TestRunConfigCommands(t *testing.T) {
 			cmd.Env = append(os.Environ(), "XRAY_TEST_CONFIG_COMMAND=1")
 			cmd.Stdin = strings.NewReader("{}")
 			if tc.input != nil {
+				if _, err := file.Seek(0, io.SeekStart); err != nil {
+					t.Fatal(err)
+				}
 				cmd.Stdin = tc.input
 			}
 			output, err := cmd.CombinedOutput()
