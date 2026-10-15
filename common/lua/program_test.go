@@ -33,13 +33,13 @@ func TestProgramStatesAreIndependent(t *testing.T) {
 	if program.proto.SourceName != path {
 		t.Fatalf("program source = %q, want %q", program.proto.SourceName, path)
 	}
-	first, err := program.NewState(context.Background(), nil, nil)
+	first, err := program.NewState(context.Background(), 256, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer first.Close()
 	first.SetGlobal("value", glua.LNumber(42))
-	second, err := program.NewState(context.Background(), nil, nil)
+	second, err := program.NewState(context.Background(), 256, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func TestProgramInitializationObservesCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	state, err := program.NewState(ctx, nil, nil)
+	state, err := program.NewState(ctx, 256, nil, nil)
 	if err == nil || state != nil {
 		if state != nil {
 			state.Close()
@@ -80,7 +80,7 @@ func TestNewStateClosesFailedValidation(t *testing.T) {
 	}
 	wantErr := errors.New("invalid script")
 	var checked *glua.LState
-	L, err := program.NewState(context.Background(), nil, func(L *glua.LState) error {
+	L, err := program.NewState(context.Background(), 256, nil, func(L *glua.LState) error {
 		checked = L
 		return wantErr
 	})
@@ -122,7 +122,7 @@ func TestCompileInline(t *testing.T) {
 			if program.proto.SourceName != "[inline]" {
 				t.Fatalf("program source = %q, want [inline]", program.proto.SourceName)
 			}
-			state, err := program.NewState(context.Background(), nil, nil)
+			state, err := program.NewState(context.Background(), 256, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -175,7 +175,7 @@ func TestCompileInlineDiagnostics(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			state, initErr := program.NewState(context.Background(), nil, nil)
+			state, initErr := program.NewState(context.Background(), 256, nil, nil)
 			if state != nil {
 				state.Close()
 				t.Fatal("NewState returned a state after failed initialization")
@@ -370,7 +370,7 @@ func TestProgramPrivilegedSignatureFixture(t *testing.T) {
 			if program.privileged != signed {
 				t.Fatalf("privileged = %t, want %t", program.privileged, signed)
 			}
-			L, err := program.NewState(context.Background(), nil, nil)
+			L, err := program.NewState(context.Background(), 256, nil, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -501,7 +501,7 @@ func TestProgramInlineSignaturesCannotAuthorize(t *testing.T) {
 				if err != nil || program == nil || program.privileged {
 					t.Fatalf("inline signed source Compile = %v, %v; want sandbox without verification", program, err)
 				}
-				L, err := program.NewState(context.Background(), nil, nil)
+				L, err := program.NewState(context.Background(), 256, nil, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -533,7 +533,7 @@ func TestProgramSignedDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	L, err := program.NewState(context.Background(), nil, nil)
+	L, err := program.NewState(context.Background(), 256, nil, nil)
 	if L != nil {
 		L.Close()
 		t.Fatal("failing signed script returned a state")
@@ -600,7 +600,7 @@ function CheckSandbox()
     package = nil
 end`)
 	var helperLoads, lateLoads int
-	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+	L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 		if L.GetGlobal("io") != glua.LNil || L.GetGlobal("loadfile") != glua.LNil {
 			t.Fatal("sandbox was not configured before module registration")
 		}
@@ -659,7 +659,7 @@ assert(tostring("hello") == "hello")
 string.__tostring = nil
 `)
 	var metamethodCalls int
-	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+	L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 		L.SetGlobal("testIPv4", luar.New(L, net.ParseIP("192.0.2.1")))
 		L.SetGlobal("testIPv6", luar.New(L, net.ParseIP("2001:db8::1")))
 		PushUserData(L, net.ParseIP("198.51.100.1"))
@@ -733,7 +733,7 @@ for _, format in ipairs({string.format, require("string").format, ("").format}) 
 end
 assert(("%s"):format({}) == "<opaque>")
 `)
-	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+	L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 		L.SetGlobal("testIP", luar.New(L, net.ParseIP("192.0.2.1")))
 		PushUserData(L, bytes.NewBufferString("0xdeadbeef"))
 		L.SetGlobal("testNativeStringer", L.Get(-1))
@@ -852,7 +852,7 @@ ok, a = xpcall(function() error(businessError, 0) end, testPanic)
 assert(not ok and a == "{<address> <address>}")
 `)
 	var sent []string
-	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+	L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 		callable := L.NewTable()
 		metatable := L.NewTable()
 		metatable.RawSetString("__call", L.NewFunction(func(L *glua.LState) int {
@@ -912,7 +912,7 @@ end
 `)
 	nativeErrors := make(map[string]error)
 	originalMessages := make(map[string]string)
-	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+	L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 		luaError := &glua.ApiError{Object: L.NewFunction(func(*glua.LState) int { return 0 })}
 		stringerError := xerrors.New("DNS query failed").Base(luaError)
 		messages := L.NewTable()
@@ -964,7 +964,7 @@ end
 package = nil
 `)
 	var failedLoads, cycleLoads int
-	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+	L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 		L.PreloadModule("xray.failure", func(L *glua.LState) int {
 			failedLoads++
 			L.RaiseError("module initialization failed")
@@ -999,7 +999,7 @@ func TestProgramSandboxModulesAreCollected(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ref := func() weak.Pointer[glua.LTable] {
 				program := compileTestProgram(t, `payload = string.rep("x", 1024 * 1024); assert(pcall(require, "xray.test") == expectedSuccess)`)
-				L, err := program.NewState(context.Background(), func(L *glua.LState) {
+				L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 					L.SetGlobal("expectedSuccess", glua.LBool(!fail))
 					L.PreloadModule("xray.test", func(L *glua.LState) int {
 						if fail {
@@ -1028,7 +1028,7 @@ func TestProgramSandboxModulesAreCollected(t *testing.T) {
 func TestProgramSandboxClosesFailedInitialization(t *testing.T) {
 	program := compileTestProgram(t, `require("xray.failure")`)
 	var partial *glua.LState
-	L, err := program.NewState(context.Background(), func(L *glua.LState) {
+	L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 		partial = L
 		L.PreloadModule("xray.failure", func(L *glua.LState) int {
 			L.RaiseError("module initialization failed")
@@ -1093,7 +1093,7 @@ file:close()`
 				t.Fatal(err)
 			}
 			output := filepath.Join(t.TempDir(), "privileged.txt")
-			L, err := program.NewState(context.Background(), func(L *glua.LState) {
+			L, err := program.NewState(context.Background(), 256, func(L *glua.LState) {
 				L.SetGlobal("testPath", glua.LString(output))
 			}, nil)
 			if !tc.privileged {
@@ -1156,7 +1156,7 @@ func TestProgramPrivilegesAreCompileTimeSnapshot(t *testing.T) {
 					t.Fatalf("os.execute available = %t, want compile-time value %t", got, privileged)
 				}
 			}
-			factory := program.NewStateFactory(time.Second, nil, nil)
+			factory := program.NewStateFactory(time.Second, 256, nil, nil)
 			for range 2 {
 				L, err := factory(context.Background())
 				if err != nil {

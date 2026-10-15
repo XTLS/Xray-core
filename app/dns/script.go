@@ -30,6 +30,7 @@ func newScriptEngine(script string) (*scriptEngine, error) {
 func (e *scriptEngine) start(server *DNS) error {
 	pool, err := xlua.NewPool(server.ctx, scriptExecutionTimeout, e.program.NewStateFactory(
 		scriptExecutionTimeout*20,
+		256,
 		func(L *lua.LState) {
 			geodata.RegisterLua(L)
 			log.RegisterLua(L)

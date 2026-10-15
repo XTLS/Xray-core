@@ -59,12 +59,19 @@ func Compile(script string) (*Program, error) {
 // NewState creates a state, runs register, executes the program under ctx, and
 // runs validate. It removes the initialization context before returning a state
 // owned by the caller.
-func (p *Program) NewState(ctx context.Context, register func(*glua.LState), validate func(*glua.LState) error) (*glua.LState, error) {
+// Choose registrySize for the script type's expected stack usage, balancing
+// per-state memory usage against the number of states retained in a pool.
+func (p *Program) NewState(ctx context.Context, registrySize int, register func(*glua.LState), validate func(*glua.LState) error) (*glua.LState, error) {
+	options := glua.Options{
+		RegistrySize:     registrySize,
+		RegistryMaxSize:  glua.RegistrySize,
+		RegistryGrowStep: registrySize,
+	}
 	var L *glua.LState
 	if p.privileged {
-		L = glua.NewState()
+		L = glua.NewState(options)
 	} else {
-		L = newSandboxedState()
+		L = newSandboxedState(options)
 	}
 	valid := false
 	defer func() {
@@ -95,8 +102,9 @@ func (p *Program) NewState(ctx context.Context, register func(*glua.LState), val
 	return L, nil
 }
 
-func newSandboxedState() *glua.LState {
-	L := glua.NewState(glua.Options{SkipOpenLibs: true})
+func newSandboxedState(options glua.Options) *glua.LState {
+	options.SkipOpenLibs = true
+	L := glua.NewState(options)
 
 	for _, lib := range []struct {
 		name string
@@ -239,10 +247,12 @@ func redactMemoryAddresses(message string) string {
 }
 
 // NewStateFactory returns a factory that gives each state an initialization timeout.
-func (p *Program) NewStateFactory(initTimeout time.Duration, register func(*glua.LState), validate func(*glua.LState) error) LStateFactory {
+// Choose registrySize for the script type's expected stack usage, balancing
+// per-state memory usage against the number of states retained in a pool.
+func (p *Program) NewStateFactory(initTimeout time.Duration, registrySize int, register func(*glua.LState), validate func(*glua.LState) error) LStateFactory {
 	return func(ctx context.Context) (*glua.LState, error) {
 		initCtx, cancel := context.WithTimeout(ctx, initTimeout)
 		defer cancel()
-		return p.NewState(initCtx, register, validate)
+		return p.NewState(initCtx, registrySize, register, validate)
 	}
 }
