@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -28,6 +30,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
 	"github.com/xtls/xray-core/transport/internet/finalmask/xmc"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/tls"
 	"google.golang.org/protobuf/proto"
 )
@@ -799,7 +802,10 @@ type XDNSDomain struct {
 }
 
 type XDNSResolver struct {
-	Addrs []string `json:"addrs"`
+	Addrs      []string          `json:"addrs"`
+	Worker     int32             `json:"worker"`
+	TlsConfig  *TLSConfig        `json:"tlsConfig"`
+	QuicConfig *QuicParamsConfig `json:"quicConfig"`
 }
 
 type XDNS struct {
@@ -834,6 +840,26 @@ func (c *XDNS) Build() (proto.Message, error) {
 		}
 	}
 	for i := range c.Resolvers {
+		worker := c.Resolvers[i].Worker
+		if worker == 0 {
+			worker = 32
+		}
+		var tlsConfig *tls.Config
+		var quicConfig *internet.QuicParams
+		if c.Resolvers[i].TlsConfig != nil {
+			proto, err := c.Resolvers[i].TlsConfig.Build()
+			if err != nil {
+				return nil, err
+			}
+			tlsConfig = proto.(*tls.Config)
+		}
+		if c.Resolvers[i].QuicConfig != nil {
+			proto, err := c.Resolvers[i].QuicConfig.Build()
+			if err != nil {
+				return nil, err
+			}
+			quicConfig = proto.(*internet.QuicParams)
+		}
 		for j := range c.Resolvers[i].Addrs {
 			var u *url.URL
 			var e error
@@ -845,18 +871,21 @@ func (c *XDNS) Build() (proto.Message, error) {
 			if e != nil {
 				return nil, e
 			}
+			var addr string
 			switch u.Scheme {
 			case "tcp", "udp":
+				host := u.Hostname()
+				port := u.Port()
+				if port == "" {
+					port = "53"
+				}
+				addr = net.JoinHostPort(host, port)
+			case "https":
+				addr = u.String()
 			default:
 				return nil, errors.New("invalid protocol")
 			}
-			var host, port string
-			host = u.Hostname()
-			port = u.Port()
-			if port == "" {
-				port = "53"
-			}
-			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: net.JoinHostPort(host, port)})
+			resolvers = append(resolvers, &xdns.ResolverProto{Type: u.Scheme, Addr: addr, Worker: worker, TlsConfig: tlsConfig, QuicConfig: quicConfig})
 		}
 	}
 	if c.ExtraPoll < 0 || c.ExtraPoll > 3 {
@@ -1147,6 +1176,91 @@ type QuicParamsConfig struct {
 	DisableGSO                    bool      `json:"disableGSO"`
 	MaxIncomingStreams            int64     `json:"maxIncomingStreams"`
 	DisableStatelessReset         bool      `json:"disableStatelessReset"`
+}
+
+func (config *QuicParamsConfig) Build() (proto.Message, error) {
+	profile := strings.ToLower(config.BbrProfile)
+	switch profile {
+	case "", string(bbr.ProfileConservative), string(bbr.ProfileStandard), string(bbr.ProfileAggressive):
+		if profile == "" {
+			profile = string(bbr.ProfileStandard)
+		}
+	default:
+		return nil, errors.New("unknown bbr profile")
+	}
+
+	up, err := config.BrutalUp.Bps()
+	if err != nil {
+		return nil, err
+	}
+	down, err := config.BrutalDown.Bps()
+	if err != nil {
+		return nil, err
+	}
+
+	if up > 0 && up < 65536 {
+		return nil, errors.New("BrutalUp must be at least 65536 bytes per second")
+	}
+	if down > 0 && down < 65536 {
+		return nil, errors.New("BrutalDown must be at least 65536 bytes per second")
+	}
+
+	config.Congestion = strings.ToLower(config.Congestion)
+	switch config.Congestion {
+	case "", "brutal", "reno", "bbr":
+	case "force-brutal":
+		if up == 0 {
+			return nil, errors.New("force-brutal requires up")
+		}
+	default:
+		return nil, errors.New("unknown congestion control: ", config.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
+	}
+
+	if config.InitStreamReceiveWindow > 0 && config.InitStreamReceiveWindow < 16384 {
+		return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
+	}
+	if config.MaxStreamReceiveWindow > 0 && config.MaxStreamReceiveWindow < 16384 {
+		return nil, errors.New("MaxStreamReceiveWindow must be at least 16384")
+	}
+	if config.InitConnectionReceiveWindow > 0 && config.InitConnectionReceiveWindow < 16384 {
+		return nil, errors.New("InitConnectionReceiveWindow must be at least 16384")
+	}
+	if config.MaxConnectionReceiveWindow > 0 && config.MaxConnectionReceiveWindow < 16384 {
+		return nil, errors.New("MaxConnectionReceiveWindow must be at least 16384")
+	}
+	if config.MaxIdleTimeout != 0 && (config.MaxIdleTimeout < 4 || config.MaxIdleTimeout > 120) {
+		return nil, errors.New("MaxIdleTimeout must be between 4 and 120")
+	}
+	if config.KeepAlivePeriod != 0 && (config.KeepAlivePeriod < 2 || config.KeepAlivePeriod > 60) {
+		return nil, errors.New("KeepAlivePeriod must be between 2 and 60")
+	}
+	if config.MaxIncomingStreams != 0 && config.MaxIncomingStreams < 8 {
+		return nil, errors.New("MaxIncomingStreams must be at least 8")
+	}
+
+	if config.Debug {
+		os.Setenv("HYSTERIA_BBR_DEBUG", "true")
+		os.Setenv("HYSTERIA_BRUTAL_DEBUG", "true")
+	}
+
+	return &internet.QuicParams{
+		Congestion:                    config.Congestion,
+		BbrProfile:                    profile,
+		BrutalUp:                      up,
+		BrutalDown:                    down,
+		BrutalDisableLossCompensation: config.BrutalDisableLossCompensation,
+		InitStreamReceiveWindow:       config.InitStreamReceiveWindow,
+		MaxStreamReceiveWindow:        config.MaxStreamReceiveWindow,
+		InitConnReceiveWindow:         config.InitConnectionReceiveWindow,
+		MaxConnReceiveWindow:          config.MaxConnectionReceiveWindow,
+		MaxIdleTimeout:                config.MaxIdleTimeout,
+		KeepAlivePeriod:               config.KeepAlivePeriod,
+		DisablePathMtuDiscovery:       config.DisablePathMTUDiscovery,
+		DisableChromeParrot:           config.DisableChromeParrot,
+		DisableGSO:                    config.DisableGSO,
+		MaxIncomingStreams:            config.MaxIncomingStreams,
+		DisableStatelessReset:         config.DisableStatelessReset,
+	}, nil
 }
 
 type FinalMask struct {

@@ -154,6 +154,24 @@ func (c *UConn) NegotiatedProtocol() string {
 	return state.NegotiatedProtocol
 }
 
+func (c *UConn) ConnectionState() tls.ConnectionState {
+	s := c.UConn.ConnectionState()
+	var state tls.ConnectionState
+	state.HandshakeComplete = s.HandshakeComplete
+	state.Version = s.Version
+	state.NegotiatedProtocol = s.NegotiatedProtocol
+	state.DidResume = s.DidResume
+	state.ServerName = s.ServerName
+	state.CipherSuite = s.CipherSuite
+	state.PeerCertificates = s.PeerCertificates
+	state.VerifiedChains = s.VerifiedChains
+	state.SignedCertificateTimestamps = s.SignedCertificateTimestamps
+	state.OCSPResponse = s.OCSPResponse
+	state.TLSUnique = s.TLSUnique
+	state.ECHAccepted = s.ECHAccepted
+	return state
+}
+
 func UClient(c net.Conn, config *tls.Config, fingerprint *utls.ClientHelloID) net.Conn {
 	utlsConn := utls.UClient(c, copyConfig(config), *fingerprint)
 	return &UConn{UConn: utlsConn}
