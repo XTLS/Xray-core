@@ -2,6 +2,7 @@ package internet_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -23,4 +24,31 @@ func TestDialWithLocalAddr(t *testing.T) {
 		t.Error(r)
 	}
 	conn.Close()
+}
+
+func TestDialInterfaceMissing(t *testing.T) {
+	// #7160: a sockopt.interface that does not exist must fail the dial,
+	// not open the connection unbound
+	sockopt := &SocketConfig{
+		Interface: "nosuchif0",
+	}
+
+	server := &tcp.Server{}
+	dest, err := server.Start()
+	common.Must(err)
+	defer server.Close()
+
+	_, err = DialSystem(context.Background(), net.TCPDestination(net.LocalHostIP, dest.Port), sockopt)
+	if err == nil {
+		t.Error("dial with a nonexistent sockopt.interface must fail")
+	} else if !strings.Contains(err.Error(), "nosuchif0") {
+		t.Error("error does not name the interface: ", err)
+	}
+
+	_, err = DialSystem(context.Background(), net.UDPDestination(net.LocalHostIP, dest.Port), sockopt)
+	if err == nil {
+		t.Error("udp dial with a nonexistent sockopt.interface must fail")
+	} else if !strings.Contains(err.Error(), "nosuchif0") {
+		t.Error("error does not name the interface: ", err)
+	}
 }

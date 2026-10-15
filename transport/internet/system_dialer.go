@@ -74,13 +74,25 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 					errors.LogInfoInner(ctx, err, "failed to apply external controller")
 				}
 			}
-			return c.Control(func(fd uintptr) {
+			var sockErr error
+			if err := c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, destAddr.String(), fd, sockopt); err != nil {
+						if sockopt.Interface != "" {
+							// the dial must not go on unbound: an unbound
+							// socket follows the routing table, and in a
+							// TUN setup that can loop back into the tun.
+							// See #7160.
+							sockErr = err
+							return
+						}
 						errors.LogInfo(ctx, err, "failed to apply socket options")
 					}
 				}
-			})
+			}); err != nil {
+				return err
+			}
+			return sockErr
 		}
 		packetConn, err := lc.ListenPacket(ctx, srcAddr.Network(), srcAddr.String())
 		if err != nil {
@@ -131,13 +143,25 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 					errors.LogInfoInner(ctx, err, "failed to apply external controller")
 				}
 			}
-			return c.Control(func(fd uintptr) {
+			var sockErr error
+			if err := c.Control(func(fd uintptr) {
 				if sockopt != nil {
 					if err := applyOutboundSocketOptions(network, address, fd, sockopt); err != nil {
+						if sockopt.Interface != "" {
+							// the dial must not go on unbound: an unbound
+							// socket follows the routing table, and in a
+							// TUN setup that can loop back into the tun.
+							// See #7160.
+							sockErr = err
+							return
+						}
 						errors.LogInfoInner(ctx, err, "failed to apply socket options")
 					}
 				}
-			})
+			}); err != nil {
+				return err
+			}
+			return sockErr
 		}
 	}
 

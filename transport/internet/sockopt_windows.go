@@ -35,7 +35,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 	if config.Interface != "" {
 		inf, err := net.InterfaceByName(config.Interface)
 		if err != nil {
-			return errors.New("failed to find the interface").Base(err)
+			return errors.New("failed to find interface ", config.Interface).Base(err)
 		}
 		// easy way to check if the address is ipv4
 		isV4 := strings.Contains(address, ".")
