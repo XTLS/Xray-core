@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/quic-go"
@@ -22,6 +23,9 @@ type interConn struct {
 
 	client bool
 	user   *protocol.MemoryUser
+
+	writeInFlight atomic.Int32
+	closed        atomic.Bool
 }
 
 func (c *interConn) User() *protocol.MemoryUser {
@@ -33,6 +37,12 @@ func (c *interConn) Read(b []byte) (int, error) {
 }
 
 func (c *interConn) Write(b []byte) (int, error) {
+	c.writeInFlight.Add(1)
+	defer c.writeInFlight.Add(-1)
+	if c.closed.Load() {
+		return 0, io.ErrClosedPipe
+	}
+
 	if c.client {
 		c.client = false
 		if _, err := c.stream.Write(append(quicvarint.Append(nil, FrameTypeTCPRequest), b...)); err != nil {
@@ -45,6 +55,19 @@ func (c *interConn) Write(b []byte) (int, error) {
 }
 
 func (c *interConn) Close() error {
+	if !c.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+	if c.writeInFlight.Load() > 0 {
+		// The stream's write side is blocked on the flow control window, so
+		// the FIN queued by Stream.Close can never be delivered and the peer
+		// keeps the stream's unread data occupying its share of the
+		// connection-level window. Reset the write side instead: the blocked
+		// Write returns immediately and the peer releases the window.
+		c.stream.CancelWrite(0)
+		c.stream.CancelRead(0)
+		return nil
+	}
 	c.stream.CancelRead(0)
 	return c.stream.Close()
 }
