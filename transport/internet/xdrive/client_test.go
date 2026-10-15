@@ -1,10 +1,14 @@
 package xdrive
 
 import (
+	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"errors"
+	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -99,3 +103,105 @@ func TestServiceSNIOverride(t *testing.T) {
 		t.Fatalf("explicit serverName gave SNI %q, want www.google.com", got)
 	}
 }
+
+// slowReader hands out one byte every gap, the way a body crosses a slow link
+type slowReader struct {
+	left int
+	gap  time.Duration
+}
+
+func (r *slowReader) Read(p []byte) (int, error) {
+	if r.left == 0 {
+		return 0, io.EOF
+	}
+	time.Sleep(r.gap)
+	r.left--
+	p[0] = 'x'
+	return 1, nil
+}
+
+// a request that keeps moving outlives the stall limit many times over, one
+// that stands still does not get much past it
+func TestServiceClientEndsOnlyStalledRequests(t *testing.T) {
+	const stall = 200 * time.Millisecond
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		switch r.URL.Path {
+		case "/slow":
+			for i := 0; i < 20; i++ {
+				w.Write([]byte("x"))
+				w.(http.Flusher).Flush()
+				time.Sleep(stall / 4)
+			}
+		case "/stuck":
+			w.Write([]byte("x"))
+			w.(http.Flusher).Flush()
+			time.Sleep(5 * stall)
+		case "/silent":
+			time.Sleep(5 * stall)
+		}
+	}))
+	defer server.Close()
+	client := newServiceClient(&internet.MemoryStreamConfig{}, stall, 8)
+
+	fetch := func(path string, body io.Reader) (int, error) {
+		req, err := http.NewRequest(http.MethodPost, server.URL+path, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close()
+		got, err := io.ReadAll(resp.Body)
+		return len(got), err
+	}
+
+	if _, err := fetch("/", &slowReader{left: 20, gap: stall / 4}); err != nil {
+		t.Errorf("a slow upload failed: %v", err)
+	}
+	if n, err := fetch("/slow", nil); err != nil || n != 20 {
+		t.Errorf("a slow download gave %d bytes, %v", n, err)
+	}
+	for _, path := range []string{"/stuck", "/silent"} {
+		start := time.Now()
+		_, err := fetch(path, nil)
+		if !errors.Is(err, errStalled) {
+			t.Errorf("%s gave %v, want %v", path, err, errStalled)
+		}
+		if took := time.Since(start); took > 4*stall {
+			t.Errorf("%s took %v to give up", path, took)
+		}
+	}
+
+	// a body that the transport sends again by itself keeps the request going too
+	replay := &serviceTransport{stall: stall, plain: roundTrip(func(r *http.Request) (*http.Response, error) {
+		body, err := r.GetBody()
+		if err != nil {
+			return nil, err
+		}
+		for b := make([]byte, 1); ; time.Sleep(stall / 4) {
+			if _, err := body.Read(b); err != nil {
+				break
+			}
+		}
+		if err := context.Cause(r.Context()); err != nil {
+			return nil, err
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+	})}
+	req, err := http.NewRequest(http.MethodPost, "http://drive/", bytes.NewReader(make([]byte, 20)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp, err := replay.RoundTrip(req); err != nil {
+		t.Errorf("a body sent again failed: %v", err)
+	} else {
+		resp.Body.Close()
+	}
+}
+
+type roundTrip func(*http.Request) (*http.Response, error)
+
+func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
