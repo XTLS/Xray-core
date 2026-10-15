@@ -66,7 +66,7 @@ func NewPortMapper(ctx context.Context, internalPort int, config PortMapConfig) 
 	}
 
 	discoverCtx, cancel := context.WithTimeout(ctx, config.Timeout)
-	gateway, err := nat.DiscoverGateway(discoverCtx)
+	gateway, err := discoverGateway(discoverCtx)
 	cancel()
 	if err != nil {
 		return nil, fmt.Errorf("gateway discovery failed: %w", err)
