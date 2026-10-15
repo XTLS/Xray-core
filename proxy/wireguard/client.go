@@ -39,11 +39,10 @@ type Handler struct {
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
-	tun        tun.Device
-	tnet       *Net
-	dev        *device.Device
-	configured bool
-	mu         sync.Mutex
+	tun  tun.Device
+	tnet *Net
+	dev  *device.Device
+	mu   sync.Mutex
 }
 
 func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
@@ -150,7 +149,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.CanSpliceCopy = 3
 	dialer.SetOutboundGateway(ctx, ob)
 
-	if err := h.init(ctx); err != nil {
+	if err := h.up(ctx); err != nil {
 		return err
 	}
 
@@ -243,14 +242,14 @@ func (h *Handler) Close() (err error) {
 	return nil
 }
 
-func (h *Handler) init(ctx context.Context) error {
+func (h *Handler) up(ctx context.Context) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.tun == nil {
 		return errors.New("closed")
 	}
 	if h.dev != nil {
-		return h.configure()
+		return h.dev.Up()
 	}
 	resolveFunc := h.resolveLocal
 	listenFunc := func() (net.PacketConn, error) {
@@ -309,18 +308,8 @@ func (h *Handler) init(ctx context.Context) error {
 			})
 		},
 	}
-	// The device takes over h.tun, so it is kept even if configure fails, and
-	// the next call retries.
-	h.dev = device.NewDevice(h.tun, bind, logger)
-	bind.setDownFunc(h.dev.Down)
-	return h.configure()
-}
-
-// configure applies the peers once and brings the device up.
-func (h *Handler) configure() error {
-	if h.configured {
-		return h.dev.Up()
-	}
+	dev := device.NewDevice(h.tun, bind, logger)
+	bind.setDownFunc(dev.Down)
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + h.conf.SecretKey + "\n")
 	for _, peer := range h.conf.Peers {
@@ -336,10 +325,8 @@ func (h *Handler) configure() error {
 			cfg.WriteString("persistent_keepalive_interval=" + peer.KeepAlive + "\n")
 		}
 	}
-	if err := h.dev.IpcSet(cfg.String()); err != nil {
-		return err
-	}
-	h.configured = true
+	common.Must(dev.IpcSet(cfg.String()))
+	h.dev = dev
 	return h.dev.Up()
 }
 
