@@ -28,6 +28,7 @@ func NewSlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
 // NewReadOnlySlicePusher borrows slices without copying and recursively makes
 // nested slice types read-only through their shared metatables. IP byte views
 // and masks are also read-only. Other referenced elements retain their mutability.
+// Element bindings are initialized on first indexing or iteration.
 func NewReadOnlySlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
 	sliceMetatable := luar.MT(L, []T{})
 	if sliceMetatable.RawGetString("__readonly") != glua.LTrue {
@@ -66,7 +67,23 @@ func setSliceReadOnly[S ~[]E, E any](L *glua.LState, readOnly *glua.LFunction) {
 			})
 			visit(reflect.TypeFor[net.IPMask]())
 		}
-		visit(typ.Elem())
+		if element := typ.Elem(); element.Kind() == reflect.Slice {
+			index := metatable.RawGetString("__index").(*glua.LFunction)
+			call := metatable.RawGetString("__call").(*glua.LFunction)
+			initialize := func() {
+				visit(element)
+				metatable.RawSetString("__index", index)
+				metatable.RawSetString("__call", call)
+			}
+			metatable.RawSetString("__index", L.NewFunction(func(L *glua.LState) int {
+				initialize()
+				return index.GFunction(L)
+			}))
+			metatable.RawSetString("__call", L.NewFunction(func(L *glua.LState) int {
+				initialize()
+				return call.GFunction(L)
+			}))
+		}
 	}
 	visit(reflect.TypeFor[S]())
 }

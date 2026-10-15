@@ -2,6 +2,7 @@ package lua
 
 import (
 	"net"
+	"reflect"
 	"testing"
 
 	glua "github.com/yuin/gopher-lua"
@@ -117,6 +118,53 @@ end
 	}
 }
 
+func TestReadOnlyIPSlicePusherLazy(t *testing.T) {
+	for _, tc := range []struct{ name, access string }{
+		{"index", `local ip = ips[1]`},
+		{"iterate", `local _, ip = ips()()`},
+		{"coroutine", `local co = coroutine.create(function() return ips[1] end); local ok, ip = coroutine.resume(co); assert(ok)`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			L := glua.NewState()
+			defer L.Close()
+			methods := 0
+			luar.GetConfig(L).MethodNames = func(_ reflect.Type, method reflect.Method) []string {
+				methods++
+				return []string{method.Name}
+			}
+			NewReadOnlySlicePusher[net.IP](L)(L, []net.IP{{192, 0, 2, 1}})
+			L.SetGlobal("ips", L.Get(-1))
+			L.Pop(1)
+			if err := L.DoString(`assert(#ips == 1); assert(not pcall(function() ips[1] = nil end))`); err != nil {
+				t.Fatal(err)
+			}
+			if methods != 0 {
+				t.Fatal("IP methods initialized without reading an element")
+			}
+			source := tc.access + `
+assert(ip:String() == "192.0.2.1" and ip.AppendText == nil)
+assert(not pcall(function() ip[1] = 0 end))
+assert(not pcall(function() ip:To4()[1] = 0 end))
+assert(not pcall(function() ip:To16()[1] = 0 end))
+assert(not pcall(function() ip:DefaultMask()[1] = 0 end))
+`
+			if err := L.DoString(source); err != nil {
+				t.Fatal(err)
+			}
+			initialized := methods
+			if initialized == 0 {
+				t.Fatal("IP access did not initialize its methods")
+			}
+			if err := L.DoString(source); err != nil {
+				t.Fatal(err)
+			}
+			if methods != initialized {
+				t.Fatal("IP methods initialized more than once")
+			}
+		})
+	}
+}
+
 func TestReadOnlyNestedSlicePusher(t *testing.T) {
 	L := glua.NewState()
 	defer L.Close()
@@ -128,7 +176,6 @@ func TestReadOnlyNestedSlicePusher(t *testing.T) {
 	NewReadOnlySlicePusher[[]net.IP](L)(L, ips)
 	L.SetGlobal("ips", L.Get(-1))
 	L.Pop(1)
-	readOnly := luar.MT(L, ips[0]).RawGetString("__newindex")
 	if err := L.DoString(`
 local function readOnly(value)
     assert(not pcall(function() value[1] = value[1] end))
@@ -152,6 +199,7 @@ assert(ip.AppendText == nil and ip.appendText == nil)
 `); err != nil {
 		t.Fatal(err)
 	}
+	readOnly := luar.MT(L, ips[0]).RawGetString("__newindex")
 	NewReadOnlySlicePusher[net.IP](L)
 	if luar.MT(L, ips[0]).RawGetString("__newindex") != readOnly {
 		t.Fatal("nested slice metatable was initialized again")
