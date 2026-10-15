@@ -165,7 +165,9 @@ func newSandboxedState() *glua.LState {
 	// Redact addresses before caught errors become readable by the script.
 	redactError := func(value glua.LValue) glua.LValue {
 		if message, ok := value.(glua.LString); ok {
-			return glua.LString(redactMemoryAddresses(string(message)))
+			if redacted := redactMemoryAddresses(string(message)); redacted != string(message) {
+				return glua.LString(redacted)
+			}
 		}
 		return value
 	}
@@ -197,13 +199,13 @@ func newSandboxedState() *glua.LState {
 
 	// Keep only time functions, including when os is accessed through require.
 	osLib := L.GetGlobal(glua.OsLibName).(*glua.LTable)
-	osLib.ForEach(func(key, _ glua.LValue) {
+	for key, _ := osLib.Next(glua.LNil); key != glua.LNil; key, _ = osLib.Next(key) {
 		switch key {
 		case glua.LString("clock"), glua.LString("date"), glua.LString("difftime"), glua.LString("time"):
 		default:
 			osLib.RawSet(key, glua.LNil)
 		}
-	})
+	}
 
 	// Prevent module injection through the global package table.
 	module := L.GetGlobal(glua.LoadLibName).(*glua.LTable)
@@ -230,6 +232,9 @@ func newSandboxedState() *glua.LState {
 var memoryAddressPattern = regexp.MustCompile(`0[xX][0-9a-fA-F]+`)
 
 func redactMemoryAddresses(message string) string {
+	if !strings.Contains(message, "0x") && !strings.Contains(message, "0X") {
+		return message
+	}
 	return memoryAddressPattern.ReplaceAllString(message, "<address>")
 }
 

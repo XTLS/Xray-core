@@ -12,7 +12,7 @@ import (
 // The returned function wraps slices without reflection or metatable lookup,
 // and pushes nil for nil slices. Use it with this state or its coroutines.
 func NewSlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
-	metatable := luar.New(L, []T{}).(*glua.LUserData).Metatable
+	metatable := luar.MT(L, []T(nil)).LTable
 	return func(L *glua.LState, values []T) {
 		if values == nil {
 			L.Push(glua.LNil)
@@ -60,11 +60,11 @@ func setSliceReadOnly[S ~[]E, E any](L *glua.LState, readOnly *glua.LFunction) {
 			// A nil receiver lets AppendText return its argument as a writable []byte.
 			methods := metatable.RawGetString("methods").(*glua.LTable)
 			appendText := methods.RawGetString("AppendText")
-			methods.ForEach(func(key, method glua.LValue) {
+			for key, method := methods.Next(glua.LNil); key != glua.LNil; key, method = methods.Next(key) {
 				if method == appendText {
 					methods.RawSet(key, glua.LNil)
 				}
-			})
+			}
 			visit(reflect.TypeFor[net.IPMask]())
 		}
 		if element := typ.Elem(); element.Kind() == reflect.Slice {
