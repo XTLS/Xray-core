@@ -1,48 +1,48 @@
-package wireguard
+package tun
 
 import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 )
 
-// BenchmarkUDPManagerNewSession measures what one new UDP flow costs the
+// BenchmarkUDPNewSession measures what one new UDP flow costs the
 // inbound while it stays open: QUIC and DNS open many short flows, and each
 // one lives until the connection idle timeout.
-func BenchmarkUDPManagerNewSession(b *testing.B) {
-	m := &udpManager{
-		handler: func(conn net.Conn, dest net.Destination) {},
-		m:       make(map[string]*udpConn),
-	}
+func BenchmarkUDPNewSession(b *testing.B) {
+	u := newUdpConnectionHandler(func(conn net.Conn, dest net.Destination) {}, nil)
 	dst := net.UDPDestination(net.ParseAddress("1.1.1.1"), 443)
-	payload := make([]byte, 1200)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		src := net.UDPDestination(net.IPAddress([]byte{10, byte(i >> 16), byte(i >> 8), byte(i)}), net.Port(1024+i%60000))
-		m.feed(src, dst, payload)
+		u.HandlePacket(src, dst, &buf.Buffer{})
 	}
 }
 
 func TestPacketQueueOrderAndClose(t *testing.T) {
 	q := newPacketQueue(udpQueueLimit)
 	for i := 0; i < 3; i++ {
-		if !q.push(&packet{p: []byte{byte(i)}}) {
+		b := buf.New()
+		b.WriteByte(byte(i))
+		if !q.push(b) {
 			t.Fatalf("push %d rejected", i)
 		}
 	}
 	for i := 0; i < 3; i++ {
-		p, ok := q.pop()
-		if !ok || p.p[0] != byte(i) {
-			t.Fatalf("pop %d: got %v, %v", i, p, ok)
+		b, ok := q.pop()
+		if !ok || b.Byte(0) != byte(i) {
+			t.Fatalf("pop %d: got %v, %v", i, b, ok)
 		}
+		b.Release()
 	}
 	q.close()
 	if _, ok := q.pop(); ok {
 		t.Fatal("pop after close returned a packet")
 	}
-	if q.push(&packet{}) {
+	if q.push(&buf.Buffer{}) {
 		t.Fatal("push after close accepted")
 	}
 }
@@ -50,11 +50,11 @@ func TestPacketQueueOrderAndClose(t *testing.T) {
 func TestPacketQueueLimit(t *testing.T) {
 	q := newPacketQueue(udpQueueLimit)
 	for i := 0; i < udpQueueLimit; i++ {
-		if !q.push(&packet{}) {
+		if !q.push(&buf.Buffer{}) {
 			t.Fatalf("push %d rejected below the limit", i)
 		}
 	}
-	if q.push(&packet{}) {
+	if q.push(&buf.Buffer{}) {
 		t.Fatal("push above the limit accepted")
 	}
 }
@@ -80,7 +80,7 @@ func TestPacketQueueCloseUnblocksReader(t *testing.T) {
 func TestPacketQueueDropsDrainedStorage(t *testing.T) {
 	q := newPacketQueue(udpQueueLimit)
 	for i := 0; i < 100; i++ {
-		q.push(&packet{})
+		q.push(&buf.Buffer{})
 	}
 	for i := 0; i < 100; i++ {
 		q.pop()

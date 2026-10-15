@@ -39,9 +39,7 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 	u.RLock()
 	conn, found := u.udpConns[src]
 	if found {
-		select {
-		case conn.egress <- data:
-		default:
+		if !conn.queue.push(data) {
 			errors.LogDebug(context.Background(), "drop udp with size ", data.Len(), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
 			data.Release()
 		}
@@ -55,17 +53,14 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 
 	conn, found = u.udpConns[src]
 	if !found {
-		egress := make(chan *buf.Buffer, 1024)
-		conn = &udpConn{handler: u, egress: egress, src: src, dst: dst}
+		conn = &udpConn{handler: u, queue: newPacketQueue(udpQueueLimit), src: src, dst: dst}
 		u.udpConns[src] = conn
 
 		go u.handleConnection(conn, dst)
 	}
 
-	// send packet data to the egress channel, if it has buffer, or discard
-	select {
-	case conn.egress <- data:
-	default:
+	// queue the packet for the reader of the connection, or discard it
+	if !conn.queue.push(data) {
 		errors.LogDebug(context.Background(), "drop udp with size ", data.Len(), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full 2")
 		data.Release()
 	}
@@ -76,7 +71,7 @@ func (u *udpConnectionHandler) connectionFinished(conn *udpConn) {
 	// Close runs twice per flow; a newer conn may already own this src.
 	if u.udpConns[conn.src] == conn {
 		delete(u.udpConns, conn.src)
-		close(conn.egress)
+		conn.queue.close()
 	}
 	u.Unlock()
 }
@@ -85,13 +80,13 @@ func (u *udpConnectionHandler) connectionFinished(conn *udpConn) {
 type udpConn struct {
 	handler *udpConnectionHandler
 
-	egress chan *buf.Buffer
-	src    net.Destination
-	dst    net.Destination
+	queue *packetQueue
+	src   net.Destination
+	dst   net.Destination
 }
 
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	b, ok := <-c.egress
+	b, ok := c.queue.pop()
 	if !ok {
 		return nil, io.EOF
 	}
@@ -100,7 +95,7 @@ func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 // Read packets from the connection
 func (c *udpConn) Read(p []byte) (int, error) {
-	b, ok := <-c.egress
+	b, ok := c.queue.pop()
 	if !ok {
 		return 0, io.EOF
 	}
@@ -137,7 +132,7 @@ func (c *udpConn) Write(p []byte) (int, error) {
 	// sending packets back mean sending payload with source/destination reversed
 	err := c.handler.writePacket(p, c.dst, c.src)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 
 	return len(p), nil
@@ -167,4 +162,69 @@ func (c *udpConn) SetReadDeadline(t time.Time) error {
 
 func (c *udpConn) SetWriteDeadline(t time.Time) error {
 	return nil
+}
+
+// udpQueueLimit bounds the packets waiting for one UDP flow; more are dropped.
+const udpQueueLimit = 1024
+
+// packetQueue holds the packets waiting for one UDP flow. Unlike a buffered
+// channel of the same bound it only allocates for packets actually queued, so
+// the many idle flows kept until the idle timeout cost next to nothing.
+type packetQueue struct {
+	mu     sync.Mutex
+	items  []*buf.Buffer
+	limit  int
+	notify chan struct{}
+	closed bool
+}
+
+func newPacketQueue(limit int) *packetQueue {
+	return &packetQueue{limit: limit, notify: make(chan struct{}, 1)}
+}
+
+// push queues b and reports whether it was accepted.
+func (q *packetQueue) push(b *buf.Buffer) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed || len(q.items) >= q.limit {
+		return false
+	}
+	q.items = append(q.items, b)
+	select {
+	case q.notify <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+// pop blocks until a packet is queued or the queue is closed and drained.
+func (q *packetQueue) pop() (*buf.Buffer, bool) {
+	for {
+		q.mu.Lock()
+		if len(q.items) > 0 {
+			b := q.items[0]
+			q.items[0] = nil
+			q.items = q.items[1:]
+			if len(q.items) == 0 {
+				q.items = nil
+			}
+			q.mu.Unlock()
+			return b, true
+		}
+		if q.closed {
+			q.mu.Unlock()
+			return nil, false
+		}
+		q.mu.Unlock()
+		<-q.notify
+	}
+}
+
+func (q *packetQueue) close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if !q.closed {
+		q.closed = true
+		close(q.notify)
+	}
 }
