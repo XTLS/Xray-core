@@ -146,6 +146,7 @@
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
+  - [NetworkManager-vless](https://github.com/s11va9/network-manager-vless)
 - HarmonyOS
   - [Hey](https://github.com/popsiclelmlm/Hey)
 
