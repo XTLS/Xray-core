@@ -136,7 +136,7 @@ func NewDOHResolver(config *ResolverProto, dialer *finalmask.Dialer) (Resolver, 
 		ctx:    ctx,
 		cancel: cancel,
 		client: client,
-		url:    "https://" + config.Addr,
+		url:    config.Addr,
 
 		udpAddr: &net.UDPAddr{IP: []byte{0, 0, 0, 0}},
 		readCh:  make(chan []byte),
