@@ -2,17 +2,15 @@ package xdrive
 
 import (
 	"context"
-	gotls "crypto/tls"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"golang.org/x/net/http2"
 )
 
 var errStalled = errors.New("the request made no progress")
@@ -109,18 +107,19 @@ func (b *progressBody) Close() error {
 // progress, see serviceTransport.RoundTrip
 func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Duration, maxConns int) *http.Client {
 	var (
-		tlsConfig     *tls.Config
-		realityConfig *reality.Config
-		sockopt       *internet.SocketConfig
-		fronting      *net.Destination
+		tlsConfig *tls.Config
+		sockopt   *internet.SocketConfig
+		fronting  *net.Destination
 	)
 	if streamSettings != nil {
 		tlsConfig = tls.ConfigFromStreamSettings(streamSettings)
-		realityConfig = reality.ConfigFromStreamSettings(streamSettings)
 		sockopt = streamSettings.SocketSettings
 		fronting = streamSettings.Destination
 	}
-	overHTTP2 := allowsHTTP2(tlsConfig, realityConfig)
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{}
+	}
+	fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint)
 
 	dial := func(ctx context.Context, addr string) (net.Conn, net.Destination, error) {
 		host, err := net.ParseDestination("tcp:" + addr)
@@ -153,58 +152,40 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Du
 		return conn, err
 	}
 
-	dialTLS := func(ctx context.Context, addr string) (net.Conn, error) {
+	// http.Transport picks h2 or h1 by the ALPN in the ConnectionState of the conn
+	dialTLS := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		conn, host, err := dial(ctx, addr)
 		if err != nil {
 			return nil, err
 		}
 
-		if realityConfig != nil {
-			return reality.UClient(conn, realityConfig, ctx, host)
+		gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(host))
+		var tlsConn net.Conn
+		if fingerprint == nil {
+			tlsConn = tls.Client(conn, gotlsConfig)
+		} else {
+			tlsConn = tls.UClient(conn, gotlsConfig, fingerprint)
 		}
-
-		gotlsConfig := &gotls.Config{ServerName: host.Address.String()}
-		if tlsConfig != nil {
-			gotlsConfig = tlsConfig.GetTLSConfig(tls.WithDestination(host))
+		// the dial outlives the request that started it, and a handshake that hangs
+		// would keep the one connection of the host to itself
+		ctx, cancel := context.WithTimeout(ctx, stall)
+		defer cancel()
+		if err := tlsConn.(tls.Interface).HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, err
 		}
-		if len(gotlsConfig.NextProtos) != 1 {
-			if overHTTP2 {
-				gotlsConfig.NextProtos = []string{"h2"}
-			} else {
-				gotlsConfig.NextProtos = []string{"http/1.1"}
-			}
-		}
-
-		if tlsConfig != nil {
-			if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-				uconn := tls.UClient(conn, gotlsConfig, fingerprint)
-				if err := uconn.(*tls.UConn).HandshakeContext(ctx); err != nil {
-					conn.Close()
-					return nil, err
-				}
-				return uconn, nil
-			}
-		}
-		return tls.Client(conn, gotlsConfig), nil
+		return tlsConn, nil
 	}
 
-	var secure http.RoundTripper
-	if overHTTP2 {
-		secure = &http2.Transport{
-			DialTLSContext: func(ctx context.Context, network, addr string, cfg *gotls.Config) (net.Conn, error) {
-				return dialTLS(ctx, addr)
-			},
-			IdleConnTimeout: net.ConnIdleTimeout,
-		}
-	} else {
-		secure = &http.Transport{
-			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialTLS(ctx, addr)
-			},
+	secure := func(connsPerHost int) *http.Transport {
+		return &http.Transport{
+			DialTLSContext:      dialTLS,
+			ForceAttemptHTTP2:   true,
 			IdleConnTimeout:     net.ConnIdleTimeout,
 			MaxIdleConns:        maxConns,
 			MaxIdleConnsPerHost: maxConns,
-			MaxConnsPerHost:     maxConns,
+			MaxConnsPerHost:     connsPerHost,
+			HTTP2:               &http.HTTP2Config{SendPingTimeout: net.ChromeH2KeepAlivePeriod},
 		}
 	}
 
@@ -217,18 +198,27 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Du
 				MaxIdleConnsPerHost: maxConns,
 				MaxConnsPerHost:     maxConns,
 			},
-			secure: secure,
+			secure: &secureTransport{h2: secure(1), h1: secure(maxConns)},
 			stall:  stall,
 		},
 	}
 }
 
-func allowsHTTP2(tlsConfig *tls.Config, realityConfig *reality.Config) bool {
-	if realityConfig != nil {
-		return true
+// secureTransport keeps a host to one connection, all that h2 needs, as without
+// a limit parallel requests would each dial their own. A host that answers over
+// h1 moves to a transport with more, since h1 carries one request at a time
+type secureTransport struct {
+	h2, h1  http.RoundTripper
+	h1Hosts sync.Map
+}
+
+func (t *secureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if _, ok := t.h1Hosts.Load(r.URL.Host); ok {
+		return t.h1.RoundTrip(r)
 	}
-	if tlsConfig == nil {
-		return false
+	resp, err := t.h2.RoundTrip(r)
+	if err == nil && resp.ProtoMajor == 1 {
+		t.h1Hosts.Store(r.URL.Host, true)
 	}
-	return len(tlsConfig.NextProtocol) == 1 && tlsConfig.NextProtocol[0] == "h2"
+	return resp, err
 }

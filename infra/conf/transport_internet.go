@@ -1,11 +1,15 @@
 package conf
 
 import (
+	"context"
+	"slices"
 	"strings"
 
+	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 type TransportProtocol string
@@ -100,6 +104,14 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
+		if config.ProtocolName == "xdrive" && tlsSettings.ALPN != nil && slices.Equal(*tlsSettings.ALPN, StringList{"http/1.1"}) && tlsSettings.ECHConfigList == "" {
+			// a fingerprint puts its own ALPN into the hello, except Go TLS and the
+			// randomized ones, which take it from the config or send none
+			if fp := tls.GetFingerprint(strings.ToLower(tlsSettings.Fingerprint)); fp != nil && fp.Client != utls.HelloGolang.Client &&
+				!strings.HasPrefix(fp.Client, utls.HelloRandomized.Client) {
+				errors.LogWarning(context.Background(), `XDRIVE: "alpn" ["http/1.1"] reaches the wire only inside ECH, without "echConfigList" the hello carries the ALPN of the fingerprint and the server may pick h2`)
+			}
+		}
 	case "reality":
 		if config.ProtocolName != "tcp" && config.ProtocolName != "splithttp" && config.ProtocolName != "grpc" {
 			return nil, errors.New("REALITY only supports RAW, XHTTP and gRPC for now.")
