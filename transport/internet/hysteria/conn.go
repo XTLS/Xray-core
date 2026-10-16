@@ -21,11 +21,10 @@ type interConn struct {
 	local  net.Addr
 	remote net.Addr
 
-	client bool
-	user   *protocol.MemoryUser
-
-	writeInFlight atomic.Int32
-	closed        atomic.Bool
+	writing atomic.Bool
+	client  bool
+	user    *protocol.MemoryUser
+	mu      sync.Mutex
 }
 
 func (c *interConn) User() *protocol.MemoryUser {
@@ -37,11 +36,11 @@ func (c *interConn) Read(b []byte) (int, error) {
 }
 
 func (c *interConn) Write(b []byte) (int, error) {
-	c.writeInFlight.Add(1)
-	defer c.writeInFlight.Add(-1)
-	if c.closed.Load() {
-		return 0, io.ErrClosedPipe
-	}
+	c.writing.Store(true)
+	defer c.writing.Store(false)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	if c.client {
 		c.client = false
@@ -55,19 +54,13 @@ func (c *interConn) Write(b []byte) (int, error) {
 }
 
 func (c *interConn) Close() error {
-	if !c.closed.CompareAndSwap(false, true) {
-		return nil
-	}
-	if c.writeInFlight.Load() > 0 {
-		// The stream's write side is blocked on the flow control window, so
-		// the FIN queued by Stream.Close can never be delivered and the peer
-		// keeps the stream's unread data occupying its share of the
-		// connection-level window. Reset the write side instead: the blocked
-		// Write returns immediately and the peer releases the window.
-		c.stream.CancelWrite(0)
+	if c.writing.Load() {
 		c.stream.CancelRead(0)
+		c.stream.CancelWrite(0)
 		return nil
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.stream.CancelRead(0)
 	return c.stream.Close()
 }
