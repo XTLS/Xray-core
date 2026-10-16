@@ -360,6 +360,7 @@ type TCPConfig struct {
 	Clients       []*TCPSequence         `protobuf:"bytes,1,rep,name=clients,proto3" json:"clients,omitempty"`
 	Servers       []*TCPSequence         `protobuf:"bytes,2,rep,name=servers,proto3" json:"servers,omitempty"`
 	Errors        []*TCPSequence         `protobuf:"bytes,3,rep,name=errors,proto3" json:"errors,omitempty"`
+	Script        string                 `protobuf:"bytes,4,opt,name=script,proto3" json:"script,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -413,6 +414,13 @@ func (x *TCPConfig) GetErrors() []*TCPSequence {
 		return x.Errors
 	}
 	return nil
+}
+
+func (x *TCPConfig) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
 }
 
 type UDPItem struct {
@@ -511,6 +519,7 @@ type UDPConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Client        []*UDPItem             `protobuf:"bytes,1,rep,name=client,proto3" json:"client,omitempty"`
 	Server        []*UDPItem             `protobuf:"bytes,2,rep,name=server,proto3" json:"server,omitempty"`
+	Script        string                 `protobuf:"bytes,3,opt,name=script,proto3" json:"script,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -559,10 +568,18 @@ func (x *UDPConfig) GetServer() []*UDPItem {
 	return nil
 }
 
+func (x *UDPConfig) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
 type UDPStandaloneConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Client        []*UDPItem             `protobuf:"bytes,1,rep,name=client,proto3" json:"client,omitempty"`
 	Server        []*UDPItem             `protobuf:"bytes,2,rep,name=server,proto3" json:"server,omitempty"`
+	Script        string                 `protobuf:"bytes,3,opt,name=script,proto3" json:"script,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -611,6 +628,13 @@ func (x *UDPStandaloneConfig) GetServer() []*UDPItem {
 	return nil
 }
 
+func (x *UDPStandaloneConfig) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
 var File_transport_internet_finalmask_header_custom_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" +
@@ -637,11 +661,12 @@ const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" 
 	"\x03var\x18\b \x01(\tR\x03var\x12I\n" +
 	"\x04expr\x18\t \x01(\v25.xray.transport.internet.finalmask.header.custom.ExprR\x04expr\"c\n" +
 	"\vTCPSequence\x12T\n" +
-	"\bsequence\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.TCPItemR\bsequence\"\x91\x02\n" +
+	"\bsequence\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.TCPItemR\bsequence\"\xa9\x02\n" +
 	"\tTCPConfig\x12V\n" +
 	"\aclients\x18\x01 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aclients\x12V\n" +
 	"\aservers\x18\x02 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\aservers\x12T\n" +
-	"\x06errors\x18\x03 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\x06errors\"\xdc\x01\n" +
+	"\x06errors\x18\x03 \x03(\v2<.xray.transport.internet.finalmask.header.custom.TCPSequenceR\x06errors\x12\x16\n" +
+	"\x06script\x18\x04 \x01(\tR\x06script\"\xdc\x01\n" +
 	"\aUDPItem\x12\x12\n" +
 	"\x04rand\x18\x01 \x01(\x05R\x04rand\x12\x19\n" +
 	"\brand_min\x18\x02 \x01(\x05R\arandMin\x12\x19\n" +
@@ -649,13 +674,15 @@ const file_transport_internet_finalmask_header_custom_config_proto_rawDesc = "" 
 	"\x06packet\x18\x04 \x01(\fR\x06packet\x12\x12\n" +
 	"\x04save\x18\x05 \x01(\tR\x04save\x12\x10\n" +
 	"\x03var\x18\x06 \x01(\tR\x03var\x12I\n" +
-	"\x04expr\x18\a \x01(\v25.xray.transport.internet.finalmask.header.custom.ExprR\x04expr\"\xaf\x01\n" +
+	"\x04expr\x18\a \x01(\v25.xray.transport.internet.finalmask.header.custom.ExprR\x04expr\"\xc7\x01\n" +
 	"\tUDPConfig\x12P\n" +
 	"\x06client\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06client\x12P\n" +
-	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06server\"\xb9\x01\n" +
+	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06server\x12\x16\n" +
+	"\x06script\x18\x03 \x01(\tR\x06script\"\xd1\x01\n" +
 	"\x13UDPStandaloneConfig\x12P\n" +
 	"\x06client\x18\x01 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06client\x12P\n" +
-	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06serverB\xaf\x01\n" +
+	"\x06server\x18\x02 \x03(\v28.xray.transport.internet.finalmask.header.custom.UDPItemR\x06server\x12\x16\n" +
+	"\x06script\x18\x03 \x01(\tR\x06scriptB\xaf\x01\n" +
 	"3com.xray.transport.internet.finalmask.header.customP\x01ZDgithub.com/xtls/xray-core/transport/internet/finalmask/header/custom\xaa\x02/Xray.Transport.Internet.Finalmask.Header.Customb\x06proto3"
 
 var (

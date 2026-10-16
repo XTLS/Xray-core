@@ -21,6 +21,7 @@ type udpCustomClient struct {
 	read   int
 	state  *stateStore
 	vars   map[string][]byte
+	script *scriptEngine
 }
 
 func (h *udpCustomClient) Serialize(b []byte) {
@@ -53,6 +54,11 @@ type udpCustomClientConn struct {
 }
 
 func NewConnClientUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+	script, err := headerScript(c, c.Script)
+	if err != nil {
+		return nil, err
+	}
+
 	conn := &udpCustomClientConn{
 		PacketConn: raw,
 		header: &udpCustomClient{
@@ -60,7 +66,11 @@ func NewConnClientUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) 
 			server: c.Server,
 			state:  newStateStore(5 * time.Second),
 			vars:   make(map[string][]byte),
+			script: script,
 		},
+	}
+	if script != nil {
+		return conn, nil
 	}
 	clientSavedSizes := collectSavedUDPSizes(conn.header.client)
 	size, err := measureUDPItems(conn.header.client)
@@ -91,6 +101,16 @@ func (c *udpCustomClientConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			return n, addr, err
 		}
 
+		if c.header.script != nil {
+			strip, err := c.header.script.strip(roleClient, addr.String(), b[:n])
+			if err != nil {
+				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", n)
+				continue
+			}
+			copy(p, b[strip:n])
+			return n - strip, addr, nil
+		}
+
 		if !c.header.Match(b[:n], addr) {
 			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", n, " > header mismatch")
 			continue
@@ -106,6 +126,25 @@ func (c *udpCustomClientConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	buf.Resize(0, finalmask.UDPSize)
 	b := buf.Bytes()
 	defer buf.Release()
+
+	if c.header.script != nil {
+		header, err := c.header.script.header(roleClient, addr.String(), nil)
+		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+			return 0, nil
+		}
+		if len(header)+len(p) > len(b) {
+			errors.LogError(context.Background(), "[mask] drop packet to ", addr, " with size ", len(p), " > the header does not fit")
+			return 0, nil
+		}
+		copy(b, header)
+		copy(b[len(header):], p)
+		if _, err := c.PacketConn.WriteTo(b[:len(header)+len(p)], addr); err != nil {
+			errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+			return 0, err
+		}
+		return len(p), nil
+	}
 
 	ctx := newEvalContextWithAddrs(c.PacketConn.LocalAddr(), addr)
 	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {
@@ -141,6 +180,7 @@ type udpCustomServer struct {
 	read   int
 	state  *stateStore
 	vars   map[string][]byte
+	script *scriptEngine
 }
 
 func (h *udpCustomServer) Serialize(b []byte) {
@@ -173,6 +213,11 @@ type udpCustomServerConn struct {
 }
 
 func NewConnServerUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) {
+	script, err := headerScript(c, c.Script)
+	if err != nil {
+		return nil, err
+	}
+
 	conn := &udpCustomServerConn{
 		PacketConn: raw,
 		header: &udpCustomServer{
@@ -180,7 +225,11 @@ func NewConnServerUDP(c *UDPConfig, raw net.PacketConn) (net.PacketConn, error) 
 			server: c.Server,
 			state:  newStateStore(5 * time.Second),
 			vars:   make(map[string][]byte),
+			script: script,
 		},
+	}
+	if script != nil {
+		return conn, nil
 	}
 	clientSavedSizes := collectSavedUDPSizes(conn.header.client)
 	size, err := measureUDPItemsWithFallback(conn.header.server, clientSavedSizes)
@@ -211,6 +260,16 @@ func (c *udpCustomServerConn) ReadFrom(p []byte) (n int, addr net.Addr, err erro
 			return n, addr, err
 		}
 
+		if c.header.script != nil {
+			strip, err := c.header.script.strip(roleServer, addr.String(), b[:n])
+			if err != nil {
+				errors.LogErrorInner(context.Background(), err, "[mask] drop packet from ", addr, " with size ", n)
+				continue
+			}
+			copy(p, b[strip:n])
+			return n - strip, addr, nil
+		}
+
 		if !c.header.Match(b[:n], addr) {
 			errors.LogError(context.Background(), "[mask] drop packet from ", addr, " with size ", n, " > header mismatch")
 			continue
@@ -226,6 +285,25 @@ func (c *udpCustomServerConn) WriteTo(p []byte, addr net.Addr) (n int, err error
 	buf.Resize(0, finalmask.UDPSize)
 	b := buf.Bytes()
 	defer buf.Release()
+
+	if c.header.script != nil {
+		header, err := c.header.script.header(roleServer, addr.String(), nil)
+		if err != nil {
+			errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+			return 0, nil
+		}
+		if len(header)+len(p) > len(b) {
+			errors.LogError(context.Background(), "[mask] drop packet to ", addr, " with size ", len(p), " > the header does not fit")
+			return 0, nil
+		}
+		copy(b, header)
+		copy(b[len(header):], p)
+		if _, err := c.PacketConn.WriteTo(b[:len(header)+len(p)], addr); err != nil {
+			errors.LogErrorInner(context.Background(), err, "[mask] drop packet to ", addr, " with size ", len(p))
+			return 0, err
+		}
+		return len(p), nil
+	}
 
 	ctx := newEvalContextWithAddrs(c.PacketConn.LocalAddr(), addr)
 	if vars, ok := c.header.state.get(udpStateKey(addr)); ok {

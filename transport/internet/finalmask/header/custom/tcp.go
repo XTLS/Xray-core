@@ -15,6 +15,7 @@ type tcpCustomClient struct {
 	clients []*TCPSequence
 	servers []*TCPSequence
 	state   *stateStore
+	script  *scriptEngine
 }
 
 type tcpCustomClientConn struct {
@@ -27,12 +28,18 @@ type tcpCustomClientConn struct {
 }
 
 func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
+	script, err := headerScript(c, c.Script)
+	if err != nil {
+		return nil, err
+	}
+
 	conn := &tcpCustomClientConn{
 		Conn: raw,
 		header: &tcpCustomClient{
 			clients: c.Clients,
 			servers: c.Servers,
 			state:   newStateStore(5 * time.Second),
+			script:  script,
 		},
 	}
 
@@ -65,6 +72,12 @@ func (c *tcpCustomClientConn) Read(p []byte) (n int, err error) {
 
 func (c *tcpCustomClientConn) Write(p []byte) (n int, err error) {
 	c.once.Do(func() {
+		if c.header.script != nil {
+			c.auth = runHeaderScript(c.header.script, roleClient, c.Conn)
+			c.wg.Done()
+			return
+		}
+
 		ctx := newEvalContextWithAddrs(c.LocalAddr(), c.RemoteAddr())
 		if vars, ok := c.header.state.get(tcpStateKey(c.LocalAddr(), c.RemoteAddr())); ok {
 			ctx.vars = cloneVars(vars)
@@ -113,6 +126,7 @@ type tcpCustomServer struct {
 	servers []*TCPSequence
 	errors  []*TCPSequence
 	state   *stateStore
+	script  *scriptEngine
 }
 
 type tcpCustomServerConn struct {
@@ -125,6 +139,11 @@ type tcpCustomServerConn struct {
 }
 
 func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
+	script, err := headerScript(c, c.Script)
+	if err != nil {
+		return nil, err
+	}
+
 	conn := &tcpCustomServerConn{
 		Conn: raw,
 		header: &tcpCustomServer{
@@ -132,6 +151,7 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 			servers: c.Servers,
 			errors:  c.Errors,
 			state:   newStateStore(5 * time.Second),
+			script:  script,
 		},
 	}
 
@@ -154,6 +174,12 @@ func (c *tcpCustomServerConn) Splice() bool {
 
 func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
 	c.once.Do(func() {
+		if c.header.script != nil {
+			c.auth = runHeaderScript(c.header.script, roleServer, c.Conn)
+			c.wg.Done()
+			return
+		}
+
 		ctx := newEvalContextWithAddrs(c.LocalAddr(), c.RemoteAddr())
 		if vars, ok := c.header.state.get(tcpStateKey(c.LocalAddr(), c.RemoteAddr())); ok {
 			ctx.vars = cloneVars(vars)

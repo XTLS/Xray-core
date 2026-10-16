@@ -41,6 +41,7 @@ message TCPConfig {
     repeated TCPSequence clients = 1;
     repeated TCPSequence servers = 2;
     repeated TCPSequence errors = 3;
+    string script = 4;
 }
 
 message UDPItem {
@@ -56,9 +57,11 @@ message UDPItem {
 message UDPConfig {
     repeated UDPItem client = 1;
     repeated UDPItem server = 2;
+    string script = 3;
 }
 
 message UDPStandaloneConfig {
     repeated UDPItem client = 1;
     repeated UDPItem server = 2;
+    string script = 3;
 }
