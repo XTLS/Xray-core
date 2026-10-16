@@ -311,14 +311,14 @@ func (h *Handler) up(ctx context.Context) error {
 		return errors.New("closed")
 	}
 	h.bind.SetCtx(ctx)
+	if !h.canup.Load() {
+		h.canup.Store(true)
+	}
 	if len(h.ipc) > 0 {
 		if err := h.dev.IpcSet(h.ipc); err != nil {
 			return err
 		}
 		h.ipc = ""
-	}
-	if !h.canup.Load() {
-		h.canup.Store(true)
 	}
 	return h.dev.Up()
 }
