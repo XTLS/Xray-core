@@ -224,7 +224,18 @@ func streamSleep(L *glua.LState) int {
 		return 0
 	}
 	streamFor(L, 0)
-	time.Sleep(time.Duration(delay) * time.Millisecond)
+	timer := time.NewTimer(time.Duration(delay) * time.Millisecond)
+	defer timer.Stop()
+	ctx := L.Context()
+	if ctx == nil {
+		<-timer.C
+		return 0
+	}
+	select {
+	case <-timer.C:
+	case <-ctx.Done():
+		L.RaiseError("Sleep was cut short: %v", ctx.Err())
+	}
 	return 0
 }
 

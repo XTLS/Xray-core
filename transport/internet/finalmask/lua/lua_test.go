@@ -258,6 +258,30 @@ end
 	require.Equal(t, [][]byte{[]byte("n")}, raw.packets(), "the stale plan raises, so the packet is dropped")
 }
 
+func TestSleepGivesTheStateBackWhenTheHookTimesOut(t *testing.T) {
+	config := &Config{Script: writeScript(t, `
+function HandleHeader(stream, address, role)
+    stream:Sleep(60000)
+end
+`)}
+	engine, err := config.engine()
+	require.NoError(t, err)
+
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	done := make(chan error, 1)
+	go func() { done <- engine.handshake(roleClient, client, 100*time.Millisecond) }()
+
+	select {
+	case err := <-done:
+		require.Error(t, err, "the timeout cuts the sleep short")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Sleep held the state past the timeout of the hook")
+	}
+}
+
 func TestAHeaderTheScriptDropsIsShortCircuited(t *testing.T) {
 	client, raw := packetConn(t, `
 function HandleHeaderWrite(header, address, role)
