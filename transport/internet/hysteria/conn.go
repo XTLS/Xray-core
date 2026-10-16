@@ -48,7 +48,6 @@ func (c *interConn) Write(b []byte) (int, error) {
 		}
 		return len(b), nil
 	}
-
 	return c.stream.Write(b)
 }
 
