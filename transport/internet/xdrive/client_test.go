@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	gotls "crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"errors"
 	"io"
@@ -11,13 +12,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/apernet/quic-go"
+	"github.com/apernet/quic-go/http3"
 	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/protocol/tls/cert"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
+	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -552,7 +560,8 @@ type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// "hKeepAlivePeriod" of XMUX sets when an idle h2 connection pings, -1 never
+// "hKeepAlivePeriod" of XMUX sets when an idle h2 connection pings, -1 never,
+// and h3 keeps alive only when it is set
 func TestServiceClientKeepAlive(t *testing.T) {
 	for period, want := range map[int64]time.Duration{0: xnet.ChromeH2KeepAlivePeriod, 20: 20 * time.Second, -1: 0} {
 		settings := &internet.MemoryStreamConfig{ProtocolSettings: &Config{Xmux: &splithttp.XmuxConfig{HKeepAlivePeriod: period}}}
@@ -562,4 +571,391 @@ func TestServiceClientKeepAlive(t *testing.T) {
 			t.Errorf("hKeepAlivePeriod %d pings after %v, want %v", period, got, want)
 		}
 	}
+	for period, want := range map[int64]time.Duration{0: 0, 20: 20 * time.Second, -1: 0} {
+		settings := &internet.MemoryStreamConfig{
+			ProtocolSettings: &Config{Xmux: &splithttp.XmuxConfig{HKeepAlivePeriod: period}},
+			SecuritySettings: &tls.Config{NextProtocol: []string{"h3"}},
+		}
+		client := newServiceClient(context.Background(), new(sync.Map), settings, 5*time.Second, 8)
+		if got := client.Transport.(*serviceTransport).secure.(*http3.Transport).QUICConfig.KeepAlivePeriod; got != want {
+			t.Errorf("hKeepAlivePeriod %d keeps h3 alive every %v, want %v", period, got, want)
+		}
+	}
+}
+
+// h3 is used when "alpn" asks for it alone, and only then
+func TestServiceClientH3Selection(t *testing.T) {
+	for _, c := range []struct {
+		alpn []string
+		h3   bool
+	}{
+		{nil, false},
+		{[]string{"h2"}, false},
+		{[]string{"http/1.1"}, false},
+		{[]string{"h3", "h2"}, false},
+		{[]string{"h2", "h3"}, false},
+		{[]string{"h3"}, true},
+	} {
+		client := newServiceClient(context.Background(), new(sync.Map), &internet.MemoryStreamConfig{SecuritySettings: &tls.Config{NextProtocol: c.alpn}}, 5*time.Second, 8)
+		if _, h3 := client.Transport.(*serviceTransport).secure.(*http3.Transport); h3 != c.h3 {
+			t.Errorf("alpn %v: h3 %v, want %v", c.alpn, h3, c.h3)
+		}
+	}
+	if _, h3 := newServiceClient(context.Background(), new(sync.Map), &internet.MemoryStreamConfig{}, 5*time.Second, 8).Transport.(*serviceTransport).secure.(*http3.Transport); h3 {
+		t.Error("h3 without tlsSettings")
+	}
+}
+
+// h3Server is an http3 server that keeps the SNI of each connection, and counts
+// its connections and those closed
+type h3Server struct {
+	port         xnet.Port
+	hash, caHash [32]byte
+	mu           sync.Mutex
+	snis         []string
+	conns        atomic.Int32
+	closed       atomic.Int32
+}
+
+func newH3Server(t *testing.T, handler http.Handler) *h3Server {
+	t.Helper()
+
+	// ECDSA, as ChromeParrot offers no Ed25519, from a CA of its own
+	ca, caHash := cert.MustGenerate(nil, cert.Authority(true), cert.KeyUsage(x509.KeyUsageCertSign))
+	certificate, hash := cert.MustGenerate(ca, cert.DNSNames("www.googleapis.com", "oauth2.googleapis.com"))
+	key, err := x509.ParsePKCS8PrivateKey(certificate.PrivateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &h3Server{port: xnet.Port(conn.LocalAddr().(*net.UDPAddr).Port), hash: hash, caHash: caHash}
+	server := &http3.Server{
+		Handler: handler,
+		TLSConfig: http3.ConfigureTLSConfig(&gotls.Config{
+			Certificates: []gotls.Certificate{{Certificate: [][]byte{certificate.Certificate, ca.Certificate}, PrivateKey: key}},
+			GetConfigForClient: func(hello *gotls.ClientHelloInfo) (*gotls.Config, error) {
+				s.mu.Lock()
+				s.snis = append(s.snis, hello.ServerName)
+				s.mu.Unlock()
+				return nil, nil
+			},
+		}),
+		ConnContext: func(ctx context.Context, c *quic.Conn) context.Context {
+			s.conns.Add(1)
+			context.AfterFunc(c.Context(), func() { s.closed.Add(1) })
+			return ctx
+		},
+	}
+	go server.Serve(conn)
+	t.Cleanup(func() {
+		server.Close()
+		conn.Close()
+	})
+	return s
+}
+
+// settings sends every host to the server over h3, through a destination built
+// as TCP the way conf builds it, and pins the certificate of the server in config
+func (s *h3Server) settings(config *tls.Config) *internet.MemoryStreamConfig {
+	config.NextProtocol = []string{"h3"}
+	config.PinnedPeerCertSha256 = [][]byte{s.hash[:]}
+	return &internet.MemoryStreamConfig{
+		ProtocolName:     protocolName,
+		Destination:      &xnet.Destination{Address: xnet.LocalHostIP, Port: s.port, Network: xnet.Network_TCP},
+		SecuritySettings: config,
+	}
+}
+
+func (s *h3Server) seenSNIs() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Sorted(slices.Values(s.snis))
+}
+
+// one client serves two hosts, and each gets its own SNI unless serverName
+// says otherwise, which is also the name a pinned CA checks the certificate for
+func TestServiceClientH3SNI(t *testing.T) {
+	for _, c := range []struct {
+		serverName string
+		pinCA      bool
+		want       []string
+	}{
+		{"", false, []string{"oauth2.googleapis.com", "www.googleapis.com"}},
+		{"www.google.com", false, []string{"www.google.com", "www.google.com"}},
+		{"", true, []string{"oauth2.googleapis.com", "www.googleapis.com"}},
+	} {
+		server := newH3Server(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		settings := server.settings(&tls.Config{ServerName: c.serverName})
+		if c.pinCA {
+			settings.SecuritySettings.(*tls.Config).PinnedPeerCertSha256 = [][]byte{server.caHash[:]}
+		}
+		client := newServiceClient(context.Background(), new(sync.Map), settings, 5*time.Second, 8)
+		for _, url := range []string{"https://www.googleapis.com/drive/v3/files", "https://oauth2.googleapis.com/token"} {
+			resp, err := client.Get(url)
+			if err != nil {
+				t.Fatalf("serverName %q, pinned CA %v, %s: %v", c.serverName, c.pinCA, url, err)
+			}
+			resp.Body.Close()
+			if resp.Proto != "HTTP/3.0" {
+				t.Errorf("serverName %q, %s: went over %s", c.serverName, url, resp.Proto)
+			}
+		}
+		if snis := server.seenSNIs(); !slices.Equal(snis, c.want) {
+			t.Errorf("serverName %q: SNIs %v, want %v", c.serverName, snis, c.want)
+		}
+	}
+}
+
+// a request that stands still ends over h3 too, and says so
+func TestServiceClientStallOverH3(t *testing.T) {
+	const stall = 200 * time.Millisecond
+	server := newH3Server(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/stuck" {
+			w.Write([]byte("x"))
+			w.(http.Flusher).Flush()
+		}
+		time.Sleep(5 * stall)
+	}))
+	client := newServiceClient(context.Background(), new(sync.Map), server.settings(&tls.Config{}), stall, 8)
+
+	for _, path := range []string{"/stuck", "/silent"} {
+		start := time.Now()
+		resp, err := client.Get("https://www.googleapis.com" + path)
+		if err == nil {
+			if resp.Proto != "HTTP/3.0" {
+				t.Fatalf("%s went over %s", path, resp.Proto)
+			}
+			_, err = io.ReadAll(resp.Body)
+			resp.Body.Close()
+		}
+		if !errors.Is(err, errStalled) {
+			t.Errorf("%s gave %v, want %v", path, err, errStalled)
+		}
+		if took := time.Since(start); took > 4*stall {
+			t.Errorf("%s took %v to give up", path, took)
+		}
+	}
+}
+
+// brutal and force-brutal, which are for Hysteria servers, give an error and
+// no panic in a goroutine of http3, where XHTTP and DoH panic on brutal
+func TestServiceClientH3Congestion(t *testing.T) {
+	server := newH3Server(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	for _, cc := range []string{"", "bbr", "reno", "brutal", "force-brutal"} {
+		settings := server.settings(&tls.Config{})
+		settings.QuicParams = &internet.QuicParams{Congestion: cc, BrutalUp: 1 << 20}
+		resp, err := newServiceClient(context.Background(), new(sync.Map), settings, 5*time.Second, 8).Get("https://www.googleapis.com/")
+		if err == nil {
+			resp.Body.Close()
+		}
+		if brutal := strings.HasSuffix(cc, "brutal"); brutal != (err != nil) || brutal && !strings.Contains(err.Error(), cc) {
+			t.Errorf("congestion %q gave %v", cc, err)
+		}
+	}
+}
+
+// recordConn keeps the datagrams sent through it
+type recordConn struct {
+	net.PacketConn
+	mu     sync.Mutex
+	sent   [][]byte
+	closed atomic.Bool
+}
+
+func (c *recordConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+	c.mu.Lock()
+	c.sent = append(c.sent, bytes.Clone(p))
+	c.mu.Unlock()
+	return c.PacketConn.WriteTo(p, addr)
+}
+
+func (c *recordConn) Close() error {
+	c.closed.Store(true)
+	return c.PacketConn.Close()
+}
+
+// recorder dials UDP through recordConns and keeps them
+type recorder struct {
+	mu    sync.Mutex
+	conns []*recordConn
+}
+
+func (r *recorder) dialUDP(ctx context.Context, dest xnet.Destination) (net.PacketConn, net.Addr, error) {
+	conn, err := internet.DialSystem(ctx, dest, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	rec := &recordConn{PacketConn: conn.(*xnet.PacketConnWrapper).PacketConn}
+	r.mu.Lock()
+	r.conns = append(r.conns, rec)
+	r.mu.Unlock()
+	return rec, conn.RemoteAddr(), nil
+}
+
+// a connection ends with its socket once it is idle for its idle timeout, as
+// keepalive is off unless asked for, and so does one whose handshake failed,
+// and neither leaves anything on the context that closes the connections
+func TestServiceClientH3Closes(t *testing.T) {
+	server := newH3Server(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for _, pin := range [][]byte{server.hash[:], make([]byte, 32)} {
+		rec := new(recorder)
+		settings := server.settings(&tls.Config{})
+		settings.SecuritySettings.(*tls.Config).PinnedPeerCertSha256 = [][]byte{pin}
+		// ChromeParrot would keep the idle timeout at 30 s
+		settings.QuicParams = &internet.QuicParams{MaxIdleTimeout: 1, DisableChromeParrot: true}
+		settings.FinalMask = finalmask.NewFinalMask(nil, nil, nil, nil, rec.dialUDP, nil)
+		connCtx := &afterFuncs{Context: ctx}
+		resp, err := newServiceClient(connCtx, new(sync.Map), settings, 5*time.Second, 8).Get("https://www.googleapis.com/")
+		if err == nil {
+			resp.Body.Close()
+		}
+		if bytes.Equal(pin, server.hash[:]) != (err == nil) {
+			t.Fatalf("pin %x: %v", pin[:4], err)
+		}
+
+		closed := func() bool {
+			rec.mu.Lock()
+			defer rec.mu.Unlock()
+			return len(rec.conns) == 1 && rec.conns[0].closed.Load()
+		}
+		for deadline := time.Now().Add(5 * time.Second); !closed() && time.Now().Before(deadline); {
+			time.Sleep(10 * time.Millisecond)
+		}
+		if !closed() {
+			t.Errorf("pin %x: the socket was left open", pin[:4])
+		}
+		waitFor(t, "the closed connection to leave the context", func() bool { return connCtx.live.Load() == 0 })
+	}
+}
+
+// cncDialer gives UDP as a stream conn, the way dialerProxy does
+type cncDialer struct{}
+
+func (cncDialer) Dial(ctx context.Context, src xnet.Address, dest xnet.Destination, sockopt *internet.SocketConfig) (net.Conn, error) {
+	conn, err := net.Dial("udp", dest.NetAddr())
+	if err != nil {
+		return nil, err
+	}
+	return cnc.NewConnection(cnc.ConnectionInput(conn), cnc.ConnectionOutput(conn), cnc.ConnectionOnClose(conn)), nil
+}
+
+func (cncDialer) DestIpAddress() net.IP { return nil }
+
+// h3 goes over the stream conn of a dialerProxy too
+func TestServiceClientH3DialerProxy(t *testing.T) {
+	internet.UseAlternativeSystemDialer(cncDialer{})
+	defer internet.UseAlternativeSystemDialer(nil)
+
+	server := newH3Server(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	resp, err := newServiceClient(context.Background(), new(sync.Map), server.settings(&tls.Config{}), 5*time.Second, 8).Get("https://www.googleapis.com/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.Proto != "HTTP/3.0" {
+		t.Errorf("went over %s", resp.Proto)
+	}
+}
+
+// xdrive moves data over h3 to a fake Drive, with the noise of a UDP mask sent
+// ahead of the Initial of each connection
+func TestDriveOverH3(t *testing.T) {
+	drive := newFakeDrive(t)
+	server := newH3Server(t, drive.server.Config.Handler)
+	driveTokenURL = "https://oauth2.googleapis.com/token"
+	driveFilesURL = "https://www.googleapis.com/files"
+	driveUploadURL = "https://www.googleapis.com/upload"
+
+	rec := new(recorder)
+	settings := server.settings(&tls.Config{})
+	settings.ProtocolSettings = driveSettings().ProtocolSettings
+	settings.ProtocolSettings.(*Config).Xmux = &splithttp.XmuxConfig{MaxConnections: &splithttp.RangeConfig{From: 4, To: 4}}
+	masks := []finalmask.UDPMask{&noise.Config{Items: []*noise.Item{{Packet: []byte("noise")}}}}
+	settings.FinalMask = finalmask.NewFinalMask(nil, masks, nil, nil, rec.dialUDP, nil)
+
+	client, srv, cleanup := pairWith(t, settings)
+	defer cleanup()
+
+	if _, err := client.Write([]byte("ping")); err != nil {
+		t.Fatalf("client write: %v", err)
+	}
+	expectRead(t, srv, "ping")
+	if _, err := srv.Write([]byte("pong")); err != nil {
+		t.Fatalf("server write: %v", err)
+	}
+	expectRead(t, client, "pong")
+
+	payload := make([]byte, 300000)
+	for i := range payload {
+		payload[i] = byte(i % 251)
+	}
+	go client.Write(payload)
+	if err := srv.SetReadDeadline(time.Now().Add(testPatience)); err != nil {
+		t.Fatalf("SetReadDeadline: %v", err)
+	}
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(srv, got); err != nil {
+		t.Fatalf("ReadFull: %v", err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatal("payload mismatch")
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	// one for the listener to www.googleapis.com, one for the token to
+	// oauth2.googleapis.com and one of XMUX for each end of the session
+	if len(rec.conns) != 4 {
+		t.Errorf("%d connections went through the mask, want 4", len(rec.conns))
+	}
+	for i, conn := range rec.conns {
+		conn.mu.Lock()
+		sent := conn.sent
+		conn.mu.Unlock()
+		if len(sent) < 2 {
+			t.Errorf("connection %d sent %d datagrams", i, len(sent))
+			continue
+		}
+		// the noise, then a QUIC v1 Initial of 1250 bytes with no source
+		// connection ID, as ChromeParrot sends it
+		first, initial := sent[0], sent[1]
+		if string(first) != "noise" || len(initial) != 1250 || initial[0]&0xf0 != 0xc0 || !bytes.Equal(initial[1:5], []byte{0, 0, 0, 1}) || initial[6+int(initial[5])] != 0 {
+			t.Errorf("connection %d began with %q and %d bytes %x", i, first, len(initial), initial[:min(len(initial), 24)])
+		}
+	}
+}
+
+// over h3 a connection of XMUX is a QUIC connection, which closes once XMUX
+// drops it, so that the server hears of it
+func TestDriveXmuxOverH3(t *testing.T) {
+	drive := newFakeDrive(t)
+	server := newH3Server(t, drive.server.Config.Handler)
+	driveTokenURL = "https://www.googleapis.com/token"
+	driveFilesURL = "https://www.googleapis.com/files"
+	driveUploadURL = "https://www.googleapis.com/upload"
+	settings := server.settings(&tls.Config{})
+	settings.ProtocolSettings = driveSettings().ProtocolSettings
+	settings.ProtocolSettings.(*Config).Xmux = &splithttp.XmuxConfig{HMaxRequestTimes: &splithttp.RangeConfig{From: 3, To: 3}}
+	storage, err := newDriveStorage(settings, settings.ProtocolSettings.(*Config))
+	if err != nil {
+		t.Fatalf("newDriveStorage: %v", err)
+	}
+	session := sessionStorage(storage)
+	defer session.Close()
+
+	for _, name := range []string{"a", "b", "c", "d"} {
+		if err := session.Put(context.Background(), "streams/abc/c2s/"+name, []byte("x")); err != nil {
+			t.Fatalf("Put: %v", err)
+		}
+	}
+	// one for the token, the first of XMUX for 3 requests and one more
+	if n := server.conns.Load(); n != 3 {
+		t.Errorf("the token and 4 requests with 3 to a connection took %d connections", n)
+	}
+	waitFor(t, "the first connection of XMUX to close", func() bool { return server.closed.Load() == 1 })
 }

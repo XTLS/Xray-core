@@ -998,6 +998,9 @@ type XDriveConfig struct {
 	HoleTimeoutMs     uint32          `json:"holeTimeoutMs"`
 	Template          json.RawMessage `json:"template"`
 	Xmux              XmuxConfig      `json:"xmux"`
+
+	// set by StreamConfig when "alpn" is ["h3"]
+	h3 bool
 }
 
 // Build implements Buildable.
@@ -1025,9 +1028,9 @@ func (c *XDriveConfig) Build() (proto.Message, error) {
 	if c.Xmux == (XmuxConfig{}) {
 		c.Xmux.MaxConnections.From = 1
 		c.Xmux.MaxConnections.To = 1
-		if c.Service == "google-drive" {
+		if c.Service == "google-drive" && !c.h3 {
 			// Google gives an h2 connection 1 MiB of window, which a few sessions on
-			// a long rtt would share
+			// a long rtt would share, an h3 connection has no such limit
 			c.Xmux.MaxConnections.From = 4
 			c.Xmux.MaxConnections.To = 4
 		}

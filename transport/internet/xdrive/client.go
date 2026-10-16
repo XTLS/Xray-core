@@ -2,14 +2,23 @@ package xdrive
 
 import (
 	"context"
+	gotls "crypto/tls"
 	"io"
 	"net/http"
+	"reflect"
+	"runtime"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/apernet/quic-go"
+	"github.com/apernet/quic-go/http3"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
+	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
 	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
@@ -113,6 +122,8 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 		sockopt   *internet.SocketConfig
 		fronting  *net.Destination
 		keepAlive = net.ChromeH2KeepAlivePeriod
+		// h3 keeps alive only when asked to, see below
+		h3KeepAlive time.Duration
 	)
 	if streamSettings != nil {
 		tlsConfig = tls.ConfigFromStreamSettings(streamSettings)
@@ -122,6 +133,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 			switch period := config.Xmux.HKeepAlivePeriod; {
 			case period > 0:
 				keepAlive = time.Duration(period) * time.Second
+				h3KeepAlive = keepAlive
 			case period < 0:
 				keepAlive = 0
 			}
@@ -132,8 +144,10 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 	}
 	fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint)
 
-	dial := func(ctx context.Context, addr string) (net.Conn, net.Destination, error) {
-		host, err := net.ParseDestination("tcp:" + addr)
+	// fronting takes only the address and port, the network stays that of the
+	// dial, which is UDP for h3 though the destination is built as TCP
+	dial := func(ctx context.Context, network, addr string) (net.Conn, net.Destination, error) {
+		host, err := net.ParseDestination(network + ":" + addr)
 		if err != nil {
 			return nil, host, errors.New("bad address: ", addr).Base(err)
 		}
@@ -147,13 +161,21 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 		}
 
 		var conn net.Conn
-		if streamSettings.FinalMask != nil {
-			conn, err = streamSettings.FinalMask.DialTCP(ctx, target)
-		} else {
+		switch {
+		case streamSettings.FinalMask == nil:
 			conn, err = internet.DialSystem(ctx, target, sockopt)
+		case target.Network == net.Network_UDP:
+			conn, err = streamSettings.FinalMask.DialUDP(ctx, target)
+		default:
+			conn, err = streamSettings.FinalMask.DialTCP(ctx, target)
 		}
 		if err != nil {
 			return nil, host, errors.New("failed to dial to dest").Base(err)
+		}
+		// h3 closes its QUIC connection instead, as the server never hears of a UDP
+		// socket that closes
+		if network == "udp" {
+			return conn, host, nil
 		}
 		// CloseIdleConnections leaves an h2 connection open while a stream just
 		// canceled has not left it yet
@@ -162,13 +184,13 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 	}
 
 	dialPlain := func(ctx context.Context, network, addr string) (net.Conn, error) {
-		conn, _, err := dial(ctx, addr)
+		conn, _, err := dial(ctx, "tcp", addr)
 		return conn, err
 	}
 
 	// http.Transport picks h2 or h1 by the ALPN in the ConnectionState of the conn
 	dialTLS := func(ctx context.Context, network, addr string) (net.Conn, error) {
-		conn, host, err := dial(ctx, addr)
+		conn, host, err := dial(ctx, "tcp", addr)
 		if err != nil {
 			return nil, err
 		}
@@ -203,6 +225,85 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 		}
 	}
 
+	var https http.RoundTripper = &secureTransport{h2: secure(1), h1: secure(maxConns), h1Hosts: h1Hosts}
+	// no server offers h3 by ALPN over TCP, so it is used only when asked for alone
+	if slices.Equal(tlsConfig.NextProtocol, []string{"h3"}) {
+		quicParams := streamSettings.QuicParams
+		if quicParams == nil {
+			quicParams = &internet.QuicParams{BbrProfile: string(bbr.ProfileStandard)}
+		}
+		// the defaults are those of quic-go, with no keepalive unless asked for, as
+		// in DoH: http3 never closes a connection that is idle or that it dropped
+		// after an error, so only the idle timeout or the end of connCtx ends it
+		quicConfig := &quic.Config{
+			InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
+			MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
+			InitialConnectionReceiveWindow: quicParams.InitConnReceiveWindow,
+			MaxConnectionReceiveWindow:     quicParams.MaxConnReceiveWindow,
+			MaxIdleTimeout:                 time.Duration(quicParams.MaxIdleTimeout) * time.Second,
+			KeepAlivePeriod:                time.Duration(quicParams.KeepAlivePeriod) * time.Second,
+			MaxIncomingStreams:             quicParams.MaxIncomingStreams,
+			DisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != "linux" && runtime.GOOS != "windows" && runtime.GOOS != "darwin"),
+			ChromeParrot:                   !quicParams.DisableChromeParrot,
+		}
+		if quicConfig.KeepAlivePeriod == 0 {
+			quicConfig.KeepAlivePeriod = h3KeepAlive
+		}
+
+		https = &http3.Transport{
+			QUICConfig: quicConfig,
+			Dial: func(ctx context.Context, addr string, _ *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
+				switch quicParams.Congestion {
+				case "", "bbr", "reno":
+				default:
+					// brutal is for Hysteria servers, not services, and a panic here, in
+					// a goroutine of http3, would end the process
+					return nil, errors.New("unsupported congestion control over h3: ", quicParams.Congestion)
+				}
+
+				conn, host, err := dial(ctx, "udp", addr)
+				if err != nil {
+					return nil, err
+				}
+				var pktConn net.PacketConn
+				var udpAddr net.Addr
+				switch c := conn.(type) {
+				case *net.PacketConnWrapper:
+					pktConn = c.PacketConn
+					udpAddr = c.RemoteAddr()
+				case *cnc.Connection:
+					pktConn = &internet.FakePacketConn{Conn: c}
+					udpAddr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
+				default:
+					conn.Close()
+					return nil, errors.New("failed to dial to dest: unexpected ", reflect.TypeOf(c))
+				}
+
+				// built for each dial with the host as SNI, as for h2: http3 sets the
+				// SNI on a copy, which a pinned CA and the ECH lookup do not see
+				gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(host))
+				// it is for servers, and ChromeParrot refuses a config that has it
+				gotlsConfig.GetCertificate = nil
+				tr := &quic.Transport{Conn: pktConn, DisableGSO: quicParams.DisableGSO}
+				if !quicParams.DisableChromeParrot {
+					tr.ConnectionIDGenerator = quic.ZeroLengthConnectionIDGenerator{}
+				}
+				qconn, err := tr.Dial(ctx, udpAddr, gotlsConfig, cfg)
+				if err != nil {
+					tr.Close()
+					pktConn.Close()
+					return nil, err
+				}
+				stop := context.AfterFunc(connCtx, func() { qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "") })
+				context.AfterFunc(qconn.Context(), func() { stop(); tr.Close(); pktConn.Close() })
+				if quicParams.Congestion != "reno" {
+					congestion.UseBBR(qconn, bbr.Profile(quicParams.BbrProfile))
+				}
+				return qconn, nil
+			},
+		}
+	}
+
 	return &http.Client{
 		Transport: &serviceTransport{
 			plain: &http.Transport{
@@ -212,7 +313,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 				MaxIdleConnsPerHost: maxConns,
 				MaxConnsPerHost:     maxConns,
 			},
-			secure: &secureTransport{h2: secure(1), h1: secure(maxConns), h1Hosts: h1Hosts},
+			secure: https,
 			stall:  stall,
 		},
 	}
