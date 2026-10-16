@@ -49,12 +49,12 @@ func (f *SlidingWindow) Add(counter uint64) {
 
 	if counter > f.last {
 		lastBlockIndex := f.last >> swBlockBitLog
-		diff := int(blockIndex - lastBlockIndex)
+		diff := blockIndex - lastBlockIndex
 		if diff > swRingBlocks {
 			diff = swRingBlocks
 		}
 
-		for i := 0; i < diff; i++ {
+		for i := 0; i < int(diff); i++ {
 			lastBlockIndex = (lastBlockIndex + 1) & swBlockMask
 			f.ring[lastBlockIndex] = 0
 		}

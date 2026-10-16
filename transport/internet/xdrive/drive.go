@@ -153,7 +153,7 @@ func jitter(backoff time.Duration) time.Duration {
 	if half <= 0 {
 		return backoff
 	}
-	return half + time.Duration(dice.Roll(int(half)))
+	return half + time.Duration(dice.RollInt63n(int64(half)))
 }
 
 func rateLimited(payload []byte) bool {
