@@ -228,6 +228,9 @@ func (m *Manager) GetAllOnlineUsers() []string {
 
 	usersOnline := make([]string, 0, len(m.onlineMaps))
 	for user, om := range m.onlineMaps {
+		if _, _, inbound := stats.ParseInboundOnlineName(user); inbound {
+			continue
+		}
 		if om.Count() > 0 {
 			usersOnline = append(usersOnline, user)
 		}

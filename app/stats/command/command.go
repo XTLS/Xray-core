@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -87,9 +88,21 @@ func (s *statsServer) GetAllOnlineUsers(ctx context.Context, request *GetAllOnli
 
 func (s *statsServer) GetUsersStats(ctx context.Context, request *GetUsersStatsRequest) (*GetUsersStatsResponse, error) {
 	userMap := make(map[string]*UserStat)
+	inbounds := make(map[string][]string)
 
 	s.stats.VisitOnlineMaps(func(name string, om feature_stats.OnlineMap) bool {
 		if om.Count() == 0 {
+			return true
+		}
+		if email, tag, ok := feature_stats.ParseInboundOnlineName(name); ok {
+			// Check entries under the map's lock, not only its atomic count.
+			om.ForEach(func(_ string, _ int64) bool {
+				inbounds[email] = append(inbounds[email], tag)
+				return false
+			})
+			return true
+		}
+		if !strings.HasPrefix(name, "user>>>") || !strings.HasSuffix(name, ">>>online") {
 			return true
 		}
 
@@ -153,10 +166,13 @@ func (s *statsServer) GetUsersStats(ctx context.Context, request *GetUsersStatsR
 		})
 	}
 
-	resp := &GetUsersStatsResponse{}
+	resp := &GetUsersStatsResponse{InboundTracking: true}
 	for _, u := range userMap {
+		u.InboundTags = inbounds[u.Email]
+		sort.Strings(u.InboundTags)
 		resp.Users = append(resp.Users, u)
 	}
+	sort.Slice(resp.Users, func(i, j int) bool { return resp.Users[i].Email < resp.Users[j].Email })
 
 	return resp, nil
 }

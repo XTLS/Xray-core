@@ -656,10 +656,12 @@ func (x *TrafficUserStat) GetDownlink() int64 {
 }
 
 type UserStat struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Email         string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
-	Ips           []*OnlineIPEntry       `protobuf:"bytes,2,rep,name=ips,proto3" json:"ips,omitempty"`
-	Traffic       *TrafficUserStat       `protobuf:"bytes,3,opt,name=traffic,proto3" json:"traffic,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Email   string                 `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
+	Ips     []*OnlineIPEntry       `protobuf:"bytes,2,rep,name=ips,proto3" json:"ips,omitempty"`
+	Traffic *TrafficUserStat       `protobuf:"bytes,3,opt,name=traffic,proto3" json:"traffic,omitempty"`
+	// Inbounds with live links for this authenticated user. Empty on older cores.
+	InboundTags   []string `protobuf:"bytes,4,rep,name=inbound_tags,json=inboundTags,proto3" json:"inbound_tags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -711,6 +713,13 @@ func (x *UserStat) GetIps() []*OnlineIPEntry {
 func (x *UserStat) GetTraffic() *TrafficUserStat {
 	if x != nil {
 		return x.Traffic
+	}
+	return nil
+}
+
+func (x *UserStat) GetInboundTags() []string {
+	if x != nil {
+		return x.InboundTags
 	}
 	return nil
 }
@@ -768,10 +777,12 @@ func (x *GetUsersStatsRequest) GetReset_() bool {
 }
 
 type GetUsersStatsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Users         []*UserStat            `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Users []*UserStat            `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	// Distinguishes a supported empty snapshot from an older core's unknown state.
+	InboundTracking bool `protobuf:"varint,2,opt,name=inbound_tracking,json=inboundTracking,proto3" json:"inbound_tracking,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetUsersStatsResponse) Reset() {
@@ -809,6 +820,13 @@ func (x *GetUsersStatsResponse) GetUsers() []*UserStat {
 		return x.Users
 	}
 	return nil
+}
+
+func (x *GetUsersStatsResponse) GetInboundTracking() bool {
+	if x != nil {
+		return x.InboundTracking
+	}
+	return false
 }
 
 type Config struct {
@@ -894,16 +912,18 @@ const file_app_stats_command_command_proto_rawDesc = "" +
 	"\tlast_seen\x18\x02 \x01(\x03R\blastSeen\"E\n" +
 	"\x0fTrafficUserStat\x12\x16\n" +
 	"\x06uplink\x18\x01 \x01(\x03R\x06uplink\x12\x1a\n" +
-	"\bdownlink\x18\x02 \x01(\x03R\bdownlink\"\x9c\x01\n" +
+	"\bdownlink\x18\x02 \x01(\x03R\bdownlink\"\xbf\x01\n" +
 	"\bUserStat\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x127\n" +
 	"\x03ips\x18\x02 \x03(\v2%.xray.app.stats.command.OnlineIPEntryR\x03ips\x12A\n" +
-	"\atraffic\x18\x03 \x01(\v2'.xray.app.stats.command.TrafficUserStatR\atraffic\"U\n" +
+	"\atraffic\x18\x03 \x01(\v2'.xray.app.stats.command.TrafficUserStatR\atraffic\x12!\n" +
+	"\finbound_tags\x18\x04 \x03(\tR\vinboundTags\"U\n" +
 	"\x14GetUsersStatsRequest\x12'\n" +
 	"\x0finclude_traffic\x18\x01 \x01(\bR\x0eincludeTraffic\x12\x14\n" +
-	"\x05reset\x18\x02 \x01(\bR\x05reset\"O\n" +
+	"\x05reset\x18\x02 \x01(\bR\x05reset\"z\n" +
 	"\x15GetUsersStatsResponse\x126\n" +
-	"\x05users\x18\x01 \x03(\v2 .xray.app.stats.command.UserStatR\x05users\"\b\n" +
+	"\x05users\x18\x01 \x03(\v2 .xray.app.stats.command.UserStatR\x05users\x12)\n" +
+	"\x10inbound_tracking\x18\x02 \x01(\bR\x0finboundTracking\"\b\n" +
 	"\x06Config2\x86\x06\n" +
 	"\fStatsService\x12_\n" +
 	"\bGetStats\x12'.xray.app.stats.command.GetStatsRequest\x1a(.xray.app.stats.command.GetStatsResponse\"\x00\x12e\n" +

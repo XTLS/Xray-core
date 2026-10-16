@@ -71,6 +71,8 @@ message UserStat {
   string email = 1;
   repeated OnlineIPEntry ips = 2;
   TrafficUserStat traffic = 3;
+  // Inbounds with live links for this authenticated user. Empty on older cores.
+  repeated string inbound_tags = 4;
 }
 
 message GetUsersStatsRequest {
@@ -80,6 +82,8 @@ message GetUsersStatsRequest {
 
 message GetUsersStatsResponse {
   repeated UserStat users = 1;
+  // Distinguishes a supported empty snapshot from an older core's unknown state.
+  bool inbound_tracking = 2;
 }
 
 service StatsService {
