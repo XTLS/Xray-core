@@ -55,6 +55,7 @@ func newScriptEngine(script string) (*scriptEngine, error) {
 
 	pool, err := xlua.NewPool(context.Background(), scriptExecutionTimeout, program.NewStateFactory(
 		scriptInitTimeout,
+		256,
 		func(L *lua.LState) {
 			log.RegisterLua(L)
 			RegisterLua(L)

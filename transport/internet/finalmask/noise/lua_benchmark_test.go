@@ -1,18 +1,10 @@
 package noise
 
-import (
-	"testing"
-
-	xbase64 "github.com/xtls/xray-core/common/base64"
-)
+import "testing"
 
 func benchmarkEngine(b *testing.B, script string) *scriptEngine {
 	b.Helper()
-	code, err := xbase64.Encode([]byte(script), false)
-	if err != nil {
-		b.Fatal(err)
-	}
-	engine, err := newScriptEngine(code)
+	engine, err := newScriptEngine(writeScript(b, script))
 	if err != nil {
 		b.Fatal(err)
 	}

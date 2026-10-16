@@ -10,29 +10,21 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	xbase64 "github.com/xtls/xray-core/common/base64"
 	xlua "github.com/xtls/xray-core/common/lua"
 	lua "github.com/yuin/gopher-lua"
 )
 
-func inline(t *testing.T, script string) string {
-	t.Helper()
-	code, err := xbase64.Encode([]byte(script), false)
-	require.NoError(t, err)
-	return code
-}
-
 func newScriptConn(t *testing.T, script string) (*noiseConn, *fakePacketConn) {
 	t.Helper()
 	raw := &fakePacketConn{}
-	conn, err := NewConnClient(&Config{Script: inline(t, script)}, raw)
+	conn, err := NewConnClient(&Config{Script: writeScript(t, script)}, raw)
 	require.NoError(t, err)
 	return conn.(*noiseConn), raw
 }
 
 func newScriptConnError(t *testing.T, script string) error {
 	t.Helper()
-	_, err := NewConnClient(&Config{Script: inline(t, script)}, &fakePacketConn{})
+	_, err := NewConnClient(&Config{Script: writeScript(t, script)}, &fakePacketConn{})
 	return err
 }
 
@@ -175,7 +167,7 @@ func TestScriptRunsOncePerPeerUntilReset(t *testing.T) {
 	script := `local noise = require("xray.finalmask.noise")
 function HandleNoise(plan, address) plan:Add("n") end`
 	raw := &fakePacketConn{}
-	conn, err := NewConnClient(&Config{Script: inline(t, script), ResetMin: 0, ResetMax: 0}, raw)
+	conn, err := NewConnClient(&Config{Script: writeScript(t, script), ResetMin: 0, ResetMax: 0}, raw)
 	require.NoError(t, err)
 
 	addr := &net.UDPAddr{Port: 1}
@@ -190,7 +182,7 @@ func TestScriptRunsAgainAfterReset(t *testing.T) {
 	script := `local noise = require("xray.finalmask.noise")
 function HandleNoise(plan, address) plan:Add("n") end`
 	raw := &fakePacketConn{}
-	conn, err := NewConnClient(&Config{Script: inline(t, script), ResetMin: 0, ResetMax: 1}, raw)
+	conn, err := NewConnClient(&Config{Script: writeScript(t, script), ResetMin: 0, ResetMax: 1}, raw)
 	require.NoError(t, err)
 	noiseConn := conn.(*noiseConn)
 
@@ -246,14 +238,10 @@ func TestScriptFailsToLoad(t *testing.T) {
 func TestScriptNameInErrors(t *testing.T) {
 	err := newScriptConnError(t, `function HandleNoise(`)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "[inline]", "an inline script is named in errors")
-
-	_, err = NewConnClient(&Config{Script: writeScript(t, `function HandleNoise(`)}, &fakePacketConn{})
-	require.Error(t, err)
 	require.Contains(t, err.Error(), "noise.lua", "errors name the file the script came from")
 }
 
-func writeScript(t *testing.T, script string) string {
+func writeScript(t testing.TB, script string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "noise.lua")
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o600))
@@ -285,7 +273,7 @@ func TestConnReusesTheEngine(t *testing.T) {
 	script := `local noise = require("xray.finalmask.noise")
 function HandleNoise(plan, address) plan:Add("n") end`
 
-	config := &Config{Script: inline(t, script)}
+	config := &Config{Script: writeScript(t, script)}
 	first, err := NewConnClient(config, &fakePacketConn{})
 	require.NoError(t, err)
 	second, err := NewConnClient(config, &fakePacketConn{})
@@ -297,7 +285,8 @@ func TestScriptIsSharedPerConfig(t *testing.T) {
 	script := `local noise = require("xray.finalmask.noise")
 function HandleNoise(plan, address) plan:Add("n") end`
 
-	config := &Config{Script: inline(t, script)}
+	path := writeScript(t, script)
+	config := &Config{Script: path}
 	first, err := NewConnClient(config, &fakePacketConn{})
 	require.NoError(t, err)
 	second, err := NewConnClient(config, &fakePacketConn{})
@@ -305,7 +294,7 @@ function HandleNoise(plan, address) plan:Add("n") end`
 	require.Same(t, first.(*noiseConn).script, second.(*noiseConn).script,
 		"the same config reuses its pool")
 
-	other, err := NewConnClient(&Config{Script: inline(t, script)}, &fakePacketConn{})
+	other, err := NewConnClient(&Config{Script: path}, &fakePacketConn{})
 	require.NoError(t, err)
 	require.NotSame(t, first.(*noiseConn).script, other.(*noiseConn).script,
 		"another config naming the same file gets its own pool")
@@ -321,9 +310,10 @@ function HandleNoise(plan, address)
     plan:Add(string.rep("x", calls))
 end
 `
+	path := writeScript(t, script)
 	for i := 0; i < 2; i++ {
 		raw := &fakePacketConn{}
-		conn, err := NewConnClient(&Config{Script: inline(t, script)}, raw)
+		conn, err := NewConnClient(&Config{Script: path}, raw)
 		require.NoError(t, err)
 		_, err = conn.WriteTo([]byte("p"), &net.UDPAddr{Port: 1})
 		require.NoError(t, err)
@@ -462,7 +452,7 @@ func TestScriptOnServerConn(t *testing.T) {
 	script := `local noise = require("xray.finalmask.noise")
 function HandleNoise(plan, address) plan:Add("n") end`
 	raw := &fakePacketConn{}
-	conn, err := NewConnServer(&Config{Script: inline(t, script)}, raw)
+	conn, err := NewConnServer(&Config{Script: writeScript(t, script)}, raw)
 	require.NoError(t, err)
 	_, err = conn.WriteTo([]byte("p"), &net.UDPAddr{Port: 1})
 	require.NoError(t, err)
@@ -628,7 +618,7 @@ func TestPlanAddNeedsThePlan(t *testing.T) {
 local noise = require("xray.finalmask.noise")
 
 function HandleNoise(plan, address)
-    local send = getmetatable(plan).Add
+    local send = plan.Add
     send("not a plan", "x")
 end
 `)
@@ -678,7 +668,7 @@ function HandleNoise(plan, address)
     plan:Add(address, 1)
 end
 `
-	config := &Config{Script: inline(t, script)}
+	config := &Config{Script: writeScript(t, script)}
 	raw := &fakePacketConn{}
 	conn, err := NewConnClient(config, raw)
 	require.NoError(t, err)
@@ -701,7 +691,7 @@ end
 func TestEngineIsCreatedOnceUnderConcurrency(t *testing.T) {
 	script := `local noise = require("xray.finalmask.noise")
 function HandleNoise(plan, address) plan:Add("n") end`
-	config := &Config{Script: inline(t, script)}
+	config := &Config{Script: writeScript(t, script)}
 
 	engines := make([]*scriptEngine, 16)
 	var wg sync.WaitGroup
@@ -722,10 +712,10 @@ function HandleNoise(plan, address) plan:Add("n") end`
 }
 
 func TestPacketsWithoutAPlan(t *testing.T) {
-	program, err := xlua.Compile(inline(t, `function HandleNoise(plan, address) end`))
+	program, err := xlua.Compile(writeScript(t, `function HandleNoise(plan, address) end`))
 	require.NoError(t, err)
 	pool, err := xlua.NewPool(context.Background(), time.Second,
-		program.NewStateFactory(time.Minute, RegisterLua, nil))
+		program.NewStateFactory(time.Minute, 256, RegisterLua, nil))
 	require.NoError(t, err)
 	defer pool.Close()
 
