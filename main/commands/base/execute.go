@@ -61,6 +61,7 @@ BigCmdLoop:
 			}
 
 			buildCommandText(cmd)
+			CommandEnv.CommandName = cmdName
 			cmd.Run(cmd, args)
 			Exit()
 			return

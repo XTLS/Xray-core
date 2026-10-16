@@ -17,12 +17,12 @@ import (
 )
 
 func checkFile(file, code string) error {
-	r, err := filesystem.OpenAsset(file)
+	r, size, err := filesystem.OpenAsset(file)
 	if err != nil {
 		return errors.New("failed to open ", file).Base(err)
 	}
 	defer r.Close()
-	if _, err := find(r, []byte(code), false); err != nil {
+	if _, err := find(r, []byte(code), false, size); err != nil {
 		return errors.New("failed to check code ", code, " from ", file).Base(err)
 	}
 	return nil
@@ -30,12 +30,12 @@ func checkFile(file, code string) error {
 
 func loadFile(file, code string) ([]byte, error) {
 	runtime.GC() // peak mem
-	r, err := filesystem.OpenAsset(file)
+	r, size, err := filesystem.OpenAsset(file)
 	if err != nil {
 		return nil, errors.New("failed to open ", file).Base(err)
 	}
 	defer r.Close()
-	bs, err := find(r, []byte(code), true)
+	bs, err := find(r, []byte(code), true, size)
 	if err != nil {
 		return nil, errors.New("failed to load code ", code, " from ", file).Base(err)
 	}
@@ -60,13 +60,13 @@ func loadIP(file, code string) ([]*CIDR, error) {
 // unmarshalling it into a []*Domain, so value is only valid during fn.
 func loadSite(file, code, attrs string, fn func(Domain_Type, []byte)) error {
 	runtime.GC() // peak mem
-	r, err := filesystem.OpenAsset(file)
+	r, size, err := filesystem.OpenAsset(file)
 	if err != nil {
 		return errors.New("failed to open ", file).Base(err)
 	}
 	defer r.Close()
 	br := bufio.NewReaderSize(r, 64*1024)
-	n, err := seek(br, []byte(code))
+	n, err := seek(br, []byte(code), size)
 	if err != nil {
 		return errors.New("failed to load code ", code, " from ", file).Base(err)
 	}
@@ -114,6 +114,9 @@ func decodeVarint(br *bufio.Reader) (uint64, error) {
 		if err != nil {
 			return 0, err
 		}
+		if shift == 63 && b > 1 {
+			break // Only one value bit fits in the tenth byte.
+		}
 		x |= (uint64(b) & 0x7F) << shift
 		if (b & 0x80) == 0 {
 			return x, nil
@@ -123,9 +126,9 @@ func decodeVarint(br *bufio.Reader) (uint64, error) {
 	return 0, errors.New("varint overflow")
 }
 
-func find(r io.Reader, code []byte, readBody bool) ([]byte, error) {
+func find(r io.Reader, code []byte, readBody bool, size int64) ([]byte, error) {
 	br := bufio.NewReaderSize(r, 64*1024)
-	bodyL, err := seek(br, code)
+	bodyL, err := seek(br, code, size)
 	if err != nil || !readBody {
 		return nil, err
 	}
@@ -137,7 +140,7 @@ func find(r io.Reader, code []byte, readBody bool) ([]byte, error) {
 }
 
 // seek advances br to the body of the entry for code and returns the body length.
-func seek(br *bufio.Reader, code []byte) (int, error) {
+func seek(br *bufio.Reader, code []byte, size int64) (int, error) {
 	codeL := len(code)
 	if codeL == 0 {
 		return 0, errors.New("empty code")
@@ -145,7 +148,8 @@ func seek(br *bufio.Reader, code []byte) (int, error) {
 	need := 2 + codeL // TODO: if code too long
 
 	for {
-		if _, err := br.ReadByte(); err != nil {
+		tag, err := br.ReadByte()
+		if err != nil {
 			return 0, err
 		}
 
@@ -153,10 +157,10 @@ func seek(br *bufio.Reader, code []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		bodyL := int(x)
-		if bodyL <= 0 {
-			return 0, errors.New("invalid body length: ", bodyL)
+		if x == 0 || x > uint64(size) || x > uint64(^uint(0)>>1) {
+			return 0, errors.New("invalid body length: ", x)
 		}
+		bodyL := int(x)
 
 		// Peek no more than the buffer holds: a code longer than the buffer cannot match a single
 		// length byte anyway, so a short peek only skips it, as base find (io.ReadFull) does.
@@ -167,7 +171,8 @@ func seek(br *bufio.Reader, code []byte) (int, error) {
 			}
 			return 0, err
 		}
-		if bodyL >= need && len(prefix) >= need && int(prefix[1]) == codeL && bytes.Equal(prefix[2:], code) {
+		if tag == 0x0a && bodyL >= need && len(prefix) >= need &&
+			prefix[0] == 0x0a && int(prefix[1]) == codeL && bytes.Equal(prefix[2:], code) {
 			return bodyL, nil
 		}
 		if _, err := br.Discard(bodyL); err != nil {

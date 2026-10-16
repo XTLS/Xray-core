@@ -169,11 +169,17 @@ func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatch
 				}
 				sessionItem.Unlock()
 			}
-			link, err := sessionItem.EnsureLink(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(dest net.Destination, payload []byte) ([]byte, error) {
-				return i.udpCodec.EncodeServerPacket(decoded.SessionID, dest, payload)
-			})
-			if err != nil {
-				continue
+			link := sessionItem.link.Load()
+			if link != nil {
+				sessionItem.UpdateConn(conn)
+			} else {
+				var err error
+				link, err = sessionItem.EnsureLink(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(dest net.Destination, payload []byte) ([]byte, error) {
+					return i.udpCodec.EncodeServerPacket(decoded.SessionID, dest, payload)
+				})
+				if err != nil {
+					continue
+				}
 			}
 
 			payloadBuf := buf.New()

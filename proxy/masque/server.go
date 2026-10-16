@@ -22,6 +22,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
+	xtun "github.com/xtls/xray-core/proxy/tun"
 	"github.com/xtls/xray-core/proxy/wireguard"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
@@ -166,17 +167,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	if mtu == 0 {
 		mtu = masque.MinPacketSize
 	}
-	dev, _, gstack, err := wireguard.CreateNetTUN(local, nil, mtu, false)
-	if err != nil {
-		return nil, err
-	}
-
 	s := &Server{
 		validator:  users,
 		dispatcher: v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:        core.ToBackgroundDetachedContext(ctx),
 		mtu:        mtu,
-		dev:        dev,
 		pools:      pools,
 		local:      local,
 		tunnels:    make(map[netip.Addr]*serverTunnel),
@@ -187,7 +182,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	if content := session.ContentFromContext(ctx); content != nil {
 		s.sniffing = content.SniffingRequest
 	}
-	wireguard.CreateForwarder(gstack, s.handleConnection)
+	dev, _, err := wireguard.CreateNetTUN(local, nil, mtu, s)
+	if err != nil {
+		return nil, err
+	}
+	s.dev = dev
 	return s, nil
 }
 
@@ -500,7 +499,8 @@ func packetDestination(packet []byte) (netip.Addr, bool) {
 	return netip.Addr{}, false
 }
 
-func (s *Server) handleConnection(conn net.Conn, dest net.Destination) {
+// HandleConnection implements tun.ConnectionHandler
+func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	defer conn.Close()
 	source := net.DestinationFromAddr(conn.RemoteAddr())
 	addr, _ := netip.AddrFromSlice(source.Address.IP())
@@ -534,9 +534,13 @@ func (s *Server) handleConnection(conn net.Conn, dest net.Destination) {
 	})
 	errors.LogInfo(ctx, "processing from ", source, " to ", dest)
 
+	writer := buf.NewWriter(conn)
+	if dest.Network == net.Network_TCP {
+		writer = &xtun.TCPWriter{Writer: writer}
+	}
 	link := &transport.Link{
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
-		Writer: buf.NewWriter(conn),
+		Writer: writer,
 	}
 	if err := s.dispatcher.DispatchLink(ctx, dest, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))

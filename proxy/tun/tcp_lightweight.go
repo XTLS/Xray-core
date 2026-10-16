@@ -1,10 +1,12 @@
 package tun
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"math"
 	"math/rand/v2"
+	"net/netip"
 	"slices"
 	"sync"
 	"time"
@@ -37,7 +39,9 @@ const (
 	tcpHeld = 1024
 	// tcpSmallest is the smallest mss that the system is believed, the one of Linux
 	tcpSmallest = 48
-	// tcpOpening is how many connections can be waiting for the answer to their SYN-ACK
+	// tcpStamps is what the times of both sides take of the options of every segment that carries them (RFC 7323)
+	tcpStamps = 12
+	// tcpOpening is how many connections that the other side opens can be waiting for the answer to their SYN-ACK
 	tcpOpening = 65535
 	// tcpStart is how many segments are sent before any of them is acknowledged
 	tcpStart = 10
@@ -48,12 +52,18 @@ const (
 
 	// tcpTick is how often a connection that waits for something looks at what it waits for
 	tcpTick = 100 * time.Millisecond
-	// ticks without anything acknowledged before it is sent again, twice as many every next time, a minute at most
+	// ticks without anything acknowledged before it is sent again, twice as many every next time, a minute at most,
+	// while an open connection that waits sends again every two seconds at most or as often as an answer takes,
+	// twice as seldom every next minute: when its way was away for a while it goes on soon after the way is back,
+	// and the next segment still waits the doubled time, so that its answer can be timed
 	tcpRetransmitTicks     = 3
+	tcpRetransmitTicksOpen = 20
 	tcpRetransmitTicksMost = 600
-	// how many times it is sent again before the connection is given up: that is after four minutes, as what is
-	// behind a wireless link may be away for a while, and after twenty seconds for one that never answered
-	tcpRetransmits    = 10
+	tcpMinuteTicks         = int(time.Minute / tcpTick)
+	// an open connection is given up after four minutes of ticks without an acknowledgment since the timer first sent
+	// it again, as what is behind a wireless link may be away for a while (ticks, so that the time a computer sleeps
+	// is not counted), and one that never answered after it was sent again that many times, after twenty seconds
+	tcpGiveUpTicks    = 4 * tcpMinuteTicks
 	tcpSynRetransmits = 5
 	// ticks between the probes of a window that stays closed
 	tcpProbeTicks = 10
@@ -62,9 +72,14 @@ const (
 )
 
 var (
-	errTCPReset   = errors.New("connection reset")
-	errTCPTimeout = errors.New("connection timed out")
+	errTCPReset       = errors.New("connection reset")
+	errTCPTimeout     = errors.New("connection timed out")
+	errTCPRefused     = errors.New("connection refused")
+	errTCPUnreachable = errors.New("destination unreachable")
 )
+
+// tcpStarted is where the times that segments carry count from
+var tcpStarted = time.Now()
 
 // segment is a TCP segment that came from the tun
 type segment struct {
@@ -92,7 +107,7 @@ type held struct {
 	data *buf.Buffer
 }
 
-// tcpConn is a TCP connection that the system opened through the tun.
+// tcpConn is a TCP connection that the system opened through the tun, or one that was opened to it by DialTCP.
 // Mostly the two are on the same machine, with nothing but the queue of the tun in between, which drops what
 // does not fit. But the system may also pass on what others send, as a router does, and then the link to them
 // is in between. So a connection has windows that are small enough, keeps what came after a lost segment,
@@ -114,12 +129,19 @@ type tcpConn struct {
 	sndShift, rcvShift uint8
 	// sack is set if the system takes selective acknowledgments
 	sack bool
+	// stamps is set if every segment carries the time of this side and the last one that came of the other side,
+	// which sees by it how long its segments take, also the ones that it sent again (RFC 7323).
+	// stampBase is what the time of this side starts from, stampSent the one that the last segment carried
+	stamps               bool
+	stampBase, stampSent uint32
 
 	mu       sync.Mutex
 	readable sync.Cond
 	writable sync.Cond
 
 	established bool
+	// opened is there while DialTCP waits for the answer to its SYN, and closed when that wait is over
+	opened chan struct{}
 	// closed is set when Close is called
 	closed bool
 	// err is why the connection is gone
@@ -140,6 +162,8 @@ type tcpConn struct {
 	rcvHeld []held
 	// rcvLast is the seq of the last one that was put into rcvHeld
 	rcvLast uint32
+	// stamp is the time of the other side that is sent back to it
+	stamp uint32
 
 	sndUna, sndNxt uint32
 	sndWnd         uint32
@@ -165,6 +189,9 @@ type tcpConn struct {
 	recover    uint32
 	// lost is the end of what is lost past the last of sacked, resent the end of what was sent again since then
 	lost, resent uint32
+	// headAt is when the segment at sndUna was sent again, or took that place while something was lost.
+	// It is zero when that segment is not sent once more for the system still asking for it: it was already
+	headAt time.Time
 	// timed is the end of a segment that was sent at timedAt and not again, to see how long its acknowledgment takes.
 	// The first one is the SYN-ACK
 	timed   uint32
@@ -176,17 +203,17 @@ type tcpConn struct {
 	armed bool
 	// stalled counts ticks without an acknowledgment of what waits for one
 	stalled, retransmitTicks, retransmits int
-	lingered                              bool
+	// lostTicks counts the ticks since the timer sent again the first time since something was acknowledged
+	lostTicks int
+	lingered  bool
 }
 
-func newTCPConn(s *stack, f flow, syn segment) *tcpConn {
+func newTCPConn(s *stack, f flow) *tcpConn {
 	c := &tcpConn{
 		stack:           s,
 		flow:            f,
 		src:             net.TCPDestination(net.IPAddress(f.src.Addr().AsSlice()), net.Port(f.src.Port())),
 		dst:             net.TCPDestination(net.IPAddress(f.dst.Addr().AsSlice()), net.Port(f.dst.Port())),
-		rcvNxt:          syn.seq + 1,
-		sndWnd:          uint32(syn.window),
 		window:          s.window,
 		ssthresh:        uint32(s.window),
 		timedAt:         time.Now(),
@@ -196,6 +223,17 @@ func newTCPConn(s *stack, f flow, syn segment) *tcpConn {
 	c.writable.L = &c.mu
 	c.ipSize = putIPHeader(c.ip[:], protoTCP, f.dst.Addr(), f.src.Addr())
 	c.mss = s.mtu - c.ipSize - tcpHeaderSize
+	c.sndUna = rand.Uint32()
+	c.sndNxt = c.sndUna + 1
+	c.stampBase = rand.Uint32()
+	return c
+}
+
+// synchronize takes what the SYN of the other side says. c.mu is held, or nobody else has c yet
+func (c *tcpConn) synchronize(syn segment) {
+	c.rcvNxt = syn.seq + 1
+	c.sndWnd = uint32(syn.window)
+	c.sack, c.stamps, c.sndShift, c.rcvShift = false, false, 0, 0
 	for kind, value, o := nextOption(syn.options); kind != 0; kind, value, o = nextOption(o) {
 		switch {
 		case kind == 2 && len(value) == 2:
@@ -205,20 +243,77 @@ func newTCPConn(s *stack, f flow, syn segment) *tcpConn {
 			c.rcvShift = tcpWindowShift
 		case kind == 4:
 			c.sack = true
+		case kind == 8 && len(value) == 8 && c.stack.stamps:
+			c.stamps, c.stamp = true, binary.BigEndian.Uint32(value)
 		}
+	}
+	if c.stamps {
+		c.mss -= tcpStamps
 	}
 	c.mss = max(c.mss, tcpSmallest)
 	c.cwnd = tcpStart * uint32(c.mss)
-	c.sndUna = rand.Uint32()
-	c.sndNxt = c.sndUna + 1
-	return c
+}
+
+// DialTCP implements Stack
+func (s *stack) DialTCP(ctx context.Context, remote netip.AddrPort) (net.Conn, error) {
+	remote = netip.AddrPortFrom(remote.Addr().Unmap(), remote.Port())
+	local, err := s.local(remote.Addr())
+	if err != nil {
+		return nil, err
+	}
+	opened := make(chan struct{})
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil, io.ErrClosedPipe
+	}
+	f := flow{src: remote}
+	port, ok := ephemeral(func(port uint16) bool {
+		f.dst = netip.AddrPortFrom(local, port)
+		return s.conns[f] == nil
+	})
+	if !ok {
+		s.mu.Unlock()
+		return nil, errors.New("no port left to reach ", remote, " from")
+	}
+	f.dst = netip.AddrPortFrom(local, port)
+	c := newTCPConn(s, f)
+	// what the SYN offers, until the answer says what of it is taken
+	c.sack, c.stamps, c.rcvShift, c.opened = true, s.stamps, tcpWindowShift, opened
+	s.conns[f] = c
+	s.mu.Unlock()
+	s.opening.Add(1)
+	c.mu.Lock()
+	if c.err == nil {
+		c.sendSyn()
+		c.arm(tcpTick)
+	}
+	c.mu.Unlock()
+
+	select {
+	case <-opened:
+	case <-ctx.Done():
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.established {
+		if c.err == nil {
+			c.abort(ctx.Err())
+		}
+		return nil, c.err
+	}
+	return c, nil
 }
 
 // header writes the headers of a segment with size bytes of payload into b and returns their size.
 // The checksum of the segment is left to write. c.mu is held
 func (c *tcpConn) header(b []byte, seq uint32, flags byte, options []byte, size int) int {
 	n := copy(b, c.ip[:c.ipSize])
-	t := b[n : n+tcpHeaderSize+len(options)]
+	stamps := 0
+	if c.stamps {
+		stamps = tcpStamps
+	}
+	t := b[n : n+tcpHeaderSize+stamps+len(options)]
 	binary.BigEndian.PutUint16(t, c.flow.dst.Port())
 	binary.BigEndian.PutUint16(t[2:], c.flow.src.Port())
 	binary.BigEndian.PutUint32(t[4:], seq)
@@ -233,7 +328,18 @@ func (c *tcpConn) header(b []byte, seq uint32, flags byte, options []byte, size 
 		binary.BigEndian.PutUint16(t[14:], uint16(min(window>>c.rcvShift, math.MaxUint16)))
 	}
 	t[16], t[17], t[18], t[19] = 0, 0, 0, 0
-	copy(t[tcpHeaderSize:], options)
+	if c.stamps {
+		o := t[tcpHeaderSize:]
+		o[0], o[1], o[2], o[3] = 1, 1, 8, 10
+		if !c.sending {
+			// what is sent while WriteMultiBuffer writes a segment has the time of that one: it may get to the tun
+			// first, and the other side drops a segment with a time before the last one that it took
+			c.stampSent = c.stampBase + uint32(time.Since(tcpStarted)/time.Millisecond)
+		}
+		binary.BigEndian.PutUint32(o[4:], c.stampSent)
+		binary.BigEndian.PutUint32(o[8:], c.stamp)
+	}
+	copy(t[tcpHeaderSize+stamps:], options)
 	setIPLength(b[:n], n+len(t)+size)
 	c.rcvAcked = c.rcvNxt
 	c.rcvAdvertised = window
@@ -254,7 +360,8 @@ func (c *tcpConn) send(seq uint32, flags byte, options, payload []byte) {
 	c.write(b[:c.header(b[:], seq, flags, options, len(payload))], payload)
 }
 
-func (c *tcpConn) sendSynAck() {
+// sendSyn sends the answer to the SYN of the other side, or the SYN of a connection that is opened from here
+func (c *tcpConn) sendSyn() {
 	options := [12]byte{2, 4}
 	binary.BigEndian.PutUint16(options[2:], uint16(c.stack.mtu-c.ipSize-tcpHeaderSize))
 	n := 4
@@ -264,7 +371,11 @@ func (c *tcpConn) sendSynAck() {
 	if c.rcvShift != 0 {
 		n += copy(options[n:], []byte{1, 3, 3, c.rcvShift})
 	}
-	c.send(c.sndUna, tcpSyn|tcpAck, options[:n], nil)
+	flags := byte(tcpSyn | tcpAck)
+	if c.opened != nil {
+		flags = tcpSyn
+	}
+	c.send(c.sndUna, flags, options[:n], nil)
 }
 
 // sendAck acknowledges what was received, and tells what of rcvHeld waits for a lost segment
@@ -278,8 +389,12 @@ func (c *tcpConn) sendAck() {
 		c.send(c.sndNxt, tcpAck, nil, nil)
 		return
 	}
-	// the block with the segment that came last goes first
-	var blocks [4][2]uint32
+	// the block with the segment that came last goes first. Next to the times there is room for one less
+	var room [4][2]uint32
+	blocks := room[:]
+	if c.stamps {
+		blocks = room[:3]
+	}
 	n, last := 1, false
 	for i := 0; i < len(c.rcvHeld); {
 		start, end, recent := c.rcvHeld[i].seq, c.rcvHeld[i].seq, false
@@ -306,6 +421,22 @@ func (c *tcpConn) sendAck() {
 	c.send(c.sndNxt, tcpAck, options[:4+8*len(list)], nil)
 }
 
+// stamped keeps the time that a segment of the other side carries, to send it back. It is the one of the segment
+// that the stream goes on with, so that the other side sees how long that one took, and not one of what came
+// before it. c.mu is held
+func (c *tcpConn) stamped(s segment) {
+	if int32(s.seq-c.rcvAcked) > 0 {
+		return
+	}
+	for kind, value, o := nextOption(s.options); kind != 0; kind, value, o = nextOption(o) {
+		if kind == 8 && len(value) == 8 {
+			if stamp := binary.BigEndian.Uint32(value); int32(stamp-c.stamp) > 0 {
+				c.stamp = stamp
+			}
+		}
+	}
+}
+
 // input takes a segment of the connection. It returns false if the connection is gone
 // and the segment is the start of another one
 func (c *tcpConn) input(s segment) bool {
@@ -313,6 +444,32 @@ func (c *tcpConn) input(s segment) bool {
 	defer c.mu.Unlock()
 	if c.err != nil {
 		return s.flags&(tcpSyn|tcpAck|tcpRst) != tcpSyn
+	}
+	if c.opened != nil {
+		// only the answer to the SYN is waited for, or the word that nobody takes it
+		switch {
+		case s.flags&tcpAck == 0:
+		case s.ack != c.sndNxt:
+			// of a connection that the other side still has from before: it is told that there is none
+			if s.flags&tcpRst == 0 {
+				c.stack.refuse(c.flow, s)
+			}
+		case s.flags&tcpRst != 0:
+			c.abort(errTCPRefused)
+		case s.flags&tcpSyn != 0:
+			c.synchronize(s)
+			c.established = true
+			c.sndUna, c.sndBase = s.ack, s.ack
+			c.stalled, c.retransmits = 0, 0
+			if !c.timedAt.IsZero() {
+				c.clocked()
+			}
+			c.stack.opening.Add(-1)
+			close(c.opened)
+			c.opened = nil
+			c.sendAck()
+		}
+		return true
 	}
 	if s.flags&tcpRst != 0 {
 		// from where the system is, or was before its FIN, not from someone who knows no more than the addresses
@@ -324,9 +481,12 @@ func (c *tcpConn) input(s segment) bool {
 	if s.flags&tcpSyn != 0 {
 		switch {
 		case !c.established && s.seq+1 == c.rcvNxt:
-			c.sendSynAck()
+			c.sendSyn()
 			c.timedAt = time.Time{}
-		case c.closed && s.flags&tcpAck == 0:
+		case c.closed && s.flags&tcpAck == 0 && !c.stack.verify:
+			// the system of this machine opens the same ports again: it has let the old connection go.
+			// What comes through a tunnel is answered with what is expected instead, as anyone who knows
+			// the addresses could send it, and the other side answers that with a reset if it is gone
 			c.abort(errTCPReset)
 			return false
 		default:
@@ -336,6 +496,9 @@ func (c *tcpConn) input(s segment) bool {
 	}
 	if s.flags&tcpAck == 0 {
 		return true
+	}
+	if c.stamps {
+		c.stamped(s)
 	}
 	if !c.established {
 		if s.ack != c.sndNxt {
@@ -385,6 +548,7 @@ func (c *tcpConn) acknowledge(s segment) {
 		if !c.timedAt.IsZero() && int32(c.sndUna-c.timed) >= 0 {
 			c.clocked()
 		}
+		recovering := c.recovering
 		switch {
 		case c.recovering && int32(c.sndUna-c.recover) >= 0:
 			c.recovering = false
@@ -393,11 +557,18 @@ func (c *tcpConn) acknowledge(s segment) {
 			if end := c.sndUna + min(uint32(c.mss), c.recover-c.sndUna); int32(end-c.lost) > 0 {
 				c.lost = end
 			}
+			c.headAt = time.Now()
 		}
 		// the way takes more if what it was given has arrived, as long as it was given about as much as it takes
 		if sent >= c.cwnd/2 {
 			if c.cwnd < c.ssthresh {
-				c.cwnd = min(c.cwnd+acked, c.ssthresh)
+				grow := acked
+				if recovering {
+					// after a timeout: one segment that is sent again can acknowledge all that came after it,
+					// which says nothing about how much the way takes at once
+					grow = min(grow, 2*uint32(c.mss))
+				}
+				c.cwnd = min(c.cwnd+grow, c.ssthresh)
 			} else if !c.recovering {
 				// a segment more for every cwnd that arrives
 				c.cwnd = min(c.cwnd+max(uint32(uint64(c.mss)*uint64(acked)/uint64(c.cwnd)), 1), uint32(c.window))
@@ -417,12 +588,22 @@ func (c *tcpConn) acknowledge(s segment) {
 			}
 		}
 	}
-	if !c.recovering && c.sndUna != c.sndNxt && (len(c.sacked) > 0 || c.dupAcks >= 3) {
-		// the system has something past sndUna, or says the same for the third time: the segment at sndUna is lost
+	if !c.recovering && c.sndUna != c.sndNxt && (len(c.sacked) > 0 || !c.sack && c.dupAcks >= 3) {
+		// the system has something past sndUna, or says the same for the third time when it cannot say what it has:
+		// the segment at sndUna is lost. One that can say it repeats itself also for what it got twice
 		c.congested()
 		c.lost = c.sndUna + min(uint32(c.mss), c.sndNxt-c.sndUna)
 	}
 	if c.recovering {
+		if acked == 0 && c.srtt != 0 && !c.headAt.IsZero() && time.Since(c.headAt) > max(c.srtt+max(c.srtt/4, 4*c.rttvar), tcpTick/4) {
+			// the segment that the system waits for was sent again longer ago than an answer takes, and the system
+			// still answers what comes after it: that one was lost as well. It is sent once more, and only once:
+			// the timer would find it too, but late, and then nothing is known anymore of how much the way takes
+			if start, end := c.hole(c.sndUna); start == c.sndUna && start != end {
+				c.retransmit(start, start+min(end-start, uint32(c.mss)))
+				c.headAt, c.stalled = time.Time{}, 0
+			}
+		}
 		c.resend()
 	}
 	c.sndWnd = window
@@ -451,7 +632,12 @@ func (c *tcpConn) clocked() {
 		c.rttvar += ((c.srtt - d).Abs() - c.rttvar) / 4
 		c.srtt += (d - c.srtt) / 8
 	}
-	c.retransmitTicks = max(tcpRetransmitTicks, int((c.srtt+4*c.rttvar)/tcpTick)+2)
+	c.retransmitTicks = c.answerTicks()
+}
+
+// answerTicks is how many ticks an acknowledgment is waited for as long as nothing was sent again. c.mu is held
+func (c *tcpConn) answerTicks() int {
+	return max(tcpRetransmitTicks, int((c.srtt+4*c.rttvar)/tcpTick)+2)
 }
 
 // sackAdd puts what the system says it has into sacked. c.mu is held
@@ -481,7 +667,7 @@ func (c *tcpConn) congested() {
 	c.ssthresh = max(min(c.cwnd, c.sndNxt-c.sndUna)/2, 2*uint32(c.mss))
 	c.cwnd = c.ssthresh
 	c.recovering, c.recover, c.resent = true, c.sndNxt, c.sndUna
-	c.timedAt = time.Time{}
+	c.timedAt, c.headAt = time.Time{}, time.Time{}
 }
 
 // hole returns the first part at or after seq of what is lost: what the system does not have
@@ -543,6 +729,10 @@ func (c *tcpConn) resend() {
 			room = c.cwnd - flight
 		}
 		end = start + min(end-start, room)
+		if start == c.sndUna {
+			// its answer is waited for from now on
+			c.headAt, c.stalled = time.Now(), 0
+		}
 		c.retransmit(start, end)
 		c.resent = end
 	}
@@ -642,9 +832,9 @@ func (c *tcpConn) release() {
 
 // hold keeps a segment that is not the next one. c.mu is held
 func (c *tcpConn) hold(seq uint32, payload []byte) {
-	i := 0
-	for i < len(c.rcvHeld) && int32(c.rcvHeld[i].seq-seq) < 0 {
-		i++
+	i := len(c.rcvHeld)
+	for i > 0 && int32(c.rcvHeld[i-1].seq-seq) >= 0 {
+		i--
 	}
 	// without what the one before and the one after have
 	if i > 0 {
@@ -666,8 +856,9 @@ func (c *tcpConn) hold(seq uint32, payload []byte) {
 	if len(payload) == 0 || len(c.rcvHeld) == tcpHeld {
 		return
 	}
-	b := buf.NewWithSize(int32(len(payload)))
-	b.Write(payload)
+	// as much memory as it carries: the room that is left counts bytes, and a thousand tiny segments in pooled
+	// buffers would take two megabytes
+	b := buf.FromBytes(slices.Clone(payload))
 	c.rcvHeld = slices.Insert(c.rcvHeld, i, held{seq, b})
 	c.rcvLast = seq
 }
@@ -716,6 +907,38 @@ func (c *tcpConn) queued(parts [][]byte, seq uint32, size int) ([][]byte, int) {
 	return parts, n
 }
 
+// shrink makes the segments fit a link on the way that takes packets of mtu bytes, when the one at seq did not.
+// None of what is on its way fits: it is sent again, the first segment at once and the others as they are
+// acknowledged. Only what is said about a segment that was sent and is not acknowledged is believed
+func (c *tcpConn) shrink(seq uint32, mtu int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	mss := mtu - c.ipSize - tcpHeaderSize
+	if c.stamps {
+		mss -= tcpStamps
+	}
+	mss = max(mss, tcpSmallest)
+	if c.err != nil || !c.established || seq-c.sndUna >= c.sndNxt-c.sndUna || mss >= c.mss {
+		return
+	}
+	c.mss = mss
+	// as what is lost, without the way taking less for it: it is the size that it did not take
+	c.recovering, c.recover, c.lost = true, c.sndNxt, c.sndNxt
+	c.timedAt = time.Time{}
+	c.resent = c.sndUna + min(uint32(mss), c.sndNxt-c.sndUna)
+	c.headAt = time.Now()
+	c.retransmit(c.sndUna, c.resent)
+}
+
+// unreachable ends the wait for the answer to the SYN at seq, which a router on the way could not deliver
+func (c *tcpConn) unreachable(seq uint32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.err == nil && c.opened != nil && seq == c.sndUna {
+		c.abort(errTCPUnreachable)
+	}
+}
+
 // arm makes tick run after d, unless it is going to run already. c.mu is held
 func (c *tcpConn) arm(d time.Duration) {
 	if c.armed {
@@ -742,19 +965,34 @@ func (c *tcpConn) tick() {
 	}
 	switch {
 	case c.sndUna != c.sndNxt:
-		if c.stalled++; c.stalled >= c.retransmitTicks {
-			if c.retransmits++; c.retransmits > tcpRetransmits || !c.established && c.retransmits > tcpSynRetransmits {
+		c.stalled++
+		due := c.stalled >= c.retransmitTicks
+		if c.established && c.retransmits > 0 {
+			due = due || c.stalled >= max(tcpRetransmitTicksOpen, c.answerTicks())<<(c.lostTicks/tcpMinuteTicks)
+		}
+		if due {
+			if c.retransmits++; c.retransmits == 1 {
+				c.lostTicks = 0
+			} else {
+				c.lostTicks += c.stalled
+			}
+			if c.established && c.lostTicks > tcpGiveUpTicks || !c.established && c.retransmits > tcpSynRetransmits {
 				c.abort(errTCPTimeout)
 				return
 			}
 			c.stalled = 0
 			c.retransmitTicks = min(c.retransmitTicks*2, tcpRetransmitTicksMost)
 			if !c.established {
-				c.sendSynAck()
+				c.sendSyn()
 				c.timedAt = time.Time{}
 			} else {
-				// what the system does not say it has is lost, and the way to it is tried with a segment again
+				// what the system does not say it has is lost, and the way to it is tried with a segment again.
+				// It takes half of what it took before the loss, not half of that again if the loss was seen already
+				ssthresh, recovering := c.ssthresh, c.recovering
 				c.congested()
+				if recovering {
+					c.ssthresh = ssthresh
+				}
 				c.cwnd, c.lost = uint32(c.mss), c.sndNxt
 				c.resend()
 			}
@@ -791,6 +1029,10 @@ func (c *tcpConn) abort(err error) {
 	c.err = err
 	if c.timer != nil {
 		c.timer.Stop()
+	}
+	if c.opened != nil {
+		close(c.opened)
+		c.opened = nil
 	}
 	for _, h := range c.rcvHeld {
 		h.data.Release()
@@ -879,9 +1121,9 @@ func (c *tcpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	c.writing = len(mb)
 	// a segment is one part of a Buffer, or as much as there is to send if the tun splits it by itself
 	var room [tcpParts][]byte
-	limit, parts := c.mss, room[:0:1]
+	parts := room[:0:1]
 	if c.stack.segmenter != nil {
-		limit, parts = tcpSegment, room[:0]
+		parts = room[:0]
 	}
 	for end := c.sndNxt + size; c.sndNxt != end; {
 		// not a part of a segment when all of it can go later, with what is acknowledged by then
@@ -897,7 +1139,11 @@ func (c *tcpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if c.err != nil {
 			break
 		}
-		most := min(limit, int(c.space()))
+		// the mss may have become smaller while the last segment was written
+		most := min(c.mss, int(c.space()))
+		if c.stack.segmenter != nil {
+			most = min(tcpSegment, int(c.space()))
+		}
 		if most > c.mss {
 			// the same for what the tun splits
 			most -= most % c.mss
@@ -907,7 +1153,7 @@ func (c *tcpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if c.sndNxt+uint32(n) == end {
 			flags |= tcpPsh
 		}
-		var b [ipv6HeaderSize + tcpHeaderSize]byte
+		var b [ipv6HeaderSize + tcpHeaderSize + tcpStamps]byte
 		h := b[:c.header(b[:], c.sndNxt, flags, nil, n)]
 		if c.sndUna == c.sndNxt {
 			// the ticks without an acknowledgment are counted from the first segment that waits for one

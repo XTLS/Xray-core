@@ -1,6 +1,7 @@
 package geodata
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,58 @@ import (
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
+
+func TestFindChecksEntryAndCodeTags(t *testing.T) {
+	for _, payload := range [][]byte{
+		{0x12, 6, 0x0a, 4, 'T', 'E', 'S', 'T'}, // Unknown field posing as entry.
+		{0x08, 6, 0x0a, 4, 'T', 'E', 'S', 'T'}, // Wrong entry wire type.
+		{0x0a, 6, 0x1a, 4, 'T', 'E', 'S', 'T'}, // Unknown field posing as code.
+		{0x0a, 6, 0x08, 4, 'T', 'E', 'S', 'T'}, // Wrong code wire type.
+	} {
+		if _, err := find(bytes.NewReader(payload), []byte("TEST"), true, int64(len(payload))); err == nil {
+			t.Fatalf("matched incorrect entry/code tags in %x", payload)
+		}
+	}
+}
+
+func TestLoadFileRejectsVarintOverflow(t *testing.T) {
+	payload := []byte{
+		0x0a,
+		0x86, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x02, // 2^64 + 6
+		0x0a, 0x04, 'T', 'E', 'S', 'T',
+	}
+	dir := t.TempDir()
+	t.Setenv("xray.location.asset", dir)
+	if err := os.WriteFile(filepath.Join(dir, "overflow.dat"), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadFile("overflow.dat", "TEST"); err == nil || !strings.Contains(err.Error(), "varint overflow") {
+		t.Fatalf("want varint overflow, got %v", err)
+	}
+}
+
+func TestLoadFileRejectsOversizedEntry(t *testing.T) {
+	payload := []byte{
+		0x0a, 0x03, 0x0a, 0x01, 'A', // A valid entry before the oversized one.
+		0x0a, 0x80, 0x80, 0x80, 0x80, 0x04, // Entry length: 1 GiB.
+		0x0a, 0x04, 'T', 'E', 'S', 'T',
+	}
+	dir := t.TempDir()
+	t.Setenv("xray.location.asset", dir)
+	if err := os.WriteFile(filepath.Join(dir, "oversized.dat"), payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Check without allocating the body first, so a regression fails safely.
+	if err := checkFile("oversized.dat", "TEST"); err == nil {
+		t.Fatal("accepted an entry length larger than the file")
+	}
+	if _, err := loadFile("oversized.dat", "TEST"); err == nil || !strings.Contains(err.Error(), "invalid body length") {
+		t.Fatalf("want invalid body length, got %v", err)
+	}
+	if err := loadSite("oversized.dat", "TEST", "", func(Domain_Type, []byte) {}); err == nil || !strings.Contains(err.Error(), "invalid body length") {
+		t.Fatalf("want invalid body length, got %v", err)
+	}
+}
 
 type siteEntry struct {
 	Type  Domain_Type

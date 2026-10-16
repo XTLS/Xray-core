@@ -34,12 +34,13 @@ func ReadAsset(file string) ([]byte, error) {
 	return ReadFile(path)
 }
 
-func OpenAsset(file string) (io.ReadCloser, error) {
-	path, _, err := getAssetFileLocation(file)
+func OpenAsset(file string) (io.ReadCloser, int64, error) {
+	path, info, err := getAssetFileLocation(file)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return NewFileReader(path)
+	r, err := NewFileReader(path)
+	return r, info.Size(), err
 }
 
 func StatAsset(file string) (os.FileInfo, error) {

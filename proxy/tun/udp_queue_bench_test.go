@@ -1,16 +1,18 @@
-package wireguard
+package tun
 
 import (
 	"runtime"
 	"testing"
+
+	"github.com/xtls/xray-core/common/buf"
 )
 
 const benchBatch = 64
 
 // Raw cost of queueing and draining a small burst, as one flow's reader does.
 func BenchmarkQueueBurstChan(b *testing.B) {
-	ch := make(chan *packet, udpQueueLimit)
-	p := &packet{}
+	ch := make(chan *buf.Buffer, udpQueueLimit)
+	p := &buf.Buffer{}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < benchBatch; j++ {
@@ -24,7 +26,7 @@ func BenchmarkQueueBurstChan(b *testing.B) {
 
 func BenchmarkQueueBurstPacketQueue(b *testing.B) {
 	q := newPacketQueue(udpQueueLimit)
-	p := &packet{}
+	p := &buf.Buffer{}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < benchBatch; j++ {
@@ -39,8 +41,8 @@ func BenchmarkQueueBurstPacketQueue(b *testing.B) {
 // Producer and consumer on different goroutines; the producer yields when the
 // queue is full instead of spinning, like a blocking channel send would.
 func BenchmarkQueueStreamChan(b *testing.B) {
-	ch := make(chan *packet, udpQueueLimit)
-	p := &packet{}
+	ch := make(chan *buf.Buffer, udpQueueLimit)
+	p := &buf.Buffer{}
 	done := make(chan struct{})
 	go func() {
 		for range ch {
@@ -58,7 +60,7 @@ func BenchmarkQueueStreamChan(b *testing.B) {
 
 func BenchmarkQueueStreamPacketQueue(b *testing.B) {
 	q := newPacketQueue(udpQueueLimit)
-	p := &packet{}
+	p := &buf.Buffer{}
 	done := make(chan struct{})
 	go func() {
 		for {
