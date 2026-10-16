@@ -31,11 +31,12 @@ import (
 )
 
 type Handler struct {
-	policyManager policy.Manager
+	p policy.Manager
 
 	tnet *Net
-	dev  *device.Device
 	bind *bind
+	dev  *device.Device
+	ipc  string
 	mu   sync.Mutex
 }
 
@@ -118,6 +119,7 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		return nil, err
 	}
 
+	blockup := newblockup(tun)
 	bind := &bind{}
 	logger := &device.Logger{
 		Verbosef: func(format string, args ...any) {
@@ -133,7 +135,7 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 			})
 		},
 	}
-	dev := device.NewDevice(newblockup(tun), bind, logger)
+	dev := device.NewDevice(blockup, bind, logger)
 	bind.ctx = context.Background()
 	bind.resolveFunc = MakeResolveLocal(d, streamSettings)
 	bind.listenFunc = func(ctx context.Context) (net.PacketConn, error) {
@@ -173,6 +175,7 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	}
 	bind.downFunc = dev.Down
 	bind.reserved = conf.Reserved
+	*blockup.canup = true
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + conf.SecretKey + "\n")
 	for _, peer := range conf.Peers {
@@ -188,17 +191,14 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 			cfg.WriteString("persistent_keepalive_interval=" + peer.KeepAlive + "\n")
 		}
 	}
-	if err := dev.IpcSet(cfg.String()); err != nil {
-		dev.Close()
-		return nil, err
-	}
 
 	return &Handler{
-		policyManager: p,
+		p: p,
 
 		tnet: tnet,
-		dev:  dev,
 		bind: bind,
+		dev:  dev,
+		ipc:  cfg.String(),
 	}, nil
 }
 
@@ -223,7 +223,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
-	sessionPolicy := h.policyManager.ForLevel(0)
+	sessionPolicy := h.p.ForLevel(0)
 	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, func() {
 		cancel()
@@ -309,6 +309,12 @@ func (h *Handler) up(ctx context.Context) error {
 		return errors.New("closed")
 	}
 	h.bind.SetCtx(ctx)
+	if len(h.ipc) > 0 {
+		if err := h.dev.IpcSet(h.ipc); err != nil {
+			return err
+		}
+		h.ipc = ""
+	}
 	return h.dev.Up()
 }
 
@@ -490,14 +496,16 @@ func (c *cache) Cache(host string, saddr []string, ttl uint32) {
 
 type blockup struct {
 	tun.Device
-	ch chan tun.Event
+	ch    chan tun.Event
+	canup *bool
 }
 
 func newblockup(t tun.Device) *blockup {
 	ch := make(chan tun.Event, cap(t.Events()))
+	canup := false
 	go func() {
 		for e := range t.Events() {
-			if e&tun.EventUp != 0 {
+			if e&tun.EventUp != 0 && !canup {
 				continue
 			}
 			select {
@@ -507,7 +515,7 @@ func newblockup(t tun.Device) *blockup {
 		}
 		close(ch)
 	}()
-	return &blockup{Device: t, ch: ch}
+	return &blockup{Device: t, ch: ch, canup: &canup}
 }
 
 func (b *blockup) Events() <-chan tun.Event {
