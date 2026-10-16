@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	finalmasklua "github.com/xtls/xray-core/transport/internet/finalmask/lua"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
@@ -75,6 +76,7 @@ var (
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
+		"lua":           func() interface{} { return new(LuaMask) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
 		"xmc":           func() interface{} { return new(XMC) },
@@ -82,6 +84,7 @@ var (
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"header-custom": func() interface{} { return new(HeaderCustomUDP) },
+		"lua":           func() interface{} { return new(LuaMask) },
 		"mkcp-legacy":   func() interface{} { return new(MkcpLegacy) },
 		"noise":         func() interface{} { return new(NoiseMask) },
 		"salamander":    func() interface{} { return new(Salamander) },
@@ -305,6 +308,25 @@ type NoiseItem struct {
 	Type      string          `json:"type"`
 	Packet    json.RawMessage `json:"packet"`
 	Delay     Int32Range      `json:"delay"`
+}
+
+type LuaMask struct {
+	Script string     `json:"script"`
+	Reset  Int32Range `json:"reset"`
+}
+
+func (c *LuaMask) Build() (proto.Message, error) {
+	if c.Script == "" {
+		return nil, errors.New(`"script" is required`)
+	}
+	if _, err := xlua.Compile(c.Script); err != nil {
+		return nil, errors.New("failed to compile the script").Base(err)
+	}
+	return &finalmasklua.Config{
+		Script:   c.Script,
+		ResetMin: int64(c.Reset.From),
+		ResetMax: int64(c.Reset.To),
+	}, nil
 }
 
 type NoiseMask struct {
