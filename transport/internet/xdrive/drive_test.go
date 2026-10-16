@@ -317,7 +317,7 @@ func driveSettings() *internet.MemoryStreamConfig {
 		ProtocolName: protocolName,
 		ProtocolSettings: &Config{
 			RemoteFolder:      "folder-id",
-			Service:           "Google Drive",
+			Service:           "google-drive",
 			Secrets:           []string{"client", "secret", "refresh"},
 			FlushIntervalMs:   5,
 			PollIntervalMs:    5,
@@ -561,6 +561,16 @@ func TestDriveSharedClient(t *testing.T) {
 	}
 	if first != second {
 		t.Fatal("same settings did not share one storage")
+	}
+}
+
+func TestDriveOldServiceName(t *testing.T) {
+	newFakeDrive(t)
+
+	settings := driveSettings()
+	settings.ProtocolSettings.(*Config).Service = "Google Drive"
+	if _, err := newStorage(settings); err != nil {
+		t.Fatalf("newStorage: %v", err)
 	}
 }
 

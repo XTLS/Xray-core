@@ -1004,6 +1004,10 @@ func (c *XDriveConfig) Build() (proto.Message, error) {
 	switch c.Service {
 	case "local":
 	case "Google Drive":
+		errors.PrintDeprecatedFeatureWarning(`"service": "Google Drive"`, `"service": "google-drive"`)
+		c.Service = "google-drive"
+		fallthrough
+	case "google-drive":
 		if len(c.Secrets) != 3 {
 			return nil, errors.New("Google Drive needs 3 secrets in order of ClientID, ClientSecret, RefreshToken")
 		}
@@ -1012,7 +1016,7 @@ func (c *XDriveConfig) Build() (proto.Message, error) {
 			return nil, errors.New(`service "template" needs a "template" object`)
 		}
 	default:
-		return nil, errors.New("unsupported service")
+		return nil, errors.New(`unknown "service": "`, c.Service, `", use "google-drive", "template" or "local"`)
 	}
 	config := &xdrive.Config{
 		RemoteFolder:      c.RemoteFolder,
