@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"io"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/apernet/quic-go"
@@ -21,10 +20,13 @@ type interConn struct {
 	local  net.Addr
 	remote net.Addr
 
-	writing atomic.Bool
-	client  bool
-	user    *protocol.MemoryUser
-	mu      sync.Mutex
+	client bool
+	user   *protocol.MemoryUser
+	lock   chan struct{}
+}
+
+func (c *interConn) unlock() {
+	<-c.lock
 }
 
 func (c *interConn) User() *protocol.MemoryUser {
@@ -36,11 +38,8 @@ func (c *interConn) Read(b []byte) (int, error) {
 }
 
 func (c *interConn) Write(b []byte) (int, error) {
-	c.writing.Store(true)
-	defer c.writing.Store(false)
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.lock <- struct{}{}
+	defer c.unlock()
 
 	if c.client {
 		c.client = false
@@ -54,13 +53,14 @@ func (c *interConn) Write(b []byte) (int, error) {
 }
 
 func (c *interConn) Close() error {
-	if c.writing.Load() {
+	select {
+	case c.lock <- struct{}{}:
+		defer c.unlock()
+	default:
 		c.stream.CancelRead(0)
 		c.stream.CancelWrite(0)
 		return nil
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.stream.CancelRead(0)
 	return c.stream.Close()
 }
