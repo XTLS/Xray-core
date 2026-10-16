@@ -33,11 +33,12 @@ import (
 type Handler struct {
 	p policy.Manager
 
-	tnet *Net
-	bind *bind
-	dev  *device.Device
-	ipc  string
-	mu   sync.Mutex
+	canup *bool
+	tnet  *Net
+	bind  *bind
+	dev   *device.Device
+	ipc   string
+	mu    sync.Mutex
 }
 
 func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
@@ -175,7 +176,6 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	}
 	bind.downFunc = dev.Down
 	bind.reserved = conf.Reserved
-	*blockup.canup = true
 	var cfg strings.Builder
 	cfg.WriteString("private_key=" + conf.SecretKey + "\n")
 	for _, peer := range conf.Peers {
@@ -195,10 +195,11 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 	return &Handler{
 		p: p,
 
-		tnet: tnet,
-		bind: bind,
-		dev:  dev,
-		ipc:  cfg.String(),
+		canup: blockup.canup,
+		tnet:  tnet,
+		bind:  bind,
+		dev:   dev,
+		ipc:   cfg.String(),
 	}, nil
 }
 
@@ -314,6 +315,9 @@ func (h *Handler) up(ctx context.Context) error {
 			return err
 		}
 		h.ipc = ""
+	}
+	if !*h.canup {
+		*h.canup = true
 	}
 	return h.dev.Up()
 }
