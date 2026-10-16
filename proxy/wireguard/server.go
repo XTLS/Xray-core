@@ -255,7 +255,7 @@ func (s *Server) Start() error {
 	if s.src.Address.Family().IsDomain() {
 		return errors.New("address is domain")
 	}
-	listenFunc := func() (net.PacketConn, error) {
+	listenFunc := func(context.Context) (net.PacketConn, error) {
 		var pktConn net.PacketConn
 		var err error
 		if s.streamSettings.FinalMask != nil {
