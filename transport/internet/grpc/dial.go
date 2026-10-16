@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"io"
 	"reflect"
 	"sync"
 	"time"
@@ -77,6 +78,12 @@ func dialgRPC(ctx context.Context, dest net.Destination, streamSettings *interne
 func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *internet.MemoryStreamConfig) (*grpc.ClientConn, error) {
 	globalDialerAccess.Lock()
 	defer globalDialerAccess.Unlock()
+
+	// Reject reuse as well as creation once the outbound starts closing.
+	// New-client registration below also covers Close racing this check.
+	if streamSettings.IsClosed() {
+		return nil, io.ErrClosedPipe
+	}
 
 	if globalDialerMap == nil {
 		globalDialerMap = make(map[dialerConf]*grpc.ClientConn)
@@ -181,22 +188,35 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		"passthrough:///"+net.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
-	if err == nil {
-		userAgent := grpcSettings.UserAgent
-		// It's NOT recommended to set the UA of gRPC connections to that of real browsers, as they are fundamentally incapable of initiating real gRPC connections.
-		switch userAgent {
-		case "chrome", "":
-			userAgent = utils.ChromeUA
-		case "firefox":
-			userAgent = utils.FirefoxUA
-		case "edge":
-			userAgent = utils.MSEdgeUA
-		case "golang":
-			userAgent = ""
-		}
-		setUserAgent(conn, userAgent)
-		conn.Connect()
+	if err != nil {
+		return nil, err
 	}
+	key := dialerConf{dest, streamSettings}
+	if err := streamSettings.OnClose(func() error {
+		globalDialerAccess.Lock()
+		if globalDialerMap[key] == conn {
+			delete(globalDialerMap, key)
+		}
+		globalDialerAccess.Unlock()
+		return conn.Close()
+	}); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	userAgent := grpcSettings.UserAgent
+	// It's NOT recommended to set the UA of gRPC connections to that of real browsers, as they are fundamentally incapable of initiating real gRPC connections.
+	switch userAgent {
+	case "chrome", "":
+		userAgent = utils.ChromeUA
+	case "firefox":
+		userAgent = utils.FirefoxUA
+	case "edge":
+		userAgent = utils.MSEdgeUA
+	case "golang":
+		userAgent = ""
+	}
+	setUserAgent(conn, userAgent)
+	conn.Connect()
 	globalDialerMap[dialerConf{dest, streamSettings}] = conn
 	return conn, err
 }
