@@ -2,6 +2,9 @@ package conf
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
@@ -132,5 +135,70 @@ func TestNoiseExpFromJSON(t *testing.T) {
 	}
 	if len(items[3].Segments) != 0 || items[3].RandMin != 10 || items[3].RandMax != 20 {
 		t.Errorf("item 3 = %+v", items[3])
+	}
+}
+
+const noiseScript = `function HandleNoise(plan, address) plan:Add("n") end
+`
+
+func writeNoiseScript(t *testing.T, script string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "noise.lua")
+	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func buildNoiseMask(t *testing.T, mask *NoiseMask) *noise.Config {
+	t.Helper()
+	msg, err := mask.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return msg.(*noise.Config)
+}
+
+func TestNoiseScriptFromFile(t *testing.T) {
+	path := writeNoiseScript(t, noiseScript)
+	cfg := buildNoiseMask(t, &NoiseMask{Script: path, Reset: Int32Range{From: 30, To: 60}})
+
+	if cfg.Script != path {
+		t.Errorf("got script %q, want the path", cfg.Script)
+	}
+	if len(cfg.Items) != 0 {
+		t.Errorf("got %d items, want none", len(cfg.Items))
+	}
+	if cfg.ResetMin != 30 || cfg.ResetMax != 60 {
+		t.Errorf("got reset %d-%d, want 30-60", cfg.ResetMin, cfg.ResetMax)
+	}
+}
+
+func TestNoiseScriptFromJSON(t *testing.T) {
+	path := writeNoiseScript(t, noiseScript)
+	input := `{"script": ` + strconv.Quote(path) + `, "reset": "30-60"}`
+	var mask NoiseMask
+	if err := json.Unmarshal([]byte(input), &mask); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := buildNoiseMask(t, &mask); cfg.Script != path {
+		t.Errorf("got script %q, want the path", cfg.Script)
+	}
+}
+
+func TestNoiseScriptRejected(t *testing.T) {
+	path := writeNoiseScript(t, noiseScript)
+	invalid := writeNoiseScript(t, "function HandleNoise(")
+
+	for name, mask := range map[string]*NoiseMask{
+		"script with noise": {Script: path, Noise: []NoiseItem{{Rand: Int32Range{From: 10, To: 20}}}},
+		"missing file":      {Script: filepath.Join(t.TempDir(), "absent.lua")},
+		"not lua":           {Script: invalid},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := mask.Build(); err == nil {
+				t.Error("expected an error")
+			}
+		})
 	}
 }

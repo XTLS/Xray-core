@@ -37,4 +37,5 @@ message Config {
     int64 reset_min = 1;
     int64 reset_max = 2;
     repeated Item items = 3;
+    string script = 4;
 }

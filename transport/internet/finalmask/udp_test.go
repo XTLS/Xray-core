@@ -6,17 +6,21 @@ import (
 	"encoding/binary"
 	"io"
 	gonet "net"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
+	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 )
@@ -1042,4 +1046,71 @@ func TestSudokuBDD(t *testing.T) {
 			t.Fatalf("expected sudoku conn to stay wrapped, got %T", unwrapped)
 		}
 	})
+}
+
+func TestNoiseScriptOverRealSockets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "noise.lua")
+	script := `
+local noise = require("xray.finalmask.noise")
+
+function HandleNoise(plan, address)
+    plan:Add("\22\3\1")
+    plan:Add(noise.Random(noise.RandomBetween(16, 16)), 1)
+end
+`
+	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mask, err := (&conf.NoiseMask{Script: path}).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientRaw, err := gonet.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = clientRaw.Close() })
+	serverRaw, err := gonet.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = serverRaw.Close() })
+
+	client, err := mask.(*noise.Config).WrapPacketConnClient(clientRaw, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := []byte("real-payload")
+	writeErr := make(chan error, 1)
+	go func() {
+		_, err := client.WriteTo(payload, serverRaw.LocalAddr())
+		writeErr <- err
+	}()
+
+	_ = serverRaw.SetDeadline(time.Now().Add(5 * time.Second))
+	var got [][]byte
+	for i := 0; i < 3; i++ {
+		buf := make([]byte, 64)
+		n, _, err := serverRaw.ReadFrom(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, buf[:n])
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(got[0], []byte{0x16, 0x03, 0x01}) {
+		t.Fatalf("unexpected first noise packet: %x", got[0])
+	}
+	if len(got[1]) != 16 {
+		t.Fatalf("unexpected second noise packet size: got=%d want=16", len(got[1]))
+	}
+	if !bytes.Equal(got[2], payload) {
+		t.Fatalf("unexpected payload: %q", got[2])
+	}
 }
