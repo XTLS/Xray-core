@@ -5,11 +5,9 @@ import (
 	"context"
 	gotls "crypto/tls"
 	"encoding/base64"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
 
 	utls "github.com/refraction-networking/utls"
 	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
@@ -244,7 +242,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	var input *bytes.Reader
-	var rawInput *bytes.Buffer
+	var rawInput **bytes.Buffer
 	allowUDP443 := false
 	switch requestAddons.Flow {
 	case vless.XRV + "-udp443":
@@ -261,30 +259,22 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		case protocol.RequestCommandMux:
 			fallthrough // let server break Mux connections that contain TCP requests
 		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
-			var t reflect.Type
-			var p uintptr
+			var target net.Conn
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
 				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
 					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
 				}
-				t = reflect.TypeOf(commonConn).Elem()
-				p = uintptr(unsafe.Pointer(commonConn))
+				target = commonConn
 			} else if tlsConn, ok := iConn.(*tls.Conn); ok {
-				t = reflect.TypeOf(tlsConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(tlsConn.Conn))
+				target = tlsConn.Conn
 			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
-				t = reflect.TypeOf(utlsConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(utlsConn.Conn))
+				target = utlsConn.Conn
 			} else if realityConn, ok := iConn.(*reality.UConn); ok {
-				t = reflect.TypeOf(realityConn.Conn).Elem()
-				p = uintptr(unsafe.Pointer(realityConn.Conn))
+				target = realityConn.Conn
 			} else {
 				return errors.New("XTLS only supports TLS and REALITY directly for now.")
 			}
-			i, _ := t.FieldByName("input")
-			r, _ := t.FieldByName("rawInput")
-			input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
-			rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+			input, rawInput = vless.AccessTLSBuffers(target)
 		default:
 			panic("unknown VLESS request command")
 		}
