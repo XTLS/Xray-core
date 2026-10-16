@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/utils"
+	"github.com/xtls/xray-core/main/commands/base"
 	"github.com/xtls/xray-core/main/confloader"
 )
 
@@ -31,7 +33,12 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 		data, err = io.ReadAll(os.Stdin)
 
 	default:
-		data, err = os.ReadFile(arg)
+		file, openErr := os.Open(arg)
+		if openErr != nil {
+			return nil, openErr
+		}
+		defer file.Close()
+		data, err = readConfigFile(file)
 	}
 
 	if err != nil {
@@ -39,6 +46,33 @@ func ConfigLoader(arg string) (out io.Reader, err error) {
 	}
 	out = bytes.NewBuffer(data)
 	return
+}
+
+func readConfigFile(file *os.File) ([]byte, error) {
+	if base.CommandEnv.CommandName != "run" {
+		return io.ReadAll(file)
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode().IsRegular() {
+		path, err := filepath.Abs(file.Name())
+		if err != nil {
+			return nil, err
+		}
+		path, err = filepath.EvalSymlinks(path)
+		if err != nil {
+			return nil, err
+		}
+		switch strings.ToLower(filepath.Ext(path)) {
+		case ".jsonc", ".json", ".yml", ".yaml", ".toml", ".pb", ".protobuf":
+		default:
+			return nil, errors.New("unsupported config file extension: ", path)
+		}
+	}
+	return io.ReadAll(file)
 }
 
 // FetchHTTPContent issues an HTTP GET against either a regular HTTP(S) URL
