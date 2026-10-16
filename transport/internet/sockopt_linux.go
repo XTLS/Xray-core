@@ -22,7 +22,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 
 	if config.Interface != "" {
 		if err := syscall.BindToDevice(int(fd), config.Interface); err != nil {
-			return errors.New("failed to set Interface").Base(err)
+			return NewBindError(errors.New("failed to set Interface").Base(err))
 		}
 	}
 

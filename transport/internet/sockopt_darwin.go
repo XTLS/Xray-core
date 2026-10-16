@@ -136,15 +136,15 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 	if config.Interface != "" {
 		iface, err := net.InterfaceByName(config.Interface)
 		if err != nil {
-			return errors.New("failed to get interface ", config.Interface).Base(err)
+			return NewBindError(errors.New("failed to get interface ", config.Interface).Base(err))
 		}
 		if network == "tcp6" || network == "udp6" {
 			if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IPV6, unix.IPV6_BOUND_IF, iface.Index); err != nil {
-				return errors.New("failed to set IPV6_BOUND_IF").Base(err)
+				return NewBindError(errors.New("failed to set IPV6_BOUND_IF").Base(err))
 			}
 		} else {
 			if err := unix.SetsockoptInt(int(fd), unix.IPPROTO_IP, unix.IP_BOUND_IF, iface.Index); err != nil {
-				return errors.New("failed to set IP_BOUND_IF").Base(err)
+				return NewBindError(errors.New("failed to set IP_BOUND_IF").Base(err))
 			}
 		}
 	}

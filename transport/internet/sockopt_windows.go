@@ -35,7 +35,7 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 	if config.Interface != "" {
 		inf, err := net.InterfaceByName(config.Interface)
 		if err != nil {
-			return errors.New("failed to find the interface").Base(err)
+			return NewBindError(errors.New("failed to find the interface").Base(err))
 		}
 		// easy way to check if the address is ipv4
 		isV4 := strings.Contains(address, ".")
@@ -47,20 +47,20 @@ func applyOutboundSocketOptions(network string, address string, fd uintptr, conf
 			binary.BigEndian.PutUint32(bytes[:], uint32(inf.Index))
 			idx := *(*uint32)(unsafe.Pointer(&bytes[0]))
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, IP_UNICAST_IF, int(idx)); err != nil {
-				return errors.New("failed to set IP_UNICAST_IF").Base(err)
+				return NewBindError(errors.New("failed to set IP_UNICAST_IF").Base(err))
 			}
 			if ip := net.ParseIP(host); ip != nil && ip.IsMulticast() && isUDPSocket(network) {
 				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IP, syscall.IP_MULTICAST_IF, int(idx)); err != nil {
-					return errors.New("failed to set IP_MULTICAST_IF").Base(err)
+					return NewBindError(errors.New("failed to set IP_MULTICAST_IF").Base(err))
 				}
 			}
 		} else {
 			if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, IPV6_UNICAST_IF, inf.Index); err != nil {
-				return errors.New("failed to set IPV6_UNICAST_IF").Base(err)
+				return NewBindError(errors.New("failed to set IPV6_UNICAST_IF").Base(err))
 			}
 			if ip := net.ParseIP(host); ip != nil && ip.IsMulticast() && isUDPSocket(network) {
 				if err := syscall.SetsockoptInt(syscall.Handle(fd), syscall.IPPROTO_IPV6, syscall.IPV6_MULTICAST_IF, inf.Index); err != nil {
-					return errors.New("failed to set IPV6_MULTICAST_IF").Base(err)
+					return NewBindError(errors.New("failed to set IPV6_MULTICAST_IF").Base(err))
 				}
 			}
 		}

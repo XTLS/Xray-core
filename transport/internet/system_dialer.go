@@ -68,19 +68,27 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 			}
 		}
 		var lc net.ListenConfig
-		lc.Control = func(network, address string, c syscall.RawConn) error {
-			for _, ctl := range Controllers {
-				if err := ctl(network, address, c); err != nil {
-					errors.LogInfoInner(ctx, err, "failed to apply external controller")
-				}
-			}
-			return c.Control(func(fd uintptr) {
-				if sockopt != nil {
-					if err := applyOutboundSocketOptions(network, destAddr.String(), fd, sockopt); err != nil {
-						errors.LogInfo(ctx, err, "failed to apply socket options")
+		if sockopt != nil || len(Controllers) > 0 {
+			lc.Control = func(network, address string, c syscall.RawConn) error {
+				for _, ctl := range Controllers {
+					if err := ctl(network, address, c); err != nil {
+						return errors.New("failed to apply external controller").Base(err)
 					}
 				}
-			})
+				if sockopt != nil {
+					var sockErr, controlErr error
+					controlErr = c.Control(func(fd uintptr) {
+						if sockErr = applyOutboundSocketOptions(network, destAddr.String(), fd, sockopt); sockErr != nil {
+							errors.LogInfoInner(ctx, sockErr, "failed to apply socket options")
+						}
+					})
+					if _, ok := sockErr.(*BindError); ok {
+						return sockErr
+					}
+					return controlErr
+				}
+				return nil
+			}
 		}
 		packetConn, err := lc.ListenPacket(ctx, srcAddr.Network(), srcAddr.String())
 		if err != nil {
@@ -128,16 +136,22 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		dialer.Control = func(network, address string, c syscall.RawConn) error {
 			for _, ctl := range Controllers {
 				if err := ctl(network, address, c); err != nil {
-					errors.LogInfoInner(ctx, err, "failed to apply external controller")
+					return errors.New("failed to apply external controller").Base(err)
 				}
 			}
-			return c.Control(func(fd uintptr) {
-				if sockopt != nil {
-					if err := applyOutboundSocketOptions(network, address, fd, sockopt); err != nil {
-						errors.LogInfoInner(ctx, err, "failed to apply socket options")
+			if sockopt != nil {
+				var sockErr, controlErr error
+				controlErr = c.Control(func(fd uintptr) {
+					if sockErr = applyOutboundSocketOptions(network, address, fd, sockopt); sockErr != nil {
+						errors.LogInfoInner(ctx, sockErr, "failed to apply socket options")
 					}
+				})
+				if _, ok := sockErr.(*BindError); ok {
+					return sockErr
 				}
-			})
+				return controlErr
+			}
+			return nil
 		}
 	}
 

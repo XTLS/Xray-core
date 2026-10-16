@@ -28,3 +28,22 @@ func (v *SocketConfig) ParseTFOValue() int {
 	}
 	return tfo
 }
+
+// Dial should fail on bind errors, return this to indicate such errors.
+type BindError struct {
+	err error
+}
+
+func (e *BindError) Unwrap() error {
+	return e.err
+}
+
+func (e *BindError) Error() string {
+	return "failed to bind to interface: " + e.err.Error()
+}
+
+func NewBindError(err error) *BindError {
+	return &BindError{
+		err: err,
+	}
+}
