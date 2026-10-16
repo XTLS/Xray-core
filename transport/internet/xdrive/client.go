@@ -58,18 +58,30 @@ func (t *serviceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 
 	resp, err := next.RoundTrip(r)
 	if err != nil {
+		err = stalled(ctx, err)
 		end()
 		return nil, err
 	}
 	alive()
-	resp.Body = &progressBody{ReadCloser: resp.Body, alive: alive, end: end}
+	resp.Body = &progressBody{ReadCloser: resp.Body, alive: alive, end: end, ctx: ctx}
 	return resp, nil
+}
+
+// stalled returns errStalled for an error that the stall gave, which http2 reports
+// as a plain cancel
+func stalled(ctx context.Context, err error) error {
+	if context.Cause(ctx) == errStalled {
+		return errStalled
+	}
+	return err
 }
 
 type progressBody struct {
 	io.ReadCloser
 	alive func()
 	end   func()
+	// ctx is that of the request, for the body of its response
+	ctx context.Context
 }
 
 func (b *progressBody) Read(p []byte) (int, error) {
@@ -78,6 +90,9 @@ func (b *progressBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p[:min(len(p), 16<<10)])
 	if n > 0 {
 		b.alive()
+	}
+	if err != nil && err != io.EOF && b.ctx != nil {
+		err = stalled(b.ctx, err)
 	}
 	return n, err
 }

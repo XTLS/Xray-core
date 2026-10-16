@@ -202,6 +202,40 @@ func TestServiceClientEndsOnlyStalledRequests(t *testing.T) {
 	}
 }
 
+// over http2 a request that stands still ends the same way, and says so
+func TestServiceClientStallOverHTTP2(t *testing.T) {
+	const stall = 200 * time.Millisecond
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/stuck" {
+			w.Write([]byte("x"))
+			w.(http.Flusher).Flush()
+		}
+		time.Sleep(5 * stall)
+	}))
+	server.EnableHTTP2 = true
+	server.StartTLS()
+	defer server.Close()
+	client := &http.Client{Transport: &serviceTransport{stall: stall, secure: server.Client().Transport}}
+
+	for _, path := range []string{"/stuck", "/silent"} {
+		start := time.Now()
+		resp, err := client.Get(server.URL + path)
+		if err == nil {
+			if resp.ProtoMajor != 2 {
+				t.Fatalf("%s went over %s", path, resp.Proto)
+			}
+			_, err = io.ReadAll(resp.Body)
+			resp.Body.Close()
+		}
+		if !errors.Is(err, errStalled) {
+			t.Errorf("%s gave %v, want %v", path, err, errStalled)
+		}
+		if took := time.Since(start); took > 4*stall {
+			t.Errorf("%s took %v to give up", path, took)
+		}
+	}
+}
+
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
