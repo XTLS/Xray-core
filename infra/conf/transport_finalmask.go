@@ -108,9 +108,20 @@ type HeaderCustomTCP struct {
 	Clients [][]TCPItem `json:"clients"`
 	Servers [][]TCPItem `json:"servers"`
 	Errors  [][]TCPItem `json:"errors"`
+	Script  string      `json:"script"`
 }
 
 func (c *HeaderCustomTCP) Build() (proto.Message, error) {
+	if c.Script != "" {
+		if len(c.Clients) > 0 || len(c.Servers) > 0 || len(c.Errors) > 0 {
+			return nil, errors.New(`"script" and "clients", "servers" or "errors" can't be used together`)
+		}
+		if _, err := xlua.Compile(c.Script); err != nil {
+			return nil, errors.New("failed to compile the header script").Base(err)
+		}
+		return &custom.TCPConfig{Script: c.Script}, nil
+	}
+
 	for _, value := range c.Clients {
 		for _, item := range value {
 			if err := validateCustomItemSpec(item.Capture, item.Packet, item.Rand, item.Reuse, item.Transform); err != nil {
@@ -622,6 +633,7 @@ type HeaderCustomUDP struct {
 	Mode   string    `json:"mode"`
 	Client []UDPItem `json:"client"`
 	Server []UDPItem `json:"server"`
+	Script string    `json:"script"`
 }
 
 func (c *HeaderCustomUDP) Build() (proto.Message, error) {
@@ -629,6 +641,19 @@ func (c *HeaderCustomUDP) Build() (proto.Message, error) {
 	case "", "prefix", "standalone":
 	default:
 		return nil, errors.New("unknown udp mode")
+	}
+
+	if c.Script != "" {
+		if len(c.Client) > 0 || len(c.Server) > 0 {
+			return nil, errors.New(`"script" and "client" or "server" can't be used together`)
+		}
+		if c.Mode == "standalone" {
+			return nil, errors.New(`"script" does not support "mode": "standalone" yet`)
+		}
+		if _, err := xlua.Compile(c.Script); err != nil {
+			return nil, errors.New("failed to compile the header script").Base(err)
+		}
+		return &custom.UDPConfig{Script: c.Script}, nil
 	}
 
 	for _, item := range c.Client {
