@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.zx2c4.com/wireguard/tun"
@@ -33,7 +34,7 @@ import (
 type Handler struct {
 	p policy.Manager
 
-	canup *bool
+	canup *atomic.Bool
 	tnet  *Net
 	bind  *bind
 	dev   *device.Device
@@ -316,8 +317,8 @@ func (h *Handler) up(ctx context.Context) error {
 		}
 		h.ipc = ""
 	}
-	if !*h.canup {
-		*h.canup = true
+	if !h.canup.Load() {
+		h.canup.Store(true)
 	}
 	return h.dev.Up()
 }
@@ -501,15 +502,15 @@ func (c *cache) Cache(host string, saddr []string, ttl uint32) {
 type blockup struct {
 	tun.Device
 	ch    chan tun.Event
-	canup *bool
+	canup *atomic.Bool
 }
 
 func newblockup(t tun.Device) *blockup {
 	ch := make(chan tun.Event, cap(t.Events()))
-	canup := false
+	canup := &atomic.Bool{}
 	go func() {
 		for e := range t.Events() {
-			if e&tun.EventUp != 0 && !canup {
+			if e&tun.EventUp != 0 && !canup.Load() {
 				continue
 			}
 			select {
@@ -519,7 +520,7 @@ func newblockup(t tun.Device) *blockup {
 		}
 		close(ch)
 	}()
-	return &blockup{Device: t, ch: ch, canup: &canup}
+	return &blockup{Device: t, ch: ch, canup: canup}
 }
 
 func (b *blockup) Events() <-chan tun.Event {
