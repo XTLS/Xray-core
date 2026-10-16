@@ -257,3 +257,34 @@ end
 	require.NoError(t, err)
 	require.Equal(t, [][]byte{[]byte("n")}, raw.packets(), "the stale plan raises, so the packet is dropped")
 }
+
+func TestAHeaderTheScriptDropsIsShortCircuited(t *testing.T) {
+	client, raw := packetConn(t, `
+function HandleHeaderWrite(header, address, role)
+    header:Add("\1\2")
+    HandleHeaderWrite = nil
+end
+`, 0)
+
+	addr := &net.UDPAddr{Port: 1}
+	for i := 0; i < 3; i++ {
+		_, err := client.WriteTo([]byte("payload"), addr)
+		require.NoError(t, err)
+	}
+	require.Equal(t, [][]byte{[]byte("\x01\x02payload"), []byte("payload"), []byte("payload")}, raw.packets())
+}
+
+func TestNoiseTheScriptDropsIsShortCircuitedForEveryAddress(t *testing.T) {
+	client, raw := packetConn(t, `
+function HandleNoise(plan, address, role)
+    plan:Add("n")
+    HandleNoise = nil
+end
+`, 0)
+
+	for _, port := range []int{1, 2} {
+		_, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: port})
+		require.NoError(t, err)
+	}
+	require.Equal(t, [][]byte{[]byte("n"), []byte("payload"), []byte("payload")}, raw.packets())
+}

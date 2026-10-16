@@ -28,7 +28,7 @@ func newPacketConn(c *Config, raw net.PacketConn, role string) (net.PacketConn, 
 	if err != nil {
 		return nil, errors.New("failed to initialize the script ", c.Script).Base(err)
 	}
-	if !engine.hooks[noiseHook] && !engine.hooks[writeHook] && !engine.hooks[readHook] {
+	if !engine.hasAny(packetHooks) {
 		return raw, nil
 	}
 
@@ -42,7 +42,7 @@ func newPacketConn(c *Config, raw net.PacketConn, role string) (net.PacketConn, 
 }
 
 func (c *maskPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
-	if !c.engine.hooks[readHook] {
+	if !c.engine.has(readHook) {
 		return c.PacketConn.ReadFrom(p)
 	}
 
@@ -72,11 +72,11 @@ func (c *maskPacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *maskPacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
-	if c.engine.hooks[noiseHook] {
+	if c.engine.has(noiseHook) {
 		c.sendNoise(addr)
 	}
 
-	if !c.engine.hooks[writeHook] {
+	if !c.engine.has(writeHook) {
 		return c.PacketConn.WriteTo(p, addr)
 	}
 

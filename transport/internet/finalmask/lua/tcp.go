@@ -31,7 +31,7 @@ func newConn(c *Config, raw net.Conn, role string) (net.Conn, error) {
 	if err != nil {
 		return nil, errors.New("failed to initialize the script ", c.Script).Base(err)
 	}
-	if !engine.hooks[headerHook] {
+	if !engine.has(headerHook) {
 		return raw, nil
 	}
 
@@ -79,7 +79,7 @@ func (c *maskConn) Write(p []byte) (n int, err error) {
 func (c *maskConn) handshake() {
 	c.once.Do(func() {
 		defer c.wg.Done()
-		if err := c.engine.handshake(c.role, c.Conn); err != nil {
+		if err := c.engine.handshake(c.role, c.Conn, handshakeTimeout); err != nil {
 			errors.LogWarningInner(context.Background(), err, "the script refused the connection")
 			return
 		}
