@@ -134,6 +134,7 @@ func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, 
 			remote: h.conn.RemoteAddr(),
 
 			user: h.user,
+			lock: make(chan struct{}, 1),
 		})
 		return true, nil
 	default:
