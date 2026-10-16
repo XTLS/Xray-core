@@ -825,7 +825,7 @@ func (c *tcpConn) receive(s segment) {
 	c.readable.Signal()
 	// the reader acknowledges what it takes, with one segment for all that came by then.
 	// It is not waited for when it does not read for long
-	if fin || now || c.rcvNxt-c.rcvAcked >= tcpWindow/4 {
+	if fin || now || c.rcvNxt-c.rcvAcked >= uint32(c.window/4) {
 		c.sendAck()
 	} else {
 		c.arm(tcpTick)

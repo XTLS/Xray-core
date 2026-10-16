@@ -527,20 +527,26 @@ func TestTCPLargeSegment(t *testing.T) {
 			t.Fatal("segments: ", segments, ", read something else than what was sent")
 		}
 
-		// no more is taken than the window while nobody reads, of the last one a part
+		// no more is taken than the window while nobody reads, of the last one a part,
+		// and what is taken is acknowledged when a quarter of the window is
 		p.seq += uint32(len(sent))
 		sent = make([]byte, (int(s.window)/50000+1)*50000)
 		rand.Read(sent)
 		for i := 0; i < len(sent); i += 50000 {
 			p.send(p.seq+uint32(i), tcpAck|tcpPsh, nil, sent[i:i+50000])
 		}
-		for {
+		for acked := p.seq; ; {
 			r := p.receive()
 			if taken := int32(r.ack - p.seq); taken > s.window {
 				t.Fatal("segments: ", segments, ", ", taken, " bytes taken with a window of ", s.window)
 			} else if taken == s.window {
 				break
 			}
+			// one that acknowledges nothing more tells that the window opened for what was read before
+			if r.ack != acked && int32(r.ack-acked) < s.window/4 {
+				t.Fatal("segments: ", segments, ", ", r.ack-acked, " bytes acknowledged with a window of ", s.window)
+			}
+			acked = r.ack
 		}
 		received = received[:0]
 		for len(received) < int(s.window) {
