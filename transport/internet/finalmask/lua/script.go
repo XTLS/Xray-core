@@ -87,7 +87,7 @@ func newEngine(script string) (*engine, error) {
 		},
 		func(L *glua.LState) error {
 			if defined(L) == 0 {
-				return errors.New("the script must define ", noiseHook.name, ", ", headerHook.name, ", ", writeHook.name, " or ", readHook.name)
+				return errors.New("the script must define at least one hook")
 			}
 			return nil
 		}))
