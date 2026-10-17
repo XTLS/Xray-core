@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
@@ -104,17 +105,27 @@ func (b *progressBody) Close() error {
 }
 
 // newServiceClient returns a client whose requests end after stall without
-// progress, see serviceTransport.RoundTrip
-func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Duration, maxConns int) *http.Client {
+// progress, see serviceTransport.RoundTrip, and whose connections close when
+// connCtx is done. Clients that share h1Hosts share which hosts answer over h1
+func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings *internet.MemoryStreamConfig, stall time.Duration, maxConns int) *http.Client {
 	var (
 		tlsConfig *tls.Config
 		sockopt   *internet.SocketConfig
 		fronting  *net.Destination
+		keepAlive = net.ChromeH2KeepAlivePeriod
 	)
 	if streamSettings != nil {
 		tlsConfig = tls.ConfigFromStreamSettings(streamSettings)
 		sockopt = streamSettings.SocketSettings
 		fronting = streamSettings.Destination
+		if config, ok := streamSettings.ProtocolSettings.(*Config); ok && config.Xmux != nil {
+			switch period := config.Xmux.HKeepAlivePeriod; {
+			case period > 0:
+				keepAlive = time.Duration(period) * time.Second
+			case period < 0:
+				keepAlive = 0
+			}
+		}
 	}
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{}
@@ -144,7 +155,10 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Du
 		if err != nil {
 			return nil, host, errors.New("failed to dial to dest").Base(err)
 		}
-		return conn, host, nil
+		// CloseIdleConnections leaves an h2 connection open while a stream just
+		// canceled has not left it yet
+		stop := context.AfterFunc(connCtx, func() { conn.Close() })
+		return &ctxConn{Conn: conn, stop: stop}, host, nil
 	}
 
 	dialPlain := func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -185,7 +199,7 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Du
 			MaxIdleConns:        maxConns,
 			MaxIdleConnsPerHost: maxConns,
 			MaxConnsPerHost:     connsPerHost,
-			HTTP2:               &http.HTTP2Config{SendPingTimeout: net.ChromeH2KeepAlivePeriod},
+			HTTP2:               &http.HTTP2Config{SendPingTimeout: keepAlive},
 		}
 	}
 
@@ -198,10 +212,22 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Du
 				MaxIdleConnsPerHost: maxConns,
 				MaxConnsPerHost:     maxConns,
 			},
-			secure: &secureTransport{h2: secure(1), h1: secure(maxConns)},
+			secure: &secureTransport{h2: secure(1), h1: secure(maxConns), h1Hosts: h1Hosts},
 			stall:  stall,
 		},
 	}
+}
+
+// ctxConn is a connection that connCtx no longer closes once it is closed,
+// so that one that ends on its own leaves nothing behind in connCtx
+type ctxConn struct {
+	net.Conn
+	stop func() bool
+}
+
+func (c *ctxConn) Close() error {
+	c.stop()
+	return c.Conn.Close()
 }
 
 // secureTransport keeps a host to one connection, all that h2 needs, as without
@@ -209,7 +235,7 @@ func newServiceClient(streamSettings *internet.MemoryStreamConfig, stall time.Du
 // h1 moves to a transport with more, since h1 carries one request at a time
 type secureTransport struct {
 	h2, h1  http.RoundTripper
-	h1Hosts sync.Map
+	h1Hosts *sync.Map
 }
 
 func (t *secureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -221,4 +247,130 @@ func (t *secureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		t.h1Hosts.Store(r.URL.Host, true)
 	}
 	return resp, err
+}
+
+var errSessionClosed = errors.New("the session is closed")
+
+// connPool hands the sessions of a storage the connections of XMUX, each a
+// client of its own made by newClient
+type connPool struct {
+	mu   sync.Mutex
+	xmux *splithttp.XmuxManager
+}
+
+func newConnPool(config *splithttp.XmuxConfig, newClient func(connCtx context.Context) *http.Client) *connPool {
+	var xmuxConfig splithttp.XmuxConfig
+	if config != nil {
+		xmuxConfig = *config
+	}
+	return &connPool{xmux: splithttp.NewXmuxManager(xmuxConfig, func() splithttp.XmuxConn {
+		ctx, cancel := context.WithCancel(context.Background())
+		return &poolConn{next: newClient(ctx).Transport, cancel: cancel}
+	})}
+}
+
+// poolConn is a connection of XMUX, which closes once XMUX drops it and the
+// requests on it end
+type poolConn struct {
+	next   http.RoundTripper
+	cancel context.CancelFunc
+
+	mu       sync.Mutex
+	inflight int
+	closing  bool
+}
+
+func (c *poolConn) IsClosed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closing
+}
+
+func (c *poolConn) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closing = true
+	if c.inflight == 0 {
+		c.cancel()
+	}
+	return nil
+}
+
+func (c *poolConn) done() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.inflight--
+	if c.closing && c.inflight == 0 {
+		c.cancel()
+	}
+}
+
+// roundTrip sends a request counted in inflight by the caller
+func (c *poolConn) roundTrip(r *http.Request) (*http.Response, error) {
+	resp, err := c.next.RoundTrip(r)
+	if err != nil {
+		c.done()
+		return nil, err
+	}
+	resp.Body = &doneBody{ReadCloser: resp.Body, done: sync.OnceFunc(c.done)}
+	return resp, nil
+}
+
+type doneBody struct {
+	io.ReadCloser
+	done func()
+}
+
+func (b *doneBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.done()
+	return err
+}
+
+// sessionTransport sends the requests of one session over a connection of
+// XMUX, and over another once that one has no requests or time left
+type sessionTransport struct {
+	pool *connPool
+
+	mu     sync.Mutex
+	client *splithttp.XmuxClient
+	closed bool
+}
+
+func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		return nil, errSessionClosed
+	}
+	client := t.client
+	if client == nil || client.LeftRequests.Add(-1) < 0 || !client.UnreusableAt.IsZero() && time.Now().After(client.UnreusableAt) {
+		t.pool.mu.Lock()
+		t.client = t.pool.xmux.GetXmuxClient(r.Context())
+		t.pool.mu.Unlock()
+		t.client.AddRunning()
+		t.client.LeftRequests.Add(-1)
+		if client != nil {
+			client.DoneRunning()
+		}
+		client = t.client
+	}
+	// counted under mu, or another request of the session that moves on could
+	// close the connection before this one is sent
+	conn := client.XmuxConn.(*poolConn)
+	conn.mu.Lock()
+	conn.inflight++
+	conn.mu.Unlock()
+	t.mu.Unlock()
+	return conn.roundTrip(r)
+}
+
+func (t *sessionTransport) Close() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.closed = true
+	if t.client != nil {
+		t.client.DoneRunning()
+		t.client = nil
+	}
 }

@@ -9,6 +9,7 @@ import (
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
 	finalmaskcustom "github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/xdrive"
 	"google.golang.org/protobuf/proto"
 )
@@ -511,5 +512,52 @@ func TestXDriveInboundConfig(t *testing.T) {
 		if err := build(c.input); err == nil || !strings.Contains(err.Error(), "xdrive transport") || !strings.Contains(err.Error(), c.err) {
 			t.Errorf("expected an xdrive error about %s for %s, got %v", c.err, c.input, err)
 		}
+	}
+}
+
+func TestXDriveXmux(t *testing.T) {
+	defaults := func(connections int32) *splithttp.XmuxConfig {
+		return &splithttp.XmuxConfig{
+			MaxConcurrency:   &splithttp.RangeConfig{},
+			MaxConnections:   &splithttp.RangeConfig{From: connections, To: connections},
+			CMaxReuseTimes:   &splithttp.RangeConfig{},
+			HMaxRequestTimes: &splithttp.RangeConfig{},
+			HMaxReusableSecs: &splithttp.RangeConfig{From: 1800, To: 3000},
+		}
+	}
+	for _, c := range []struct {
+		input string
+		want  *splithttp.XmuxConfig
+	}{
+		{`{"service": "google-drive", "secrets": ["a", "b", "c"]}`, defaults(4)},
+		{`{"service": "template", "template": {}}`, defaults(1)},
+		{`{"service": "google-drive", "secrets": ["a", "b", "c"], "xmux": {"maxConcurrency": "1-2", "hMaxRequestTimes": 100, "hKeepAlivePeriod": -1}}`, &splithttp.XmuxConfig{
+			MaxConcurrency:   &splithttp.RangeConfig{From: 1, To: 2},
+			MaxConnections:   &splithttp.RangeConfig{},
+			CMaxReuseTimes:   &splithttp.RangeConfig{},
+			HMaxRequestTimes: &splithttp.RangeConfig{From: 100, To: 100},
+			HMaxReusableSecs: &splithttp.RangeConfig{},
+			HKeepAlivePeriod: -1,
+		}},
+	} {
+		config := new(XDriveConfig)
+		if err := json.Unmarshal([]byte(c.input), config); err != nil {
+			t.Fatalf("%s: Unmarshal: %v", c.input, err)
+		}
+		built, err := config.Build()
+		if err != nil {
+			t.Fatalf("%s: Build: %v", c.input, err)
+		}
+		if got := built.(*xdrive.Config).Xmux; !proto.Equal(got, c.want) {
+			t.Errorf("%s: xmux is %v, want %v", c.input, got, c.want)
+		}
+	}
+
+	config := new(XDriveConfig)
+	if err := json.Unmarshal([]byte(`{"service": "template", "template": {}, "xmux": {"maxConnections": 2, "maxConcurrency": 8}}`), config); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, err := config.Build(); err == nil {
+		t.Error("Build accepted maxConnections with maxConcurrency")
 	}
 }

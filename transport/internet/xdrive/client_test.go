@@ -18,6 +18,7 @@ import (
 
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
@@ -75,7 +76,7 @@ func sniForSettings(t *testing.T, serverName string) string {
 	driveFilesURL = "https://www.googleapis.com/drive/v3/files"
 	defer func() { driveFilesURL = prev }()
 
-	client := newServiceClient(settings, 5*time.Second, 8)
+	client := newServiceClient(context.Background(), new(sync.Map), settings, 5*time.Second, 8)
 	req, err := http.NewRequest(http.MethodGet, driveFilesURL, nil)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -145,7 +146,7 @@ func TestServiceClientEndsOnlyStalledRequests(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	client := newServiceClient(&internet.MemoryStreamConfig{}, stall, 8)
+	client := newServiceClient(context.Background(), new(sync.Map), &internet.MemoryStreamConfig{}, stall, 8)
 
 	fetch := func(path string, body io.Reader) (int, error) {
 		req, err := http.NewRequest(http.MethodPost, server.URL+path, body)
@@ -217,7 +218,7 @@ func TestServiceClientStallOverTLS(t *testing.T) {
 			}
 			time.Sleep(5 * stall)
 		})
-		client := newServiceClient(server.settings(&tls.Config{}), stall, 8)
+		client := newServiceClient(context.Background(), new(sync.Map), server.settings(&tls.Config{}), stall, 8)
 
 		for _, path := range []string{"/stuck", "/silent"} {
 			start := time.Now()
@@ -240,12 +241,13 @@ func TestServiceClientStallOverTLS(t *testing.T) {
 }
 
 // tlsServer is a TLS server that keeps the last hello it got and counts its
-// connections
+// connections, and those closed
 type tlsServer struct {
 	*httptest.Server
-	mu    sync.Mutex
-	hello *gotls.ClientHelloInfo
-	conns atomic.Int32
+	mu     sync.Mutex
+	hello  *gotls.ClientHelloInfo
+	conns  atomic.Int32
+	closed atomic.Int32
 }
 
 func newTLSServer(t *testing.T, config *gotls.Config, handler http.HandlerFunc) *tlsServer {
@@ -260,8 +262,11 @@ func newTLSServer(t *testing.T, config *gotls.Config, handler http.HandlerFunc) 
 	}
 	s.TLS = config
 	s.Config.ConnState = func(_ net.Conn, state http.ConnState) {
-		if state == http.StateNew {
+		switch state {
+		case http.StateNew:
 			s.conns.Add(1)
+		case http.StateClosed:
+			s.closed.Add(1)
 		}
 	}
 	s.StartTLS()
@@ -298,7 +303,7 @@ func TestServiceClientSpeaksWhatServerPicks(t *testing.T) {
 	for _, protos := range [][]string{chromeALPN, {"http/1.1"}} {
 		server := newTLSServer(t, &gotls.Config{NextProtos: protos}, func(w http.ResponseWriter, r *http.Request) {})
 		for _, config := range []*tls.Config{{}, {NextProtocol: []string{"h2"}}, {NextProtocol: []string{"http/1.1"}}, {Fingerprint: "unsafe"}} {
-			client := newServiceClient(server.settings(config), 5*time.Second, 8)
+			client := newServiceClient(context.Background(), new(sync.Map), server.settings(config), 5*time.Second, 8)
 			resp, err := client.Get(server.URL)
 			if err != nil {
 				t.Fatalf("server %v, alpn %v, fingerprint %q: %v", protos, config.NextProtocol, config.Fingerprint, err)
@@ -318,7 +323,7 @@ func TestServiceClientSpeaksWhatServerPicks(t *testing.T) {
 // offers certificate compression
 func TestServiceClientDefaultsToChrome(t *testing.T) {
 	server := newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, func(w http.ResponseWriter, r *http.Request) {})
-	client := newServiceClient(&internet.MemoryStreamConfig{}, 5*time.Second, 8)
+	client := newServiceClient(context.Background(), new(sync.Map), &internet.MemoryStreamConfig{}, 5*time.Second, 8)
 	// the test certificate is not trusted, the hello is all that is needed
 	if resp, err := client.Get(server.URL); err == nil {
 		resp.Body.Close()
@@ -339,7 +344,7 @@ func TestServiceClientOneConnection(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	})
 	h1 := newTLSServer(t, &gotls.Config{NextProtos: []string{"http/1.1"}}, func(w http.ResponseWriter, r *http.Request) {})
-	client := newServiceClient(server.settings(&tls.Config{}), 5*time.Second, driveMaxInflight)
+	client := newServiceClient(context.Background(), new(sync.Map), server.settings(&tls.Config{}), 5*time.Second, driveMaxInflight)
 	get := func(url string) {
 		resp, err := client.Get(url)
 		if err != nil {
@@ -395,7 +400,7 @@ func TestServiceClientHTTP1(t *testing.T) {
 		server := newTLSServer(t, &gotls.Config{NextProtos: c.protos, EncryptedClientHelloKeys: echKeys}, func(w http.ResponseWriter, r *http.Request) {
 			time.Sleep(50 * time.Millisecond)
 		})
-		client := newServiceClient(server.settings(c.config), 5*time.Second, 8)
+		client := newServiceClient(context.Background(), new(sync.Map), server.settings(c.config), 5*time.Second, 8)
 		get := func() {
 			resp, err := client.Get(server.URL)
 			if err != nil {
@@ -426,7 +431,7 @@ func TestServiceClientHTTP1(t *testing.T) {
 	// without the keys the server gets the outer hello, which offers the ALPN of
 	// Chrome
 	outer := newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, func(w http.ResponseWriter, r *http.Request) {})
-	if resp, err := newServiceClient(outer.settings(ech), 5*time.Second, 8).Get(outer.URL); err == nil {
+	if resp, err := newServiceClient(context.Background(), new(sync.Map), outer.settings(ech), 5*time.Second, 8).Get(outer.URL); err == nil {
 		resp.Body.Close()
 	}
 	if hello := outer.lastHello(); hello == nil {
@@ -462,7 +467,7 @@ func TestServiceClientHungHandshake(t *testing.T) {
 		server.Listener = &muteFirst{Listener: server.Listener}
 		server.StartTLS()
 		t.Cleanup(server.Close)
-		client := newServiceClient(server.settings(&tls.Config{Fingerprint: fingerprint}), stall, 8)
+		client := newServiceClient(context.Background(), new(sync.Map), server.settings(&tls.Config{Fingerprint: fingerprint}), stall, 8)
 
 		if _, err := client.Get(server.URL); err == nil {
 			t.Fatalf("fingerprint %q: a request got through a handshake that hung", fingerprint)
@@ -488,7 +493,7 @@ func TestServiceClientClosesFailedHandshake(t *testing.T) {
 
 	for _, fingerprint := range []string{"", "unsafe"} {
 		settings := &internet.MemoryStreamConfig{ProtocolName: protocolName, SecuritySettings: &tls.Config{Fingerprint: fingerprint}}
-		go newServiceClient(settings, 5*time.Second, 8).Get("https://" + ln.Addr().String())
+		go newServiceClient(context.Background(), new(sync.Map), settings, 5*time.Second, 8).Get("https://" + ln.Addr().String())
 		conn, err := ln.Accept()
 		if err != nil {
 			t.Fatal(err)
@@ -503,6 +508,58 @@ func TestServiceClientClosesFailedHandshake(t *testing.T) {
 	}
 }
 
+// afterFuncs counts the functions that context.AfterFunc registers on it and
+// that are not stopped yet
+type afterFuncs struct {
+	context.Context
+	live atomic.Int32
+}
+
+// Value hides the cancelCtx below, which context.AfterFunc would use instead
+func (c *afterFuncs) Value(any) any { return nil }
+
+func (c *afterFuncs) AfterFunc(func()) func() bool {
+	c.live.Add(1)
+	return func() bool {
+		c.live.Add(-1)
+		return true
+	}
+}
+
+// a connection that ends on its own, here after Connection: close, leaves
+// nothing on the context that closes the connections of the client
+func TestServiceClientForgetsClosedConnections(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Connection", "close")
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	connCtx := &afterFuncs{Context: ctx}
+	client := newServiceClient(connCtx, new(sync.Map), &internet.MemoryStreamConfig{}, 5*time.Second, 8)
+
+	for range 4 {
+		resp, err := client.Get(server.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	waitFor(t, "the closed connections to leave the context", func() bool { return connCtx.live.Load() == 0 })
+}
+
 type roundTrip func(*http.Request) (*http.Response, error)
 
 func (f roundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// "hKeepAlivePeriod" of XMUX sets when an idle h2 connection pings, -1 never
+func TestServiceClientKeepAlive(t *testing.T) {
+	for period, want := range map[int64]time.Duration{0: xnet.ChromeH2KeepAlivePeriod, 20: 20 * time.Second, -1: 0} {
+		settings := &internet.MemoryStreamConfig{ProtocolSettings: &Config{Xmux: &splithttp.XmuxConfig{HKeepAlivePeriod: period}}}
+		client := newServiceClient(context.Background(), new(sync.Map), settings, 5*time.Second, 8)
+		h2 := client.Transport.(*serviceTransport).secure.(*secureTransport).h2.(*http.Transport)
+		if got := h2.HTTP2.SendPingTimeout; got != want {
+			t.Errorf("hKeepAlivePeriod %d pings after %v, want %v", period, got, want)
+		}
+	}
+}
