@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"os"
 	"sync"
+	"syscall"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -22,6 +24,14 @@ type fdTun struct {
 	// vnet is the size of the virtio_net_hdr in front of every packet, zero if the tun has none.
 	// With it the system does not split what it sends to the tun and takes what is not split from it
 	vnet int
+	// raw is file for ReadParts, readv what it calls when there may be a packet, iovecs where that reads to:
+	// header, which takes the virtio_net_hdr, and the parts. read and readErr are what came of it
+	raw     syscall.RawConn
+	readv   func(fd uintptr) bool
+	header  [packetRoom]byte
+	iovecs  []unix.Iovec
+	read    int
+	readErr error
 
 	writeLock sync.RWMutex
 	closed    bool
@@ -29,13 +39,45 @@ type fdTun struct {
 
 // newFdTun takes a file descriptor that does not block
 func newFdTun(fd, vnet int) *fdTun {
-	return &fdTun{fd: fd, file: os.NewFile(uintptr(fd), "/dev/net/tun"), vnet: vnet}
+	t := &fdTun{fd: fd, file: os.NewFile(uintptr(fd), "/dev/net/tun"), vnet: vnet}
+	t.raw, _ = t.file.SyscallConn()
+	t.readv = func(fd uintptr) bool {
+		for {
+			n, _, errno := unix.Syscall(unix.SYS_READV, fd, uintptr(unsafe.Pointer(&t.iovecs[0])), uintptr(len(t.iovecs)))
+			switch errno {
+			case 0:
+				t.read, t.readErr = int(n), nil
+			case unix.EINTR:
+				continue
+			case unix.EAGAIN:
+				return false
+			default:
+				t.read, t.readErr = 0, errno
+			}
+			return true
+		}
+	}
+	return t
 }
 
 func (t *fdTun) ReadPacket(b []byte) ([]byte, error) {
 	n, err := t.file.Read(b)
 	// what the virtio_net_hdr says is of no use here: no checksum is looked at, and a segment may have any size
 	return b[min(t.vnet, n):n], err
+}
+
+// ReadParts implements segmenter
+func (t *fdTun) ReadParts(parts [][]byte) (int, error) {
+	t.iovecs = append(t.iovecs[:0], unix.Iovec{Base: &t.header[0]})
+	t.iovecs[0].SetLen(t.vnet)
+	for i, p := range parts {
+		t.iovecs = append(t.iovecs, unix.Iovec{Base: &p[0]})
+		t.iovecs[i+1].SetLen(len(p))
+	}
+	if err := t.raw.Read(t.readv); err != nil {
+		return 0, err
+	}
+	return max(t.read-t.vnet, 0), t.readErr
 }
 
 func (t *fdTun) WritePacket(header, payload []byte) error {

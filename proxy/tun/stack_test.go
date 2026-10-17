@@ -65,6 +65,20 @@ func (l *link) Segments() bool {
 	return l.segments
 }
 
+// ReadParts implements segmenter
+func (l *link) ReadParts(parts [][]byte) (int, error) {
+	select {
+	case packet := <-l.in:
+		n := 0
+		for _, p := range parts {
+			n += copy(p, packet[n:])
+		}
+		return n, nil
+	case <-l.done:
+		return 0, io.EOF
+	}
+}
+
 // WriteSegment implements segmenter as the system does when it sends a segment on: a packet for every mss bytes
 func (l *link) WriteSegment(header []byte, payload [][]byte, mss int) error {
 	data := bytes.Join(payload, nil)
@@ -206,7 +220,7 @@ func (p *peer) receive() segment {
 func (p *peer) dialed() (segment, []byte) {
 	p.t.Helper()
 	b := p.packet()
-	packet, ok := parsePacket(b)
+	packet, ok := parsePacket(b, 0)
 	if !ok || packet.proto != protoTCP || len(packet.payload) < tcpHeaderSize {
 		p.t.Fatal("not a segment: ", b)
 	}
@@ -223,7 +237,7 @@ func (p *peer) segment(b []byte) segment {
 	} else if checksum(sum(b[:size], 0)) != 0 {
 		p.t.Fatal("wrong checksum of the ip header")
 	}
-	packet, ok := parsePacket(b)
+	packet, ok := parsePacket(b, 0)
 	if !ok || packet.proto != protoTCP || packet.src != p.dst.Addr() || packet.dst != p.src.Addr() {
 		p.t.Fatal("not a segment of the connection: ", b)
 	}
@@ -464,30 +478,90 @@ func TestTCPOutOfOrder(t *testing.T) {
 	read(t, a.conn, "jklmno")
 }
 
-// A segment is as large as the system makes it when the tun does not split what it reads.
+// A segment is as large as the system makes it when the tun does not split what it reads, and one that is large,
+// the next and all taken stays in the buffers that such a tun reads it into.
 func TestTCPLargeSegment(t *testing.T) {
-	conns := make(chan accepted, 1)
-	p, l := newPeer(t, "10.0.0.1:1234", "10.0.0.2:80")
-	newTestStack(t, l, accept(conns))
-	p.connect(nil)
-	a := take(t, conns)
+	for _, segments := range []bool{false, true} {
+		conns := make(chan accepted, 1)
+		p, l := newPeer(t, "10.0.0.1:1234", "10.0.0.2:80")
+		l.segments = segments
+		s := newTestStack(t, l, accept(conns))
+		sent := make([]byte, 200000)
+		rand.Read(sent)
+		// one of no connection is refused as a whole
+		p.send(p.seq, tcpPsh, nil, sent[:20000])
+		if r := p.receive(); r.flags != tcpRst|tcpAck || r.ack != p.seq+20000 {
+			t.Fatal("segments: ", segments, ", not refused: flags ", r.flags, ", ack ", r.ack-p.seq, " after its seq")
+		}
+		p.connect(nil)
+		a := take(t, conns)
 
-	sent := make([]byte, 60000)
-	rand.Read(sent)
-	p.send(p.seq, tcpAck|tcpPsh, nil, sent)
-	var received []byte
-	for len(received) < len(sent) {
-		mb, err := a.conn.(buf.Reader).ReadMultiBuffer()
-		if err != nil {
-			t.Fatal(err)
+		// one that waits for the one before it, that one, one with a part that came already, small ones around
+		// one that fits a buffer, and the rest
+		for _, part := range [][2]int{{60000, 90000}, {0, 60000}, {80000, 110000}, {110000, 110100}, {110100, 115100}, {115100, 118100}, {118100, 170000}, {170000, 200000}} {
+			p.send(p.seq+uint32(part[0]), tcpAck|tcpPsh, nil, sent[part[0]:part[1]])
 		}
-		for _, b := range mb {
-			received = append(received, b.Bytes()...)
+		// all of it is taken before anything is read, for the buffers to be as the stack put it in them
+		for r := p.receive(); r.ack != p.seq+uint32(len(sent)); r = p.receive() {
 		}
-		buf.ReleaseMulti(mb)
-	}
-	if !bytes.Equal(received, sent) {
-		t.Fatal("read something else than what was sent")
+		var received []byte
+		for len(received) < len(sent) {
+			mb, err := a.conn.(buf.Reader).ReadMultiBuffer()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// a buffer that was read into starts with the headers, one that was copied to is full
+			if kept := mb[0].Len() == buf.Size-ipv4HeaderSize-tcpHeaderSize; len(received) == 0 && kept != segments {
+				t.Fatal("segments: ", segments, ", the first buffer has ", mb[0].Len(), " bytes")
+			}
+			for _, b := range mb {
+				// and a small one is copied to where the one before it ends
+				if b.Len() < 1000 {
+					t.Fatal("segments: ", segments, ", a buffer of ", b.Len(), " bytes")
+				}
+				received = append(received, b.Bytes()...)
+			}
+			buf.ReleaseMulti(mb)
+		}
+		if !bytes.Equal(received, sent) {
+			t.Fatal("segments: ", segments, ", read something else than what was sent")
+		}
+
+		// no more is taken than the window while nobody reads, of the last one a part,
+		// and what is taken is acknowledged when a quarter of the window is
+		p.seq += uint32(len(sent))
+		sent = make([]byte, (int(s.window)/50000+1)*50000)
+		rand.Read(sent)
+		for i := 0; i < len(sent); i += 50000 {
+			p.send(p.seq+uint32(i), tcpAck|tcpPsh, nil, sent[i:i+50000])
+		}
+		for acked := p.seq; ; {
+			r := p.receive()
+			if taken := int32(r.ack - p.seq); taken > s.window {
+				t.Fatal("segments: ", segments, ", ", taken, " bytes taken with a window of ", s.window)
+			} else if taken == s.window {
+				break
+			}
+			// one that acknowledges nothing more tells that the window opened for what was read before
+			if r.ack != acked && int32(r.ack-acked) < s.window/4 {
+				t.Fatal("segments: ", segments, ", ", r.ack-acked, " bytes acknowledged with a window of ", s.window)
+			}
+			acked = r.ack
+		}
+		received = received[:0]
+		for len(received) < int(s.window) {
+			mb, err := a.conn.(buf.Reader).ReadMultiBuffer()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, b := range mb {
+				received = append(received, b.Bytes()...)
+			}
+			buf.ReleaseMulti(mb)
+		}
+		if !bytes.Equal(received, sent[:s.window]) {
+			t.Fatal("segments: ", segments, ", read something else than what the window took")
+		}
 	}
 }
 
@@ -1082,13 +1156,20 @@ func TestTCPSynAfterClose(t *testing.T) {
 }
 
 // A UDP packet starts a connection, which answers from any address, and an echo request is answered.
+// Both can be larger than a buffer of a tun that reads into more than one.
 func TestUDPAndICMP(t *testing.T) {
-	for _, test := range []struct{ src, dst, other string }{
-		{"10.0.0.1:1234", "10.0.0.2:53", "10.0.0.3:5353"},
-		{"[fd00::1]:1234", "[fd00::2]:53", "[fd00::3]:5353"},
+	large := make([]byte, 20000)
+	rand.Read(large)
+	for _, test := range []struct {
+		src, dst, other string
+		segments        bool
+	}{
+		{"10.0.0.1:1234", "10.0.0.2:53", "10.0.0.3:5353", false},
+		{"[fd00::1]:1234", "[fd00::2]:53", "[fd00::3]:5353", true},
 	} {
 		conns := make(chan accepted, 1)
 		p, l := newPeer(t, test.src, test.dst)
+		l.segments = test.segments
 		newTestStack(t, l, accept(conns))
 
 		var b [ipv6HeaderSize + udpHeaderSize]byte
@@ -1105,6 +1186,13 @@ func TestUDPAndICMP(t *testing.T) {
 			t.Fatal("read ", mb.String(), " from ", a.conn.RemoteAddr(), " to ", a.dest, ", error: ", err)
 		}
 		buf.ReleaseMulti(mb)
+		binary.BigEndian.PutUint16(u[4:], uint16(udpHeaderSize+len(large)))
+		setIPLength(b[:n], n+udpHeaderSize+len(large))
+		l.in <- append(b[:n+udpHeaderSize:n+udpHeaderSize], large...)
+		if mb, err = a.conn.(buf.Reader).ReadMultiBuffer(); err != nil || len(mb) != 1 || !bytes.Equal(mb[0].Bytes(), large) {
+			t.Fatal("read ", mb.Len(), " bytes of a large packet, error: ", err)
+		}
+		buf.ReleaseMulti(mb)
 
 		for _, from := range []string{test.dst, test.other} {
 			answer := buf.FromBytes([]byte("defg"))
@@ -1114,7 +1202,7 @@ func TestUDPAndICMP(t *testing.T) {
 				t.Fatal(err)
 			}
 			raw := p.packet()
-			packet, ok := parsePacket(raw)
+			packet, ok := parsePacket(raw, 0)
 			u := packet.payload
 			// the system may have to split it on the way to where it goes
 			if !ok || raw[0]>>4 == 4 && raw[6] != 0 || packet.proto != protoUDP || netip.AddrPortFrom(packet.src, binary.BigEndian.Uint16(u)).String() != from ||
@@ -1133,12 +1221,12 @@ func TestUDPAndICMP(t *testing.T) {
 			proto, request, reply = protoICMPv6, 128, 129
 		}
 		n = putIPHeader(b[:], proto, p.src.Addr(), p.dst.Addr())
-		setIPLength(b[:n], n+12)
-		l.in <- append(b[:n:n], request, 0, 0, 0, 1, 2, 3, 4, 'a', 'b', 'c', 'd')
-		packet, ok := parsePacket(p.packet())
+		setIPLength(b[:n], n+8+len(large))
+		l.in <- append(append(b[:n:n], request, 0, 0, 0, 1, 2, 3, 4), large...)
+		packet, ok := parsePacket(p.joined(), 0)
 		m := packet.payload
-		if !ok || packet.proto != proto || packet.src != p.dst.Addr() || packet.dst != p.src.Addr() || m[0] != reply || string(m[4:]) != "\x01\x02\x03\x04abcd" {
-			t.Fatal("wrong echo reply: ", packet)
+		if !ok || packet.proto != proto || packet.src != p.dst.Addr() || packet.dst != p.src.Addr() || m[0] != reply || string(m[4:8]) != "\x01\x02\x03\x04" || !bytes.Equal(m[8:], large) {
+			t.Fatal("wrong echo reply of ", len(m), " bytes from ", packet.src, " to ", packet.dst)
 		}
 		var ip [ipv6HeaderSize]byte
 		size := putIPHeader(ip[:], proto, packet.src, packet.dst)
@@ -1373,7 +1461,7 @@ func TestUDPDial(t *testing.T) {
 				t.Fatal("wrong header of the packet to ", to, ": ", raw[:ipv4HeaderSize])
 			}
 			numbers[to][binary.BigEndian.Uint16(raw[4:])] = true
-			packet, ok := parsePacket(raw)
+			packet, ok := parsePacket(raw, 0)
 			u := packet.payload
 			if !ok || packet.proto != protoUDP || netip.AddrPortFrom(packet.src, binary.BigEndian.Uint16(u)) != local ||
 				netip.AddrPortFrom(packet.dst, binary.BigEndian.Uint16(u[2:])) != to || string(u[udpHeaderSize:]) != "abc" {
@@ -1395,7 +1483,7 @@ func TestUDPDial(t *testing.T) {
 		if _, err := conn.WriteTo([]byte("abc"), &net.UDPAddr{IP: across.Addr().AsSlice(), Port: int(across.Port())}); err != nil {
 			t.Fatal(err)
 		}
-		if packet, ok := parsePacket(p.packet()); !ok || packet.proto != protoUDP || packet.dst != across.Addr() ||
+		if packet, ok := parsePacket(p.packet(), 0); !ok || packet.proto != protoUDP || packet.dst != across.Addr() ||
 			netip.AddrPortFrom(packet.src, binary.BigEndian.Uint16(packet.payload)) != acrossLocal {
 			t.Fatal("wrong packet to ", across, ": ", packet)
 		}
@@ -1407,7 +1495,7 @@ func TestUDPDial(t *testing.T) {
 		// a stack that takes no connections is one host: it answers a ping of its address and of no other
 		l.in <- ping(p.src.Addr(), netip.MustParseAddrPort(test.other).Addr())
 		l.in <- ping(p.src.Addr(), local.Addr())
-		if packet, ok := parsePacket(p.packet()); !ok || packet.src != local.Addr() || packet.dst != p.src.Addr() || packet.payload[0]&^129 != 0 {
+		if packet, ok := parsePacket(p.packet(), 0); !ok || packet.src != local.Addr() || packet.dst != p.src.Addr() || packet.payload[0]&^129 != 0 {
 			t.Fatal("wrong echo reply: ", packet)
 		}
 		p.silent(20 * time.Millisecond)
@@ -1873,7 +1961,7 @@ func TestFragments(t *testing.T) {
 		if err := a.conn.(buf.Writer).WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(sent)}); err != nil {
 			t.Fatal(err)
 		}
-		packet, ok := parsePacket(p.joined())
+		packet, ok := parsePacket(p.joined(), 0)
 		u := packet.payload
 		if !ok || packet.fragment || packet.proto != protoUDP || netip.AddrPortFrom(packet.src, binary.BigEndian.Uint16(u)) != p.dst ||
 			netip.AddrPortFrom(packet.dst, binary.BigEndian.Uint16(u[2:])) != p.src || int(binary.BigEndian.Uint16(u[4:])) != len(u) || !bytes.Equal(u[udpHeaderSize:], sent) {
@@ -1898,7 +1986,7 @@ func TestFragments(t *testing.T) {
 		mixed := split(summed(udpPacket(p.src, p.dst, bytes.Repeat([]byte{1}, 2000))), 1024, 11)
 		l.in <- mixed[0]
 		l.in <- split(summed(udpPacket(p.src, p.dst, bytes.Repeat([]byte{2}, 2000))), 1024, 11)[1]
-		packet, ok = parsePacket(p.joined())
+		packet, ok = parsePacket(p.joined(), 0)
 		m = packet.payload
 		if !ok || packet.proto != proto || packet.src != p.dst.Addr() || packet.dst != p.src.Addr() || m[0] != reply || !bytes.Equal(m[8:], sent) {
 			t.Fatal("wrong echo reply: ", packet.src, packet.dst, packet.proto, len(m))
@@ -2040,7 +2128,7 @@ func TestChecksumsAndLoopback(t *testing.T) {
 		l.in <- damaged(echo)
 		p.silent(50 * time.Millisecond)
 		l.in <- echo
-		if packet, ok := parsePacket(p.packet()); !ok || packet.proto != proto || string(packet.payload[4:]) != "\x01\x02\x03\x04abcd" {
+		if packet, ok := parsePacket(p.packet(), 0); !ok || packet.proto != proto || string(packet.payload[4:]) != "\x01\x02\x03\x04abcd" {
 			t.Fatal("wrong echo reply: ", packet)
 		}
 

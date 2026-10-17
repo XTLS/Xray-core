@@ -41,8 +41,9 @@ const (
 type packet struct {
 	proto    byte
 	src, dst netip.Addr
-	// payload is what follows the IP header
+	// payload is what follows the IP header, without the last rest bytes of it when they are in other buffers
 	payload []byte
+	rest    int
 	// fragment is set if payload is a part of what follows the IP header: the one at offset of the packet
 	// with the number id, which has more after it or not
 	fragment bool
@@ -51,8 +52,8 @@ type packet struct {
 	id       uint32
 }
 
-// parsePacket reads the IP header of b
-func parsePacket(b []byte) (p packet, ok bool) {
+// parsePacket reads the IP header of a packet that is b and rest bytes after it
+func parsePacket(b []byte, rest int) (p packet, ok bool) {
 	if len(b) < ipv4HeaderSize {
 		return p, false
 	}
@@ -60,7 +61,7 @@ func parsePacket(b []byte) (p packet, ok bool) {
 	case 4:
 		size := int(b[0]&0xf) * 4
 		total := int(binary.BigEndian.Uint16(b[2:]))
-		if size < ipv4HeaderSize || total < size || total > len(b) {
+		if size < ipv4HeaderSize || total < size || total > len(b)+rest {
 			return p, false
 		}
 		if f := binary.BigEndian.Uint16(b[6:]); f&0x3fff != 0 {
@@ -69,19 +70,19 @@ func parsePacket(b []byte) (p packet, ok bool) {
 		p.proto = b[9]
 		p.src = netip.AddrFrom4([4]byte(b[12:16]))
 		p.dst = netip.AddrFrom4([4]byte(b[16:20]))
-		p.payload = b[size:total]
+		p.payload, p.rest = b[size:min(total, len(b))], max(total-len(b), 0)
 	case 6:
 		if len(b) < ipv6HeaderSize {
 			return p, false
 		}
 		total := ipv6HeaderSize + int(binary.BigEndian.Uint16(b[4:]))
-		if total > len(b) {
+		if total > len(b)+rest {
 			return p, false
 		}
 		p.proto = b[6]
 		p.src = netip.AddrFrom16([16]byte(b[8:24]))
 		p.dst = netip.AddrFrom16([16]byte(b[24:40]))
-		p.payload = b[ipv6HeaderSize:total]
+		p.payload, p.rest = b[ipv6HeaderSize:min(total, len(b))], max(total-len(b), 0)
 		// hop-by-hop options, routing, destination options
 		for p.proto == 0 || p.proto == 43 || p.proto == 60 {
 			if len(p.payload) < 8 {
