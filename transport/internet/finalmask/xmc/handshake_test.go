@@ -61,7 +61,7 @@ func TestHandshakeSuccess(t *testing.T) {
 		}
 		defer rawConn.Close()
 
-		server, err := wrapConnServer(rawConn, profiles, password, privateKey, publicKey)
+		server, err := wrapConnServer(rawConn, profiles, password, privateKey, publicKey, nil)
 		if err != nil {
 			t.Errorf("failed to wrap server: %v", err)
 			return
@@ -92,7 +92,7 @@ func TestHandshakeSuccess(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost")
+	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost", nil)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 		}
 		defer rawConn.Close()
 
-		server, err := wrapConnServer(rawConn, profiles, serverPassword, serverPrivateKey, serverPublicKey)
+		server, err := wrapConnServer(rawConn, profiles, serverPassword, serverPrivateKey, serverPublicKey, nil)
 		if err != nil {
 			// Wrapping is synchronous and shouldn't fail initially simply because key derivation works with any string
 			t.Logf("wrapped server: %v", err)
@@ -158,7 +158,7 @@ func TestHandshakePasswordMismatch(t *testing.T) {
 	}
 	defer clientRaw.Close()
 
-	client, err := newClientConn(clientRaw, profiles, clientPassword, serverPublicKey, "localhost")
+	client, err := newClientConn(clientRaw, profiles, clientPassword, serverPublicKey, "localhost", nil)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestHandshakeNetPipeWithKeepAlive(t *testing.T) {
 	serverDone := make(chan error, 1)
 
 	go func() {
-		server, err := wrapConnServer(serverRaw, profiles, password, privateKey, publicKey)
+		server, err := wrapConnServer(serverRaw, profiles, password, privateKey, publicKey, nil)
 		if err != nil {
 			serverDone <- err
 			return
@@ -222,7 +222,7 @@ func TestHandshakeNetPipeWithKeepAlive(t *testing.T) {
 		serverDone <- <-followupDone
 	}()
 
-	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost")
+	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +260,7 @@ func TestStatusQueryUnaffected(t *testing.T) {
 	privateKey, publicKey := deriveTestRSAKey(t, password)
 	serverDone := make(chan error, 1)
 	go func() {
-		server, err := wrapConnServer(serverRaw, profiles, password, privateKey, publicKey)
+		server, err := wrapConnServer(serverRaw, profiles, password, privateKey, publicKey, nil)
 		if err == nil {
 			err = server.handshake()
 		}
@@ -329,7 +329,7 @@ func TestClientHandshakeHonorsCallerDeadline(t *testing.T) {
 	const password = "deadline-shared-key"
 	profiles := []loginProfile{testLoginProfile("deadline_user")}
 	_, publicKey := deriveTestRSAKey(t, password)
-	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost")
+	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestClientCloseInterruptsHandshake(t *testing.T) {
 	const password = "close-shared-key"
 	profiles := []loginProfile{testLoginProfile("close_user")}
 	_, publicKey := deriveTestRSAKey(t, password)
-	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost")
+	client, err := newClientConn(clientRaw, profiles, password, publicKey, "localhost", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
