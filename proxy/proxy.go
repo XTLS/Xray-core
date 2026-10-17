@@ -268,7 +268,7 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			if rawInputBuffer, err := buf.ReadFrom(raw); err == nil && !rawInputBuffer.IsEmpty() {
 				buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
 			}
-			*raw = bytes.Buffer{} // release memory
+			// *raw = bytes.Buffer{} // may not be suitable for Go 1.27.3+
 		}
 		w.rawInput = nil
 
