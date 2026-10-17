@@ -6,11 +6,9 @@ import (
 	gotls "crypto/tls"
 	"encoding/base64"
 	"io"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
-	"unsafe"
 
 	"github.com/xtls/xray-core/app/dispatcher"
 	"github.com/xtls/xray-core/app/reverse"
@@ -548,7 +546,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	var input *bytes.Reader
-	var rawInput *bytes.Buffer
+	var rawInput **bytes.Buffer
 	switch requestAddons.Flow {
 	case vless.XRV:
 		if account.Flow == requestAddons.Flow {
@@ -560,30 +558,23 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				inbound.CanSpliceCopy = 3
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
-				var t reflect.Type
-				var p uintptr
+				var target net.Conn
 				if commonConn, ok := connection.(*encryption.CommonConn); ok {
 					if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
 						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
 					}
-					t = reflect.TypeOf(commonConn).Elem()
-					p = uintptr(unsafe.Pointer(commonConn))
+					target = commonConn
 				} else if tlsConn, ok := iConn.(*tls.Conn); ok {
 					if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
 						return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version)
 					}
-					t = reflect.TypeOf(tlsConn.Conn).Elem()
-					p = uintptr(unsafe.Pointer(tlsConn.Conn))
+					target = tlsConn.Conn
 				} else if realityConn, ok := iConn.(*reality.Conn); ok {
-					t = reflect.TypeOf(realityConn.Conn).Elem()
-					p = uintptr(unsafe.Pointer(realityConn.Conn))
+					target = realityConn.Conn
 				} else {
 					return errors.New("XTLS only supports TLS and REALITY directly for now.")
 				}
-				i, _ := t.FieldByName("input")
-				r, _ := t.FieldByName("rawInput")
-				input = (*bytes.Reader)(unsafe.Pointer(p + i.Offset))
-				rawInput = (*bytes.Buffer)(unsafe.Pointer(p + r.Offset))
+				input, rawInput = vless.AccessTLSBuffers(target)
 			}
 		} else {
 			return errors.New("account " + account.ID.String() + " is not able to use the flow " + requestAddons.Flow)

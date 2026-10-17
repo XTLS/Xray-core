@@ -180,14 +180,14 @@ type VisionReader struct {
 	isUplink     bool
 	conn         net.Conn
 	input        *bytes.Reader
-	rawInput     *bytes.Buffer
+	rawInput     **bytes.Buffer
 	ob           *session.Outbound
 
 	// internal
 	directReadCounter stats.Counter
 }
 
-func NewVisionReader(reader buf.Reader, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, input *bytes.Reader, rawInput *bytes.Buffer, ob *session.Outbound) *VisionReader {
+func NewVisionReader(reader buf.Reader, trafficState *TrafficState, isUplink bool, ctx context.Context, conn net.Conn, input *bytes.Reader, rawInput **bytes.Buffer, ob *session.Outbound) *VisionReader {
 	return &VisionReader{
 		Reader:       reader,
 		trafficState: trafficState,
@@ -261,12 +261,15 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		if inputBuffer, err := buf.ReadFrom(w.input); err == nil && !inputBuffer.IsEmpty() {
 			buffer, _ = buf.MergeMulti(buffer, inputBuffer)
 		}
-		if rawInputBuffer, err := buf.ReadFrom(w.rawInput); err == nil && !rawInputBuffer.IsEmpty() {
-			buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
-		}
 		*w.input = bytes.Reader{} // release memory
 		w.input = nil
-		*w.rawInput = bytes.Buffer{} // release memory
+
+		if raw := *w.rawInput; raw != nil {
+			if rawInputBuffer, err := buf.ReadFrom(raw); err == nil && !rawInputBuffer.IsEmpty() {
+				buffer, _ = buf.MergeMulti(buffer, rawInputBuffer)
+			}
+			// *raw = bytes.Buffer{} // may not be suitable for Go 1.27.3+
+		}
 		w.rawInput = nil
 
 		if inbound := session.InboundFromContext(w.ctx); inbound != nil && inbound.Conn != nil {
