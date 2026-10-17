@@ -42,7 +42,7 @@ func liveDriveConfig(t *testing.T) *Config {
 
 	config := &Config{
 		RemoteFolder:      secrets.Folder,
-		Service:           "Google Drive",
+		Service:           "google-drive",
 		Secrets:           []string{secrets.ClientID, secrets.ClientSecret, secrets.RefreshToken},
 		SegmentBytes:      256 * 1024,
 		FlushIntervalMs:   100,

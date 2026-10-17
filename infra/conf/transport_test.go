@@ -9,6 +9,7 @@ import (
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
 	finalmaskcustom "github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"github.com/xtls/xray-core/transport/internet/xdrive"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -322,8 +323,25 @@ func TestXDriveRejectsUnknownService(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"remoteFolder": "/tmp/xdrive", "service": "Dropbox"}`), config); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if _, err := config.Build(); err == nil {
-		t.Fatal("Build accepted an unsupported service")
+	if _, err := config.Build(); err == nil || !strings.Contains(err.Error(), `use "google-drive", "template" or "local"`) {
+		t.Fatalf("expected an unknown service error, got %v", err)
+	}
+}
+
+func TestXDriveGoogleDriveName(t *testing.T) {
+	for _, service := range []string{"google-drive", "Google Drive"} {
+		config := &XDriveConfig{RemoteFolder: "folder-id", Service: service, Secrets: []string{"a", "b", "c"}}
+		built, err := config.Build()
+		if err != nil {
+			t.Fatalf("%s: %v", service, err)
+		}
+		if got := built.(*xdrive.Config).Service; got != "google-drive" {
+			t.Errorf("%s: service is %q, want google-drive", service, got)
+		}
+		config = &XDriveConfig{RemoteFolder: "folder-id", Service: service, Secrets: []string{"a", "b"}}
+		if _, err := config.Build(); err == nil {
+			t.Errorf("%s: accepted two secrets", service)
+		}
 	}
 }
 
@@ -413,5 +431,85 @@ func TestXDriveTemplateNeedsTemplate(t *testing.T) {
 	}
 	if _, err := config.Build(); err == nil {
 		t.Fatal("Build accepted a template service without a template")
+	}
+}
+
+const (
+	xdriveStream = `"streamSettings": {"network": "xdrive", "xdriveSettings": {"remoteFolder": "f", "service": "local"}}`
+	xdriveID     = `"id": "27848739-7e62-4138-9fd3-098a63964b6b"`
+	xdriveServer = `"address": "127.0.0.1", "port": 443, ` + xdriveID
+	xdriveEnc    = `"encryption": "mlkem768x25519plus.native.0rtt.XKbaq1BuzJKKKPxZbwgRpn-gYQbnhrYketgezASCL1I"`
+	xdriveDec    = `"decryption": "mlkem768x25519plus.native.600s.UKfUEMDdjlEnycTMBP0a08acky8vRRKSrM1MRnaYk3s"`
+)
+
+func TestXDriveOutboundConfig(t *testing.T) {
+	build := func(s string) error {
+		c := new(OutboundDetourConfig)
+		if err := json.Unmarshal([]byte(s), c); err != nil {
+			return err
+		}
+		_, err := c.Build()
+		return err
+	}
+
+	for _, input := range []string{
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`,
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": 0, "xudpConcurrency": 8, "xudpProxyUDP443": "allow"}}`,
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "reverse": {"tag": "r"}}, ` + xdriveStream + `}`,
+		`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `}]}]}, ` + xdriveStream + `, "mux": {"enabled": true}}`,
+	} {
+		if err := build(input); err != nil {
+			t.Errorf("%s: %v", input, err)
+		}
+	}
+	for _, c := range []struct{ input, err string }{
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, "encryption": "none"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"encryption"`},
+		{`{"protocol": "vless", "settings": {"address": "example.com", "port": 443, ` + xdriveID + `, "encryption": "none"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"encryption"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": false}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "xudpConcurrency": -1}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "xudpProxyUDP443": "skip"}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"flow"`},
+		{`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}]}]}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"flow"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "testpre": 1}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"testpre"`},
+		{`{"protocol": "vmess", "settings": {` + xdriveServer + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
+		{`{"protocol": "trojan", "settings": {"address": "example.com", "port": 443, "password": "p"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
+		{`{"protocol": "freedom", ` + xdriveStream + `}`, "VLESS"},
+	} {
+		if err := build(c.input); err == nil || !strings.Contains(err.Error(), "xdrive transport") || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("expected an xdrive error about %s for %s, got %v", c.err, c.input, err)
+		}
+	}
+}
+
+func TestXDriveInboundConfig(t *testing.T) {
+	build := func(s string) error {
+		c := new(InboundDetourConfig)
+		if err := json.Unmarshal([]byte(s), c); err != nil {
+			return err
+		}
+		_, err := c.Build()
+		return err
+	}
+
+	for _, input := range []string{
+		`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `}, ` + xdriveStream + `}`,
+		`{"protocol": "vless", "listen": "@xdrive", "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `}, ` + xdriveStream + `}`,
+	} {
+		if err := build(input); err != nil {
+			t.Errorf("%s: %v", input, err)
+		}
+	}
+	for _, c := range []struct{ input, err string }{
+		{`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `}], "decryption": "none"}, ` + xdriveStream + `}`, `"decryption"`},
+		{`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `, "flow": "xtls-rprx-vision"}, ` + xdriveStream + `}`, `"flow"`},
+		{`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `, "flow": "xtls-rprx-vision"}], ` + xdriveDec + `}, ` + xdriveStream + `}`, `"flow"`},
+		{`{"protocol": "vmess", "port": 443, "settings": {"clients": [{` + xdriveID + `}]}, ` + xdriveStream + `}`, "VLESS"},
+		{`{"protocol": "vless", "port": "10800-10803", "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `}, ` + xdriveStream + `}`, "one port"},
+	} {
+		if err := build(c.input); err == nil || !strings.Contains(err.Error(), "xdrive transport") || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("expected an xdrive error about %s for %s, got %v", c.err, c.input, err)
+		}
 	}
 }
