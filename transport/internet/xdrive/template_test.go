@@ -306,3 +306,113 @@ func TestTemplateConcurrencyDefault(t *testing.T) {
 		t.Fatalf("default inflight cap is %d, want %d", cap(storage.inflight), driveMaxInflight)
 	}
 }
+
+// hrefStore mimics the Yandex Disk REST API: upload and download answer with an href
+// to a presigned blob URL, which must be called without the API credentials.
+type hrefStore struct {
+	*fakeStore
+	blobAuth string
+}
+
+func newHrefStore(t *testing.T) *hrefStore {
+	t.Helper()
+
+	store := &hrefStore{fakeStore: &fakeStore{objects: make(map[string][]byte)}}
+	store.server = httptest.NewServer(http.HandlerFunc(store.handle))
+	t.Cleanup(store.server.Close)
+	return store
+}
+
+func (s *hrefStore) handle(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/blob/") {
+		s.mu.Lock()
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			s.blobAuth = auth
+		}
+		s.mu.Unlock()
+		r.URL.Path = "/folder/" + strings.TrimPrefix(r.URL.Path, "/blob/")
+		s.fakeStore.handle(w, r)
+		return
+	}
+	if r.Header.Get("Authorization") != "OAuth tok" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	name := r.URL.Query().Get("path")
+	switch r.URL.Path {
+	case "/upload":
+	case "/download":
+		s.mu.Lock()
+		_, ok := s.objects[name]
+		s.mu.Unlock()
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	default:
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]interface{}{"href": s.server.URL + "/blob/" + name})
+}
+
+func hrefSettings(store *hrefStore) *internet.MemoryStreamConfig {
+	base := store.server.URL
+	settings := templateSettings(store.fakeStore, map[string]interface{}{
+		"type": "static", "header": map[string]interface{}{"Authorization": "OAuth {secret0}"},
+	}, []string{"tok"})
+	cfg := settings.ProtocolSettings.(*Config)
+	var tmpl map[string]interface{}
+	json.Unmarshal([]byte(cfg.Template), &tmpl)
+	tmpl["put"] = map[string]interface{}{"url": base + "/upload?path={name}", "hrefPath": "href", "hrefMethod": "PUT"}
+	tmpl["get"] = map[string]interface{}{"url": base + "/download?path={name}", "hrefPath": "href"}
+	tmpl["list"] = map[string]interface{}{"method": "PROPFIND", "url": base + "/blob/", "namesRegex": `<d:href>/folder/([^<]+)</d:href>`}
+	tmpl["delete"] = map[string]interface{}{"method": "DELETE", "url": base + "/blob/{name}"}
+	raw, _ := json.Marshal(tmpl)
+	cfg.Template = string(raw)
+	return settings
+}
+
+func TestTemplateTwoStep(t *testing.T) {
+	store := newHrefStore(t)
+	settings := hrefSettings(store)
+	storage, err := newTemplateStorage(settings, settings.ProtocolSettings.(*Config))
+	if err != nil {
+		t.Fatalf("newTemplateStorage: %v", err)
+	}
+	ctx := context.Background()
+
+	if err := storage.Put(ctx, "streams/abc/c2s/000000000.seg", []byte("hello")); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	data, err := storage.Get(ctx, "streams/abc/c2s/000000000.seg")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("Get returned %q, want hello", data)
+	}
+	if _, err := storage.Get(ctx, "streams/abc/c2s/000000009.seg"); err != errNotFound {
+		t.Fatalf("Get of a missing object returned %v, want errNotFound", err)
+	}
+	if store.blobAuth != "" {
+		t.Fatalf("the presigned href received credentials %q", store.blobAuth)
+	}
+}
+
+func TestTemplateTwoStepTransport(t *testing.T) {
+	store := newHrefStore(t)
+	client, server, cleanup := pairWith(t, hrefSettings(store))
+	defer cleanup()
+
+	if _, err := client.Write([]byte("ping")); err != nil {
+		t.Fatalf("client write: %v", err)
+	}
+	expectRead(t, server, "ping")
+
+	if _, err := server.Write([]byte("pong")); err != nil {
+		t.Fatalf("server write: %v", err)
+	}
+	expectRead(t, client, "pong")
+}

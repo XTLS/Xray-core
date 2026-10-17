@@ -33,6 +33,14 @@ type opTemplate struct {
 	Headers    map[string]string `json:"headers"`
 	Body       string            `json:"body"`
 	NamesRegex string            `json:"namesRegex"`
+
+	// HrefPath makes the operation two-step, as in the Yandex Disk REST API: the first request
+	// answers with a JSON body, the URL found at HrefPath is then called with HrefMethod (GET by
+	// default), carrying the payload. The URL is used as given, with neither auth nor headers.
+	HrefPath   string `json:"hrefPath"`
+	HrefMethod string `json:"hrefMethod"`
+
+	presigned bool
 }
 
 type retryTemplate struct {
@@ -262,6 +270,11 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 	backoff := driveInitialBackoff
 	var lastErr error
 
+	url := op.URL
+	if !op.presigned {
+		url = subst(url, vars)
+	}
+
 	for attempt := 0; attempt < driveMaxAttempts; attempt++ {
 		if attempt > 0 {
 			select {
@@ -275,10 +288,14 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 			}
 		}
 
-		authHeaders, err := s.authHeaders(ctx, vars)
-		if err != nil {
-			lastErr = err
-			continue
+		var authHeaders map[string]string
+		if !op.presigned {
+			headers, err := s.authHeaders(ctx, vars)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			authHeaders = headers
 		}
 
 		method := op.Method
@@ -290,7 +307,7 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 		if body != nil {
 			reader = bytes.NewReader(body)
 		}
-		req, err := http.NewRequestWithContext(ctx, method, subst(op.URL, vars), reader)
+		req, err := http.NewRequestWithContext(ctx, method, url, reader)
 		if err != nil {
 			return 0, nil, errors.New("failed to build request").Base(err)
 		}
@@ -325,7 +342,7 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 			continue
 		}
 
-		if resp.StatusCode == http.StatusUnauthorized && s.tmpl.Auth.Type == "oauth2" {
+		if resp.StatusCode == http.StatusUnauthorized && s.tmpl.Auth.Type == "oauth2" && !op.presigned {
 			s.invalidateToken()
 			lastErr = errors.New("the service rejected the token")
 			continue
@@ -339,6 +356,22 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 	return 0, nil, lastErr
 }
 
+// run performs op, following its href when the operation is two-step.
+func (s *templateStorage) run(ctx context.Context, op *opTemplate, vars map[string]string, body []byte) (int, []byte, error) {
+	if op.HrefPath == "" {
+		return s.do(ctx, op, vars, body)
+	}
+	status, payload, err := s.do(ctx, op, vars, nil)
+	if err != nil || status < 200 || status >= 300 {
+		return status, payload, err
+	}
+	href := jsonString(payload, op.HrefPath)
+	if href == "" {
+		return 0, nil, errors.New("the response has no href at ", op.HrefPath)
+	}
+	return s.do(ctx, &opTemplate{Method: op.HrefMethod, URL: href, presigned: true}, vars, body)
+}
+
 func (s *templateStorage) Put(ctx context.Context, name string, data []byte) error {
 	vars := s.baseVars()
 	vars["name"] = s.storedName(name)
@@ -349,7 +382,7 @@ func (s *templateStorage) Put(ctx context.Context, name string, data []byte) err
 		body = []byte(subst(s.tmpl.Put.Body, vars))
 	}
 
-	status, payload, err := s.do(ctx, &s.tmpl.Put, vars, body)
+	status, payload, err := s.run(ctx, &s.tmpl.Put, vars, body)
 	if err != nil {
 		return err
 	}
@@ -363,7 +396,7 @@ func (s *templateStorage) Get(ctx context.Context, name string) ([]byte, error) 
 	vars := s.baseVars()
 	vars["name"] = s.storedName(name)
 
-	status, payload, err := s.do(ctx, &s.tmpl.Get, vars, nil)
+	status, payload, err := s.run(ctx, &s.tmpl.Get, vars, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +414,7 @@ func (s *templateStorage) Delete(ctx context.Context, name string) error {
 	vars := s.baseVars()
 	vars["name"] = s.storedName(name)
 
-	status, payload, err := s.do(ctx, &s.tmpl.Delete, vars, nil)
+	status, payload, err := s.run(ctx, &s.tmpl.Delete, vars, nil)
 	if err != nil {
 		return err
 	}
@@ -396,7 +429,7 @@ func (s *templateStorage) List(ctx context.Context, prefix string) ([]Entry, err
 	flat := s.storedName(prefix)
 	vars["prefix"] = flat
 
-	status, payload, err := s.do(ctx, &s.tmpl.List, vars, nil)
+	status, payload, err := s.run(ctx, &s.tmpl.List, vars, nil)
 	if err != nil {
 		return nil, err
 	}
