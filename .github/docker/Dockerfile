@@ -10,7 +10,7 @@ RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o xray -trimpath -
 
 # Download geodat into a staging directory
 ADD https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geoip.dat /tmp/geodat/geoip.dat
-ADD https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/geosite.dat /tmp/geodat/geosite.dat
+ADD https://raw.githubusercontent.com/v2fly/domain-list-community/release/dlc.dat /tmp/geodat/geosite.dat
 
 RUN mkdir -p /tmp/empty
 
