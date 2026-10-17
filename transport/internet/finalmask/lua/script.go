@@ -83,7 +83,6 @@ func newEngine(script string) (*engine, error) {
 		func(L *glua.LState) {
 			log.RegisterLua(L)
 			RegisterLua(L)
-			registerObjects(L)
 		},
 		func(L *glua.LState) error {
 			if defined(L) == 0 {

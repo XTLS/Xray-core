@@ -312,3 +312,15 @@ end
 	}
 	require.Equal(t, [][]byte{[]byte("n"), []byte("payload"), []byte("payload")}, raw.packets())
 }
+
+func TestAMethodRefusesAReceiverTheHookWasNotGiven(t *testing.T) {
+	client, raw := packetConn(t, `
+function HandleNoise(plan, address, role)
+    plan.Add({}, "n")
+end
+`, 0)
+
+	_, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: 1})
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{[]byte("payload")}, raw.packets())
+}

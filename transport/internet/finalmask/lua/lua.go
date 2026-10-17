@@ -82,53 +82,69 @@ func RegisterLua(L *glua.LState) {
 	})
 }
 
-func registerObjects(L *glua.LState) {
-	planMeta := L.CreateTable(0, 3)
-	planMeta.RawSetString("__index", planMeta)
-	planMeta.RawSetString("Add", L.NewFunction(planAdd))
-	planMeta.RawSetString("AddRandom", L.NewFunction(planAddRandom))
-	setObject(L, planKey, planMeta, &noisePlan{})
-
-	streamMeta := L.CreateTable(0, 4)
-	streamMeta.RawSetString("__index", streamMeta)
-	streamMeta.RawSetString("Write", L.NewFunction(streamWrite))
-	streamMeta.RawSetString("Read", L.NewFunction(streamRead))
-	streamMeta.RawSetString("Sleep", L.NewFunction(streamSleep))
-	setObject(L, streamKey, streamMeta, &headerStream{})
-
-	headerMeta := L.CreateTable(0, 3)
-	headerMeta.RawSetString("__index", headerMeta)
-	headerMeta.RawSetString("Add", L.NewFunction(builderAdd))
-	headerMeta.RawSetString("AddRandom", L.NewFunction(builderAddRandom))
-	setObject(L, headerKey, headerMeta, &headerBuilder{})
-
-	packetMeta := L.CreateTable(0, 5)
-	packetMeta.RawSetString("__index", packetMeta)
-	packetMeta.RawSetString("Len", L.NewFunction(packetLen))
-	packetMeta.RawSetString("Byte", L.NewFunction(packetByte))
-	packetMeta.RawSetString("Match", L.NewFunction(packetMatch))
-	packetMeta.RawSetString("Slice", L.NewFunction(packetSlice))
-	setObject(L, packetKey, packetMeta, &headerPacket{})
+var objects = map[string]struct {
+	methods map[string]glua.LGFunction
+	make    func() any
+}{
+	planKey: {
+		methods: map[string]glua.LGFunction{"Add": planAdd, "AddRandom": planAddRandom},
+		make:    func() any { return &noisePlan{} },
+	},
+	streamKey: {
+		methods: map[string]glua.LGFunction{"Write": streamWrite, "Read": streamRead, "Sleep": streamSleep},
+		make:    func() any { return &headerStream{} },
+	},
+	headerKey: {
+		methods: map[string]glua.LGFunction{"Add": builderAdd, "AddRandom": builderAddRandom},
+		make:    func() any { return &headerBuilder{} },
+	},
+	packetKey: {
+		methods: map[string]glua.LGFunction{"Len": packetLen, "Byte": packetByte, "Match": packetMatch, "Slice": packetSlice},
+		make:    func() any { return &headerPacket{} },
+	},
 }
 
-func setObject(L *glua.LState, key string, meta *glua.LTable, value any) {
-	data := L.NewUserData()
-	data.Value = value
-	data.Metatable = meta
-	L.SetField(L.G.Registry, key, data)
-}
-
+// object hands a hook the one object of its kind a state owns, and makes it
+// when the state has not run that hook before: a script that only writes
+// noise never pays for the objects of a header.
 func object[T any](L *glua.LState, key string) (*glua.LUserData, T, error) {
 	var zero T
 	data, ok := L.GetField(L.G.Registry, key).(*glua.LUserData)
 	if !ok {
-		return nil, zero, errors.New("the script has no ", key)
+		kind, ok := objects[key]
+		if !ok {
+			return nil, zero, errors.New("there is no ", key)
+		}
+		meta := L.CreateTable(0, len(kind.methods)+1)
+		meta.RawSetString("__index", meta)
+		for name, method := range kind.methods {
+			meta.RawSetString(name, L.NewFunction(method))
+		}
+		data = L.NewUserData()
+		data.Value = kind.make()
+		data.Metatable = meta
+		L.SetField(L.G.Registry, key, data)
 	}
 	value, ok := data.Value.(T)
 	if !ok {
 		return nil, zero, errors.New("the script has no ", key)
 	}
 	return data, value, nil
+}
+
+// borrowed reads back the object a hook is running with, and refuses anything
+// else the script may pass to a method of its own accord.
+func borrowed[T any](L *glua.LState, key string) (T, bool) {
+	var zero T
+	data, ok := L.GetField(L.G.Registry, key).(*glua.LUserData)
+	if !ok || L.Get(1) != glua.LValue(data) {
+		return zero, false
+	}
+	value, ok := data.Value.(T)
+	if !ok {
+		return zero, false
+	}
+	return value, true
 }
 
 func planAdd(L *glua.LState) int {
@@ -161,8 +177,8 @@ func planAddRandom(L *glua.LState) int {
 }
 
 func planFor(L *glua.LState, size int) *noisePlan {
-	_, plan, err := object[*noisePlan](L, planKey)
-	if err != nil || L.Get(1) != L.GetField(L.G.Registry, planKey) {
+	plan, ok := borrowed[*noisePlan](L, planKey)
+	if !ok {
 		L.RaiseError("the plan HandleNoise was given is required")
 		return nil
 	}
@@ -240,8 +256,8 @@ func streamSleep(L *glua.LState) int {
 }
 
 func streamFor(L *glua.LState, write int) *headerStream {
-	_, stream, err := object[*headerStream](L, streamKey)
-	if err != nil || L.Get(1) != L.GetField(L.G.Registry, streamKey) {
+	stream, ok := borrowed[*headerStream](L, streamKey)
+	if !ok {
 		L.RaiseError("the stream HandleHeader was given is required")
 		return nil
 	}
@@ -284,8 +300,8 @@ func builderAddRandom(L *glua.LState) int {
 }
 
 func builderFor(L *glua.LState, add int) *headerBuilder {
-	_, builder, err := object[*headerBuilder](L, headerKey)
-	if err != nil || L.Get(1) != L.GetField(L.G.Registry, headerKey) {
+	builder, ok := borrowed[*headerBuilder](L, headerKey)
+	if !ok {
 		L.RaiseError("the header HandleHeaderWrite was given is required")
 		return nil
 	}
@@ -344,8 +360,8 @@ func packetSlice(L *glua.LState) int {
 }
 
 func packetFor(L *glua.LState) *headerPacket {
-	_, packet, err := object[*headerPacket](L, packetKey)
-	if err != nil || L.Get(1) != L.GetField(L.G.Registry, packetKey) {
+	packet, ok := borrowed[*headerPacket](L, packetKey)
+	if !ok {
 		L.RaiseError("the packet HandleHeaderRead was given is required")
 		return nil
 	}
