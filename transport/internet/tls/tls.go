@@ -275,6 +275,7 @@ var ModernFingerprints = map[string]*utls.ClientHelloID{
 	"hellochrome_120":  &utls.HelloChrome_120,
 	"hellochrome_131":  &utls.HelloChrome_131,
 	"hellochrome_133":  &utls.HelloChrome_133,
+	"hellochrome_155":  &utls.HelloChrome_155,
 	"helloios_13":      &utls.HelloIOS_13,
 	"helloios_14":      &utls.HelloIOS_14,
 	"helloedge_106":    &utls.HelloEdge_106,
