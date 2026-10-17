@@ -311,8 +311,8 @@ type NoiseItem struct {
 }
 
 type LuaMask struct {
-	Script string     `json:"script"`
-	Reset  Int32Range `json:"reset"`
+	Script     string     `json:"script"`
+	NoiseReset Int32Range `json:"noiseReset"`
 }
 
 func (c *LuaMask) Build() (proto.Message, error) {
@@ -323,9 +323,9 @@ func (c *LuaMask) Build() (proto.Message, error) {
 		return nil, errors.New("failed to compile the script").Base(err)
 	}
 	return &finalmasklua.Config{
-		Script:   c.Script,
-		ResetMin: int64(c.Reset.From),
-		ResetMax: int64(c.Reset.To),
+		Script:        c.Script,
+		NoiseResetMin: int64(c.NoiseReset.From),
+		NoiseResetMax: int64(c.NoiseReset.To),
 	}, nil
 }
 

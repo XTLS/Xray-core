@@ -43,7 +43,7 @@ func (c *fakePacketConn) packets() [][]byte {
 func packetConn(t *testing.T, script string, reset int32) (net.PacketConn, *fakePacketConn) {
 	t.Helper()
 	raw := &fakePacketConn{}
-	conn, err := (&Config{Script: writeScript(t, script), ResetMax: int64(reset)}).WrapPacketConnClient(raw, nil, nil)
+	conn, err := (&Config{Script: writeScript(t, script), NoiseResetMax: int64(reset)}).WrapPacketConnClient(raw, nil, nil)
 	require.NoError(t, err)
 	return conn, raw
 }

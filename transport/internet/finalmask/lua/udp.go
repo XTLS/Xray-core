@@ -111,9 +111,9 @@ func (c *maskPacketConn) sendNoise(addr net.Addr) {
 	key := address(addr)
 	at := c.sent[key]
 	defer func() {
-		c.sent[key] = time.Now().Add(time.Duration(crypto.RandBetween(c.config.ResetMin, c.config.ResetMax)) * time.Second)
+		c.sent[key] = time.Now().Add(time.Duration(crypto.RandBetween(c.config.NoiseResetMin, c.config.NoiseResetMax)) * time.Second)
 	}()
-	if !at.IsZero() && (c.config.ResetMax <= 0 || time.Now().Before(at)) {
+	if !at.IsZero() && (c.config.NoiseResetMax <= 0 || time.Now().Before(at)) {
 		return
 	}
 
