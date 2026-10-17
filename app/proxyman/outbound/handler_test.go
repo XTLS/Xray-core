@@ -18,6 +18,7 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/proxy/freedom"
+	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -172,4 +173,48 @@ func TestTagsCache(t *testing.T) {
 	wg_add_rm.Wait()
 	stop_get = true
 	wg_get.Wait()
+}
+
+type closeCountingHandler struct {
+	tag    string
+	closed atomic.Int32
+}
+
+func (h *closeCountingHandler) Start() error                              { return nil }
+func (h *closeCountingHandler) Close() error                              { h.closed.Add(1); return nil }
+func (h *closeCountingHandler) Tag() string                               { return h.tag }
+func (h *closeCountingHandler) Dispatch(context.Context, *transport.Link) {}
+func (h *closeCountingHandler) SenderSettings() *serial.TypedMessage      { return nil }
+func (h *closeCountingHandler) ProxySettings() *serial.TypedMessage       { return nil }
+
+func TestRemoveHandlerClosesHandler(t *testing.T) {
+	ctx := context.Background()
+	ohm, err := New(ctx, &proxyman.OutboundConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ohm.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &closeCountingHandler{tag: "removed"}
+	if err := ohm.AddHandler(ctx, h); err != nil {
+		t.Fatal(err)
+	}
+	if err := ohm.RemoveHandler(ctx, "removed"); err != nil {
+		t.Fatal(err)
+	}
+	if ohm.GetHandler("removed") != nil {
+		t.Error("expected the handler to be removed")
+	}
+	if n := h.closed.Load(); n != 1 {
+		t.Error("expected the removed handler to be closed once, but got", n)
+	}
+
+	// Neither removing it again nor closing the manager closes it again.
+	ohm.RemoveHandler(ctx, "removed")
+	ohm.Close()
+	if n := h.closed.Load(); n != 1 {
+		t.Error("expected the removed handler to be closed once, but got", n)
+	}
 }
