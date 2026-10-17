@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xtls/xray-core/common/log"
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
 	finalmaskcustom "github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
@@ -352,6 +353,56 @@ func TestXDriveTemplateStreamConfig(t *testing.T) {
 	}
 	if built.ProtocolName != "xdrive" {
 		t.Fatalf("ProtocolName is %q, want xdrive", built.ProtocolName)
+	}
+}
+
+type logLines []string
+
+func (l *logLines) Handle(msg log.Message) {
+	*l = append(*l, msg.String())
+}
+
+// "alpn" ["http/1.1"] is warned about where the hello does not carry it, which
+// is outside ECH with a fingerprint that has an ALPN of its own
+func TestXDriveHTTP1ALPNWarning(t *testing.T) {
+	var lines logLines
+	log.RegisterHandler(&lines)
+
+	for _, c := range []struct {
+		method, tlsSettings string
+		warn                bool
+	}{
+		{"xdrive", `{}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"]}`, true},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "Firefox"}`, true},
+		{"raw", `{"alpn": ["http/1.1"]}`, false},
+		{"xdrive", `{"alpn": ["h2", "http/1.1"]}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "echConfigList": "udp://1.1.1.1"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "unsafe"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "hellogolang"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "randomized"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "hellorandomizednoalpn"}`, false},
+	} {
+		lines = nil
+		config := new(StreamConfig)
+		if err := json.Unmarshal([]byte(`{
+			"method": "`+c.method+`",
+			"security": "tls",
+			"tlsSettings": `+c.tlsSettings+`,
+			"xdriveSettings": {"remoteFolder": "/tmp/xdrive", "service": "local"}
+		}`), config); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if _, err := config.Build(); err != nil {
+			t.Fatalf("%s %s: %v", c.method, c.tlsSettings, err)
+		}
+		warned := false
+		for _, line := range lines {
+			warned = warned || strings.HasPrefix(line, "[Warning]") && strings.Contains(line, `"alpn"`)
+		}
+		if warned != c.warn {
+			t.Errorf("%s %s: warned %v, want %v", c.method, c.tlsSettings, warned, c.warn)
+		}
 	}
 }
 
