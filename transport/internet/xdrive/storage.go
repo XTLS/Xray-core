@@ -48,6 +48,19 @@ func newStorage(streamSettings *internet.MemoryStreamConfig) (Storage, error) {
 	}
 }
 
+// sessionStorage returns the storage of one session, which takes connections
+// of XMUX until Close, with the token and cache of storage. Local storage has
+// no connections
+func sessionStorage(storage Storage) Storage {
+	switch s := storage.(type) {
+	case *driveStorage:
+		return s.session()
+	case *templateStorage:
+		return s.session()
+	}
+	return storage
+}
+
 var (
 	sharedMu sync.Mutex
 	shared   = make(map[string]Storage)

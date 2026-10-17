@@ -997,6 +997,10 @@ type XDriveConfig struct {
 	EagerWindowMs     uint32          `json:"eagerWindowMs"`
 	HoleTimeoutMs     uint32          `json:"holeTimeoutMs"`
 	Template          json.RawMessage `json:"template"`
+	Xmux              XmuxConfig      `json:"xmux"`
+
+	// set by StreamConfig when "alpn" is ["h3"]
+	h3 bool
 }
 
 // Build implements Buildable.
@@ -1018,6 +1022,21 @@ func (c *XDriveConfig) Build() (proto.Message, error) {
 	default:
 		return nil, errors.New(`unknown "service": "`, c.Service, `", use "google-drive", "template" or "local"`)
 	}
+	if c.Xmux.MaxConnections.To > 0 && c.Xmux.MaxConcurrency.To > 0 {
+		return nil, errors.New("maxConnections cannot be specified together with maxConcurrency")
+	}
+	if c.Xmux == (XmuxConfig{}) {
+		c.Xmux.MaxConnections.From = 1
+		c.Xmux.MaxConnections.To = 1
+		if c.Service == "google-drive" && !c.h3 {
+			// Google gives an h2 connection 1 MiB of window, which a few sessions on
+			// a long rtt would share, an h3 connection has no such limit
+			c.Xmux.MaxConnections.From = 4
+			c.Xmux.MaxConnections.To = 4
+		}
+		c.Xmux.HMaxReusableSecs.From = 1800
+		c.Xmux.HMaxReusableSecs.To = 3000
+	}
 	config := &xdrive.Config{
 		RemoteFolder:      c.RemoteFolder,
 		Service:           c.Service,
@@ -1031,6 +1050,14 @@ func (c *XDriveConfig) Build() (proto.Message, error) {
 		EagerWindowMs:     c.EagerWindowMs,
 		HoleTimeoutMs:     c.HoleTimeoutMs,
 		Template:          string(c.Template),
+		Xmux: &splithttp.XmuxConfig{
+			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
+			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),
+			CMaxReuseTimes:   newRangeConfig(c.Xmux.CMaxReuseTimes),
+			HMaxRequestTimes: newRangeConfig(c.Xmux.HMaxRequestTimes),
+			HMaxReusableSecs: newRangeConfig(c.Xmux.HMaxReusableSecs),
+			HKeepAlivePeriod: c.Xmux.HKeepAlivePeriod,
+		},
 	}
 	return config, nil
 }

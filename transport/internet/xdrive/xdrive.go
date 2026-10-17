@@ -87,6 +87,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	if err != nil {
 		return nil, err
 	}
+	storage = sessionStorage(storage)
 
 	session, err := newSessionID()
 	if err != nil {
@@ -228,8 +229,10 @@ func (l *Listener) claim(session string) bool {
 }
 
 func (l *Listener) newSessionConn(session string) *Conn {
-	return newConn(l.ctx, l.storage,
+	storage := sessionStorage(l.storage)
+	return newConn(l.ctx, storage,
 		downlinkPrefix(session), uplinkPrefix(session), l.params, func() {
+			storage.Close()
 			l.mu.Lock()
 			delete(l.active, session)
 			l.mu.Unlock()

@@ -4,16 +4,21 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	gotls "crypto/tls"
 	"io"
+	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 const testPatience = 30 * time.Second
@@ -579,5 +584,390 @@ func TestInlinePayload(t *testing.T) {
 
 	if got := atomic.LoadInt64(&storage.gets); got != 0 {
 		t.Fatalf("called Get %d times for an inline payload", got)
+	}
+}
+
+// runSessions opens n sessions at once, both ends in this process, passes data
+// both ways over each and closes them
+func runSessions(t *testing.T, streamSettings *internet.MemoryStreamConfig, n int) {
+	t.Helper()
+
+	accepted := make(chan stat.Connection, 1)
+	listener, err := Serve(context.Background(), net.LocalHostIP, net.Port(0), streamSettings, func(conn stat.Connection) {
+		accepted <- conn
+	})
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	defer listener.Close()
+
+	var ends []stat.Connection
+	defer func() {
+		for _, end := range ends {
+			end.Close()
+		}
+	}()
+	for range n {
+		client, err := Dial(context.Background(), net.Destination{}, streamSettings)
+		if err != nil {
+			t.Fatalf("Dial: %v", err)
+		}
+		ends = append(ends, client)
+		select {
+		case peer := <-accepted:
+			ends = append(ends, peer)
+		case <-time.After(testPatience):
+			t.Fatal("listener did not accept the session")
+		}
+	}
+	for i := 0; i < len(ends); i += 2 {
+		if _, err := ends[i].Write([]byte("ping")); err != nil {
+			t.Fatalf("client write: %v", err)
+		}
+		expectRead(t, ends[i+1], "ping")
+		if _, err := ends[i+1].Write([]byte("pong")); err != nil {
+			t.Fatalf("server write: %v", err)
+		}
+		expectRead(t, ends[i], "pong")
+	}
+}
+
+// sessionEnd is the session and end of it that a request to the fake store
+// comes from, or "" for the listener and the token
+func sessionEnd(r *http.Request) string {
+	name := strings.TrimPrefix(r.URL.Path, "/folder/")
+	if r.Method == "PROPFIND" {
+		name = r.URL.Query().Get("prefix")
+	}
+	write := r.Method == http.MethodPut
+	parts := strings.Split(name, flatSeparator)
+	switch {
+	case len(parts) > 2 && parts[0] == streamsDir:
+		// each end writes its own direction and reads the other
+		if (parts[2] == uplinkDir) == write {
+			return parts[1] + " client"
+		}
+		return parts[1] + " server"
+	case len(parts) == 2 && parts[0] == sessionsDir && write:
+		_, session, _ := strings.Cut(parts[1], "-")
+		return session + " client"
+	}
+	return ""
+}
+
+// with "maxConcurrency" 1 every end of a session has a connection of its own,
+// with "maxConnections" the ends share that many, and the sessions after them
+// take the same ones again. The listener and the token use none of them, and
+// the sessions get the token once
+func TestXmuxConnections(t *testing.T) {
+	const n = 3
+	for _, c := range []struct {
+		name   string
+		xmux   *splithttp.XmuxConfig
+		conns  int
+		shared bool
+	}{
+		{"maxConcurrency", &splithttp.XmuxConfig{MaxConcurrency: &splithttp.RangeConfig{From: 1, To: 1}}, 2 * n, false},
+		{"maxConnections", &splithttp.XmuxConfig{MaxConnections: &splithttp.RangeConfig{From: 2, To: 2}}, 2, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			resetSharedStorage()
+			t.Cleanup(resetSharedStorage)
+
+			store := &fakeStore{objects: make(map[string][]byte), needAuth: "Bearer tok-fake"}
+			var (
+				mu    sync.Mutex
+				conns = make(map[string]map[string]bool)
+			)
+			server := newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, func(w http.ResponseWriter, r *http.Request) {
+				end := sessionEnd(r)
+				mu.Lock()
+				if conns[end] == nil {
+					conns[end] = make(map[string]bool)
+				}
+				conns[end][r.RemoteAddr] = true
+				mu.Unlock()
+				store.handle(w, r)
+			})
+			store.server = server.Server
+			settings := templateSettings(store, map[string]interface{}{
+				"type":     "oauth2",
+				"tokenUrl": server.URL + "/token",
+				"form":     map[string]interface{}{"grant_type": "refresh_token", "refresh_token": "{secret0}"},
+				"header":   map[string]interface{}{"Authorization": "Bearer {token}"},
+			}, []string{"refresh"})
+			settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+			settings.ProtocolSettings.(*Config).Xmux = c.xmux
+
+			runSessions(t, settings, n)
+			mu.Lock()
+			first := conns
+			conns = make(map[string]map[string]bool)
+			mu.Unlock()
+			dialed := server.conns.Load()
+			runSessions(t, settings, n)
+			if got := server.conns.Load(); got != dialed {
+				t.Errorf("the next %d sessions dialed %d connections", n, got-dialed)
+			}
+
+			owner := make(map[string]string)
+			for end, addrs := range first {
+				if end == "" {
+					continue
+				}
+				if len(addrs) != 1 {
+					t.Errorf("%s used %d connections", end, len(addrs))
+				}
+				for addr := range addrs {
+					if owner[addr] != "" && !c.shared {
+						t.Errorf("%s and %s shared a connection", end, owner[addr])
+					}
+					owner[addr] = end
+				}
+			}
+			if len(owner) != c.conns {
+				t.Errorf("%d sessions had %d connections, want %d", 2*n, len(owner), c.conns)
+			}
+			for addr := range first[""] {
+				if owner[addr] != "" {
+					t.Errorf("the listener or the token went over the connection of %s", owner[addr])
+				}
+			}
+			store.mu.Lock()
+			defer store.mu.Unlock()
+			if store.tokens != 1 {
+				t.Errorf("the sessions got the token %d times", store.tokens)
+			}
+		})
+	}
+}
+
+func TestDriveXmuxConnections(t *testing.T) {
+	drive := newFakeDrive(t)
+	server := newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, drive.server.Config.Handler.ServeHTTP)
+	driveTokenURL = server.URL + "/token"
+	driveFilesURL = server.URL + "/files"
+	driveUploadURL = server.URL + "/upload"
+	settings := driveSettings()
+	settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+	settings.ProtocolSettings.(*Config).Xmux = &splithttp.XmuxConfig{MaxConnections: &splithttp.RangeConfig{From: 3, To: 3}}
+
+	runSessions(t, settings, 3)
+	if got := server.conns.Load(); got != 4 {
+		t.Errorf("6 ends of sessions with 3 connections and the listener took %d connections", got)
+	}
+
+	drive.mu.Lock()
+	defer drive.mu.Unlock()
+	if drive.tokens != 1 {
+		t.Errorf("6 ends of sessions got the token %d times", drive.tokens)
+	}
+}
+
+// a session knows the hosts that answered the storage over h1, the polling of
+// the listener for one, so it sends requests in a row over one connection, not
+// first over one for h2 that then stays idle, and parallel ones over more
+func TestSessionKnowsHTTP1Hosts(t *testing.T) {
+	check := func(name string, server *tlsServer, storage Storage) {
+		put := func(s Storage, names ...string) {
+			for _, n := range names {
+				if err := s.Put(context.Background(), "streams/abc/c2s/"+n, []byte("x")); err != nil {
+					t.Errorf("%s: Put: %v", name, err)
+				}
+			}
+		}
+		put(storage, "a", "b")
+		before := server.conns.Load()
+		session := sessionStorage(storage)
+		defer session.Close()
+		put(session, "c", "d")
+		if n := server.conns.Load() - before; n != 1 {
+			t.Errorf("%s: 2 requests in a row of a session over h1 took %d connections", name, n)
+		}
+
+		before = server.conns.Load()
+		var wg sync.WaitGroup
+		for _, n := range []string{"e", "f", "g", "h"} {
+			wg.Go(func() { put(session, n) })
+		}
+		wg.Wait()
+		if server.conns.Load() == before {
+			t.Errorf("%s: 4 parallel requests of a session over h1 took one connection", name)
+		}
+	}
+	slow := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(20 * time.Millisecond)
+			next(w, r)
+		}
+	}
+
+	store := &fakeStore{objects: make(map[string][]byte)}
+	server := newTLSServer(t, &gotls.Config{NextProtos: []string{"http/1.1"}}, slow(store.handle))
+	store.server = server.Server
+	settings := templateSettings(store, map[string]interface{}{"type": "none"}, nil)
+	settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+	template, err := newTemplateStorage(settings, settings.ProtocolSettings.(*Config))
+	if err != nil {
+		t.Fatalf("newTemplateStorage: %v", err)
+	}
+	check("template", server, template)
+
+	drive := newFakeDrive(t)
+	server = newTLSServer(t, &gotls.Config{NextProtos: []string{"http/1.1"}}, slow(drive.server.Config.Handler.ServeHTTP))
+	driveTokenURL = server.URL + "/token"
+	driveFilesURL = server.URL + "/files"
+	settings = driveSettings()
+	settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+	google, err := newDriveStorage(settings, settings.ProtocolSettings.(*Config))
+	if err != nil {
+		t.Fatalf("newDriveStorage: %v", err)
+	}
+	check("drive", server, google)
+}
+
+// with "hMaxRequestTimes" a session moves on to a new connection after that
+// many requests, and the old one closes once the requests on it end, not before
+func TestXmuxRequestLimit(t *testing.T) {
+	store := &fakeStore{objects: make(map[string][]byte)}
+	arrived := make(chan struct{}, 1)
+	release := make(chan struct{})
+	server := newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			arrived <- struct{}{}
+			<-release
+		}
+		store.handle(w, r)
+	})
+	store.server = server.Server
+	settings := templateSettings(store, map[string]interface{}{"type": "none"}, nil)
+	settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+	settings.ProtocolSettings.(*Config).Xmux = &splithttp.XmuxConfig{HMaxRequestTimes: &splithttp.RangeConfig{From: 3, To: 3}}
+	storage, err := newTemplateStorage(settings, settings.ProtocolSettings.(*Config))
+	if err != nil {
+		t.Fatalf("newTemplateStorage: %v", err)
+	}
+	session := sessionStorage(storage)
+	defer session.Close()
+	put := func(names ...string) {
+		for _, name := range names {
+			if err := session.Put(context.Background(), "streams/abc/c2s/"+name, []byte("x")); err != nil {
+				t.Fatalf("Put: %v", err)
+			}
+		}
+	}
+
+	put("a")
+	got := make(chan error, 1)
+	go func() {
+		_, err := session.Get(context.Background(), "streams/abc/c2s/a")
+		got <- err
+	}()
+	<-arrived
+	put("b", "c")
+	if n := server.conns.Load(); n != 2 {
+		t.Errorf("4 requests with 3 to a connection took %d connections", n)
+	}
+	if server.closed.Load() != 0 {
+		t.Error("the first connection closed under a request")
+	}
+	close(release)
+	if err := <-got; err != nil {
+		t.Errorf("Get on the first connection: %v", err)
+	}
+	waitFor(t, "the first connection to close", func() bool { return server.closed.Load() == 1 })
+
+	put("d", "e", "f")
+	if n := server.conns.Load(); n != 3 {
+		t.Errorf("7 requests with 3 to a connection took %d connections", n)
+	}
+	waitFor(t, "the second connection to close", func() bool { return server.closed.Load() == 2 })
+}
+
+// a session that fails to announce itself lets go of its connection, which the
+// next one takes with "maxConcurrency" 1
+func TestFailedDialReleasesConnection(t *testing.T) {
+	resetSharedStorage()
+	t.Cleanup(resetSharedStorage)
+
+	store := &fakeStore{objects: make(map[string][]byte)}
+	var refuse atomic.Bool
+	refuse.Store(true)
+	server := newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, func(w http.ResponseWriter, r *http.Request) {
+		if refuse.Load() {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		store.handle(w, r)
+	})
+	store.server = server.Server
+	settings := templateSettings(store, map[string]interface{}{"type": "none"}, nil)
+	settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+	settings.ProtocolSettings.(*Config).Xmux = &splithttp.XmuxConfig{MaxConcurrency: &splithttp.RangeConfig{From: 1, To: 1}}
+
+	if _, err := Dial(context.Background(), net.Destination{}, settings); err == nil {
+		t.Fatal("Dial announced a session that the service refused")
+	}
+	refuse.Store(false)
+	conn, err := Dial(context.Background(), net.Destination{}, settings)
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.Close()
+	if n := server.conns.Load(); n != 1 {
+		t.Errorf("a failed Dial and the next took %d connections", n)
+	}
+}
+
+// a session gets the token over a connection of the storage, not over one of
+// XMUX
+func TestSessionTokenConnection(t *testing.T) {
+	check := func(name string, server *tlsServer, storage Storage) {
+		session := sessionStorage(storage)
+		defer session.Close()
+		if err := session.Put(context.Background(), "sessions/abc", nil); err != nil {
+			t.Fatalf("%s: Put: %v", name, err)
+		}
+		if n := server.conns.Load(); n != 2 {
+			t.Errorf("%s: the token and a Put of a session took %d connections, want 2", name, n)
+		}
+	}
+
+	store := &fakeStore{objects: make(map[string][]byte), needAuth: "Bearer tok-fake"}
+	server := newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, store.handle)
+	store.server = server.Server
+	settings := templateSettings(store, map[string]interface{}{
+		"type":     "oauth2",
+		"tokenUrl": server.URL + "/token",
+		"header":   map[string]interface{}{"Authorization": "Bearer {token}"},
+	}, nil)
+	settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+	template, err := newTemplateStorage(settings, settings.ProtocolSettings.(*Config))
+	if err != nil {
+		t.Fatalf("newTemplateStorage: %v", err)
+	}
+	check("template", server, template)
+
+	drive := newFakeDrive(t)
+	server = newTLSServer(t, &gotls.Config{NextProtos: chromeALPN}, drive.server.Config.Handler.ServeHTTP)
+	driveTokenURL = server.URL + "/token"
+	driveFilesURL = server.URL + "/files"
+	settings = driveSettings()
+	settings.SecuritySettings = server.settings(&tls.Config{}).SecuritySettings
+	google, err := newDriveStorage(settings, settings.ProtocolSettings.(*Config))
+	if err != nil {
+		t.Fatalf("newDriveStorage: %v", err)
+	}
+	check("drive", server, google)
+}
+
+// local storage has no connections to keep apart
+func TestLocalSessionStorage(t *testing.T) {
+	storage, err := newLocalStorage(t.TempDir())
+	if err != nil {
+		t.Fatalf("newLocalStorage: %v", err)
+	}
+	if sessionStorage(storage) != Storage(storage) {
+		t.Fatal("a session of local storage got a storage of its own")
 	}
 }
