@@ -63,7 +63,10 @@ func (s *ServerUDPSession) EnsureLink(
 
 	s.currentConn.Store(conn)
 
-	sessCtx, cancel := context.WithCancel(ctx)
+	// The session is routed by client session ID and may outlive the inbound
+	// connection of the source address it started from (SIP022 §3.2.4), so its
+	// lifetime is governed by its own timer rather than by that connection.
+	sessCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	inbound := session.InboundFromContext(sessCtx)
 	if inbound != nil && s.User != nil {
 		inbound.User = s.User
