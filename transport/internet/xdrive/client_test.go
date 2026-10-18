@@ -23,6 +23,7 @@ import (
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol/tls/cert"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
@@ -342,6 +343,33 @@ func TestServiceClientDefaultsToChrome(t *testing.T) {
 	}
 	if !slices.Equal(hello.SupportedProtos, chromeALPN) || !slices.Contains(hello.Extensions, 27) {
 		t.Errorf("the hello offered %v with extensions %v, not like Chrome", hello.SupportedProtos, hello.Extensions)
+	}
+}
+
+// a request says it is chrome, as the hello does, unless it says what it is
+func TestServiceClientUserAgent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, r.UserAgent())
+	}))
+	defer server.Close()
+	client := newServiceClient(context.Background(), new(sync.Map), &internet.MemoryStreamConfig{}, 5*time.Second, 8)
+	for ua, want := range map[string]string{"": utils.ChromeUA, "firefox": utils.FirefoxUA, "custom/1.0": "custom/1.0"} {
+		req, _ := http.NewRequest(http.MethodGet, server.URL, nil)
+		if ua != "" {
+			req.Header.Set("User-Agent", ua)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if string(got) != want {
+			t.Errorf("with %q the server got %q, not %q", ua, got, want)
+		}
+		if req.Header.Get("User-Agent") != ua || len(req.Header) > min(len(ua), 1) {
+			t.Errorf("with %q the request was changed to %v", ua, req.Header)
+		}
 	}
 }
 

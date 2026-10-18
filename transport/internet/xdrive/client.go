@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/net/cnc"
+	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
@@ -49,6 +50,10 @@ func (t *serviceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		cancel(nil)
 	}
 	r = r.WithContext(ctx)
+	// the headers of chrome as with XHTTP and DoH, net/http and http3 would send
+	// their own user agent after a hello of chrome
+	r.Header = r.Header.Clone()
+	utils.TryDefaultHeadersWith(r.Header, "fetch")
 	if r.Body != nil && r.Body != http.NoBody {
 		r.Body = &progressBody{ReadCloser: r.Body, alive: alive}
 	}
