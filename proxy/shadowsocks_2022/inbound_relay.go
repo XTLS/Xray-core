@@ -243,16 +243,14 @@ func (i *RelayInbound) processUDP(ctx context.Context, conn stat.Connection, dis
 			dest.Network = net.Network_UDP
 
 			sessionItem := i.udpSessions.GetOrCreate(sessionID)
+			sessionItem.Lock()
 			if sessionItem.User == nil {
-				sessionItem.Lock()
-				if sessionItem.User == nil {
-					sessionItem.User = &protocol.MemoryUser{
-						Email: targetDest.email,
-						Level: targetDest.level,
-					}
+				sessionItem.User = &protocol.MemoryUser{
+					Email: targetDest.email,
+					Level: targetDest.level,
 				}
-				sessionItem.Unlock()
 			}
+			sessionItem.Unlock()
 			link := sessionItem.link.Load()
 			if link != nil {
 				sessionItem.UpdateConn(conn)

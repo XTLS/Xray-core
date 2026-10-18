@@ -229,7 +229,9 @@ func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 			return DecodedUDPPacket{}, ErrBadHeaderType
 		}
 
-		sessionItem.AddPacketID(packetID)
+		if !sessionItem.CommitPacketID(packetID) {
+			return DecodedUDPPacket{}, ErrPacketIdNotUnique
+		}
 		return decoded, nil
 	}
 
@@ -248,8 +250,7 @@ func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 }
 
 func (s *ServerUDPSession) DecryptAESPayload(method *CipherMethod, psk []byte, sessionID, packetID uint64, rawHeader, bodyCipher []byte) (DecodedUDPPacket, error) {
-	bodyAead := s.clientBodyCipher
-	isNewCipher := false
+	bodyAead := s.getClientBodyCipher()
 	if bodyAead == nil {
 		bodyKey := DeriveSessionSubKey(psk, rawHeader[:8], method.KeySaltLength)
 		var err error
@@ -257,7 +258,6 @@ func (s *ServerUDPSession) DecryptAESPayload(method *CipherMethod, psk []byte, s
 		if err != nil {
 			return DecodedUDPPacket{}, err
 		}
-		isNewCipher = true
 	}
 
 	bodyNonce := rawHeader[4:16]
@@ -275,10 +275,8 @@ func (s *ServerUDPSession) DecryptAESPayload(method *CipherMethod, psk []byte, s
 		return DecodedUDPPacket{}, ErrBadHeaderType
 	}
 
-	s.AddPacketID(packetID)
-
-	if isNewCipher {
-		s.clientBodyCipher = bodyAead
+	if !s.commitClientPacket(packetID, bodyAead) {
+		return DecodedUDPPacket{}, ErrPacketIdNotUnique
 	}
 
 	return decoded, nil
