@@ -7,19 +7,17 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 type maskPacketConn struct {
 	net.PacketConn
-	config *Config
 	engine *engine
 	role   string
 
 	noise []scriptPacket
-	sent  map[string]time.Time
+	sent  map[string]bool
 	mu    sync.Mutex
 }
 
@@ -34,10 +32,9 @@ func newPacketConn(c *Config, raw net.PacketConn, role string) (net.PacketConn, 
 
 	return &maskPacketConn{
 		PacketConn: raw,
-		config:     c,
 		engine:     engine,
 		role:       role,
-		sent:       make(map[string]time.Time),
+		sent:       make(map[string]bool),
 	}, nil
 }
 
@@ -109,13 +106,10 @@ func (c *maskPacketConn) sendNoise(addr net.Addr) {
 	defer c.mu.Unlock()
 
 	key := address(addr)
-	at := c.sent[key]
-	defer func() {
-		c.sent[key] = time.Now().Add(time.Duration(crypto.RandBetween(c.config.NoiseResetMin, c.config.NoiseResetMax)) * time.Second)
-	}()
-	if !at.IsZero() && (c.config.NoiseResetMax <= 0 || time.Now().Before(at)) {
+	if c.sent[key] {
 		return
 	}
+	c.sent[key] = true
 
 	packets, err := c.engine.packets(c.role, key, c.noise[:0])
 	if err != nil {

@@ -8,6 +8,4 @@ option java_multiple_files = true;
 
 message Config {
     string script = 1;
-    int64 noise_reset_min = 2;
-    int64 noise_reset_max = 3;
 }

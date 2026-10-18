@@ -24,8 +24,6 @@ const (
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Script        string                 `protobuf:"bytes,1,opt,name=script,proto3" json:"script,omitempty"`
-	NoiseResetMin int64                  `protobuf:"varint,2,opt,name=noise_reset_min,json=noiseResetMin,proto3" json:"noise_reset_min,omitempty"`
-	NoiseResetMax int64                  `protobuf:"varint,3,opt,name=noise_reset_max,json=noiseResetMax,proto3" json:"noise_reset_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -67,29 +65,13 @@ func (x *Config) GetScript() string {
 	return ""
 }
 
-func (x *Config) GetNoiseResetMin() int64 {
-	if x != nil {
-		return x.NoiseResetMin
-	}
-	return 0
-}
-
-func (x *Config) GetNoiseResetMax() int64 {
-	if x != nil {
-		return x.NoiseResetMax
-	}
-	return 0
-}
-
 var File_transport_internet_finalmask_lua_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_lua_config_proto_rawDesc = "" +
 	"\n" +
-	"-transport/internet/finalmask/lua/config.proto\x12%xray.transport.internet.finalmask.lua\"p\n" +
+	"-transport/internet/finalmask/lua/config.proto\x12%xray.transport.internet.finalmask.lua\" \n" +
 	"\x06Config\x12\x16\n" +
-	"\x06script\x18\x01 \x01(\tR\x06script\x12&\n" +
-	"\x0fnoise_reset_min\x18\x02 \x01(\x03R\rnoiseResetMin\x12&\n" +
-	"\x0fnoise_reset_max\x18\x03 \x01(\x03R\rnoiseResetMaxB\x91\x01\n" +
+	"\x06script\x18\x01 \x01(\tR\x06scriptB\x91\x01\n" +
 	")com.xray.transport.internet.finalmask.luaP\x01Z:github.com/xtls/xray-core/transport/internet/finalmask/lua\xaa\x02%Xray.Transport.Internet.Finalmask.Luab\x06proto3"
 
 var (

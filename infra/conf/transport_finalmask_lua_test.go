@@ -24,22 +24,18 @@ func writeLuaMaskScript(t *testing.T, script string) string {
 
 func TestLuaMask(t *testing.T) {
 	path := writeLuaMaskScript(t, luaMaskScript)
-	msg, err := (&LuaMask{Script: path, NoiseReset: Int32Range{From: 30, To: 60}}).Build()
+	msg, err := (&LuaMask{Script: path}).Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := msg.(*lua.Config)
-	if cfg.Script != path {
+	if cfg := msg.(*lua.Config); cfg.Script != path {
 		t.Errorf("got script %q, want the path", cfg.Script)
-	}
-	if cfg.NoiseResetMin != 30 || cfg.NoiseResetMax != 60 {
-		t.Errorf("got reset %d-%d, want 30-60", cfg.NoiseResetMin, cfg.NoiseResetMax)
 	}
 }
 
 func TestLuaMaskFromJSON(t *testing.T) {
 	path := writeLuaMaskScript(t, luaMaskScript)
-	settings := json.RawMessage(`{"script": ` + strconv.Quote(path) + `, "noiseReset": "30-60"}`)
+	settings := json.RawMessage(`{"script": ` + strconv.Quote(path) + `}`)
 	mask := Mask{Type: "lua", Settings: &settings}
 
 	for name, tcp := range map[string]bool{"tcp": true, "udp": false} {

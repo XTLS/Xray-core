@@ -40,10 +40,10 @@ func (c *fakePacketConn) packets() [][]byte {
 	return c.sent
 }
 
-func packetConn(t *testing.T, script string, reset int32) (net.PacketConn, *fakePacketConn) {
+func packetConn(t *testing.T, script string) (net.PacketConn, *fakePacketConn) {
 	t.Helper()
 	raw := &fakePacketConn{}
-	conn, err := (&Config{Script: writeScript(t, script), NoiseResetMax: int64(reset)}).WrapPacketConnClient(raw, nil, nil)
+	conn, err := (&Config{Script: writeScript(t, script)}).WrapPacketConnClient(raw, nil, nil)
 	require.NoError(t, err)
 	return conn, raw
 }
@@ -135,7 +135,7 @@ end
 }
 
 func TestHeaderRoundTrip(t *testing.T) {
-	client, raw := packetConn(t, header, 0)
+	client, raw := packetConn(t, header)
 
 	_, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: 1})
 	require.NoError(t, err)
@@ -153,7 +153,7 @@ function HandleNoise(plan, address, role)
     plan:Add("first")
     plan:AddRandom(fm.RandomBetween(8, 8), 0)
 end
-`, 0)
+`)
 
 	addr := &net.UDPAddr{Port: 1}
 	_, err := client.WriteTo([]byte("payload"), addr)
@@ -200,7 +200,7 @@ end`,
 		"bad delay": `function HandleNoise(plan, address, role) plan:Add("n", -1) end`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			client, raw := packetConn(t, script, 0)
+			client, raw := packetConn(t, script)
 			_, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: 1})
 			require.NoError(t, err)
 			require.Equal(t, [][]byte{[]byte("payload")}, raw.packets(), "the payload still goes out without the noise")
@@ -215,7 +215,7 @@ func TestHeaderLimits(t *testing.T) {
 		"not a string": `function HandleHeaderWrite(header, address, role) header:Add(true) end`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			client, raw := packetConn(t, script, 0)
+			client, raw := packetConn(t, script)
 			n, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: 1})
 			require.NoError(t, err)
 			require.Zero(t, n, "a packet without its header is dropped")
@@ -251,7 +251,7 @@ end
 function HandleHeaderWrite(header, address, role)
     kept:Add("too late")
 end
-`, 0)
+`)
 
 	_, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: 1})
 	require.NoError(t, err)
@@ -288,7 +288,7 @@ function HandleHeaderWrite(header, address, role)
     header:Add("\1\2")
     HandleHeaderWrite = nil
 end
-`, 0)
+`)
 
 	addr := &net.UDPAddr{Port: 1}
 	for i := 0; i < 3; i++ {
@@ -304,7 +304,7 @@ function HandleNoise(plan, address, role)
     plan:Add("n")
     HandleNoise = nil
 end
-`, 0)
+`)
 
 	for _, port := range []int{1, 2} {
 		_, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: port})
@@ -318,7 +318,7 @@ func TestAMethodRefusesAReceiverTheHookWasNotGiven(t *testing.T) {
 function HandleNoise(plan, address, role)
     plan.Add({}, "n")
 end
-`, 0)
+`)
 
 	_, err := client.WriteTo([]byte("payload"), &net.UDPAddr{Port: 1})
 	require.NoError(t, err)
