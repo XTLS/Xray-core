@@ -553,3 +553,49 @@ func TestUDPServerConcurrentDecodeSameSession(t *testing.T) {
 		})
 	}
 }
+
+func TestUDPWriterDropsOversizedPacket(t *testing.T) {
+	method, err := GetCipherMethod(MethodAES256GCM)
+	common.Must(err)
+	rawKey := make([]byte, method.KeySaltLength)
+	_, _ = rand.Read(rawKey)
+	clientCodec, err := NewUDPPacketCodec(method, [][]byte{rawKey})
+	common.Must(err)
+	serverCodec, err := NewUDPServerCodec(method, rawKey, time.Minute)
+	common.Must(err)
+	session, err := clientCodec.NewClientSession()
+	common.Must(err)
+
+	var out packetRecorder
+	writer := &UDPWriter{
+		Writer:      &out,
+		Destination: net.UDPDestination(net.LocalHostIP, net.Port(443)),
+		Session:     session,
+	}
+
+	large := buf.New()
+	large.Extend(buf.Size) // does not fit into one packet together with the SS2022 header
+	small := buf.New()
+	small.Write([]byte("small"))
+
+	if err := writer.WriteMultiBuffer(buf.MultiBuffer{large, small}); err != nil {
+		t.Fatalf("oversized packet must be dropped without ending the flow, got: %v", err)
+	}
+	if len(out.packets) != 1 {
+		t.Fatalf("expected 1 packet written, got %d", len(out.packets))
+	}
+	decoded, err := serverCodec.DecodePacket(out.packets[0])
+	common.Must(err)
+	if string(decoded.Payload) != "small" {
+		t.Fatalf("unexpected payload %q", decoded.Payload)
+	}
+}
+
+type packetRecorder struct {
+	packets [][]byte
+}
+
+func (r *packetRecorder) Write(p []byte) (int, error) {
+	r.packets = append(r.packets, append([]byte(nil), p...))
+	return len(p), nil
+}

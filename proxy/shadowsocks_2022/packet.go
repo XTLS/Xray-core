@@ -722,6 +722,10 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		pktBuf, err := w.Session.EncodePacket(dest, b.Bytes())
 		b.Release()
+		if err == ErrPacketTooLarge {
+			// Drop the datagram like a lower layer would, instead of ending the whole UDP flow.
+			continue
+		}
 		if err != nil {
 			buf.ReleaseMulti(mb)
 			return err
