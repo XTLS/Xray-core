@@ -57,7 +57,7 @@ func liveDriveConfig(t *testing.T) *Config {
 		config.Concurrency = uint32(envInt(t, "XRAY_XDRIVE_LIVE_CONCURRENCY"))
 	}
 
-	storage, err := newDriveStorage(nil, config)
+	storage, err := newDriveStorage(&internet.MemoryStreamConfig{}, config)
 	if err != nil {
 		t.Fatalf("newDriveStorage: %v", err)
 	}
@@ -83,7 +83,7 @@ func envInt(t *testing.T, name string) int {
 
 func TestLiveDriveStorage(t *testing.T) {
 	config := liveDriveConfig(t)
-	storage, err := newDriveStorage(nil, config)
+	storage, err := newDriveStorage(&internet.MemoryStreamConfig{}, config)
 	if err != nil {
 		t.Fatalf("newDriveStorage: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestLiveDriveTransport(t *testing.T) {
 
 func TestLiveDriveParallelPut(t *testing.T) {
 	config := liveDriveConfig(t)
-	storage, err := newDriveStorage(nil, config)
+	storage, err := newDriveStorage(&internet.MemoryStreamConfig{}, config)
 	if err != nil {
 		t.Fatalf("newDriveStorage: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestLiveDriveParallelPut(t *testing.T) {
 
 func TestLiveDriveSegmentSweep(t *testing.T) {
 	config := liveDriveConfig(t)
-	storage, err := newDriveStorage(nil, config)
+	storage, err := newDriveStorage(&internet.MemoryStreamConfig{}, config)
 	if err != nil {
 		t.Fatalf("newDriveStorage: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestLiveDriveSegmentSweep(t *testing.T) {
 
 func TestLiveDriveListLag(t *testing.T) {
 	config := liveDriveConfig(t)
-	storage, err := newDriveStorage(nil, config)
+	storage, err := newDriveStorage(&internet.MemoryStreamConfig{}, config)
 	if err != nil {
 		t.Fatalf("newDriveStorage: %v", err)
 	}
