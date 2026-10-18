@@ -106,13 +106,37 @@ func (s *ServerUDPSession) CheckPacketID(packetID uint64) bool {
 	return s.Window.Check(packetID)
 }
 
-func (s *ServerUDPSession) AddPacketID(packetID uint64) {
+// CommitPacketID records a packet ID after the packet has been fully validated.
+// It re-checks the window under the lock, so when the same packet is validated
+// concurrently (e.g. by the workers of two client source addresses), only one is accepted.
+func (s *ServerUDPSession) CommitPacketID(packetID uint64) bool {
 	s.Lock()
 	defer s.Unlock()
 	if s.Window == nil {
 		s.Window = new(SlidingWindow)
 	}
-	s.Window.Add(packetID)
+	return s.Window.CheckAndAdd(packetID)
+}
+
+func (s *ServerUDPSession) getClientBodyCipher() cipher.AEAD {
+	s.Lock()
+	defer s.Unlock()
+	return s.clientBodyCipher
+}
+
+func (s *ServerUDPSession) commitClientPacket(packetID uint64, bodyAead cipher.AEAD) bool {
+	s.Lock()
+	defer s.Unlock()
+	if s.Window == nil {
+		s.Window = new(SlidingWindow)
+	}
+	if !s.Window.CheckAndAdd(packetID) {
+		return false
+	}
+	if s.clientBodyCipher == nil {
+		s.clientBodyCipher = bodyAead
+	}
+	return true
 }
 
 type UDPSessionManager struct {
