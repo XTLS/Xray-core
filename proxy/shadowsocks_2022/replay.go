@@ -100,21 +100,12 @@ type ServerUDPSession struct {
 func (s *ServerUDPSession) CheckPacketID(packetID uint64) bool {
 	s.Lock()
 	defer s.Unlock()
-	if s.Window == nil {
-		s.Window = new(SlidingWindow)
-	}
 	return s.Window.Check(packetID)
 }
 
-// CommitPacketID records a packet ID after the packet has been fully validated.
-// It re-checks the window under the lock, so when the same packet is validated
-// concurrently (e.g. by the workers of two client source addresses), only one is accepted.
 func (s *ServerUDPSession) CommitPacketID(packetID uint64) bool {
 	s.Lock()
 	defer s.Unlock()
-	if s.Window == nil {
-		s.Window = new(SlidingWindow)
-	}
 	return s.Window.CheckAndAdd(packetID)
 }
 
@@ -127,9 +118,6 @@ func (s *ServerUDPSession) getClientBodyCipher() cipher.AEAD {
 func (s *ServerUDPSession) commitClientPacket(packetID uint64, bodyAead cipher.AEAD) bool {
 	s.Lock()
 	defer s.Unlock()
-	if s.Window == nil {
-		s.Window = new(SlidingWindow)
-	}
 	if !s.Window.CheckAndAdd(packetID) {
 		return false
 	}
@@ -161,6 +149,7 @@ func (m *UDPSessionManager) GetOrCreate(sessionID uint64) *ServerUDPSession {
 
 	s := &ServerUDPSession{
 		SessionID: sessionID,
+		Window:    new(SlidingWindow),
 		manager:   m,
 	}
 	s.LastActive.Store(now)

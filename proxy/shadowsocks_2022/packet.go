@@ -397,16 +397,10 @@ type serverSessionState struct {
 }
 
 func (st *serverSessionState) check(packetID uint64) bool {
-	if st.window == nil {
-		st.window = new(SlidingWindow)
-	}
 	return st.window.Check(packetID)
 }
 
 func (st *serverSessionState) add(packetID uint64) {
-	if st.window == nil {
-		st.window = new(SlidingWindow)
-	}
 	st.window.Add(packetID)
 }
 
@@ -479,6 +473,7 @@ func (s *ClientUDPSession) getServerSession(sessionID uint64, now int64) (*serve
 
 	newState := &serverSessionState{
 		sessionID: sessionID,
+		window:    new(SlidingWindow),
 		cipher:    bodyAead,
 	}
 	newState.lastSeen.Store(now)
