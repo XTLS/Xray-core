@@ -423,11 +423,11 @@ func BenchmarkIPMatcher4CN(b *testing.B) {
 	}
 }
 
-func BenchmarkIPMatcher6US(b *testing.B) {
+func BenchmarkIPMatcher6RU(b *testing.B) {
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher := buildIPMatcher("geoip:us")
-	ip := xnet.ParseAddress("2001:4860:4860::8888").IP()
+	matcher := buildIPMatcher("geoip:ru")
+	ip := xnet.ParseAddress("2a02:6b8::feed:0ff").IP()
 
 	b.ResetTimer()
 
