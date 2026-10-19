@@ -52,18 +52,18 @@ func (d *DefaultDispatcher) sniff(ctx context.Context, reader *cachedReader, req
 		case <-ctx.Done():
 		}
 	}()
+	var result tlsSniffResult
 	select {
 	case <-ctx.Done():
-		return nil, errors.New(ctx.Err()).Base(errSniffingRejected)
-	case result := <-done:
-		if ctx.Err() != nil {
-			buf.ReleaseMulti(result.cache)
-			return nil, errors.New(ctx.Err()).Base(errSniffingRejected)
-		}
-		reader.cache = result.cache
-		reader.readErr = result.readErr
-		return result.result, result.err
+	case result = <-done:
 	}
+	if ctx.Err() != nil {
+		buf.ReleaseMulti(result.cache)
+		return nil, errors.New(ctx.Err()).Base(errSniffingRejected)
+	}
+	reader.cache = result.cache
+	reader.readErr = result.readErr
+	return result.result, result.err
 }
 
 func readTLSSniff(ctx context.Context, reader buf.Reader) (out tlsSniffResult) {

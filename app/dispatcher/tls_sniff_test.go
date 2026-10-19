@@ -16,62 +16,33 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/outbound"
-	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type sniffTestManager struct {
 	outbound.Manager
-	handlers map[string]outbound.Handler
+	handler outbound.Handler
 }
 
-func (m *sniffTestManager) GetDefaultHandler() outbound.Handler    { return m.handlers["direct"] }
-func (m *sniffTestManager) GetHandler(tag string) outbound.Handler { return m.handlers[tag] }
+func (m *sniffTestManager) GetDefaultHandler() outbound.Handler { return m.handler }
 
-type (
-	sniffTestRouter struct{ routing.DefaultRouter }
-	sniffTestRoute  struct{ routing.Context }
-)
-
-func (sniffTestRoute) GetOutboundTag() string         { return "selected" }
-func (sniffTestRoute) GetRuleTag() string             { return "" }
-func (sniffTestRoute) GetOutboundGroupTags() []string { return nil }
-func (sniffTestRouter) PickRoute(ctx routing.Context) (routing.Route, error) {
-	if ctx.GetTargetDomain() == "www.youtube.com" {
-		return sniffTestRoute{ctx}, nil
-	}
-	return nil, common.ErrNoClue
+type sniffTestHandler struct {
+	outbound.Handler
+	called   chan string
+	finished chan []byte
 }
 
-type (
-	sniffDispatch struct {
-		tag     string
-		payload []byte
-	}
-	sniffTestHandler struct {
-		outbound.Handler
-		tag      string
-		called   chan string
-		finished chan sniffDispatch
-	}
-)
-
-func (h *sniffTestHandler) Tag() string { return h.tag }
+func (h *sniffTestHandler) Tag() string { return "capture" }
 func (h *sniffTestHandler) Dispatch(ctx context.Context, link *transport.Link) {
-	h.called <- h.tag
-	var payload []byte
-	for {
-		mb, err := link.Reader.ReadMultiBuffer()
-		for _, b := range mb {
-			payload = append(payload, b.Bytes()...)
-		}
-		buf.ReleaseMulti(mb)
-		if err != nil {
-			break
-		}
+	ob := session.OutboundsFromContext(ctx)[0]
+	target := ob.RouteTarget
+	if !target.IsValid() {
+		target = ob.Target
 	}
-	h.finished <- sniffDispatch{h.tag, payload}
+	h.called <- target.Address.String()
+	payload, _ := io.ReadAll(&buf.BufferedReader{Reader: link.Reader})
+	h.finished <- payload
 	common.Close(link.Writer)
 }
 
@@ -125,14 +96,14 @@ func TestTLSRoutingBeforeDispatch(t *testing.T) {
 				want    string
 				cancel  bool
 			}{
-				{"immediate", hello, 0, 0, time.Second, "selected", false},
-				{"late", hello, 350 * time.Millisecond, 0, time.Second, "selected", false},
-				{"many reads", hello, 0, 1, time.Second, "selected", false},
-				{"multiple records", splitRecords, 0, 3, time.Second, "selected", false},
-				{"trailing bytes", append(bytes.Clone(hello), []byte("following application data")...), 0, 0, time.Second, "selected", false},
-				{"unselected", other, 0, 0, time.Second, "direct", false},
-				{"no SNI", noSNI, 0, 0, time.Second, "direct", false},
-				{"non TLS", []byte("GET / HTTP/1.1\r\nHost: www.example.com\r\n\r\n"), 0, 0, time.Second, "direct", false},
+				{"immediate", hello, 0, 0, time.Second, "www.youtube.com", false},
+				{"late", hello, 350 * time.Millisecond, 0, time.Second, "www.youtube.com", false},
+				{"many reads", hello, 0, 1, time.Second, "www.youtube.com", false},
+				{"multiple records", splitRecords, 0, 3, time.Second, "www.youtube.com", false},
+				{"trailing bytes", append(bytes.Clone(hello), []byte("following application data")...), 0, 0, time.Second, "www.youtube.com", false},
+				{"unselected", other, 0, 0, time.Second, "www.example.com", false},
+				{"no SNI", noSNI, 0, 0, time.Second, "192.0.2.1", false},
+				{"non TLS", []byte("GET / HTTP/1.1\r\nHost: www.example.com\r\n\r\n"), 0, 0, time.Second, "www.example.com", false},
 				{"EOF", nil, 0, 0, time.Second, "", false},
 				{"partial EOF", hello[:10], 0, 0, time.Second, "", false},
 				{"idle timeout", nil, 80 * time.Millisecond, 0, 30 * time.Millisecond, "", false},
@@ -141,12 +112,9 @@ func TestTLSRoutingBeforeDispatch(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					called := make(chan string, 1)
-					finished := make(chan sniffDispatch, 1)
-					manager := &sniffTestManager{handlers: make(map[string]outbound.Handler)}
-					for _, tag := range []string{"direct", "selected"} {
-						manager.handlers[tag] = &sniffTestHandler{tag: tag, called: called, finished: finished}
-					}
-					d := &DefaultDispatcher{ohm: manager, router: sniffTestRouter{}}
+					finished := make(chan []byte, 1)
+					manager := &sniffTestManager{handler: &sniffTestHandler{called: called, finished: finished}}
+					d := &DefaultDispatcher{ohm: manager}
 					ctx, cancel := context.WithCancel(sniffTestContext(tc.timeout))
 					defer cancel()
 					dest := net.TCPDestination(net.ParseAddress("192.0.2.1"), 443)
@@ -203,8 +171,8 @@ func TestTLSRoutingBeforeDispatch(t *testing.T) {
 					} else {
 						select {
 						case result := <-finished:
-							if result.tag != tc.want || !bytes.Equal(result.payload, tc.payload) {
-								t.Fatalf("route=%s bytes=%d, want route=%s bytes=%d", result.tag, len(result.payload), tc.want, len(tc.payload))
+							if target := <-called; target != tc.want || !bytes.Equal(result, tc.payload) {
+								t.Fatalf("target=%s bytes=%d, want target=%s bytes=%d", target, len(result), tc.want, len(tc.payload))
 							}
 						case <-time.After(time.Second):
 							t.Fatal("no outbound result")

@@ -101,12 +101,13 @@ func (r *cachedReader) Interrupt() {
 
 // DefaultDispatcher is a default implementation of Dispatcher.
 type DefaultDispatcher struct {
+	ohm    outbound.Manager
+	router routing.Router
+	policy policy.Manager
+	stats  stats.Manager
+	fdns   dns.FakeDNSEngine
+
 	pendingTLSSniffs atomic.Int32
-	ohm              outbound.Manager
-	router           routing.Router
-	policy           policy.Manager
-	stats            stats.Manager
-	fdns             dns.FakeDNSEngine
 }
 
 func init() {
