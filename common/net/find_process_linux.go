@@ -26,20 +26,20 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 		panic("Unsupported network type for process lookup.")
 	}
 
-	var procFile string
+	var procFiles []string
 
 	switch network {
 	case "tcp":
 		if net.ParseIP(srcIP).To4() != nil {
-			procFile = "/proc/net/tcp"
+			procFiles = []string{"/proc/net/tcp"}
 		} else {
-			procFile = "/proc/net/tcp6"
+			procFiles = []string{"/proc/net/tcp6"}
 		}
 	case "udp":
 		if net.ParseIP(srcIP).To4() != nil {
-			procFile = "/proc/net/udp"
+			procFiles = []string{"/proc/net/udp", "/proc/net/udp6"}
 		} else {
-			procFile = "/proc/net/udp6"
+			procFiles = []string{"/proc/net/udp6", "/proc/net/udp"}
 		}
 	default:
 		panic("Unsupported network type for process lookup.")
@@ -50,12 +50,17 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 		return 0, "", "", errors.New("failed to format address: ", err)
 	}
 
-	inode, err := findInodeInFile(procFile, targetHexAddr)
+	portFallback := ""
+	if network == "udp" {
+		portFallback = fmt.Sprintf(":%04X", srcPort)
+	}
+
+	inode, err := findInodeInFiles(procFiles, targetHexAddr, portFallback)
 	if err != nil {
-		return 0, "", "", errors.New("could not search in ", procFile).Base(err)
+		return 0, "", "", errors.New("could not search in ", strings.Join(procFiles, " and ")).Base(err)
 	}
 	if inode == "" {
-		return 0, "", "", errors.New("connection for ", srcIP, ":", srcPort, " not found in ", procFile)
+		return 0, "", "", errors.New("connection for ", srcIP, ":", srcPort, " not found in ", strings.Join(procFiles, " or "))
 	}
 
 	pidStr, err := findPidByInode(inode)
@@ -102,31 +107,43 @@ func formatLittleEndianString(addr net.IP, port Port) (string, error) {
 	return fmt.Sprintf("%s:%s", ipHex, portHex), nil
 }
 
-func findInodeInFile(filePath, targetHexAddr string) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
+func findInodeInFiles(filePaths []string, targetHexAddr, portFallback string) (string, error) {
+	onlyMatchedPort := ""
 
-	scanner := bufio.NewScanner(file)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-
-		if len(fields) < 10 {
-			continue
+	for i, filePath := range filePaths {
+		file, err := os.Open(filePath)
+		if err != nil {
+			if i > 0 && os.IsNotExist(err) {
+				continue
+			}
+			return "", err
 		}
+		defer file.Close()
 
-		localAddress := fields[1]
-		if localAddress == targetHexAddr {
-			inode := fields[9]
-			return inode, nil
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			fields := strings.Fields(scanner.Text())
+			if len(fields) < 10 {
+				continue
+			}
+
+			localAddress := fields[1]
+			if localAddress == targetHexAddr {
+				return fields[9], nil
+			}
+			if portFallback != "" && strings.HasSuffix(localAddress, portFallback) {
+				wildcardIP := strings.TrimSuffix(localAddress, portFallback)
+				if (len(wildcardIP) == 8 || len(wildcardIP) == 32) && strings.Trim(wildcardIP, "0") == "" {
+					onlyMatchedPort = fields[9]
+				}
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return "", err
 		}
 	}
 
-	return "", scanner.Err()
+	return onlyMatchedPort, nil
 }
 
 func findPidByInode(inode string) (string, error) {
