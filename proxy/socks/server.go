@@ -21,16 +21,18 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
 // Server is a SOCKS 5 proxy server
 type Server struct {
-	config        *ServerConfig
-	policyManager policy.Manager
-	cone          bool
-	httpServer    *http.Server
+	config            *ServerConfig
+	policyManager     policy.Manager
+	cone              bool
+	httpServer        *http.Server
+	udpSocketSettings *internet.SocketConfig
 }
 
 // NewServer creates a new Server object.
@@ -40,6 +42,9 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
+	}
+	if stream, ok := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig); ok && stream != nil {
+		s.udpSocketSettings = stream.UDPSocketSettings
 	}
 	httpConfig := &http.ServerConfig{
 		UserLevel: config.UserLevel,
@@ -106,10 +111,11 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 	}
 
 	svrSession := &ServerSession{
-		config:       s.config,
-		address:      inbound.Gateway.Address,
-		port:         inbound.Gateway.Port,
-		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
+		config:            s.config,
+		udpSocketSettings: s.udpSocketSettings,
+		address:           inbound.Gateway.Address,
+		port:              inbound.Gateway.Port,
+		localAddress:      net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
 	}
 
 	// Firstbyte is for forwarded conn from SOCKS inbound

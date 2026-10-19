@@ -206,6 +206,12 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	if dokodemoConfig, ok := rawConfig.(*DokodemoConfig); ok {
 		receiverSettings.ReceiveOriginalDestination = dokodemoConfig.FollowRedirect
 	}
+	if receiverSettings.StreamSettings.GetUdpSocketSettings() != nil {
+		socksConfig, ok := rawConfig.(*SocksServerConfig)
+		if !ok || !socksConfig.UDP {
+			return nil, errors.New("streamSettings.udpSockopt requires a SOCKS or mixed inbound with UDP enabled")
+		}
+	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
 		return nil, errors.New("failed to build inbound handler for protocol ", c.Protocol).Base(err)
@@ -373,6 +379,9 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 			return nil, errors.New("failed to build stream settings for outbound detour").Base(err)
 		}
 		senderSettings.StreamSettings = ss
+	}
+	if senderSettings.StreamSettings.GetUdpSocketSettings() != nil {
+		return nil, errors.New("streamSettings.udpSockopt is not supported by outbounds; use sockopt for their transport sockets")
 	}
 
 	if c.MuxSettings != nil {

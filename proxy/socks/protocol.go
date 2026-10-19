@@ -43,10 +43,11 @@ var addrParser = protocol.NewAddressParser(
 )
 
 type ServerSession struct {
-	config       *ServerConfig
-	address      net.Address
-	port         net.Port
-	localAddress net.Address
+	config            *ServerConfig
+	address           net.Address
+	port              net.Port
+	localAddress      net.Address
+	udpSocketSettings *internet.SocketConfig
 }
 
 func (s *ServerSession) handshake4(cmd byte, reader io.Reader, writer io.Writer) (*protocol.RequestHeader, error) {
@@ -203,7 +204,7 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 			// Use conn.LocalAddr() IP as remote address in the response by default
 			responseAddress = s.localAddress
 		}
-		udpHub, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: responseAddress.IP(), Port: 0}, nil)
+		udpHub, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: responseAddress.IP(), Port: 0}, s.udpSocketSettings)
 		if err != nil {
 			return nil, nil, errors.New("failed to create UDP listener").Base(err)
 		}

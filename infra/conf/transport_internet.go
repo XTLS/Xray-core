@@ -68,6 +68,7 @@ type StreamConfig struct {
 	MASQUESettings      *MasqueConfig      `json:"masqueSettings"`
 	XDRIVESettings      *XDriveConfig      `json:"xdriveSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
+	UDPSocketSettings   *UDPSocketConfig   `json:"udpSockopt"`
 }
 
 // Build implements Buildable.
@@ -234,6 +235,13 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			return nil, errors.New("Failed to build sockopt.").Base(err)
 		}
 		config.SocketSettings = ss
+	}
+	if c.UDPSocketSettings != nil {
+		ss, err := c.UDPSocketSettings.Build()
+		if err != nil {
+			return nil, errors.New("failed to build udpSockopt").Base(err)
+		}
+		config.UdpSocketSettings = ss
 	}
 
 	if c.FinalMask != nil {
