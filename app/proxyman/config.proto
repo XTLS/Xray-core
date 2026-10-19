@@ -32,6 +32,10 @@ message SniffingConfig {
   bool metadata_only = 4;
 
   bool route_only = 5;
+
+  // Opt-in deadline (milliseconds) for content sniffing before routing IP TCP/443.
+  // A timeout or incomplete input closes the connection without dispatching it.
+  uint32 tls_sniffing_timeout = 7;
 }
 
 message ReceiverConfig {

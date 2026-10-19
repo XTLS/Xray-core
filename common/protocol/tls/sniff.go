@@ -129,25 +129,58 @@ func ReadClientHello(data []byte, h *SniffHeader) error {
 }
 
 func SniffTLS(b []byte) (*SniffHeader, error) {
-	if len(b) < 5 {
+	if len(b) == 0 {
 		return nil, common.ErrNoClue
 	}
-
 	if b[0] != 0x16 /* TLS Handshake */ {
 		return nil, errNotTLS
 	}
-	if !IsValidTLSVersion(b[1], b[2]) {
-		return nil, errNotTLS
-	}
-	headerLen := int(binary.BigEndian.Uint16(b[3:5]))
-	if 5+headerLen > len(b) {
-		return nil, common.ErrNoClue
-	}
 
-	h := &SniffHeader{}
-	err := ReadClientHello(b[5:5+headerLen], h)
-	if err == nil {
-		return h, nil
+	// A ClientHello can span both reads and TLS records. Allocate only for bytes
+	// actually received, never for the length advertised by the peer.
+	var hello []byte
+	for {
+		if len(b) < 5 {
+			return nil, protocol.ErrProtoNeedMoreData
+		}
+		if b[0] != 0x16 || !IsValidTLSVersion(b[1], b[2]) {
+			return nil, errNotTLS
+		}
+		recordLen := int(binary.BigEndian.Uint16(b[3:5]))
+		if recordLen == 0 || recordLen > 16384 {
+			return nil, errNotClientHello
+		}
+		if len(b) < 5+recordLen {
+			return nil, protocol.ErrProtoNeedMoreData
+		}
+		record := b[5 : 5+recordLen]
+		if hello == nil {
+			hello = record[:len(record):len(record)]
+		} else {
+			hello = append(hello, record...)
+		}
+		if hello[0] != 1 { // ClientHello
+			return nil, errNotClientHello
+		}
+		if len(hello) >= 4 {
+			helloLen := 4 + (int(hello[1]) << 16) + (int(hello[2]) << 8) + int(hello[3])
+			if len(hello) >= helloLen {
+				h := &SniffHeader{}
+				err := ReadClientHello(hello[:helloLen], h)
+				if err == nil {
+					return h, nil
+				}
+				// The full handshake is present: shortages inside it are malformed,
+				// unlike QUIC's potentially sparse input to ReadClientHello.
+				if err == common.ErrNoClue || err == protocol.ErrProtoNeedMoreData {
+					err = errNotClientHello
+				}
+				return nil, err
+			}
+		}
+		b = b[5+recordLen:]
+		if len(b) == 0 {
+			return nil, protocol.ErrProtoNeedMoreData
+		}
 	}
-	return nil, err
 }

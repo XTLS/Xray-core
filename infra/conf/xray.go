@@ -61,12 +61,13 @@ var (
 )
 
 type SniffingConfig struct {
-	Enabled         bool       `json:"enabled"`
-	DestOverride    StringList `json:"destOverride"`
-	DomainsExcluded StringList `json:"domainsExcluded"`
-	IPsExcluded     StringList `json:"ipsExcluded"`
-	MetadataOnly    bool       `json:"metadataOnly"`
-	RouteOnly       bool       `json:"routeOnly"`
+	TLSSniffingTimeout uint32     `json:"tlsSniffingTimeout"`
+	Enabled            bool       `json:"enabled"`
+	DestOverride       StringList `json:"destOverride"`
+	DomainsExcluded    StringList `json:"domainsExcluded"`
+	IPsExcluded        StringList `json:"ipsExcluded"`
+	MetadataOnly       bool       `json:"metadataOnly"`
+	RouteOnly          bool       `json:"routeOnly"`
 }
 
 // Build implements Buildable.
@@ -97,14 +98,16 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 		return nil, err
 	}
 
-	return &proxyman.SniffingConfig{
+	config := &proxyman.SniffingConfig{
 		Enabled:             c.Enabled,
 		DestinationOverride: protocols,
 		DomainsExcluded:     domains,
 		IpsExcluded:         ips,
 		MetadataOnly:        c.MetadataOnly,
 		RouteOnly:           c.RouteOnly,
-	}, nil
+		TlsSniffingTimeout:  c.TLSSniffingTimeout,
+	}
+	return config, config.Validate()
 }
 
 type MuxConfig struct {

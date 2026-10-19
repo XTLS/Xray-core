@@ -73,10 +73,13 @@ type SniffingConfig struct {
 	// Whether should only try to sniff metadata without waiting for client input.
 	// Can be used to support SMTP like protocol where server send the first
 	// message.
-	MetadataOnly  bool `protobuf:"varint,4,opt,name=metadata_only,json=metadataOnly,proto3" json:"metadata_only,omitempty"`
-	RouteOnly     bool `protobuf:"varint,5,opt,name=route_only,json=routeOnly,proto3" json:"route_only,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MetadataOnly bool `protobuf:"varint,4,opt,name=metadata_only,json=metadataOnly,proto3" json:"metadata_only,omitempty"`
+	RouteOnly    bool `protobuf:"varint,5,opt,name=route_only,json=routeOnly,proto3" json:"route_only,omitempty"`
+	// Opt-in deadline (milliseconds) for content sniffing before routing IP TCP/443.
+	// A timeout or incomplete input closes the connection without dispatching it.
+	TlsSniffingTimeout uint32 `protobuf:"varint,7,opt,name=tls_sniffing_timeout,json=tlsSniffingTimeout,proto3" json:"tls_sniffing_timeout,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SniffingConfig) Reset() {
@@ -149,6 +152,13 @@ func (x *SniffingConfig) GetRouteOnly() bool {
 		return x.RouteOnly
 	}
 	return false
+}
+
+func (x *SniffingConfig) GetTlsSniffingTimeout() uint32 {
+	if x != nil {
+		return x.TlsSniffingTimeout
+	}
+	return 0
 }
 
 type ReceiverConfig struct {
@@ -479,7 +489,7 @@ var File_app_proxyman_config_proto protoreflect.FileDescriptor
 const file_app_proxyman_config_proto_rawDesc = "" +
 	"\n" +
 	"\x19app/proxyman/config.proto\x12\x11xray.app.proxyman\x1a\x18common/net/address.proto\x1a\x15common/net/port.proto\x1a\x1ftransport/internet/config.proto\x1a!common/serial/typed_message.proto\x1a\x1bcommon/geodata/geodat.proto\"\x0f\n" +
-	"\rInboundConfig\"\xad\x02\n" +
+	"\rInboundConfig\"\xdf\x02\n" +
 	"\x0eSniffingConfig\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x121\n" +
 	"\x14destination_override\x18\x02 \x03(\tR\x13destinationOverride\x12J\n" +
@@ -487,7 +497,8 @@ const file_app_proxyman_config_proto_rawDesc = "" +
 	"\fips_excluded\x18\x06 \x03(\v2\x1b.xray.common.geodata.IPRuleR\vipsExcluded\x12#\n" +
 	"\rmetadata_only\x18\x04 \x01(\bR\fmetadataOnly\x12\x1d\n" +
 	"\n" +
-	"route_only\x18\x05 \x01(\bR\trouteOnly\"\xe5\x02\n" +
+	"route_only\x18\x05 \x01(\bR\trouteOnly\x120\n" +
+	"\x14tls_sniffing_timeout\x18\a \x01(\rR\x12tlsSniffingTimeout\"\xe5\x02\n" +
 	"\x0eReceiverConfig\x126\n" +
 	"\tport_list\x18\x01 \x01(\v2\x19.xray.common.net.PortListR\bportList\x123\n" +
 	"\x06listen\x18\x02 \x01(\v2\x1b.xray.common.net.IPOrDomainR\x06listen\x12N\n" +

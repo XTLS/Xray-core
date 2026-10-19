@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -28,8 +29,9 @@ var errSniffingTimeout = errors.New("timeout on sniffing")
 
 type cachedReader struct {
 	sync.Mutex
-	reader buf.TimeoutReader // *pipe.Reader or *buf.TimeoutWrapperReader
-	cache  buf.MultiBuffer
+	reader  buf.TimeoutReader // *pipe.Reader or *buf.TimeoutWrapperReader
+	cache   buf.MultiBuffer
+	readErr error
 }
 
 func (r *cachedReader) Cache(b *buf.Buffer, deadline time.Duration) error {
@@ -67,6 +69,9 @@ func (r *cachedReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if mb != nil {
 		return mb, nil
 	}
+	if r.readErr != nil {
+		return nil, r.readErr
+	}
 
 	return r.reader.ReadMultiBuffer()
 }
@@ -75,6 +80,9 @@ func (r *cachedReader) ReadMultiBufferTimeout(timeout time.Duration) (buf.MultiB
 	mb := r.readInternal()
 	if mb != nil {
 		return mb, nil
+	}
+	if r.readErr != nil {
+		return nil, r.readErr
 	}
 
 	return r.reader.ReadMultiBufferTimeout(timeout)
@@ -93,11 +101,12 @@ func (r *cachedReader) Interrupt() {
 
 // DefaultDispatcher is a default implementation of Dispatcher.
 type DefaultDispatcher struct {
-	ohm    outbound.Manager
-	router routing.Router
-	policy policy.Manager
-	stats  stats.Manager
-	fdns   dns.FakeDNSEngine
+	pendingTLSSniffs atomic.Int32
+	ohm              outbound.Manager
+	router           routing.Router
+	policy           policy.Manager
+	stats            stats.Manager
+	fdns             dns.FakeDNSEngine
 }
 
 func init() {
@@ -292,7 +301,13 @@ func (d *DefaultDispatcher) Dispatch(ctx context.Context, destination net.Destin
 				reader: outbound.Reader.(*pipe.Reader),
 			}
 			outbound.Reader = cReader
-			result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
+			result, err := d.sniff(ctx, cReader, sniffingRequest, destination)
+			if errors.Cause(err) == errSniffingRejected {
+				errors.LogInfoInner(ctx, err, "closing connection before routing")
+				common.Close(outbound.Writer)
+				cReader.Interrupt()
+				return
+			}
 			if err == nil {
 				content.Protocol = result.Protocol()
 			}
@@ -347,7 +362,12 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 			reader: outbound.Reader.(buf.TimeoutReader),
 		}
 		outbound.Reader = cReader
-		result, err := sniffer(ctx, cReader, sniffingRequest.MetadataOnly, destination.Network)
+		result, err := d.sniff(ctx, cReader, sniffingRequest, destination)
+		if errors.Cause(err) == errSniffingRejected {
+			common.Close(outbound.Writer)
+			cReader.Interrupt()
+			return err
+		}
 		if err == nil {
 			content.Protocol = result.Protocol()
 		}

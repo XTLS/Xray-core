@@ -4,6 +4,7 @@ package session // import "github.com/xtls/xray-core/common/session"
 import (
 	"context"
 	"math/rand"
+	"time"
 
 	c "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
@@ -77,6 +78,7 @@ type Outbound struct {
 
 // SniffingRequest controls the behavior of content sniffing. They are from inbound config. Read-only
 type SniffingRequest struct {
+	TLSSniffingTimeout             time.Duration
 	ExcludeForDomain               geodata.DomainMatcher
 	ExcludeForIP                   geodata.IPMatcher
 	OverrideDestinationForProtocol []string
