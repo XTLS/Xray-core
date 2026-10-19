@@ -61,12 +61,20 @@ func (c *TempUDPConn) RemoteAddr() net.Addr {
 
 func (c *TempUDPConn) SetTimeout(d time.Duration) {
 	c.Timer = signal.CancelAfterInactivity(context.Background(), func() {
-		c.Close()
+		// The callback can run before CancelAfterInactivity returns the timer.
+		c.closeSockets()
 	}, d)
 }
 
 func (c *TempUDPConn) Close() error {
-	c.Timer.SetTimeout(0)
+	// A failed handshake can close the association before SetTimeout is called.
+	if c.Timer != nil {
+		c.Timer.SetTimeout(0)
+	}
+	return c.closeSockets()
+}
+
+func (c *TempUDPConn) closeSockets() error {
 	c.AssociatedTCPConn.Close()
 	return c.PacketConn.Close()
 }
