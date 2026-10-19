@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/transport/internet"
 )
 
@@ -44,6 +45,7 @@ var addrParser = protocol.NewAddressParser(
 
 type ServerSession struct {
 	config       *ServerConfig
+	validator    *http.AccountValidator
 	address      net.Address
 	port         net.Port
 	localAddress net.Address
@@ -126,7 +128,7 @@ func (s *ServerSession) auth5(nMethod byte, reader io.Reader, writer io.Writer) 
 			return "", errors.New("failed to read username and password for authentication").Base(err)
 		}
 
-		if !s.config.HasAccount(username, password) {
+		if !s.validator.Has(username, password) {
 			writeSocks5AuthenticationResponse(writer, 0x01, 0xFF)
 			return "", errors.New("invalid username or password")
 		}
