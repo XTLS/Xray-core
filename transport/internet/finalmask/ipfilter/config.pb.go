@@ -25,6 +25,7 @@ const (
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	BlockedIps    []*geodata.IPRule      `protobuf:"bytes,1,rep,name=blocked_ips,json=blockedIps,proto3" json:"blocked_ips,omitempty"`
+	AllowedIps    []*geodata.IPRule      `protobuf:"bytes,2,rep,name=allowed_ips,json=allowedIps,proto3" json:"allowed_ips,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -66,14 +67,23 @@ func (x *Config) GetBlockedIps() []*geodata.IPRule {
 	return nil
 }
 
+func (x *Config) GetAllowedIps() []*geodata.IPRule {
+	if x != nil {
+		return x.AllowedIps
+	}
+	return nil
+}
+
 var File_transport_internet_finalmask_ipfilter_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_finalmask_ipfilter_config_proto_rawDesc = "" +
 	"\n" +
-	"2transport/internet/finalmask/ipfilter/config.proto\x12*xray.transport.internet.finalmask.ipfilter\x1a\x1bcommon/geodata/geodat.proto\"F\n" +
+	"2transport/internet/finalmask/ipfilter/config.proto\x12*xray.transport.internet.finalmask.ipfilter\x1a\x1bcommon/geodata/geodat.proto\"\x84\x01\n" +
 	"\x06Config\x12<\n" +
 	"\vblocked_ips\x18\x01 \x03(\v2\x1b.xray.common.geodata.IPRuleR\n" +
-	"blockedIpsB\xa0\x01\n" +
+	"blockedIps\x12<\n" +
+	"\vallowed_ips\x18\x02 \x03(\v2\x1b.xray.common.geodata.IPRuleR\n" +
+	"allowedIpsB\xa0\x01\n" +
 	".com.xray.transport.internet.finalmask.ipfilterP\x01Z?github.com/xtls/xray-core/transport/internet/finalmask/ipfilter\xaa\x02*Xray.Transport.Internet.Finalmask.Ipfilterb\x06proto3"
 
 var (
@@ -95,11 +105,12 @@ var file_transport_internet_finalmask_ipfilter_config_proto_goTypes = []any{
 }
 var file_transport_internet_finalmask_ipfilter_config_proto_depIdxs = []int32{
 	1, // 0: xray.transport.internet.finalmask.ipfilter.Config.blocked_ips:type_name -> xray.common.geodata.IPRule
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	1, // 1: xray.transport.internet.finalmask.ipfilter.Config.allowed_ips:type_name -> xray.common.geodata.IPRule
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_ipfilter_config_proto_init() }

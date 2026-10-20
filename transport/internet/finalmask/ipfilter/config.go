@@ -6,22 +6,36 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
-func (c *Config) matcher() (geodata.IPMatcher, error) {
-	if len(c.BlockedIps) == 0 {
+func (c *Config) buildFilter() (*filter, error) {
+	if len(c.BlockedIps) == 0 && len(c.AllowedIps) == 0 {
 		return nil, nil
 	}
-	return geodata.IPReg.BuildIPMatcher(c.BlockedIps)
+	f := new(filter)
+	var err error
+	if len(c.BlockedIps) > 0 {
+		f.blocked, err = geodata.IPReg.BuildIPMatcher(c.BlockedIps)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(c.AllowedIps) > 0 {
+		f.allowed, err = geodata.IPReg.BuildIPMatcher(c.AllowedIps)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return f, nil
 }
 
 func (c *Config) Listen(inner net.Listener) (net.Listener, error) {
-	matcher, err := c.matcher()
+	f, err := c.buildFilter()
 	if err != nil {
 		return nil, err
 	}
-	if matcher == nil {
+	if f == nil {
 		return inner, nil
 	}
-	return &listener{Listener: inner, matcher: matcher}, nil
+	return &listener{Listener: inner, filter: f}, nil
 }
 
 func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
@@ -38,12 +52,12 @@ func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination
 }
 
 func (c *Config) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
-	matcher, err := c.matcher()
+	f, err := c.buildFilter()
 	if err != nil {
 		return nil, err
 	}
-	if matcher == nil {
+	if f == nil {
 		return conn, nil
 	}
-	return &packetConn{PacketConn: conn, matcher: matcher}, nil
+	return &packetConn{PacketConn: conn, filter: f}, nil
 }

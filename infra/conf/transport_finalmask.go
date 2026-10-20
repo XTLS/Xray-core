@@ -99,6 +99,7 @@ var (
 
 type IPFilter struct {
 	BlockedIPs []string `json:"blockedIPs"`
+	AllowedIPs []string `json:"allowedIPs"`
 }
 
 func (c *IPFilter) Build() (proto.Message, error) {
@@ -106,7 +107,11 @@ func (c *IPFilter) Build() (proto.Message, error) {
 	if err != nil {
 		return nil, errors.New(`invalid "blockedIPs"`).Base(err)
 	}
-	return &ipfilter.Config{BlockedIps: rules}, nil
+	allowed, err := geodata.ParseIPRules(c.AllowedIPs)
+	if err != nil {
+		return nil, errors.New(`invalid "allowedIPs"`).Base(err)
+	}
+	return &ipfilter.Config{BlockedIps: rules, AllowedIps: allowed}, nil
 }
 
 type TCPItem struct {
