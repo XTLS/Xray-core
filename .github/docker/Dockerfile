@@ -46,8 +46,8 @@ FROM gcr.io/distroless/static:nonroot
 COPY --from=build --chown=0:0 --chmod=755 /src/xray /usr/local/bin/xray
 COPY --from=build --chown=65532:65532 --chmod=755 /tmp/empty /usr/local/share/xray
 COPY --from=build --chown=65532:65532 --chmod=644 /tmp/geodat/*.dat /usr/local/share/xray/
-COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /usr/local/etc/xray
-COPY --from=build --chown=0:0 --chmod=644 /tmp/usr/local/etc/xray/*.json /usr/local/etc/xray/
+COPY --from=build --chown=0:65532 --chmod=750 /tmp/empty /usr/local/etc/xray
+COPY --from=build --chown=0:65532 --chmod=640 /tmp/usr/local/etc/xray/*.json /usr/local/etc/xray/
 COPY --from=build --chown=65532:65532 --chmod=700 /tmp/empty /var/log/xray
 
 VOLUME /usr/local/etc/xray
