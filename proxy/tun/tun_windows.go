@@ -401,6 +401,15 @@ func resolveOnOwn() *savedResolver {
 		if internet.IsSkippedDNSServer(address) {
 			return nil, errors.New("skipped DNS server ", address)
 		}
+		// A socket of the server's IP version only needs that version bound
+		// to the interface, which a dual-stack one would need both of.
+		if ap, err := netip.ParseAddrPort(address); err == nil && (network == "udp" || network == "tcp") {
+			if ap.Addr().Unmap().Is4() {
+				network += "4"
+			} else {
+				network += "6"
+			}
+		}
 		return dialer.DialContext(ctx, network, address)
 	}
 	net.DefaultResolver.PreferGo = true
