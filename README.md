@@ -70,7 +70,7 @@
   - [CELERITY](https://github.com/ClickDevTech/CELERITY-panel)
 - One Click
   - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
-  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool), [VPainLess](https://github.com/vpainless/vpainless)
+  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [3x-setup](https://github.com/Anthrop44/3x-setup), [VPainLess](https://github.com/vpainless/vpainless)
   - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
 - Magisk
   - [Magic_V2Ray](https://github.com/vincentng295/Magic_V2Ray)
