@@ -105,11 +105,16 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		return errors.New("inbound gateway not specified")
 	}
 
+	localAddr := net.LocalHostIP
+	if tcpAddr, ok := conn.LocalAddr().(*net.TCPAddr); ok {
+		localAddr = net.IPAddress(tcpAddr.IP)
+	}
+
 	svrSession := &ServerSession{
 		config:       s.config,
 		address:      inbound.Gateway.Address,
 		port:         inbound.Gateway.Port,
-		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
+		localAddress: localAddr,
 	}
 
 	// Firstbyte is for forwarded conn from SOCKS inbound

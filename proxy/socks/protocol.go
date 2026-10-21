@@ -203,15 +203,27 @@ func (s *ServerSession) handshake5(nMethod byte, reader io.Reader, writer net.Co
 			// Use conn.LocalAddr() IP as remote address in the response by default
 			responseAddress = s.localAddress
 		}
-		udpHub, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: responseAddress.IP(), Port: 0}, nil)
+		var listenIP gonet.IP
+		if responseAddress.Family().IsIP() {
+			listenIP = responseAddress.IP()
+		} else {
+			listenIP = gonet.IPv4zero
+		}
+		udpHub, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: listenIP, Port: 0}, nil)
 		if err != nil {
 			return nil, nil, errors.New("failed to create UDP listener").Base(err)
 		}
-		responsePort = net.Port(udpHub.LocalAddr().(*net.UDPAddr).Port)
+		if udpAddr, ok := udpHub.LocalAddr().(*gonet.UDPAddr); ok {
+			responsePort = net.Port(udpAddr.Port)
+		}
 		expectedRemote := &gonet.UDPAddr{}
 		// UDP Associate should not specify a domain as source IP
 		if request.Address.Family().IsDomain() || request.Address.IP().IsUnspecified() {
-			expectedRemote.IP = writer.RemoteAddr().(*net.TCPAddr).IP // unix?
+			if tcpAddr, ok := writer.RemoteAddr().(*gonet.TCPAddr); ok {
+				expectedRemote.IP = tcpAddr.IP
+			} else {
+				expectedRemote.IP = gonet.IPv4zero
+			}
 		} else {
 			expectedRemote.IP = request.Address.IP()
 			expectedRemote.Port = int(request.Port) // 0 is allowed
