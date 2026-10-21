@@ -9,7 +9,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/klauspost/cpuid/v2 v2.4.0
+	github.com/klauspost/cpuid/v2 v2.4.1
 	github.com/libp2p/go-nat v1.0.1-0.20250821073202-01afc089f138
 	github.com/miekg/dns v1.1.73
 	github.com/pelletier/go-toml v1.9.5
