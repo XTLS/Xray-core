@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package xray.transport.internet.finalmask.filter;
+option csharp_namespace = "Xray.Transport.Internet.Finalmask.Filter";
+option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/filter";
+option java_package = "com.xray.transport.internet.finalmask.filter";
+option java_multiple_files = true;
+
+import "common/geodata/geodat.proto";
+
+message Config {
+  repeated xray.common.geodata.IPRule blocked_source_ips = 1;
+  repeated xray.common.geodata.IPRule allowed_source_ips = 2;
+}

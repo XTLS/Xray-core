@@ -15,9 +15,11 @@ import (
 
 	googleuuid "github.com/google/uuid"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/geodata"
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/filter"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
@@ -74,6 +76,7 @@ var (
 	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"filter":        func() interface{} { return new(Filter) },
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
@@ -81,6 +84,7 @@ var (
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
+		"filter":        func() interface{} { return new(Filter) },
 		"header-custom": func() interface{} { return new(HeaderCustomUDP) },
 		"mkcp-legacy":   func() interface{} { return new(MkcpLegacy) },
 		"noise":         func() interface{} { return new(NoiseMask) },
@@ -92,6 +96,23 @@ var (
 		"udphop":        func() interface{} { return new(UDPHop) },
 	}, "type", "settings")
 )
+
+type Filter struct {
+	BlockedSourceIPs []string `json:"blockedSourceIPs"`
+	AllowedSourceIPs []string `json:"allowedSourceIPs"`
+}
+
+func (c *Filter) Build() (proto.Message, error) {
+	rules, err := geodata.ParseIPRules(c.BlockedSourceIPs)
+	if err != nil {
+		return nil, errors.New(`invalid "blockedSourceIPs"`).Base(err)
+	}
+	allowed, err := geodata.ParseIPRules(c.AllowedSourceIPs)
+	if err != nil {
+		return nil, errors.New(`invalid "allowedSourceIPs"`).Base(err)
+	}
+	return &filter.Config{BlockedSourceIps: rules, AllowedSourceIps: allowed}, nil
+}
 
 type TCPItem struct {
 	Delay     Int32Range       `json:"delay"`
