@@ -51,7 +51,17 @@ func (m *Manager) AddHandler(ctx context.Context, handler inbound.Handler) error
 	}
 
 	if m.running {
-		return handler.Start()
+		if err := handler.Start(); err != nil {
+			if len(tag) > 0 {
+				delete(m.taggedHandlers, tag)
+			} else {
+				m.untaggedHandlers = m.untaggedHandlers[:len(m.untaggedHandlers)-1]
+			}
+			if err := handler.Close(); err != nil {
+				errors.LogWarningInner(ctx, err, "failed to close handler ", tag)
+			}
+			return err
+		}
 	}
 
 	return nil
