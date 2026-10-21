@@ -128,7 +128,7 @@ func TestDNSScriptGeoIPFallback(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 	script := `
 local servers = require("xray.dns").Servers
-local us_ips = require("xray.geodata").BuildIPMatcher("geoip:us")
+local ru_ips = require("xray.geodata").BuildIPMatcher("geoip:ru")
 
 local by_id = {}
 for _, server in ipairs(servers) do
@@ -138,7 +138,7 @@ assert(by_id.primary and by_id.fallback, "primary and fallback DNS servers are r
 
 function HandleDNSQuery(domain, ipv4, ipv6, fake)
     local ips, ttl, err = by_id.primary:Query(domain, ipv4, ipv6, fake)
-    if not err and us_ips:AnyMatch(ips) then
+    if not err and ru_ips:AnyMatch(ips) then
         return ips, ttl, nil
     end
     return by_id.fallback:Query(domain, ipv4, ipv6, fake)
@@ -152,7 +152,7 @@ end
 	primary := &scriptNameServer{
 		name: "primary",
 		answers: map[string]net.IP{
-			"us.example":    net.ParseIP("2001:4860:4860::8888"),
+			"ru.example":    net.ParseIP("2a02:6b8::feed:0ff"),
 			"other.example": net.ParseIP("127.0.0.1"),
 		},
 		ttl: 30,
@@ -191,7 +191,7 @@ end
 		ip     net.IP
 		ttl    uint32
 	}{
-		{"Us.Example.", net.ParseIP("2001:4860:4860::8888"), 30},
+		{"Ru.Example.", net.ParseIP("2a02:6b8::feed:0ff"), 30},
 		{"other.example", net.ParseIP("9.9.9.9"), 60},
 	} {
 		ips, ttl, err := server.LookupIP(tc.domain, option)
