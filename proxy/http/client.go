@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sync"
 	"text/template"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -86,7 +87,13 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 	user := server.User
 	var conn stat.Connection
 
-	mbuf, _ := link.Reader.ReadMultiBuffer()
+	var mbuf buf.MultiBuffer
+	if reader, ok := link.Reader.(buf.TimeoutReader); ok {
+		// Don't wait forever: server-first protocols (SMTP, FTP, MySQL...) send nothing until the server greets.
+		mbuf, _ = reader.ReadMultiBufferTimeout(time.Millisecond * 500)
+	} else {
+		mbuf, _ = link.Reader.ReadMultiBuffer()
+	}
 	len := mbuf.Len()
 	firstPayload := bytespool.Alloc(len)
 	mbuf, _ = buf.SplitBytes(mbuf, firstPayload)
@@ -234,7 +241,8 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 			return nil, err
 		}
 
-		resp, err := http.ReadResponse(bufio.NewReader(rawConn), req)
+		reader := bufio.NewReader(rawConn)
+		resp, err := http.ReadResponse(reader, req)
 		if err != nil {
 			rawConn.Close()
 			return nil, err
@@ -244,6 +252,11 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 		if resp.StatusCode != http.StatusOK {
 			rawConn.Close()
 			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status)
+		}
+		// Tunneled bytes (e.g. a server-first greeting) may arrive in the same read as the 200 response.
+		if n := reader.Buffered(); n > 0 {
+			early, _ := reader.Peek(n)
+			return &earlyDataConn{Conn: rawConn, early: early}, nil
 		}
 		return rawConn, nil
 	}
@@ -373,6 +386,21 @@ func (h *http2Conn) Write(p []byte) (n int, err error) {
 func (h *http2Conn) Close() error {
 	h.in.Close()
 	return h.out.Close()
+}
+
+// earlyDataConn returns the bytes read ahead together with the CONNECT response before reading from Conn.
+type earlyDataConn struct {
+	net.Conn
+	early []byte
+}
+
+func (c *earlyDataConn) Read(p []byte) (int, error) {
+	if len(c.early) > 0 {
+		n := copy(p, c.early)
+		c.early = c.early[n:]
+		return n, nil
+	}
+	return c.Conn.Read(p)
 }
 
 func init() {
