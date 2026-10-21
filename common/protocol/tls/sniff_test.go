@@ -1,8 +1,10 @@
 package tls_test
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/xtls/xray-core/common/protocol"
 	. "github.com/xtls/xray-core/common/protocol/tls"
 )
 
@@ -157,5 +159,12 @@ func TestTLSHeaders(t *testing.T) {
 				t.Error("expect domain ", test.domain, " but got ", header.Domain())
 			}
 		}
+	}
+}
+
+func TestTLSHeaderIncompleteRecord(t *testing.T) {
+	_, err := SniffTLS([]byte{0x16, 0x03, 0x01, 0x00, 0xc8, 0x01, 0x00, 0x00, 0xc4})
+	if !errors.Is(err, protocol.ErrProtoNeedMoreData) {
+		t.Error("expect ErrProtoNeedMoreData but got ", err)
 	}
 }

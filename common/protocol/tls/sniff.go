@@ -141,7 +141,7 @@ func SniffTLS(b []byte) (*SniffHeader, error) {
 	}
 	headerLen := int(binary.BigEndian.Uint16(b[3:5]))
 	if 5+headerLen > len(b) {
-		return nil, common.ErrNoClue
+		return nil, protocol.ErrProtoNeedMoreData
 	}
 
 	h := &SniffHeader{}
