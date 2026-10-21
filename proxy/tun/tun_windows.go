@@ -558,9 +558,21 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 
 	switch network {
 	case "tcp6", "udp6", "ip6":
+		dualStack := false
+		if network == "udp6" {
+			ipv6Only, err := windows.GetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, windows.IPV6_V6ONLY)
+			if err != nil {
+				return internet.NewBindError(err)
+			}
+			dualStack = ipv6Only == 0
+		}
 		err1 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, IPV6_UNICAST_IF, iface.Index)
 		if network == "udp6" {
 			err2 = windows.SetsockoptInt(windows.Handle(fd), windows.IPPROTO_IPV6, windows.IPV6_MULTICAST_IF, iface.Index)
+		}
+		// Only dual-stack UDP can send to both IPv4 and IPv6 destinations.
+		if !dualStack {
+			break
 		}
 		fallthrough
 	case "tcp4", "udp4", "ip4":
@@ -572,7 +584,10 @@ func setinterface(network, address string, fd uintptr, iface *net.Interface) err
 		panic(network + " " + address)
 	}
 
-	return errors.Combine(err1, err2, err3, err4)
+	if err := errors.Combine(err1, err2, err3, err4); err != nil {
+		return internet.NewBindError(err)
+	}
+	return nil
 }
 
 func findOutboundInterface(tunIndex int, fixedName string) (*net.Interface, error) {
