@@ -562,6 +562,12 @@ func TestDriveSharedClient(t *testing.T) {
 	if first != second {
 		t.Fatal("same settings did not share one storage")
 	}
+	// a session has an inflight of its own, as large
+	session := sessionStorage(first).(*driveStorage)
+	defer session.Close()
+	if session.inflight == first.(*driveStorage).inflight || cap(session.inflight) != driveMaxInflight {
+		t.Fatalf("a session shares inflight or has cap %d", cap(session.inflight))
+	}
 }
 
 func TestDriveOldServiceName(t *testing.T) {

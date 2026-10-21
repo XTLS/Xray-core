@@ -7,6 +7,7 @@
 package xdrive
 
 import (
+	splithttp "github.com/xtls/xray-core/transport/internet/splithttp"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -35,6 +36,7 @@ type Config struct {
 	EagerWindowMs     uint32                 `protobuf:"varint,10,opt,name=eager_window_ms,json=eagerWindowMs,proto3" json:"eager_window_ms,omitempty"`
 	HoleTimeoutMs     uint32                 `protobuf:"varint,11,opt,name=hole_timeout_ms,json=holeTimeoutMs,proto3" json:"hole_timeout_ms,omitempty"`
 	Template          string                 `protobuf:"bytes,12,opt,name=template,proto3" json:"template,omitempty"`
+	Xmux              *splithttp.XmuxConfig  `protobuf:"bytes,13,opt,name=xmux,proto3" json:"xmux,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -153,11 +155,18 @@ func (x *Config) GetTemplate() string {
 	return ""
 }
 
+func (x *Config) GetXmux() *splithttp.XmuxConfig {
+	if x != nil {
+		return x.Xmux
+	}
+	return nil
+}
+
 var File_transport_internet_xdrive_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_xdrive_config_proto_rawDesc = "" +
 	"\n" +
-	"&transport/internet/xdrive/config.proto\x12\x1exray.transport.internet.xdrive\"\xcb\x03\n" +
+	"&transport/internet/xdrive/config.proto\x12\x1exray.transport.internet.xdrive\x1a)transport/internet/splithttp/config.proto\"\x8e\x04\n" +
 	"\x06Config\x12#\n" +
 	"\rremote_folder\x18\x01 \x01(\tR\fremoteFolder\x12\x18\n" +
 	"\aservice\x18\x02 \x01(\tR\aservice\x12\x18\n" +
@@ -171,7 +180,8 @@ const file_transport_internet_xdrive_config_proto_rawDesc = "" +
 	"\x0feager_window_ms\x18\n" +
 	" \x01(\rR\reagerWindowMs\x12&\n" +
 	"\x0fhole_timeout_ms\x18\v \x01(\rR\rholeTimeoutMs\x12\x1a\n" +
-	"\btemplate\x18\f \x01(\tR\btemplateB5Z3github.com/xtls/xray-core/transport/internet/xdriveb\x06proto3"
+	"\btemplate\x18\f \x01(\tR\btemplate\x12A\n" +
+	"\x04xmux\x18\r \x01(\v2-.xray.transport.internet.splithttp.XmuxConfigR\x04xmuxB5Z3github.com/xtls/xray-core/transport/internet/xdriveb\x06proto3"
 
 var (
 	file_transport_internet_xdrive_config_proto_rawDescOnce sync.Once
@@ -187,14 +197,16 @@ func file_transport_internet_xdrive_config_proto_rawDescGZIP() []byte {
 
 var file_transport_internet_xdrive_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_transport_internet_xdrive_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.transport.internet.xdrive.Config
+	(*Config)(nil),               // 0: xray.transport.internet.xdrive.Config
+	(*splithttp.XmuxConfig)(nil), // 1: xray.transport.internet.splithttp.XmuxConfig
 }
 var file_transport_internet_xdrive_config_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: xray.transport.internet.xdrive.Config.xmux:type_name -> xray.transport.internet.splithttp.XmuxConfig
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_xdrive_config_proto_init() }

@@ -113,7 +113,7 @@ func templateSettings(store *fakeStore, auth map[string]interface{}, secrets []s
 		"delete":  map[string]interface{}{"method": "DELETE", "url": base + "/folder/{name}"},
 		"list": map[string]interface{}{
 			"method":     "PROPFIND",
-			"url":        base + "/folder/",
+			"url":        base + "/folder/?prefix={prefix}",
 			"namesRegex": `<d:href>/folder/([^<]+)</d:href>`,
 		},
 		"retry": map[string]interface{}{"status": []int{429, 500, 502, 503}},
@@ -296,6 +296,12 @@ func TestTemplateConcurrency(t *testing.T) {
 	}
 	if cap(storage.inflight) != 4 {
 		t.Fatalf("inflight cap is %d, want 4 from the template", cap(storage.inflight))
+	}
+	// and so has a session, of its own
+	session := storage.session().(*templateStorage)
+	defer session.Close()
+	if session.inflight == storage.inflight || cap(session.inflight) != 4 {
+		t.Fatalf("a session shares inflight or has cap %d, want 4", cap(session.inflight))
 	}
 }
 

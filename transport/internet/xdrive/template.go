@@ -62,12 +62,20 @@ type storageTemplate struct {
 }
 
 type templateStorage struct {
-	tmpl    *storageTemplate
-	client  *http.Client
-	folder  string
-	secrets []string
-
+	*templateShared
+	// a session has a client and inflight of its own, see session
+	client   *http.Client
 	inflight chan struct{}
+	release  func()
+}
+
+// templateShared is what the sessions of a storage have in common
+type templateShared struct {
+	conns       *connPool
+	tmpl        *storageTemplate
+	tokenClient *http.Client
+	folder      string
+	secrets     []string
 
 	tokenMu     sync.Mutex
 	token       string
@@ -102,13 +110,33 @@ func newTemplateStorage(streamSettings *internet.MemoryStreamConfig, config *Con
 		conc = maxTemplateConcurrency
 	}
 
+	h1Hosts := new(sync.Map)
+	client := newServiceClient(context.Background(), h1Hosts, streamSettings, driveTimeout, conc)
 	return &templateStorage{
-		tmpl:     tmpl,
-		client:   newServiceClient(streamSettings, driveTimeout, conc),
-		folder:   config.RemoteFolder,
-		secrets:  config.Secrets,
+		templateShared: &templateShared{
+			conns: newConnPool(config.Xmux, func(connCtx context.Context) *http.Client {
+				return newServiceClient(connCtx, h1Hosts, streamSettings, driveTimeout, conc)
+			}),
+			tmpl:        tmpl,
+			tokenClient: client,
+			folder:      config.RemoteFolder,
+			secrets:     config.Secrets,
+		},
+		client:   client,
 		inflight: make(chan struct{}, conc),
 	}, nil
+}
+
+// session returns a storage for one session, over the connections of XMUX
+// until Close, with the token of s
+func (s *templateStorage) session() Storage {
+	transport := &sessionTransport{pool: s.conns}
+	return &templateStorage{
+		templateShared: s.templateShared,
+		client:         &http.Client{Transport: transport},
+		inflight:       make(chan struct{}, cap(s.inflight)),
+		release:        transport.Close,
+	}
 }
 
 const maxTemplateConcurrency = 256
@@ -224,7 +252,7 @@ func (s *templateStorage) accessToken(ctx context.Context) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := s.client.Do(req)
+	resp, err := s.tokenClient.Do(req)
 	if err != nil {
 		return "", errors.New("failed to fetch the token").Base(err)
 	}
@@ -474,5 +502,8 @@ func (s *templateStorage) List(ctx context.Context, prefix string) ([]Entry, err
 }
 
 func (s *templateStorage) Close() error {
+	if s.release != nil {
+		s.release()
+	}
 	return nil
 }

@@ -3,6 +3,8 @@ syntax = "proto3";
 package xray.transport.internet.xdrive;
 option go_package = "github.com/xtls/xray-core/transport/internet/xdrive";
 
+import "transport/internet/splithttp/config.proto";
+
 message Config {
   string remote_folder = 1;
   string service = 2;
@@ -16,4 +18,5 @@ message Config {
   uint32 eager_window_ms = 10;
   uint32 hole_timeout_ms = 11;
   string template = 12;
+  xray.transport.internet.splithttp.XmuxConfig xmux = 13;
 }
