@@ -23,10 +23,8 @@ type Stack interface {
 	// Start makes the stack read the packets of its tun
 	Start() error
 	Close() error
-	// SetMTU changes the outgoing MTU (1280..65535) without closing connections.
-	// It requires StackOptions.DynamicMTU.
-	// Packets already being formed, including all fragments of a datagram, may use the previous MTU.
-	// It does not change the tun itself or wait for writes to finish. A closed stack returns io.ErrClosedPipe.
+	// SetMTU changes the outgoing MTU (1280..65535).
+	// Packets and datagrams in progress may use the previous MTU.
 	SetMTU(mtu uint32) error
 	// Input takes a packet of a tun that hands them over instead of being read. The packet is not kept,
 	// but it may be written to. The packets of one connection have to come one after another
@@ -42,7 +40,7 @@ type StackOptions struct {
 	Tun         Tun
 	MTU         uint32
 	IdleTimeout time.Duration
-	// DynamicMTU enables SetMTU. Otherwise the initial MTU is fixed.
+	// DynamicMTU enables SetMTU.
 	DynamicMTU bool
 	// Addresses are what the stack opens connections from
 	Addresses []netip.Addr
@@ -64,8 +62,8 @@ type flow struct {
 type stack struct {
 	ctx        context.Context
 	tun        Tun
-	mtu        uint32 // accessed atomically in dynamic mode
-	dynamicMTU bool   // unchanged after construction
+	mtu        uint32
+	dynamicMTU bool // immutable
 	// segmenter is the tun if it takes segments that are larger than its MTU
 	segmenter segmenter
 	// window is the window of every connection
@@ -126,7 +124,6 @@ func NewStack(ctx context.Context, options StackOptions, handler ConnectionHandl
 	return s, nil
 }
 
-// SetMTU implements Stack. Existing TCP connections keep a smaller MSS after an increase.
 func (s *stack) SetMTU(mtu uint32) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

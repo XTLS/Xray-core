@@ -863,7 +863,7 @@ func (c *tcpConn) hold(seq uint32, payload []byte) {
 	c.rcvLast = seq
 }
 
-// limitMSS makes the next segment fit the current MTU, preserving peer and path limits. c.mu is held.
+// c.mu must be held.
 func (c *tcpConn) limitMSS() {
 	if !c.stack.dynamicMTU {
 		return
