@@ -7,19 +7,19 @@ import (
 )
 
 func (c *Config) buildFilter() (*filter, error) {
-	if len(c.BlockedIps) == 0 && len(c.AllowedIps) == 0 {
+	if len(c.BlockedSourceIps) == 0 && len(c.AllowedSourceIps) == 0 {
 		return nil, nil
 	}
 	f := new(filter)
 	var err error
-	if len(c.BlockedIps) > 0 {
-		f.blocked, err = geodata.IPReg.BuildIPMatcher(c.BlockedIps)
+	if len(c.BlockedSourceIps) > 0 {
+		f.blocked, err = geodata.IPReg.BuildIPMatcher(c.BlockedSourceIps)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if len(c.AllowedIps) > 0 {
-		f.allowed, err = geodata.IPReg.BuildIPMatcher(c.AllowedIps)
+	if len(c.AllowedSourceIps) > 0 {
+		f.allowed, err = geodata.IPReg.BuildIPMatcher(c.AllowedSourceIps)
 		if err != nil {
 			return nil, err
 		}

@@ -19,11 +19,11 @@ func TestFinalMaskFilter(t *testing.T) {
 			name, settings   string
 			blocked, allowed int
 		}{
-			{"blacklist", `{"blockedIPs":["192.0.2.0/24"]}`, 1, 0},
-			{"whitelist", `{"allowedIPs":["192.0.2.0/24"]}`, 0, 1},
-			{"both", `{"blockedIPs":["192.0.2.0/24"],"allowedIPs":["192.0.2.0/24"]}`, 1, 1},
-			{"empty_whitelist", `{"allowedIPs":[]}`, 0, 0},
-			{"empty_blacklist", `{"blockedIPs":[]}`, 0, 0},
+			{"blacklist", `{"blockedSourceIPs":["192.0.2.0/24"]}`, 1, 0},
+			{"whitelist", `{"allowedSourceIPs":["192.0.2.0/24"]}`, 0, 1},
+			{"both", `{"blockedSourceIPs":["192.0.2.0/24"],"allowedSourceIPs":["192.0.2.0/24"]}`, 1, 1},
+			{"empty_whitelist", `{"allowedSourceIPs":[]}`, 0, 0},
+			{"empty_blacklist", `{"blockedSourceIPs":[]}`, 0, 0},
 		} {
 			t.Run(network+"/"+test.name, func(t *testing.T) {
 				input := fmt.Sprintf(`{"finalmask":{"%s":[{"type":"filter","settings":%s}]}}`, network, test.settings)
@@ -50,10 +50,10 @@ func TestFinalMaskFilter(t *testing.T) {
 				if !ok {
 					t.Fatalf("unexpected mask type: %T", instance)
 				}
-				if len(filter.BlockedIps) != test.blocked || len(filter.AllowedIps) != test.allowed {
+				if len(filter.BlockedSourceIps) != test.blocked || len(filter.AllowedSourceIps) != test.allowed {
 					t.Fatalf("unexpected filter policy: %v", filter)
 				}
-				for _, rules := range [][]*geodata.IPRule{filter.BlockedIps, filter.AllowedIps} {
+				for _, rules := range [][]*geodata.IPRule{filter.BlockedSourceIps, filter.AllowedSourceIps} {
 					for _, rule := range rules {
 						cidr := rule.GetCustom().GetCidr()
 						if cidr.GetPrefix() != 24 || !net.IP(cidr.GetIp()).Equal(net.IPv4(192, 0, 2, 0)) {
@@ -67,7 +67,7 @@ func TestFinalMaskFilter(t *testing.T) {
 			})
 		}
 	}
-	for _, field := range []string{"blockedIPs", "allowedIPs"} {
+	for _, field := range []string{"blockedSourceIPs", "allowedSourceIPs"} {
 		var config Filter
 		if err := json.Unmarshal([]byte(fmt.Sprintf(`{"%s":["192.0.2.0/33"]}`, field)), &config); err != nil {
 			t.Fatal(err)

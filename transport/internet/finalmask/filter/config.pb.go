@@ -23,11 +23,11 @@ const (
 )
 
 type Config struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BlockedIps    []*geodata.IPRule      `protobuf:"bytes,1,rep,name=blocked_ips,json=blockedIps,proto3" json:"blocked_ips,omitempty"`
-	AllowedIps    []*geodata.IPRule      `protobuf:"bytes,2,rep,name=allowed_ips,json=allowedIps,proto3" json:"allowed_ips,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	BlockedSourceIps []*geodata.IPRule      `protobuf:"bytes,1,rep,name=blocked_source_ips,json=blockedSourceIps,proto3" json:"blocked_source_ips,omitempty"`
+	AllowedSourceIps []*geodata.IPRule      `protobuf:"bytes,2,rep,name=allowed_source_ips,json=allowedSourceIps,proto3" json:"allowed_source_ips,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -60,16 +60,16 @@ func (*Config) Descriptor() ([]byte, []int) {
 	return file_transport_internet_finalmask_filter_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Config) GetBlockedIps() []*geodata.IPRule {
+func (x *Config) GetBlockedSourceIps() []*geodata.IPRule {
 	if x != nil {
-		return x.BlockedIps
+		return x.BlockedSourceIps
 	}
 	return nil
 }
 
-func (x *Config) GetAllowedIps() []*geodata.IPRule {
+func (x *Config) GetAllowedSourceIps() []*geodata.IPRule {
 	if x != nil {
-		return x.AllowedIps
+		return x.AllowedSourceIps
 	}
 	return nil
 }
@@ -78,12 +78,10 @@ var File_transport_internet_finalmask_filter_config_proto protoreflect.FileDescr
 
 const file_transport_internet_finalmask_filter_config_proto_rawDesc = "" +
 	"\n" +
-	"0transport/internet/finalmask/filter/config.proto\x12(xray.transport.internet.finalmask.filter\x1a\x1bcommon/geodata/geodat.proto\"\x84\x01\n" +
-	"\x06Config\x12<\n" +
-	"\vblocked_ips\x18\x01 \x03(\v2\x1b.xray.common.geodata.IPRuleR\n" +
-	"blockedIps\x12<\n" +
-	"\vallowed_ips\x18\x02 \x03(\v2\x1b.xray.common.geodata.IPRuleR\n" +
-	"allowedIpsB\x9a\x01\n" +
+	"0transport/internet/finalmask/filter/config.proto\x12(xray.transport.internet.finalmask.filter\x1a\x1bcommon/geodata/geodat.proto\"\x9e\x01\n" +
+	"\x06Config\x12I\n" +
+	"\x12blocked_source_ips\x18\x01 \x03(\v2\x1b.xray.common.geodata.IPRuleR\x10blockedSourceIps\x12I\n" +
+	"\x12allowed_source_ips\x18\x02 \x03(\v2\x1b.xray.common.geodata.IPRuleR\x10allowedSourceIpsB\x9a\x01\n" +
 	",com.xray.transport.internet.finalmask.filterP\x01Z=github.com/xtls/xray-core/transport/internet/finalmask/filter\xaa\x02(Xray.Transport.Internet.Finalmask.Filterb\x06proto3"
 
 var (
@@ -104,8 +102,8 @@ var file_transport_internet_finalmask_filter_config_proto_goTypes = []any{
 	(*geodata.IPRule)(nil), // 1: xray.common.geodata.IPRule
 }
 var file_transport_internet_finalmask_filter_config_proto_depIdxs = []int32{
-	1, // 0: xray.transport.internet.finalmask.filter.Config.blocked_ips:type_name -> xray.common.geodata.IPRule
-	1, // 1: xray.transport.internet.finalmask.filter.Config.allowed_ips:type_name -> xray.common.geodata.IPRule
+	1, // 0: xray.transport.internet.finalmask.filter.Config.blocked_source_ips:type_name -> xray.common.geodata.IPRule
+	1, // 1: xray.transport.internet.finalmask.filter.Config.allowed_source_ips:type_name -> xray.common.geodata.IPRule
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

@@ -32,7 +32,7 @@ func TestTCPFilterBeforeOtherMasks(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer l.Close()
-			whitelist := len(policy.config.AllowedIps) > 0
+			whitelist := len(policy.config.AllowedSourceIps) > 0
 			want := []net.Conn{allowed, allowed6}
 			if !whitelist {
 				want = append([]net.Conn{unknown, missing}, want...)
@@ -133,7 +133,7 @@ func TestUDPFilter(t *testing.T) {
 			}
 			defer conn.Close()
 			buf := make([]byte, 64)
-			if len(policy.config.AllowedIps) == 0 {
+			if len(policy.config.AllowedSourceIps) == 0 {
 				for _, expected := range []datagram{unknown, missing} {
 					n, addr, err := conn.ReadFrom(buf)
 					if err != nil || addr != expected.addr || string(buf[:n]) != string(expected.data) {
@@ -163,7 +163,7 @@ func TestUDPFilter(t *testing.T) {
 }
 
 func TestEmptyFilter(t *testing.T) {
-	for _, empty := range []*Config{{}, {AllowedIps: []*geodata.IPRule{}}} {
+	for _, empty := range []*Config{{}, {AllowedSourceIps: []*geodata.IPRule{}}} {
 		rawListener := new(testListener)
 		rawPacket := new(testPacketConn)
 		if l, err := empty.Listen(rawListener); err != nil || l != rawListener {
@@ -185,8 +185,8 @@ func TestUDPFilterReadError(t *testing.T) {
 			}{
 				{"blocked", &net.UDPAddr{IP: net.ParseIP("192.0.2.1")}, true},
 				{"allowed", &net.UDPAddr{IP: net.ParseIP("198.51.100.1")}, false},
-				{"missing address", nil, len(policy.config.AllowedIps) > 0},
-				{"unknown address", &net.UnixAddr{Name: "filter.sock", Net: "unixgram"}, len(policy.config.AllowedIps) > 0},
+				{"missing address", nil, len(policy.config.AllowedSourceIps) > 0},
+				{"unknown address", &net.UnixAddr{Name: "filter.sock", Net: "unixgram"}, len(policy.config.AllowedSourceIps) > 0},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					source := test.source
@@ -218,16 +218,16 @@ func testPolicies(t *testing.T) []struct {
 	config *Config
 } {
 	t.Helper()
-	blocked := testConfig(t, "192.0.2.0/24", "2001:db8::/48").BlockedIps
-	allowed := testConfig(t, "198.51.100.0/24", "2001:db8:1::/48").BlockedIps
-	broader := testConfig(t, "192.0.2.0/24", "198.51.100.0/24", "2001:db8::/32").BlockedIps
+	blocked := testConfig(t, "192.0.2.0/24", "2001:db8::/48").BlockedSourceIps
+	allowed := testConfig(t, "198.51.100.0/24", "2001:db8:1::/48").BlockedSourceIps
+	broader := testConfig(t, "192.0.2.0/24", "198.51.100.0/24", "2001:db8::/32").BlockedSourceIps
 	return []struct {
 		name   string
 		config *Config
 	}{
-		{"blacklist", &Config{BlockedIps: blocked}},
-		{"whitelist", &Config{AllowedIps: allowed}},
-		{"both", &Config{BlockedIps: blocked, AllowedIps: broader}},
+		{"blacklist", &Config{BlockedSourceIps: blocked}},
+		{"whitelist", &Config{AllowedSourceIps: allowed}},
+		{"both", &Config{BlockedSourceIps: blocked, AllowedSourceIps: broader}},
 	}
 }
 
@@ -237,7 +237,7 @@ func testConfig(t *testing.T, entries ...string) *Config {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Config{BlockedIps: rules}
+	return &Config{BlockedSourceIps: rules}
 }
 
 type testConn struct {

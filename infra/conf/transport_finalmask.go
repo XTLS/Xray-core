@@ -98,20 +98,20 @@ var (
 )
 
 type Filter struct {
-	BlockedIPs []string `json:"blockedIPs"`
-	AllowedIPs []string `json:"allowedIPs"`
+	BlockedSourceIPs []string `json:"blockedSourceIPs"`
+	AllowedSourceIPs []string `json:"allowedSourceIPs"`
 }
 
 func (c *Filter) Build() (proto.Message, error) {
-	rules, err := geodata.ParseIPRules(c.BlockedIPs)
+	rules, err := geodata.ParseIPRules(c.BlockedSourceIPs)
 	if err != nil {
-		return nil, errors.New(`invalid "blockedIPs"`).Base(err)
+		return nil, errors.New(`invalid "blockedSourceIPs"`).Base(err)
 	}
-	allowed, err := geodata.ParseIPRules(c.AllowedIPs)
+	allowed, err := geodata.ParseIPRules(c.AllowedSourceIPs)
 	if err != nil {
-		return nil, errors.New(`invalid "allowedIPs"`).Base(err)
+		return nil, errors.New(`invalid "allowedSourceIPs"`).Base(err)
 	}
-	return &filter.Config{BlockedIps: rules, AllowedIps: allowed}, nil
+	return &filter.Config{BlockedSourceIps: rules, AllowedSourceIps: allowed}, nil
 }
 
 type TCPItem struct {
