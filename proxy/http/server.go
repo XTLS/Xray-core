@@ -31,6 +31,7 @@ import (
 type Server struct {
 	config        *ServerConfig
 	policyManager policy.Manager
+	validator     *AccountValidator
 }
 
 // NewServer creates a new HTTP inbound handler.
@@ -39,9 +40,41 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	s := &Server{
 		config:        config,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
+		validator:     NewAccountValidator(config.Accounts),
 	}
 
 	return s, nil
+}
+
+// Validator exposes the account store so an inbound that embeds this server,
+// such as the SOCKS one, manages the same accounts instead of a second copy.
+func (s *Server) Validator() *AccountValidator {
+	return s.validator
+}
+
+// AddUser implements proxy.UserManager.AddUser().
+func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	return s.validator.Add(u)
+}
+
+// RemoveUser implements proxy.UserManager.RemoveUser().
+func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	return s.validator.Del(e)
+}
+
+// GetUser implements proxy.UserManager.GetUser().
+func (s *Server) GetUser(ctx context.Context, e string) *protocol.MemoryUser {
+	return s.validator.Get(e)
+}
+
+// GetUsers implements proxy.UserManager.GetUsers().
+func (s *Server) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	return s.validator.GetAll()
+}
+
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (s *Server) GetUsersCount(context.Context) int64 {
+	return s.validator.Count()
 }
 
 func (s *Server) policy() policy.Session {
@@ -118,9 +151,11 @@ Start:
 		return errors.New("failed to read http request").Base(err)
 	}
 
-	if len(s.config.Accounts) > 0 {
+	// Not len(s.config.Accounts): an account added over the API has to switch
+	// authentication on as well, otherwise the inbound would stay open.
+	if !s.validator.Empty() {
 		user, pass, ok := parseBasicAuth(request.Header.Get("Proxy-Authorization"))
-		if !ok || !s.config.HasAccount(user, pass) {
+		if !ok || !s.validator.Has(user, pass) {
 			return common.Error2(conn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\n\r\n")))
 		}
 		if inbound != nil {

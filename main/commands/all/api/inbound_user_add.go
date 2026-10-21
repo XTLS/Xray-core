@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/xtls/xray-core/common/protocol"
 
 	handlerService "github.com/xtls/xray-core/app/proxyman/command"
@@ -12,10 +14,12 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/infra/conf/serial"
+	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/proxy/hysteria"
 	"github.com/xtls/xray-core/proxy/masque"
 	"github.com/xtls/xray-core/proxy/shadowsocks"
 	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
+	"github.com/xtls/xray-core/proxy/socks"
 	"github.com/xtls/xray-core/proxy/trojan"
 	vlessin "github.com/xtls/xray-core/proxy/vless/inbound"
 	vmessin "github.com/xtls/xray-core/proxy/vmess/inbound"
@@ -94,10 +98,35 @@ func extractInboundUsers(inb *core.InboundHandlerConfig) []*protocol.User {
 		return ty.Users
 	case *hysteria.ServerConfig:
 		return ty.Users
+	case *socks.ServerConfig:
+		return accountsToUsers(ty.Accounts, ty.UserLevel, func(u, p string) proto.Message {
+			return &socks.Account{Username: u, Password: p}
+		})
+	case *http.ServerConfig:
+		return accountsToUsers(ty.Accounts, ty.UserLevel, func(u, p string) proto.Message {
+			return &http.Account{Username: u, Password: p}
+		})
 	default:
 		fmt.Println("unsupported inbound type")
 	}
 	return nil
+}
+
+// accountsToUsers turns the username/password map of a SOCKS or HTTP inbound
+// into the user list the API speaks. Those two keep their accounts in a map
+// rather than in a Users field, so there is nothing to return directly.
+// The e-mail is the username: executeInboundUserAction skips users without one,
+// and the username is what an operator addresses the account by anyway.
+func accountsToUsers(accounts map[string]string, level uint32, newAccount func(username, password string) proto.Message) []*protocol.User {
+	users := make([]*protocol.User, 0, len(accounts))
+	for username, password := range accounts {
+		users = append(users, &protocol.User{
+			Level:   level,
+			Email:   username,
+			Account: cserial.ToTypedMessage(newAccount(username, password)),
+		})
+	}
+	return users
 }
 
 func extractInboundsConfig(unnamedArgs []string) []conf.InboundDetourConfig {

@@ -31,6 +31,7 @@ type Server struct {
 	policyManager policy.Manager
 	cone          bool
 	httpServer    *http.Server
+	validator     *http.AccountValidator
 }
 
 // NewServer creates a new Server object.
@@ -47,8 +48,47 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	if config.AuthType == AuthType_PASSWORD {
 		httpConfig.Accounts = config.Accounts
 	}
-	s.httpServer, _ = http.NewServer(ctx, httpConfig)
+	var err error
+	s.httpServer, err = http.NewServer(ctx, httpConfig)
+	if err != nil {
+		return nil, errors.New("failed to create the embedded HTTP server").Base(err)
+	}
+	// One store for both halves of this inbound. Since #3682 the SOCKS inbound
+	// also serves HTTP, and two copies of the accounts would drift apart the
+	// moment a user is added over the API.
+	s.validator = s.httpServer.Validator()
 	return s, nil
+}
+
+// AddUser implements proxy.UserManager.AddUser().
+func (s *Server) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
+	// An inbound that does not ask for a password ignores its accounts, so an
+	// account added here would never be checked on the SOCKS side while the
+	// HTTP side would start demanding one. Refuse instead of being half-applied.
+	if s.config.AuthType != AuthType_PASSWORD {
+		return errors.New("inbound auth is not password, cannot add user")
+	}
+	return s.validator.Add(u)
+}
+
+// RemoveUser implements proxy.UserManager.RemoveUser().
+func (s *Server) RemoveUser(ctx context.Context, e string) error {
+	return s.validator.Del(e)
+}
+
+// GetUser implements proxy.UserManager.GetUser().
+func (s *Server) GetUser(ctx context.Context, e string) *protocol.MemoryUser {
+	return s.validator.Get(e)
+}
+
+// GetUsers implements proxy.UserManager.GetUsers().
+func (s *Server) GetUsers(ctx context.Context) []*protocol.MemoryUser {
+	return s.validator.GetAll()
+}
+
+// GetUsersCount implements proxy.UserManager.GetUsersCount().
+func (s *Server) GetUsersCount(context.Context) int64 {
+	return s.validator.Count()
 }
 
 func (s *Server) policy() policy.Session {
@@ -107,6 +147,7 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 
 	svrSession := &ServerSession{
 		config:       s.config,
+		validator:    s.validator,
 		address:      inbound.Gateway.Address,
 		port:         inbound.Gateway.Port,
 		localAddress: net.IPAddress(conn.LocalAddr().(*net.TCPAddr).IP),
