@@ -274,20 +274,20 @@ func setUpHTTPTunnel(ctx context.Context, dest net.Destination, target string, u
 			wg.Done()
 		}()
 
+		// rawConn may be shared with other tunnels, so only this stream is closed on failure
 		resp, err := h2clientConn.RoundTrip(req)
 		if err != nil {
-			rawConn.Close()
 			return nil, err
 		}
 
 		wg.Wait()
 		if pErr != nil {
-			rawConn.Close()
+			resp.Body.Close()
 			return nil, pErr
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			rawConn.Close()
+			resp.Body.Close()
 			return nil, errors.New("Proxy responded with non 200 code: " + resp.Status)
 		}
 		return newHTTP2Conn(rawConn, pw, resp.Body), nil
