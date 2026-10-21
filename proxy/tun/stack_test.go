@@ -1936,7 +1936,7 @@ func TestFragmentsWithoutRoom(t *testing.T) {
 	} {
 		l := newLink()
 		l.out = func([]byte) { t.Error("a packet with an MTU of ", test.mtu) }
-		s := &stack{tun: l, mtu: test.mtu}
+		s := &stack{tun: l, mtu: uint32(test.mtu)}
 		if err := s.sendUDP(make([]byte, 100), netip.MustParseAddrPort(test.src), netip.MustParseAddrPort(test.dst)); err == nil {
 			t.Fatal("no error with an MTU of ", test.mtu)
 		}

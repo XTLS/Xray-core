@@ -222,7 +222,7 @@ func newTCPConn(s *stack, f flow) *tcpConn {
 	c.readable.L = &c.mu
 	c.writable.L = &c.mu
 	c.ipSize = putIPHeader(c.ip[:], protoTCP, f.dst.Addr(), f.src.Addr())
-	c.mss = s.mtu - c.ipSize - tcpHeaderSize
+	c.mss = s.getMTU() - c.ipSize - tcpHeaderSize
 	c.sndUna = rand.Uint32()
 	c.sndNxt = c.sndUna + 1
 	c.stampBase = rand.Uint32()
@@ -363,7 +363,7 @@ func (c *tcpConn) send(seq uint32, flags byte, options, payload []byte) {
 // sendSyn sends the answer to the SYN of the other side, or the SYN of a connection that is opened from here
 func (c *tcpConn) sendSyn() {
 	options := [12]byte{2, 4}
-	binary.BigEndian.PutUint16(options[2:], uint16(c.stack.mtu-c.ipSize-tcpHeaderSize))
+	binary.BigEndian.PutUint16(options[2:], uint16(c.stack.getMTU()-c.ipSize-tcpHeaderSize))
 	n := 4
 	if c.sack {
 		n += copy(options[n:], []byte{1, 1, 4, 2})
@@ -863,6 +863,18 @@ func (c *tcpConn) hold(seq uint32, payload []byte) {
 	c.rcvLast = seq
 }
 
+// limitMSS makes the next segment fit the current MTU, preserving peer and path limits. c.mu is held.
+func (c *tcpConn) limitMSS() {
+	if !c.stack.dynamicMTU {
+		return
+	}
+	mss := c.stack.getMTU() - c.ipSize - tcpHeaderSize
+	if c.stamps {
+		mss -= tcpStamps
+	}
+	c.mss = min(c.mss, mss)
+}
+
 // retransmit sends again what was sent from seq to end. c.mu is held
 func (c *tcpConn) retransmit(seq, end uint32) {
 	fin := false
@@ -873,6 +885,7 @@ func (c *tcpConn) retransmit(seq, end uint32) {
 		}
 	}
 	for int32(end-seq) > 0 {
+		c.limitMSS()
 		var part [1][]byte
 		_, n := c.queued(part[:0], seq, min(c.mss, int(end-seq)))
 		if n == 0 {
@@ -1128,6 +1141,7 @@ func (c *tcpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for end := c.sndNxt + size; c.sndNxt != end; {
 		// not a part of a segment when all of it can go later, with what is acknowledged by then
 		for c.err == nil {
+			c.limitMSS()
 			if space := c.space(); space >= min(end-c.sndNxt, uint32(c.mss)) || space != 0 && c.sndUna == c.sndNxt {
 				break
 			}
@@ -1165,12 +1179,13 @@ func (c *tcpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 		c.arm(tcpTick)
 		// segments that come in the meantime are taken while this one is written, and acknowledged after it
+		mss := c.mss
 		c.sending = true
 		c.mu.Unlock()
 		if s := c.stack.segmenter; s != nil {
 			t := h[c.ipSize:]
 			binary.BigEndian.PutUint16(t[16:], ^checksum(pseudoSum(h[:c.ipSize], protoTCP, len(t)+n)))
-			_ = s.WriteSegment(h, p, c.mss)
+			_ = s.WriteSegment(h, p, mss)
 		} else {
 			c.write(h, p[0])
 		}

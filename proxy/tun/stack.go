@@ -23,6 +23,11 @@ type Stack interface {
 	// Start makes the stack read the packets of its tun
 	Start() error
 	Close() error
+	// SetMTU changes the outgoing MTU (1280..65535) without closing connections.
+	// It requires StackOptions.DynamicMTU.
+	// Packets already being formed, including all fragments of a datagram, may use the previous MTU.
+	// It does not change the tun itself or wait for writes to finish. A closed stack returns io.ErrClosedPipe.
+	SetMTU(mtu uint32) error
 	// Input takes a packet of a tun that hands them over instead of being read. The packet is not kept,
 	// but it may be written to. The packets of one connection have to come one after another
 	Input(packet []byte)
@@ -37,6 +42,8 @@ type StackOptions struct {
 	Tun         Tun
 	MTU         uint32
 	IdleTimeout time.Duration
+	// DynamicMTU enables SetMTU. Otherwise the initial MTU is fixed.
+	DynamicMTU bool
 	// Addresses are what the stack opens connections from
 	Addresses []netip.Addr
 	// Remote is set if the tun is a tunnel to another system and not the tun of this one: what comes through it
@@ -55,9 +62,10 @@ type flow struct {
 // what others send, see tcpConn. The tun may also be a tunnel to a system that is far away, and the stack
 // the one that opens the connections
 type stack struct {
-	ctx context.Context
-	tun Tun
-	mtu int
+	ctx        context.Context
+	tun        Tun
+	mtu        uint32 // accessed atomically in dynamic mode
+	dynamicMTU bool   // unchanged after construction
 	// segmenter is the tun if it takes segments that are larger than its MTU
 	segmenter segmenter
 	// window is the window of every connection
@@ -92,7 +100,7 @@ func NewStack(ctx context.Context, options StackOptions, handler ConnectionHandl
 	s := &stack{
 		ctx:       ctx,
 		tun:       options.Tun,
-		mtu:       int(options.MTU),
+		mtu:       options.MTU,
 		window:    tcpWindow,
 		addresses: options.Addresses,
 		verify:    options.Remote,
@@ -100,6 +108,7 @@ func NewStack(ctx context.Context, options StackOptions, handler ConnectionHandl
 		conns:     make(map[flow]*tcpConn),
 		sockets:   make(map[netip.AddrPort]*udpSocket),
 	}
+	s.dynamicMTU = options.DynamicMTU
 	if t, ok := options.Tun.(segmenter); ok && t.Segments() {
 		s.segmenter = t
 		s.window = tcpLargeWindow
@@ -115,6 +124,32 @@ func NewStack(ctx context.Context, options StackOptions, handler ConnectionHandl
 		s.udp = newUdpConnectionHandler(s.handle, s.writeUDP)
 	}
 	return s, nil
+}
+
+// SetMTU implements Stack. Existing TCP connections keep a smaller MSS after an increase.
+func (s *stack) SetMTU(mtu uint32) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return io.ErrClosedPipe
+	}
+	if !s.dynamicMTU {
+		return errors.New("dynamic MTU is disabled")
+	}
+	if mtu < ipv6SmallestMTU || mtu > math.MaxUint16 {
+		return errors.New("invalid MTU: ", mtu)
+	}
+	if int(mtu) != s.getMTU() {
+		atomic.StoreUint32(&s.mtu, mtu)
+	}
+	return nil
+}
+
+func (s *stack) getMTU() int {
+	if s.dynamicMTU {
+		return int(atomic.LoadUint32(&s.mtu))
+	}
+	return int(s.mtu)
 }
 
 // Start is called by Handler to bring stack to life
@@ -367,6 +402,7 @@ func (s *stack) sendUDP(payload []byte, src, dst netip.AddrPort) error {
 // write completes the IP header of a packet that is in two parts and writes it to the tun, in fragments if it is
 // larger than the MTU. A segment of a connection never is, and is not written by this
 func (s *stack) write(header, payload []byte) error {
+	mtu := s.getMTU()
 	size, last := ipv6HeaderSize, 39
 	if header[0]>>4 == 4 {
 		size, last = ipv4HeaderSize, 19
@@ -377,8 +413,8 @@ func (s *stack) write(header, payload []byte) error {
 		// a link on the way may split it as well, and what is put together there is told apart by its number
 		binary.BigEndian.PutUint16(header[4:], uint16(id))
 	}
-	if len(header)+len(payload) > s.mtu {
-		return writeFragments(s.tun, s.mtu, id, header, payload)
+	if len(header)+len(payload) > mtu {
+		return writeFragments(s.tun, mtu, id, header, payload)
 	}
 	setIPLength(header[:size], len(header)+len(payload))
 	return s.tun.WritePacket(header, payload)
