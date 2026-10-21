@@ -69,9 +69,10 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 		}
 		var lc net.ListenConfig
 		if sockopt != nil || len(Controllers) > 0 {
-			lc.Control = func(network, address string, c syscall.RawConn) error {
+			lc.Control = func(network, _ string, c syscall.RawConn) error {
+				// ListenPacket supplies a local address; dialer controllers need the destination.
 				for _, ctl := range Controllers {
-					if err := ctl(network, address, c); err != nil {
+					if err := ctl(network, destAddr.String(), c); err != nil {
 						return errors.New("failed to apply external controller").Base(err)
 					}
 				}
@@ -197,6 +198,7 @@ func UseAlternativeSystemDialer(dialer SystemDialer) {
 
 // RegisterDialerController adds a controller to the effective system dialer.
 // The controller can be used to operate on file descriptors before they are put into use.
+// It receives the network and resolved remote address, as in net.Dialer.Control.
 // It only works when effective dialer is the default dialer.
 //
 // xray:api:beta
