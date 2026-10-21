@@ -49,6 +49,9 @@ const (
 	// tcpParts of how many parts of what was written it is made at most
 	tcpSegment = math.MaxUint16 - ipv6HeaderSize - tcpHeaderSize
 	tcpParts   = 7
+	// tcpKept is how large a payload is at least for the buffers that it was read into to be kept. A smaller one
+	// is copied to where the one before it ends, for a reader to get buffers that are full
+	tcpKept = buf.Size / 2
 
 	// tcpTick is how often a connection that waits for something looks at what it waits for
 	tcpTick = 100 * time.Millisecond
@@ -87,7 +90,9 @@ type segment struct {
 	flags    byte
 	window   uint16
 	options  []byte
-	payload  []byte
+	// payload is without its last rest bytes when those are in other buffers of the stack, see stack.whole
+	payload []byte
+	rest    int
 }
 
 // nextOption returns the first option of o and what follows it, kind is zero when there is none
@@ -749,6 +754,12 @@ func (c *tcpConn) space() uint32 {
 
 // receive takes the payload of a segment. c.mu is held
 func (c *tcpConn) receive(s segment) {
+	// what is large, the next and all taken stays in the buffers that it was read into
+	size := len(s.payload) + s.rest
+	keep := c.stack.bufs != nil && size >= tcpKept && s.seq == c.rcvNxt && size <= int(c.window-c.rcvLen)
+	if !keep {
+		s.payload = c.stack.whole(s.payload, s.rest)
+	}
 	seq, payload, fin := s.seq, s.payload, s.flags&tcpFin != 0
 	if len(payload) == 0 && !fin {
 		if int32(c.rcvNxt-seq) > 0 {
@@ -789,9 +800,14 @@ func (c *tcpConn) receive(s segment) {
 		return
 	}
 
-	c.rcvQueue = buf.MergeBytes(c.rcvQueue, payload)
-	c.rcvLen += int32(len(payload))
-	c.rcvNxt += uint32(len(payload))
+	if keep {
+		c.rcvQueue = c.stack.keep(c.rcvQueue, payload, s.rest)
+	} else {
+		size = len(payload)
+		c.rcvQueue = buf.MergeBytes(c.rcvQueue, payload)
+	}
+	c.rcvLen += int32(size)
+	c.rcvNxt += uint32(size)
 	for !fin && len(c.rcvHeld) > 0 && int32(c.rcvNxt-c.rcvHeld[0].seq) >= 0 {
 		h := c.rcvHeld[0]
 		if before := int32(c.rcvNxt - h.seq); before < h.data.Len() {
@@ -809,7 +825,7 @@ func (c *tcpConn) receive(s segment) {
 	c.readable.Signal()
 	// the reader acknowledges what it takes, with one segment for all that came by then.
 	// It is not waited for when it does not read for long
-	if fin || now || c.rcvNxt-c.rcvAcked >= tcpWindow/4 {
+	if fin || now || c.rcvNxt-c.rcvAcked >= uint32(c.window/4) {
 		c.sendAck()
 	} else {
 		c.arm(tcpTick)

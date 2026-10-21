@@ -71,6 +71,10 @@ type stack struct {
 	udp    *udpConnectionHandler
 	// addresses are what connections are opened from
 	addresses []netip.Addr
+	// bufs is what read reads a packet into if the tun is a segmenter, one after the other, the headers in the first.
+	// One that keep took is nil. joined is for a packet that is in more than one and is needed in one piece
+	bufs   buf.MultiBuffer
+	joined []byte
 
 	mu    sync.Mutex
 	conns map[flow]*tcpConn
@@ -149,26 +153,66 @@ func (s *stack) Close() error {
 
 // read takes the packets of the tun until it is closed
 func (s *stack) read() {
-	// a tun that does not split segments gives them as large as a packet can be
-	b := make([]byte, packetRoom+1<<16)
-	for {
-		b, err := s.tun.ReadPacket(b)
-		if err != nil {
-			s.mu.Lock()
-			closed := s.closed
-			s.mu.Unlock()
-			if !closed {
-				errors.LogErrorInner(s.ctx, err, "[tun] failed to read a packet, no more are read")
+	var err error
+	if s.segmenter != nil {
+		err = s.readSegments()
+	} else {
+		// as large as a packet can be, whatever the MTU is
+		b := make([]byte, packetRoom+1<<16)
+		for err == nil {
+			var p []byte
+			if p, err = s.tun.ReadPacket(b); err == nil {
+				s.Input(p)
 			}
-			return
 		}
-		s.Input(b)
 	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if !closed {
+		errors.LogErrorInner(s.ctx, err, "[tun] failed to read a packet, no more are read")
+	}
+}
+
+// readSegments is read for a tun that does not split segments and gives them as large as a packet can be.
+// They are read into buffers for a connection to keep what is large as it is, see keep
+func (s *stack) readSegments() error {
+	s.bufs = make(buf.MultiBuffer, (1<<16)/buf.Size)
+	defer buf.ReleaseMulti(s.bufs)
+	parts := make([][]byte, len(s.bufs))
+	var r room
+	for {
+		for i, b := range s.bufs {
+			if b == nil {
+				s.bufs[i] = buf.New()
+				_, _ = s.bufs[i].ReadFrom(&r)
+				parts[i] = r.b
+			}
+		}
+		n, err := s.segmenter.ReadParts(parts)
+		if err != nil {
+			return err
+		}
+		s.input(parts[0][:min(n, buf.Size)], max(n-buf.Size, 0))
+	}
+}
+
+// room takes what it is given to read into as read: that is the room of a Buffer as it is, not cleared
+type room struct{ b []byte }
+
+func (r *room) Read(b []byte) (int, error) {
+	r.b = b
+	return len(b), nil
 }
 
 // Input implements Stack. Several tunnels may hand over their packets at once
 func (s *stack) Input(b []byte) {
-	p, ok := parsePacket(b)
+	s.input(b, 0)
+}
+
+// input takes a packet that is b and rest bytes after it, in the bufs that follow the one that b is in
+func (s *stack) input(b []byte, rest int) {
+	p, ok := parsePacket(b, rest)
 	if !ok || p.src.Is4In6() || p.dst.Is4In6() || p.src.IsLoopback() || p.dst.IsLoopback() || p.dst.IsUnspecified() || p.src.IsMulticast() {
 		// nothing comes from many at once, and an address that stands for this machine itself is not one
 		// that the other side of a tun can ask for. Nor is an IPv6 address that stands for an IPv4 one, which
@@ -180,6 +224,10 @@ func (s *stack) Input(b []byte) {
 	}
 	// what was put together may be of two packets with one number, its checksum tells
 	verify := s.verify || p.fragment
+	if p.rest != 0 && (verify || p.proto != protoTCP) {
+		// only a segment of TCP that is not looked at can stay in pieces
+		p.payload, p.rest = s.whole(p.payload, p.rest), 0
+	}
 	if p.fragment {
 		p, ok = s.fragments.add(p)
 	}
@@ -194,6 +242,37 @@ func (s *stack) Input(b []byte) {
 	case protoICMPv4, protoICMPv6:
 		s.handleICMP(p)
 	}
+}
+
+// whole returns in one piece what is b and rest bytes after it, in the bufs that follow the one that b is in
+func (s *stack) whole(b []byte, rest int) []byte {
+	if rest == 0 {
+		return b
+	}
+	s.joined = append(s.joined[:0], b...)
+	for i := 1; rest > 0; i++ {
+		n := min(rest, buf.Size)
+		s.joined = append(s.joined, s.bufs[i].BytesTo(int32(n))...)
+		rest -= n
+	}
+	return s.joined
+}
+
+// keep adds to mb what is b and rest bytes after it, in the bufs that follow the one that b is in: nothing is copied,
+// the buffers are taken for it and no longer read into
+func (s *stack) keep(mb buf.MultiBuffer, b []byte, rest int) buf.MultiBuffer {
+	// b ends where what was read into the first one does, or before it
+	first := s.bufs[0]
+	from := first.Cap() - int32(cap(b))
+	first.Resize(from, from+int32(len(b)))
+	mb, s.bufs[0] = append(mb, first), nil
+	for i := 1; rest > 0; i++ {
+		n := min(rest, buf.Size)
+		s.bufs[i].Resize(0, int32(n))
+		mb, s.bufs[i] = append(mb, s.bufs[i]), nil
+		rest -= n
+	}
+	return mb
 }
 
 // local returns the address that packets to remote are sent from
@@ -237,6 +316,7 @@ func (s *stack) handleTCP(p packet) {
 		window:  binary.BigEndian.Uint16(t[14:]),
 		options: t[tcpHeaderSize:size],
 		payload: t[size:],
+		rest:    p.rest,
 	}
 
 	s.mu.Lock()
@@ -283,7 +363,7 @@ func (s *stack) refuse(f flow, seg segment) {
 		binary.BigEndian.PutUint32(t[4:], seg.ack)
 		t[13] = tcpRst
 	} else {
-		ack := seg.seq + uint32(len(seg.payload))
+		ack := seg.seq + uint32(len(seg.payload)+seg.rest)
 		if seg.flags&(tcpSyn|tcpFin) != 0 {
 			ack++
 		}
