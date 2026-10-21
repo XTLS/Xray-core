@@ -53,21 +53,23 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Inbound, error) {
 		return nil, err
 	}
 
-	udpCodec, err := NewUDPServerCodec(method, psk, 500*time.Second)
+	user := &protocol.MemoryUser{
+		Email: config.Email,
+		Level: uint32(config.Level),
+	}
+
+	udpCodec, err := NewUDPServerCodec(method, psk, user, 500*time.Second)
 	if err != nil {
 		return nil, err
 	}
 
 	v := core.MustFromContext(ctx)
 	return &Inbound{
-		networks:   networks,
-		method:     method,
-		psk:        psk,
-		saltFilter: antireplay.NewMapFilter[[32]byte](60),
-		user: &protocol.MemoryUser{
-			Email: config.Email,
-			Level: uint32(config.Level),
-		},
+		networks:      networks,
+		method:        method,
+		psk:           psk,
+		saltFilter:    antireplay.NewMapFilter[[32]byte](60),
+		user:          user,
 		udpCodec:      udpCodec,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}, nil
@@ -155,18 +157,12 @@ func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatch
 		}
 
 		for _, b := range mb {
-			decoded, err := i.udpCodec.DecodePacket(b.Bytes())
+			sessionItem, decoded, err := i.udpCodec.DecodePacket(b.Bytes())
 			b.Release()
 			if err != nil || decoded.HeaderType != HeaderTypeClient {
 				continue
 			}
 
-			sessionItem := i.udpCodec.GetSession(decoded.SessionID)
-			sessionItem.Lock()
-			if sessionItem.User == nil {
-				sessionItem.User = i.user
-			}
-			sessionItem.Unlock()
 			link := sessionItem.link.Load()
 			if link != nil {
 				sessionItem.UpdateConn(conn)

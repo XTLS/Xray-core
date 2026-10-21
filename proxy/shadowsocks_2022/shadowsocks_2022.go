@@ -67,8 +67,12 @@ func (s *ServerUDPSession) EnsureLink(
 	// don't bind its lifetime to a parent context
 	sessCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	inbound := session.InboundFromContext(sessCtx)
-	if inbound != nil && s.User != nil {
-		inbound.User = s.User
+	if inbound != nil {
+		newInbound := *inbound
+		if s.User != nil {
+			newInbound.User = s.User
+		}
+		sessCtx = session.ContextWithInbound(sessCtx, &newInbound)
 	}
 	var email string
 	var level uint32
