@@ -168,7 +168,7 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- e
 			_ = conn.Close()
 
 			respBuf := buf.New()
-			defer respBuf.Release()
+			defer func() { respBuf.Release() }()
 			n, err := respBuf.ReadFullFrom(conn, 2)
 			if err != nil && n == 0 {
 				errors.LogErrorInner(ctx, err, "failed to read response length")
@@ -187,6 +187,10 @@ func (s *QUICNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- e
 				return
 			}
 			respBuf.Clear()
+			if int32(length) > respBuf.Cap() {
+				respBuf.Release()
+				respBuf = buf.NewWithSize(int32(length))
+			}
 			n, err = respBuf.ReadFullFrom(conn, int32(length))
 			if err != nil && n == 0 {
 				errors.LogErrorInner(ctx, err, "failed to read response length")
