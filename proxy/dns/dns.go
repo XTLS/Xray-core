@@ -355,6 +355,8 @@ func (h *Handler) handleIPQuery(id uint16, qType dnsmessage.Type, domain string,
 	}))
 	common.Must(builder.StartAnswers())
 
+	// Keep the reply within b (buf.Size): 256 AAAA answers and the longest name fit.
+	ips = ips[:min(len(ips), 256)]
 	rHeader := dnsmessage.ResourceHeader{Name: dnsmessage.MustNewName(domain), Class: dnsmessage.ClassINET, TTL: ttl}
 	switch qType {
 	case dnsmessage.TypeA:
