@@ -290,6 +290,8 @@ type SplitHTTPConfig struct {
 	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
 	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
 	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
+	DownlinkGzipMs       Int32Range        `json:"downlinkGzipMs"`
+	DownlinkGzipForce    bool              `json:"downlinkGzipForce"`
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
@@ -492,6 +494,8 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ScMinPostsIntervalMs: newRangeConfig(c.ScMinPostsIntervalMs),
 		ScMaxBufferedPosts:   c.ScMaxBufferedPosts,
 		ScStreamUpServerSecs: newRangeConfig(c.ScStreamUpServerSecs),
+		DownlinkGzipMs:       newRangeConfig(c.DownlinkGzipMs),
+		DownlinkGzipForce:    c.DownlinkGzipForce,
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
 		SessionIDTable:       c.SessionIDTable,
 		SessionIDLength:      newRangeConfig(c.SessionIDLength),

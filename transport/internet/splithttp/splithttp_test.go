@@ -465,3 +465,94 @@ func Test_maxUpload(t *testing.T) {
 
 	common.Must(listen.Close())
 }
+
+func Test_ListenXHAndDial_GzipHeartbeat(t *testing.T) {
+	if runtime.GOARCH == "arm64" {
+		return
+	}
+
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+	for _, tc := range []struct {
+		name string
+		mode string
+		alpn []string
+	}{
+		{"h1 packet-up", "packet-up", nil},
+		{"h2 packet-up", "packet-up", []string{"h2"}},
+		{"h2 stream-up", "stream-up", []string{"h2"}},
+		{"h2 stream-one", "stream-one", []string{"h2"}},
+		{"h3 packet-up", "packet-up", []string{"h3"}},
+		{"h3 stream-one", "stream-one", []string{"h3"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			serverSettings := &internet.MemoryStreamConfig{
+				ProtocolName: "splithttp",
+				ProtocolSettings: &Config{
+					Path:              "/gz",
+					DownlinkGzipMs:    &RangeConfig{From: 20, To: 20},
+					DownlinkGzipForce: true,
+				},
+			}
+			clientSettings := &internet.MemoryStreamConfig{
+				ProtocolName:     "splithttp",
+				ProtocolSettings: &Config{Path: "gz", Mode: tc.mode},
+			}
+			if tc.alpn != nil {
+				for _, s := range []*internet.MemoryStreamConfig{serverSettings, clientSettings} {
+					s.SecurityType = "tls"
+					s.SecuritySettings = &tls.Config{
+						Certificate:          []*tls.Certificate{tls.ParseCertificate(ct)},
+						PinnedPeerCertSha256: [][]byte{ctHash[:]},
+						NextProtocol:         tc.alpn,
+					}
+				}
+			}
+
+			var dest net.Destination
+			if tc.alpn != nil && tc.alpn[0] == "h3" {
+				dest = net.UDPDestination(net.DomainAddress("localhost"), udp.PickPort())
+			} else {
+				dest = net.TCPDestination(net.DomainAddress("localhost"), tcp.PickPort())
+			}
+			listen, err := ListenXH(context.Background(), net.LocalHostIP, dest.Port, serverSettings, func(conn stat.Connection) {
+				go func() {
+					defer conn.Close()
+					b := buf.New()
+					defer b.Release()
+					for {
+						b.Clear()
+						if _, err := b.ReadFrom(conn); err != nil {
+							return
+						}
+						time.Sleep(100 * time.Millisecond) // idle downlink, heartbeats go out
+						if _, err := conn.Write(b.Bytes()); err != nil {
+							return
+						}
+					}
+				}()
+			})
+			common.Must(err)
+			defer listen.Close()
+			if dest.Network == net.Network_UDP {
+				time.Sleep(time.Second)
+			}
+
+			conn, err := Dial(context.Background(), dest, clientSettings)
+			common.Must(err)
+			defer conn.Close()
+
+			for _, size := range []int{1024, 1024} {
+				b1 := make([]byte, size)
+				common.Must2(rand.Read(b1))
+				common.Must2(conn.Write(b1))
+				b2 := make([]byte, size)
+				if _, err := io.ReadFull(conn, b2); err != nil {
+					t.Fatal(err)
+				}
+				if r := cmp.Diff(b2, b1); r != "" {
+					t.Fatal(r)
+				}
+			}
+		})
+	}
+}

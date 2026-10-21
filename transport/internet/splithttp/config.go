@@ -178,6 +178,17 @@ func (c *Config) GetNormalizedScStreamUpServerSecs() *RangeConfig {
 	return c.ScStreamUpServerSecs
 }
 
+func (c *Config) GetNormalizedDownlinkGzipMs() *RangeConfig {
+	r := c.DownlinkGzipMs
+	if r == nil || r.To <= 0 {
+		return &RangeConfig{}
+	}
+	if r.From <= 0 || r.From > r.To {
+		return &RangeConfig{From: r.To, To: r.To}
+	}
+	return r
+}
+
 func (c *Config) GetNormalizedUplinkChunkSize() *RangeConfig {
 	if c.UplinkChunkSize == nil || c.UplinkChunkSize.To == 0 {
 		switch c.UplinkDataPlacement {

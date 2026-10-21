@@ -366,6 +366,12 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			writer.Header().Set("Content-Type", "text/event-stream")
 		}
 
+		gzipHeartbeat := h.config.GetNormalizedDownlinkGzipMs()
+		useGzip := gzipHeartbeat.To > 0 && (h.config.DownlinkGzipForce || acceptsGzip(request.Header.Get("Accept-Encoding")))
+		if useGzip {
+			writer.Header().Set("Content-Encoding", "gzip")
+		}
+
 		writer.WriteHeader(http.StatusOK)
 		writer.(http.Flusher).Flush()
 
@@ -373,6 +379,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			Instance:       done.New(),
 			Reader:         request.Body,
 			ResponseWriter: writer,
+		}
+		if useGzip {
+			if err := httpSC.enableGzip(); err != nil {
+				errors.LogInfoInner(context.Background(), err, "failed to start gzip downlink")
+				return
+			}
+			go httpSC.gzipHeartbeat(gzipHeartbeat)
 		}
 		localAddr := h.localAddr
 		if la, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && la != nil {
@@ -396,6 +409,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		case <-httpSC.Wait():
 		}
 
+		if useGzip && request.Context().Err() == nil {
+			httpSC.finishGzip()
+		}
 		conn.Close()
 	} else {
 		errors.LogInfo(context.Background(), "unsupported method: ", request.Method)
@@ -408,6 +424,10 @@ type httpServerConn struct {
 	*done.Instance
 	io.Reader // no need to Close request.Body
 	http.ResponseWriter
+
+	gz         *gzipWriter
+	gzFinished bool
+	lastWrite  time.Time
 }
 
 func (c *httpServerConn) Write(b []byte) (int, error) {
@@ -415,6 +435,9 @@ func (c *httpServerConn) Write(b []byte) (int, error) {
 	defer c.Unlock()
 	if c.Done() {
 		return 0, io.ErrClosedPipe
+	}
+	if c.gz != nil {
+		return c.writeGzip(b)
 	}
 	n, err := c.ResponseWriter.Write(b)
 	if err == nil {
