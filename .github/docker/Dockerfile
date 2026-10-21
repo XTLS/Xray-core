@@ -40,21 +40,15 @@ RUN echo '{}' >/tmp/usr/local/etc/xray/11_geodata.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/12_env.json
 RUN echo '{}' >/tmp/usr/local/etc/xray/99_version.json
 
-# Create log files
-RUN mkdir -p /tmp/var/log/xray && touch \
-  /tmp/var/log/xray/access.log \
-  /tmp/var/log/xray/error.log
-
 # Build finally image
 FROM gcr.io/distroless/static:nonroot
 
 COPY --from=build --chown=0:0 --chmod=755 /src/xray /usr/local/bin/xray
 COPY --from=build --chown=65532:65532 --chmod=755 /tmp/empty /usr/local/share/xray
 COPY --from=build --chown=65532:65532 --chmod=644 /tmp/geodat/*.dat /usr/local/share/xray/
-COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /usr/local/etc/xray
-COPY --from=build --chown=0:0 --chmod=644 /tmp/usr/local/etc/xray/*.json /usr/local/etc/xray/
-COPY --from=build --chown=0:0 --chmod=755 /tmp/empty /var/log/xray
-COPY --from=build --chown=65532:65532 --chmod=600 /tmp/var/log/xray/*.log /var/log/xray/
+COPY --from=build --chown=0:65532 --chmod=750 /tmp/empty /usr/local/etc/xray
+COPY --from=build --chown=0:65532 --chmod=640 /tmp/usr/local/etc/xray/*.json /usr/local/etc/xray/
+COPY --from=build --chown=65532:65532 --chmod=700 /tmp/empty /var/log/xray
 
 VOLUME /usr/local/etc/xray
 VOLUME /var/log/xray
