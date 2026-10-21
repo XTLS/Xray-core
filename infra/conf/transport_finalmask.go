@@ -19,9 +19,9 @@ import (
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/finalmask/filter"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
-	"github.com/xtls/xray-core/transport/internet/finalmask/ipfilter"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
@@ -76,7 +76,7 @@ var (
 	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"ip-filter":     func() interface{} { return new(IPFilter) },
+		"filter":        func() interface{} { return new(Filter) },
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
@@ -84,7 +84,7 @@ var (
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"ip-filter":     func() interface{} { return new(IPFilter) },
+		"filter":        func() interface{} { return new(Filter) },
 		"header-custom": func() interface{} { return new(HeaderCustomUDP) },
 		"mkcp-legacy":   func() interface{} { return new(MkcpLegacy) },
 		"noise":         func() interface{} { return new(NoiseMask) },
@@ -97,12 +97,12 @@ var (
 	}, "type", "settings")
 )
 
-type IPFilter struct {
+type Filter struct {
 	BlockedIPs []string `json:"blockedIPs"`
 	AllowedIPs []string `json:"allowedIPs"`
 }
 
-func (c *IPFilter) Build() (proto.Message, error) {
+func (c *Filter) Build() (proto.Message, error) {
 	rules, err := geodata.ParseIPRules(c.BlockedIPs)
 	if err != nil {
 		return nil, errors.New(`invalid "blockedIPs"`).Base(err)
@@ -111,7 +111,7 @@ func (c *IPFilter) Build() (proto.Message, error) {
 	if err != nil {
 		return nil, errors.New(`invalid "allowedIPs"`).Base(err)
 	}
-	return &ipfilter.Config{BlockedIps: rules, AllowedIps: allowed}, nil
+	return &filter.Config{BlockedIps: rules, AllowedIps: allowed}, nil
 }
 
 type TCPItem struct {

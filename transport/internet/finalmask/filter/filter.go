@@ -1,4 +1,4 @@
-package ipfilter
+package filter
 
 import (
 	"github.com/xtls/xray-core/common/geodata"

@@ -1,4 +1,4 @@
-package ipfilter
+package filter
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func TestTCPFilterBeforeOtherMasks(t *testing.T) {
 		t.Run(policy.name, func(t *testing.T) {
 			blocked4 := sourceConn("192.0.2.1")
 			blocked6 := sourceConn("2001:db8::1")
-			unknown := &testConn{addr: &net.UnixAddr{Name: "ipfilter.sock", Net: "unix"}}
+			unknown := &testConn{addr: &net.UnixAddr{Name: "filter.sock", Net: "unix"}}
 			missing := new(testConn)
 			allowed := sourceConn("198.51.100.1")
 			allowed6 := sourceConn("2001:db8:1::1")
@@ -113,7 +113,7 @@ func TestUDPFilter(t *testing.T) {
 		t.Run(policy.name, func(t *testing.T) {
 			allowed := &net.UDPAddr{IP: net.ParseIP("198.51.100.1"), Port: 1234}
 			allowed6 := &net.UDPAddr{IP: net.ParseIP("2001:db8:1::1"), Port: 1234}
-			unknown := datagram{data: []byte("unknown"), addr: &net.UnixAddr{Name: "ipfilter.sock", Net: "unixgram"}}
+			unknown := datagram{data: []byte("unknown"), addr: &net.UnixAddr{Name: "filter.sock", Net: "unixgram"}}
 			missing := datagram{data: []byte("missing address")}
 			raw := &testPacketConn{reads: []datagram{
 				{data: []byte("blocked"), addr: &net.UDPAddr{IP: net.ParseIP("192.0.2.1"), Port: 1234}},
@@ -186,7 +186,7 @@ func TestUDPFilterReadError(t *testing.T) {
 				{"blocked", &net.UDPAddr{IP: net.ParseIP("192.0.2.1")}, true},
 				{"allowed", &net.UDPAddr{IP: net.ParseIP("198.51.100.1")}, false},
 				{"missing address", nil, len(policy.config.AllowedIps) > 0},
-				{"unknown address", &net.UnixAddr{Name: "ipfilter.sock", Net: "unixgram"}, len(policy.config.AllowedIps) > 0},
+				{"unknown address", &net.UnixAddr{Name: "filter.sock", Net: "unixgram"}, len(policy.config.AllowedIps) > 0},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					source := test.source

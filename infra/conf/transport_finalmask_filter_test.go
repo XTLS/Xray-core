@@ -10,10 +10,10 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/finalmask/ipfilter"
+	"github.com/xtls/xray-core/transport/internet/finalmask/filter"
 )
 
-func TestFinalMaskIPFilter(t *testing.T) {
+func TestFinalMaskFilter(t *testing.T) {
 	for _, network := range []string{"tcp", "udp"} {
 		for _, test := range []struct {
 			name, settings   string
@@ -26,7 +26,7 @@ func TestFinalMaskIPFilter(t *testing.T) {
 			{"empty_blacklist", `{"blockedIPs":[]}`, 0, 0},
 		} {
 			t.Run(network+"/"+test.name, func(t *testing.T) {
-				input := fmt.Sprintf(`{"finalmask":{"%s":[{"type":"ip-filter","settings":%s}]}}`, network, test.settings)
+				input := fmt.Sprintf(`{"finalmask":{"%s":[{"type":"filter","settings":%s}]}}`, network, test.settings)
 				var config StreamConfig
 				if err := json.Unmarshal([]byte(input), &config); err != nil {
 					t.Fatal(err)
@@ -46,12 +46,12 @@ func TestFinalMaskIPFilter(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				filter, ok := instance.(*ipfilter.Config)
+				filter, ok := instance.(*filter.Config)
 				if !ok {
 					t.Fatalf("unexpected mask type: %T", instance)
 				}
 				if len(filter.BlockedIps) != test.blocked || len(filter.AllowedIps) != test.allowed {
-					t.Fatalf("unexpected IP filter policy: %v", filter)
+					t.Fatalf("unexpected filter policy: %v", filter)
 				}
 				for _, rules := range [][]*geodata.IPRule{filter.BlockedIps, filter.AllowedIps} {
 					for _, rule := range rules {
@@ -68,7 +68,7 @@ func TestFinalMaskIPFilter(t *testing.T) {
 		}
 	}
 	for _, field := range []string{"blockedIPs", "allowedIPs"} {
-		var config IPFilter
+		var config Filter
 		if err := json.Unmarshal([]byte(fmt.Sprintf(`{"%s":["192.0.2.0/33"]}`, field)), &config); err != nil {
 			t.Fatal(err)
 		}
