@@ -66,7 +66,14 @@ func (c *TempUDPConn) SetTimeout(d time.Duration) {
 }
 
 func (c *TempUDPConn) Close() error {
-	c.Timer.SetTimeout(0)
-	c.AssociatedTCPConn.Close()
-	return c.PacketConn.Close()
+	if c.Timer != nil {
+		c.Timer.SetTimeout(0)
+	}
+	if c.AssociatedTCPConn != nil {
+		c.AssociatedTCPConn.Close()
+	}
+	if c.PacketConn != nil {
+		return c.PacketConn.Close()
+	}
+	return nil
 }
