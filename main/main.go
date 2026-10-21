@@ -16,6 +16,7 @@ func main() {
 		[]*base.Command{
 			cmdRun,
 			cmdVersion,
+			cmdCheck,
 		},
 		base.RootCommand.Commands...,
 	)
