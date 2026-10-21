@@ -191,7 +191,7 @@ func TestRelayUDPSessionStabilityAndDispatch(t *testing.T) {
 	// Verify downstream destination can decode both packets
 	method, err := GetCipherMethod(MethodAES128GCM)
 	common.Must(err)
-	destCodec, err := NewUDPServerCodec(method, destKey, 300*time.Second)
+	destCodec, err := NewUDPServerCodec(method, destKey, nil, 300*time.Second)
 	common.Must(err)
 
 	mu.Lock()
@@ -202,7 +202,8 @@ func TestRelayUDPSessionStabilityAndDispatch(t *testing.T) {
 		t.Fatalf("expected 2 received packets at destination, got %d", len(pkts))
 	}
 
-	dec1, err := destCodec.DecodePacket(pkts[0])
+	dec1, dec2 := DecodedUDPPacket{}, DecodedUDPPacket{}
+	_, dec1, err = destCodec.DecodePacket(pkts[0])
 	if err != nil {
 		t.Fatalf("dest failed to decode packet 1: %v", err)
 	}
@@ -210,7 +211,7 @@ func TestRelayUDPSessionStabilityAndDispatch(t *testing.T) {
 		t.Fatalf("dec1 mismatch: sess=%x, pktID=%d, payload=%s", dec1.SessionID, dec1.PacketID, string(dec1.Payload))
 	}
 
-	dec2, err := destCodec.DecodePacket(pkts[1])
+	_, dec2, err = destCodec.DecodePacket(pkts[1])
 	if err != nil {
 		t.Fatalf("dest failed to decode packet 2: %v", err)
 	}

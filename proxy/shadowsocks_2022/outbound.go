@@ -30,7 +30,7 @@ type Outbound struct {
 	method        *CipherMethod
 	pskList       [][]byte
 	finalPSK      []byte
-	udpCodec      *UDPPacketCodec
+	udpCodec      *UDPClientCodec
 	policyManager policy.Manager
 }
 
@@ -50,9 +50,9 @@ func NewClient(ctx context.Context, config *ClientConfig) (*Outbound, error) {
 	}
 
 	finalPSK := pskList[len(pskList)-1]
-	udpCodec, err := NewUDPPacketCodec(method, pskList)
+	udpCodec, err := NewUDPClientCodec(method, pskList)
 	if err != nil {
-		return nil, errors.New("failed to create udp packet codec").Base(err)
+		return nil, errors.New("failed to create udp client codec").Base(err)
 	}
 
 	v := core.MustFromContext(ctx)

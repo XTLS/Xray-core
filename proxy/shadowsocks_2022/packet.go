@@ -7,33 +7,78 @@ import (
 	"io"
 	"math"
 	mrand "math/rand/v2"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 )
 
-type UDPCodec struct {
+type UDPClientCodec struct {
 	method       *CipherMethod
 	pskList      [][]byte
 	psk          []byte
 	blockCipher  cipher.Block
 	blockCiphers []cipher.Block
 	chachaCipher cipher.AEAD
+}
+
+func NewUDPClientCodec(method *CipherMethod, pskList [][]byte) (*UDPClientCodec, error) {
+	if len(pskList) == 0 {
+		return nil, errors.New("empty psk list")
+	}
+	if method.IsChaCha && len(pskList) > 1 {
+		return nil, errors.New("multi-key is not supported for chacha20-poly1305")
+	}
+	finalPSK := pskList[len(pskList)-1]
+	c := &UDPClientCodec{
+		method:  method,
+		pskList: pskList,
+		psk:     finalPSK,
+	}
+	var err error
+	if method.IsChaCha {
+		c.chachaCipher, err = method.NewUDPCipher(finalPSK)
+	} else {
+		c.blockCipher, err = method.NewBlock(finalPSK)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(pskList) > 1 {
+		c.blockCiphers = make([]cipher.Block, len(pskList))
+		for i, psk := range pskList {
+			c.blockCiphers[i], err = method.NewBlock(psk)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return c, nil
+}
+
+func NewUDPPacketCodec(method *CipherMethod, pskList [][]byte) (*UDPClientCodec, error) {
+	return NewUDPClientCodec(method, pskList)
+}
+
+type UDPServerCodec struct {
+	method       *CipherMethod
+	psk          []byte
+	user         *protocol.MemoryUser
+	blockCipher  cipher.Block
+	chachaCipher cipher.AEAD
 	sessions     *UDPSessionManager
 }
 
-type (
-	UDPPacketCodec = UDPCodec
-	UDPServerCodec = UDPCodec
-)
-
-func newUDPCodec(method *CipherMethod, psk []byte) (*UDPCodec, error) {
-	c := &UDPCodec{
-		method: method,
-		psk:    psk,
+func NewUDPServerCodec(method *CipherMethod, psk []byte, user *protocol.MemoryUser, sessionTimeout time.Duration) (*UDPServerCodec, error) {
+	c := &UDPServerCodec{
+		method:   method,
+		psk:      psk,
+		user:     user,
+		sessions: NewUDPSessionManager(sessionTimeout),
 	}
 	var err error
 	if method.IsChaCha {
@@ -47,46 +92,129 @@ func newUDPCodec(method *CipherMethod, psk []byte) (*UDPCodec, error) {
 	return c, nil
 }
 
-func NewUDPPacketCodec(method *CipherMethod, pskList [][]byte) (*UDPCodec, error) {
-	if method.IsChaCha && len(pskList) > 1 {
-		return nil, errors.New("multi-key is not supported for chacha20-poly1305")
-	}
-	finalPSK := pskList[len(pskList)-1]
-	c, err := newUDPCodec(method, finalPSK)
-	if err != nil {
-		return nil, err
-	}
-	c.pskList = pskList
-	if len(pskList) > 1 {
-		c.blockCiphers = make([]cipher.Block, len(pskList))
-		for i, psk := range pskList {
-			c.blockCiphers[i], err = method.NewBlock(psk)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	return c, nil
-}
-
-func NewUDPServerCodec(method *CipherMethod, psk []byte, sessionTimeout time.Duration) (*UDPCodec, error) {
-	c, err := newUDPCodec(method, psk)
-	if err != nil {
-		return nil, err
-	}
-	c.sessions = NewUDPSessionManager(sessionTimeout)
-	return c, nil
-}
-
-func (c *UDPCodec) Sessions() *UDPSessionManager {
+func (c *UDPServerCodec) Sessions() *UDPSessionManager {
 	return c.sessions
 }
 
-func (c *UDPCodec) GetSession(sessionID uint64) *ServerUDPSession {
+func (c *UDPServerCodec) GetSession(sessionID uint64) *ServerUDPSession {
 	if c.sessions == nil {
 		return nil
 	}
-	return c.sessions.GetOrCreate(sessionID)
+	return c.sessions.Get(sessionID)
+}
+
+type UDPMultiServerCodec struct {
+	method      *CipherMethod
+	masterPSK   []byte
+	masterBlock cipher.Block
+	sessions    *UDPSessionManager
+}
+
+func NewUDPMultiServerCodec(method *CipherMethod, masterPSK []byte, sessionTimeout time.Duration) (*UDPMultiServerCodec, error) {
+	if method.IsChaCha {
+		return nil, errors.New("multi-user is not supported for chacha20-poly1305")
+	}
+	masterBlock, err := method.NewBlock(masterPSK)
+	if err != nil {
+		return nil, err
+	}
+	return &UDPMultiServerCodec{
+		method:      method,
+		masterPSK:   masterPSK,
+		masterBlock: masterBlock,
+		sessions:    NewUDPSessionManager(sessionTimeout),
+	}, nil
+}
+
+func (c *UDPMultiServerCodec) Sessions() *UDPSessionManager {
+	return c.sessions
+}
+
+func (c *UDPMultiServerCodec) GetSession(sessionID uint64) *ServerUDPSession {
+	if c.sessions == nil {
+		return nil
+	}
+	return c.sessions.Get(sessionID)
+}
+
+type UserLookupFunc func(hash [AESBlockSize]byte) (*protocol.MemoryUser, []byte, bool)
+
+func (c *UDPMultiServerCodec) DecodePacket(data []byte, userLookup UserLookupFunc) (*ServerUDPSession, DecodedUDPPacket, *protocol.MemoryUser, error) {
+	if len(data) < 2*AESBlockSize+AEADTagSize+RequestHeaderFixedChunkLength {
+		return nil, DecodedUDPPacket{}, nil, ErrPacketTooShort
+	}
+
+	var rawHeader [16]byte
+	c.masterBlock.Decrypt(rawHeader[:], data[:16])
+
+	sessionID := binary.BigEndian.Uint64(rawHeader[:8])
+	packetID := binary.BigEndian.Uint64(rawHeader[8:16])
+
+	sessionItem := c.sessions.Get(sessionID)
+	var currentUser *protocol.MemoryUser
+	var userPSK []byte
+	var bodyAead cipher.AEAD
+
+	if sessionItem != nil {
+		sessionItem.Lock()
+		currentUser = sessionItem.User
+		userPSK = sessionItem.UserPSK
+		bodyAead = sessionItem.clientBodyCipher
+		sessionItem.Unlock()
+
+		if currentUser != nil {
+			if !sessionItem.CheckPacketID(packetID) {
+				return nil, DecodedUDPPacket{}, nil, ErrPacketIdNotUnique
+			}
+		}
+	}
+
+	if currentUser == nil {
+		decryptedHash := DecryptUDPEIH(c.masterBlock, rawHeader[:], data[16:32])
+		user, psk, ok := userLookup(decryptedHash)
+		if !ok {
+			return nil, DecodedUDPPacket{}, nil, errors.New("user not found")
+		}
+		currentUser = user
+		userPSK = psk
+	}
+
+	if bodyAead == nil {
+		bodyKey := DeriveSessionSubKey(userPSK, rawHeader[:8], c.method.KeySaltLength)
+		var err error
+		bodyAead, err = c.method.NewAEAD(bodyKey)
+		if err != nil {
+			return nil, DecodedUDPPacket{}, nil, err
+		}
+	}
+
+	bodyNonce := rawHeader[4:16]
+	bodyCipher := data[32:]
+	bodyPlain, err := bodyAead.Open(nil, bodyNonce, bodyCipher, nil)
+	if err != nil {
+		return nil, DecodedUDPPacket{}, nil, errors.New("failed to decrypt aes udp body").Base(err)
+	}
+
+	decoded, err := parsePlainUDPPacket(sessionID, packetID, bodyPlain)
+	if err != nil {
+		return nil, DecodedUDPPacket{}, nil, err
+	}
+	if decoded.HeaderType != HeaderTypeClient {
+		return nil, DecodedUDPPacket{}, nil, ErrBadHeaderType
+	}
+
+	if sessionItem == nil {
+		sessionItem = c.sessions.GetOrCreate(sessionID)
+	}
+	if !sessionItem.Commit(packetID, bodyAead, currentUser, userPSK) {
+		return nil, DecodedUDPPacket{}, nil, ErrPacketIdNotUnique
+	}
+
+	return sessionItem, decoded, currentUser, nil
+}
+
+func (c *UDPMultiServerCodec) EncodeServerPacket(clientSessionID uint64, userPSK []byte, dest net.Destination, payload []byte) ([]byte, error) {
+	return c.sessions.EncodeServerPacket(c.method, userPSK, clientSessionID, dest, payload)
 }
 
 type DecodedUDPPacket struct {
@@ -193,46 +321,42 @@ func parsePlainUDPPacket(sessionID, packetID uint64, bodyPlain []byte) (DecodedU
 	}, nil
 }
 
-func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
+func (c *UDPServerCodec) DecodePacket(data []byte) (*ServerUDPSession, DecodedUDPPacket, error) {
 	if len(data) < PacketMinimalHeaderSize {
-		return DecodedUDPPacket{}, ErrPacketTooShort
+		return nil, DecodedUDPPacket{}, ErrPacketTooShort
 	}
 
 	if c.method.IsChaCha {
 		if len(data) < PacketNonceSize+AEADTagSize {
-			return DecodedUDPPacket{}, ErrPacketTooShort
+			return nil, DecodedUDPPacket{}, ErrPacketTooShort
 		}
 		nonce := data[:PacketNonceSize]
 		ciphertext := data[PacketNonceSize:]
 		plain, err := c.chachaCipher.Open(nil, nonce, ciphertext, nil)
 		if err != nil {
-			return DecodedUDPPacket{}, errors.New("failed to decrypt chacha udp packet").Base(err)
+			return nil, DecodedUDPPacket{}, errors.New("failed to decrypt chacha udp packet").Base(err)
 		}
 		if len(plain) < 16+1+8+2 {
-			return DecodedUDPPacket{}, ErrPacketTooShort
+			return nil, DecodedUDPPacket{}, ErrPacketTooShort
 		}
 
 		sessionID := binary.BigEndian.Uint64(plain[:8])
 		packetID := binary.BigEndian.Uint64(plain[8:16])
 
-		sessionItem := c.sessions.GetOrCreate(sessionID)
-		if !sessionItem.CheckPacketID(packetID) {
-			return DecodedUDPPacket{}, ErrPacketIdNotUnique
-		}
-
 		decoded, err := parsePlainUDPPacket(sessionID, packetID, plain[16:])
 		if err != nil {
-			return DecodedUDPPacket{}, err
+			return nil, DecodedUDPPacket{}, err
 		}
 
 		if decoded.HeaderType != HeaderTypeClient {
-			return DecodedUDPPacket{}, ErrBadHeaderType
+			return nil, DecodedUDPPacket{}, ErrBadHeaderType
 		}
 
-		if !sessionItem.CommitPacketID(packetID) {
-			return DecodedUDPPacket{}, ErrPacketIdNotUnique
+		sessionItem := c.sessions.GetOrCreate(sessionID)
+		if !sessionItem.Commit(packetID, nil, c.user, c.psk) {
+			return nil, DecodedUDPPacket{}, ErrPacketIdNotUnique
 		}
-		return decoded, nil
+		return sessionItem, decoded, nil
 	}
 
 	// AES mode
@@ -241,45 +365,48 @@ func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 	sessionID := binary.BigEndian.Uint64(rawHeader[:8])
 	packetID := binary.BigEndian.Uint64(rawHeader[8:16])
 
-	sessionItem := c.sessions.GetOrCreate(sessionID)
-	if !sessionItem.CheckPacketID(packetID) {
-		return DecodedUDPPacket{}, ErrPacketIdNotUnique
+	sessionItem := c.sessions.Get(sessionID)
+	var bodyAead cipher.AEAD
+	if sessionItem != nil {
+		if !sessionItem.CheckPacketID(packetID) {
+			return nil, DecodedUDPPacket{}, ErrPacketIdNotUnique
+		}
+		sessionItem.Lock()
+		bodyAead = sessionItem.clientBodyCipher
+		sessionItem.Unlock()
 	}
 
-	return sessionItem.DecryptAESPayload(c.method, c.psk, sessionID, packetID, rawHeader[:], data[16:])
-}
-
-func (s *ServerUDPSession) DecryptAESPayload(method *CipherMethod, psk []byte, sessionID, packetID uint64, rawHeader, bodyCipher []byte) (DecodedUDPPacket, error) {
-	bodyAead := s.getClientBodyCipher()
 	if bodyAead == nil {
-		bodyKey := DeriveSessionSubKey(psk, rawHeader[:8], method.KeySaltLength)
+		bodyKey := DeriveSessionSubKey(c.psk, rawHeader[:8], c.method.KeySaltLength)
 		var err error
-		bodyAead, err = method.NewAEAD(bodyKey)
+		bodyAead, err = c.method.NewAEAD(bodyKey)
 		if err != nil {
-			return DecodedUDPPacket{}, err
+			return nil, DecodedUDPPacket{}, err
 		}
 	}
 
 	bodyNonce := rawHeader[4:16]
+	bodyCipher := data[16:]
 	bodyPlain, err := bodyAead.Open(nil, bodyNonce, bodyCipher, nil)
 	if err != nil {
-		return DecodedUDPPacket{}, errors.New("failed to decrypt aes udp body").Base(err)
+		return nil, DecodedUDPPacket{}, errors.New("failed to decrypt aes udp body").Base(err)
 	}
 
 	decoded, err := parsePlainUDPPacket(sessionID, packetID, bodyPlain)
 	if err != nil {
-		return DecodedUDPPacket{}, err
+		return nil, DecodedUDPPacket{}, err
 	}
-
 	if decoded.HeaderType != HeaderTypeClient {
-		return DecodedUDPPacket{}, ErrBadHeaderType
+		return nil, DecodedUDPPacket{}, ErrBadHeaderType
 	}
 
-	if !s.commitClientPacket(packetID, bodyAead) {
-		return DecodedUDPPacket{}, ErrPacketIdNotUnique
+	if sessionItem == nil {
+		sessionItem = c.sessions.GetOrCreate(sessionID)
 	}
-
-	return decoded, nil
+	if !sessionItem.Commit(packetID, bodyAead, c.user, c.psk) {
+		return nil, DecodedUDPPacket{}, ErrPacketIdNotUnique
+	}
+	return sessionItem, decoded, nil
 }
 
 func (s *ServerUDPSession) EnsureServerState(method *CipherMethod, psk []byte) error {
@@ -301,6 +428,9 @@ func (s *ServerUDPSession) EnsureServerState(method *CipherMethod, psk []byte) e
 	if method.IsChaCha {
 		var err error
 		s.serverChaCha, err = method.NewUDPCipher(psk)
+		if err != nil {
+			s.ServerSessionID = 0
+		}
 		return err
 	}
 
@@ -385,11 +515,12 @@ func (s *ServerUDPSession) EncodeServerPacket(method *CipherMethod, clientSessio
 	return res, nil
 }
 
-func (c *UDPCodec) EncodeServerPacket(clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
+func (c *UDPServerCodec) EncodeServerPacket(clientSessionID uint64, dest net.Destination, payload []byte) ([]byte, error) {
 	return c.sessions.EncodeServerPacket(c.method, c.psk, clientSessionID, dest, payload)
 }
 
 type serverSessionState struct {
+	sync.Mutex
 	sessionID uint64
 	window    *SlidingWindow
 	cipher    cipher.AEAD
@@ -397,15 +528,20 @@ type serverSessionState struct {
 }
 
 func (st *serverSessionState) check(packetID uint64) bool {
+	st.Lock()
+	defer st.Unlock()
 	return st.window.Check(packetID)
 }
 
-func (st *serverSessionState) add(packetID uint64) {
-	st.window.Add(packetID)
+func (st *serverSessionState) commit(packetID uint64) bool {
+	st.Lock()
+	defer st.Unlock()
+	return st.window.CheckAndAdd(packetID)
 }
 
 type ClientUDPSession struct {
-	codec            *UDPCodec
+	mu               sync.Mutex
+	codec            *UDPClientCodec
 	clientSessionID  uint64
 	nextPacketID     atomic.Uint64
 	clientBodyCipher cipher.AEAD
@@ -413,7 +549,7 @@ type ClientUDPSession struct {
 	old              atomic.Pointer[serverSessionState]
 }
 
-func (c *UDPCodec) NewClientSession() (*ClientUDPSession, error) {
+func (c *UDPClientCodec) NewClientSession() (*ClientUDPSession, error) {
 	var sessID [8]byte
 	if _, err := io.ReadFull(rand.Reader, sessID[:]); err != nil {
 		return nil, err
@@ -438,7 +574,7 @@ func (c *UDPCodec) NewClientSession() (*ClientUDPSession, error) {
 	}, nil
 }
 
-func (s *ClientUDPSession) getServerSession(sessionID uint64, now int64) (*serverSessionState, error) {
+func (s *ClientUDPSession) getOrTransitionServerSession(sessionID uint64, cipher cipher.AEAD, now int64) (*serverSessionState, error) {
 	cur := s.current.Load()
 	if cur != nil && cur.sessionID == sessionID {
 		return cur, nil
@@ -447,40 +583,42 @@ func (s *ClientUDPSession) getServerSession(sessionID uint64, now int64) (*serve
 	old := s.old.Load()
 	if old != nil && old.sessionID == sessionID {
 		if now-old.lastSeen.Load() > 60 {
-			s.old.CompareAndSwap(old, nil)
 			return nil, errors.New("old server session expired")
 		}
 		return old, nil
 	}
 
-	// New server session:
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cur = s.current.Load()
+	if cur != nil && cur.sessionID == sessionID {
+		return cur, nil
+	}
+
+	old = s.old.Load()
+	if old != nil && old.sessionID == sessionID {
+		if now-old.lastSeen.Load() > 60 {
+			return nil, errors.New("old server session expired")
+		}
+		return old, nil
+	}
+
 	// Spec §3.2.4: reject newer server sessions when the last packet received from the old session is less than 1 minute old.
 	if old != nil && now-old.lastSeen.Load() < 60 {
 		return nil, errors.New("newer server session rejected: old session is less than 1 minute old")
 	}
 
-	var bodyAead cipher.AEAD
-	if !s.codec.method.IsChaCha {
-		var sessBytes [8]byte
-		binary.BigEndian.PutUint64(sessBytes[:], sessionID)
-		bodyKey := DeriveSessionSubKey(s.codec.psk, sessBytes[:], s.codec.method.KeySaltLength)
-		var err error
-		bodyAead, err = s.codec.method.NewAEAD(bodyKey)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	newState := &serverSessionState{
 		sessionID: sessionID,
 		window:    new(SlidingWindow),
-		cipher:    bodyAead,
+		cipher:    cipher,
 	}
 	newState.lastSeen.Store(now)
 
 	if cur == nil {
-		s.current.CompareAndSwap(nil, newState)
-		return s.current.Load(), nil
+		s.current.Store(newState)
+		return newState, nil
 	}
 
 	s.old.Store(cur)
@@ -630,15 +768,6 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 		sessionID := binary.BigEndian.Uint64(plain[:8])
 		packetID := binary.BigEndian.Uint64(plain[8:16])
 
-		now := time.Now().Unix()
-		st, err := s.getServerSession(sessionID, now)
-		if err != nil {
-			return DecodedUDPPacket{}, err
-		}
-		if !st.check(packetID) {
-			return DecodedUDPPacket{}, ErrPacketIdNotUnique
-		}
-
 		decoded, err := parsePlainUDPPacket(sessionID, packetID, plain[16:])
 		if err != nil {
 			return DecodedUDPPacket{}, err
@@ -651,7 +780,16 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 			return DecodedUDPPacket{}, errors.New("client session ID mismatch")
 		}
 
-		st.add(packetID)
+		now := time.Now().Unix()
+		st, err := s.getOrTransitionServerSession(sessionID, nil, now)
+		if err != nil {
+			return DecodedUDPPacket{}, err
+		}
+
+		// Atomically commit after all validations succeed
+		if !st.commit(packetID) {
+			return DecodedUDPPacket{}, ErrPacketIdNotUnique
+		}
 		st.lastSeen.Store(now)
 
 		return decoded, nil
@@ -664,18 +802,79 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 	packetID := binary.BigEndian.Uint64(rawHeader[8:16])
 
 	now := time.Now().Unix()
-	st, err := s.getServerSession(sessionID, now)
+
+	// 1. Fast path for known active session
+	cur := s.current.Load()
+	var st *serverSessionState
+	var bodyAead cipher.AEAD
+
+	if cur != nil && cur.sessionID == sessionID {
+		st = cur
+		bodyAead = cur.cipher
+	} else {
+		old := s.old.Load()
+		if old != nil && old.sessionID == sessionID {
+			if now-old.lastSeen.Load() > 60 {
+				return DecodedUDPPacket{}, errors.New("old server session expired")
+			}
+			st = old
+			bodyAead = old.cipher
+		}
+	}
+
+	if st != nil {
+		if !st.check(packetID) {
+			return DecodedUDPPacket{}, ErrPacketIdNotUnique
+		}
+		bodyNonce := rawHeader[4:16]
+		bodyCipher := data[16:]
+		bodyPlain, err := bodyAead.Open(nil, bodyNonce, bodyCipher, nil)
+		if err != nil {
+			return DecodedUDPPacket{}, errors.New("failed to decrypt aes udp body").Base(err)
+		}
+
+		decoded, err := parsePlainUDPPacket(sessionID, packetID, bodyPlain)
+		if err != nil {
+			return DecodedUDPPacket{}, err
+		}
+
+		if decoded.HeaderType != HeaderTypeServer {
+			return DecodedUDPPacket{}, ErrBadHeaderType
+		}
+		if decoded.ClientSessionID != s.clientSessionID {
+			return DecodedUDPPacket{}, errors.New("client session ID mismatch")
+		}
+
+		if !st.commit(packetID) {
+			return DecodedUDPPacket{}, ErrPacketIdNotUnique
+		}
+		st.lastSeen.Store(now)
+
+		return decoded, nil
+	}
+
+	// 2. Unknown session: Trial path without mutating s.current or s.old yet!
+	// Re-check cur in case another worker concurrently transitioned to this sessionID
+	cur = s.current.Load()
+	old := s.old.Load()
+	if (cur == nil || cur.sessionID != sessionID) && (old == nil || old.sessionID != sessionID) {
+		// Spec §3.2.4: reject newer server sessions when the last packet received from the old session is less than 1 minute old.
+		if old != nil && now-old.lastSeen.Load() < 60 {
+			return DecodedUDPPacket{}, errors.New("newer server session rejected: old session is less than 1 minute old")
+		}
+	}
+
+	var sessBytes [8]byte
+	binary.BigEndian.PutUint64(sessBytes[:], sessionID)
+	bodyKey := DeriveSessionSubKey(s.codec.psk, sessBytes[:], s.codec.method.KeySaltLength)
+	trialAead, err := s.codec.method.NewAEAD(bodyKey)
 	if err != nil {
 		return DecodedUDPPacket{}, err
 	}
-	if !st.check(packetID) {
-		return DecodedUDPPacket{}, ErrPacketIdNotUnique
-	}
-	bodyAead := st.cipher
 
 	bodyNonce := rawHeader[4:16]
 	bodyCipher := data[16:]
-	bodyPlain, err := bodyAead.Open(nil, bodyNonce, bodyCipher, nil)
+	bodyPlain, err := trialAead.Open(nil, bodyNonce, bodyCipher, nil)
 	if err != nil {
 		return DecodedUDPPacket{}, errors.New("failed to decrypt aes udp body").Base(err)
 	}
@@ -692,7 +891,15 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 		return DecodedUDPPacket{}, errors.New("client session ID mismatch")
 	}
 
-	st.add(packetID)
+	// Payload authenticated! Safely commit and transition session under lock
+	st, err = s.getOrTransitionServerSession(sessionID, trialAead, now)
+	if err != nil {
+		return DecodedUDPPacket{}, err
+	}
+
+	if !st.commit(packetID) {
+		return DecodedUDPPacket{}, ErrPacketIdNotUnique
+	}
 	st.lastSeen.Store(now)
 
 	return decoded, nil

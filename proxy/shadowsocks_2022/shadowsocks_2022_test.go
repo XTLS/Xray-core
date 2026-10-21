@@ -265,7 +265,7 @@ func TestUDPCodec(t *testing.T) {
 
 			clientCodec, err := NewUDPPacketCodec(method, [][]byte{psk})
 			common.Must(err)
-			serverCodec, err := NewUDPServerCodec(method, psk, time.Minute)
+			serverCodec, err := NewUDPServerCodec(method, psk, nil, time.Minute)
 			common.Must(err)
 
 			session, err := clientCodec.NewClientSession()
@@ -277,7 +277,7 @@ func TestUDPCodec(t *testing.T) {
 			rawCopy := make([]byte, pktBuf.Len())
 			copy(rawCopy, pktBuf.Bytes())
 
-			decoded, err := serverCodec.DecodePacket(pktBuf.Bytes())
+			_, decoded, err := serverCodec.DecodePacket(pktBuf.Bytes())
 			common.Must(err)
 
 			if decoded.HeaderType != HeaderTypeClient {
@@ -291,7 +291,7 @@ func TestUDPCodec(t *testing.T) {
 			}
 
 			// Replay same packet wire bytes should fail with ErrPacketIdNotUnique
-			_, err = serverCodec.DecodePacket(rawCopy)
+			_, _, err = serverCodec.DecodePacket(rawCopy)
 			if err != ErrPacketIdNotUnique {
 				t.Fatalf("expected ErrPacketIdNotUnique on replay, got: %v", err)
 			}
@@ -427,7 +427,7 @@ func TestClientUDPSessionMultiDestination(t *testing.T) {
 
 			clientCodec, err := NewUDPPacketCodec(method, [][]byte{rawKey})
 			common.Must(err)
-			serverCodec, err := NewUDPServerCodec(method, rawKey, time.Minute)
+			serverCodec, err := NewUDPServerCodec(method, rawKey, nil, time.Minute)
 			common.Must(err)
 
 			session, err := clientCodec.NewClientSession()
@@ -448,9 +448,9 @@ func TestClientUDPSessionMultiDestination(t *testing.T) {
 			defer pkt2.Release()
 
 			// Server decodes both
-			dec1, err := serverCodec.DecodePacket(pkt1.Bytes())
+			_, dec1, err := serverCodec.DecodePacket(pkt1.Bytes())
 			common.Must(err)
-			dec2, err := serverCodec.DecodePacket(pkt2.Bytes())
+			_, dec2, err := serverCodec.DecodePacket(pkt2.Bytes())
 			common.Must(err)
 
 			if dec1.SessionID != session.ClientSessionID() || dec2.SessionID != session.ClientSessionID() {
