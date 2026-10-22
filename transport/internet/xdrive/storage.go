@@ -43,6 +43,10 @@ func newStorage(streamSettings *internet.MemoryStreamConfig) (Storage, error) {
 		return sharedStorage(streamSettings, config, func() (Storage, error) {
 			return newTemplateStorage(streamSettings, config)
 		})
+	case "s3":
+		return sharedStorage(streamSettings, config, func() (Storage, error) {
+			return newS3Storage(streamSettings, config)
+		})
 	default:
 		return nil, errors.New("unsupported service: ", config.Service)
 	}
@@ -57,6 +61,8 @@ func sessionStorage(storage Storage) Storage {
 		return s.session()
 	case *templateStorage:
 		return s.session()
+	case *s3Storage:
+		return s.session()
 	}
 	return storage
 }
@@ -68,6 +74,14 @@ var (
 
 func shareKey(streamSettings *internet.MemoryStreamConfig, config *Config) string {
 	parts := []string{config.Service, config.RemoteFolder}
+	if config.S3 != nil {
+		parts = append(parts, config.S3.Endpoint, s3Region(config.S3.Region), config.S3.Bucket)
+		if config.S3.PathStyle {
+			parts = append(parts, "path-style")
+		} else {
+			parts = append(parts, "virtual-hosted-style")
+		}
+	}
 	parts = append(parts, config.Secrets...)
 	if streamSettings != nil {
 		parts = append(parts, streamSettings.SecurityType)
