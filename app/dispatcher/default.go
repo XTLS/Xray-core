@@ -396,6 +396,7 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 				return nil, ctx.Err()
 			default:
 				cachingStartingTimeStamp := time.Now()
+				cachedLen := payload.Len()
 				err := cReader.Cache(payload, cacheDeadline)
 				if err != nil {
 					return nil, err
@@ -403,7 +404,8 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 				cachingTimeElapsed := time.Since(cachingStartingTimeStamp)
 				cacheDeadline -= cachingTimeElapsed
 
-				if !payload.IsEmpty() {
+				// A read without new data is not an attempt: the same bytes give the same result
+				if payload.Len() > cachedLen || payload.IsFull() {
 					result, err := sniffer.Sniff(ctx, payload.Bytes(), network)
 					switch err {
 					case common.ErrNoClue: // No Clue: protocol not matches, and sniffer cannot determine whether there will be a match or not
@@ -413,8 +415,6 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 					default:
 						return result, err
 					}
-				} else {
-					totalAttempt++
 				}
 				if totalAttempt >= 2 || cacheDeadline <= 0 {
 					return nil, errSniffingTimeout
