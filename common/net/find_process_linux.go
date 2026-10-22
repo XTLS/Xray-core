@@ -4,7 +4,7 @@ package net
 
 import (
 	"bufio"
-	"encoding/hex"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
@@ -45,10 +45,7 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 		panic("Unsupported network type for process lookup.")
 	}
 
-	targetHexAddr, err := formatLittleEndianString(net.ParseIP(srcIP), Port(srcPort))
-	if err != nil {
-		return 0, "", "", errors.New("failed to format address: ", err)
-	}
+	targetHexAddr := formatProcNetAddress(net.ParseIP(srcIP), Port(srcPort))
 
 	portFallback := ""
 	if network == "udp" {
@@ -87,24 +84,21 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	return pid, procName, absPath, nil
 }
 
-func formatLittleEndianString(addr net.IP, port Port) (string, error) {
-	ip := addr
+func formatProcNetAddress(addr net.IP, port Port) string {
 	var ipBytes []byte
-	if ip.To4() != nil {
-		ipBytes = ip.To4()
+	if ipv4 := addr.To4(); ipv4 != nil {
+		ipBytes = ipv4
 	} else {
-		ipBytes = ip.To16()
-	}
-	if ipBytes == nil {
-		return "", errors.New("invalid IP format for ", addr, ": ", ip)
+		ipBytes = addr.To16()
 	}
 
-	for i, j := 0, len(ipBytes)-1; i < j; i, j = i+1, j-1 {
-		ipBytes[i], ipBytes[j] = ipBytes[j], ipBytes[i]
+	var formatted strings.Builder
+	formatted.Grow(len(ipBytes)*2 + 5)
+	for i := 0; i < len(ipBytes); i += 4 {
+		fmt.Fprintf(&formatted, "%08X", binary.NativeEndian.Uint32(ipBytes[i:i+4]))
 	}
-	portHex := fmt.Sprintf("%04X", uint16(port))
-	ipHex := strings.ToUpper(hex.EncodeToString(ipBytes))
-	return fmt.Sprintf("%s:%s", ipHex, portHex), nil
+	fmt.Fprintf(&formatted, ":%04X", uint16(port))
+	return formatted.String()
 }
 
 func findInodeInFiles(filePaths []string, targetHexAddr, portFallback string) (string, error) {
