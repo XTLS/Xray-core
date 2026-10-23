@@ -1,0 +1,72 @@
+name: Sync upstream release + REALITY compat patch
+
+# Merges the latest XTLS/Xray-core release into main, re-applies patches/ and publishes "<tag>-compat"
+# with raw linux binaries usable as Remnanode's CUSTOM_CORE_URL.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+
+concurrency: sync-upstream
+
+jobs:
+  sync:
+    if: github.repository != 'XTLS/Xray-core'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+    steps:
+      - name: Find latest upstream release
+        id: up
+        run: |
+          tag=$(gh release view -R XTLS/Xray-core --json tagName -q .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag-compat" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.up.outputs.skip != 'true'
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }} # GITHUB_TOKEN cannot push upstream changes to .github/workflows
+
+      - uses: actions/setup-go@v7
+        if: steps.up.outputs.skip != 'true'
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Merge upstream release
+        if: steps.up.outputs.skip != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags https://github.com/XTLS/Xray-core.git "refs/tags/${{ steps.up.outputs.tag }}"
+          git merge --no-edit -m "Merge upstream ${{ steps.up.outputs.tag }}" FETCH_HEAD
+
+      - name: Re-apply patches and verify
+        if: steps.up.outputs.skip != 'true'
+        run: |
+          ./patches/apply.sh
+          go run ./infra/vformat/main.go -mode check -pwd ./
+          go vet ./transport/internet/reality/...
+          go build -o /dev/null ./main
+          git add -A
+          git diff --cached --quiet || git commit -m "Re-apply REALITY compat patch for ${{ steps.up.outputs.tag }}"
+          git push origin HEAD:main
+
+      - name: Build and publish release
+        if: steps.up.outputs.skip != 'true'
+        run: |
+          tag="${{ steps.up.outputs.tag }}-compat"
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -o "xray-linux-$arch" -trimpath -buildvcs=false -gcflags="all=-l=4" \
+              -ldflags="-X github.com/xtls/xray-core/core.build=$(git rev-parse --short HEAD) -s -w -buildid=" ./main
+          done
+          sha256sum xray-linux-* > sha256sums.txt
+          gh release create "$tag" xray-linux-amd64 xray-linux-arm64 sha256sums.txt --target "$(git rev-parse HEAD)" --title "$tag" \
+            --notes "Upstream [${{ steps.up.outputs.tag }}](https://github.com/XTLS/Xray-core/releases/tag/${{ steps.up.outputs.tag }}) + REALITY patch accepting Client Hellos without X25519MLKEM768 (see patches/)."
