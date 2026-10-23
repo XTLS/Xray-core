@@ -91,6 +91,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Fragment != nil {
+		errors.PrintDeprecatedFeatureWarning(`"fragment" in Freedom`, `"fragment" in "streamSettings.finalmask.tcp"`)
 		config.Fragment = new(freedom.Fragment)
 
 		switch strings.ToLower(c.Fragment.Packets) {
@@ -147,6 +148,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Noises != nil {
+		errors.PrintDeprecatedFeatureWarning(`"noises" in Freedom`, `"noise" in "streamSettings.finalmask.udp"`)
 		for _, n := range c.Noises {
 			NConfig, err := ParseNoise(n)
 			if err != nil {
