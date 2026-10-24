@@ -237,10 +237,11 @@ type OutboundDetourConfig struct {
 
 func requiresTransportSecurity(address *Address) bool {
 	if address == nil || address.Address == nil {
-		return false
+		return true
 	}
 	if address.Family().IsIP() {
-		return !geodata.GetPrivateIPMatcher().Match(address.IP())
+		ip := address.IP()
+		return !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()
 	}
 	domain := strings.TrimSuffix(strings.ToLower(address.Domain()), ".")
 	return !geodata.GetPrivateDomainMatcher().MatchAny(domain)
