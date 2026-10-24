@@ -251,6 +251,9 @@ func (list *PortList) UnmarshalJSON(data []byte) error {
 		if err2 := json.Unmarshal(data, &number); err2 != nil {
 			return errors.New("invalid port: ", string(data)).Base(err2)
 		}
+		if _, err := net.PortFromInt(number); err != nil {
+			return errors.New("invalid port: ", number).Base(err)
+		}
 	}
 	rangelist := strings.Split(listStr, ",")
 	for _, rangeStr := range rangelist {
