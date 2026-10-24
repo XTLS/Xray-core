@@ -81,6 +81,7 @@ type Handler struct {
 	observer               features.Feature
 	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
+	userConns              userConns
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
 }
@@ -241,8 +242,13 @@ func (h *Handler) AddUser(ctx context.Context, u *protocol.MemoryUser) error {
 
 // RemoveUser implements proxy.UserManager.RemoveUser().
 func (h *Handler) RemoveUser(ctx context.Context, e string) error {
-	h.RemoveReverse(h.validator.GetByEmail(e))
-	return h.validator.Del(e)
+	u := h.validator.GetByEmail(e)
+	h.RemoveReverse(u)
+	if err := h.validator.Del(e); err != nil {
+		return err
+	}
+	h.userConns.closeAll(u)
+	return nil
 }
 
 // GetUser implements proxy.UserManager.GetUser().
@@ -536,6 +542,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.VlessRoute = net.PortFromBytes(userSentID[6:8])
 
 	account := request.User.Account.(*vless.MemoryAccount)
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer h.userConns.track(request.User, connection, cancel)()
+	// RemoveUser may have run after decoding but before track, so its closeAll missed this connection
+	if h.validator.Get(account.ID.UUID()) != request.User {
+		return errors.New("user " + request.User.Email + " has been removed")
+	}
 
 	if account.Reverse != nil && request.Command != protocol.RequestCommandRvs {
 		return errors.New("for safety reasons, user " + account.ID.String() + " is not allowed to use forward proxy")
