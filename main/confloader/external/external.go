@@ -58,11 +58,7 @@ func readConfigFile(file *os.File) ([]byte, error) {
 		return nil, err
 	}
 	if info.Mode().IsRegular() {
-		path, err := filepath.Abs(file.Name())
-		if err != nil {
-			return nil, err
-		}
-		path, err = filepath.EvalSymlinks(path)
+		path, err := configFilePath(file)
 		if err != nil {
 			return nil, err
 		}
