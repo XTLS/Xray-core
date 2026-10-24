@@ -213,8 +213,8 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
 				writer.WriteHeader(http.StatusConflict)
 			} else {
-				writer.Header().Set("X-Accel-Buffering", "no")
-				writer.Header().Set("Cache-Control", "no-store")
+				h.config.SetResponseHeader(writer.Header(), "X-Accel-Buffering", "no")
+				h.config.SetResponseHeader(writer.Header(), "Cache-Control", "no-store")
 				writer.WriteHeader(http.StatusOK)
 				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
 				hasLegacyRefererCompatMarker := request.Header.Get("Referer") != ""
@@ -342,7 +342,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		if len(bodyPayload) == 0 {
 			// Methods without a body are usually cached by default.
-			writer.Header().Set("Cache-Control", "no-store")
+			h.config.SetResponseHeader(writer.Header(), "Cache-Control", "no-store")
 		}
 
 		writer.WriteHeader(http.StatusOK)
@@ -355,15 +355,15 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		}
 
 		// magic header instructs nginx + apache to not buffer response body
-		writer.Header().Set("X-Accel-Buffering", "no")
+		h.config.SetResponseHeader(writer.Header(), "X-Accel-Buffering", "no")
 		// A web-compliant header telling all middleboxes to disable caching.
 		// Should be able to prevent overloading the cache, or stop CDNs from
 		// teeing the response stream into their cache, causing slowdowns.
-		writer.Header().Set("Cache-Control", "no-store")
+		h.config.SetResponseHeader(writer.Header(), "Cache-Control", "no-store")
 
 		if !h.config.NoSSEHeader {
 			// magic header to make the HTTP middle box consider this as SSE to disable buffer
-			writer.Header().Set("Content-Type", "text/event-stream")
+			h.config.SetResponseHeader(writer.Header(), "Content-Type", "text/event-stream")
 		}
 
 		writer.WriteHeader(http.StatusOK)

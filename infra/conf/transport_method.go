@@ -279,6 +279,7 @@ type SplitHTTPConfig struct {
 	SessionIDKey         string            `json:"sessionIDKey"`
 	SessionIDTable       string            `json:"sessionIDTable"`
 	SessionIDLength      Int32Range        `json:"sessionIDLength"`
+	ResponseHeaders      map[string]string `json:"responseHeaders"`
 	SeqPlacement         string            `json:"seqPlacement"`
 	SeqKey               string            `json:"seqKey"`
 	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
@@ -495,6 +496,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
 		SessionIDTable:       c.SessionIDTable,
 		SessionIDLength:      newRangeConfig(c.SessionIDLength),
+		ResponseHeaders:      c.ResponseHeaders,
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),
