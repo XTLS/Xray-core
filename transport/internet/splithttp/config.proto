@@ -22,6 +22,12 @@ message XmuxConfig {
   int64 hKeepAlivePeriod = 6;
 }
 
+message ErrorResponse {
+  int32 statusCode = 1;
+  string body = 2;
+  string contentType = 3;
+}
+
 message Config {
   string host = 1;
   string path = 2;
@@ -52,4 +58,5 @@ message Config {
   int32 serverMaxHeaderBytes = 27;
   string sessionIDTable = 28;
   RangeConfig sessionIDLength = 29;
+  ErrorResponse errorResponse = 31;
 }

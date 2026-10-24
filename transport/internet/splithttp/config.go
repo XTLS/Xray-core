@@ -129,6 +129,32 @@ func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestMethod s
 	}
 }
 
+// WriteErrorResponse writes an error response status, optionally replacing the
+// bare default with the body and content type configured via errorResponse.
+func (c *Config) WriteErrorResponse(writer http.ResponseWriter, status int) {
+	if e := c.ErrorResponse; e != nil {
+		if e.ContentType != "" {
+			writer.Header().Set("Content-Type", e.ContentType)
+		}
+		writer.WriteHeader(status)
+		if e.Body != "" {
+			writer.Write([]byte(e.Body)) //nolint:errcheck
+		}
+		return
+	}
+	writer.WriteHeader(status)
+}
+
+// GetNormalizedPaddingRejectStatus returns the status code for requests that
+// fail the padding validation, the effective authentication gate, allowing
+// operators to choose different status semantics such as 403.
+func (c *Config) GetNormalizedPaddingRejectStatus() int {
+	if e := c.ErrorResponse; e != nil && e.StatusCode > 0 {
+		return int(e.StatusCode)
+	}
+	return http.StatusBadRequest
+}
+
 func (c *Config) GetNormalizedUplinkHTTPMethod() string {
 	if c.UplinkHTTPMethod == "" {
 		return "POST"

@@ -264,36 +264,37 @@ func (c *TCPConfig) Build() (proto.Message, error) {
 }
 
 type SplitHTTPConfig struct {
-	Host                 string            `json:"host"`
-	Path                 string            `json:"path"`
-	Mode                 string            `json:"mode"`
-	Headers              map[string]string `json:"headers"`
-	XPaddingBytes        Int32Range        `json:"xPaddingBytes"`
-	XPaddingObfsMode     bool              `json:"xPaddingObfsMode"`
-	XPaddingKey          string            `json:"xPaddingKey"`
-	XPaddingHeader       string            `json:"xPaddingHeader"`
-	XPaddingPlacement    string            `json:"xPaddingPlacement"`
-	XPaddingMethod       string            `json:"xPaddingMethod"`
-	UplinkHTTPMethod     string            `json:"uplinkHTTPMethod"`
-	SessionIDPlacement   string            `json:"sessionIDPlacement"`
-	SessionIDKey         string            `json:"sessionIDKey"`
-	SessionIDTable       string            `json:"sessionIDTable"`
-	SessionIDLength      Int32Range        `json:"sessionIDLength"`
-	SeqPlacement         string            `json:"seqPlacement"`
-	SeqKey               string            `json:"seqKey"`
-	UplinkDataPlacement  string            `json:"uplinkDataPlacement"`
-	UplinkDataKey        string            `json:"uplinkDataKey"`
-	UplinkChunkSize      Int32Range        `json:"uplinkChunkSize"`
-	NoGRPCHeader         bool              `json:"noGRPCHeader"`
-	NoSSEHeader          bool              `json:"noSSEHeader"`
-	ScMaxEachPostBytes   Int32Range        `json:"scMaxEachPostBytes"`
-	ScMinPostsIntervalMs Int32Range        `json:"scMinPostsIntervalMs"`
-	ScMaxBufferedPosts   int64             `json:"scMaxBufferedPosts"`
-	ScStreamUpServerSecs Int32Range        `json:"scStreamUpServerSecs"`
-	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
-	Xmux                 XmuxConfig        `json:"xmux"`
-	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
-	Extra                json.RawMessage   `json:"extra"`
+	Host                 string               `json:"host"`
+	Path                 string               `json:"path"`
+	Mode                 string               `json:"mode"`
+	Headers              map[string]string    `json:"headers"`
+	XPaddingBytes        Int32Range           `json:"xPaddingBytes"`
+	XPaddingObfsMode     bool                 `json:"xPaddingObfsMode"`
+	XPaddingKey          string               `json:"xPaddingKey"`
+	XPaddingHeader       string               `json:"xPaddingHeader"`
+	XPaddingPlacement    string               `json:"xPaddingPlacement"`
+	XPaddingMethod       string               `json:"xPaddingMethod"`
+	UplinkHTTPMethod     string               `json:"uplinkHTTPMethod"`
+	SessionIDPlacement   string               `json:"sessionIDPlacement"`
+	SessionIDKey         string               `json:"sessionIDKey"`
+	SessionIDTable       string               `json:"sessionIDTable"`
+	SessionIDLength      Int32Range           `json:"sessionIDLength"`
+	ErrorResponse        *ErrorResponseConfig `json:"errorResponse"`
+	SeqPlacement         string               `json:"seqPlacement"`
+	SeqKey               string               `json:"seqKey"`
+	UplinkDataPlacement  string               `json:"uplinkDataPlacement"`
+	UplinkDataKey        string               `json:"uplinkDataKey"`
+	UplinkChunkSize      Int32Range           `json:"uplinkChunkSize"`
+	NoGRPCHeader         bool                 `json:"noGRPCHeader"`
+	NoSSEHeader          bool                 `json:"noSSEHeader"`
+	ScMaxEachPostBytes   Int32Range           `json:"scMaxEachPostBytes"`
+	ScMinPostsIntervalMs Int32Range           `json:"scMinPostsIntervalMs"`
+	ScMaxBufferedPosts   int64                `json:"scMaxBufferedPosts"`
+	ScStreamUpServerSecs Int32Range           `json:"scStreamUpServerSecs"`
+	ServerMaxHeaderBytes int32                `json:"serverMaxHeaderBytes"`
+	Xmux                 XmuxConfig           `json:"xmux"`
+	DownloadSettings     *StreamConfig        `json:"downloadSettings"`
+	Extra                json.RawMessage      `json:"extra"`
 }
 
 type XmuxConfig struct {
@@ -303,6 +304,23 @@ type XmuxConfig struct {
 	HMaxRequestTimes Int32Range `json:"hMaxRequestTimes"`
 	HMaxReusableSecs Int32Range `json:"hMaxReusableSecs"`
 	HKeepAlivePeriod int64      `json:"hKeepAlivePeriod"`
+}
+
+type ErrorResponseConfig struct {
+	StatusCode  int    `json:"statusCode"`
+	Body        string `json:"body"`
+	ContentType string `json:"contentType"`
+}
+
+func (c *ErrorResponseConfig) Build() *splithttp.ErrorResponse {
+	if c == nil {
+		return nil
+	}
+	return &splithttp.ErrorResponse{
+		StatusCode:  int32(c.StatusCode),
+		Body:        c.Body,
+		ContentType: c.ContentType,
+	}
 }
 
 func newRangeConfig(input Int32Range) *splithttp.RangeConfig {
@@ -495,6 +513,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
 		SessionIDTable:       c.SessionIDTable,
 		SessionIDLength:      newRangeConfig(c.SessionIDLength),
+		ErrorResponse:        c.ErrorResponse.Build(),
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),
