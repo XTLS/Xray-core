@@ -204,7 +204,7 @@ jobs:
       - name: Build Xray
         run: |
           mkdir -p build_assets
-          COMMID=$(git describe --always --dirty)
+          COMMID="$(git describe --always --dirty)-ariansharifi" # 3x-ui tells fork builds from upstream by this suffix
           if [[ ${GOOS} == 'windows' ]]; then
             echo 'Building Xray for Windows...'
             go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
