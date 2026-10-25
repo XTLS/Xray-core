@@ -1,8 +1,6 @@
 package platform // import "github.com/xtls/xray-core/common/platform"
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -74,7 +72,7 @@ func NormalizeEnvName(name string) string {
 	return strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(name)), ".", "_")
 }
 
-func getExecutableDir() string {
+func GetExecutableDir() string {
 	exec, err := os.Executable()
 	if err != nil {
 		return ""
@@ -83,7 +81,7 @@ func getExecutableDir() string {
 }
 
 func GetConfigurationPath() string {
-	configPath := NewEnvFlag(ConfigLocation).GetValue(getExecutableDir)
+	configPath := NewEnvFlag(ConfigLocation).GetValue(GetExecutableDir)
 	return filepath.Join(configPath, "config.json")
 }
 
@@ -91,60 +89,4 @@ func GetConfigurationPath() string {
 func GetConfDirPath() string {
 	configPath := NewEnvFlag(ConfdirLocation).GetValue(func() string { return "" })
 	return configPath
-}
-
-// ResolveLuaFile finds a local .lua script and returns its resolved absolute path.
-// Relative paths: XRAY_LOCATION_CONFDIR > XRAY_LOCATION_CONFIG > working dir > executable dir.
-func ResolveLuaFile(path string) (resolved string, err error) {
-	if filepath.IsAbs(path) {
-		resolved, _, err = ResolveRegularFile(path)
-	} else {
-		for _, dir := range []string{
-			GetConfDirPath(),
-			NewEnvFlag(ConfigLocation).GetValue(func() string { return "" }),
-			".",
-			getExecutableDir(),
-		} {
-			if dir != "" {
-				if resolved, _, err = ResolveRegularFile(filepath.Join(dir, path)); err == nil || !errors.Is(err, os.ErrNotExist) {
-					break
-				}
-			}
-		}
-	}
-	if err != nil {
-		return "", err
-	}
-	if filepath.Ext(resolved) != ".lua" {
-		return "", errors.New("Lua file extension must be .lua")
-	}
-	return resolved, nil
-}
-
-// ResolveRegularFile returns an absolute path and metadata of a regular file.
-// File symlinks are resolved when possible; otherwise the original path is kept.
-func ResolveRegularFile(path string) (string, os.FileInfo, error) {
-	path, err := filepath.Abs(path)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to resolve file path: %w", err)
-	}
-	info, err := os.Lstat(path)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		// Best effort: EvalSymlinks may fail when junctions are involved.
-		if resolved, err := filepath.EvalSymlinks(path); err == nil {
-			path = resolved
-		}
-		info, err = os.Stat(path)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
-		}
-	}
-	if !info.Mode().IsRegular() {
-		return "", nil, fmt.Errorf("file is not a regular file: %s", path)
-	}
-	// Hard links are not handled.
-	return path, info, nil
 }

@@ -14,7 +14,7 @@ import (
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/main/commands/base"
 	"github.com/xtls/xray-core/main/confloader"
@@ -59,7 +59,7 @@ func readConfigFile(file *os.File) ([]byte, error) {
 		return nil, err
 	}
 	if info.Mode().IsRegular() {
-		path, _, err := platform.ResolveRegularFile(file.Name())
+		path, _, err := filesystem.ResolveRegularFile(file.Name())
 		if err != nil {
 			return nil, err
 		}

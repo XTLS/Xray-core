@@ -14,7 +14,7 @@ func LineSeparator() string {
 
 // GetAssetLocation searches for `file` in the env dir, the executable dir, and certain locations
 func GetAssetLocation(file string) string {
-	assetPath := NewEnvFlag(AssetLocation).GetValue(getExecutableDir)
+	assetPath := NewEnvFlag(AssetLocation).GetValue(GetExecutableDir)
 	defPath := filepath.Join(assetPath, file)
 	for _, p := range []string{
 		defPath,
@@ -36,6 +36,6 @@ func GetAssetLocation(file string) string {
 
 // GetCertLocation searches for `file` in the env dir and the executable dir
 func GetCertLocation(file string) string {
-	certPath := NewEnvFlag(CertLocation).GetValue(getExecutableDir)
+	certPath := NewEnvFlag(CertLocation).GetValue(GetExecutableDir)
 	return filepath.Join(certPath, file)
 }

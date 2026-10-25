@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	xlua "github.com/xtls/xray-core/common/lua"
-	"github.com/xtls/xray-core/common/platform"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/main/commands/base"
 )
 
@@ -33,7 +33,7 @@ func executeSign(cmd *base.Command, args []string) {
 		cmd.Usage()
 	}
 
-	input, info, err := platform.ResolveRegularFile(args[0])
+	input, info, err := filesystem.ResolveRegularFile(args[0])
 	if err != nil {
 		base.Fatalf("failed to inspect Lua file: %s", err)
 	}
@@ -67,7 +67,7 @@ func executeSign(cmd *base.Command, args []string) {
 }
 
 func writeSignedFile(path string, code []byte, mode os.FileMode) error {
-	if resolved, info, err := platform.ResolveRegularFile(path); err == nil {
+	if resolved, info, err := filesystem.ResolveRegularFile(path); err == nil {
 		path = resolved
 		mode = info.Mode().Perm()
 	} else if !os.IsNotExist(err) {
