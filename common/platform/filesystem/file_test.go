@@ -13,7 +13,7 @@ import (
 	. "github.com/xtls/xray-core/common/platform/filesystem"
 )
 
-func TestStatAssetRejectsInvalidPath(t *testing.T) {
+func TestResolveAssetRejectsInvalidPath(t *testing.T) {
 	for _, file := range []string{
 		"",
 		".",
@@ -31,7 +31,7 @@ func TestStatAssetRejectsInvalidPath(t *testing.T) {
 		`nested\..\geoip.dat`,
 		filepath.Join(t.TempDir(), "geoip.dat"),
 	} {
-		if _, err := StatAsset(file); err == nil {
+		if _, err := ResolveAsset(file); err == nil {
 			t.Fatalf("expected error for %q", file)
 		}
 	}

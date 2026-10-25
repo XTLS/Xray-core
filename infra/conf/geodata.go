@@ -19,7 +19,7 @@ func (c *GeodataAssetConfig) Build() (*geodata.Asset, error) {
 	if err := validateHTTPS(c.URL); err != nil {
 		return nil, errors.New("invalid geodata asset url: ", c.URL).Base(err)
 	}
-	if _, err := filesystem.StatAsset(c.File); err != nil {
+	if _, err := filesystem.ResolveAsset(c.File); err != nil {
 		return nil, errors.New("invalid geodata asset file: ", c.File).Base(err)
 	}
 	return &geodata.Asset{

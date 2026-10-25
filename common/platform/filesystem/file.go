@@ -27,14 +27,6 @@ func ReadFile(path string) ([]byte, error) {
 	return buf.ReadAllToBytes(reader)
 }
 
-func ReadAsset(file string) ([]byte, error) {
-	path, _, err := getAssetFileLocation(file)
-	if err != nil {
-		return nil, err
-	}
-	return ReadFile(path)
-}
-
 func OpenAsset(file string) (io.ReadCloser, int64, error) {
 	path, info, err := getAssetFileLocation(file)
 	if err != nil {
@@ -42,11 +34,6 @@ func OpenAsset(file string) (io.ReadCloser, int64, error) {
 	}
 	r, err := NewFileReader(path)
 	return r, info.Size(), err
-}
-
-func StatAsset(file string) (os.FileInfo, error) {
-	_, info, err := getAssetFileLocation(file)
-	return info, err
 }
 
 func ResolveAsset(file string) (string, error) {
@@ -70,21 +57,6 @@ func ReadCert(file string) ([]byte, error) {
 		return ReadFile(file)
 	}
 	return ReadFile(platform.GetCertLocation(file))
-}
-
-func CopyFile(dst string, src string) error {
-	bytes, err := ReadFile(src)
-	if err != nil {
-		return err
-	}
-	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = f.Write(bytes)
-	return err
 }
 
 // ResolveLuaFile finds a local .lua script and returns its resolved absolute path.
@@ -116,25 +88,19 @@ func ResolveLuaFile(path string) (resolved string, err error) {
 }
 
 // ResolveRegularFile returns an absolute path and metadata of a regular file.
-// File symlinks are resolved when possible; otherwise the original path is kept.
+// Symlinks are resolved when possible; otherwise the original path is kept.
 func ResolveRegularFile(path string) (string, os.FileInfo, error) {
 	path, err := filepath.Abs(path)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to resolve file path: %w", err)
 	}
-	info, err := os.Lstat(path)
+	// Best effort: EvalSymlinks may fail when Windows junctions are involved.
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = resolved
+	}
+	info, err := os.Stat(path)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		// Best effort: EvalSymlinks may fail when junctions are involved.
-		if resolved, err := filepath.EvalSymlinks(path); err == nil {
-			path = resolved
-		}
-		info, err = os.Stat(path)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
-		}
 	}
 	if !info.Mode().IsRegular() {
 		return "", nil, fmt.Errorf("file is not a regular file: %s", path)
