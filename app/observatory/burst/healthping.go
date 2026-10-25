@@ -31,6 +31,9 @@ type HealthPing struct {
 	dispatcher    routing.Dispatcher
 	access        sync.Mutex
 	ticker        *time.Ticker
+	limiter       *pingLimiter
+	// measure performs one ping; replaceable in tests
+	measure func(tag string, client *pingClient) (time.Duration, error)
 
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
@@ -78,13 +81,18 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 		settings.Timeout = 5 * time.Second
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	return &HealthPing{
+	h := &HealthPing{
 		ctx:        ctx,
 		cancelCtx:  cancel,
 		dispatcher: dispatcher,
+		limiter:    newPingLimiter(maxParallelPings, maxParallelPerFamily),
 		Settings:   settings,
 		Results:    nil,
 	}
+	h.measure = func(_ string, client *pingClient) (time.Duration, error) {
+		return client.MeasureDelay(h.Settings.HttpMethod)
+	}
+	return h
 }
 
 // StartScheduler implements the HealthChecker
@@ -103,7 +111,13 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 			errors.LogWarning(h.ctx, "error select outbounds for initial health check: ", err)
 			return
 		}
-		h.Check(tags)
+		if len(tags) == 0 {
+			return
+		}
+		// spread the initial run instead of pinging all outbounds at once
+		window := initialCheckWindow(interval)
+		errors.LogInfo(h.ctx, "perform initial health check for ", len(tags), " outbounds over ", window)
+		h.doCheck(h.ctx, tags, window, 1)
 	}()
 
 	go func() {
@@ -184,8 +198,15 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 				delay = time.Duration(dice.RollInt63n(int64(duration)))
 			}
 			timers = append(timers, time.AfterFunc(delay, func() {
+				// wait for a slot before measuring, so waiting is not
+				// counted in the ping timeout
+				release, ok := h.limiter.acquire(ctx, handler)
+				if !ok {
+					return
+				}
+				defer release()
 				errors.LogDebug(h.ctx, "checking ", handler)
-				delay, err := client.MeasureDelay(h.Settings.HttpMethod)
+				delay, err := h.measure(handler, client)
 				if err == nil {
 					ch <- &rtt{
 						handler: handler,
