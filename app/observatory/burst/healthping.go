@@ -31,6 +31,7 @@ type HealthPing struct {
 	dispatcher    routing.Dispatcher
 	access        sync.Mutex
 	ticker        *time.Ticker
+	persistPath   string
 
 	Settings *HealthPingSettings
 	Results  map[string]*HealthPingRTTS
@@ -92,6 +93,7 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 	if h.ticker != nil {
 		return
 	}
+	h.startPersistence(selector)
 	interval := h.Settings.Interval * time.Duration(h.Settings.SamplingCount)
 	ticker := time.NewTicker(interval)
 	h.ticker = ticker
@@ -142,6 +144,9 @@ func (h *HealthPing) StopScheduler() {
 	h.ticker.Stop()
 	h.ticker = nil
 	h.cancelCtx()
+	if h.persistPath != "" {
+		h.saveResults(h.persistPath)
+	}
 }
 
 // Check implements the HealthChecker
