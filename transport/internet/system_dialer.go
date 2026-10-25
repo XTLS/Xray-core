@@ -2,6 +2,7 @@ package internet
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -91,7 +92,17 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 				return nil
 			}
 		}
-		packetConn, err := lc.ListenPacket(ctx, srcAddr.Network(), srcAddr.String())
+		udpNetwork := srcAddr.Network()
+		if runtime.GOOS == "openbsd" {
+			// No IPv4-mapped addresses here. With the generic "udp" network Go
+			// also tries 0.0.0.0 for "[::]:0" (golang/go#18806) and prefers it,
+			// so the socket ends up AF_INET and cannot reach an IPv6 peer.
+			udpNetwork = "udp4"
+			if bindAddr, ok := srcAddr.(*net.UDPAddr); ok && bindAddr.IP.To4() == nil {
+				udpNetwork = "udp6"
+			}
+		}
+		packetConn, err := lc.ListenPacket(ctx, udpNetwork, srcAddr.String())
 		if err != nil {
 			return nil, err
 		}
