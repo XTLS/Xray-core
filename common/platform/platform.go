@@ -95,10 +95,10 @@ func GetConfDirPath() string {
 
 // ResolveLuaFile finds a local .lua script and returns its resolved absolute path.
 // Relative paths: XRAY_LOCATION_CONFDIR > XRAY_LOCATION_CONFIG > working dir > executable dir.
-func ResolveLuaFile(path string) (string, error) {
-	paths := []string{path}
-	if !filepath.IsAbs(path) {
-		paths = nil
+func ResolveLuaFile(path string) (resolved string, err error) {
+	if filepath.IsAbs(path) {
+		resolved, _, err = ResolveRegularFile(path)
+	} else {
 		for _, dir := range []string{
 			GetConfDirPath(),
 			NewEnvFlag(ConfigLocation).GetValue(func() string { return "" }),
@@ -106,34 +106,19 @@ func ResolveLuaFile(path string) (string, error) {
 			getExecutableDir(),
 		} {
 			if dir != "" {
-				paths = append(paths, filepath.Join(dir, path))
+				if resolved, _, err = ResolveRegularFile(filepath.Join(dir, path)); err == nil || !errors.Is(err, os.ErrNotExist) {
+					break
+				}
 			}
 		}
 	}
-	path, err := resolveFile(paths)
 	if err != nil {
 		return "", err
 	}
-	if filepath.Ext(path) != ".lua" {
+	if filepath.Ext(resolved) != ".lua" {
 		return "", errors.New("Lua file extension must be .lua")
 	}
-	return path, nil
-}
-
-func resolveFile(paths []string) (string, error) {
-	var tried []string
-	for _, path := range paths {
-		tried = append(tried, path)
-		path, _, err := ResolveRegularFile(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		return path, nil
-	}
-	return "", fmt.Errorf("file not found; tried %q: %w", tried, os.ErrNotExist)
+	return resolved, nil
 }
 
 // ResolveRegularFile returns an absolute path and metadata of a regular file.
