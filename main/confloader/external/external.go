@@ -14,7 +14,6 @@ import (
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/main/commands/base"
 	"github.com/xtls/xray-core/main/confloader"
@@ -59,14 +58,10 @@ func readConfigFile(file *os.File) ([]byte, error) {
 		return nil, err
 	}
 	if info.Mode().IsRegular() {
-		path, _, err := filesystem.ResolveRegularFile(file.Name())
-		if err != nil {
-			return nil, err
-		}
-		switch strings.ToLower(filepath.Ext(path)) {
+		switch strings.ToLower(filepath.Ext(file.Name())) {
 		case ".jsonc", ".json", ".yml", ".yaml", ".toml", ".pb", ".protobuf":
 		default:
-			return nil, errors.New("unsupported config file extension: ", path)
+			return nil, errors.New("unsupported config file extension: ", file.Name())
 		}
 	}
 	return io.ReadAll(file)

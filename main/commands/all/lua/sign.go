@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	xlua "github.com/xtls/xray-core/common/lua"
-	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/main/commands/base"
 )
 
@@ -33,15 +32,14 @@ func executeSign(cmd *base.Command, args []string) {
 		cmd.Usage()
 	}
 
-	input, info, err := filesystem.ResolveRegularFile(args[0])
+	if filepath.Ext(args[0]) != ".lua" {
+		base.Fatalf("Lua file extension must be .lua")
+	}
+	info, err := os.Stat(args[0])
 	if err != nil {
 		base.Fatalf("failed to inspect Lua file: %s", err)
 	}
-	if filepath.Ext(input) != ".lua" {
-		base.Fatalf("Lua file extension must be .lua")
-	}
-
-	code, err := os.ReadFile(input)
+	code, err := os.ReadFile(args[0])
 	if err != nil {
 		base.Fatalf("failed to read Lua file: %s", err)
 	}
@@ -59,7 +57,7 @@ func executeSign(cmd *base.Command, args []string) {
 	}
 	output := *signOutput
 	if output == "" {
-		output = input
+		output = args[0]
 	}
 	if err := writeSignedFile(output, signed, info.Mode().Perm()); err != nil {
 		base.Fatalf("failed to write signed Lua file: %s", err)
@@ -67,8 +65,7 @@ func executeSign(cmd *base.Command, args []string) {
 }
 
 func writeSignedFile(path string, code []byte, mode os.FileMode) error {
-	if resolved, info, err := filesystem.ResolveRegularFile(path); err == nil {
-		path = resolved
+	if info, err := os.Stat(path); err == nil {
 		mode = info.Mode().Perm()
 	} else if !os.IsNotExist(err) {
 		return err

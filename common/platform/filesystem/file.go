@@ -2,7 +2,6 @@ package filesystem
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -49,7 +48,15 @@ func getAssetFileLocation(file string) (string, os.FileInfo, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	return ResolveRegularFile(platform.GetAssetLocation(local))
+	path := platform.GetAssetLocation(local)
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", nil, errors.New("asset is not a regular file")
+	}
+	return path, info, nil
 }
 
 func ReadCert(file string) ([]byte, error) {
@@ -59,52 +66,29 @@ func ReadCert(file string) ([]byte, error) {
 	return ReadFile(platform.GetCertLocation(file))
 }
 
-// ResolveLuaFile finds a local .lua script and returns its resolved absolute path.
+// ResolveLuaFile finds a local .lua script and returns its absolute path.
 // Relative paths: XRAY_LOCATION_CONFDIR > XRAY_LOCATION_CONFIG > working dir > executable dir.
-func ResolveLuaFile(path string) (resolved string, err error) {
+func ResolveLuaFile(path string) (string, error) {
+	if filepath.Ext(path) != ".lua" {
+		return "", errors.New("Lua file extension must be .lua")
+	}
 	if filepath.IsAbs(path) {
-		resolved, _, err = ResolveRegularFile(path)
-	} else {
-		for _, dir := range []string{
-			platform.GetConfDirPath(),
-			platform.NewEnvFlag(platform.ConfigLocation).GetValue(func() string { return "" }),
-			".",
-			platform.GetExecutableDir(),
-		} {
-			if dir != "" {
-				if resolved, _, err = ResolveRegularFile(filepath.Join(dir, path)); err == nil || !errors.Is(err, os.ErrNotExist) {
-					break
-				}
+		return path, nil
+	}
+	for _, dir := range []string{
+		platform.GetConfDirPath(),
+		platform.NewEnvFlag(platform.ConfigLocation).GetValue(func() string { return "" }),
+		".",
+		platform.GetExecutableDir(),
+	} {
+		if dir != "" {
+			resolved := filepath.Join(dir, path)
+			if _, err := os.Stat(resolved); err == nil {
+				return filepath.Abs(resolved)
+			} else if !os.IsNotExist(err) {
+				return "", err
 			}
 		}
 	}
-	if err != nil {
-		return "", err
-	}
-	if filepath.Ext(resolved) != ".lua" {
-		return "", errors.New("Lua file extension must be .lua")
-	}
-	return resolved, nil
-}
-
-// ResolveRegularFile returns an absolute path and metadata of a regular file.
-// Symlinks are resolved when possible; otherwise the original path is kept.
-func ResolveRegularFile(path string) (string, os.FileInfo, error) {
-	path, err := filepath.Abs(path)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to resolve file path: %w", err)
-	}
-	// Best effort: EvalSymlinks may fail when Windows junctions are involved.
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		path = resolved
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
-	}
-	if !info.Mode().IsRegular() {
-		return "", nil, fmt.Errorf("file is not a regular file: %s", path)
-	}
-	// Hard links are not handled.
-	return path, info, nil
+	return "", os.ErrNotExist
 }
