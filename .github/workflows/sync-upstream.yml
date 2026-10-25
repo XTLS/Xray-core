@@ -1,0 +1,45 @@
+name: Sync upstream
+
+# Daily merge of XTLS/Xray-core:main into this fork's main.
+# Custom changes (e.g. the `check` command) stay on top; on a merge conflict
+# the job fails and GitHub sends a notification email.
+#
+# Optional secret GH_PAT (scopes: repo, workflow):
+#   - lets the push trigger the other workflows (release/test builds), and
+#   - allows merging upstream commits that touch .github/workflows.
+# Without it the job falls back to GITHUB_TOKEN (works for most merges).
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Merge upstream/main
+        run: |
+          git config user.name  "sync-bot"
+          git config user.email "sync-bot@users.noreply.github.com"
+          git remote add upstream https://github.com/XTLS/Xray-core.git
+          git fetch upstream main
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Already up to date with upstream"
+            exit 0
+          fi
+          git merge --no-edit upstream/main -m "Merge upstream/main"
+          git push origin HEAD:main
