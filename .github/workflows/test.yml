@@ -78,7 +78,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm] # Linux x86_64 and Linux arm64 only
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v7
