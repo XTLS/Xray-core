@@ -96,9 +96,6 @@ func GetConfDirPath() string {
 // ResolveLuaFile finds a local .lua script and returns its resolved absolute path.
 // Relative paths: XRAY_LOCATION_CONFDIR > XRAY_LOCATION_CONFIG > working dir > executable dir.
 func ResolveLuaFile(path string) (string, error) {
-	if path == "" {
-		return "", errors.New("Lua file path is empty")
-	}
 	paths := []string{path}
 	if !filepath.IsAbs(path) {
 		paths = nil
@@ -117,14 +114,6 @@ func ResolveLuaFile(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return resolveLuaTarget(path)
-}
-
-func resolveLuaTarget(path string) (string, error) {
-	path, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve Lua file symlinks: %w", err)
-	}
 	if filepath.Ext(path) != ".lua" {
 		return "", errors.New("Lua file extension must be .lua")
 	}
@@ -134,22 +123,43 @@ func resolveLuaTarget(path string) (string, error) {
 func resolveFile(paths []string) (string, error) {
 	var tried []string
 	for _, path := range paths {
-		path, err := filepath.Abs(path)
-		if err != nil {
-			return "", fmt.Errorf("failed to resolve file path: %w", err)
-		}
 		tried = append(tried, path)
-		info, err := os.Stat(path)
+		path, _, err := ResolveRegularFile(path)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return "", fmt.Errorf("failed to inspect file %q: %w", path, err)
-		}
-		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("file is not a regular file: %s", path)
+			return "", err
 		}
 		return path, nil
 	}
 	return "", fmt.Errorf("file not found; tried %q: %w", tried, os.ErrNotExist)
+}
+
+// ResolveRegularFile returns an absolute path and metadata of a regular file.
+// File symlinks are resolved when possible; otherwise the original path is kept.
+func ResolveRegularFile(path string) (string, os.FileInfo, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to resolve file path: %w", err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		// Best effort: EvalSymlinks may fail when junctions are involved.
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			path = resolved
+		}
+		info, err = os.Stat(path)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to inspect file %q: %w", path, err)
+		}
+	}
+	if !info.Mode().IsRegular() {
+		return "", nil, fmt.Errorf("file is not a regular file: %s", path)
+	}
+	// Hard links are not handled.
+	return path, info, nil
 }

@@ -61,15 +61,7 @@ func getAssetFileLocation(file string) (string, os.FileInfo, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	path := platform.GetAssetLocation(local)
-	info, err := os.Stat(path)
-	if err != nil {
-		return "", nil, err
-	}
-	if !info.Mode().IsRegular() {
-		return "", nil, errors.New("asset is not a regular file")
-	}
-	return path, info, nil
+	return platform.ResolveRegularFile(platform.GetAssetLocation(local))
 }
 
 func ReadCert(file string) ([]byte, error) {
