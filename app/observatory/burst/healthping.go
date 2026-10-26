@@ -101,9 +101,13 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	return h
 }
 
+// DisableScheduler turns off the initial and the scheduled health checks,
+// so results come only from Check. Set by "xray check".
+var DisableScheduler bool
+
 // StartScheduler implements the HealthChecker
 func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
-	if h.ticker != nil {
+	if h.ticker != nil || DisableScheduler {
 		return
 	}
 	h.startPersistence(selector)

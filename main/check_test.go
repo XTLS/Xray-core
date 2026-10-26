@@ -128,3 +128,34 @@ func TestCheckConfigFiles(t *testing.T) {
 		t.Error("expected error for missing dir")
 	}
 }
+
+func TestKeepOutbounds(t *testing.T) {
+	var doc1, doc2 map[string]any
+	decodeJSONNumber([]byte(`{"outbounds":[
+		{"tag":"direct","protocol":"freedom"},
+		{"tag":"cf_22","streamSettings":{"sockopt":{"dialerProxy":"chain1-fragment"}}},
+		{"tag":"cf_23","streamSettings":{"sockopt":{"dialerProxy":"chain2-fragment"}}}
+	]}`), &doc1)
+	decodeJSONNumber([]byte(`{"log":{},"outbounds":[
+		{"tag":"chain1-fragment","streamSettings":{"sockopt":{"dialerProxy":"direct"}}},
+		{"tag":"chain2-fragment"},
+		{"tag":"block"}
+	]}`), &doc2)
+	docs := []map[string]any{doc1, doc2}
+	kept, err := keepOutbounds(docs, "cf_22")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"direct", "cf_22", "chain1-fragment"}; !reflect.DeepEqual(kept, want) {
+		t.Errorf("kept %v, want %v", kept, want)
+	}
+	if n := len(doc2["outbounds"].([]any)); n != 1 {
+		t.Errorf("doc2 has %d outbounds, want 1", n)
+	}
+
+	var doc3 map[string]any
+	decodeJSONNumber([]byte(`{"outbounds":[{"tag":"f_1","proxySettings":{"tag":"nope"}}]}`), &doc3)
+	if _, err := keepOutbounds([]map[string]any{doc3}, "f_1"); err == nil {
+		t.Error("expected error for missing proxySettings outbound")
+	}
+}

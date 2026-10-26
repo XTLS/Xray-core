@@ -221,3 +221,15 @@ func TestDoCheckStartCheckLimit(t *testing.T) {
 		t.Errorf("cf peak %d, want 2", p.famPeak["cf"])
 	}
 }
+
+func TestDisableScheduler(t *testing.T) {
+	DisableScheduler = true
+	defer func() { DisableScheduler = false }()
+	h := NewHealthPing(context.Background(), nil, &HealthPingConfig{Interval: int64(time.Minute)})
+	called := false
+	h.StartScheduler(func() ([]string, error) { called = true; return []string{"cf_1"}, nil })
+	if h.ticker != nil || called {
+		t.Error("scheduler started while disabled")
+	}
+	h.StopScheduler()
+}

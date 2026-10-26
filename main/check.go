@@ -59,9 +59,16 @@ The config is never read from stdin. Loaded files are printed to
 stderr.
 
 The config must contain burstObservatory with pingConfig (its
-destination, timeout and httpMethod are used). Inbounds, routing,
-api and metrics are not started, so a running xray is not affected.
-TLS serverName and xhttp host stay as configured.
+destination, timeout and httpMethod are used). Only the checked
+outbound and the outbounds it connects through (dialerProxy,
+proxySettings) are started; inbounds, routing, api, metrics, dns,
+fakedns, geodata and reverse are not, so it starts fast and a running
+xray is not affected. TLS serverName and xhttp host stay as
+configured. Only the checks below are run: no observatory rounds and
+no saved results are used.
+
+Progress goes to stderr: loaded config files, started outbounds and
+the ping timeout, then "check i/n: ok|failed in <time>" per check.
 
 The --set path=value flag overrides one more field of the checked
 outbound. The path is dot-separated from the outbound root,
@@ -149,8 +156,10 @@ func runCheck(args []string) error {
 		return err
 	}
 	fmt.Fprintln(os.Stderr, "config:", strings.Join(files, ", "))
-	// do not read or overwrite the saved results of a running xray
+	// do not read or overwrite the saved results of a running xray, and
+	// run only the checks below, without observatory's own rounds
 	burst.DisablePersistence = true
+	burst.DisableScheduler = true
 
 	var failed int
 	for _, ip := range ips {
@@ -212,12 +221,13 @@ func readIPList(file string) ([]string, error) {
 }
 
 // checkOne runs count xray health checks of tag connecting to ip and
-// returns the result line.
+// returns the result line. Progress goes to stderr.
 func checkOne(files []string, tag, ip string, sets []string, count int, interval time.Duration) (string, error) {
-	cfg, err := loadCheckConfig(files, tag, ip, sets, count)
+	cfg, info, err := loadCheckConfig(files, tag, ip, sets, count)
 	if err != nil {
 		return "", err
 	}
+	fmt.Fprintf(os.Stderr, "%s: starting xray, %s\n", ip, info)
 
 	server, err := core.New(cfg)
 	if err != nil {
@@ -226,7 +236,7 @@ func checkOne(files []string, tag, ip string, sets []string, count int, interval
 	if err := server.Start(); err != nil {
 		return "", fmt.Errorf("failed to start: %w", err)
 	}
-	defer server.Close()
+	defer closeWithTimeout(server, 3*time.Second)
 
 	obs, ok := server.GetFeature(extension.ObservatoryType()).(extension.BurstObservatory)
 	if !ok {
@@ -234,24 +244,27 @@ func checkOne(files []string, tag, ip string, sets []string, count int, interval
 	}
 
 	// one-time xray health checks, the same as the balancer uses
+	var hp *observatory.HealthPingMeasurementResult
 	for i := 0; i < count; i++ {
 		if i > 0 {
 			time.Sleep(interval)
 		}
+		start := time.Now()
 		obs.Check([]string{tag})
+		prev := hp
+		if hp, err = healthOf(obs, tag); err != nil {
+			return "", err
+		}
+		state := "ok"
+		switch {
+		case hp == nil || (prev != nil && hp.All == prev.All):
+			state = "no result (network down?)"
+		case prev == nil && hp.Fail > 0, prev != nil && hp.Fail > prev.Fail:
+			state = "failed"
+		}
+		fmt.Fprintf(os.Stderr, "%s: check %d/%d: %s in %v\n", ip, i+1, count, state, time.Since(start).Round(time.Millisecond))
 	}
 
-	msg, err := obs.GetObservation(context.Background())
-	if err != nil {
-		return "", fmt.Errorf("failed to get observation: %w", err)
-	}
-	var hp *observatory.HealthPingMeasurementResult
-	for _, s := range msg.(*observatory.ObservationResult).Status {
-		if s.OutboundTag == tag {
-			hp = s.HealthPing
-			break
-		}
-	}
 	alive, delay := false, int64(0)
 	if hp != nil && hp.All > 0 {
 		alive = hp.Fail == 0
@@ -260,6 +273,115 @@ func checkOne(files []string, tag, ip string, sets []string, count int, interval
 		}
 	}
 	return fmt.Sprintf("alive: %t, delay: %d, outbound_tag: %q", alive, delay, tag), nil
+}
+
+// healthOf returns the health results of tag, nil if there are none yet.
+func healthOf(obs extension.Observatory, tag string) (*observatory.HealthPingMeasurementResult, error) {
+	msg, err := obs.GetObservation(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get observation: %w", err)
+	}
+	for _, s := range msg.(*observatory.ObservationResult).Status {
+		if s.OutboundTag == tag {
+			return s.HealthPing, nil
+		}
+	}
+	return nil, nil
+}
+
+// closeWithTimeout closes the instance, but does not wait longer than d:
+// the result is already known and pending connections must not hold it.
+func closeWithTimeout(server *core.Instance, d time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		server.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+		fmt.Fprintf(os.Stderr, "xray instance did not close in %v, continuing\n", d)
+	}
+}
+
+// outboundRefs returns tags of outbounds an outbound uses to connect:
+// every sockopt.dialerProxy (also inside xhttp downloadSettings) and
+// proxySettings.tag.
+func outboundRefs(node any) []string {
+	var refs []string
+	switch n := node.(type) {
+	case map[string]any:
+		for k, v := range n {
+			if k == "dialerProxy" {
+				if t, ok := v.(string); ok && t != "" {
+					refs = append(refs, t)
+				}
+			}
+			if k == "proxySettings" {
+				if m, ok := v.(map[string]any); ok {
+					if t, ok := m["tag"].(string); ok && t != "" {
+						refs = append(refs, t)
+					}
+				}
+			}
+			refs = append(refs, outboundRefs(v)...)
+		}
+	case []any:
+		for _, v := range n {
+			refs = append(refs, outboundRefs(v)...)
+		}
+	}
+	return refs
+}
+
+// keepOutbounds leaves in docs only the outbound tag and the outbounds it
+// depends on (dialerProxy chains), and returns their tags in config order.
+func keepOutbounds(docs []map[string]any, tag string) ([]string, error) {
+	byTag := map[string]any{}
+	for _, doc := range docs {
+		outbounds, _ := doc["outbounds"].([]any)
+		for _, o := range outbounds {
+			if m, ok := o.(map[string]any); ok {
+				if t, ok := m["tag"].(string); ok {
+					byTag[t] = o
+				}
+			}
+		}
+	}
+	need := map[string]bool{tag: true}
+	queue := []string{tag}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, ref := range outboundRefs(byTag[cur]) {
+			if need[ref] {
+				continue
+			}
+			if _, ok := byTag[ref]; !ok {
+				return nil, fmt.Errorf("outbound %q used by %q (dialerProxy/proxySettings) not found", ref, cur)
+			}
+			need[ref] = true
+			queue = append(queue, ref)
+		}
+	}
+	var kept []string
+	for _, doc := range docs {
+		outbounds, ok := doc["outbounds"].([]any)
+		if !ok {
+			continue
+		}
+		filtered := []any{}
+		for _, o := range outbounds {
+			if m, ok := o.(map[string]any); ok {
+				if t, ok := m["tag"].(string); ok && need[t] {
+					filtered = append(filtered, o)
+					kept = append(kept, t)
+				}
+			}
+		}
+		doc["outbounds"] = filtered
+	}
+	return kept, nil
 }
 
 // addressPath returns the --set path of the server address in an outbound.
@@ -273,7 +395,11 @@ func addressPath(outbound any) string {
 	return "settings.address"
 }
 
-func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (*core.Config, error) {
+// loadCheckConfig builds a minimal config: the outbound tag (with ip as its
+// address) and its dialerProxy chain, burstObservatory for that tag only,
+// and none of inbounds, routing, api, metrics, dns, fakedns, geodata and
+// reverse. info describes it for the progress output.
+func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (cfg *core.Config, info string, err error) {
 	docs := make([]map[string]any, len(files))
 	target := -1
 	for i, file := range files {
@@ -286,17 +412,17 @@ func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (
 		}
 		data, err := readConfigAsJSON(file, f)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load config %s: %w", file, err)
+			return nil, "", fmt.Errorf("failed to load config %s: %w", file, err)
 		}
 		if err := decodeJSONNumber(data, &docs[i]); err != nil {
-			return nil, fmt.Errorf("failed to load config %s: %w", file, err)
+			return nil, "", fmt.Errorf("failed to load config %s: %w", file, err)
 		}
 		if outboundIndex(docs[i], tag) >= 0 {
 			target = i
 		}
 	}
 	if target < 0 {
-		return nil, fmt.Errorf("outbound with tag %q not found", tag)
+		return nil, "", fmt.Errorf("outbound with tag %q not found", tag)
 	}
 
 	outbounds := docs[target]["outbounds"].([]any)
@@ -305,7 +431,7 @@ func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (
 	for _, s := range sets {
 		path, raw, ok := strings.Cut(s, "=")
 		if !ok || path == "" {
-			return nil, fmt.Errorf("invalid --set %q: expected path=value", s)
+			return nil, "", fmt.Errorf("invalid --set %q: expected path=value", s)
 		}
 		var value any
 		if err := decodeJSONNumber([]byte(raw), &value); err != nil {
@@ -313,20 +439,25 @@ func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (
 		}
 		updated, err := setPath(outbounds[idx], strings.Split(path, "."), value)
 		if err != nil {
-			return nil, fmt.Errorf("invalid --set %q: %w", s, err)
+			return nil, "", fmt.Errorf("invalid --set %q: %w", s, err)
 		}
 		outbounds[idx] = updated
+	}
+
+	kept, err := keepOutbounds(docs, tag)
+	if err != nil {
+		return nil, "", err
 	}
 
 	merged := &conf.Config{}
 	for i, doc := range docs {
 		data, err := json.Marshal(doc)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		c, err := serial.DecodeJSONConfig(bytes.NewReader(data))
 		if err != nil {
-			return nil, fmt.Errorf("failed to load config %s: %w", files[i], err)
+			return nil, "", fmt.Errorf("failed to load config %s: %w", files[i], err)
 		}
 		if i == 0 {
 			*merged = *c
@@ -337,10 +468,10 @@ func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (
 
 	bo := merged.BurstObservatory
 	if bo == nil {
-		return nil, fmt.Errorf("burstObservatory is not configured")
+		return nil, "", fmt.Errorf("burstObservatory is not configured")
 	}
 	if bo.HealthCheck == nil {
-		return nil, fmt.Errorf("burstObservatory.pingConfig is not configured")
+		return nil, "", fmt.Errorf("burstObservatory.pingConfig is not configured")
 	}
 	// observe only this outbound, keep all count results, and keep the
 	// scheduled rounds out of the way: checks are run by checkOne
@@ -348,18 +479,28 @@ func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (
 	bo.HealthCheck.SamplingCount = count
 	bo.HealthCheck.Interval = duration.Duration(time.Hour)
 
-	// do not start listeners and routing of the running config
+	timeout := time.Duration(bo.HealthCheck.Timeout)
+	if timeout <= 0 {
+		timeout = 5 * time.Second // burst default
+	}
+
+	// nothing of the running config but the checked outbound: no
+	// listeners, routing, api, metrics, dns, fakedns, geodata, reverse
 	merged.InboundConfigs = nil
 	merged.RouterConfig = nil
 	merged.API = nil
 	merged.Metrics = nil
 	merged.Observatory = nil
+	merged.DNSConfig = nil
+	merged.FakeDNS = nil
+	merged.Geodata = nil
+	merged.Reverse = nil
 
-	cfg, err := merged.Build()
+	cfg, err = merged.Build()
 	if err != nil {
-		return nil, fmt.Errorf("failed to build config: %w", err)
+		return nil, "", fmt.Errorf("failed to build config: %w", err)
 	}
-	return cfg, nil
+	return cfg, fmt.Sprintf("outbounds: %s, timeout %v", strings.Join(kept, ", "), timeout), nil
 }
 
 func readConfigAsJSON(file, format string) ([]byte, error) {
