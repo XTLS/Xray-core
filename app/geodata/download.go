@@ -114,8 +114,8 @@ func newClient(baseCtx context.Context, dispatcher routing.Dispatcher, outbound 
 				if req.URL.Scheme != "https" {
 					return errors.New("redirected to non-https URL: ", req.URL.String())
 				}
-				if len(via) >= 10 {
-					return errors.New("stopped after 10 redirects")
+				if len(via) >= 20 {
+					return errors.New("stopped after 20 redirects")
 				}
 				return nil
 			},
