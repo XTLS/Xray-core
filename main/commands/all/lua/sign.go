@@ -3,6 +3,7 @@ package lua
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/main/commands/base"
@@ -32,7 +33,7 @@ func executeSign(cmd *base.Command, args []string) {
 		cmd.Usage()
 	}
 
-	if filepath.Ext(args[0]) != ".lua" {
+	if !strings.EqualFold(filepath.Ext(args[0]), ".lua") {
 		base.Fatalf("Lua file extension must be .lua")
 	}
 	info, err := os.Stat(args[0])

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/platform"
@@ -69,7 +70,7 @@ func ReadCert(file string) ([]byte, error) {
 // ResolveLuaFile finds a local .lua script and returns its absolute path.
 // Relative paths: XRAY_LOCATION_CONFDIR > XRAY_LOCATION_CONFIG > working dir > executable dir.
 func ResolveLuaFile(path string) (string, error) {
-	if filepath.Ext(path) != ".lua" {
+	if !strings.EqualFold(filepath.Ext(path), ".lua") {
 		return "", errors.New("Lua file extension must be .lua")
 	}
 	if filepath.IsAbs(path) {
