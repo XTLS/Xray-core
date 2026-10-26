@@ -15,6 +15,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/pelletier/go-toml"
 	"github.com/xtls/xray-core/app/observatory"
+	"github.com/xtls/xray-core/app/observatory/burst"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/infra/conf"
@@ -139,6 +140,8 @@ func runCheck(args []string) error {
 		configDir = defaultCheckConfDir
 	}
 	files := getConfigFilePath(false)
+	// do not read or overwrite the saved results of a running xray
+	burst.DisablePersistence = true
 
 	var failed int
 	for _, ip := range ips {
@@ -304,18 +307,18 @@ func loadCheckConfig(files []string, tag, ip string, sets []string, count int) (
 		}
 	}
 
-	burst := merged.BurstObservatory
-	if burst == nil {
+	bo := merged.BurstObservatory
+	if bo == nil {
 		return nil, fmt.Errorf("burstObservatory is not configured")
 	}
-	if burst.HealthCheck == nil {
+	if bo.HealthCheck == nil {
 		return nil, fmt.Errorf("burstObservatory.pingConfig is not configured")
 	}
 	// observe only this outbound, keep all count results, and keep the
 	// scheduled rounds out of the way: checks are run by checkOne
-	burst.SubjectSelector = []string{tag}
-	burst.HealthCheck.SamplingCount = count
-	burst.HealthCheck.Interval = duration.Duration(time.Hour)
+	bo.SubjectSelector = []string{tag}
+	bo.HealthCheck.SamplingCount = count
+	bo.HealthCheck.Interval = duration.Duration(time.Hour)
 
 	// do not start listeners and routing of the running config
 	merged.InboundConfigs = nil

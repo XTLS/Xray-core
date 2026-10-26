@@ -16,6 +16,11 @@ const (
 	persistInterval = 300 * time.Second
 )
 
+// DisablePersistence turns off saving and restoring observatory results.
+// Set by "xray check", so it never mixes in or overwrites the state file
+// of a running xray.
+var DisablePersistence bool
+
 type persistSample struct {
 	Time int64 `json:"time"` // unix nanoseconds
 	RTT  int64 `json:"rtt"`  // nanoseconds
@@ -131,6 +136,9 @@ func (h *HealthPing) restoreSample(tag string, rtt time.Duration, at time.Time) 
 
 // startPersistence restores saved data and saves it periodically until ctx is done.
 func (h *HealthPing) startPersistence(selector func() ([]string, error)) {
+	if DisablePersistence {
+		return
+	}
 	path := persistPath(h.ctx)
 	if path == "" {
 		return
