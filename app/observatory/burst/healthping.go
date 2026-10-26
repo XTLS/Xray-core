@@ -21,6 +21,7 @@ type HealthPingSettings struct {
 	SamplingCount int           `json:"sampling"`
 	Timeout       time.Duration `json:"timeout"`
 	HttpMethod    string        `json:"httpMethod"`
+	StartCheck    int           `json:"startCheck"`
 }
 
 // HealthPing is the health checker for balancers
@@ -58,6 +59,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 			SamplingCount: int(config.SamplingCount),
 			Timeout:       time.Duration(config.Timeout),
 			HttpMethod:    httpMethod,
+			StartCheck:    int(config.StartCheck),
 		}
 	}
 	if settings.Destination == "" {
@@ -75,6 +77,9 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	if settings.SamplingCount <= 0 {
 		settings.SamplingCount = 10
 	}
+	if settings.StartCheck <= 0 {
+		settings.StartCheck = defaultStartCheck
+	}
 	if settings.Timeout <= 0 {
 		// results are saved after all health pings finish,
 		// a larger timeout could possibly makes checks run longer
@@ -85,7 +90,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 		ctx:        ctx,
 		cancelCtx:  cancel,
 		dispatcher: dispatcher,
-		limiter:    newPingLimiter(maxParallelPings, maxParallelPerFamily),
+		limiter:    newPingLimiter(maxParallelPings, settings.StartCheck),
 		Settings:   settings,
 		Results:    nil,
 	}

@@ -13,9 +13,11 @@ const (
 	initialCheckSpread = 60 * time.Second
 	// maxParallelPings limits concurrent measurements across the whole HealthPing.
 	maxParallelPings = 32
-	// maxParallelPerFamily limits concurrent measurements per tag family.
-	// A family is the tag prefix before the first '_' ("cf_1" -> "cf").
-	maxParallelPerFamily = 4
+	// defaultStartCheck is the default limit of concurrent measurements per
+	// tag family: by default 4 random outbounds of each family are checked at
+	// once (e.g. cf_4, cf_6, cf_15, cf_30). A family is the tag prefix before
+	// the first '_' ("cf_1" -> "cf"). Override with pingConfig.startCheck.
+	defaultStartCheck = 4
 )
 
 // initialCheckWindow returns the spread window for the initial run:

@@ -51,6 +51,7 @@ type HealthCheckSettings struct {
 	SamplingCount int               `json:"sampling"`
 	Timeout       duration.Duration `json:"timeout"`
 	HttpMethod    string            `json:"httpMethod"`
+	StartCheck    int               `json:"startCheck"`
 }
 
 func (h HealthCheckSettings) Build() (proto.Message, error) {
@@ -67,6 +68,7 @@ func (h HealthCheckSettings) Build() (proto.Message, error) {
 		Timeout:       int64(h.Timeout),
 		SamplingCount: int32(h.SamplingCount),
 		HttpMethod:    httpMethod,
+		StartCheck:    int32(h.StartCheck),
 	}, nil
 }
 

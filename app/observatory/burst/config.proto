@@ -28,5 +28,8 @@ message HealthPingConfig {
   int64 timeout = 5;
   // http method to make request
   string httpMethod = 6;
+  // max concurrent checks per outbound tag family (prefix before '_'),
+  // e.g. cf_4, cf_6, cf_15, cf_30 at once for "cf"; default 4
+  int32 startCheck = 7;
 
 }
