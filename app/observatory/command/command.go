@@ -8,6 +8,8 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type service struct {
@@ -25,6 +27,24 @@ func (s *service) GetOutboundStatus(ctx context.Context, request *GetOutboundSta
 	retdata := resp.(*observatory.ObservationResult)
 	return &GetOutboundStatusResponse{
 		Status: retdata,
+	}, nil
+}
+
+// observatoryResetter is implemented by burstObservatory.
+type observatoryResetter interface {
+	Reset(tags, prefixes []string) []string
+}
+
+func (s *service) ResetOutboundStatus(ctx context.Context, request *ResetOutboundStatusRequest) (*ResetOutboundStatusResponse, error) {
+	if len(request.Tags) == 0 && len(request.Prefixes) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "no tags or prefixes to reset")
+	}
+	r, ok := s.observatory.(observatoryResetter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, "reset is supported by burstObservatory only")
+	}
+	return &ResetOutboundStatusResponse{
+		Tags: r.Reset(request.Tags, request.Prefixes),
 	}, nil
 }
 

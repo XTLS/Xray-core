@@ -89,7 +89,8 @@ type HealthPingConfig struct {
 	Timeout int64 `protobuf:"varint,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	// http method to make request
 	HttpMethod string `protobuf:"bytes,6,opt,name=httpMethod,proto3" json:"httpMethod,omitempty"`
-	// max concurrent checks per outbound tag family (prefix before '_'), default 4
+	// max concurrent checks per outbound tag family (prefix before '_'),
+	// e.g. cf_4, cf_6, cf_15, cf_30 at once for "cf"; default 4
 	StartCheck    int32 `protobuf:"varint,7,opt,name=startCheck,proto3" json:"startCheck,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

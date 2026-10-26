@@ -63,6 +63,9 @@ outbound. The path is dot-separated from the outbound root,
 array indexes are numbers (settings.vnext.0.address). The value
 is parsed as JSON, or used as a string otherwise. Can be repeated.
 
+To reset the results a running xray keeps for an outbound or a
+tag prefix, see "{{.Exec}} help api obsreset".
+
 Prints one line per IP:
 	alive: <bool>, delay: <ms>, outbound_tag: "<tag>"
 delay is the minimal time of successful checks, alive is false
