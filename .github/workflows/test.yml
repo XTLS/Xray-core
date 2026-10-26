@@ -45,19 +45,25 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - name: Install pinned protobuf tools
+      - name: Cache protoc
+        id: cache-protoc
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/protoc
+          key: protoc-linux-x86_64-33.5
+      - name: Download protoc
+        if: steps.cache-protoc.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}
-        env:
-          GOBIN: ${{ runner.temp }}/protobuf/bin
         run: |
           curl -fsSL --retry 3 -o protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v33.5/protoc-33.5-linux-x86_64.zip
-          unzip -q protoc.zip -d protobuf
+          unzip -q protoc.zip -d protoc
+      - name: Install pinned protobuf tools
+        run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
-          echo "GOBIN=$GOBIN" >> "$GITHUB_ENV"
-          echo "$GOBIN" >> "$GITHUB_PATH"
       - name: Check generated protobuf files
         run: |
+          export PATH="$RUNNER_TEMP/protoc/bin:$PATH"
           # Remove old outputs so orphaned pb files are also detected.
           git ls-files -z -- '*.pb.go' | xargs -0 -r rm --
           go run ./infra/vprotogen
