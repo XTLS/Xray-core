@@ -41,16 +41,29 @@ jobs:
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v7
-      - name: Check Proto Version Header
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install pinned protobuf tools
+        working-directory: ${{ runner.temp }}
+        env:
+          GOBIN: ${{ runner.temp }}/protobuf/bin
         run: |
-          head -n 4 core/config.pb.go > ref.txt
-          find . -name "*.pb.go" ! -name "*_grpc.pb.go" -print0 | while IFS= read -r -d '' file; do
-            if ! cmp -s ref.txt <(head -n 4 "$file"); then
-              echo "Error: Header mismatch in $file"
-              head -n 4 "$file"
-              exit 1
-            fi
-          done
+          curl -fsSL --retry 3 -o protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v33.5/protoc-33.5-linux-x86_64.zip
+          unzip -q protoc.zip -d protobuf
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.0
+          echo "GOBIN=$GOBIN" >> "$GITHUB_ENV"
+          echo "$GOBIN" >> "$GITHUB_PATH"
+      - name: Check generated protobuf files
+        run: |
+          # Remove old outputs so orphaned pb files are also detected.
+          git ls-files -z -- '*.pb.go' | xargs -0 -r rm --
+          go run ./infra/vprotogen
+          # Include newly generated files in the diff without committing.
+          git add --intent-to-add --force -- '*.pb.go'
+          git diff --exit-code HEAD -- '*.pb.go'
 
   check-format:
     runs-on: ubuntu-latest
