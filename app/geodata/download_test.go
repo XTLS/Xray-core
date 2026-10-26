@@ -76,6 +76,16 @@ func TestDownloadOneLuaGuard(t *testing.T) {
 }
 
 func TestProtobufConfigValidation(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("xray.location.asset", dir)
+	for _, name := range []string{"asset.dat", "asset.DAT"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "directory.dat"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	server, err := core.New(&core.Config{})
 	if err != nil {
 		t.Fatal(err)
@@ -95,6 +105,8 @@ func TestProtobufConfigValidation(t *testing.T) {
 		{"uppercase extension", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "asset.DAT"}}}, ""},
 		{"invalid extension", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "asset.lua"}}}, "extension must be .dat"},
 		{"missing extension", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "asset"}}}, "extension must be .dat"},
+		{"missing file", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "missing.dat"}}}, "invalid geodata asset file"},
+		{"directory", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "directory.dat"}}}, "asset is not a regular file"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config, err := serial.ToTypedMessage(tc.config).GetInstance()

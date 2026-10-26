@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	commongeodata "github.com/xtls/xray-core/common/geodata"
+	"github.com/xtls/xray-core/common/platform/filesystem"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 )
@@ -34,6 +35,9 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	for _, asset := range config.Assets {
 		if !strings.EqualFold(filepath.Ext(asset.GetFile()), ".dat") {
 			return nil, errors.New("geodata asset file extension must be .dat")
+		}
+		if _, err := filesystem.StatAsset(asset.GetFile()); err != nil {
+			return nil, errors.New("invalid geodata asset file: ", asset.GetFile()).Base(err)
 		}
 	}
 	schedule, err := cron.ParseStandard(config.Cron)
