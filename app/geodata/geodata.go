@@ -28,6 +28,9 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 	if config.Cron == "" {
 		return &Instance{}, nil
 	}
+	if len(config.Assets) > 100 {
+		return nil, errors.New("geodata supports at most 100 assets")
+	}
 	for _, asset := range config.Assets {
 		if !strings.EqualFold(filepath.Ext(asset.GetFile()), ".dat") {
 			return nil, errors.New("geodata asset file extension must be .dat")
