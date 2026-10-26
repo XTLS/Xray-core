@@ -15,9 +15,25 @@ message GetOutboundStatusResponse {
   xray.core.app.observatory.ObservationResult status = 1;
 }
 
+// Clears burstObservatory health results of outbounds.
+message ResetOutboundStatusRequest {
+  // exact outbound tags, e.g. cf_22
+  repeated string tags = 1;
+  // tag prefixes, e.g. cf_ resets every outbound whose tag starts with it
+  repeated string prefixes = 2;
+}
+
+message ResetOutboundStatusResponse {
+  // tags whose results were cleared
+  repeated string tags = 1;
+}
+
 service ObservatoryService {
   rpc GetOutboundStatus(GetOutboundStatusRequest)
       returns (GetOutboundStatusResponse) {}
+  // ResetOutboundStatus clears health results (burstObservatory only).
+  rpc ResetOutboundStatus(ResetOutboundStatusRequest)
+      returns (ResetOutboundStatusResponse) {}
 }
 
 

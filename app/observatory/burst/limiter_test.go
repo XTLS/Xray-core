@@ -103,8 +103,8 @@ func checkLimits(t *testing.T, p *probe, total int) {
 		t.Errorf("global peak %d > %d", p.peak, maxParallelPings)
 	}
 	for f, n := range p.famPeak {
-		if n > maxParallelPerFamily {
-			t.Errorf("family %s peak %d > %d", f, n, maxParallelPerFamily)
+		if n > defaultStartCheck {
+			t.Errorf("family %s peak %d > %d", f, n, defaultStartCheck)
 		}
 	}
 }
@@ -121,8 +121,8 @@ func TestDoCheckImmediateIsLimited(t *testing.T) {
 		t.Fatal("doCheck hung")
 	}
 	checkLimits(t, p, len(tags))
-	if p.famPeak["cf"] != maxParallelPerFamily {
-		t.Errorf("cf peak %d, expected the limit %d to be reached", p.famPeak["cf"], maxParallelPerFamily)
+	if p.famPeak["cf"] != defaultStartCheck {
+		t.Errorf("cf peak %d, expected the limit %d to be reached", p.famPeak["cf"], defaultStartCheck)
 	}
 	if len(h.Results) != len(tags) {
 		t.Errorf("results for %d tags, want %d", len(h.Results), len(tags))
@@ -188,5 +188,36 @@ func TestDoCheckCancelWhileWaiting(t *testing.T) {
 	p.mu.Unlock()
 	if started >= len(tags) {
 		t.Errorf("cancel did not stop pending pings: %d started", started)
+	}
+}
+
+func TestStartCheckSetting(t *testing.T) {
+	cases := map[int32]int{0: defaultStartCheck, -1: defaultStartCheck, 2: 2, 10: 10}
+	for in, want := range cases {
+		h := NewHealthPing(context.Background(), nil, &HealthPingConfig{StartCheck: in})
+		if h.Settings.StartCheck != want || h.limiter.perFamily != want {
+			t.Errorf("startCheck %d: settings %d, limiter %d, want %d",
+				in, h.Settings.StartCheck, h.limiter.perFamily, want)
+		}
+	}
+}
+
+func TestDoCheckStartCheckLimit(t *testing.T) {
+	p := newProbe()
+	h := NewHealthPing(context.Background(), nil, &HealthPingConfig{
+		Interval:   int64(time.Minute),
+		Timeout:    int64(time.Second),
+		StartCheck: 2,
+	})
+	h.measure = p.measure(20 * time.Millisecond)
+	tags := makeTags()
+	h.doCheck(context.Background(), tags, 0, 1)
+	for f, n := range p.famPeak {
+		if n > 2 {
+			t.Errorf("family %s peak %d > startCheck 2", f, n)
+		}
+	}
+	if p.famPeak["cf"] != 2 {
+		t.Errorf("cf peak %d, want 2", p.famPeak["cf"])
 	}
 }

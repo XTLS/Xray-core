@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ObservatoryService_GetOutboundStatus_FullMethodName = "/xray.core.app.observatory.command.ObservatoryService/GetOutboundStatus"
+	ObservatoryService_GetOutboundStatus_FullMethodName   = "/xray.core.app.observatory.command.ObservatoryService/GetOutboundStatus"
+	ObservatoryService_ResetOutboundStatus_FullMethodName = "/xray.core.app.observatory.command.ObservatoryService/ResetOutboundStatus"
 )
 
 // ObservatoryServiceClient is the client API for ObservatoryService service.
@@ -27,6 +28,8 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ObservatoryServiceClient interface {
 	GetOutboundStatus(ctx context.Context, in *GetOutboundStatusRequest, opts ...grpc.CallOption) (*GetOutboundStatusResponse, error)
+	// ResetOutboundStatus clears health results (burstObservatory only).
+	ResetOutboundStatus(ctx context.Context, in *ResetOutboundStatusRequest, opts ...grpc.CallOption) (*ResetOutboundStatusResponse, error)
 }
 
 type observatoryServiceClient struct {
@@ -47,11 +50,23 @@ func (c *observatoryServiceClient) GetOutboundStatus(ctx context.Context, in *Ge
 	return out, nil
 }
 
+func (c *observatoryServiceClient) ResetOutboundStatus(ctx context.Context, in *ResetOutboundStatusRequest, opts ...grpc.CallOption) (*ResetOutboundStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResetOutboundStatusResponse)
+	err := c.cc.Invoke(ctx, ObservatoryService_ResetOutboundStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ObservatoryServiceServer is the server API for ObservatoryService service.
 // All implementations must embed UnimplementedObservatoryServiceServer
 // for forward compatibility.
 type ObservatoryServiceServer interface {
 	GetOutboundStatus(context.Context, *GetOutboundStatusRequest) (*GetOutboundStatusResponse, error)
+	// ResetOutboundStatus clears health results (burstObservatory only).
+	ResetOutboundStatus(context.Context, *ResetOutboundStatusRequest) (*ResetOutboundStatusResponse, error)
 	mustEmbedUnimplementedObservatoryServiceServer()
 }
 
@@ -64,6 +79,9 @@ type UnimplementedObservatoryServiceServer struct{}
 
 func (UnimplementedObservatoryServiceServer) GetOutboundStatus(context.Context, *GetOutboundStatusRequest) (*GetOutboundStatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOutboundStatus not implemented")
+}
+func (UnimplementedObservatoryServiceServer) ResetOutboundStatus(context.Context, *ResetOutboundStatusRequest) (*ResetOutboundStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResetOutboundStatus not implemented")
 }
 func (UnimplementedObservatoryServiceServer) mustEmbedUnimplementedObservatoryServiceServer() {}
 func (UnimplementedObservatoryServiceServer) testEmbeddedByValue()                            {}
@@ -104,6 +122,24 @@ func _ObservatoryService_GetOutboundStatus_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ObservatoryService_ResetOutboundStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResetOutboundStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ObservatoryServiceServer).ResetOutboundStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ObservatoryService_ResetOutboundStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ObservatoryServiceServer).ResetOutboundStatus(ctx, req.(*ResetOutboundStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ObservatoryService_ServiceDesc is the grpc.ServiceDesc for ObservatoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -114,6 +150,10 @@ var ObservatoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetOutboundStatus",
 			Handler:    _ObservatoryService_GetOutboundStatus_Handler,
+		},
+		{
+			MethodName: "ResetOutboundStatus",
+			Handler:    _ObservatoryService_ResetOutboundStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

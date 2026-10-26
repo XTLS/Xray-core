@@ -21,6 +21,7 @@ type HealthPingSettings struct {
 	SamplingCount int           `json:"sampling"`
 	Timeout       time.Duration `json:"timeout"`
 	HttpMethod    string        `json:"httpMethod"`
+	StartCheck    int           `json:"startCheck"`
 }
 
 // HealthPing is the health checker for balancers
@@ -32,6 +33,7 @@ type HealthPing struct {
 	access        sync.Mutex
 	ticker        *time.Ticker
 	limiter       *pingLimiter
+	persistPath   string
 	// measure performs one ping; replaceable in tests
 	measure func(tag string, client *pingClient) (time.Duration, error)
 
@@ -58,6 +60,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 			SamplingCount: int(config.SamplingCount),
 			Timeout:       time.Duration(config.Timeout),
 			HttpMethod:    httpMethod,
+			StartCheck:    int(config.StartCheck),
 		}
 	}
 	if settings.Destination == "" {
@@ -75,6 +78,9 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 	if settings.SamplingCount <= 0 {
 		settings.SamplingCount = 10
 	}
+	if settings.StartCheck <= 0 {
+		settings.StartCheck = defaultStartCheck
+	}
 	if settings.Timeout <= 0 {
 		// results are saved after all health pings finish,
 		// a larger timeout could possibly makes checks run longer
@@ -85,7 +91,7 @@ func NewHealthPing(ctx context.Context, dispatcher routing.Dispatcher, config *H
 		ctx:        ctx,
 		cancelCtx:  cancel,
 		dispatcher: dispatcher,
-		limiter:    newPingLimiter(maxParallelPings, maxParallelPerFamily),
+		limiter:    newPingLimiter(maxParallelPings, settings.StartCheck),
 		Settings:   settings,
 		Results:    nil,
 	}
@@ -100,6 +106,7 @@ func (h *HealthPing) StartScheduler(selector func() ([]string, error)) {
 	if h.ticker != nil {
 		return
 	}
+	h.startPersistence(selector)
 	interval := h.Settings.Interval * time.Duration(h.Settings.SamplingCount)
 	ticker := time.NewTicker(interval)
 	h.ticker = ticker
@@ -156,6 +163,9 @@ func (h *HealthPing) StopScheduler() {
 	h.ticker.Stop()
 	h.ticker = nil
 	h.cancelCtx()
+	if h.persistPath != "" {
+		h.saveResults(h.persistPath)
+	}
 }
 
 // Check implements the HealthChecker

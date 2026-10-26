@@ -102,6 +102,106 @@ func (x *GetOutboundStatusResponse) GetStatus() *observatory.ObservationResult {
 	return nil
 }
 
+// Clears burstObservatory health results of outbounds.
+type ResetOutboundStatusRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// exact outbound tags, e.g. cf_22
+	Tags []string `protobuf:"bytes,1,rep,name=tags,proto3" json:"tags,omitempty"`
+	// tag prefixes, e.g. cf_ resets every outbound whose tag starts with it
+	Prefixes      []string `protobuf:"bytes,2,rep,name=prefixes,proto3" json:"prefixes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetOutboundStatusRequest) Reset() {
+	*x = ResetOutboundStatusRequest{}
+	mi := &file_app_observatory_command_command_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetOutboundStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetOutboundStatusRequest) ProtoMessage() {}
+
+func (x *ResetOutboundStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_app_observatory_command_command_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetOutboundStatusRequest.ProtoReflect.Descriptor instead.
+func (*ResetOutboundStatusRequest) Descriptor() ([]byte, []int) {
+	return file_app_observatory_command_command_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ResetOutboundStatusRequest) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *ResetOutboundStatusRequest) GetPrefixes() []string {
+	if x != nil {
+		return x.Prefixes
+	}
+	return nil
+}
+
+type ResetOutboundStatusResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// tags whose results were cleared
+	Tags          []string `protobuf:"bytes,1,rep,name=tags,proto3" json:"tags,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetOutboundStatusResponse) Reset() {
+	*x = ResetOutboundStatusResponse{}
+	mi := &file_app_observatory_command_command_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetOutboundStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetOutboundStatusResponse) ProtoMessage() {}
+
+func (x *ResetOutboundStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_app_observatory_command_command_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetOutboundStatusResponse.ProtoReflect.Descriptor instead.
+func (*ResetOutboundStatusResponse) Descriptor() ([]byte, []int) {
+	return file_app_observatory_command_command_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ResetOutboundStatusResponse) GetTags() []string {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -110,7 +210,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_app_observatory_command_command_proto_msgTypes[2]
+	mi := &file_app_observatory_command_command_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -122,7 +222,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_app_observatory_command_command_proto_msgTypes[2]
+	mi := &file_app_observatory_command_command_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -135,7 +235,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_app_observatory_command_command_proto_rawDescGZIP(), []int{2}
+	return file_app_observatory_command_command_proto_rawDescGZIP(), []int{4}
 }
 
 var File_app_observatory_command_command_proto protoreflect.FileDescriptor
@@ -145,10 +245,16 @@ const file_app_observatory_command_command_proto_rawDesc = "" +
 	"%app/observatory/command/command.proto\x12!xray.core.app.observatory.command\x1a\x1capp/observatory/config.proto\"\x1a\n" +
 	"\x18GetOutboundStatusRequest\"a\n" +
 	"\x19GetOutboundStatusResponse\x12D\n" +
-	"\x06status\x18\x01 \x01(\v2,.xray.core.app.observatory.ObservationResultR\x06status\"\b\n" +
-	"\x06Config2\xa7\x01\n" +
+	"\x06status\x18\x01 \x01(\v2,.xray.core.app.observatory.ObservationResultR\x06status\"L\n" +
+	"\x1aResetOutboundStatusRequest\x12\x12\n" +
+	"\x04tags\x18\x01 \x03(\tR\x04tags\x12\x1a\n" +
+	"\bprefixes\x18\x02 \x03(\tR\bprefixes\"1\n" +
+	"\x1bResetOutboundStatusResponse\x12\x12\n" +
+	"\x04tags\x18\x01 \x03(\tR\x04tags\"\b\n" +
+	"\x06Config2\xc0\x02\n" +
 	"\x12ObservatoryService\x12\x90\x01\n" +
-	"\x11GetOutboundStatus\x12;.xray.core.app.observatory.command.GetOutboundStatusRequest\x1a<.xray.core.app.observatory.command.GetOutboundStatusResponse\"\x00B\x80\x01\n" +
+	"\x11GetOutboundStatus\x12;.xray.core.app.observatory.command.GetOutboundStatusRequest\x1a<.xray.core.app.observatory.command.GetOutboundStatusResponse\"\x00\x12\x96\x01\n" +
+	"\x13ResetOutboundStatus\x12=.xray.core.app.observatory.command.ResetOutboundStatusRequest\x1a>.xray.core.app.observatory.command.ResetOutboundStatusResponse\"\x00B\x80\x01\n" +
 	"%com.xray.core.app.observatory.commandP\x01Z1github.com/xtls/xray-core/app/observatory/command\xaa\x02!Xray.Core.App.Observatory.Commandb\x06proto3"
 
 var (
@@ -163,19 +269,23 @@ func file_app_observatory_command_command_proto_rawDescGZIP() []byte {
 	return file_app_observatory_command_command_proto_rawDescData
 }
 
-var file_app_observatory_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_app_observatory_command_command_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_app_observatory_command_command_proto_goTypes = []any{
 	(*GetOutboundStatusRequest)(nil),      // 0: xray.core.app.observatory.command.GetOutboundStatusRequest
 	(*GetOutboundStatusResponse)(nil),     // 1: xray.core.app.observatory.command.GetOutboundStatusResponse
-	(*Config)(nil),                        // 2: xray.core.app.observatory.command.Config
-	(*observatory.ObservationResult)(nil), // 3: xray.core.app.observatory.ObservationResult
+	(*ResetOutboundStatusRequest)(nil),    // 2: xray.core.app.observatory.command.ResetOutboundStatusRequest
+	(*ResetOutboundStatusResponse)(nil),   // 3: xray.core.app.observatory.command.ResetOutboundStatusResponse
+	(*Config)(nil),                        // 4: xray.core.app.observatory.command.Config
+	(*observatory.ObservationResult)(nil), // 5: xray.core.app.observatory.ObservationResult
 }
 var file_app_observatory_command_command_proto_depIdxs = []int32{
-	3, // 0: xray.core.app.observatory.command.GetOutboundStatusResponse.status:type_name -> xray.core.app.observatory.ObservationResult
+	5, // 0: xray.core.app.observatory.command.GetOutboundStatusResponse.status:type_name -> xray.core.app.observatory.ObservationResult
 	0, // 1: xray.core.app.observatory.command.ObservatoryService.GetOutboundStatus:input_type -> xray.core.app.observatory.command.GetOutboundStatusRequest
-	1, // 2: xray.core.app.observatory.command.ObservatoryService.GetOutboundStatus:output_type -> xray.core.app.observatory.command.GetOutboundStatusResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	2, // 2: xray.core.app.observatory.command.ObservatoryService.ResetOutboundStatus:input_type -> xray.core.app.observatory.command.ResetOutboundStatusRequest
+	1, // 3: xray.core.app.observatory.command.ObservatoryService.GetOutboundStatus:output_type -> xray.core.app.observatory.command.GetOutboundStatusResponse
+	3, // 4: xray.core.app.observatory.command.ObservatoryService.ResetOutboundStatus:output_type -> xray.core.app.observatory.command.ResetOutboundStatusResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -192,7 +302,7 @@ func file_app_observatory_command_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_observatory_command_command_proto_rawDesc), len(file_app_observatory_command_command_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
