@@ -21,8 +21,10 @@ import (
 	"golang.org/x/net/http2"
 )
 
-const idleTimeout = 30 * time.Second
-const maxDownloadSize int64 = 256 * 1024 * 1024
+const (
+	idleTimeout           = 30 * time.Second
+	maxDownloadSize int64 = 256 * 1024 * 1024
+)
 
 // DO NOT EDIT. Ignored by geodata, rejected by Lua.
 const luaGuardHeader = "\x12\x01\x00"
