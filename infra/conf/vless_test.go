@@ -1,6 +1,7 @@
 package conf_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/xtls/xray-core/common/net"
@@ -11,6 +12,53 @@ import (
 	"github.com/xtls/xray-core/proxy/vless/inbound"
 	"github.com/xtls/xray-core/proxy/vless/outbound"
 )
+
+func TestVLessDeviceIDConfig(t *testing.T) {
+	const id = "27848739-7e62-4138-9fd3-098a63964b6b"
+	for name, input := range map[string]string{
+		"simplified": `{"address":"example.com","port":443,"id":"` + id + `","encryption":"none","deviceId":"device-a"}`,
+		"vnext":      `{"vnext":[{"address":"example.com","port":443,"users":[{"id":"` + id + `","encryption":"none","deviceId":"device-a"}]}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var config VLessOutboundConfig
+			if err := json.Unmarshal([]byte(input), &config); err != nil {
+				t.Fatal(err)
+			}
+			built, err := config.Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			user, err := built.(*outbound.Config).Vnext.User.ToMemoryUser()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if user.Account.(*vless.MemoryAccount).DeviceID != "device-a" {
+				t.Fatal("outbound configuration lost device ID")
+			}
+		})
+	}
+	for _, field := range []string{"users", "clients"} {
+		t.Run(field, func(t *testing.T) {
+			input := `{"decryption":"none","` + field + `":[{"id":"` + id + `","enforceDeviceId":true,"allowedDeviceIds":["device-a"]}]}`
+			var config VLessInboundConfig
+			if err := json.Unmarshal([]byte(input), &config); err != nil {
+				t.Fatal(err)
+			}
+			built, err := config.Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			user, err := built.(*inbound.Config).Users[0].ToMemoryUser()
+			if err != nil {
+				t.Fatal(err)
+			}
+			account := user.Account.(*vless.MemoryAccount)
+			if !account.AllowsDeviceID("device-a") || account.AllowsDeviceID("device-b") || account.AllowsDeviceID("") {
+				t.Fatal("inbound configuration lost device policy")
+			}
+		})
+	}
+}
 
 func TestVLessOutbound(t *testing.T) {
 	creator := func() Buildable {

@@ -79,16 +79,21 @@ type Account struct {
 	// ID of the account, in the form of a UUID, e.g., "66ad4540-b58c-4ad2-9926-ea63445a9b57".
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Flow settings. May be "xtls-rprx-vision".
-	Flow          string   `protobuf:"bytes,2,opt,name=flow,proto3" json:"flow,omitempty"`
-	Encryption    string   `protobuf:"bytes,3,opt,name=encryption,proto3" json:"encryption,omitempty"`
-	XorMode       uint32   `protobuf:"varint,4,opt,name=xorMode,proto3" json:"xorMode,omitempty"`
-	Seconds       uint32   `protobuf:"varint,5,opt,name=seconds,proto3" json:"seconds,omitempty"`
-	Padding       string   `protobuf:"bytes,6,opt,name=padding,proto3" json:"padding,omitempty"`
-	Reverse       *Reverse `protobuf:"bytes,7,opt,name=reverse,proto3" json:"reverse,omitempty"`
-	Testpre       uint32   `protobuf:"varint,8,opt,name=testpre,proto3" json:"testpre,omitempty"`
-	Testseed      []uint32 `protobuf:"varint,9,rep,packed,name=testseed,proto3" json:"testseed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Flow       string   `protobuf:"bytes,2,opt,name=flow,proto3" json:"flow,omitempty"`
+	Encryption string   `protobuf:"bytes,3,opt,name=encryption,proto3" json:"encryption,omitempty"`
+	XorMode    uint32   `protobuf:"varint,4,opt,name=xorMode,proto3" json:"xorMode,omitempty"`
+	Seconds    uint32   `protobuf:"varint,5,opt,name=seconds,proto3" json:"seconds,omitempty"`
+	Padding    string   `protobuf:"bytes,6,opt,name=padding,proto3" json:"padding,omitempty"`
+	Reverse    *Reverse `protobuf:"bytes,7,opt,name=reverse,proto3" json:"reverse,omitempty"`
+	Testpre    uint32   `protobuf:"varint,8,opt,name=testpre,proto3" json:"testpre,omitempty"`
+	Testseed   []uint32 `protobuf:"varint,9,rep,packed,name=testseed,proto3" json:"testseed,omitempty"`
+	// Client setting. An identifier supplied with each VLESS request.
+	DeviceId string `protobuf:"bytes,10,opt,name=deviceId,proto3" json:"deviceId,omitempty"`
+	// Server settings. When enabled, only listed device IDs may connect.
+	EnforceDeviceId  bool     `protobuf:"varint,11,opt,name=enforceDeviceId,proto3" json:"enforceDeviceId,omitempty"`
+	AllowedDeviceIds []string `protobuf:"bytes,12,rep,name=allowedDeviceIds,proto3" json:"allowedDeviceIds,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Account) Reset() {
@@ -184,6 +189,27 @@ func (x *Account) GetTestseed() []uint32 {
 	return nil
 }
 
+func (x *Account) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
+func (x *Account) GetEnforceDeviceId() bool {
+	if x != nil {
+		return x.EnforceDeviceId
+	}
+	return false
+}
+
+func (x *Account) GetAllowedDeviceIds() []string {
+	if x != nil {
+		return x.AllowedDeviceIds
+	}
+	return nil
+}
+
 var File_proxy_vless_account_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_account_proto_rawDesc = "" +
@@ -191,7 +217,7 @@ const file_proxy_vless_account_proto_rawDesc = "" +
 	"\x19proxy/vless/account.proto\x12\x10xray.proxy.vless\x1a\x19app/proxyman/config.proto\"Z\n" +
 	"\aReverse\x12\x10\n" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12=\n" +
-	"\bsniffing\x18\x02 \x01(\v2!.xray.app.proxyman.SniffingConfigR\bsniffing\"\x86\x02\n" +
+	"\bsniffing\x18\x02 \x01(\v2!.xray.app.proxyman.SniffingConfigR\bsniffing\"\xf8\x02\n" +
 	"\aAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x1e\n" +
@@ -203,7 +229,11 @@ const file_proxy_vless_account_proto_rawDesc = "" +
 	"\apadding\x18\x06 \x01(\tR\apadding\x123\n" +
 	"\areverse\x18\a \x01(\v2\x19.xray.proxy.vless.ReverseR\areverse\x12\x18\n" +
 	"\atestpre\x18\b \x01(\rR\atestpre\x12\x1a\n" +
-	"\btestseed\x18\t \x03(\rR\btestseedBR\n" +
+	"\btestseed\x18\t \x03(\rR\btestseed\x12\x1a\n" +
+	"\bdeviceId\x18\n" +
+	" \x01(\tR\bdeviceId\x12(\n" +
+	"\x0fenforceDeviceId\x18\v \x01(\bR\x0fenforceDeviceId\x12*\n" +
+	"\x10allowedDeviceIds\x18\f \x03(\tR\x10allowedDeviceIdsBR\n" +
 	"\x14com.xray.proxy.vlessP\x01Z%github.com/xtls/xray-core/proxy/vless\xaa\x02\x10Xray.Proxy.Vlessb\x06proto3"
 
 var (

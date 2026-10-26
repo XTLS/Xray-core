@@ -104,6 +104,9 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		if err != nil {
 			return nil, nil, nil, false, errors.New("failed to decode request header addons").Base(err)
 		}
+		if !request.User.Account.(*vless.MemoryAccount).AllowsDeviceID(requestAddons.DeviceId) {
+			return nil, nil, nil, false, errors.New("VLESS device ID is not allowed")
+		}
 
 		buffer.Clear()
 		if _, err := buffer.ReadFullFrom(reader, 1); err != nil {

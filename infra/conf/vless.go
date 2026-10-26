@@ -248,6 +248,7 @@ type VLessOutboundConfig struct {
 	Level      uint32                `json:"level"`
 	Email      string                `json:"email"`
 	Id         string                `json:"id"`
+	DeviceId   string                `json:"deviceId"`
 	Flow       string                `json:"flow"`
 	Seed       string                `json:"seed"`
 	Encryption string                `json:"encryption"`
@@ -296,6 +297,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 			account := new(vless.Account)
 			if c.Address != nil {
 				account.Id = c.Id
+				account.DeviceId = c.DeviceId
 				account.Flow = c.Flow
 				//account.Seed = c.Seed
 				account.Encryption = c.Encryption

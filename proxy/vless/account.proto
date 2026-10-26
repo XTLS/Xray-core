@@ -28,4 +28,10 @@ message Account {
 
   uint32 testpre = 8;
   repeated uint32 testseed = 9;
+
+  // Client setting. An identifier supplied with each VLESS request.
+  string deviceId = 10;
+  // Server settings. When enabled, only listed device IDs may connect.
+  bool enforceDeviceId = 11;
+  repeated string allowedDeviceIds = 12;
 }

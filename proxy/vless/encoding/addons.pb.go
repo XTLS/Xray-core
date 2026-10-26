@@ -22,9 +22,11 @@ const (
 )
 
 type Addons struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Flow          string                 `protobuf:"bytes,1,opt,name=Flow,proto3" json:"Flow,omitempty"`
-	Seed          []byte                 `protobuf:"bytes,2,opt,name=Seed,proto3" json:"Seed,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Flow  string                 `protobuf:"bytes,1,opt,name=Flow,proto3" json:"Flow,omitempty"`
+	Seed  []byte                 `protobuf:"bytes,2,opt,name=Seed,proto3" json:"Seed,omitempty"`
+	// Supplied by the client on every VLESS connection.
+	DeviceId      string `protobuf:"bytes,3,opt,name=deviceId,proto3" json:"deviceId,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -73,14 +75,22 @@ func (x *Addons) GetSeed() []byte {
 	return nil
 }
 
+func (x *Addons) GetDeviceId() string {
+	if x != nil {
+		return x.DeviceId
+	}
+	return ""
+}
+
 var File_proxy_vless_encoding_addons_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_encoding_addons_proto_rawDesc = "" +
 	"\n" +
-	"!proxy/vless/encoding/addons.proto\x12\x19xray.proxy.vless.encoding\"0\n" +
+	"!proxy/vless/encoding/addons.proto\x12\x19xray.proxy.vless.encoding\"L\n" +
 	"\x06Addons\x12\x12\n" +
 	"\x04Flow\x18\x01 \x01(\tR\x04Flow\x12\x12\n" +
-	"\x04Seed\x18\x02 \x01(\fR\x04SeedBm\n" +
+	"\x04Seed\x18\x02 \x01(\fR\x04Seed\x12\x1a\n" +
+	"\bdeviceId\x18\x03 \x01(\tR\bdeviceIdBm\n" +
 	"\x1dcom.xray.proxy.vless.encodingP\x01Z.github.com/xtls/xray-core/proxy/vless/encoding\xaa\x02\x19Xray.Proxy.Vless.Encodingb\x06proto3"
 
 var (

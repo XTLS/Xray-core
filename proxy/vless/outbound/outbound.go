@@ -238,7 +238,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	account := request.User.Account.(*vless.MemoryAccount)
 
 	requestAddons := &encoding.Addons{
-		Flow: account.Flow,
+		Flow:     account.Flow,
+		DeviceId: account.DeviceID,
 	}
 
 	var input *bytes.Reader

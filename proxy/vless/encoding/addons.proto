@@ -9,4 +9,6 @@ option java_multiple_files = true;
 message Addons {
   string Flow = 1;
   bytes Seed = 2;
+  // Supplied by the client on every VLESS connection.
+  string deviceId = 3;
 }
