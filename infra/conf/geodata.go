@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/robfig/cron/v3"
 	"github.com/xtls/xray-core/app/geodata"
@@ -44,6 +45,17 @@ func validateHTTPS(s string) error {
 	return nil
 }
 
+func validateGeodataCron(spec string) error {
+	schedule, err := cron.ParseStandard(spec)
+	if err != nil {
+		return err
+	}
+	if interval, ok := schedule.(cron.ConstantDelaySchedule); ok && interval.Delay < time.Minute {
+		return errors.New("interval must be at least 1 minute")
+	}
+	return nil
+}
+
 type GeodataConfig struct {
 	Cron     *string               `json:"cron"`
 	Outbound string                `json:"outbound"`
@@ -54,7 +66,7 @@ func (c *GeodataConfig) Build() (proto.Message, error) {
 	config := &geodata.Config{}
 
 	if c.Cron != nil {
-		if _, err := cron.ParseStandard(*c.Cron); err != nil {
+		if err := validateGeodataCron(*c.Cron); err != nil {
 			return nil, errors.New("invalid geodata cron").Base(err)
 		}
 		config.Cron = *c.Cron

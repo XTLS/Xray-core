@@ -106,3 +106,42 @@ func TestGeodataAssetConfigFileExtension(t *testing.T) {
 		}
 	}
 }
+
+func TestGeodataConfigCronFrequency(t *testing.T) {
+	for _, tc := range []struct {
+		cron      string
+		wantError string
+	}{
+		{"0 * * * *", ""},
+		{"15 */2 * * *", ""},
+		{"0 4 * * *", ""},
+		{"*/60 * * * *", ""},
+		{"0,0 * * * *", ""},
+		{"CRON_TZ=Asia/Singapore 30 * * * *", ""},
+		{"@hourly", ""},
+		{"@daily", ""},
+		{"@every 1m", ""},
+		{"@every 1h", ""},
+		{"@every 1h30m", ""},
+		{"* * * * *", ""},
+		{"*/30 * * * *", ""},
+		{"0,59 4 * * *", ""},
+		{"0-1 4 1 1 *", ""},
+		{"@every 59m59s", ""},
+		{"@every 1s", "interval must be at least 1 minute"},
+		{"@every 59s", "interval must be at least 1 minute"},
+		{"@every 59.999s", "interval must be at least 1 minute"},
+		{"invalid", "invalid geodata cron"},
+	} {
+		t.Run(tc.cron, func(t *testing.T) {
+			_, err := (&GeodataConfig{Cron: &tc.cron}).Build()
+			if tc.wantError == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("Build() error = %v; want %q", err, tc.wantError)
+			}
+		})
+	}
+}
