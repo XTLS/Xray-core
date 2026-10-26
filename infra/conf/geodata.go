@@ -2,6 +2,8 @@ package conf
 
 import (
 	"net/url"
+	"path/filepath"
+	"strings"
 
 	"github.com/robfig/cron/v3"
 	"github.com/xtls/xray-core/app/geodata"
@@ -18,6 +20,9 @@ type GeodataAssetConfig struct {
 func (c *GeodataAssetConfig) Build() (*geodata.Asset, error) {
 	if err := validateHTTPS(c.URL); err != nil {
 		return nil, errors.New("invalid geodata asset url: ", c.URL).Base(err)
+	}
+	if !strings.EqualFold(filepath.Ext(c.File), ".dat") {
+		return nil, errors.New("geodata asset file extension must be .dat")
 	}
 	if _, err := filesystem.StatAsset(c.File); err != nil {
 		return nil, errors.New("invalid geodata asset file: ", c.File).Base(err)

@@ -1,7 +1,9 @@
 package conf_test
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/xtls/xray-core/app/geodata"
@@ -70,6 +72,37 @@ func TestGeodataAssetConfigInvalidURL(t *testing.T) {
 			File: "geoip.dat",
 		}).Build(); err == nil {
 			t.Fatalf("expected error for %q", rawURL)
+		}
+	}
+}
+
+func TestGeodataAssetConfigFileExtension(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("xray.location.asset", dir)
+	for _, tc := range []struct {
+		name  string
+		valid bool
+	}{
+		{"custom.dat", true},
+		{"custom.DAT", true},
+		{"launcher.cmd", false},
+		{"script.lua", false},
+		{"config.json", false},
+		{"asset", false},
+	} {
+		if err := os.WriteFile(filepath.Join(dir, tc.name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := (&GeodataAssetConfig{
+			URL:  "https://example.com/download",
+			File: tc.name,
+		}).Build()
+		if tc.valid {
+			if err != nil {
+				t.Fatalf("Build(%q): %v", tc.name, err)
+			}
+		} else if err == nil || !strings.Contains(err.Error(), "extension must be .dat") {
+			t.Fatalf("Build(%q) = %v; want .dat extension error", tc.name, err)
 		}
 	}
 }
