@@ -71,3 +71,60 @@ func TestSetAddressKeepsServerName(t *testing.T) {
 		t.Errorf("serverName changed: %v", sni)
 	}
 }
+
+func resetCheckConfigFlags() {
+	configFiles = nil
+	configDir = ""
+}
+
+func TestCheckConfigFiles(t *testing.T) {
+	defer resetCheckConfigFlags()
+
+	// split config: all files in name order
+	dir := t.TempDir()
+	for _, n := range []string{"03_routing.json", "00_log.json", "06_outbounds.json", "notes.txt"} {
+		os.WriteFile(filepath.Join(dir, n), []byte("{}"), 0o600)
+	}
+	resetCheckConfigFlags()
+	configDir = dir
+	got, err := checkConfigFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(dir, "00_log.json"),
+		filepath.Join(dir, "03_routing.json"),
+		filepath.Join(dir, "06_outbounds.json"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("split: %v, want %v", got, want)
+	}
+
+	// single file in dir
+	one := t.TempDir()
+	os.WriteFile(filepath.Join(one, "config.json"), []byte("{}"), 0o600)
+	resetCheckConfigFlags()
+	configDir = one
+	if got, err := checkConfigFiles(); err != nil || len(got) != 1 {
+		t.Errorf("single: %v, %v", got, err)
+	}
+
+	// -c file without -confdir does not use the default dir
+	resetCheckConfigFlags()
+	configFiles.Set(filepath.Join(one, "config.json"))
+	if got, err := checkConfigFiles(); err != nil || len(got) != 1 || configDir != "" {
+		t.Errorf("-c: %v, %v, dir %q", got, err, configDir)
+	}
+
+	// empty and missing dirs are errors, never stdin
+	resetCheckConfigFlags()
+	configDir = t.TempDir()
+	if _, err := checkConfigFiles(); err == nil {
+		t.Error("expected error for empty dir")
+	}
+	resetCheckConfigFlags()
+	configDir = filepath.Join(dir, "missing")
+	if _, err := checkConfigFiles(); err == nil {
+		t.Error("expected error for missing dir")
+	}
+}

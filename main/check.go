@@ -26,7 +26,7 @@ import (
 	"github.com/xtls/xray-core/main/confloader"
 )
 
-const defaultCheckConfDir = "/etc/xray/conf.d"
+const defaultCheckConfDir = "/usr/local/etc/xray"
 
 var cmdCheck = &base.Command{
 	UsageLine:   "{{.Exec}} check [-c config.json] [-confdir dir] [-format fmt] [-list file] [--set path=value]... <tag> [<ip>] <count> <interval>",
@@ -49,9 +49,14 @@ Arguments:
 The -list=file flag checks every IP from the file, one per line.
 Empty lines and lines starting with # are skipped.
 
-Config: -config=file, -c=file, -confdir=dir and -format=fmt work
-as in "run". If none of -c and -confdir is given, the default
--confdir ` + defaultCheckConfDir + ` is used.
+Config: -config=file (-c=file) and -confdir=dir select the config
+as in "run"; -format=fmt sets its format. If none of -c and -confdir
+is given, -confdir ` + defaultCheckConfDir + ` is used. A config dir may
+hold one file (config.json) or a config split into several files
+(00_log.json, 01_api.json, ...): all *.json, *.jsonc, *.toml, *.yaml
+and *.yml files of the dir are merged in name order, as "run" does.
+The config is never read from stdin. Loaded files are printed to
+stderr.
 
 The config must contain burstObservatory with pingConfig (its
 destination, timeout and httpMethod are used). Inbounds, routing,
@@ -139,10 +144,11 @@ func runCheck(args []string) error {
 	}
 	interval := time.Duration(sec * float64(time.Second))
 
-	if len(configFiles) == 0 && configDir == "" {
-		configDir = defaultCheckConfDir
+	files, err := checkConfigFiles()
+	if err != nil {
+		return err
 	}
-	files := getConfigFilePath(false)
+	fmt.Fprintln(os.Stderr, "config:", strings.Join(files, ", "))
 	// do not read or overwrite the saved results of a running xray
 	burst.DisablePersistence = true
 
@@ -166,6 +172,25 @@ func runCheck(args []string) error {
 		return fmt.Errorf("%d of %d checks could not run", failed, len(ips))
 	}
 	return nil
+}
+
+// checkConfigFiles returns the config files for check: -c files and the
+// files of -confdir, or of defaultCheckConfDir when neither is given.
+// Unlike "run" it never falls back to stdin.
+func checkConfigFiles() ([]string, error) {
+	if len(configFiles) == 0 && configDir == "" {
+		configDir = defaultCheckConfDir
+	}
+	if configDir != "" {
+		if !dirExists(configDir) {
+			return nil, fmt.Errorf("config dir %s not found, use -c file or -confdir dir", configDir)
+		}
+		readConfDir(configDir)
+	}
+	if len(configFiles) == 0 {
+		return nil, fmt.Errorf("no config files (*.json, *.jsonc, *.toml, *.yaml, *.yml) in %s, use -c file or -confdir dir", configDir)
+	}
+	return configFiles, nil
 }
 
 func readIPList(file string) ([]string, error) {
