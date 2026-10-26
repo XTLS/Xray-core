@@ -22,6 +22,7 @@ import (
 )
 
 const idleTimeout = 30 * time.Second
+const maxDownloadSize int64 = 256 * 1024 * 1024
 
 // DO NOT EDIT. Ignored by geodata, rejected by Lua.
 const luaGuardHeader = "\x12\x01\x00"
@@ -216,13 +217,18 @@ func (d *downloader) fetch(rawURL string, writer io.Writer) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		io.Copy(io.Discard, resp.Body)
 		return errors.New("unexpected status code: ", resp.StatusCode)
 	}
+	if resp.ContentLength > maxDownloadSize {
+		return errors.New("geodata download exceeds 256 MiB")
+	}
 
-	n, err := io.Copy(writer, resp.Body)
+	n, err := io.Copy(writer, io.LimitReader(resp.Body, maxDownloadSize+1))
 	if err != nil {
 		return err
+	}
+	if n > maxDownloadSize {
+		return errors.New("geodata download exceeds 256 MiB")
 	}
 	if n == 0 {
 		return errors.New("empty response body")
