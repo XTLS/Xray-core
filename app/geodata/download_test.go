@@ -7,10 +7,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	commongeodata "github.com/xtls/xray-core/common/geodata"
 	xlua "github.com/xtls/xray-core/common/lua"
+	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/core"
 	"github.com/yuin/gopher-lua/parse"
 	"google.golang.org/protobuf/proto"
 )
@@ -67,6 +70,44 @@ func TestDownloadOneLuaGuard(t *testing.T) {
 				if _, err := commongeodata.ParseDomainRules([]string{"ext:" + filepath.Base(staged.target) + ":" + tc.code}, commongeodata.Domain_Full); err != nil {
 					t.Fatalf("geodata loader rejected the header: %v", err)
 				}
+			}
+		})
+	}
+}
+
+func TestProtobufConfigValidation(t *testing.T) {
+	server, err := core.New(&core.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = server.Close() })
+	for _, tc := range []struct {
+		name      string
+		config    *Config
+		wantError string
+	}{
+		{"minutely cron", &Config{Cron: "* * * * *"}, ""},
+		{"minimum interval", &Config{Cron: "@every 1m"}, ""},
+		{"short interval", &Config{Cron: "@every 59s"}, "interval must be at least 1 minute"},
+		{"fractional interval", &Config{Cron: "@every 59.999s"}, "interval must be at least 1 minute"},
+		{"invalid cron", &Config{Cron: "invalid"}, "invalid geodata cron"},
+		{"dat extension", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "asset.dat"}}}, ""},
+		{"uppercase extension", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "asset.DAT"}}}, ""},
+		{"invalid extension", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "asset.lua"}}}, "extension must be .dat"},
+		{"missing extension", &Config{Cron: "@daily", Assets: []*Asset{{Url: "https://example.com/asset.dat", File: "asset"}}}, "extension must be .dat"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := serial.ToTypedMessage(tc.config).GetInstance()
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = core.CreateObject(server, config)
+			if tc.wantError == "" {
+				if err != nil {
+					t.Fatal(err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("CreateObject() error = %v; want %q", err, tc.wantError)
 			}
 		})
 	}
