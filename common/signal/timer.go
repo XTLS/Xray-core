@@ -3,11 +3,7 @@ package signal
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
-
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/task"
 )
 
 type ActivityUpdater interface {
@@ -17,10 +13,10 @@ type ActivityUpdater interface {
 type ActivityTimer struct {
 	mu        sync.RWMutex
 	updated   chan struct{}
-	checkTask *task.Periodic
+	checker   *time.Timer
+	timeout   time.Duration
 	onTimeout func()
-	consumed  atomic.Bool
-	once      sync.Once
+	consumed  bool
 }
 
 func (t *ActivityTimer) Update() {
@@ -30,30 +26,29 @@ func (t *ActivityTimer) Update() {
 	}
 }
 
-func (t *ActivityTimer) check() error {
+func (t *ActivityTimer) check() bool {
 	select {
 	case <-t.updated:
+		return true
 	default:
 		t.finish()
+		return false
 	}
-	return nil
 }
 
 func (t *ActivityTimer) finish() {
-	t.once.Do(func() {
-		t.consumed.Store(true)
-		t.mu.Lock()
-		defer t.mu.Unlock()
-
-		common.CloseIfExists(t.checkTask)
-		t.onTimeout()
-	})
+	t.mu.Lock()
+	if t.consumed {
+		t.mu.Unlock()
+		return
+	}
+	t.checker.Stop()
+	t.consumed = true
+	t.mu.Unlock()
+	t.onTimeout()
 }
 
 func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
-	if t.consumed.Load() {
-		return
-	}
 	if timeout == 0 {
 		t.finish()
 		return
@@ -61,25 +56,31 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	// double check, just in case
-	if t.consumed.Load() {
+	if t.consumed {
 		return
 	}
-	newCheckTask := &task.Periodic{
-		Interval: timeout,
-		Execute:  t.check,
-	}
-	common.CloseIfExists(t.checkTask)
-	t.checkTask = newCheckTask
-	t.Update()
-	common.Must(newCheckTask.Start())
+	t.timeout = timeout
+	t.checker.Reset(timeout)
 }
 
 func CancelAfterInactivity(ctx context.Context, cancel context.CancelFunc, timeout time.Duration) *ActivityTimer {
 	timer := &ActivityTimer{
 		updated:   make(chan struct{}, 1),
 		onTimeout: cancel,
+		timeout:   timeout,
 	}
-	timer.SetTimeout(timeout)
+	timer.checker = time.AfterFunc(timeout, func() {
+		if timer.check() {
+			timer.mu.Lock()
+			defer timer.mu.Unlock()
+			if timer.consumed {
+				return
+			}
+			timer.checker.Reset(timer.timeout)
+		}
+	})
+	if timeout == 0 {
+		timer.SetTimeout(0)
+	}
 	return timer
 }
