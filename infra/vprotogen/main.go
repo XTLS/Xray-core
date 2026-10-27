@@ -19,7 +19,10 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 )
 
-var directory = flag.String("pwd", "", "Working directory of Xray vprotogen.")
+var (
+	directory = flag.String("pwd", "", "Working directory of Xray vprotogen.")
+	mode      = flag.String("mode", "generate", "Execution mode. 'generate' (default) compiles and saves changes. 'check' reports out-of-date files and exits with non-zero.")
+)
 
 // topoSort sorts file descriptors so each dependency appears before files importing it.
 func topoSort(files []protoreflect.FileDescriptor) []*descriptorpb.FileDescriptorProto {
@@ -98,6 +101,21 @@ func main() {
 	}
 	pwd := *directory
 
+	isCheck := false
+	switch *mode {
+	case "generate", "":
+		isCheck = false
+	case "check":
+		isCheck = true
+	default:
+		fmt.Fprintf(os.Stderr, "Unrecognized 'mode': %s. Use 'generate' or 'check'.\n", *mode)
+		os.Exit(1)
+	}
+
+	if isCheck {
+		fmt.Println("Checking for out-of-date Protobuf generated files...")
+	}
+
 	var protoFiles []string
 	err := filepath.WalkDir(pwd, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -147,6 +165,7 @@ func main() {
 		},
 	}
 
+	var diffCount int
 	for _, plugin := range []string{"protoc-gen-go", "protoc-gen-go-grpc"} {
 		resp, err := runPlugin(plugin, pwd, req)
 		if err != nil {
@@ -158,26 +177,48 @@ func main() {
 			targetPath := filepath.Join(pwd, filepath.FromSlash(f.GetName()))
 			content := []byte(f.GetContent())
 
-			if existing, err := os.ReadFile(targetPath); err == nil {
+			hasDiff := false
+			existing, err := os.ReadFile(targetPath)
+			if err != nil {
+				hasDiff = true
+			} else {
 				oldNorm := bytes.ReplaceAll(existing, []byte("\r\n"), []byte("\n"))
 				newNorm := bytes.ReplaceAll(content, []byte("\r\n"), []byte("\n"))
-				if bytes.Equal(oldNorm, newNorm) {
-					continue
+				if !bytes.Equal(oldNorm, newNorm) {
+					hasDiff = true
 				}
 			}
 
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
-				os.Exit(1)
-			}
-			mode := os.FileMode(0o644)
-			if stat, err := os.Stat(targetPath); err == nil {
-				mode = stat.Mode().Perm()
-			}
-			if err := os.WriteFile(targetPath, content, mode); err != nil {
-				fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", targetPath, err)
-				os.Exit(1)
+			if hasDiff {
+				diffCount++
+				fmt.Println(targetPath)
+
+				if isCheck {
+					continue
+				}
+
+				if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+					fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
+					os.Exit(1)
+				}
+				mode := os.FileMode(0o644)
+				if stat, err := os.Stat(targetPath); err == nil {
+					mode = stat.Mode().Perm()
+				}
+				if err := os.WriteFile(targetPath, content, mode); err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", targetPath, err)
+					os.Exit(1)
+				}
 			}
 		}
+	}
+
+	if isCheck {
+		if diffCount > 0 {
+			fmt.Println("Protobuf generated file problem(s) found.")
+			fmt.Println("Please run 'go run ./infra/vprotogen' to regenerate them.")
+			os.Exit(1)
+		}
+		fmt.Println("All Protobuf generated file check has been passed.")
 	}
 }
