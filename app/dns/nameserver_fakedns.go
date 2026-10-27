@@ -26,12 +26,21 @@ func (s *FakeDNSServer) IsDisableCache() bool {
 }
 
 func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, opt dns.IPOption) ([]net.IP, uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	if f.fakeDNSEngine == nil {
 		return nil, 0, errors.New("Unable to locate a fake DNS Engine")
 	}
 
 	var ips []net.Address
-	if fkr0, ok := f.fakeDNSEngine.(dns.FakeDNSEngineRev0); ok {
+	if engine, ok := f.fakeDNSEngine.(dns.FakeDNSEngineContext); ok {
+		var err error
+		ips, err = engine.Allocate(ctx, domain, opt.IPv4Enable, opt.IPv6Enable)
+		if err != nil {
+			return nil, 0, err
+		}
+	} else if fkr0, ok := f.fakeDNSEngine.(dns.FakeDNSEngineRev0); ok {
 		ips = fkr0.GetFakeIPForDomain3(domain, opt.IPv4Enable, opt.IPv6Enable)
 	} else {
 		ips = f.fakeDNSEngine.GetFakeIPForDomain(domain)

@@ -16,12 +16,18 @@ type FakeDNSPoolElementConfig struct {
 }
 
 type FakeDNSConfig struct {
-	pool  *FakeDNSPoolElementConfig
-	pools []*FakeDNSPoolElementConfig
+	pool   *FakeDNSPoolElementConfig
+	pools  []*FakeDNSPoolElementConfig
+	remote *fakedns.RemoteConfig
 }
 
 // MarshalJSON implements encoding/json.Marshaler.MarshalJSON
 func (f *FakeDNSConfig) MarshalJSON() ([]byte, error) {
+	if f.remote != nil && f.pool == nil && f.pools == nil {
+		return json.Marshal(struct {
+			Remote *fakedns.RemoteConfig `json:"remote"`
+		}{f.remote})
+	}
 	if (f.pool != nil) != (f.pools != nil) {
 		if f.pool != nil {
 			return json.Marshal(f.pool)
@@ -34,6 +40,31 @@ func (f *FakeDNSConfig) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements encoding/json.Unmarshaler.UnmarshalJSON
 func (f *FakeDNSConfig) UnmarshalJSON(data []byte) error {
+	// Reset the union when a configuration object is decoded more than once.
+	*f = FakeDNSConfig{}
+	var object map[string]json.RawMessage
+	var remoteJSON json.RawMessage
+	if json.Unmarshal(data, &object) == nil {
+		for key, value := range object {
+			if strings.EqualFold(key, "remote") {
+				remoteJSON = value
+			}
+		}
+	}
+	if remoteJSON != nil {
+		if len(object) != 1 || string(remoteJSON) == "null" {
+			return errors.New("remote FakeDNS cannot have local pool settings")
+		}
+		var remote fakedns.RemoteConfig
+		if err := json.Unmarshal(remoteJSON, &remote); err != nil {
+			return err
+		}
+		if remote.Address == "" {
+			return errors.New("remote FakeDNS requires an address")
+		}
+		f.remote = &remote
+		return nil
+	}
 	var pool FakeDNSPoolElementConfig
 	var pools []*FakeDNSPoolElementConfig
 	switch {
@@ -48,6 +79,9 @@ func (f *FakeDNSConfig) UnmarshalJSON(data []byte) error {
 }
 
 func (f *FakeDNSConfig) Build() (*fakedns.FakeDnsPoolMulti, error) {
+	if f.remote != nil {
+		return &fakedns.FakeDnsPoolMulti{Remote: f.remote}, nil
+	}
 	fakeDNSPool := fakedns.FakeDnsPoolMulti{}
 
 	if f.pool != nil {
@@ -60,6 +94,9 @@ func (f *FakeDNSConfig) Build() (*fakedns.FakeDnsPoolMulti, error) {
 
 	if f.pools != nil {
 		for _, v := range f.pools {
+			if v == nil {
+				return nil, errors.New("FakeDNS pool cannot be null")
+			}
 			fakeDNSPool.Pools = append(fakeDNSPool.Pools, &fakedns.FakeDnsPool{IpPool: v.IPPool, LruSize: v.LRUSize})
 		}
 		return &fakeDNSPool, nil

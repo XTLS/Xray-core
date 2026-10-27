@@ -13,4 +13,13 @@ message FakeDnsPool{
 
 message FakeDnsPoolMulti{
   repeated FakeDnsPool pools = 1;
+  // Mutually exclusive with local pools. Uses FakeDNSService on another core.
+  RemoteConfig remote = 2;
+}
+
+message RemoteConfig {
+  // Local endpoint: loopback IP:port or an absolute unix: socket path.
+  string address = 1;
+  // Per-call deadline in milliseconds. Zero uses 2000 ms.
+  uint32 timeout = 2;
 }

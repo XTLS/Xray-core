@@ -27,10 +27,22 @@ func newFakeDNSSniffer(ctx context.Context) (protocolSnifferWithMetadata, error)
 		return protocolSnifferWithMetadata{}, errNotInit
 	}
 	return protocolSnifferWithMetadata{protocolSniffer: func(ctx context.Context, bytes []byte) (SniffResult, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		outbounds := session.OutboundsFromContext(ctx)
 		ob := outbounds[len(outbounds)-1]
 		if ob.Target.Network == net.Network_TCP || ob.Target.Network == net.Network_UDP {
-			domainFromFakeDNS := fakeDNSEngine.GetDomainFromFakeDNS(ob.Target.Address)
+			var domainFromFakeDNS string
+			if engine, ok := fakeDNSEngine.(dns.FakeDNSEngineContext); ok {
+				var err error
+				domainFromFakeDNS, err = engine.ReverseLookup(ctx, ob.Target.Address)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				domainFromFakeDNS = fakeDNSEngine.GetDomainFromFakeDNS(ob.Target.Address)
+			}
 			if domainFromFakeDNS != "" {
 				errors.LogInfo(ctx, "fake dns got domain: ", domainFromFakeDNS, " for ip: ", ob.Target.Address.String())
 				return &fakeDNSSniffResult{domainName: domainFromFakeDNS}, nil

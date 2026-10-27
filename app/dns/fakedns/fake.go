@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/app/dns/fakedns/remote"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/cache"
 	"github.com/xtls/xray-core/common/errors"
@@ -23,16 +24,32 @@ type Holder struct {
 }
 
 func (fkdns *Holder) IsIPInIPPool(ip net.Address) bool {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
 	if ip.Family().IsDomain() {
 		return false
 	}
-	return fkdns.ipRange.Contains(ip.IP())
+	return fkdns.ipRange != nil && fkdns.ipRange.Contains(ip.IP())
+}
+
+func (fkdns *Holder) GetFakeIPRanges() []string {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
+	if fkdns.ipRange == nil {
+		return nil
+	}
+	return []string{fkdns.ipRange.String()}
 }
 
 func (fkdns *Holder) GetFakeIPForDomain3(domain string, ipv4, ipv6 bool) []net.Address {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
+	if fkdns.ipRange == nil {
+		return nil
+	}
 	isIPv6 := fkdns.ipRange.IP.To4() == nil
 	if (isIPv6 && ipv6) || (!isIPv6 && ipv4) {
-		return fkdns.GetFakeIPForDomain(domain)
+		return fkdns.getFakeIPForDomain(domain)
 	}
 	return []net.Address{}
 }
@@ -76,6 +93,8 @@ func (fkdns *Holder) initializeFromConfig() error {
 }
 
 func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
 	var ipRange *net.IPNet
 	var err error
 
@@ -97,6 +116,13 @@ func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
 func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	fkdns.mu.Lock()
 	defer fkdns.mu.Unlock()
+	return fkdns.getFakeIPForDomain(domain)
+}
+
+func (fkdns *Holder) getFakeIPForDomain(domain string) []net.Address {
+	if fkdns.ipRange == nil {
+		return nil
+	}
 	if v, ok := fkdns.domainToIP.Get(domain); ok {
 		return []net.Address{v.(net.Address)}
 	}
@@ -109,8 +135,9 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	bigIntIP := big.NewInt(0).SetBytes(fkdns.ipRange.IP)
 	bigIntIP = bigIntIP.Add(bigIntIP, new(big.Int).SetUint64(currentTimeMillis))
 	var ip net.Address
+	address := make([]byte, len(fkdns.ipRange.IP))
 	for {
-		ip = net.IPAddress(bigIntIP.Bytes())
+		ip = net.IPAddress(bigIntIP.FillBytes(address))
 
 		// if we run for a long time, we may go back to beginning and start seeing the IP in use
 		if _, ok := fkdns.domainToIP.PeekKeyFromValue(ip); !ok {
@@ -118,7 +145,7 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 		}
 
 		bigIntIP = bigIntIP.Add(bigIntIP, big.NewInt(1))
-		if !fkdns.ipRange.Contains(bigIntIP.Bytes()) {
+		if bigIntIP.BitLen() > bits || !fkdns.ipRange.Contains(bigIntIP.FillBytes(address)) {
 			bigIntIP = big.NewInt(0).SetBytes(fkdns.ipRange.IP)
 		}
 	}
@@ -128,12 +155,17 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 
 // GetDomainFromFakeDNS checks if an IP is a fake IP and have corresponding domain name
 func (fkdns *Holder) GetDomainFromFakeDNS(ip net.Address) string {
-	if !ip.Family().IsIP() || !fkdns.ipRange.Contains(ip.IP()) {
+	fkdns.mu.Lock()
+	if !ip.Family().IsIP() || fkdns.ipRange == nil || !fkdns.ipRange.Contains(ip.IP()) {
+		fkdns.mu.Unlock()
 		return ""
 	}
-	if k, ok := fkdns.domainToIP.GetKeyFromValue(ip); ok {
+	k, ok := fkdns.domainToIP.GetKeyFromValue(ip)
+	fkdns.mu.Unlock()
+	if ok {
 		return k.(string)
 	}
+	// Log handlers may inspect the pool; do not invoke them under mu.
 	errors.LogInfo(context.Background(), "A fake ip request to ", ip, ", however there is no matching domain name in fake DNS")
 	return ""
 }
@@ -142,6 +174,18 @@ type HolderMulti struct {
 	holders []*Holder
 
 	config *FakeDnsPoolMulti
+}
+
+func (h *HolderMulti) GetFakeIPRanges() []string {
+	var pools []string
+	for _, holder := range h.holders {
+		ranges := holder.GetFakeIPRanges()
+		if len(ranges) == 0 {
+			return nil
+		}
+		pools = append(pools, ranges...)
+	}
+	return pools
 }
 
 func (h *HolderMulti) IsIPInIPPool(ip net.Address) bool {
@@ -236,6 +280,13 @@ func init() {
 	}))
 
 	common.Must(common.RegisterConfig((*FakeDnsPoolMulti)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
+		cfg := config.(*FakeDnsPoolMulti)
+		if cfg.Remote != nil {
+			if len(cfg.Pools) != 0 {
+				return nil, errors.New("remote FakeDNS cannot have local pools")
+			}
+			return remote.New(ctx, cfg.Remote.Address, cfg.Remote.Timeout)
+		}
 		var f *HolderMulti
 		var err error
 		if f, err = NewFakeDNSHolderMulti(config.(*FakeDnsPoolMulti)); err != nil {

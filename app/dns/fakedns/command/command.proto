@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package xray.app.dns.fakedns.command;
+option csharp_namespace = "Xray.App.Dns.Fakedns.Command";
+option go_package = "github.com/xtls/xray-core/app/dns/fakedns/command";
+option java_package = "com.xray.app.dns.fakedns.command";
+option java_multiple_files = true;
+
+message Config {}
+
+message GetPoolsRequest {}
+message GetPoolsResponse {
+  repeated string ip_pools = 1;
+}
+
+message AllocateRequest {
+  string domain = 1;
+  bool ipv4 = 2;
+  bool ipv6 = 3;
+}
+message AllocateResponse {
+  // Network byte order: exactly 4 or 16 bytes per address.
+  repeated bytes ips = 1;
+}
+
+message ReverseLookupRequest {
+  bytes ip = 1;
+}
+message ReverseLookupResponse {
+  // Empty for an unknown or evicted mapping; this call never allocates.
+  string domain = 1;
+}
+
+// Operates on the same bounded allocator used by local DNS and sniffing.
+// Clients must use a single authority for overlapping address pools.
+service FakeDNSService {
+  rpc GetPools(GetPoolsRequest) returns (GetPoolsResponse) {}
+  rpc Allocate(AllocateRequest) returns (AllocateResponse) {}
+  rpc ReverseLookup(ReverseLookupRequest) returns (ReverseLookupResponse) {}
+}

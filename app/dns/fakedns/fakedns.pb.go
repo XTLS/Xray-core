@@ -74,8 +74,10 @@ func (x *FakeDnsPool) GetLruSize() int64 {
 }
 
 type FakeDnsPoolMulti struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Pools         []*FakeDnsPool         `protobuf:"bytes,1,rep,name=pools,proto3" json:"pools,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Pools []*FakeDnsPool         `protobuf:"bytes,1,rep,name=pools,proto3" json:"pools,omitempty"`
+	// Mutually exclusive with local pools. Uses FakeDNSService on another core.
+	Remote        *RemoteConfig `protobuf:"bytes,2,opt,name=remote,proto3" json:"remote,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -117,6 +119,67 @@ func (x *FakeDnsPoolMulti) GetPools() []*FakeDnsPool {
 	return nil
 }
 
+func (x *FakeDnsPoolMulti) GetRemote() *RemoteConfig {
+	if x != nil {
+		return x.Remote
+	}
+	return nil
+}
+
+type RemoteConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Local endpoint: loopback IP:port or an absolute unix: socket path.
+	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	// Per-call deadline in milliseconds. Zero uses 2000 ms.
+	Timeout       uint32 `protobuf:"varint,2,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoteConfig) Reset() {
+	*x = RemoteConfig{}
+	mi := &file_app_dns_fakedns_fakedns_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoteConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoteConfig) ProtoMessage() {}
+
+func (x *RemoteConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_app_dns_fakedns_fakedns_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoteConfig.ProtoReflect.Descriptor instead.
+func (*RemoteConfig) Descriptor() ([]byte, []int) {
+	return file_app_dns_fakedns_fakedns_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RemoteConfig) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *RemoteConfig) GetTimeout() uint32 {
+	if x != nil {
+		return x.Timeout
+	}
+	return 0
+}
+
 var File_app_dns_fakedns_fakedns_proto protoreflect.FileDescriptor
 
 const file_app_dns_fakedns_fakedns_proto_rawDesc = "" +
@@ -124,9 +187,13 @@ const file_app_dns_fakedns_fakedns_proto_rawDesc = "" +
 	"\x1dapp/dns/fakedns/fakedns.proto\x12\x14xray.app.dns.fakedns\"@\n" +
 	"\vFakeDnsPool\x12\x17\n" +
 	"\aip_pool\x18\x01 \x01(\tR\x06ipPool\x12\x18\n" +
-	"\alruSize\x18\x02 \x01(\x03R\alruSize\"K\n" +
+	"\alruSize\x18\x02 \x01(\x03R\alruSize\"\x87\x01\n" +
 	"\x10FakeDnsPoolMulti\x127\n" +
-	"\x05pools\x18\x01 \x03(\v2!.xray.app.dns.fakedns.FakeDnsPoolR\x05poolsB^\n" +
+	"\x05pools\x18\x01 \x03(\v2!.xray.app.dns.fakedns.FakeDnsPoolR\x05pools\x12:\n" +
+	"\x06remote\x18\x02 \x01(\v2\".xray.app.dns.fakedns.RemoteConfigR\x06remote\"B\n" +
+	"\fRemoteConfig\x12\x18\n" +
+	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x18\n" +
+	"\atimeout\x18\x02 \x01(\rR\atimeoutB^\n" +
 	"\x18com.xray.app.dns.fakednsP\x01Z)github.com/xtls/xray-core/app/dns/fakedns\xaa\x02\x14Xray.App.Dns.Fakednsb\x06proto3"
 
 var (
@@ -141,18 +208,20 @@ func file_app_dns_fakedns_fakedns_proto_rawDescGZIP() []byte {
 	return file_app_dns_fakedns_fakedns_proto_rawDescData
 }
 
-var file_app_dns_fakedns_fakedns_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_app_dns_fakedns_fakedns_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_app_dns_fakedns_fakedns_proto_goTypes = []any{
 	(*FakeDnsPool)(nil),      // 0: xray.app.dns.fakedns.FakeDnsPool
 	(*FakeDnsPoolMulti)(nil), // 1: xray.app.dns.fakedns.FakeDnsPoolMulti
+	(*RemoteConfig)(nil),     // 2: xray.app.dns.fakedns.RemoteConfig
 }
 var file_app_dns_fakedns_fakedns_proto_depIdxs = []int32{
 	0, // 0: xray.app.dns.fakedns.FakeDnsPoolMulti.pools:type_name -> xray.app.dns.fakedns.FakeDnsPool
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 1: xray.app.dns.fakedns.FakeDnsPoolMulti.remote:type_name -> xray.app.dns.fakedns.RemoteConfig
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_app_dns_fakedns_fakedns_proto_init() }
@@ -166,7 +235,7 @@ func file_app_dns_fakedns_fakedns_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_dns_fakedns_fakedns_proto_rawDesc), len(file_app_dns_fakedns_fakedns_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

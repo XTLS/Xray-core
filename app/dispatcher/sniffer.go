@@ -98,8 +98,11 @@ func (s *Sniffer) SniffMetadata(c context.Context) (SniffResult, error) {
 			pendingSniffer = append(pendingSniffer, si)
 			continue
 		}
+		if err != nil {
+			return nil, err
+		}
 
-		if err == nil && result != nil {
+		if result != nil {
 			return result, nil
 		}
 	}
