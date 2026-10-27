@@ -65,9 +65,26 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 	if t.consumed.Load() {
 		return
 	}
+	// Periodic.Start runs Execute once synchronously, here, while t.mu is
+	// held. If a check of the task being replaced is still in flight it can
+	// take the token posted by Update below; check would then call finish,
+	// which locks t.mu again: a self-deadlock that leaks the connection's
+	// handler. The synchronous first run only drains the token and never
+	// calls check (later runs happen on the timer, after t.mu is released).
+	first := true
 	newCheckTask := &task.Periodic{
 		Interval: timeout,
-		Execute:  t.check,
+		Execute: func() error {
+			if first {
+				first = false
+				select {
+				case <-t.updated:
+				default:
+				}
+				return nil
+			}
+			return t.check()
+		},
 	}
 	common.CloseIfExists(t.checkTask)
 	t.checkTask = newCheckTask
