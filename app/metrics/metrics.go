@@ -16,6 +16,7 @@ import (
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
 	feature_stats "github.com/xtls/xray-core/features/stats"
@@ -155,6 +156,11 @@ func (p *MetricsHandler) handleDebugVars(w http.ResponseWriter, r *http.Request)
 	})
 	vars["stats"] = marshalJSON(p.stats())
 	vars["observatory"] = marshalJSON(p.observatoryStatus())
+	if provider, ok := core.MustFromContext(p.ctx).GetFeature((*dns.FakeDNSEngine)(nil)).(dns.FakeDNSStatsProvider); ok {
+		if stats := provider.GetFakeDNSStats(); stats != nil {
+			vars["fakeDns"] = marshalJSON(stats)
+		}
+	}
 
 	payload, err := json.Marshal(vars)
 	if err != nil {

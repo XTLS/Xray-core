@@ -37,6 +37,14 @@ func NewLru(cap int) Lru {
 	}
 }
 
+// Usage snapshots occupancy without enumerating entries or changing recency.
+// It is optional on Lru, preserving compatibility with other implementations.
+func (l *lru) Usage() (used, capacity int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.doubleLinkedlist.Len(), l.capacity
+}
+
 func (l *lru) Get(key interface{}) (value interface{}, ok bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

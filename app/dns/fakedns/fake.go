@@ -76,6 +76,8 @@ func (fkdns *Holder) initializeFromConfig() error {
 }
 
 func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
+	fkdns.mu.Lock()
+	defer fkdns.mu.Unlock()
 	var ipRange *net.IPNet
 	var err error
 
