@@ -229,14 +229,19 @@ func (h *Handler) blockDelay(rule *FinalRule) time.Duration {
 func (h *Handler) blackhole(ctx context.Context, input buf.Reader, output buf.Writer, rule *FinalRule, dest *net.Destination) error {
 	delay := h.blockDelay(rule)
 	errors.LogInfo(ctx, "blocked target: ", *dest, ", blackholing connection for ", delay)
-	timer := time.AfterFunc(delay, func() {
+	defer common.Close(output)
+	done := make(chan struct{})
+	go func() { // a DispatchLink inbound's reader ignores Interrupt, so don't wait for this copy
+		_ = buf.Copy(input, buf.Discard)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(delay):
 		common.Interrupt(input)
 		common.Interrupt(output)
 		errors.LogInfo(ctx, "closed blackholed connection to blocked target: ", *dest)
-	})
-	defer timer.Stop()
-	defer common.Close(output)
-	_ = buf.Copy(input, buf.Discard)
+	}
 	return nil
 }
 
