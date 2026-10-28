@@ -34,11 +34,11 @@ func TestDownloadOneLuaGuard(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(dir, "asset.lua"), nil, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte(tc.body))
 			}))
 			defer server.Close()
-			d := &downloader{ctx: context.Background(), httpClient: server.Client()}
+			d := &downloader{ctx: context.Background(), httpsClient: server.Client()}
 			staged, err := d.downloadOne(&Asset{Url: server.URL, File: "asset.lua"})
 			if err != nil {
 				t.Fatal(err)
