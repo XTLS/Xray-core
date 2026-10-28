@@ -36,7 +36,7 @@ func New(ctx context.Context, config *Config) (*Instance, error) {
 		if !strings.EqualFold(filepath.Ext(asset.GetFile()), ".dat") {
 			return nil, errors.New("geodata asset file extension must be .dat")
 		}
-		if _, err := filesystem.StatAsset(asset.GetFile()); err != nil {
+		if _, err := filesystem.ResolveAsset(asset.GetFile()); err != nil {
 			return nil, errors.New("invalid geodata asset file: ", asset.GetFile()).Base(err)
 		}
 	}

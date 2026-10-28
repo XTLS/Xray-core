@@ -3,6 +3,7 @@ package lua
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/main/commands/base"
@@ -32,14 +33,13 @@ func executeSign(cmd *base.Command, args []string) {
 		cmd.Usage()
 	}
 
+	if !strings.EqualFold(filepath.Ext(args[0]), ".lua") {
+		base.Fatalf("Lua file extension must be .lua")
+	}
 	info, err := os.Stat(args[0])
 	if err != nil {
 		base.Fatalf("failed to inspect Lua file: %s", err)
 	}
-	if !info.Mode().IsRegular() {
-		base.Fatalf("Lua input is not a regular file: %s", args[0])
-	}
-
 	code, err := os.ReadFile(args[0])
 	if err != nil {
 		base.Fatalf("failed to read Lua file: %s", err)
@@ -67,14 +67,7 @@ func executeSign(cmd *base.Command, args []string) {
 
 func writeSignedFile(path string, code []byte, mode os.FileMode) error {
 	if info, err := os.Stat(path); err == nil {
-		if !info.Mode().IsRegular() {
-			return &os.PathError{Op: "write", Path: path, Err: os.ErrInvalid}
-		}
 		mode = info.Mode().Perm()
-		path, err = filepath.EvalSymlinks(path)
-		if err != nil {
-			return err
-		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}

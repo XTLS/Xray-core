@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/platform"
@@ -26,14 +27,6 @@ func ReadFile(path string) ([]byte, error) {
 	return buf.ReadAllToBytes(reader)
 }
 
-func ReadAsset(file string) ([]byte, error) {
-	path, _, err := getAssetFileLocation(file)
-	if err != nil {
-		return nil, err
-	}
-	return ReadFile(path)
-}
-
 func OpenAsset(file string) (io.ReadCloser, int64, error) {
 	path, info, err := getAssetFileLocation(file)
 	if err != nil {
@@ -41,11 +34,6 @@ func OpenAsset(file string) (io.ReadCloser, int64, error) {
 	}
 	r, err := NewFileReader(path)
 	return r, info.Size(), err
-}
-
-func StatAsset(file string) (os.FileInfo, error) {
-	_, info, err := getAssetFileLocation(file)
-	return info, err
 }
 
 func ResolveAsset(file string) (string, error) {
@@ -79,17 +67,29 @@ func ReadCert(file string) ([]byte, error) {
 	return ReadFile(platform.GetCertLocation(file))
 }
 
-func CopyFile(dst string, src string) error {
-	bytes, err := ReadFile(src)
-	if err != nil {
-		return err
+// ResolveLuaFile finds a local .lua script and returns its absolute path.
+// Relative paths: XRAY_LOCATION_CONFDIR > XRAY_LOCATION_CONFIG > working dir > executable dir.
+func ResolveLuaFile(path string) (string, error) {
+	if !strings.EqualFold(filepath.Ext(path), ".lua") {
+		return "", errors.New("Lua file extension must be .lua")
 	}
-	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
+	if filepath.IsAbs(path) {
+		return path, nil
 	}
-	defer f.Close()
-
-	_, err = f.Write(bytes)
-	return err
+	for _, dir := range []string{
+		platform.GetConfDirPath(),
+		platform.NewEnvFlag(platform.ConfigLocation).GetValue(func() string { return "" }),
+		".",
+		platform.GetExecutableDir(),
+	} {
+		if dir != "" {
+			resolved := filepath.Join(dir, path)
+			if _, err := os.Stat(resolved); err == nil {
+				return filepath.Abs(resolved)
+			} else if !os.IsNotExist(err) {
+				return "", err
+			}
+		}
+	}
+	return "", os.ErrNotExist
 }
