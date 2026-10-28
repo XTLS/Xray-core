@@ -2,6 +2,8 @@ package internet
 
 import (
 	"context"
+	go_errors "errors"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -92,6 +94,16 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
 			}
 		}
 		packetConn, err := lc.ListenPacket(ctx, srcAddr.Network(), srcAddr.String())
+		var bindErr *BindError
+		if err != nil && runtime.GOOS == "windows" && go_errors.As(err, &bindErr) {
+			// Keep dual-stack UDP when possible. If the interface cannot bind both
+			// families, retry a socket that cannot send on the unbound family.
+			network := "udp6"
+			if destAddr.IP.To4() != nil {
+				network = "udp4"
+			}
+			packetConn, err = lc.ListenPacket(ctx, network, srcAddr.String())
+		}
 		if err != nil {
 			return nil, err
 		}
