@@ -369,6 +369,8 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
 					if w.trafficState.EnableXtls {
 						*switchToDirectCopy = true
+						// this may be the last write, so suppress close_notify before sending Direct
+						SuppressOuterCloseNotify(w.conn)
 					}
 					var command byte = CommandPaddingContinue
 					if i == len(mb)-1 {

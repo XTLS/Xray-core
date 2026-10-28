@@ -1,6 +1,8 @@
 package scenarios
 
 import (
+	"bytes"
+	gotls "crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -507,6 +509,150 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 	}
 	if err := errg.Wait(); err != nil {
 		t.Error(err)
+	}
+}
+
+// tapConn keeps a copy of what passes through a connection. Once hold is set,
+// writes wait for Close and leave in one piece.
+type tapConn struct {
+	net.Conn
+	read, written, held bytes.Buffer
+	hold                bool
+}
+
+func (c *tapConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	c.read.Write(b[:n])
+	return n, err
+}
+
+func (c *tapConn) Write(b []byte) (int, error) {
+	c.written.Write(b)
+	if c.hold {
+		return c.held.Write(b)
+	}
+	return c.Conn.Write(b)
+}
+
+func (c *tapConn) Close() error {
+	if c.held.Len() > 0 {
+		c.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) // crypto/tls sets it to now after its close_notify
+		c.Conn.Write(c.held.Bytes())
+	}
+	return c.Conn.Close()
+}
+
+// The target answers and closes in one TCP write, so the server sends Direct in its last
+// block. The application must read exactly what the target wrote, then EOF.
+func TestVlessXtlsVisionDirectInLastBlock(t *testing.T) {
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+	certPEM, keyPEM := ct.ToPEM()
+	pair, err := gotls.X509KeyPair(certPEM, keyPEM)
+	common.Must(err)
+
+	for _, closeNotify := range []bool{false, true} {
+		t.Run(fmt.Sprint("closeNotify=", closeNotify), func(t *testing.T) {
+			listener, err := net.Listen("tcp", "127.0.0.1:0")
+			common.Must(err)
+			defer listener.Close()
+			wrote := make(chan []byte, 1)
+			go func() {
+				conn, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				conn.SetDeadline(time.Now().Add(10 * time.Second))
+				tap := &tapConn{Conn: conn}
+				target := gotls.Server(tap, &gotls.Config{
+					Certificates: []gotls.Certificate{pair}, MinVersion: gotls.VersionTLS13, SessionTicketsDisabled: true,
+				})
+				if target.Handshake() == nil {
+					tap.hold = true
+					target.Write(make([]byte, 600))
+				}
+				if closeNotify {
+					target.Close()
+				} else {
+					tap.Close()
+				}
+				wrote <- tap.written.Bytes()
+			}()
+			dest := net.TCPDestination(net.LocalHostIP, net.Port(listener.Addr().(*net.TCPAddr).Port))
+
+			userID := protocol.NewID(uuid.New())
+			user := &protocol.User{Account: serial.ToTypedMessage(&vless.Account{Id: userID.String(), Flow: vless.XRV})}
+			serverPort := tcp.PickPort()
+			serverConfig := &core.Config{
+				Inbound: []*core.InboundHandlerConfig{{
+					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+						PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+						Listen:   net.NewIPOrDomain(net.LocalHostIP),
+						StreamSettings: &internet.StreamConfig{
+							ProtocolName: "tcp",
+							SecurityType: serial.GetMessageType(&tls.Config{}),
+							SecuritySettings: []*serial.TypedMessage{serial.ToTypedMessage(&tls.Config{
+								Certificate: []*tls.Certificate{tls.ParseCertificate(ct)},
+							})},
+						},
+					}),
+					ProxySettings: serial.ToTypedMessage(&inbound.Config{Users: []*protocol.User{user}}),
+				}},
+				Outbound: []*core.OutboundHandlerConfig{{
+					ProxySettings: serial.ToTypedMessage(&freedom.Config{
+						FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					}),
+				}},
+			}
+			clientPort := tcp.PickPort()
+			clientConfig := &core.Config{
+				Inbound: []*core.InboundHandlerConfig{{
+					ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+						PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+						Listen:   net.NewIPOrDomain(net.LocalHostIP),
+					}),
+					ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+						RewriteAddress:  net.NewIPOrDomain(dest.Address),
+						RewritePort:     uint32(dest.Port),
+						AllowedNetworks: []net.Network{net.Network_TCP},
+					}),
+				}},
+				Outbound: []*core.OutboundHandlerConfig{{
+					ProxySettings: serial.ToTypedMessage(&outbound.Config{Vnext: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+						User:    user,
+					}}),
+					SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
+						StreamSettings: &internet.StreamConfig{
+							ProtocolName: "tcp",
+							SecurityType: serial.GetMessageType(&tls.Config{}),
+							SecuritySettings: []*serial.TypedMessage{serial.ToTypedMessage(&tls.Config{
+								PinnedPeerCertSha256: [][]byte{ctHash[:]},
+							})},
+						},
+					}),
+				}},
+			}
+			servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+			common.Must(err)
+			defer CloseAllServers(servers)
+
+			conn, err := net.Dial("tcp", "127.0.0.1:"+clientPort.String())
+			common.Must(err)
+			conn.SetDeadline(time.Now().Add(10 * time.Second))
+			app := &tapConn{Conn: conn}
+			defer app.Close()
+			_, tlsErr := io.ReadAll(gotls.Client(app, &gotls.Config{InsecureSkipVerify: true}))
+			_, err = io.Copy(io.Discard, app) // whatever the application's TLS left unread
+			select {
+			case want := <-wrote:
+				if got := app.read.Bytes(); !bytes.Equal(got, want) || tlsErr != nil || err != nil {
+					t.Errorf("read %d bytes, the target wrote %d; TLS: %v; then: %v", len(got), len(want), tlsErr, err)
+				}
+			case <-time.After(10 * time.Second):
+				t.Error("the target did not finish")
+			}
+		})
 	}
 }
 
