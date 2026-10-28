@@ -2,12 +2,16 @@ package buf_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strings"
 	"testing"
+	"testing/iotest"
 
+	"github.com/golang/mock/gomock"
 	"github.com/xtls/xray-core/common"
 	. "github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/testing/mocks"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
@@ -128,4 +132,81 @@ func TestReaderInterface(t *testing.T) {
 	_ = io.Reader(new(BufferedReader))
 	_ = io.ByteReader(new(BufferedReader))
 	_ = io.WriterTo(new(BufferedReader))
+}
+
+func TestBufferedReaderDataError(t *testing.T) {
+	reader := &BufferedReader{Reader: NewReader(iotest.DataErrReader(strings.NewReader("abcd")))}
+	data, err := io.ReadAll(reader)
+	if string(data) != "abcd" || err != nil {
+		t.Fatalf("ReadAll = %q, %v; want abcd, nil", data, err)
+	}
+}
+
+func TestBufferedReaderDataErrorMixedReads(t *testing.T) {
+	reader := &BufferedReader{Reader: NewReader(iotest.DataErrReader(strings.NewReader("abcd")))}
+	if b, err := reader.ReadByte(); b != 'a' || err != nil {
+		t.Fatalf("ReadByte = %q, %v; want a, nil", b, err)
+	}
+	mb, err := reader.ReadAtMost(1)
+	got := mb.String()
+	ReleaseMulti(mb)
+	if got != "b" || err != nil {
+		t.Fatalf("ReadAtMost = %q, %v; want b, nil", got, err)
+	}
+	mb, err = reader.ReadMultiBuffer()
+	got = mb.String()
+	ReleaseMulti(mb)
+	if got != "cd" || (err != nil && err != io.EOF) {
+		t.Fatalf("ReadMultiBuffer = %q, %v; want cd before EOF", got, err)
+	}
+	if _, err := reader.ReadByte(); err != io.EOF {
+		t.Fatalf("ReadByte after data = %v; want EOF", err)
+	}
+}
+
+func TestBufferedReaderDataErrorWriteTo(t *testing.T) {
+	readError := errors.New("read failure")
+	for _, tc := range []struct {
+		name       string
+		err        error
+		readAtMost bool
+	}{{"EOF", io.EOF, false}, {"read error", readError, false}, {"ReadAtMost error", readError, true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			source := mocks.NewReader(gomock.NewController(t))
+			source.EXPECT().Read(gomock.Any()).DoAndReturn(func(p []byte) (int, error) {
+				return copy(p, "abcd"), tc.err
+			}).Times(1)
+			reader := &BufferedReader{Reader: NewReader(source)}
+			var first string
+			var firstErr error
+			if tc.readAtMost {
+				mb, err := reader.ReadAtMost(1)
+				first, firstErr = mb.String(), err
+				ReleaseMulti(mb)
+			} else {
+				var data [1]byte
+				n, err := reader.Read(data[:])
+				first, firstErr = string(data[:n]), err
+			}
+			if first != "a" || firstErr != nil {
+				t.Fatalf("first read = %q, %v; want a, nil", first, firstErr)
+			}
+			var output bytes.Buffer
+			n, err := reader.WriteTo(&output)
+			wantErr := tc.err
+			if wantErr == io.EOF {
+				wantErr = nil
+			}
+			if n != 3 || output.String() != "bcd" || !errors.Is(err, wantErr) {
+				t.Fatalf("WriteTo = %d, %q, %v; want 3, bcd, %v", n, output.String(), err, wantErr)
+			}
+			if wantErr != nil && !IsReadError(err) {
+				t.Errorf("WriteTo error is not classified as a read error: %v", err)
+			}
+			source.EXPECT().Read(gomock.Any()).Return(0, io.EOF).Times(1)
+			if _, err := reader.ReadByte(); err != io.EOF {
+				t.Fatalf("ReadByte after pending error = %v; want underlying EOF", err)
+			}
+		})
+	}
 }
