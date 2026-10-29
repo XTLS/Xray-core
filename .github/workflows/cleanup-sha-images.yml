@@ -1,0 +1,30 @@
+name: Cleanup sha- container images
+
+on:
+  push:
+    branches:
+      - bulk-cleanup-ghcr
+
+# Run the two cleanup workflows one at a time.
+concurrency:
+  group: ghcr-images
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      packages: write
+    steps:
+      # The repository needs Admin access under the package's Manage Actions access.
+      - name: Delete versions with only sha- tags
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        with:
+          package: xray-core
+          use-regex: true
+          delete-tags: '^sha-'
+          # Preserve every non-sha- tag. The colon check avoids matching digests.
+          exclude-tags: '^(?!sha-)[^:]+$'
+          delete-untagged: false
+          dry-run: true
