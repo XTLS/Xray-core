@@ -117,6 +117,7 @@ func main() {
 	}
 
 	var protoFiles []string
+	var pbCount int
 	err := filepath.WalkDir(pwd, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -125,6 +126,9 @@ func main() {
 			rel, _ := filepath.Rel(pwd, path)
 			protoFiles = append(protoFiles, filepath.ToSlash(rel))
 		}
+		if strings.HasSuffix(d.Name(), ".pb.go") {
+			pbCount++
+		}
 		return nil
 	})
 	if err != nil {
@@ -132,6 +136,10 @@ func main() {
 		os.Exit(1)
 	}
 	if len(protoFiles) == 0 {
+		if isCheck && pbCount > 0 {
+			fmt.Fprintf(os.Stderr, "Found %d .pb.go files without any .proto files. Remove these orphaned files.\n", pbCount)
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -166,6 +174,7 @@ func main() {
 	}
 
 	var diffCount int
+	generatedFiles := make(map[string]struct{})
 	for _, plugin := range []string{"protoc-gen-go", "protoc-gen-go-grpc"} {
 		resp, err := runPlugin(plugin, pwd, req)
 		if err != nil {
@@ -175,6 +184,7 @@ func main() {
 
 		for _, f := range resp.File {
 			targetPath := filepath.Join(pwd, filepath.FromSlash(f.GetName()))
+			generatedFiles[targetPath] = struct{}{}
 			content := []byte(f.GetContent())
 
 			hasDiff := false
@@ -214,6 +224,10 @@ func main() {
 	}
 
 	if isCheck {
+		if pbCount != len(generatedFiles) {
+			fmt.Printf("Protobuf file count mismatch: found %d, expected %d. Remove orphaned files and regenerate.\n", pbCount, len(generatedFiles))
+			diffCount++
+		}
 		if diffCount > 0 {
 			fmt.Println("Protobuf generated file problem(s) found.")
 			fmt.Println("Please run 'go run ./infra/vprotogen' to regenerate them.")
