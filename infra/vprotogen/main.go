@@ -135,9 +135,6 @@ func main() {
 		fmt.Println("Walk error:", err)
 		os.Exit(1)
 	}
-	if len(protoFiles) == 0 {
-		return
-	}
 
 	compiler := protocompile.Compiler{
 		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
