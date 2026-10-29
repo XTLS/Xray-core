@@ -6,7 +6,6 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/xtls/xray-core/app/geodata"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/platform/filesystem"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -18,9 +17,6 @@ type GeodataAssetConfig struct {
 func (c *GeodataAssetConfig) Build() (*geodata.Asset, error) {
 	if err := validateHTTPS(c.URL); err != nil {
 		return nil, errors.New("invalid geodata asset url: ", c.URL).Base(err)
-	}
-	if _, err := filesystem.ResolveAsset(c.File); err != nil {
-		return nil, errors.New("invalid geodata asset file: ", c.File).Base(err)
 	}
 	return &geodata.Asset{
 		Url:  c.URL,

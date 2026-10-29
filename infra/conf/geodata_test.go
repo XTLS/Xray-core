@@ -1,7 +1,6 @@
 package conf_test
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/xtls/xray-core/app/geodata"
@@ -9,8 +8,6 @@ import (
 )
 
 func TestGeodataConfig(t *testing.T) {
-	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
-
 	creator := func() Buildable {
 		return new(GeodataConfig)
 	}
@@ -38,27 +35,7 @@ func TestGeodataConfig(t *testing.T) {
 	})
 }
 
-func TestGeodataAssetConfig(t *testing.T) {
-	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
-
-	if _, err := (&GeodataAssetConfig{
-		URL:  "https://example.com/geoip.dat",
-		File: "geoip.dat",
-	}).Build(); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := (&GeodataAssetConfig{
-		URL:  "https://example.com/geoip.dat",
-		File: "missing.dat",
-	}).Build(); err == nil {
-		t.Fatal("expected error")
-	}
-}
-
 func TestGeodataAssetConfigInvalidURL(t *testing.T) {
-	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
-
 	for _, rawURL := range []string{
 		"",
 		"http://example.com/geoip.dat",
