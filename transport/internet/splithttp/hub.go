@@ -126,7 +126,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	h.config.ApplyXPaddingToResponse(writer, config)
 
-	if request.Method == "OPTIONS" {
+	// A real CORS preflight always carries Access-Control-Request-Method. An OPTIONS request without it is an
+	// uplink request (uplinkHTTPMethod: "OPTIONS") and must go through the normal handling below.
+	if request.Method == "OPTIONS" && request.Header.Get("Access-Control-Request-Method") != "" {
 		writer.WriteHeader(http.StatusOK)
 		return
 	}
