@@ -564,11 +564,10 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			Protocols:         protocols,
 			// net/http's server defaults are 1 MiB per connection and per stream,
 			// which caps uplink (stream-up/one, packet-up over a shared h2 conn)
-			// at ~1 MiB per RTT. Match the client side (x/net/http2 transport
-			// uses 1 GiB / 4 MiB). Buffers are only allocated as data arrives.
+			// at ~1 MiB per RTT. Buffers are only allocated as data arrives.
 			HTTP2: &http.HTTP2Config{
-				MaxReceiveBufferPerConnection: 64 << 20,
-				MaxReceiveBufferPerStream:     16 << 20,
+				MaxReceiveBufferPerConnection: 10 << 20,
+				MaxReceiveBufferPerStream:     10 << 20,
 			},
 		}
 		go func() {
