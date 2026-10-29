@@ -661,8 +661,6 @@ func (c *Config) Build() (*core.Config, error) {
 		config.App = append(config.App, serial.ToTypedMessage(dnsApp))
 	}
 
-	config.App = append(config.App, serial.ToTypedMessage(&proxyman.InboundConfig{}))
-
 	if c.Policy != nil {
 		pc, err := c.Policy.Build()
 		if err != nil {
@@ -719,6 +717,9 @@ func (c *Config) Build() (*core.Config, error) {
 		}
 		config.App = append(config.App, serial.ToTypedMessage(r))
 	}
+
+	// Initialize the inbound module last to ensure inbound connections are handled correctly.
+	config.App = append(config.App, serial.ToTypedMessage(&proxyman.InboundConfig{}))
 
 	var inbounds []InboundDetourConfig
 
