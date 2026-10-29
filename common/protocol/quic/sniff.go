@@ -1,10 +1,12 @@
 package quic
 
 import (
+	"cmp"
 	"crypto"
 	"crypto/aes"
 	"encoding/binary"
 	"io"
+	"slices"
 
 	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
@@ -73,6 +75,9 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 
 	// Crypto data separated across packets
 	cryptoLen := int32(0)
+	// Received CRYPTO ranges. Chrome scatters ClientHello fragments across packets
+	// out of order, so cryptoLen alone does not mean the bytes before it arrived.
+	var cryptoSpans []cryptoSpan
 	cryptoDataBuf := buf.NewWithSize(32767)
 	defer cryptoDataBuf.Release()
 	cache := buf.New()
@@ -254,6 +259,7 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 				if _, err := buffer.Read(cryptoDataBuf.BytesRange(offset, currentCryptoLen)); err != nil { // Field: Crypto Data
 					return nil, io.ErrUnexpectedEOF
 				}
+				cryptoSpans = append(cryptoSpans, cryptoSpan{offset, currentCryptoLen})
 			case 0x1c: // CONNECTION_CLOSE frame, only 0x1c is permitted in initial packet
 				if _, err = readShortQUICVarint(buffer); err != nil { // Field: Error Code
 					return nil, io.ErrUnexpectedEOF
@@ -275,8 +281,21 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 			}
 		}
 
+		// Parse only a gap-free ClientHello: unreceived bytes are zeros and can
+		// read as a valid message with an empty server name.
+		received := contiguousPrefix(cryptoSpans)
+		if received < 4 {
+			b = restPayload
+			continue
+		}
+		cryptoData := cryptoDataBuf.BytesRange(0, cryptoLen)
+		helloLen := 4 + (int32(cryptoData[1])<<16 | int32(cryptoData[2])<<8 | int32(cryptoData[3]))
+		if received < helloLen {
+			b = restPayload
+			continue
+		}
 		tlsHdr := &ptls.SniffHeader{}
-		err = ptls.ReadClientHello(cryptoDataBuf.BytesRange(0, cryptoLen), tlsHdr)
+		err = ptls.ReadClientHello(cryptoData[:helloLen], tlsHdr)
 		if err != nil {
 			// The crypto data may have not been fully recovered in current packets,
 			// So we continue to sniff rest packets.
@@ -287,6 +306,23 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 	}
 	// All payload is parsed as valid QUIC packets, but we need more packets for crypto data to read client hello.
 	return nil, protocol.ErrProtoNeedMoreData
+}
+
+type cryptoSpan struct {
+	start, end int32
+}
+
+// contiguousPrefix returns how many CRYPTO bytes from offset 0 have arrived without gaps.
+func contiguousPrefix(spans []cryptoSpan) int32 {
+	slices.SortFunc(spans, func(a, b cryptoSpan) int { return cmp.Compare(a.start, b.start) })
+	prefix := int32(0)
+	for _, s := range spans {
+		if s.start > prefix {
+			break
+		}
+		prefix = max(prefix, s.end)
+	}
+	return prefix
 }
 
 func hkdfExpandLabel(secret []byte, label string, length int) []byte {
