@@ -609,7 +609,6 @@ func (c *Config) Build() (*core.Config, error) {
 	config := &core.Config{
 		App: []*serial.TypedMessage{
 			serial.ToTypedMessage(&dispatcher.Config{}),
-			serial.ToTypedMessage(&proxyman.InboundConfig{}),
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 		},
 	}
@@ -661,6 +660,8 @@ func (c *Config) Build() (*core.Config, error) {
 		}
 		config.App = append(config.App, serial.ToTypedMessage(dnsApp))
 	}
+
+	config.App = append(config.App, serial.ToTypedMessage(&proxyman.InboundConfig{}))
 
 	if c.Policy != nil {
 		pc, err := c.Policy.Build()
