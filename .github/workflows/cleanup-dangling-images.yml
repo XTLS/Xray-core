@@ -1,0 +1,26 @@
+name: Cleanup dangling container images
+
+on:
+  push:
+    branches:
+      - bulk-cleanup-ghcr
+
+# Run the two cleanup workflows one at a time.
+concurrency:
+  group: ghcr-images
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      packages: write
+    steps:
+      # Untagged architecture manifests can still belong to a tagged image.
+      - name: Delete untagged and unreferenced versions
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        with:
+          package: xray-core
+          delete-untagged: true
+          dry-run: true
