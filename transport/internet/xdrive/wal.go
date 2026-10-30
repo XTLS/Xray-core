@@ -230,6 +230,10 @@ func newWALReader(ctx context.Context, storage Storage, prefix string, p params)
 	return r
 }
 
+func (r *walReader) chunks() <-chan []byte {
+	return r.ch
+}
+
 func (r *walReader) Wake() {
 	select {
 	case r.wake <- struct{}{}:

@@ -90,7 +90,6 @@ func TestXrayConfig(t *testing.T) {
 						AccessLogPath: "/var/log/xray/access.log",
 					}),
 					serial.ToTypedMessage(&dispatcher.Config{}),
-					serial.ToTypedMessage(&proxyman.InboundConfig{}),
 					serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 					serial.ToTypedMessage(&router.Config{
 						DomainStrategy: router.Config_AsIs,
@@ -111,6 +110,7 @@ func TestXrayConfig(t *testing.T) {
 							},
 						},
 					}),
+					serial.ToTypedMessage(&proxyman.InboundConfig{}),
 				},
 				Inbound: []*core.InboundHandlerConfig{
 					{
