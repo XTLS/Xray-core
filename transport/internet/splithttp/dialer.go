@@ -443,9 +443,15 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		if xmuxClient != nil {
 			xmuxClient.LeftRequests.Add(-1)
 		}
-		_, _, _, err = httpClient.OpenStream(ctx, requestURL.String(), sessionId, reader, true)
+		uploadReader, _, _, err := httpClient.OpenStream(ctx, requestURL.String(), sessionId, reader, true)
 		if err != nil { // browser dialer only
+			conn.Close()
 			return nil, err
+		}
+		onClose := conn.onClose
+		conn.onClose = func() {
+			onClose()
+			common.Close(uploadReader)
 		}
 		return stat.Connection(&conn), nil
 	}

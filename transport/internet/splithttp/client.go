@@ -61,18 +61,21 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	if body != nil {
 		method = c.transportConfig.GetNormalizedUplinkHTTPMethod() // stream-up/one
 	}
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, body)
+	// The stream outlives the dial context; its reader owns HTTP cancellation.
+	requestCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	req, err := http.NewRequestWithContext(requestCtx, method, url, body)
 	if err != nil {
+		cancel()
 		errors.LogInfoInner(ctx, err, "failed to create HTTP request for "+url)
 		return nil, nil, nil, err
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
-	wrc = &WaitReadCloser{wait: done.New()}
+	wrc = &WaitReadCloser{wait: done.New(), cancel: cancel}
 	go func() {
 		resp, err := c.client.Do(req)
 		if err != nil {
-			if !uploadOnly { // stream-down is enough
+			if !uploadOnly && requestCtx.Err() == nil { // stream-down is enough
 				c.closed.Store(true)
 				errors.LogInfoInner(ctx, err, "failed to "+method+" "+url)
 			}
@@ -190,6 +193,7 @@ func (c *DefaultDialerClient) Close() error {
 type WaitReadCloser struct {
 	wait   *done.Instance
 	reader atomic.Pointer[io.ReadCloser]
+	cancel context.CancelFunc
 }
 
 func (w *WaitReadCloser) Set(rc io.ReadCloser) {
@@ -214,6 +218,9 @@ func (w *WaitReadCloser) Read(b []byte) (int, error) {
 }
 
 func (w *WaitReadCloser) Close() error {
+	if w.cancel != nil {
+		w.cancel()
+	}
 	w.wait.Close()
 	if p := w.reader.Swap(nil); p != nil {
 		return (*p).Close()
