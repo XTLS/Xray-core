@@ -293,6 +293,7 @@ type SplitHTTPConfig struct {
 	ServerMaxHeaderBytes int32             `json:"serverMaxHeaderBytes"`
 	Xmux                 XmuxConfig        `json:"xmux"`
 	DownloadSettings     *StreamConfig     `json:"downloadSettings"`
+	H2Params             json.RawMessage   `json:"h2Params"`
 	Extra                json.RawMessage   `json:"extra"`
 }
 
@@ -495,6 +496,7 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 		ServerMaxHeaderBytes: c.ServerMaxHeaderBytes,
 		SessionIDTable:       c.SessionIDTable,
 		SessionIDLength:      newRangeConfig(c.SessionIDLength),
+		H2Params:             c.H2Params,
 		Xmux: &splithttp.XmuxConfig{
 			MaxConcurrency:   newRangeConfig(c.Xmux.MaxConcurrency),
 			MaxConnections:   newRangeConfig(c.Xmux.MaxConnections),
