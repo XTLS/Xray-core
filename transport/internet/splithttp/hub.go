@@ -555,9 +555,9 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 		handler.localAddr = l.listener.Addr()
 
 		var http2Config *http.HTTP2Config
-		if len(l.config.Http2) > 0 {
+		if len(l.config.H2Params) > 0 {
 			http2Config = new(http.HTTP2Config)
-			if err := json.Unmarshal(l.config.Http2, http2Config); err != nil {
+			if err := json.Unmarshal(l.config.H2Params, http2Config); err != nil {
 				return nil, errors.New("failed to parse HTTP2Config").Base(err)
 			}
 		}
