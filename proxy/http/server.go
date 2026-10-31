@@ -312,8 +312,8 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 // Sometimes, server might send 1xx response to client
 // it should not be processed by http proxy handler, just forward it to client
 func readResponseAndHandle100Continue(r *bufio.Reader, req *http.Request, writer io.Writer) (*http.Response, error) {
-	// have a little look of response
-	r.Peek(1)
+	// Wait for the HTTP/1.x status prefix before inspecting the buffered response.
+	r.Peek(12)
 	peekBytes, err := r.Peek(min(56, r.Buffered()))
 	if err == nil || err == bufio.ErrBufferFull {
 		str := string(peekBytes)

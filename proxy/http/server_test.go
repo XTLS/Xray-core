@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 // A malformed upstream response containing a bare '\n' before the real
@@ -29,7 +30,7 @@ func TestReadResponseAndHandle100ContinueDoesNotPanicOnEarlyNewline(t *testing.T
 func TestReadResponseAndHandle100ContinueForwardsAndParsesFinalResponse(t *testing.T) {
 	payload := "HTTP/1.1 100 Continue\r\n\r\n" +
 		"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
-	r := bufio.NewReader(bytes.NewReader([]byte(payload)))
+	r := bufio.NewReader(iotest.OneByteReader(bytes.NewReader([]byte(payload))))
 	req, err := http.NewRequest("GET", "http://example.com/", nil)
 	if err != nil {
 		t.Fatal(err)
