@@ -96,13 +96,13 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	if len(h.host) > 0 && !internet.IsValidHTTPHost(request.Host, h.host) {
 		errors.LogInfo(context.Background(), "failed to validate host, request:", request.Host, ", config:", h.host)
-		writer.WriteHeader(http.StatusNotFound)
+		h.config.WriteErrorResponse(writer, http.StatusNotFound)
 		return
 	}
 
 	if !strings.HasPrefix(request.URL.Path, h.path) {
 		errors.LogInfo(context.Background(), "failed to validate path, request:", request.URL.Path, ", config:", h.path)
-		writer.WriteHeader(http.StatusNotFound)
+		h.config.WriteErrorResponse(writer, http.StatusNotFound)
 		return
 	}
 
@@ -146,7 +146,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	if !h.config.IsPaddingValid(paddingValue, validRange.From, validRange.To, PaddingMethod(h.config.XPaddingMethod)) {
 		errors.LogInfo(context.Background(), "invalid padding ("+paddingPlacement+") length:", int32(len(paddingValue)))
-		writer.WriteHeader(http.StatusBadRequest)
+		h.config.WriteErrorResponse(writer, h.config.GetNormalizedPaddingRejectStatus())
 		return
 	}
 	obfsPaddingAccepted := h.config.XPaddingObfsMode && paddingValue != ""
@@ -155,7 +155,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	if sessionId == "" && h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-one" && h.config.Mode != "stream-up" {
 		errors.LogInfo(context.Background(), "stream-one mode is not allowed")
-		writer.WriteHeader(http.StatusBadRequest)
+		h.config.WriteErrorResponse(writer, http.StatusBadRequest)
 		return
 	}
 
@@ -200,7 +200,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		if seqStr == "" {
 			if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "stream-up" {
 				errors.LogInfo(context.Background(), "stream-up mode is not allowed")
-				writer.WriteHeader(http.StatusBadRequest)
+				h.config.WriteErrorResponse(writer, http.StatusBadRequest)
 				return
 			}
 			httpSC := &httpServerConn{
@@ -213,7 +213,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			})
 			if err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
-				writer.WriteHeader(http.StatusConflict)
+				h.config.WriteErrorResponse(writer, http.StatusConflict)
 			} else {
 				writer.Header().Set("X-Accel-Buffering", "no")
 				writer.Header().Set("Cache-Control", "no-store")
@@ -242,7 +242,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "packet-up" {
 			errors.LogInfo(context.Background(), "packet-up mode is not allowed")
-			writer.WriteHeader(http.StatusBadRequest)
+			h.config.WriteErrorResponse(writer, http.StatusBadRequest)
 			return
 		}
 
@@ -261,7 +261,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			headerPayload, err = base64.RawURLEncoding.DecodeString(headerPayloadEncoded)
 			if err != nil {
 				errors.LogInfo(context.Background(), "Invalid base64 in header's payload: ", err.Error())
-				writer.WriteHeader(http.StatusBadRequest)
+				h.config.WriteErrorResponse(writer, http.StatusBadRequest)
 				return
 			}
 		}
@@ -281,7 +281,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			cookiePayload, err = base64.RawURLEncoding.DecodeString(cookiePayloadEncoded)
 			if err != nil {
 				errors.LogInfo(context.Background(), "Invalid base64 in cookies' payload: ", err.Error())
-				writer.WriteHeader(http.StatusBadRequest)
+				h.config.WriteErrorResponse(writer, http.StatusBadRequest)
 				return
 			}
 		}
@@ -291,7 +291,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			var readErr error
 			if request.ContentLength > int64(scMaxEachPostBytes) {
 				errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")
-				writer.WriteHeader(http.StatusRequestEntityTooLarge)
+				h.config.WriteErrorResponse(writer, http.StatusRequestEntityTooLarge)
 				return
 			}
 			if request.ContentLength > 0 {
@@ -302,7 +302,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 			}
 			if readErr != nil {
 				errors.LogInfoInner(context.Background(), readErr, "failed to read body payload")
-				writer.WriteHeader(http.StatusBadRequest)
+				h.config.WriteErrorResponse(writer, http.StatusBadRequest)
 				return
 			}
 		}
@@ -321,14 +321,14 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		if len(payload) > scMaxEachPostBytes {
 			errors.LogInfo(context.Background(), "Too large upload. scMaxEachPostBytes is set to ", scMaxEachPostBytes, "but request size exceed it. Adjust scMaxEachPostBytes on the server to be at least as large as client.")
-			writer.WriteHeader(http.StatusRequestEntityTooLarge)
+			h.config.WriteErrorResponse(writer, http.StatusRequestEntityTooLarge)
 			return
 		}
 
 		seq, err := strconv.ParseUint(seqStr, 10, 64)
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to upload (ParseUint)")
-			writer.WriteHeader(http.StatusInternalServerError)
+			h.config.WriteErrorResponse(writer, http.StatusInternalServerError)
 			return
 		}
 
@@ -338,7 +338,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		})
 		if err != nil {
 			errors.LogInfoInner(context.Background(), err, "failed to upload (PushPayload)")
-			writer.WriteHeader(http.StatusInternalServerError)
+			h.config.WriteErrorResponse(writer, http.StatusInternalServerError)
 			return
 		}
 
@@ -401,7 +401,7 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		conn.Close()
 	} else {
 		errors.LogInfo(context.Background(), "unsupported method: ", request.Method)
-		writer.WriteHeader(http.StatusMethodNotAllowed)
+		h.config.WriteErrorResponse(writer, http.StatusMethodNotAllowed)
 	}
 }
 
