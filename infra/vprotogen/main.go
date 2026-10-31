@@ -117,7 +117,7 @@ func main() {
 	}
 
 	var protoFiles []string
-	var pbCount int
+	var existingPbFiles []string
 	err := filepath.WalkDir(pwd, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
@@ -127,20 +127,13 @@ func main() {
 			protoFiles = append(protoFiles, filepath.ToSlash(rel))
 		}
 		if strings.HasSuffix(d.Name(), ".pb.go") {
-			pbCount++
+			existingPbFiles = append(existingPbFiles, path)
 		}
 		return nil
 	})
 	if err != nil {
 		fmt.Println("Walk error:", err)
 		os.Exit(1)
-	}
-	if len(protoFiles) == 0 {
-		if isCheck && pbCount > 0 {
-			fmt.Fprintf(os.Stderr, "Found %d .pb.go files without any .proto files. Remove these orphaned files.\n", pbCount)
-			os.Exit(1)
-		}
-		return
 	}
 
 	compiler := protocompile.Compiler{
@@ -163,14 +156,8 @@ func main() {
 
 	req := &pluginpb.CodeGeneratorRequest{
 		FileToGenerate: protoFiles,
-		Parameter:      proto.String("paths=source_relative"),
+		Parameter:      new("paths=source_relative"),
 		ProtoFile:      topoSort(fdList),
-		// TODO: replace with unknown in the future
-		CompilerVersion: &pluginpb.Version{
-			Major: proto.Int32(6),
-			Minor: proto.Int32(33),
-			Patch: proto.Int32(5),
-		},
 	}
 
 	var diffCount int
@@ -223,11 +210,22 @@ func main() {
 		}
 	}
 
-	if isCheck {
-		if pbCount != len(generatedFiles) {
-			fmt.Printf("Protobuf file count mismatch: found %d, expected %d. Remove orphaned files and regenerate.\n", pbCount, len(generatedFiles))
+	for _, path := range existingPbFiles {
+		if _, ok := generatedFiles[path]; !ok {
 			diffCount++
+			if isCheck {
+				fmt.Printf("Orphaned Protobuf file: %s\n", path)
+			} else {
+				fmt.Printf("Removing orphaned Protobuf file: %s\n", path)
+				if err := os.Remove(path); err != nil {
+					fmt.Fprintf(os.Stderr, "Error removing %s: %v\n", path, err)
+					os.Exit(1)
+				}
+			}
 		}
+	}
+
+	if isCheck {
 		if diffCount > 0 {
 			fmt.Println("Protobuf generated file problem(s) found.")
 			fmt.Println("Please run 'go run ./infra/vprotogen' to regenerate them.")
