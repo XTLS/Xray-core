@@ -28,23 +28,53 @@ func TestReadResponseAndHandle100ContinueDoesNotPanicOnEarlyNewline(t *testing.T
 }
 
 func TestReadResponseAndHandle100ContinueForwardsAndParsesFinalResponse(t *testing.T) {
-	payload := "HTTP/1.1 100 Continue\r\n\r\n" +
-		"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
-	r := bufio.NewReader(iotest.OneByteReader(bytes.NewReader([]byte(payload))))
-	req, err := http.NewRequest("GET", "http://example.com/", nil)
+	const cont = "HTTP/1.1 100 Continue\r\n\r\n"
+	const hint = "HTTP/1.1 103 Early Hints\r\nLink: </style.css>; rel=preload; as=style\r\n\r\n"
+	for _, tc := range []struct{ name, interim string }{
+		{"no_interim", ""},
+		{"continue", cont},
+		{"early_hints", hint},
+		{"multiple_hints", hint + hint},
+		{"continue_and_hints", cont + hint},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := tc.interim + "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello"
+			r := bufio.NewReader(iotest.OneByteReader(strings.NewReader(payload)))
+			req, err := http.NewRequest("GET", "http://example.com/", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var forwarded bytes.Buffer
+			resp, err := readResponseAndHandle100Continue(r, req, &forwarded)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 || string(body) != "hello" || forwarded.String() != tc.interim {
+				t.Fatalf("status=%d body=%q forwarded=%q; want 200, hello, %q", resp.StatusCode, body, forwarded.String(), tc.interim)
+			}
+		})
+	}
+}
+
+func TestReadResponseAndHandle100ContinueStopsAtSwitchingProtocols(t *testing.T) {
+	const upgrade = "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: example\r\n\r\n"
+	r := bufio.NewReader(iotest.OneByteReader(strings.NewReader(upgrade + "opaque")))
+	var forwarded bytes.Buffer
+	resp, err := readResponseAndHandle100Continue(r, &http.Request{Method: "GET"}, &forwarded)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	var forwarded bytes.Buffer
-	resp, err := readResponseAndHandle100Continue(r, req, &forwarded)
+	defer resp.Body.Close()
+	remaining, err := io.ReadAll(r)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if resp.StatusCode != 200 {
-		t.Fatalf("expected status 200, got %d", resp.StatusCode)
-	}
-	if !strings.Contains(forwarded.String(), "100 Continue") {
-		t.Fatalf("expected 1xx response to be forwarded, got %q", forwarded.String())
+	if resp.StatusCode != 101 || forwarded.Len() != 0 || string(remaining) != "opaque" {
+		t.Fatalf("status=%d forwarded=%q remaining=%q", resp.StatusCode, forwarded.String(), remaining)
 	}
 }
