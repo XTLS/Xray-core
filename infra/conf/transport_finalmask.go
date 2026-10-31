@@ -22,6 +22,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/filter"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	finalmasklua "github.com/xtls/xray-core/transport/internet/finalmask/lua"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
@@ -78,6 +79,7 @@ var (
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"filter":        func() interface{} { return new(Filter) },
 		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
+		"lua":           func() interface{} { return new(LuaMask) },
 		"fragment":      func() interface{} { return new(FragmentMask) },
 		"sudoku":        func() interface{} { return new(Sudoku) },
 		"xmc":           func() interface{} { return new(XMC) },
@@ -86,6 +88,7 @@ var (
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
 		"filter":        func() interface{} { return new(Filter) },
 		"header-custom": func() interface{} { return new(HeaderCustomUDP) },
+		"lua":           func() interface{} { return new(LuaMask) },
 		"mkcp-legacy":   func() interface{} { return new(MkcpLegacy) },
 		"noise":         func() interface{} { return new(NoiseMask) },
 		"salamander":    func() interface{} { return new(Salamander) },
@@ -328,27 +331,26 @@ type NoiseItem struct {
 	Delay     Int32Range      `json:"delay"`
 }
 
+type LuaMask struct {
+	Script string `json:"script"`
+}
+
+func (c *LuaMask) Build() (proto.Message, error) {
+	if c.Script == "" {
+		return nil, errors.New(`"script" is required`)
+	}
+	if _, err := xlua.Compile(c.Script); err != nil {
+		return nil, errors.New("failed to compile the script").Base(err)
+	}
+	return &finalmasklua.Config{Script: c.Script}, nil
+}
+
 type NoiseMask struct {
-	Reset  Int32Range  `json:"reset"`
-	Noise  []NoiseItem `json:"noise"`
-	Script string      `json:"script"`
+	Reset Int32Range  `json:"reset"`
+	Noise []NoiseItem `json:"noise"`
 }
 
 func (c *NoiseMask) Build() (proto.Message, error) {
-	if c.Script != "" {
-		if len(c.Noise) > 0 {
-			return nil, errors.New(`"script" and "noise" can't be used together`)
-		}
-		if _, err := xlua.Compile(c.Script); err != nil {
-			return nil, errors.New("failed to compile the noise script").Base(err)
-		}
-		return &noise.Config{
-			ResetMin: int64(c.Reset.From),
-			ResetMax: int64(c.Reset.To),
-			Script:   c.Script,
-		}, nil
-	}
-
 	noiseSlice := make([]*noise.Item, 0, len(c.Noise))
 	for _, item := range c.Noise {
 		if len(item.Packet) > 0 && item.Rand.To > 0 {
