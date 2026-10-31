@@ -97,36 +97,61 @@ func (c *Config) GetRequestCookiesWithPayload(payload []byte) []*http.Cookie {
 }
 
 func (c *Config) WriteResponseHeader(writer http.ResponseWriter, requestMethod string, requestHeader http.Header) {
+	header := writer.Header()
+
 	// CORS headers for the browser dialer
 	if origin := requestHeader.Get("Origin"); origin == "" {
-		writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.SetResponseHeader(header, "Access-Control-Allow-Origin", "*")
 	} else {
 		// Chrome says: The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'.
-		writer.Header().Set("Access-Control-Allow-Origin", origin)
+		c.SetResponseHeader(header, "Access-Control-Allow-Origin", origin)
 	}
 
 	if c.GetNormalizedSessionPlacement() == PlacementCookie ||
 		c.GetNormalizedSeqPlacement() == PlacementCookie ||
 		c.XPaddingPlacement == PlacementCookie ||
 		c.GetNormalizedUplinkDataPlacement() == PlacementCookie {
-		writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.SetResponseHeader(header, "Access-Control-Allow-Credentials", "true")
 	}
 
 	if requestMethod == "OPTIONS" {
 		requestedMethod := requestHeader.Get("Access-Control-Request-Method")
 		if requestedMethod != "" {
-			writer.Header().Set("Access-Control-Allow-Methods", requestedMethod)
+			c.SetResponseHeader(header, "Access-Control-Allow-Methods", requestedMethod)
 		} else {
-			writer.Header().Set("Access-Control-Allow-Methods", "*")
+			c.SetResponseHeader(header, "Access-Control-Allow-Methods", "*")
 		}
 
 		requestedHeaders := requestHeader.Get("Access-Control-Request-Headers")
 		if requestedHeaders == "" {
-			writer.Header().Set("Access-Control-Allow-Headers", "*")
+			c.SetResponseHeader(header, "Access-Control-Allow-Headers", "*")
 		} else {
-			writer.Header().Set("Access-Control-Allow-Headers", requestedHeaders)
+			c.SetResponseHeader(header, "Access-Control-Allow-Headers", requestedHeaders)
 		}
 	}
+
+	// Apply user-configured response headers on top of the defaults above.
+	// An empty value removes the header from the response entirely.
+	for key, value := range c.ResponseHeaders {
+		if value != "" {
+			header.Set(key, value)
+		} else {
+			header.Del(key)
+		}
+	}
+}
+
+// SetResponseHeader sets a response header with the given default value,
+// unless the user has overridden it, or removed it with an empty value,
+// via responseHeaders.
+func (c *Config) SetResponseHeader(header http.Header, key, value string) {
+	if v, found := c.ResponseHeaders[key]; found {
+		if v != "" {
+			header.Set(key, v)
+		}
+		return
+	}
+	header.Set(key, value)
 }
 
 func (c *Config) GetNormalizedUplinkHTTPMethod() string {
