@@ -29,12 +29,17 @@ func TestTunConfigAutoSystem(t *testing.T) {
 		{
 			Input:  `{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["dns", "misconfigtun"]}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"dns", "misconfigtun"}},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853", "misconfigtun"}},
 		},
 		{
 			Input:  `{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["DNS"]}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"dns"}},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853"}},
+		},
+		{
+			Input:  `{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["TCP/853", "udp/853", "tcp/0853"]}`,
+			Parser: loadJSON(creator),
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"tcp/853", "udp/853"}},
 		},
 	})
 }
@@ -49,6 +54,9 @@ func TestTunConfigAutoSystemNeeds(t *testing.T) {
 		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["misconfigtun"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["misconfigtun"]}`, nil},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["dns"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["udp/53"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["windnsclient"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/853", "udp/853"]}`, nil},
 		{`{"name": "xray0", "autoSystemDnsToGateway": true}`, []string{"linux", "freebsd"}},
 	} {
 		config := new(TunConfig)
@@ -62,11 +70,13 @@ func TestTunConfigAutoSystemNeeds(t *testing.T) {
 }
 
 func TestTunConfigAutoSystemWfpBlockLeakUnknown(t *testing.T) {
-	config := new(TunConfig)
-	if err := json.Unmarshal([]byte(`{"name": "xray0", "autoSystemWfpBlockLeak": ["dns", "ip"]}`), config); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := config.Build(); err == nil {
-		t.Error("an unknown autoSystemWfpBlockLeak value was accepted")
+	for _, value := range []string{"ip", "tcp/0", "icmp/1"} {
+		config := new(TunConfig)
+		if err := json.Unmarshal([]byte(`{"name": "xray0", "autoSystemWfpBlockLeak": ["dns", "`+value+`"]}`), config); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := config.Build(); err == nil {
+			t.Errorf("autoSystemWfpBlockLeak value %q was accepted", value)
+		}
 	}
 }

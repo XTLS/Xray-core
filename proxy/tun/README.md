@@ -23,6 +23,10 @@ For more advanced routing policies or rules, OS level configuration can still ma
 This keeps complex system level routing and rules in a single place of responsibility - the OS itself. \
 Examples of how to achieve this on a simple Linux system (Ubuntu with systemd-networkd) can be found at the end of this README.
 
+Packets are handled by Xray-core's own lightweight TCP/IP stack, which replaced gVisor (XTLS/Xray-core#7130).
+
+With `autoSystemRoutingTable`, Xray's own connections are kept out of the TUN through `autoOutboundsInterface` (then `"auto"` by default): each of their sockets is bound to another interface, the one named there, or with `"auto"` the one of the default route (Android needs the name). Linux and Android bind with `SO_BINDTODEVICE`, Windows with `IP_UNICAST_IF` and `IPV6_UNICAST_IF`, macOS and iOS with `IP_BOUND_IF` and `IPV6_BOUND_IF`, and FreeBSD switches them to another routing table (see [FreeBSD SUPPORT](#freebsd-support)). Connections to loopback addresses, TCP and UDP, stay unbound. If a socket cannot be bound, the connection fails rather than leave unbound, where it could loop back into the TUN (XTLS/Xray-core#7173).
+
 ### SYSTEM DNS ON LINUX AND FREEBSD (`autoSystemDnsToGateway`)
 
 On Linux and FreeBSD, setting `autoSystemDnsToGateway` to `true` lets the inbound point the system resolver at the tun interface, so name lookups resolve through Xray instead of going out over the physical link. It is off by default, and it exists only on those two systems. This section describes Linux; the FreeBSD differences follow in [SYSTEM DNS ON FREEBSD](#system-dns-on-freebsd).
@@ -215,12 +219,16 @@ All in all systemd-networkd and its derivatives (like netplan or NetworkManager)
 Windows version of the same functionality is implemented through Wintun library. \
 To make it start, wintun.dll specific for your Windows/arch must be present next to Xray.exe binary.
 
-After the start network adapter with the name you chose in the config will be created in the system, and exist while Xray is running.
+After the start network adapter with the name you chose in the config will be created in the system, and exist while Xray is running. A Wintun adapter that already has that name is reused.
+
+With IPv6 disabled system-wide (the `DisabledComponents` registry value), the adapter has no IPv6, and the TUN starts with IPv4 only, unless `gateway` or `autoSystemRoutingTable` has IPv6 entries, which then keep it from starting.
 
 When `dns` is set, those servers are applied to the adapter. Windows is kept from registering the TUN's addresses in DNS, and its DNS cache is flushed when the TUN starts and stops.
 
-With `autoSystemWfpBlockLeak`, which needs `autoSystemRoutingTable` (the config is rejected otherwise), Xray also adds Windows Filtering Platform filters that keep two kinds of traffic of every program but Xray itself from leaving outside the TUN, each chosen by a value in the list, e.g. `"autoSystemWfpBlockLeak": ["dns", "misconfigtun"]`:
-- `"dns"` (needs `dns`, the config is rejected otherwise): DNS (port 53) only goes through the TUN. Windows keeps sending name queries to the DNS servers of the other interfaces as well, out through those interfaces whatever the routes say, and other programs reach a resolver on the local network (e.g. `192.168.1.1` handed out by DHCP) through its more specific LAN route instead of the TUN. On Windows 11 and Server 2022 and later, where those queries may also go over HTTPS or TLS, Windows' DNS Client service cannot connect outside the TUN at all, except for name resolution on the local network (LLMNR, mDNS). The `dns` servers therefore have to lie within `gateway` or `autoSystemRoutingTable` (a warning is logged otherwise), and DNS servers that should be reached directly belong in Xray's own `dns` settings.
+With `autoSystemWfpBlockLeak`, which needs `autoSystemRoutingTable` (the config is rejected otherwise), Xray also adds Windows Filtering Platform filters that keep traffic of every program but Xray itself from leaving outside the TUN, each kind chosen by a value in the list, e.g. `"autoSystemWfpBlockLeak": ["dns", "misconfigtun"]`:
+- `"tcp/<port>"`, `"udp/<port>"`: connections to that TCP or UDP port only go through the TUN, e.g. `"tcp/853"`.
+- `"windnsclient"`: Windows' DNS Client service cannot connect outside the TUN at all, except for name resolution on the local network (LLMNR, mDNS). On Windows 11 and Server 2022 and later, it may send name queries over HTTPS or TLS, to any port. Earlier versions only query port 53, so there it does nothing.
+- `"dns"`: stands for `"udp/53"`, `"tcp/53"`, `"windnsclient"`, `"tcp/853"` (DNS over TLS) and `"udp/853"` (DNS over QUIC). Windows keeps sending name queries to the DNS servers of the other interfaces as well, out through those interfaces whatever the routes say, and other programs reach a resolver on the local network (e.g. `192.168.1.1` handed out by DHCP) through its more specific LAN route instead of the TUN. Keeping the system's DNS inside the TUN like this, with `"dns"`, `"udp/53"`, `"tcp/53"` or `"windnsclient"`, needs `dns` (the config is rejected otherwise). The `dns` servers then have to lie within `gateway` or `autoSystemRoutingTable` (a warning is logged otherwise), and DNS servers that should be reached directly belong in Xray's own `dns` settings.
 - `"misconfigtun"`: an IP version without routes in `autoSystemRoutingTable`, IPv4 or IPv6, is blocked entirely, in both directions, as it would bypass the TUN. Only loopback and what Windows itself needs on the local link (DHCP, and for IPv6 neighbor and multicast listener discovery) remain allowed. An address of that version in `gateway` is not needed: without one, Windows gives the TUN link-local addresses itself, an IPv6 one at once and an IPv4 one from `169.254.0.0/16` after some seconds (until then, IPv4 routed to the TUN is unreachable), and what is routed to the TUN goes through it with those.
 
 With the filters in place, Xray's own connections out also get past Windows Firewall's block rules (other firewalls may still block them), while connections to Xray's inbounds stay subject to them.
@@ -232,6 +240,8 @@ If the filters cannot be added, Xray does not start. They are removed when Xray 
 `autoSystemWfpBlockLeak` (Windows only) is empty by default, as the filters break some setups: with `"dns"`, a local DNS resolver other programs use (e.g. on `127.0.0.1:53`), the DNS of another VPN on its own interface, virtual machines whose NAT resolves names on the host, or signing in to a captive portal; with `"misconfigtun"`, IPv4 or IPv6 on the local network while no route of that version leads to the TUN. Without the filters, DNS may leak as described above. To keep an IP version out of the TUN on purpose while still blocking DNS leaks, use only `["dns"]`.
 
 `autoOutboundsInterface` (the default with `autoSystemRoutingTable`) keeps Xray's own connections out of the TUN by binding them to another interface, which Windows only honors while that interface has weak host send and forwarding off for the IP versions routed to the TUN. Otherwise, Windows sends them into the TUN, from that interface's address, and they stall. While the TUN runs, Xray therefore turns weak host send off on that interface, and on again when it stops or another interface takes over. Forwarding cannot be turned off this way, as Mobile Hotspot and Internet Connection Sharing need it, so a warning is logged while it is on. Having the hotspot share the TUN instead of that interface (Settings, Mobile hotspot, Share my internet connection from) moves forwarding to the TUN, where it does no harm, and sends the hotspot's devices through Xray as well.
+
+An outbound interface with only IPv4 or only IPv6 works as well: a UDP socket opened for both IP versions, which such an interface cannot be bound to, is opened again for the destination's version only, and IPv6 TCP is bound for IPv6 alone, so connections of the missing version fail rather than leave through another interface (XTLS/Xray-core#7214).
 
 You can give the adapter ip address manually, you can live Windows to give it autogenerated ip address (which take few seconds), it doesn't matter, the traffic going _through_ the interface will be forwarded into the app for proxying. \
 Minimal configuration that will work for local machine is routing passing the traffic on-link through the interface.
@@ -307,6 +317,7 @@ sudo route add -inet6 -host 2606:4700:4700::1111 -iface utun10
 sudo route add -inet6 -host 2606:4700:4700::1001 -iface utun10
 ```
 Alternatively, configure `autoSystemRoutingTable` and Xray will add and remove those system routes while it is running.
+Xray's own connections are then kept out of the TUN through `autoOutboundsInterface`: an IPv4 socket is bound with `IP_BOUND_IF`, an IPv6 or dual-stack one with `IPV6_BOUND_IF`, which covers the IPv4 traffic of a dual-stack socket as well, since macOS rejects `IP_BOUND_IF` on IPv6 sockets (XTLS/Xray-core#7230).
 Important to remember that everything written above about Linux routing concept, also apply to Mac OS X. If you simply route default route through utun interface, that will result network loop and immediate network failure.
 
 ## ANDROID SUPPORT
@@ -338,7 +349,7 @@ let tunFd = ((0 ... 1024).first { (_ fd: Int32) -> Bool in var len = socklen_t(b
 }!
 ```
 
-Set the environment variable `xray.tun.fd` (or `XRAY_TUN_FD`) to the fd number before starting Xray. This can be done from Swift/Objective-C or by exposing a Go function via gomobile bindings.
+Set the environment variable `xray.tun.fd` (or `XRAY_TUN_FD`) to the fd number before starting Xray. This can be done from Swift/Objective-C or by exposing a Go function via gomobile bindings. Xray works on a duplicate of the fd and closes only that, so the fd itself stays NetworkExtension's (XTLS/Xray-core#6883).
 
 Build using gomobile for iOS framework integration:
 ```

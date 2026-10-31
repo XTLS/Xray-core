@@ -114,8 +114,35 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := addLeakFilters(engine, loopback, true, true, true); err != nil {
+	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun", "tcp/443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := newLeakFilters(leaks, false, false)
+	block.dnsClient = true // whatever the Windows version
+	if err := addLeakFilters(engine, loopback, block); err != nil {
 		skipUnlessElevated(err)
+	}
+}
+
+func TestNewLeakFilters(t *testing.T) {
+	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := newLeakFilters(leaks, true, false)
+	want := "udp/53, tcp/53, tcp/853, udp/853, IPv6"
+	if dnsClientUsesAnyPort() {
+		want = "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv6"
+	}
+	if got := block.String(); got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+	if !block.systemDNS() {
+		t.Error("systemDNS() = false with dns")
+	}
+	if block := newLeakFilters([]string{"tcp/853", "udp/853", "misconfigtun"}, true, true); block.String() != "tcp/853, udp/853" || block.systemDNS() {
+		t.Errorf("tcp/853, udp/853: %q, systemDNS() = %v", block.String(), block.systemDNS())
 	}
 }
 

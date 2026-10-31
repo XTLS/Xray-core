@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strings"
 	"unsafe"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -170,19 +171,79 @@ func condition(field *windows.GUID, typ uint32, value uintptr) fwpmFilterConditi
 	}
 }
 
+// leakFilters is what blockLeaks keeps from leaving outside the TUN.
+type leakFilters struct {
+	ports      []leakPort // connections to these ports
+	dnsClient  bool       // Windows' DNS Client service
+	ipv4, ipv6 bool       // an IP version altogether
+}
+
+// newLeakFilters turns expanded autoSystemWfpBlockLeak values into the filters
+// for a TUN that the routes of route4 (IPv4) and route6 (IPv6) lead to.
+func newLeakFilters(leaks []string, route4, route6 bool) leakFilters {
+	var block leakFilters
+	for _, leak := range leaks {
+		switch leak {
+		case "windnsclient":
+			block.dnsClient = dnsClientUsesAnyPort()
+		case "misconfigtun":
+			block.ipv4, block.ipv6 = !route4, !route6
+		default:
+			if port, ok := parseLeakPort(leak); ok {
+				block.ports = append(block.ports, port)
+			}
+		}
+	}
+	return block
+}
+
+// String lists what block keeps inside the TUN, or is empty for nothing.
+func (block leakFilters) String() string {
+	var blocked []string
+	for _, port := range block.ports {
+		blocked = append(blocked, port.String())
+	}
+	for _, b := range []struct {
+		on   bool
+		what string
+	}{{block.dnsClient, "windnsclient"}, {block.ipv4, "IPv4"}, {block.ipv6, "IPv6"}} {
+		if b.on {
+			blocked = append(blocked, b.what)
+		}
+	}
+	return strings.Join(blocked, ", ")
+}
+
+// systemDNS tells whether block keeps the system's DNS inside the TUN.
+func (block leakFilters) systemDNS() bool {
+	return block.dnsClient || slices.ContainsFunc(block.ports, func(port leakPort) bool { return port.port == 53 })
+}
+
+// dnsClientUsesAnyPort tells whether Windows' DNS Client service may send its
+// queries over HTTPS or TLS, and so to any port, which it does since Windows 11
+// and Server 2022 (build 20348). Earlier versions only query port 53, and may
+// run the service in one process with others, which its filters would catch
+// as well.
+func dnsClientUsesAnyPort() bool {
+	_, _, build := windows.RtlGetNtVersionNumbers()
+	return build >= 20348
+}
+
 // blockLeaks keeps traffic from leaving through interfaces other than tun,
 // for every program but Xray itself, whose outbounds (DNS included) use the
 // other interfaces on purpose:
 //
-//   - dns: DNS (port 53) may only go through the TUN. Windows sends a name
-//     query to the DNS servers of all interfaces, not only to those of the TUN:
-//     to the first server of each interface, then to all of them when no answer
-//     arrives within a second or two. It sends the queries for the servers of
-//     an interface out through that interface, whatever the routes say, and
-//     other programs reach an on-link resolver, like 192.168.1.1 from DHCP,
-//     through its LAN route, which is more specific than the TUN's default
-//     route. Since Windows 11 and Server 2022, Windows may also send its
-//     queries over HTTPS or TLS, so there its DNS Client service may not
+//   - ports: connections to these TCP or UDP ports may only go through the
+//     TUN, those of DNS (53), DNS over TLS (TCP 853) and DNS over QUIC (UDP
+//     853) with "dns". Windows sends a name query to the DNS servers of all
+//     interfaces, not only to those of the TUN: to the first server of each
+//     interface, then to all of them when no answer arrives within a second or
+//     two. It sends the queries for the servers of an interface out through
+//     that interface, whatever the routes say, and other programs reach an
+//     on-link resolver, like 192.168.1.1 from DHCP, through its LAN route,
+//     which is more specific than the TUN's default route.
+//   - dnsClient: since Windows 11 and Server 2022, Windows may also send its
+//     queries over HTTPS or TLS, to any port, so its DNS Client service may not
 //     connect outside the TUN at all, except for name resolution on the local
 //     link (mDNS, LLMNR).
 //   - ipv4, ipv6: no IPv4, or no IPv6, at all, in either direction, for a TUN
@@ -196,7 +257,7 @@ func condition(field *windows.GUID, typ uint32, value uintptr) fwpmFilterConditi
 //
 // The filters live in a dynamic WFP session: closing the returned engine handle
 // with closeWFPEngine deletes them, and so does Windows when the process dies.
-func blockLeaks(tun winipcfg.LUID, dns, ipv4, ipv6 bool) (windows.Handle, error) {
+func blockLeaks(tun winipcfg.LUID, block leakFilters) (windows.Handle, error) {
 	engine, err := openWFPEngine()
 	if err != nil {
 		return 0, err
@@ -205,7 +266,7 @@ func blockLeaks(tun winipcfg.LUID, dns, ipv4, ipv6 bool) (windows.Handle, error)
 		closeWFPEngine(engine)
 		return 0, errors.New("FwpmTransactionBegin0 failed").Base(err)
 	}
-	err = addLeakFilters(engine, tun, dns, ipv4, ipv6)
+	err = addLeakFilters(engine, tun, block)
 	if err == nil {
 		if err = fwpmResult(procFwpmTransactionCommit0.Call(uintptr(engine))); err != nil {
 			err = errors.New("FwpmTransactionCommit0 failed").Base(err)
@@ -242,7 +303,7 @@ func closeWFPEngine(engine windows.Handle) {
 
 // addLeakFilters adds the filters of blockLeaks in a sublayer of their own.
 // blockLeaks runs it in a transaction, so that they take effect all at once.
-func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv4, ipv6 bool) error {
+func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
@@ -285,51 +346,55 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv4, ipv6 bo
 	// hard permit. Connections from outside to Xray get an ordinary one, so
 	// that firewalls keep guarding its inbounds.
 	self := condition(&fwpmConditionALEAppID, fwpByteBlobType, uintptr(unsafe.Pointer(appID)))
-	dns53 := condition(&fwpmConditionIPRemotePort, fwpUint16, 53)
-	// DNS goes through the TUN when its local address is the TUN's, and it
-	// also leaves, or arrives, through the TUN. The local address alone
+	// A connection goes through the TUN when its local address is the TUN's,
+	// and it also leaves, or arrives, through the TUN. The local address alone
 	// decides by default, but with weak host sending or receiving enabled,
 	// packets of the TUN's address can use other interfaces. (The next hop,
 	// the interface replies would leave by, is not known for arriving ones.)
 	onTUN := func(field *windows.GUID) fwpmFilterCondition0 {
 		return condition(field, fwpUint64, uintptr(unsafe.Pointer(tunLUID)))
 	}
-	out := []fwpmFilterCondition0{dns53, onTUN(&fwpmConditionIPLocalInterface), onTUN(&fwpmConditionIPNexthopInterface)}
-	in := []fwpmFilterCondition0{dns53, onTUN(&fwpmConditionIPLocalInterface), onTUN(&fwpmConditionIPArrivalInterface)}
 	for _, layer := range []struct {
-		key        *windows.GUID
-		selfFlags  uint32
-		throughTUN []fwpmFilterCondition0
+		key       *windows.GUID
+		selfFlags uint32
+		via       *windows.GUID // the interface that has to be the TUN as well
 	}{
-		{&fwpmLayerALEAuthConnectV4, fwpmFilterFlagClearActionRight, out},
-		{&fwpmLayerALEAuthRecvAcceptV4, 0, in},
-		{&fwpmLayerALEAuthConnectV6, fwpmFilterFlagClearActionRight, out},
-		{&fwpmLayerALEAuthRecvAcceptV6, 0, in},
+		{&fwpmLayerALEAuthConnectV4, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface},
+		{&fwpmLayerALEAuthRecvAcceptV4, 0, &fwpmConditionIPArrivalInterface},
+		{&fwpmLayerALEAuthConnectV6, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface},
+		{&fwpmLayerALEAuthRecvAcceptV6, 0, &fwpmConditionIPArrivalInterface},
 	} {
 		if err := add(layer.key, "permit Xray", layer.selfFlags, fwpActionPermit, 4, self); err != nil {
 			return err
 		}
-		if dns {
-			if err := add(layer.key, "permit DNS through the TUN", 0, fwpActionPermit, 3, layer.throughTUN...); err != nil {
+		for _, port := range block.ports {
+			protocol := uintptr(windows.IPPROTO_UDP)
+			if port.tcp {
+				protocol = windows.IPPROTO_TCP
+			}
+			toPort := []fwpmFilterCondition0{
+				condition(&fwpmConditionIPProtocol, fwpUint8, protocol),
+				condition(&fwpmConditionIPRemotePort, fwpUint16, uintptr(port.port)),
+			}
+			throughTUN := slices.Concat(toPort, []fwpmFilterCondition0{onTUN(&fwpmConditionIPLocalInterface), onTUN(layer.via)})
+			if err := add(layer.key, "permit "+port.String()+" through the TUN", 0, fwpActionPermit, 3, throughTUN...); err != nil {
 				return err
 			}
-			if err := add(layer.key, "block DNS", 0, fwpActionBlock, 2, dns53); err != nil {
+			if err := add(layer.key, "block "+port.String(), 0, fwpActionBlock, 2, toPort...); err != nil {
 				return err
 			}
 		}
 	}
 
-	// Since Windows 11 and Server 2022 (build 20348), the DNS Client service
-	// may also send the queries for an interface's servers over HTTPS or TLS,
-	// out through that interface and to any port. So there it may only
-	// connect through the TUN, except for mDNS and LLMNR, which stay on the
-	// local link (over an IP version only while it is not blocked altogether).
-	// Earlier versions only query port 53, and may run the service in one
-	// process with others, which the filters would catch as well. Like
-	// Windows Firewall's rules for it, they recognize the service by its SID,
+	// Since Windows 11 and Server 2022, the DNS Client service may also send
+	// the queries for an interface's servers over HTTPS or TLS, out through
+	// that interface and to any port. So there it may only connect through
+	// the TUN, except for mDNS and LLMNR, which stay on the local link (over
+	// an IP version only while it is not blocked altogether). Like Windows
+	// Firewall's rules for it, the filters recognize the service by its SID,
 	// which Windows puts in the token of its process: the security descriptor
 	// grants that SID the right to match (FWP_ACTRL_MATCH_FILTER, CC in SDDL).
-	if _, _, build := windows.RtlGetNtVersionNumbers(); dns && build >= 20348 {
+	if block.dnsClient {
 		sd, err := windows.SecurityDescriptorFromString("O:SYG:SYD:(A;;CCRC;;;" + dnsClientSID + ")")
 		if err != nil {
 			return err
@@ -343,8 +408,8 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv4, ipv6 bo
 			key       *windows.GUID
 			localLink bool
 		}{
-			{&fwpmLayerALEAuthConnectV4, !ipv4},
-			{&fwpmLayerALEAuthConnectV6, !ipv6},
+			{&fwpmLayerALEAuthConnectV4, !block.ipv4},
+			{&fwpmLayerALEAuthConnectV6, !block.ipv6},
 		} {
 			if err := add(layer.key, "permit the DNS Client service through the TUN", 0, fwpActionPermit, 3, dnsClient, onTUN(&fwpmConditionIPLocalInterface), onTUN(&fwpmConditionIPNexthopInterface)); err != nil {
 				return err
@@ -367,7 +432,7 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv4, ipv6 bo
 		matchType:      fwpMatchFlagsAllSet,
 		conditionValue: fwpValue0{typ: fwpUint32, value: fwpConditionFlagIsLoopback},
 	}
-	if ipv4 {
+	if block.ipv4 {
 		// DHCP keeps the addresses of the other interfaces, which Xray's own
 		// connections use.
 		dhcp := []fwpmFilterCondition0{
@@ -387,7 +452,7 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, dns, ipv4, ipv6 bo
 			}
 		}
 	}
-	if ipv6 {
+	if block.ipv6 {
 		// Neighbor and multicast listener discovery, ICMPv6 130-137 and 143,
 		// whose type and code sit where the local and remote port are.
 		discovery := []fwpmFilterCondition0{condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_ICMPV6)}
