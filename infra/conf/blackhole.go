@@ -1,11 +1,10 @@
 package conf
 
 import (
-	"encoding/base64"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/proxy/blackhole"
+	"github.com/xtls/xray-core/proxy/freedom"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -19,24 +18,14 @@ type BlackholeConfig struct {
 }
 
 func (v *BlackholeConfig) Build() (proto.Message, error) {
-	config := new(blackhole.Config)
 	if v.Response != nil {
-		responseName := strings.ToLower(v.Response.Type)
-		switch responseName {
+		switch strings.ToLower(v.Response.Type) {
 		case "none", "":
-			config.Response = &blackhole.Response{Type: "none"}
-		case "http":
-			config.Response = &blackhole.Response{Type: "http"}
-		case "custom":
-			data, err := base64.StdEncoding.DecodeString(v.Response.CustomResponseData)
-			if err != nil {
-				return nil, errors.New("failed to decode custom response data: " + err.Error())
-			}
-			config.Response = &blackhole.Response{Type: "custom", CustomResponseData: data}
 		default:
-			return nil, errors.New("unknown blackhole response: " + responseName)
+			errors.PrintDeprecatedFeatureWarning(`"blackhole" outbound response`, `the "responder" outbound`)
+			return (&ResponderConfig{Type: v.Response.Type, Response: v.Response.CustomResponseData}).Build()
 		}
 	}
 
-	return config, nil
+	return &freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Block}}}, nil
 }

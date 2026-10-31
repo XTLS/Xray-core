@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package xray.proxy.responder;
+option csharp_namespace = "Xray.Proxy.Responder";
+option go_package = "github.com/xtls/xray-core/proxy/responder";
+option java_package = "com.xray.proxy.responder";
+option java_multiple_files = true;
+
+message Config {
+  bytes response = 1;
+}
