@@ -154,10 +154,12 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 		if inbound.CanSpliceCopy == 2 {
 			inbound.CanSpliceCopy = 1
 		}
+		writer := buf.NewBufferedWriter(buf.NewWriter(conn))
+		common.Must(writer.SetBuffered(false))
 		if err := dispatcher.DispatchLink(
 			ctx, dest, &transport.Link{
 				Reader: reader,
-				Writer: buf.NewWriter(conn),
+				Writer: writer,
 			},
 		); err != nil {
 			return errors.New("failed to dispatch request").Base(err)
