@@ -465,3 +465,137 @@ func Test_maxUpload(t *testing.T) {
 
 	common.Must(listen.Close())
 }
+
+func newPacketUpEchoServer(t *testing.T, serverCfg *Config) net.Port {
+	t.Helper()
+	port := tcp.PickPort()
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, port, &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: serverCfg,
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+			var b [5]byte
+			c.SetReadDeadline(time.Now().Add(5 * time.Second))
+			if _, err := io.ReadFull(c, b[:]); err != nil {
+				return
+			}
+			common.Must2(c.Write(append([]byte("echo:"), b[:]...)))
+		}(conn)
+	})
+	common.Must(err)
+	t.Cleanup(func() { listen.Close() })
+	return port
+}
+
+// uplinkEcho fails instead of hanging when the uplink never reaches the server.
+func uplinkEcho(t *testing.T, mode, method, transport string) error {
+	t.Helper()
+	res := make(chan error, 1)
+	go func() { res <- uplinkEchoOnce(mode, method, transport) }()
+	select {
+	case err := <-res:
+		return err
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("timed out")
+	}
+}
+
+func uplinkEchoOnce(mode, method, transport string) error {
+	port := tcp.PickPort()
+	serverCfg := &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "/sh", Mode: mode},
+	}
+	clientCfg := &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "/sh", Mode: mode, UplinkHTTPMethod: method},
+	}
+	if transport == "tls" {
+		ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+		sec := &tls.Config{Certificate: []*tls.Certificate{tls.ParseCertificate(ct)}, PinnedPeerCertSha256: [][]byte{ctHash[:]}}
+		serverCfg.SecurityType, serverCfg.SecuritySettings = "tls", sec
+		clientCfg.SecurityType, clientCfg.SecuritySettings = "tls", sec
+	}
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, port, serverCfg, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+			var b [5]byte
+			c.SetReadDeadline(time.Now().Add(5 * time.Second))
+			if _, err := io.ReadFull(c, b[:]); err != nil {
+				return
+			}
+			common.Must2(c.Write(append([]byte("echo:"), b[:]...)))
+		}(conn)
+	})
+	if err != nil {
+		return err
+	}
+	defer listen.Close()
+
+	conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), port), clientCfg)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err = conn.Write([]byte("hello")); err != nil {
+		return err
+	}
+	var b [1024]byte
+	conn.SetReadDeadline(time.Now().Add(4 * time.Second))
+	n, err := io.ReadFull(conn, b[:len("echo:hello")])
+	if err != nil || string(b[:n]) != "echo:hello" {
+		return fmt.Errorf("got %q: %v", b[:n], err)
+	}
+	return nil
+}
+
+// OPTIONS must carry uplink data exactly like POST does, in every mode and over every transport.
+func Test_UplinkHTTPMethodOptions(t *testing.T) {
+	for _, transport := range []string{"plain", "tls"} {
+		for _, mode := range []string{"packet-up", "stream-up", "stream-one", "auto"} {
+			t.Run(transport+"/"+mode, func(t *testing.T) {
+				if transport == "tls" && runtime.GOARCH == "arm64" {
+					t.Skip("TLS tests are skipped on arm64, like the other TLS tests in this package")
+				}
+				if err := uplinkEcho(t, mode, "POST", transport); err != nil {
+					t.Skipf("POST baseline does not work in this setup: %v", err)
+				}
+				for _, method := range []string{"PUT", "OPTIONS"} {
+					if err := uplinkEcho(t, mode, method, transport); err != nil {
+						t.Errorf("%s: %v", method, err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func Test_CORSPreflightStillAnswered(t *testing.T) {
+	port := newPacketUpEchoServer(t, &Config{Path: "/sh", Mode: "packet-up"})
+	req, _ := http.NewRequest("OPTIONS", fmt.Sprintf("http://127.0.0.1:%d/sh/", port), nil)
+	req.Header.Set("Origin", "https://example.com")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	resp, err := http.DefaultClient.Do(req)
+	common.Must(err)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("preflight status = %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Methods"); got != "POST" {
+		t.Errorf("Allow-Methods = %q", got)
+	}
+}
+
+func Test_ServerMaxHeaderBytes(t *testing.T) {
+	port := newPacketUpEchoServer(t, &Config{Path: "/sh", Mode: "packet-up", ServerMaxHeaderBytes: 2048})
+	big := bytes.Repeat([]byte("a"), 8192)
+	req, _ := http.NewRequest("GET", fmt.Sprintf("http://127.0.0.1:%d/sh/", port), nil)
+	req.Header.Set("X-Big", string(big))
+	resp, err := http.DefaultClient.Do(req)
+	common.Must(err)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusRequestHeaderFieldsTooLarge {
+		t.Fatalf("oversized header status = %d, want 431", resp.StatusCode)
+	}
+}

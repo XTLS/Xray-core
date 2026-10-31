@@ -1,6 +1,8 @@
 package geodata
 
 import (
+	"bufio"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	go_errors "errors"
@@ -197,7 +199,22 @@ func (d *downloader) fetch(rawURL string, writer io.Writer) error {
 		return errors.New("geodata download exceeds 256 MiB")
 	}
 
-	n, err := io.Copy(writer, io.LimitReader(resp.Body, maxDownloadSize+1))
+	br := bufio.NewReader(resp.Body)
+	header, err := br.Peek(2)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	var body io.Reader = br
+	if len(header) == 2 && header[0] == 0x1f && header[1] == 0x8b {
+		zr, err := gzip.NewReader(br)
+		if err != nil {
+			return err
+		}
+		defer zr.Close()
+		body = zr
+	}
+
+	n, err := io.Copy(writer, io.LimitReader(body, maxDownloadSize+1))
 	if err != nil {
 		return err
 	}
