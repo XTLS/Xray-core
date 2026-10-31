@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/quic-go"
@@ -407,6 +408,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 type httpServerConn struct {
 	sync.Mutex
+	writing   atomic.Bool
+	closeOnce sync.Once
+	closeErr  error
 	*done.Instance
 	io.Reader // no need to Close request.Body
 	http.ResponseWriter
@@ -415,6 +419,8 @@ type httpServerConn struct {
 func (c *httpServerConn) Write(b []byte) (int, error) {
 	c.Lock()
 	defer c.Unlock()
+	c.writing.Store(true)
+	defer c.writing.Store(false)
 	if c.Done() {
 		return 0, io.ErrClosedPipe
 	}
@@ -426,9 +432,15 @@ func (c *httpServerConn) Write(b []byte) (int, error) {
 }
 
 func (c *httpServerConn) Close() error {
-	c.Lock()
-	defer c.Unlock()
-	return c.Instance.Close()
+	c.closeOnce.Do(func() {
+		c.closeErr = c.Instance.Close()
+		if c.writing.Load() {
+			_ = http.NewResponseController(c.ResponseWriter).SetWriteDeadline(time.Now())
+		}
+		c.Lock()
+		c.Unlock()
+	})
+	return c.closeErr
 }
 
 type Listener struct {
