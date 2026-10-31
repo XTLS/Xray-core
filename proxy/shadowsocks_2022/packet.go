@@ -533,10 +533,14 @@ func (st *serverSessionState) check(packetID uint64) bool {
 	return st.window.Check(packetID)
 }
 
-func (st *serverSessionState) commit(packetID uint64) bool {
+func (st *serverSessionState) commit(packetID uint64, now int64) bool {
 	st.Lock()
 	defer st.Unlock()
-	return st.window.CheckAndAdd(packetID)
+	if !st.window.CheckAndAdd(packetID) {
+		return false
+	}
+	st.lastSeen.Store(now)
+	return true
 }
 
 type ClientUDPSession struct {
@@ -574,39 +578,31 @@ func (c *UDPClientCodec) NewClientSession() (*ClientUDPSession, error) {
 	}, nil
 }
 
-func (s *ClientUDPSession) getOrTransitionServerSession(sessionID uint64, cipher cipher.AEAD, now int64) (*serverSessionState, error) {
-	cur := s.current.Load()
-	if cur != nil && cur.sessionID == sessionID {
+func (s *ClientUDPSession) findServerSession(sessionID uint64, now int64) (*serverSessionState, error) {
+	if cur := s.current.Load(); cur != nil && cur.sessionID == sessionID {
 		return cur, nil
 	}
-
-	old := s.old.Load()
-	if old != nil && old.sessionID == sessionID {
-		if now-old.lastSeen.Load() > 60 {
-			return nil, errors.New("old server session expired")
+	if old := s.old.Load(); old != nil {
+		if old.sessionID == sessionID {
+			if now-old.lastSeen.Load() > 60 {
+				return nil, errors.New("old server session expired")
+			}
+			return old, nil
 		}
-		return old, nil
+		// Spec §3.2.4: reject newer server sessions when the last packet received from the old session is less than 1 minute old.
+		if now-old.lastSeen.Load() < 60 {
+			return nil, errors.New("newer server session rejected: old session is less than 1 minute old")
+		}
 	}
+	return nil, nil
+}
 
+func (s *ClientUDPSession) transitionServerSession(sessionID uint64, cipher cipher.AEAD, now int64) (*serverSessionState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cur = s.current.Load()
-	if cur != nil && cur.sessionID == sessionID {
-		return cur, nil
-	}
-
-	old = s.old.Load()
-	if old != nil && old.sessionID == sessionID {
-		if now-old.lastSeen.Load() > 60 {
-			return nil, errors.New("old server session expired")
-		}
-		return old, nil
-	}
-
-	// Spec §3.2.4: reject newer server sessions when the last packet received from the old session is less than 1 minute old.
-	if old != nil && now-old.lastSeen.Load() < 60 {
-		return nil, errors.New("newer server session rejected: old session is less than 1 minute old")
+	if st, err := s.findServerSession(sessionID, now); st != nil || err != nil {
+		return st, err
 	}
 
 	newState := &serverSessionState{
@@ -616,12 +612,9 @@ func (s *ClientUDPSession) getOrTransitionServerSession(sessionID uint64, cipher
 	}
 	newState.lastSeen.Store(now)
 
-	if cur == nil {
-		s.current.Store(newState)
-		return newState, nil
+	if cur := s.current.Load(); cur != nil {
+		s.old.Store(cur)
 	}
-
-	s.old.Store(cur)
 	s.current.Store(newState)
 	return newState, nil
 }
@@ -751,6 +744,8 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 		return DecodedUDPPacket{}, ErrPacketTooShort
 	}
 
+	now := time.Now().Unix()
+
 	if s.codec.method.IsChaCha {
 		if len(data) < PacketNonceSize+AEADTagSize {
 			return DecodedUDPPacket{}, ErrPacketTooShort
@@ -772,7 +767,6 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 		if err != nil {
 			return DecodedUDPPacket{}, err
 		}
-
 		if decoded.HeaderType != HeaderTypeServer {
 			return DecodedUDPPacket{}, ErrBadHeaderType
 		}
@@ -780,17 +774,20 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 			return DecodedUDPPacket{}, errors.New("client session ID mismatch")
 		}
 
-		now := time.Now().Unix()
-		st, err := s.getOrTransitionServerSession(sessionID, nil, now)
+		st, err := s.findServerSession(sessionID, now)
 		if err != nil {
 			return DecodedUDPPacket{}, err
 		}
+		if st == nil {
+			st, err = s.transitionServerSession(sessionID, nil, now)
+			if err != nil {
+				return DecodedUDPPacket{}, err
+			}
+		}
 
-		// Atomically commit after all validations succeed
-		if !st.commit(packetID) {
+		if !st.commit(packetID, now) {
 			return DecodedUDPPacket{}, ErrPacketIdNotUnique
 		}
-		st.lastSeen.Store(now)
 
 		return decoded, nil
 	}
@@ -801,80 +798,29 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 	sessionID := binary.BigEndian.Uint64(rawHeader[:8])
 	packetID := binary.BigEndian.Uint64(rawHeader[8:16])
 
-	now := time.Now().Unix()
-
-	// 1. Fast path for known active session
-	cur := s.current.Load()
-	var st *serverSessionState
-	var bodyAead cipher.AEAD
-
-	if cur != nil && cur.sessionID == sessionID {
-		st = cur
-		bodyAead = cur.cipher
-	} else {
-		old := s.old.Load()
-		if old != nil && old.sessionID == sessionID {
-			if now-old.lastSeen.Load() > 60 {
-				return DecodedUDPPacket{}, errors.New("old server session expired")
-			}
-			st = old
-			bodyAead = old.cipher
-		}
-	}
-
-	if st != nil {
-		if !st.check(packetID) {
-			return DecodedUDPPacket{}, ErrPacketIdNotUnique
-		}
-		bodyNonce := rawHeader[4:16]
-		bodyCipher := data[16:]
-		bodyPlain, err := bodyAead.Open(nil, bodyNonce, bodyCipher, nil)
-		if err != nil {
-			return DecodedUDPPacket{}, errors.New("failed to decrypt aes udp body").Base(err)
-		}
-
-		decoded, err := parsePlainUDPPacket(sessionID, packetID, bodyPlain)
-		if err != nil {
-			return DecodedUDPPacket{}, err
-		}
-
-		if decoded.HeaderType != HeaderTypeServer {
-			return DecodedUDPPacket{}, ErrBadHeaderType
-		}
-		if decoded.ClientSessionID != s.clientSessionID {
-			return DecodedUDPPacket{}, errors.New("client session ID mismatch")
-		}
-
-		if !st.commit(packetID) {
-			return DecodedUDPPacket{}, ErrPacketIdNotUnique
-		}
-		st.lastSeen.Store(now)
-
-		return decoded, nil
-	}
-
-	// 2. Unknown session: Trial path without mutating s.current or s.old yet!
-	// Re-check cur in case another worker concurrently transitioned to this sessionID
-	cur = s.current.Load()
-	old := s.old.Load()
-	if (cur == nil || cur.sessionID != sessionID) && (old == nil || old.sessionID != sessionID) {
-		// Spec §3.2.4: reject newer server sessions when the last packet received from the old session is less than 1 minute old.
-		if old != nil && now-old.lastSeen.Load() < 60 {
-			return DecodedUDPPacket{}, errors.New("newer server session rejected: old session is less than 1 minute old")
-		}
-	}
-
-	var sessBytes [8]byte
-	binary.BigEndian.PutUint64(sessBytes[:], sessionID)
-	bodyKey := DeriveSessionSubKey(s.codec.psk, sessBytes[:], s.codec.method.KeySaltLength)
-	trialAead, err := s.codec.method.NewAEAD(bodyKey)
+	st, err := s.findServerSession(sessionID, now)
 	if err != nil {
 		return DecodedUDPPacket{}, err
 	}
 
+	var bodyAead cipher.AEAD
+	if st != nil {
+		if !st.check(packetID) {
+			return DecodedUDPPacket{}, ErrPacketIdNotUnique
+		}
+		bodyAead = st.cipher
+	} else {
+		var sessBytes [8]byte
+		binary.BigEndian.PutUint64(sessBytes[:], sessionID)
+		bodyKey := DeriveSessionSubKey(s.codec.psk, sessBytes[:], s.codec.method.KeySaltLength)
+		bodyAead, err = s.codec.method.NewAEAD(bodyKey)
+		if err != nil {
+			return DecodedUDPPacket{}, err
+		}
+	}
+
 	bodyNonce := rawHeader[4:16]
-	bodyCipher := data[16:]
-	bodyPlain, err := trialAead.Open(nil, bodyNonce, bodyCipher, nil)
+	bodyPlain, err := bodyAead.Open(nil, bodyNonce, data[16:], nil)
 	if err != nil {
 		return DecodedUDPPacket{}, errors.New("failed to decrypt aes udp body").Base(err)
 	}
@@ -883,7 +829,6 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 	if err != nil {
 		return DecodedUDPPacket{}, err
 	}
-
 	if decoded.HeaderType != HeaderTypeServer {
 		return DecodedUDPPacket{}, ErrBadHeaderType
 	}
@@ -891,16 +836,16 @@ func (s *ClientUDPSession) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 		return DecodedUDPPacket{}, errors.New("client session ID mismatch")
 	}
 
-	// Payload authenticated! Safely commit and transition session under lock
-	st, err = s.getOrTransitionServerSession(sessionID, trialAead, now)
-	if err != nil {
-		return DecodedUDPPacket{}, err
+	if st == nil {
+		st, err = s.transitionServerSession(sessionID, bodyAead, now)
+		if err != nil {
+			return DecodedUDPPacket{}, err
+		}
 	}
 
-	if !st.commit(packetID) {
+	if !st.commit(packetID, now) {
 		return DecodedUDPPacket{}, ErrPacketIdNotUnique
 	}
-	st.lastSeen.Store(now)
 
 	return decoded, nil
 }
