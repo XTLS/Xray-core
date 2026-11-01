@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -31,7 +32,9 @@ Run Xray with config, the default command.
 The -config=file, -c=file flags set the config files for
 Xray. Multiple assign is accepted.
 
-The -confdir=dir flag sets a dir with multiple json config
+The -confdir=dir flag sets a directory with multiple config files.
+Files and the directory are loaded in command-line order; files inside
+the directory are sorted by name.
 
 The -format=json flag sets the format of config files.
 Default "auto".
@@ -52,11 +55,12 @@ func init() {
 }
 
 var (
-	configFiles cmdarg.Arg // "Config file for Xray.", the option is customed type, parse in main
-	configDir   string
-	dump        = cmdRun.Flag.Bool("dump", false, "Dump merged config only, without launching Xray server.")
-	test        = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
-	format      = cmdRun.Flag.String("format", "auto", "Format of input file.")
+	configFiles       cmdarg.Arg // "Config file for Xray.", the option is customed type, parse in main
+	configDir         string
+	configDirPosition int
+	dump              = cmdRun.Flag.Bool("dump", false, "Dump merged config only, without launching Xray server.")
+	test              = cmdRun.Flag.Bool("test", false, "Test config file only, without launching Xray server.")
+	format            = cmdRun.Flag.String("format", "auto", "Format of input file.")
 	// TODO: Restore this flag and its help text when Lua privileged signature authorization is re-enabled.
 	// luaPrivilegedPublicKey = cmdRun.Flag.String("lua-privileged-pubkey", "", "Unpadded Base64URL Ed25519 public key for privileged local Lua scripts.")
 
@@ -66,7 +70,11 @@ var (
 	_ = func() bool {
 		cmdRun.Flag.Var(&configFiles, "config", "Config path for Xray.")
 		cmdRun.Flag.Var(&configFiles, "c", "Short alias of -config")
-		cmdRun.Flag.StringVar(&configDir, "confdir", "", "A dir with multiple json config")
+		cmdRun.Flag.Func("confdir", "A dir with multiple config files", func(dir string) error {
+			configDir = dir
+			configDirPosition = len(configFiles)
+			return nil
+		})
 
 		return true
 	}()
@@ -147,7 +155,8 @@ func getRegepxByFormat() string {
 	}
 }
 
-func readConfDir(dirPath string) {
+func readConfDir(dirPath string) cmdarg.Arg {
+	var files cmdarg.Arg
 	confs, err := os.ReadDir(dirPath)
 	if err != nil {
 		log.Fatalln(err)
@@ -158,26 +167,28 @@ func readConfDir(dirPath string) {
 			log.Fatalln(err)
 		}
 		if matched {
-			configFiles.Set(path.Join(dirPath, f.Name()))
+			files.Set(path.Join(dirPath, f.Name()))
 		}
 	}
+	return files
 }
 
 func getConfigFilePath(verbose bool) cmdarg.Arg {
+	files := configFiles
 	if dirExists(configDir) {
 		if verbose {
 			log.Println("Using confdir from arg:", configDir)
 		}
-		readConfDir(configDir)
+		files = slices.Concat(files[:configDirPosition], readConfDir(configDir), files[configDirPosition:])
 	} else if envConfDir := platform.GetConfDirPath(); dirExists(envConfDir) {
 		if verbose {
 			log.Println("Using confdir from env:", envConfDir)
 		}
-		readConfDir(envConfDir)
+		files = slices.Concat(files, readConfDir(envConfDir))
 	}
 
-	if len(configFiles) > 0 {
-		return configFiles
+	if len(files) > 0 {
+		return files
 	}
 
 	if workingDir, err := os.Getwd(); err == nil {
