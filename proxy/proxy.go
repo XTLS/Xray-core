@@ -301,6 +301,7 @@ type VisionWriter struct {
 	// internal
 	writeOnceUserUUID  []byte
 	directWriteCounter stats.Counter
+	tlsRecords         tlsRecordTracker
 
 	testseed []uint32
 }
@@ -324,6 +325,7 @@ func NewVisionWriter(writer buf.Writer, trafficState *TrafficState, isUplink boo
 }
 
 func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	var direct buf.MultiBuffer
 	var isPadding *bool
 	var switchToDirectCopy *bool
 	var spliceReadyInbound *session.Inbound
@@ -362,11 +364,17 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if len(mb) == 1 && mb[0] == nil {
 			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx, w.testseed) // we do a long padding to hide vless header
 		} else {
-			isComplete := IsCompleteRecord(mb)
+			// TLS records can span both buffers and writes. End the padded
+			// prefix at a record boundary, then send the rest over the raw conn.
+			directEnd := w.tlsRecords.applicationDataEnd(mb, w.trafficState.EnableXtls)
+			if directEnd > 0 {
+				mb, direct = splitVisionBuffer(mb, directEnd)
+			}
+			isComplete := !w.trafficState.EnableXtls && IsCompleteRecord(mb)
 			mb = ReshapeMultiBuffer(w.ctx, mb)
 			longPadding := w.trafficState.IsTLS
 			for i, b := range mb {
-				if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
+				if directEnd > 0 || (w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete) {
 					if w.trafficState.EnableXtls {
 						*switchToDirectCopy = true
 					}
@@ -398,7 +406,14 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 	}
 	if err := w.Writer.WriteMultiBuffer(mb); err != nil {
+		buf.ReleaseMulti(direct)
 		return err
+	}
+	if len(direct) > 0 {
+		// Re-enter the normal switch path only after the terminal padding
+		// command has been written successfully. This also counts raw bytes
+		// and enables splice after the raw write has completed.
+		return w.WriteMultiBuffer(direct)
 	}
 	if spliceReadyInbound != nil && spliceReadyInbound.CanSpliceCopy == 2 {
 		// Enable splice only after this write has completed to avoid racing
