@@ -247,30 +247,31 @@ startOver:
 	}
 
 	// With autoSystemWfpBlockLeak, once the system routes lead to the TUN,
-	// keep DNS ("dns", if dns is set), and an IP version no route of which
-	// leads to the TUN ("misconfigtun"), from leaving through the other
-	// interfaces. Addresses do not matter: without one of a version in
-	// gateway, Windows gives the TUN a link-local one.
-	leaks := t.options.AutoSystemWfpBlockLeak
-	blockDNS := slices.Contains(leaks, "dns") && len(dns) > 0
-	blockIPv4 := slices.Contains(leaks, "misconfigtun") && !route4
-	blockIPv6 := slices.Contains(leaks, "misconfigtun") && !route6
-	if (route4 || route6) && (blockDNS || blockIPv4 || blockIPv6) {
-		if t.wfp, err = blockLeaks(t.luid, blockDNS, blockIPv4, blockIPv6); err != nil {
-			var blocked []string
-			for _, b := range []struct {
-				on   bool
-				what string
-			}{{blockDNS, "DNS"}, {blockIPv4, "IPv4"}, {blockIPv6, "IPv6"}} {
-				if b.on {
-					blocked = append(blocked, b.what)
-				}
-			}
-			// Rather no TUN than a leaking one.
-			return errors.New("unable to block ", strings.Join(blocked, " and "), " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
+	// keep connections to the ports given ("dns" stands for those of DNS),
+	// Windows' DNS Client service, and an IP version no route of which leads
+	// to the TUN ("misconfigtun"), from leaving through the other interfaces.
+	// Addresses do not matter: without one of a version in gateway, Windows
+	// gives the TUN a link-local one.
+	leaks, err := ExpandWfpBlockLeak(t.options.AutoSystemWfpBlockLeak)
+	if err != nil {
+		return err
+	}
+	block := newLeakFilters(leaks, route4, route6)
+	if route4 || route6 {
+		if slices.Contains(leaks, "windnsclient") && !block.dnsClient {
+			errors.LogInfo(context.Background(), "[tun] windnsclient skipped: before Windows 11 and Server 2022, the DNS Client service only queries port 53")
 		}
-		errors.LogInfo(context.Background(), "[tun] outside the TUN, blocked DNS: ", blockDNS, ", blocked IPv4: ", blockIPv4, ", blocked IPv6: ", blockIPv6)
-		if blockDNS {
+		if block.systemDNS() && len(dns) == 0 {
+			return errors.New("keeping the system's DNS inside the TUN needs dns to be set")
+		}
+	}
+	if blocked := block.String(); (route4 || route6) && blocked != "" {
+		if t.wfp, err = blockLeaks(t.luid, block); err != nil {
+			// Rather no TUN than a leaking one.
+			return errors.New("unable to block ", blocked, " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
+		}
+		errors.LogInfo(context.Background(), "[tun] blocked outside the TUN: ", blocked)
+		if block.systemDNS() {
 			covered := slices.Clone(addresses)
 			for _, route := range routesData {
 				covered = append(covered, route.Destination)
