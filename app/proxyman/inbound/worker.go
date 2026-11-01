@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
@@ -286,7 +287,17 @@ func (w *udpWorker) getConnection(id connID) (*udpConn, bool) {
 		return conn, true
 	}
 
-	pReader, pWriter := pipe.New(pipe.DiscardOverflow(), pipe.WithSizeLimit(16*1024))
+	// UDP packet dispatch is shared by every session, so full sessions must
+	// discard instead of blocking. Honor the buffer policy within finite bounds:
+	// keep the old minimum on low-memory architectures and cap unlimited policies.
+	bufferSize := policy.BufferPolicyFromContext(w.ctx).PerConnection
+	if bufferSize < 0 || bufferSize > 1024*1024 {
+		bufferSize = 1024 * 1024
+	} else if bufferSize < 16*1024 {
+		bufferSize = 16 * 1024
+	}
+	// Each UDP datagram owns a buffer even when its payload is small.
+	pReader, pWriter := pipe.New(pipe.DiscardOverflow(), pipe.WithSizeLimit(bufferSize), pipe.WithBufferLimit(1024))
 	conn := &udpConn{
 		reader: pReader,
 		writer: pWriter,
@@ -413,7 +424,7 @@ func (w *udpWorker) clean() error {
 func (w *udpWorker) Start() error {
 	w.activeConn = make(map[connID]*udpConn, 16)
 	ctx := context.Background()
-	h, err := udp.ListenUDP(ctx, w.address, w.port, w.stream, udp.HubCapacity(256))
+	h, err := udp.ListenUDP(ctx, w.address, w.port, w.stream, udp.HubCapacity(1024))
 	if err != nil {
 		return err
 	}

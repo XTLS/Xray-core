@@ -22,6 +22,7 @@ const (
 
 type pipeOption struct {
 	limit           int32 // maximum buffer size in bytes
+	bufferLimit     int
 	discardOverflow bool
 }
 
@@ -56,7 +57,7 @@ func (p *pipe) Len() int32 {
 func (p *pipe) getState(forRead bool) error {
 	switch p.state {
 	case open:
-		if !forRead && p.option.isFull(p.data.Len()) {
+		if !forRead && ((p.option.bufferLimit >= 0 && len(p.data) >= p.option.bufferLimit) || p.option.isFull(p.data.Len())) {
 			return errBufferFull
 		}
 		return nil

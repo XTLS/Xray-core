@@ -25,6 +25,15 @@ func WithSizeLimit(limit int32) Option {
 	}
 }
 
+// WithBufferLimit limits the number of queued buffers. As with WithSizeLimit,
+// a write is admitted if the queue is not full, so one multi-buffer write may
+// exceed the limit. A negative value disables the limit.
+func WithBufferLimit(limit int) Option {
+	return func(opt *pipeOption) {
+		opt.bufferLimit = limit
+	}
+}
+
 // DiscardOverflow returns an Option for Pipe to discard writes if full.
 func DiscardOverflow() Option {
 	return func(opt *pipeOption) {
@@ -54,7 +63,8 @@ func New(opts ...Option) (*Reader, *Writer) {
 		done:        done.New(),
 		errChan:     make(chan error, 1),
 		option: pipeOption{
-			limit: -1,
+			limit:       -1,
+			bufferLimit: -1,
 		},
 	}
 

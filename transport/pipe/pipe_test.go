@@ -32,6 +32,71 @@ func TestPipeReadWrite(t *testing.T) {
 	}
 }
 
+func TestPipeBufferLimitDiscardAndResume(t *testing.T) {
+	reader, writer := New(WithBufferLimit(2), DiscardOverflow())
+	defer writer.Close()
+	for _, value := range []byte{'a', 'b', 'c'} {
+		b := buf.New()
+		b.Write([]byte{value})
+		common.Must(writer.WriteMultiBuffer(buf.MultiBuffer{b}))
+	}
+	mb, err := reader.ReadMultiBuffer()
+	common.Must(err)
+	if len(mb) != 2 || mb.String() != "ab" {
+		t.Fatalf("full pipe retained %d buffers: %q", len(mb), mb.String())
+	}
+	buf.ReleaseMulti(mb)
+	b := buf.New()
+	b.Write([]byte{'d'})
+	common.Must(writer.WriteMultiBuffer(buf.MultiBuffer{b}))
+	mb, err = reader.ReadMultiBuffer()
+	common.Must(err)
+	defer buf.ReleaseMulti(mb)
+	if len(mb) != 1 || mb.String() != "d" {
+		t.Fatal("pipe did not resume after draining")
+	}
+}
+
+func TestPipeBufferLimitBlocksUntilRead(t *testing.T) {
+	reader, writer := New(WithBufferLimit(1))
+	defer writer.Close()
+	b := buf.New()
+	b.Write([]byte{'a'})
+	common.Must(writer.WriteMultiBuffer(buf.MultiBuffer{b}))
+	started := make(chan struct{})
+	finished := make(chan error, 1)
+	go func() {
+		b := buf.New()
+		b.Write([]byte{'b'})
+		close(started)
+		finished <- writer.WriteMultiBuffer(buf.MultiBuffer{b})
+	}()
+	<-started
+	select {
+	case err := <-finished:
+		t.Fatalf("write to full pipe returned before a read: %v", err)
+	case <-time.After(20 * time.Millisecond):
+	}
+	mb, err := reader.ReadMultiBuffer()
+	common.Must(err)
+	if mb.String() != "a" {
+		t.Fatal("first buffer changed")
+	}
+	buf.ReleaseMulti(mb)
+	select {
+	case err := <-finished:
+		common.Must(err)
+	case <-time.After(time.Second):
+		t.Fatal("write did not resume after draining")
+	}
+	mb, err = reader.ReadMultiBuffer()
+	common.Must(err)
+	defer buf.ReleaseMulti(mb)
+	if mb.String() != "b" {
+		t.Fatal("second buffer changed")
+	}
+}
+
 func TestPipeInterrupt(t *testing.T) {
 	pReader, pWriter := New(WithSizeLimit(1024))
 	payload := []byte{'a', 'b', 'c', 'd'}
