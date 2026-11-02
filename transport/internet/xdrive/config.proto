@@ -19,4 +19,12 @@ message Config {
   uint32 hole_timeout_ms = 11;
   string template = 12;
   xray.transport.internet.splithttp.XmuxConfig xmux = 13;
+  S3Config s3 = 14;
+}
+
+message S3Config {
+  string endpoint = 1;
+  string region = 2;
+  string bucket = 3;
+  bool path_style = 4;
 }

@@ -63,6 +63,7 @@ func newFakeDrive(t *testing.T) *fakeDrive {
 	}
 	mux.HandleFunc("/token", record(drive.handleToken))
 	mux.HandleFunc("/upload", record(drive.handleUpload))
+	mux.HandleFunc("/upload/", record(drive.handleUpload))
 	mux.HandleFunc("/files", record(drive.handleFiles))
 	mux.HandleFunc("/files/", record(drive.handleFile))
 	drive.server = httptest.NewServer(mux)
@@ -119,7 +120,8 @@ func (d *fakeDrive) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var metadata struct {
-		Name string `json:"name"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
 	}
 	if err := json.NewDecoder(metaPart).Decode(&metadata); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -129,6 +131,22 @@ func (d *fakeDrive) handleUpload(w http.ResponseWriter, r *http.Request) {
 	var data []byte
 	if dataPart, err := reader.NextPart(); err == nil {
 		data, _ = io.ReadAll(dataPart)
+	}
+
+	if id, ok := strings.CutPrefix(r.URL.Path, "/upload/"); ok {
+		// an update of the body and description of a file
+		d.mu.Lock()
+		file := d.files[id]
+		if file != nil {
+			file.data, file.description = data, metadata.Description
+		}
+		d.mu.Unlock()
+		if file == nil || r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"id": id})
+		return
 	}
 
 	d.mu.Lock()
@@ -223,6 +241,11 @@ func (d *fakeDrive) handleFile(w http.ResponseWriter, r *http.Request) {
 	if ok && r.Method == http.MethodDelete {
 		delete(d.files, id)
 	}
+	var snapshot fakeFile
+	if ok {
+		// a file can be updated, its fields are read here
+		snapshot = *file
+	}
 	d.mu.Unlock()
 
 	if !ok {
@@ -233,11 +256,25 @@ func (d *fakeDrive) handleFile(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	if strings.Contains(r.URL.RawQuery, "fields=description") {
-		json.NewEncoder(w).Encode(map[string]string{"description": file.description})
+	if r.Method == http.MethodPatch {
+		var meta struct {
+			Description string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&meta); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		d.mu.Lock()
+		file.description = meta.Description
+		d.mu.Unlock()
+		json.NewEncoder(w).Encode(map[string]string{"id": id})
 		return
 	}
-	w.Write(file.data)
+	if strings.Contains(r.URL.RawQuery, "fields=description") {
+		json.NewEncoder(w).Encode(map[string]string{"description": snapshot.description})
+		return
+	}
+	w.Write(snapshot.data)
 }
 
 func (d *fakeDrive) shouldFail(kind string) bool {

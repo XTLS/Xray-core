@@ -47,18 +47,19 @@ func executeBalancerInfo(cmd *base.Command, args []string) {
 	conn, ctx, close := dialAPIServer()
 	defer close()
 	client := routerService.NewRoutingServiceClient(conn)
-	r := &routerService.GetBalancerInfoRequest{Tag: unnamedArgs[0]}
-	resp, err := client.GetBalancerInfo(ctx, r)
-	if err != nil {
-		base.Fatalf("failed to get health information: %s", err)
-	}
+	for _, tag := range unnamedArgs {
+		r := &routerService.GetBalancerInfoRequest{Tag: tag}
+		resp, err := client.GetBalancerInfo(ctx, r)
+		if err != nil {
+			base.Fatalf("failed to get health information: %s", err)
+		}
 
-	if apiJSON {
-		showJSONResponse(resp)
-		return
+		if apiJSON {
+			showJSONResponse(resp)
+		} else {
+			showBalancerInfo(resp.Balancer)
+		}
 	}
-
-	showBalancerInfo(resp.Balancer)
 }
 
 func showBalancerInfo(b *routerService.BalancerMsg) {

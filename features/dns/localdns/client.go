@@ -2,6 +2,7 @@ package localdns
 
 import (
 	"context"
+	"net/netip"
 	"syscall"
 	"time"
 
@@ -99,6 +100,15 @@ func New() *Client {
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			if internet.IsSkippedDNSServer(address) {
 				return nil, errors.New("skipped DNS server ", address)
+			}
+			// A socket of the server's IP version only needs that version bound
+			// to the interface, which a dual-stack one would need both of.
+			if ap, err := netip.ParseAddrPort(address); err == nil && (network == "udp" || network == "tcp") {
+				if ap.Addr().Unmap().Is4() {
+					network += "4"
+				} else {
+					network += "6"
+				}
 			}
 			return d.DialContext(ctx, network, address)
 		},

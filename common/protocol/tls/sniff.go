@@ -101,6 +101,10 @@ func ReadClientHello(data []byte, h *SniffHeader) error {
 					return errNotClientHello
 				}
 				if nameType == 0 {
+					// RFC 6066 requires a non-empty HostName.
+					if nameLen == 0 {
+						return errNotClientHello
+					}
 					// QUIC separated across packets
 					// May cause the serverName to be incomplete
 					b := byte(0)

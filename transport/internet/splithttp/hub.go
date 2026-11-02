@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	gotls "crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -126,7 +127,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 	h.config.ApplyXPaddingToResponse(writer, config)
 
-	if request.Method == "OPTIONS" {
+	// A real CORS preflight always carries Access-Control-Request-Method. An OPTIONS request without it is an
+	// uplink request (uplinkHTTPMethod: "OPTIONS") and must go through the normal handling below.
+	if request.Method == "OPTIONS" && request.Header.Get("Access-Control-Request-Method") != "" {
 		writer.WriteHeader(http.StatusOK)
 		return
 	}
@@ -553,6 +556,14 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		handler.localAddr = l.listener.Addr()
 
+		var http2Config *http.HTTP2Config
+		if len(l.config.H2Params) > 0 {
+			http2Config = new(http.HTTP2Config)
+			if err := json.Unmarshal(l.config.H2Params, http2Config); err != nil {
+				return nil, errors.New("failed to parse HTTP2Config").Base(err)
+			}
+		}
+
 		// server can handle both plaintext HTTP/1.1 and h2c
 		protocols := new(http.Protocols)
 		protocols.SetHTTP1(true)
@@ -562,6 +573,7 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 			ReadHeaderTimeout: time.Second * 4,
 			MaxHeaderBytes:    l.config.GetNormalizedServerMaxHeaderBytes(),
 			Protocols:         protocols,
+			HTTP2:             http2Config,
 		}
 		go func() {
 			if err := l.server.Serve(l.listener); err != nil {

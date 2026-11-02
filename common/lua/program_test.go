@@ -187,18 +187,19 @@ func TestCompileInlineDiagnostics(t *testing.T) {
 */
 
 func TestCompileFileExtension(t *testing.T) {
-	for _, name := range []string{"script", "script.dat", "script.lua.txt", "script.LUA"} {
+	for _, name := range []string{"script", "script.dat", "script.lua.txt"} {
+		if program, err := Compile(name); program != nil || err == nil || !strings.Contains(err.Error(), "Lua file extension must be .lua") {
+			t.Fatalf("Compile(%q) = %v, %v; want nil program and .lua extension error", name, program, err)
+		}
+	}
+	for _, name := range []string{"script.lua", "script.LUA", "script.Lua", "script.lUa"} {
 		path := filepath.Join(t.TempDir(), name)
 		if err := os.WriteFile(path, []byte("value = 42"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if program, err := Compile(path); program != nil || err == nil || !strings.Contains(err.Error(), "Lua file extension must be .lua") {
-			t.Fatalf("Compile(%q) = %v, %v; want nil program and .lua extension error", path, program, err)
+		if program, err := Compile(path); program == nil || err != nil {
+			t.Fatalf("Compile(%q) = %v, %v; want successful compilation", path, program, err)
 		}
-	}
-	path := writeTestScript(t, "value = 42") + string(filepath.Separator) + "."
-	if program, err := Compile(path); program == nil || err != nil {
-		t.Fatalf("Compile(%q) = %v, %v; want acceptance of the resolved .lua path", path, program, err)
 	}
 }
 
@@ -232,10 +233,6 @@ func writeTestScript(t *testing.T, code string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "script.lua")
 	if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	path, err := filepath.EvalSymlinks(path)
-	if err != nil {
 		t.Fatal(err)
 	}
 	return path

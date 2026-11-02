@@ -324,7 +324,7 @@ func TestXDriveRejectsUnknownService(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"remoteFolder": "/tmp/xdrive", "service": "Dropbox"}`), config); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if _, err := config.Build(); err == nil || !strings.Contains(err.Error(), `use "google-drive", "template" or "local"`) {
+	if _, err := config.Build(); err == nil || !strings.Contains(err.Error(), `use "google-drive", "template", "s3" or "local"`) {
 		t.Fatalf("expected an unknown service error, got %v", err)
 	}
 }

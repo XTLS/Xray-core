@@ -58,18 +58,10 @@ func readConfigFile(file *os.File) ([]byte, error) {
 		return nil, err
 	}
 	if info.Mode().IsRegular() {
-		path, err := filepath.Abs(file.Name())
-		if err != nil {
-			return nil, err
-		}
-		path, err = filepath.EvalSymlinks(path)
-		if err != nil {
-			return nil, err
-		}
-		switch strings.ToLower(filepath.Ext(path)) {
+		switch strings.ToLower(filepath.Ext(file.Name())) {
 		case ".jsonc", ".json", ".yml", ".yaml", ".toml", ".pb", ".protobuf":
 		default:
-			return nil, errors.New("unsupported config file extension: ", path)
+			return nil, errors.New("unsupported config file extension: ", file.Name())
 		}
 	}
 	return io.ReadAll(file)
