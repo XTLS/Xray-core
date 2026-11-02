@@ -45,6 +45,16 @@ func TestWFPStructLayout(t *testing.T) {
 		[]uintptr{unsafe.Sizeof(ports), unsafe.Offsetof(ports.high)},
 		[]uintptr{32, 16}, []uintptr{16, 8})
 
+	var v4 fwpV4AddrAndMask
+	check("FWP_V4_ADDR_AND_MASK",
+		[]uintptr{unsafe.Sizeof(v4), unsafe.Offsetof(v4.mask)},
+		[]uintptr{8, 4}, []uintptr{8, 4})
+
+	var v6 fwpV6AddrAndMask
+	check("FWP_V6_ADDR_AND_MASK",
+		[]uintptr{unsafe.Sizeof(v6), unsafe.Offsetof(v6.prefixLength)},
+		[]uintptr{17, 16}, []uintptr{17, 16})
+
 	var display fwpmDisplayData0
 	check("FWPM_DISPLAY_DATA0",
 		[]uintptr{unsafe.Sizeof(display), unsafe.Offsetof(display.description)},
@@ -128,6 +138,18 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	if err := addLeakFilters(engine, loopback, block); err != nil {
 		skipUnlessElevated(err)
 	}
+	// The local network's addresses, with another sublayer.
+	if leaks, err = ExpandWfpBlockLeak([]string{"allexceptlan", "udp/1000-2000", "icmp"}); err != nil {
+		t.Fatal(err)
+	}
+	block = newLeakFilters(leaks, true, false)
+	block.dnsClient = true
+	if !block.lan {
+		t.Fatal("allexceptlan left the local network blocked")
+	}
+	if err := addLeakFilters(engine, loopback, block); err != nil {
+		skipUnlessElevated(err)
+	}
 }
 
 func TestNewLeakFilters(t *testing.T) {
@@ -148,6 +170,9 @@ func TestNewLeakFilters(t *testing.T) {
 		{[]string{"misconfigtun"}, true, false, "IPv6", false},
 		{[]string{"tcp/10-20", "udp", "icmp"}, true, true, "tcp/10-20, udp, icmp", true},
 		{[]string{"tcp/54-60", "icmp"}, true, true, "tcp/54-60, icmp", false},
+		{[]string{"allexceptlan"}, true, true, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4 except LAN, IPv6 except LAN", true},
+		{[]string{"allexceptlan", "all"}, true, true, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4, IPv6", true},
+		{[]string{"misconfigtun", "allexceptlan"}, true, false, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4 except LAN, IPv6 except LAN", true},
 	} {
 		leaks, err := ExpandWfpBlockLeak(c.values)
 		if err != nil {
@@ -160,6 +185,11 @@ func TestNewLeakFilters(t *testing.T) {
 		if got := block.systemDNS(); got != c.systemDNS {
 			t.Errorf("%v: systemDNS() = %v", c.values, got)
 		}
+	}
+	// Without the port 53 values "allexceptlan" brings along, a resolver on
+	// the local network, like the router's, stays reachable.
+	if (leakFilters{ipv4: true, ipv6: true, lan: true}).systemDNS() {
+		t.Error("systemDNS() = true with the local network open")
 	}
 }
 

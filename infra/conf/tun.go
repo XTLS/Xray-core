@@ -52,7 +52,7 @@ func (v *TunConfig) Build() (proto.Message, error) {
 			return nil, errors.New("autoSystemWfpBlockLeak needs autoSystemRoutingTable to be set")
 		}
 		if tun.BlocksSystemDNS(leaks) && len(v.DNS) == 0 {
-			return nil, errors.New(`autoSystemWfpBlockLeak "all", "dns", "windnsclient", or TCP or UDP port 53, needs dns to be set`)
+			return nil, errors.New(`autoSystemWfpBlockLeak "all", "allexceptlan", "dns", "windnsclient", or TCP or UDP port 53, needs dns to be set`)
 		}
 	case "linux", "freebsd":
 		if v.AutoSystemDnsToGateway && len(v.Gateway) == 0 {

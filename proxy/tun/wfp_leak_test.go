@@ -25,6 +25,8 @@ func TestExpandWfpBlockLeak(t *testing.T) {
 		{[]string{"udp/10-20", "udp/53-53", "tcp/50-60"}, []string{"udp/10-20", "udp/53", "tcp/50-60"}, true},
 		{[]string{"tcp/54-60", "udp/1-52"}, []string{"tcp/54-60", "udp/1-52"}, false},
 		{[]string{"ICMP", "icmp"}, []string{"icmp"}, false},
+		{[]string{"AllExceptLAN"}, []string{"allexceptlan", "udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853"}, true},
+		{[]string{"dns", "allexceptlan", "all"}, []string{"udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853", "allexceptlan", "all"}, true},
 	} {
 		leaks, err := ExpandWfpBlockLeak(c.values)
 		if err != nil {

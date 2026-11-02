@@ -249,9 +249,10 @@ startOver:
 	// With autoSystemWfpBlockLeak, once the system routes lead to the TUN,
 	// keep the protocols and ports given ("dns" stands for those of DNS),
 	// Windows' DNS Client service, an IP version no route of which leads to
-	// the TUN ("misconfigtun"), or everything ("all"), from leaving through
-	// the other interfaces. Addresses do not matter: without one of a version
-	// in gateway, Windows gives the TUN a link-local one.
+	// the TUN ("misconfigtun"), or everything ("all", or "allexceptlan" but
+	// for the local network), from leaving through the other interfaces.
+	// Addresses do not matter: without one of a version in gateway, Windows
+	// gives the TUN a link-local one.
 	leaks, err := ExpandWfpBlockLeak(t.options.AutoSystemWfpBlockLeak)
 	if err != nil {
 		return err

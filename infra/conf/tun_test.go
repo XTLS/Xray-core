@@ -46,6 +46,11 @@ func TestTunConfigAutoSystem(t *testing.T) {
 			Parser: loadJSON(creator),
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"all", "udp", "tcp/8000-9000", "icmp"}},
 		},
+		{
+			Input:  `{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["AllExceptLAN"]}`,
+			Parser: loadJSON(creator),
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"allexceptlan", "udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853"}},
+		},
 	})
 }
 
@@ -67,6 +72,8 @@ func TestTunConfigAutoSystemNeeds(t *testing.T) {
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/50-60"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/54-60", "icmp"]}`, nil},
 		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["all"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["allexceptlan"]}`, []string{"windows"}},
+		{`{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["allexceptlan"]}`, nil},
 		{`{"name": "xray0", "autoSystemDnsToGateway": true}`, []string{"linux", "freebsd"}},
 	} {
 		config := new(TunConfig)

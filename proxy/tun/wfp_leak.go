@@ -72,7 +72,8 @@ func parseLeakTraffic(value string) (leakTraffic, bool) {
 
 // ExpandWfpBlockLeak checks the values of autoSystemWfpBlockLeak and returns
 // them in lower case, in order and without duplicates, with "dns" replaced by
-// what it stands for, and ports written the same way, "tcp/0" as "tcp" say.
+// what it stands for, "allexceptlan" followed by that, and ports written the
+// same way, "tcp/0" as "tcp" say.
 func ExpandWfpBlockLeak(values []string) ([]string, error) {
 	var leaks []string
 	add := func(leak string) {
@@ -88,6 +89,13 @@ func ExpandWfpBlockLeak(values []string) ([]string, error) {
 			}
 		case "windnsclient", "misconfigtun", "all":
 			add(value)
+		case "allexceptlan":
+			// The local network is no way out for DNS, which a resolver
+			// there, like the router, would forward outside the TUN.
+			add(value)
+			for _, leak := range dnsLeaks {
+				add(leak)
+			}
 		default:
 			traffic, ok := parseLeakTraffic(value)
 			if !ok {
