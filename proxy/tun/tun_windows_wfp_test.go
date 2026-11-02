@@ -40,6 +40,11 @@ func TestWFPStructLayout(t *testing.T) {
 		[]uintptr{unsafe.Sizeof(value), unsafe.Offsetof(value.value)},
 		[]uintptr{16, 8}, []uintptr{8, 4})
 
+	var ports fwpRange0
+	check("FWP_RANGE0",
+		[]uintptr{unsafe.Sizeof(ports), unsafe.Offsetof(ports.high)},
+		[]uintptr{32, 16}, []uintptr{16, 8})
+
 	var display fwpmDisplayData0
 	check("FWPM_DISPLAY_DATA0",
 		[]uintptr{unsafe.Sizeof(display), unsafe.Offsetof(display.description)},
@@ -114,7 +119,7 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun", "tcp/443"})
+	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun", "all", "tcp/443", "udp/1000-2000", "tcp", "icmp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,23 +131,35 @@ func TestLeakFiltersAccepted(t *testing.T) {
 }
 
 func TestNewLeakFilters(t *testing.T) {
-	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	block := newLeakFilters(leaks, true, false)
-	want := "udp/53, tcp/53, tcp/853, udp/853, IPv6"
+	windnsclient := ""
 	if dnsClientUsesAnyPort() {
-		want = "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv6"
+		windnsclient = ", windnsclient"
 	}
-	if got := block.String(); got != want {
-		t.Errorf("String() = %q, want %q", got, want)
-	}
-	if !block.systemDNS() {
-		t.Error("systemDNS() = false with dns")
-	}
-	if block := newLeakFilters([]string{"tcp/853", "udp/853", "misconfigtun"}, true, true); block.String() != "tcp/853, udp/853" || block.systemDNS() {
-		t.Errorf("tcp/853, udp/853: %q, systemDNS() = %v", block.String(), block.systemDNS())
+	for _, c := range []struct {
+		values         []string
+		route4, route6 bool
+		blocked        string
+		systemDNS      bool
+	}{
+		{[]string{"dns", "misconfigtun"}, true, false, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv6", true},
+		{[]string{"tcp/853", "udp/853", "misconfigtun"}, true, true, "tcp/853, udp/853", false},
+		{[]string{"all"}, true, true, "IPv4, IPv6", true},
+		{[]string{"all", "misconfigtun"}, true, true, "IPv4, IPv6", true},
+		{[]string{"misconfigtun"}, true, false, "IPv6", false},
+		{[]string{"tcp/10-20", "udp", "icmp"}, true, true, "tcp/10-20, udp, icmp", true},
+		{[]string{"tcp/54-60", "icmp"}, true, true, "tcp/54-60, icmp", false},
+	} {
+		leaks, err := ExpandWfpBlockLeak(c.values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		block := newLeakFilters(leaks, c.route4, c.route6)
+		if got := block.String(); got != c.blocked {
+			t.Errorf("%v: String() = %q, want %q", c.values, got, c.blocked)
+		}
+		if got := block.systemDNS(); got != c.systemDNS {
+			t.Errorf("%v: systemDNS() = %v", c.values, got)
+		}
 	}
 }
 

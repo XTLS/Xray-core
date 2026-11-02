@@ -41,6 +41,11 @@ func TestTunConfigAutoSystem(t *testing.T) {
 			Parser: loadJSON(creator),
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"tcp/853", "udp/853"}},
 		},
+		{
+			Input:  `{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["All", "UDP/0", "tcp/8000-9000", "icmp"]}`,
+			Parser: loadJSON(creator),
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"all", "udp", "tcp/8000-9000", "icmp"}},
+		},
 	})
 }
 
@@ -57,6 +62,11 @@ func TestTunConfigAutoSystemNeeds(t *testing.T) {
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["udp/53"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["windnsclient"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/853", "udp/853"]}`, nil},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["all"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["udp"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/50-60"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/54-60", "icmp"]}`, nil},
+		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["all"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemDnsToGateway": true}`, []string{"linux", "freebsd"}},
 	} {
 		config := new(TunConfig)
@@ -70,7 +80,7 @@ func TestTunConfigAutoSystemNeeds(t *testing.T) {
 }
 
 func TestTunConfigAutoSystemWfpBlockLeakUnknown(t *testing.T) {
-	for _, value := range []string{"ip", "tcp/0", "icmp/1"} {
+	for _, value := range []string{"ip", "tcp/0-10", "icmp/1", "udp/20-10"} {
 		config := new(TunConfig)
 		if err := json.Unmarshal([]byte(`{"name": "xray0", "autoSystemWfpBlockLeak": ["dns", "`+value+`"]}`), config); err != nil {
 			t.Fatal(err)

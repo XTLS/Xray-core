@@ -37,15 +37,17 @@ const (
 	fwpmSessionFlagDynamic         = 1  // FWPM_SESSION_FLAG_DYNAMIC
 	fwpmFilterFlagClearActionRight = 8  // FWPM_FILTER_FLAG_CLEAR_ACTION_RIGHT
 
-	fwpUint8                  = 1  // FWP_UINT8
-	fwpUint16                 = 2  // FWP_UINT16
-	fwpUint32                 = 3  // FWP_UINT32
-	fwpUint64                 = 4  // FWP_UINT64
-	fwpByteArray16Type        = 11 // FWP_BYTE_ARRAY16_TYPE
-	fwpByteBlobType           = 12 // FWP_BYTE_BLOB_TYPE
-	fwpSecurityDescriptorType = 14 // FWP_SECURITY_DESCRIPTOR_TYPE
+	fwpUint8                  = 1     // FWP_UINT8
+	fwpUint16                 = 2     // FWP_UINT16
+	fwpUint32                 = 3     // FWP_UINT32
+	fwpUint64                 = 4     // FWP_UINT64
+	fwpByteArray16Type        = 11    // FWP_BYTE_ARRAY16_TYPE
+	fwpByteBlobType           = 12    // FWP_BYTE_BLOB_TYPE
+	fwpSecurityDescriptorType = 14    // FWP_SECURITY_DESCRIPTOR_TYPE
+	fwpRangeType              = 0x102 // FWP_RANGE_TYPE
 
 	fwpMatchEqual       = 0 // FWP_MATCH_EQUAL
+	fwpMatchRange       = 5 // FWP_MATCH_RANGE
 	fwpMatchFlagsAllSet = 6 // FWP_MATCH_FLAGS_ALL_SET
 
 	fwpConditionFlagIsLoopback = 1 // FWP_CONDITION_FLAG_IS_LOOPBACK
@@ -92,6 +94,11 @@ type fwpByteBlob struct {
 type fwpValue0 struct {
 	typ   uint32
 	value uintptr
+}
+
+// fwpRange0 is FWP_RANGE0, which an FWP_RANGE_TYPE condition points to.
+type fwpRange0 struct {
+	low, high fwpValue0
 }
 
 type fwpmDisplayData0 struct {
@@ -173,9 +180,9 @@ func condition(field *windows.GUID, typ uint32, value uintptr) fwpmFilterConditi
 
 // leakFilters is what blockLeaks keeps from leaving outside the TUN.
 type leakFilters struct {
-	ports      []leakPort // connections to these ports
-	dnsClient  bool       // Windows' DNS Client service
-	ipv4, ipv6 bool       // an IP version altogether
+	traffic    []leakTraffic // connections of these protocols and ports
+	dnsClient  bool          // Windows' DNS Client service
+	ipv4, ipv6 bool          // an IP version altogether
 }
 
 // newLeakFilters turns expanded autoSystemWfpBlockLeak values into the filters
@@ -187,10 +194,12 @@ func newLeakFilters(leaks []string, route4, route6 bool) leakFilters {
 		case "windnsclient":
 			block.dnsClient = dnsClientUsesAnyPort()
 		case "misconfigtun":
-			block.ipv4, block.ipv6 = !route4, !route6
+			block.ipv4, block.ipv6 = block.ipv4 || !route4, block.ipv6 || !route6
+		case "all":
+			block.ipv4, block.ipv6 = true, true
 		default:
-			if port, ok := parseLeakPort(leak); ok {
-				block.ports = append(block.ports, port)
+			if traffic, ok := parseLeakTraffic(leak); ok {
+				block.traffic = append(block.traffic, traffic)
 			}
 		}
 	}
@@ -200,8 +209,8 @@ func newLeakFilters(leaks []string, route4, route6 bool) leakFilters {
 // String lists what block keeps inside the TUN, or is empty for nothing.
 func (block leakFilters) String() string {
 	var blocked []string
-	for _, port := range block.ports {
-		blocked = append(blocked, port.String())
+	for _, traffic := range block.traffic {
+		blocked = append(blocked, traffic.String())
 	}
 	for _, b := range []struct {
 		on   bool
@@ -214,9 +223,12 @@ func (block leakFilters) String() string {
 	return strings.Join(blocked, ", ")
 }
 
-// systemDNS tells whether block keeps the system's DNS inside the TUN.
+// systemDNS tells whether block keeps the system's DNS inside the TUN: port
+// 53, the DNS Client service, or both IP versions altogether.
 func (block leakFilters) systemDNS() bool {
-	return block.dnsClient || slices.ContainsFunc(block.ports, func(port leakPort) bool { return port.port == 53 })
+	return block.dnsClient || block.ipv4 && block.ipv6 || slices.ContainsFunc(block.traffic, func(traffic leakTraffic) bool {
+		return traffic.covers("udp", 53) || traffic.covers("tcp", 53)
+	})
 }
 
 // dnsClientUsesAnyPort tells whether Windows' DNS Client service may send its
@@ -233,27 +245,30 @@ func dnsClientUsesAnyPort() bool {
 // for every program but Xray itself, whose outbounds (DNS included) use the
 // other interfaces on purpose:
 //
-//   - ports: connections to these TCP or UDP ports may only go through the
-//     TUN, those of DNS (53), DNS over TLS (TCP 853) and DNS over QUIC (UDP
-//     853) with "dns". Windows sends a name query to the DNS servers of all
-//     interfaces, not only to those of the TUN: to the first server of each
-//     interface, then to all of them when no answer arrives within a second or
-//     two. It sends the queries for the servers of an interface out through
-//     that interface, whatever the routes say, and other programs reach an
-//     on-link resolver, like 192.168.1.1 from DHCP, through its LAN route,
-//     which is more specific than the TUN's default route.
+//   - traffic: connections of these protocols, TCP and UDP to some or all
+//     ports, or ICMP, may only go through the TUN, those of DNS (53), DNS
+//     over TLS (TCP 853) and DNS over QUIC (UDP 853) with "dns". Windows sends
+//     a name query to the DNS servers of all interfaces, not only to those of
+//     the TUN: to the first server of each interface, then to all of them when
+//     no answer arrives within a second or two. It sends the queries for the
+//     servers of an interface out through that interface, whatever the routes
+//     say, and other programs reach an on-link resolver, like 192.168.1.1 from
+//     DHCP, through its LAN route, which is more specific than the TUN's
+//     default route.
 //   - dnsClient: since Windows 11 and Server 2022, Windows may also send its
 //     queries over HTTPS or TLS, to any port, so its DNS Client service may not
 //     connect outside the TUN at all, except for name resolution on the local
 //     link (mDNS, LLMNR).
-//   - ipv4, ipv6: no IPv4, or no IPv6, at all, in either direction, for a TUN
-//     that no route of it leads to, except loopback and what Windows itself
-//     needs on the local link (DHCP, and for IPv6 neighbor and multicast
-//     listener discovery), none of which can leave it. The TUN carries what
-//     is routed to it even without an address of that IP version in gateway:
-//     Windows gives it link-local ones itself, an IPv6 one at once, an IPv4
-//     one from 169.254.0.0/16 after some seconds (until then, IPv4 routed to
-//     the TUN is unreachable).
+//   - ipv4, ipv6: no IPv4, or no IPv6, at all outside the TUN, in either
+//     direction: for a TUN that no route of that version leads to, or for
+//     everything with "all". The TUN carries what is routed to it even without
+//     an address of that IP version in gateway: Windows gives it link-local
+//     ones itself, an IPv6 one at once, an IPv4 one from 169.254.0.0/16 after
+//     some seconds (until then, IPv4 routed to the TUN is unreachable).
+//
+// Whatever is blocked, loopback, which cannot leave the system, and what
+// Windows itself needs on the local link stay allowed: DHCP, and for IPv6
+// neighbor and multicast listener discovery.
 //
 // The filters live in a dynamic WFP session: closing the returned engine handle
 // with closeWFPEngine deletes them, and so does Windows when the process dies.
@@ -354,33 +369,109 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters)
 	onTUN := func(field *windows.GUID) fwpmFilterCondition0 {
 		return condition(field, fwpUint64, uintptr(unsafe.Pointer(tunLUID)))
 	}
+	// toPorts matches the ports of traffic, if not all of them.
+	toPorts := func(traffic leakTraffic) []fwpmFilterCondition0 {
+		switch {
+		case traffic.low == 0:
+			return nil
+		case traffic.low == traffic.high:
+			return []fwpmFilterCondition0{condition(&fwpmConditionIPRemotePort, fwpUint16, uintptr(traffic.low))}
+		}
+		ports := &fwpRange0{
+			low:  fwpValue0{typ: fwpUint16, value: uintptr(traffic.low)},
+			high: fwpValue0{typ: fwpUint16, value: uintptr(traffic.high)},
+		}
+		pinner.Pin(ports) // the condition only holds it as uintptr
+		return []fwpmFilterCondition0{{
+			fieldKey:       fwpmConditionIPRemotePort,
+			matchType:      fwpMatchRange,
+			conditionValue: fwpValue0{typ: fwpRangeType, value: uintptr(unsafe.Pointer(ports))},
+		}}
+	}
+
+	// What stays allowed whatever is blocked, in both directions: replies to
+	// a connection accepted from outside would leave through the physical
+	// link as well.
+	type permit struct {
+		name       string
+		conditions []fwpmFilterCondition0
+	}
+	loopback := permit{"loopback", []fwpmFilterCondition0{{
+		fieldKey:       fwpmConditionFlags,
+		matchType:      fwpMatchFlagsAllSet,
+		conditionValue: fwpValue0{typ: fwpUint32, value: fwpConditionFlagIsLoopback},
+	}}}
+	// DHCP keeps the addresses of the other interfaces, which Xray's own
+	// connections use.
+	dhcp := permit{"DHCP", []fwpmFilterCondition0{
+		condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_UDP),
+		condition(&fwpmConditionIPLocalPort, fwpUint16, 68),
+		condition(&fwpmConditionIPRemotePort, fwpUint16, 67),
+	}}
+	// Neighbor and multicast listener discovery, ICMPv6 130-137 and 143,
+	// whose type and code sit where the local and remote port are.
+	discovery := permit{"IPv6 neighbor and multicast listener discovery", []fwpmFilterCondition0{condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_ICMPV6)}}
+	for _, typ := range []uintptr{130, 131, 132, 133, 134, 135, 136, 137, 143} {
+		discovery.conditions = append(discovery.conditions, condition(&fwpmConditionIPLocalPort, fwpUint16, typ))
+	}
+	discovery.conditions = append(discovery.conditions, condition(&fwpmConditionIPRemotePort, fwpUint16, 0))
+	dhcpv6 := []fwpmFilterCondition0{
+		condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_UDP),
+		condition(&fwpmConditionIPLocalPort, fwpUint16, 546),
+		condition(&fwpmConditionIPRemotePort, fwpUint16, 547),
+	}
+	// The DHCPv6 client sends to the servers' multicast address, and they
+	// answer from their own.
+	dhcpv6Out := permit{"DHCPv6", slices.Concat(dhcpv6, []fwpmFilterCondition0{condition(&fwpmConditionIPRemoteAddress, fwpByteArray16Type, uintptr(unsafe.Pointer(&ipv6AllDHCPv6Servers)))})}
+	dhcpv6In := permit{"DHCPv6", dhcpv6}
+
 	for _, layer := range []struct {
 		key       *windows.GUID
 		selfFlags uint32
 		via       *windows.GUID // the interface that has to be the TUN as well
+		ipv6      bool
+		permits   []permit
 	}{
-		{&fwpmLayerALEAuthConnectV4, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface},
-		{&fwpmLayerALEAuthRecvAcceptV4, 0, &fwpmConditionIPArrivalInterface},
-		{&fwpmLayerALEAuthConnectV6, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface},
-		{&fwpmLayerALEAuthRecvAcceptV6, 0, &fwpmConditionIPArrivalInterface},
+		{&fwpmLayerALEAuthConnectV4, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface, false, []permit{loopback, dhcp}},
+		{&fwpmLayerALEAuthRecvAcceptV4, 0, &fwpmConditionIPArrivalInterface, false, []permit{loopback, dhcp}},
+		{&fwpmLayerALEAuthConnectV6, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface, true, []permit{loopback, discovery, dhcpv6Out}},
+		{&fwpmLayerALEAuthRecvAcceptV6, 0, &fwpmConditionIPArrivalInterface, true, []permit{loopback, discovery, dhcpv6In}},
 	} {
+		throughTUN := []fwpmFilterCondition0{onTUN(&fwpmConditionIPLocalInterface), onTUN(layer.via)}
 		if err := add(layer.key, "permit Xray", layer.selfFlags, fwpActionPermit, 4, self); err != nil {
 			return err
 		}
-		for _, port := range block.ports {
-			protocol := uintptr(windows.IPPROTO_UDP)
-			if port.tcp {
-				protocol = windows.IPPROTO_TCP
-			}
-			toPort := []fwpmFilterCondition0{
-				condition(&fwpmConditionIPProtocol, fwpUint8, protocol),
-				condition(&fwpmConditionIPRemotePort, fwpUint16, uintptr(port.port)),
-			}
-			throughTUN := slices.Concat(toPort, []fwpmFilterCondition0{onTUN(&fwpmConditionIPLocalInterface), onTUN(layer.via)})
-			if err := add(layer.key, "permit "+port.String()+" through the TUN", 0, fwpActionPermit, 3, throughTUN...); err != nil {
+		for _, p := range layer.permits {
+			if err := add(layer.key, "permit "+p.name, 0, fwpActionPermit, 3, p.conditions...); err != nil {
 				return err
 			}
-			if err := add(layer.key, "block "+port.String(), 0, fwpActionBlock, 2, toPort...); err != nil {
+		}
+		for _, traffic := range block.traffic {
+			protocol := uintptr(windows.IPPROTO_UDP)
+			switch {
+			case traffic.protocol == "tcp":
+				protocol = windows.IPPROTO_TCP
+			case traffic.protocol == "icmp" && layer.ipv6:
+				protocol = windows.IPPROTO_ICMPV6
+			case traffic.protocol == "icmp":
+				protocol = windows.IPPROTO_ICMP
+			}
+			matches := slices.Concat([]fwpmFilterCondition0{condition(&fwpmConditionIPProtocol, fwpUint8, protocol)}, toPorts(traffic))
+			if err := add(layer.key, "permit "+traffic.String()+" through the TUN", 0, fwpActionPermit, 3, slices.Concat(matches, throughTUN)...); err != nil {
+				return err
+			}
+			if err := add(layer.key, "block "+traffic.String(), 0, fwpActionBlock, 2, matches...); err != nil {
+				return err
+			}
+		}
+		if family := "IPv4"; layer.ipv6 && block.ipv6 || !layer.ipv6 && block.ipv4 {
+			if layer.ipv6 {
+				family = "IPv6"
+			}
+			if err := add(layer.key, "permit "+family+" through the TUN", 0, fwpActionPermit, 1, throughTUN...); err != nil {
+				return err
+			}
+			if err := add(layer.key, "block "+family, 0, fwpActionBlock, 0); err != nil {
 				return err
 			}
 		}
@@ -420,70 +511,6 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters)
 				}
 			}
 			if err := add(layer.key, "block the DNS Client service", 0, fwpActionBlock, 2, dnsClient); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Both directions: replies to a connection accepted from outside would
-	// leave through the physical link as well.
-	loopback := fwpmFilterCondition0{
-		fieldKey:       fwpmConditionFlags,
-		matchType:      fwpMatchFlagsAllSet,
-		conditionValue: fwpValue0{typ: fwpUint32, value: fwpConditionFlagIsLoopback},
-	}
-	if block.ipv4 {
-		// DHCP keeps the addresses of the other interfaces, which Xray's own
-		// connections use.
-		dhcp := []fwpmFilterCondition0{
-			condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_UDP),
-			condition(&fwpmConditionIPLocalPort, fwpUint16, 68),
-			condition(&fwpmConditionIPRemotePort, fwpUint16, 67),
-		}
-		for _, layer := range []*windows.GUID{&fwpmLayerALEAuthConnectV4, &fwpmLayerALEAuthRecvAcceptV4} {
-			if err := add(layer, "permit IPv4 loopback", 0, fwpActionPermit, 1, loopback); err != nil {
-				return err
-			}
-			if err := add(layer, "permit DHCP", 0, fwpActionPermit, 1, dhcp...); err != nil {
-				return err
-			}
-			if err := add(layer, "block IPv4", 0, fwpActionBlock, 0); err != nil {
-				return err
-			}
-		}
-	}
-	if block.ipv6 {
-		// Neighbor and multicast listener discovery, ICMPv6 130-137 and 143,
-		// whose type and code sit where the local and remote port are.
-		discovery := []fwpmFilterCondition0{condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_ICMPV6)}
-		for _, typ := range []uintptr{130, 131, 132, 133, 134, 135, 136, 137, 143} {
-			discovery = append(discovery, condition(&fwpmConditionIPLocalPort, fwpUint16, typ))
-		}
-		discovery = append(discovery, condition(&fwpmConditionIPRemotePort, fwpUint16, 0))
-		dhcpv6 := []fwpmFilterCondition0{
-			condition(&fwpmConditionIPProtocol, fwpUint8, windows.IPPROTO_UDP),
-			condition(&fwpmConditionIPLocalPort, fwpUint16, 546),
-			condition(&fwpmConditionIPRemotePort, fwpUint16, 547),
-		}
-		for _, direction := range []struct {
-			layer  *windows.GUID
-			dhcpv6 []fwpmFilterCondition0
-		}{
-			// The client sends to the servers' multicast address, and they
-			// answer from their own.
-			{&fwpmLayerALEAuthConnectV6, slices.Concat(dhcpv6, []fwpmFilterCondition0{condition(&fwpmConditionIPRemoteAddress, fwpByteArray16Type, uintptr(unsafe.Pointer(&ipv6AllDHCPv6Servers)))})},
-			{&fwpmLayerALEAuthRecvAcceptV6, dhcpv6},
-		} {
-			if err := add(direction.layer, "permit IPv6 loopback", 0, fwpActionPermit, 1, loopback); err != nil {
-				return err
-			}
-			if err := add(direction.layer, "permit IPv6 neighbor and multicast listener discovery", 0, fwpActionPermit, 1, discovery...); err != nil {
-				return err
-			}
-			if err := add(direction.layer, "permit DHCPv6", 0, fwpActionPermit, 1, direction.dhcpv6...); err != nil {
-				return err
-			}
-			if err := add(direction.layer, "block IPv6", 0, fwpActionBlock, 0); err != nil {
 				return err
 			}
 		}
