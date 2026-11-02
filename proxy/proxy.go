@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"runtime"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/pires/go-proxyproto"
@@ -775,16 +776,41 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 			if inTimer != nil {
 				inTimer.SetTimeout(24 * time.Hour)
 			}
+			progress := &spliceProgress{
+				conn:         readerConn,
+				readCounter:  readCounter,
+				writeCounter: writeCounter,
+				statWriter:   statWriter,
+			}
+			// TCPConn.ReadFrom moves the whole connection in the kernel and only
+			// returns when it ends, so traffic statistics would otherwise stay at
+			// zero for the entire lifetime of a spliced connection. Sample the
+			// kernel's received-byte counter while the splice is running.
+			done := make(chan struct{})
+			var wg sync.WaitGroup
+			if base, ok := tcpBytesReceived(readerConn); ok {
+				progress.base = base
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					ticker := time.NewTicker(time.Second)
+					defer ticker.Stop()
+					for {
+						select {
+						case <-done:
+							return
+						case <-ticker.C:
+							progress.sample()
+						}
+					}
+				}()
+			}
 			w, err := tc.ReadFrom(readerConn)
-			if readCounter != nil {
-				readCounter.Add(w) // outbound stats
-			}
-			if writeCounter != nil {
-				writeCounter.Add(w) // inbound stats
-			}
-			if statWriter != nil {
-				statWriter.Counter.Add(w) // user stats
-			}
+			close(done)
+			wg.Wait()
+			// Report whatever the sampler has not seen yet so the totals stay
+			// exactly equal to ReadFrom's return value.
+			progress.finish(w)
 			if err != nil && errors.Cause(err) != io.EOF {
 				return err
 			}
