@@ -39,8 +39,9 @@ func (t leakTraffic) covers(protocol string, port uint16) bool {
 }
 
 // parseLeakTraffic parses a lower case "tcp", "udp" or "icmp" value. The former
-// two may end in "/<port>" or "/<low>-<high>", where "/0" stands for all ports,
-// as do "/1-65535" and no port at all; ICMP has no ports.
+// two may end in "/<port>" or "/<low>-<high>", with ports from 1 to 65535 and
+// low not above high, where "/1-65535" stands for all ports, as does no port
+// at all; ICMP has no ports.
 func parseLeakTraffic(value string) (leakTraffic, bool) {
 	protocol, ports, hasPorts := strings.Cut(value, "/")
 	switch protocol {
@@ -55,16 +56,16 @@ func parseLeakTraffic(value string) (leakTraffic, bool) {
 	}
 	lowText, highText, isRange := strings.Cut(ports, "-")
 	low, err := strconv.ParseUint(lowText, 10, 16)
-	if err != nil {
+	if err != nil || low == 0 {
 		return leakTraffic{}, false
 	}
 	high := low
 	if isRange {
-		if high, err = strconv.ParseUint(highText, 10, 16); err != nil || low == 0 || high < low {
+		if high, err = strconv.ParseUint(highText, 10, 16); err != nil || high < low {
 			return leakTraffic{}, false
 		}
 	}
-	if low == 0 || low == 1 && high == 65535 {
+	if low == 1 && high == 65535 {
 		return leakTraffic{protocol: protocol}, true
 	}
 	return leakTraffic{protocol: protocol, low: uint16(low), high: uint16(high)}, true
@@ -73,7 +74,7 @@ func parseLeakTraffic(value string) (leakTraffic, bool) {
 // ExpandWfpBlockLeak checks the values of autoSystemWfpBlockLeak and returns
 // them in lower case, in order and without duplicates, with "dns" replaced by
 // what it stands for, "allexceptlan" followed by that, and ports written the
-// same way, "tcp/0" as "tcp" say.
+// same way, "tcp/1-65535" as "tcp" say.
 func ExpandWfpBlockLeak(values []string) ([]string, error) {
 	var leaks []string
 	add := func(leak string) {

@@ -20,7 +20,7 @@ func TestExpandWfpBlockLeak(t *testing.T) {
 		{[]string{"tcp/53"}, []string{"tcp/53"}, true},
 		{[]string{"windnsclient"}, []string{"windnsclient"}, true},
 		{[]string{"ALL"}, []string{"all"}, true},
-		{[]string{"tcp", "TCP/0", "udp/0", "UDP"}, []string{"tcp", "udp"}, true},
+		{[]string{"tcp", "TCP", "UDP"}, []string{"tcp", "udp"}, true},
 		{[]string{"tcp/1-65535", "udp/1-65535"}, []string{"tcp", "udp"}, true},
 		{[]string{"udp/10-20", "udp/53-53", "tcp/50-60"}, []string{"udp/10-20", "udp/53", "tcp/50-60"}, true},
 		{[]string{"tcp/54-60", "udp/1-52"}, []string{"tcp/54-60", "udp/1-52"}, false},
@@ -43,6 +43,7 @@ func TestExpandWfpBlockLeak(t *testing.T) {
 	for _, value := range []string{
 		"", "ip", "tcp/", "udp/65536", "tcp/-1", "tcp/+53", "tcp/53/1", "udp/abc", "icmp/0", "icmp/8", "tcp:53", " dns",
 		"tcp/0-10", "tcp/20-10", "tcp/5-", "tcp/-5", "tcp/1-2-3", "tcp/1-65536", "udp/ 53", "all/0",
+		"tcp/0", "udp/0", "tcp/00", "udp/0-0", "udp/65535-1",
 	} {
 		if _, err := ExpandWfpBlockLeak([]string{value}); err == nil {
 			t.Errorf("%q was accepted", value)
