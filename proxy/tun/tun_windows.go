@@ -250,16 +250,17 @@ startOver:
 	// keep the protocols and ports given ("dns" stands for those of DNS),
 	// Windows' DNS Client service, an IP version no route of which leads to
 	// the TUN ("misconfigtun"), or everything ("all", or "allexceptlan" but
-	// for the local network), from leaving through the other interfaces.
-	// Addresses do not matter: without one of a version in gateway, Windows
-	// gives the TUN a link-local one.
+	// for the local network), over IPv4, IPv6 or both, from leaving through
+	// the other interfaces. Addresses do not matter: without one of a version
+	// in gateway, Windows gives the TUN a link-local one.
 	leaks, err := ExpandWfpBlockLeak(t.options.AutoSystemWfpBlockLeak)
 	if err != nil {
 		return err
 	}
 	block := newLeakFilters(leaks, route4, route6)
 	if route4 || route6 {
-		if slices.Contains(leaks, "windnsclient") && !block.dnsClient {
+		if block.dnsClient != 0 && !dnsClientUsesAnyPort() {
+			block.dnsClient = 0
 			errors.LogInfo(context.Background(), "[tun] windnsclient skipped: before Windows 11 and Server 2022, the DNS Client service only queries port 53")
 		}
 		if block.systemDNS() && len(dns) == 0 {

@@ -129,52 +129,56 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun", "all", "tcp/443", "udp/1000-2000", "tcp", "icmp", "tcpv4/80", "udpv6/5000-6000", "icmpv6"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	block := newLeakFilters(leaks, false, false)
-	block.dnsClient = true // whatever the Windows version
-	if err := addLeakFilters(engine, loopback, block); err != nil {
-		skipUnlessElevated(err)
-	}
-	// The local network's addresses, with another sublayer.
-	if leaks, err = ExpandWfpBlockLeak([]string{"allexceptlan", "udp/1000-2000", "icmp"}); err != nil {
-		t.Fatal(err)
-	}
-	block = newLeakFilters(leaks, true, false)
-	block.dnsClient = true
-	if !block.lan {
-		t.Fatal("allexceptlan left the local network blocked")
-	}
-	if err := addLeakFilters(engine, loopback, block); err != nil {
-		skipUnlessElevated(err)
+	// Each with a sublayer of its own.
+	for _, c := range []struct {
+		values         []string
+		route4, route6 bool
+	}{
+		{[]string{"dns", "misconfigtun", "all", "tcp/443", "udp/1000-2000", "tcp", "icmp", "ipv4:tcp/80", "ipv6:udp/5000-6000", "ipv6:icmp"}, false, false},
+		// The local network's addresses.
+		{[]string{"allexceptlan", "udp/1000-2000", "icmp"}, true, false},
+		{[]string{"ipv4:allexceptlan", "ipv6:all", "ipv6:windnsclient"}, true, true},
+		{[]string{"ipv6:allexceptlan", "ipv4:misconfigtun"}, false, true},
+	} {
+		leaks, err := ExpandWfpBlockLeak(c.values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := addLeakFilters(engine, loopback, newLeakFilters(leaks, c.route4, c.route6)); err != nil {
+			skipUnlessElevated(err)
+		}
 	}
 }
 
 func TestNewLeakFilters(t *testing.T) {
-	windnsclient := ""
-	if dnsClientUsesAnyPort() {
-		windnsclient = ", windnsclient"
-	}
 	for _, c := range []struct {
 		values         []string
 		route4, route6 bool
 		blocked        string
 		systemDNS      bool
 	}{
-		{[]string{"dns", "misconfigtun"}, true, false, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv6", true},
+		{[]string{"dns", "misconfigtun"}, true, false, "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv6", true},
 		{[]string{"tcp/853", "udp/853", "misconfigtun"}, true, true, "tcp/853, udp/853", false},
 		{[]string{"all"}, true, true, "IPv4, IPv6", true},
 		{[]string{"all", "misconfigtun"}, true, true, "IPv4, IPv6", true},
 		{[]string{"misconfigtun"}, true, false, "IPv6", false},
 		{[]string{"tcp/10-20", "udp", "icmp"}, true, true, "tcp/10-20, udp, icmp", true},
 		{[]string{"tcp/54-60", "icmp"}, true, true, "tcp/54-60, icmp", false},
-		{[]string{"TCPv4/10-20", "udpv6", "icmpv4"}, true, true, "tcpv4/10-20, udpv6, icmpv4", true},
-		{[]string{"tcpv6/54-60", "icmpv6"}, true, true, "tcpv6/54-60, icmpv6", false},
-		{[]string{"allexceptlan"}, true, true, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4 except LAN, IPv6 except LAN", true},
-		{[]string{"allexceptlan", "all"}, true, true, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4, IPv6", true},
-		{[]string{"misconfigtun", "allexceptlan"}, true, false, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4 except LAN, IPv6 except LAN", true},
+		{[]string{"allexceptlan"}, true, true, "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv4 except LAN, IPv6 except LAN", true},
+		{[]string{"allexceptlan", "all"}, true, true, "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv4, IPv6", true},
+		{[]string{"misconfigtun", "allexceptlan"}, true, false, "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv4 except LAN, IPv6 except LAN", true},
+		// For one IP version only.
+		{[]string{"IPv4:TCP/10-20", "ipv6:udp", "ipv4:icmp"}, true, true, "ipv4:tcp/10-20, ipv6:udp, ipv4:icmp", true},
+		{[]string{"ipv6:tcp/54-60", "ipv6:icmp"}, true, true, "ipv6:tcp/54-60, ipv6:icmp", false},
+		{[]string{"ipv4:windnsclient"}, true, true, "ipv4:windnsclient", true},
+		{[]string{"ipv6:all"}, true, true, "IPv6", true},
+		{[]string{"ipv6:all"}, true, false, "IPv6", true},
+		{[]string{"ipv4:allexceptlan", "ipv6:all"}, true, true, "ipv4:udp/53, ipv4:tcp/53, ipv4:tcp/853, ipv4:udp/853, ipv4:windnsclient, IPv4 except LAN, IPv6", true},
+		{[]string{"allexceptlan", "ipv6:all"}, true, true, "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv4 except LAN, IPv6", true},
+		{[]string{"ipv4:misconfigtun"}, true, false, "", false},
+		{[]string{"ipv6:misconfigtun"}, true, false, "IPv6", false},
+		{[]string{"ipv4:misconfigtun", "ipv6:allexceptlan"}, false, true, "ipv6:udp/53, ipv6:tcp/53, ipv6:tcp/853, ipv6:udp/853, ipv6:windnsclient, IPv4, IPv6 except LAN", true},
+		{[]string{"ipv6:windnsclient", "ipv4:windnsclient"}, true, true, "windnsclient", true},
 	} {
 		leaks, err := ExpandWfpBlockLeak(c.values)
 		if err != nil {
@@ -190,7 +194,7 @@ func TestNewLeakFilters(t *testing.T) {
 	}
 	// Without the port 53 values "allexceptlan" brings along, a resolver on
 	// the local network, like the router's, stays reachable.
-	if (leakFilters{ipv4: true, ipv6: true, lan: true}).systemDNS() {
+	if (leakFilters{all: bothIPVersions, lan: bothIPVersions}).systemDNS() {
 		t.Error("systemDNS() = true with the local network open")
 	}
 }

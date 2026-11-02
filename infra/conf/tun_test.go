@@ -52,9 +52,14 @@ func TestTunConfigAutoSystem(t *testing.T) {
 			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"allexceptlan", "udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853"}},
 		},
 		{
-			Input:  `{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["TCPv4/853", "udpv6/10-20", "ICMPv6"]}`,
+			Input:  `{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["IPv4:TCP/853", "ipv6:udp/10-20", "IPv6:ICMP"]}`,
 			Parser: loadJSON(creator),
-			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"tcpv4/853", "udpv6/10-20", "icmpv6"}},
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"ipv4:tcp/853", "ipv6:udp/10-20", "ipv6:icmp"}},
+		},
+		{
+			Input:  `{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["ipv4:dns", "IPv6:All", "ipv6:udp/53"]}`,
+			Parser: loadJSON(creator),
+			Output: &tun.Config{Name: "xray0", Desc: "Wintun", MTU: 1500, DNS: []string{"1.1.1.1"}, AutoSystemRoutingTable: []string{"0.0.0.0/0"}, AutoOutboundsInterface: "auto", AutoSystemWfpBlockLeak: []string{"udp/53", "ipv4:tcp/53", "ipv4:windnsclient", "ipv4:tcp/853", "ipv4:udp/853", "ipv6:all"}},
 		},
 	})
 }
@@ -76,8 +81,12 @@ func TestTunConfigAutoSystemNeeds(t *testing.T) {
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["udp"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/50-60"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcp/54-60", "icmp"]}`, nil},
-		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["udpv6/53"]}`, []string{"windows"}},
-		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["tcpv4/853", "icmpv4"]}`, nil},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["ipv6:udp/53"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["ipv4:dns"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["ipv6:all"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["ipv4:windnsclient"]}`, []string{"windows"}},
+		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["ipv4:tcp/853", "ipv4:icmp", "ipv6:misconfigtun"]}`, nil},
+		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["ipv6:misconfigtun"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemWfpBlockLeak": ["all"]}`, []string{"windows"}},
 		{`{"name": "xray0", "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["allexceptlan"]}`, []string{"windows"}},
 		{`{"name": "xray0", "dns": ["1.1.1.1"], "autoSystemRoutingTable": ["0.0.0.0/0"], "autoSystemWfpBlockLeak": ["allexceptlan"]}`, nil},
@@ -94,7 +103,7 @@ func TestTunConfigAutoSystemNeeds(t *testing.T) {
 }
 
 func TestTunConfigAutoSystemWfpBlockLeakUnknown(t *testing.T) {
-	for _, value := range []string{"ip", "tcp/0", "tcp/0-10", "icmp/1", "udp/20-10", "tcp4", "icmpv4/1"} {
+	for _, value := range []string{"ip", "tcp/0", "tcp/0-10", "icmp/1", "udp/20-10", "tcp4", "tcpv4", "ipv4", "ipv5:udp", "ipv4:icmp/1"} {
 		config := new(TunConfig)
 		if err := json.Unmarshal([]byte(`{"name": "xray0", "autoSystemWfpBlockLeak": ["dns", "`+value+`"]}`), config); err != nil {
 			t.Fatal(err)
