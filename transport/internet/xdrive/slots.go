@@ -22,8 +22,12 @@ import (
 // reuses a slot only once that says what was in it before was taken
 
 const (
-	slotMagic     = "XDRVSL01"
+	slotMagic = "XDRVSL02"
+	// slotMagicV1 frames have no checksum, they are still read
+	slotMagicV1   = "XDRVSL01"
 	slotHeaderLen = len(slotMagic) + 8 + 1 + 4 + 4
+	// slotHeaderLenV1 is the header without the checksum
+	slotHeaderLenV1 = len(slotMagicV1) + 8 + 1 + 4
 	// slotInlineLimit is how large a segment is at most to go in the description
 	// of its slot, which takes one request less than a body
 	slotInlineLimit = 14 << 10
@@ -52,6 +56,13 @@ var (
 	slotStallTimeout = 60 * time.Second
 	slotCloseGrace   = 10 * time.Second
 	slotGoneTimeout  = 60 * time.Second
+
+	// a failed write of a segment is tried slotWriteAttempts times
+	slotWriteAttempts = 3
+	// a read of the head that has not answered for slotHedgeTick is asked a
+	// second time, for slotHedgeBudget at most
+	slotHedgeTick   = 250 * time.Millisecond
+	slotHedgeBudget = time.Second
 )
 
 // slotStore is a storage of objects that are written and read again by id,
@@ -72,6 +83,8 @@ type slotFrame struct {
 	size int
 	crc  uint32
 	data []byte
+	// legacy frames carry no checksum
+	legacy bool
 }
 
 func newSlotFrame(seq int64, mode byte, data []byte) slotFrame {
@@ -94,7 +107,20 @@ func (f slotFrame) encode() string {
 
 func decodeSlot(description string) (slotFrame, bool) {
 	b, err := base64.StdEncoding.DecodeString(description)
-	if err != nil || len(b) < slotHeaderLen || string(b[:len(slotMagic)]) != slotMagic {
+	if err != nil || len(b) < slotHeaderLenV1 {
+		return slotFrame{}, false
+	}
+	switch string(b[:len(slotMagic)]) {
+	case slotMagic:
+		return decodeSlotV2(b)
+	case slotMagicV1:
+		return decodeSlotV1(b)
+	}
+	return slotFrame{}, false
+}
+
+func decodeSlotV2(b []byte) (slotFrame, bool) {
+	if len(b) < slotHeaderLen {
 		return slotFrame{}, false
 	}
 	f := slotFrame{
@@ -112,10 +138,28 @@ func decodeSlot(description string) (slotFrame, bool) {
 	return f, true
 }
 
+func decodeSlotV1(b []byte) (slotFrame, bool) {
+	f := slotFrame{
+		seq:  int64(binary.BigEndian.Uint64(b[8:])),
+		mode: b[16],
+		size: int(binary.BigEndian.Uint32(b[17:])),
+
+		legacy: true,
+	}
+	if f.mode == slotInline {
+		f.data = b[slotHeaderLenV1:]
+		if len(f.data) != f.size {
+			return slotFrame{}, false
+		}
+		f.crc = crc32.ChecksumIEEE(f.data)
+	}
+	return f, true
+}
+
 // holds reports whether body is the one that f is about, which a body read
 // right after its description need not be yet
 func (f slotFrame) holds(body []byte) bool {
-	return len(body) == f.size && crc32.ChecksumIEEE(body) == f.crc
+	return len(body) == f.size && (f.legacy || crc32.ChecksumIEEE(body) == f.crc)
 }
 
 // slotTable is the ring of one direction: the ids of its slots and of the
@@ -347,11 +391,31 @@ func (w *slotWriter) upload(seq int64, chunk []byte) {
 		w.fail(errors.New("failed to store segment ", seq).Base(err))
 		return
 	}
-	if err := w.write(seq, mode, chunk); err != nil {
-		w.fail(errors.New("failed to store segment ", seq).Base(err))
-		// the slot is free, the reader learns there what happened
-		w.write(seq, slotErr, nil)
+	var lastErr error
+	for attempt := range slotWriteAttempts {
+		if attempt > 0 {
+			select {
+			case <-w.ctx.Done():
+				return
+			case <-time.After(time.Duration(attempt) * 200 * time.Millisecond):
+			}
+			// the failed write may have gone through
+			if d, err := w.store.readDescription(w.ctx, w.slotID(seq)); err == nil {
+				if f, ok := decodeSlot(d); ok && f.seq >= seq {
+					return
+				}
+			}
+		}
+		if lastErr = w.write(seq, mode, chunk); lastErr == nil {
+			return
+		}
+		if w.ctx.Err() != nil {
+			return
+		}
 	}
+	w.fail(errors.New("failed to store segment ", seq).Base(lastErr))
+	// the slot is free, the reader learns there what happened
+	w.write(seq, slotErr, nil)
 }
 
 func (w *slotWriter) write(seq int64, mode byte, data []byte) error {
@@ -609,7 +673,13 @@ func (r *slotReader) fetch(ctx context.Context, seq int64, offset int, f *slotFe
 	backoff := slotHuntFloor
 	var goneSince, warnedAt time.Time
 	for {
-		description, err := r.store.readDescription(ctx, id)
+		var description string
+		var err error
+		if r.isHead(seq) {
+			description, err = r.readHedged(ctx, id)
+		} else {
+			description, err = r.store.readDescription(ctx, id)
+		}
 		frame, ok := decodeSlot(description)
 		switch {
 		case err == nil && ok && frame.seq == seq:
@@ -669,6 +739,55 @@ func (r *slotReader) fetch(ctx context.Context, seq int64, offset int, f *slotFe
 		}
 		if !r.hold(ctx, wait, a, b) {
 			return
+		}
+	}
+}
+
+// readHedged reads the description of the head, and asks a second time if the
+// first request is slow to answer, as one that is stuck costs more than one
+// too many. The first good answer is taken
+func (r *slotReader) readHedged(ctx context.Context, id string) (string, error) {
+	if slotHedgeTick <= 0 {
+		return r.store.readDescription(ctx, id)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type result struct {
+		description string
+		err         error
+	}
+	results := make(chan result, 2)
+	launch := func() {
+		go func() {
+			d, err := r.store.readDescription(ctx, id)
+			results <- result{d, err}
+		}()
+	}
+	launch()
+	outstanding := 1
+	deadline := time.Now().Add(slotHedgeBudget)
+	ticker := time.NewTicker(slotHedgeTick)
+	defer ticker.Stop()
+	var last result
+	for {
+		select {
+		case res := <-results:
+			outstanding--
+			if res.err == nil {
+				return res.description, nil
+			}
+			last = res
+			if outstanding == 0 {
+				return last.description, last.err
+			}
+		case <-ticker.C:
+			if outstanding < 2 && time.Now().Before(deadline) {
+				launch()
+				outstanding++
+			}
+		case <-ctx.Done():
+			return "", ctx.Err()
 		}
 	}
 }
