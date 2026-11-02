@@ -129,7 +129,7 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun", "all", "tcp/443", "udp/1000-2000", "tcp", "icmp"})
+	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun", "all", "tcp/443", "udp/1000-2000", "tcp", "icmp", "tcpv4/80", "udpv6/5000-6000", "icmpv6"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,6 +170,8 @@ func TestNewLeakFilters(t *testing.T) {
 		{[]string{"misconfigtun"}, true, false, "IPv6", false},
 		{[]string{"tcp/10-20", "udp", "icmp"}, true, true, "tcp/10-20, udp, icmp", true},
 		{[]string{"tcp/54-60", "icmp"}, true, true, "tcp/54-60, icmp", false},
+		{[]string{"TCPv4/10-20", "udpv6", "icmpv4"}, true, true, "tcpv4/10-20, udpv6, icmpv4", true},
+		{[]string{"tcpv6/54-60", "icmpv6"}, true, true, "tcpv6/54-60, icmpv6", false},
 		{[]string{"allexceptlan"}, true, true, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4 except LAN, IPv6 except LAN", true},
 		{[]string{"allexceptlan", "all"}, true, true, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4, IPv6", true},
 		{[]string{"misconfigtun", "allexceptlan"}, true, false, "udp/53, tcp/53, tcp/853, udp/853" + windnsclient + ", IPv4 except LAN, IPv6 except LAN", true},

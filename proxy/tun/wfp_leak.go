@@ -15,44 +15,54 @@ var dnsLeaks = []string{"udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853"
 
 // leakTraffic is a "tcp", "udp" or "icmp" value of autoSystemWfpBlockLeak, the
 // former two with "/<port>" or "/<low>-<high>" for some ports only, such as
-// "tcp/853" or "udp/10-20": connections of that protocol, to those ports, may
-// only go through the TUN.
+// "tcp/853" or "udp/10-20", and any of them with "v4" or "v6" after the
+// protocol for one IP version only, such as "tcpv4/853" or "icmpv6":
+// connections of that protocol, to those ports, may only go through the TUN.
 type leakTraffic struct {
 	protocol  string // "tcp", "udp" or "icmp"
+	version   string // "v4" or "v6" for one IP version only, empty for both
 	low, high uint16 // the ports, both 0 for all
 }
 
 func (t leakTraffic) String() string {
+	name := t.protocol + t.version
 	switch {
 	case t.low == 0:
-		return t.protocol
+		return name
 	case t.low == t.high:
-		return t.protocol + "/" + strconv.Itoa(int(t.low))
+		return name + "/" + strconv.Itoa(int(t.low))
 	default:
-		return t.protocol + "/" + strconv.Itoa(int(t.low)) + "-" + strconv.Itoa(int(t.high))
+		return name + "/" + strconv.Itoa(int(t.low)) + "-" + strconv.Itoa(int(t.high))
 	}
 }
 
-// covers tells whether t includes connections of protocol to port.
+// covers tells whether t includes connections of protocol to port, over at
+// least one IP version.
 func (t leakTraffic) covers(protocol string, port uint16) bool {
 	return t.protocol == protocol && (t.low == 0 || t.low <= port && port <= t.high)
 }
 
-// parseLeakTraffic parses a lower case "tcp", "udp" or "icmp" value. The former
-// two may end in "/<port>" or "/<low>-<high>", with ports from 1 to 65535 and
-// low not above high, where "/1-65535" stands for all ports, as does no port
-// at all; ICMP has no ports.
+// parseLeakTraffic parses a lower case "tcp", "udp" or "icmp" value, which may
+// be followed by "v4" or "v6". TCP and UDP may end in "/<port>" or
+// "/<low>-<high>", with ports from 1 to 65535 and low not above high, where
+// "/1-65535" stands for all ports, as does no port at all; ICMP has no ports.
 func parseLeakTraffic(value string) (leakTraffic, bool) {
-	protocol, ports, hasPorts := strings.Cut(value, "/")
-	switch protocol {
+	name, ports, hasPorts := strings.Cut(value, "/")
+	t := leakTraffic{protocol: name}
+	for _, version := range []string{"v4", "v6"} {
+		if protocol, ok := strings.CutSuffix(name, version); ok {
+			t.protocol, t.version = protocol, version
+		}
+	}
+	switch t.protocol {
 	case "tcp", "udp":
 	case "icmp":
-		return leakTraffic{protocol: protocol}, !hasPorts
+		return t, !hasPorts
 	default:
 		return leakTraffic{}, false
 	}
 	if !hasPorts {
-		return leakTraffic{protocol: protocol}, true
+		return t, true
 	}
 	lowText, highText, isRange := strings.Cut(ports, "-")
 	low, err := strconv.ParseUint(lowText, 10, 16)
@@ -65,10 +75,10 @@ func parseLeakTraffic(value string) (leakTraffic, bool) {
 			return leakTraffic{}, false
 		}
 	}
-	if low == 1 && high == 65535 {
-		return leakTraffic{protocol: protocol}, true
+	if low != 1 || high != 65535 {
+		t.low, t.high = uint16(low), uint16(high)
 	}
-	return leakTraffic{protocol: protocol, low: uint16(low), high: uint16(high)}, true
+	return t, true
 }
 
 // ExpandWfpBlockLeak checks the values of autoSystemWfpBlockLeak and returns

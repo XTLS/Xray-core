@@ -288,15 +288,15 @@ func dnsClientUsesAnyPort() bool {
 // other interfaces on purpose:
 //
 //   - traffic: connections of these protocols, TCP and UDP to some or all
-//     ports, or ICMP, may only go through the TUN, those of DNS (53), DNS
-//     over TLS (TCP 853) and DNS over QUIC (UDP 853) with "dns". Windows sends
-//     a name query to the DNS servers of all interfaces, not only to those of
-//     the TUN: to the first server of each interface, then to all of them when
-//     no answer arrives within a second or two. It sends the queries for the
-//     servers of an interface out through that interface, whatever the routes
-//     say, and other programs reach an on-link resolver, like 192.168.1.1 from
-//     DHCP, through its LAN route, which is more specific than the TUN's
-//     default route.
+//     ports, or ICMP, over one IP version or both, may only go through the
+//     TUN, those of DNS (53), DNS over TLS (TCP 853) and DNS over QUIC (UDP
+//     853) with "dns". Windows sends a name query to the DNS servers of all
+//     interfaces, not only to those of the TUN: to the first server of each
+//     interface, then to all of them when no answer arrives within a second
+//     or two. It sends the queries for the servers of an interface out
+//     through that interface, whatever the routes say, and other programs
+//     reach an on-link resolver, like 192.168.1.1 from DHCP, through its LAN
+//     route, which is more specific than the TUN's default route.
 //   - dnsClient: since Windows 11 and Server 2022, Windows may also send its
 //     queries over HTTPS or TLS, to any port, so its DNS Client service may not
 //     connect outside the TUN at all, except for name resolution on the local
@@ -515,6 +515,9 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters)
 			}
 		}
 		for _, traffic := range block.traffic {
+			if traffic.version == "v4" && layer.ipv6 || traffic.version == "v6" && !layer.ipv6 {
+				continue // for the other IP version only
+			}
 			protocol := uintptr(windows.IPPROTO_UDP)
 			switch {
 			case traffic.protocol == "tcp":

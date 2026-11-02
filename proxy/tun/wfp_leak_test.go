@@ -25,6 +25,9 @@ func TestExpandWfpBlockLeak(t *testing.T) {
 		{[]string{"udp/10-20", "udp/53-53", "tcp/50-60"}, []string{"udp/10-20", "udp/53", "tcp/50-60"}, true},
 		{[]string{"tcp/54-60", "udp/1-52"}, []string{"tcp/54-60", "udp/1-52"}, false},
 		{[]string{"ICMP", "icmp"}, []string{"icmp"}, false},
+		{[]string{"TCPv4/853", "udpv6/10-20", "ICMPv4", "icmpv6"}, []string{"tcpv4/853", "udpv6/10-20", "icmpv4", "icmpv6"}, false},
+		{[]string{"tcpv6/1-65535", "tcp", "tcpv4", "udpv6/53-53"}, []string{"tcpv6", "tcp", "tcpv4", "udpv6/53"}, true},
+		{[]string{"udpv4/53"}, []string{"udpv4/53"}, true},
 		{[]string{"AllExceptLAN"}, []string{"allexceptlan", "udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853"}, true},
 		{[]string{"dns", "allexceptlan", "all"}, []string{"udp/53", "tcp/53", "windnsclient", "tcp/853", "udp/853", "allexceptlan", "all"}, true},
 	} {
@@ -44,6 +47,7 @@ func TestExpandWfpBlockLeak(t *testing.T) {
 		"", "ip", "tcp/", "udp/65536", "tcp/-1", "tcp/+53", "tcp/53/1", "udp/abc", "icmp/0", "icmp/8", "tcp:53", " dns",
 		"tcp/0-10", "tcp/20-10", "tcp/5-", "tcp/-5", "tcp/1-2-3", "tcp/1-65536", "udp/ 53", "all/0",
 		"tcp/0", "udp/0", "tcp/00", "udp/0-0", "udp/65535-1",
+		"tcpv5", "tcp4", "udp6", "v4", "tcpv4v6", "ipv4", "dnsv4", "allv6", "tcpv4/0", "icmpv4/8", "icmpv6/0",
 	} {
 		if _, err := ExpandWfpBlockLeak([]string{value}); err == nil {
 			t.Errorf("%q was accepted", value)
@@ -66,6 +70,9 @@ func TestLeakTrafficCovers(t *testing.T) {
 		{"tcp/10-20", "tcp", 20, true},
 		{"tcp/10-20", "tcp", 21, false},
 		{"tcp/10-20", "tcp", 9, false},
+		{"udpv4/53", "udp", 53, true},
+		{"tcpv6", "tcp", 443, true},
+		{"icmpv4", "udp", 53, false},
 	} {
 		traffic, ok := parseLeakTraffic(c.value)
 		if !ok {
