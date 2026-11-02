@@ -40,6 +40,21 @@ func TestWFPStructLayout(t *testing.T) {
 		[]uintptr{unsafe.Sizeof(value), unsafe.Offsetof(value.value)},
 		[]uintptr{16, 8}, []uintptr{8, 4})
 
+	var ports fwpRange0
+	check("FWP_RANGE0",
+		[]uintptr{unsafe.Sizeof(ports), unsafe.Offsetof(ports.high)},
+		[]uintptr{32, 16}, []uintptr{16, 8})
+
+	var v4 fwpV4AddrAndMask
+	check("FWP_V4_ADDR_AND_MASK",
+		[]uintptr{unsafe.Sizeof(v4), unsafe.Offsetof(v4.mask)},
+		[]uintptr{8, 4}, []uintptr{8, 4})
+
+	var v6 fwpV6AddrAndMask
+	check("FWP_V6_ADDR_AND_MASK",
+		[]uintptr{unsafe.Sizeof(v6), unsafe.Offsetof(v6.prefixLength)},
+		[]uintptr{17, 16}, []uintptr{17, 16})
+
 	var display fwpmDisplayData0
 	check("FWPM_DISPLAY_DATA0",
 		[]uintptr{unsafe.Sizeof(display), unsafe.Offsetof(display.description)},
@@ -114,35 +129,101 @@ func TestLeakFiltersAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun", "tcp/443"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	block := newLeakFilters(leaks, false, false)
-	block.dnsClient = true // whatever the Windows version
-	if err := addLeakFilters(engine, loopback, block); err != nil {
-		skipUnlessElevated(err)
+	// Each with a sublayer of its own.
+	for _, c := range []struct {
+		values         []string
+		route4, route6 bool
+	}{
+		{[]string{"dns", "misconfigtun", "all", "tcp/443", "udp/1000-2000", "tcp", "icmp", "10-20", "1-65535"}, false, false},
+		// CIDRs, and the local network's addresses.
+		{[]string{"1.1.1.0/24:tcp/80", "[2001:db8::/32]:udp/5000-6000", "[::/0]:icmp", "8.8.8.8/32:all", "[2000::/3]:misconfigtun", "9.9.9.9/32:dns"}, true, false},
+		{[]string{"allexceptlan", "udp/1000-2000", "icmp", "192.168.1.5/32:all"}, true, false},
+		{[]string{"0.0.0.0/0:allexceptlan", "[::/0]:all", "[::/0]:windnsclient", "1.0.0.0/8:windnsclient"}, true, true},
+		{[]string{"[::/0]:allexceptlan", "0.0.0.0/0:misconfigtun", "10.0.0.0/8:allexceptlan", "1.0.0.0/8:allexceptlan"}, false, true},
+	} {
+		leaks, err := ExpandWfpBlockLeak(c.values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := addLeakFilters(engine, loopback, newLeakFilters(leaks, c.route4, c.route6)); err != nil {
+			skipUnlessElevated(err)
+		}
 	}
 }
 
 func TestNewLeakFilters(t *testing.T) {
-	leaks, err := ExpandWfpBlockLeak([]string{"dns", "misconfigtun"})
-	if err != nil {
-		t.Fatal(err)
+	for _, c := range []struct {
+		values         []string
+		route4, route6 bool
+		blocked        string
+		systemDNS      bool
+	}{
+		{[]string{"dns", "misconfigtun"}, true, false, "53, 853, windnsclient, [::/0]:misconfigtun", true},
+		{[]string{"tcp/853", "udp/853", "misconfigtun"}, true, true, "tcp/853, udp/853", false},
+		{[]string{"all"}, true, true, "all", true},
+		{[]string{"all", "misconfigtun"}, true, true, "all", true},
+		{[]string{"misconfigtun"}, true, false, "[::/0]:misconfigtun", false},
+		{[]string{"misconfigtun"}, false, true, "0.0.0.0/0:misconfigtun", false},
+		{[]string{"misconfigtun"}, false, false, "misconfigtun", false},
+		{[]string{"tcp/10-20", "udp", "icmp"}, true, true, "tcp/10-20, udp, icmp", true},
+		{[]string{"tcp/54-60", "icmp", "54-60"}, true, true, "tcp/54-60, icmp, 54-60", false},
+		{[]string{"allexceptlan"}, true, true, "allexceptlan, 53, 853, windnsclient", true},
+		{[]string{"allexceptlan", "all"}, true, true, "allexceptlan, 53, 853, windnsclient, all", true},
+		{[]string{"misconfigtun", "allexceptlan"}, true, false, "[::/0]:misconfigtun, allexceptlan, 53, 853, windnsclient", true},
+		// Limited to the addresses of a CIDR.
+		{[]string{"0.0.0.0/0:TCP/10-20", "[::/0]:udp", "0.0.0.0/0:icmp"}, true, true, "0.0.0.0/0:tcp/10-20, [::/0]:udp, 0.0.0.0/0:icmp", true},
+		{[]string{"[::/0]:tcp/54-60", "[::/0]:icmp"}, true, true, "[::/0]:tcp/54-60, [::/0]:icmp", false},
+		{[]string{"0.0.0.0/0:windnsclient"}, true, true, "0.0.0.0/0:windnsclient", true},
+		{[]string{"1.1.1.0/24:53"}, true, true, "1.1.1.0/24:53", true},
+		{[]string{"[::/0]:all"}, true, false, "[::/0]:all", true},
+		{[]string{"0.0.0.0/0:allexceptlan", "[::/0]:all"}, true, true, "0.0.0.0/0:allexceptlan, 0.0.0.0/0:53, 0.0.0.0/0:853, 0.0.0.0/0:windnsclient, [::/0]:all", true},
+		{[]string{"0.0.0.0/0:misconfigtun"}, true, false, "", false},
+		{[]string{"[::/0]:misconfigtun"}, true, false, "[::/0]:misconfigtun", false},
+		{[]string{"[2000::/3]:misconfigtun", "1.0.0.0/8:misconfigtun"}, true, false, "[2000::/3]:misconfigtun", false},
+		{[]string{"misconfigtun", "[::/0]:misconfigtun"}, true, false, "[::/0]:misconfigtun", false},
+		{[]string{"0.0.0.0/0:misconfigtun", "[::/0]:allexceptlan"}, false, true, "0.0.0.0/0:misconfigtun, [::/0]:allexceptlan, [::/0]:53, [::/0]:853, [::/0]:windnsclient", true},
+	} {
+		leaks, err := ExpandWfpBlockLeak(c.values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		block := newLeakFilters(leaks, c.route4, c.route6)
+		if got := block.String(); got != c.blocked {
+			t.Errorf("%v: String() = %q, want %q", c.values, got, c.blocked)
+		}
+		if got := block.systemDNS(); got != c.systemDNS {
+			t.Errorf("%v: systemDNS() = %v", c.values, got)
+		}
 	}
-	block := newLeakFilters(leaks, true, false)
-	want := "udp/53, tcp/53, tcp/853, udp/853, IPv6"
-	if dnsClientUsesAnyPort() {
-		want = "udp/53, tcp/53, tcp/853, udp/853, windnsclient, IPv6"
+	// Without the port 53 values "allexceptlan" brings along, a resolver on
+	// the local network, like the router's, stays reachable.
+	if (leakFilters{{name: "allexceptlan"}}).systemDNS() {
+		t.Error("systemDNS() = true with the local network open")
 	}
-	if got := block.String(); got != want {
-		t.Errorf("String() = %q, want %q", got, want)
+}
+
+func TestLanWithin(t *testing.T) {
+	prefixes := func(cidrs ...string) []netip.Prefix {
+		var prefixes []netip.Prefix
+		for _, cidr := range cidrs {
+			prefixes = append(prefixes, netip.MustParsePrefix(cidr))
+		}
+		return prefixes
 	}
-	if !block.systemDNS() {
-		t.Error("systemDNS() = false with dns")
-	}
-	if block := newLeakFilters([]string{"tcp/853", "udp/853", "misconfigtun"}, true, true); block.String() != "tcp/853, udp/853" || block.systemDNS() {
-		t.Errorf("tcp/853, udp/853: %q, systemDNS() = %v", block.String(), block.systemDNS())
+	for _, c := range []struct {
+		within, lan []netip.Prefix
+	}{
+		{nil, nil},
+		{prefixes("0.0.0.0/0"), prefixes("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "224.0.0.0/4", "255.255.255.255/32")},
+		{prefixes("::/0"), prefixes("fc00::/7", "fe80::/10", "ff00::/8")},
+		{prefixes("1.0.0.0/8", "10.1.0.0/16"), prefixes("10.1.0.0/16")},
+		{prefixes("192.0.0.0/2"), prefixes("192.168.0.0/16", "224.0.0.0/4", "255.255.255.255/32")},
+		{prefixes("2000::/3", "fe80::/64", "fe80::/10"), prefixes("fe80::/64", "fe80::/10")},
+		{prefixes("8.8.8.8/32", "2001:db8::/32"), nil},
+	} {
+		if got := lanWithin(c.within...); !slices.Equal(got, c.lan) {
+			t.Errorf("%v: got %v, want %v", c.within, got, c.lan)
+		}
 	}
 }
 
@@ -167,10 +248,38 @@ func TestDNSOutsideTUN(t *testing.T) {
 		netip.MustParseAddr("::ffff:203.0.113.54"),
 		netip.MustParseAddr("8.8.8.8"),
 		netip.MustParseAddr("2001:db8::53"),
+		// Local resolvers, reachable over loopback whatever is blocked.
+		netip.MustParseAddr("127.0.0.1"),
+		netip.MustParseAddr("::ffff:127.0.0.53"),
+		netip.MustParseAddr("::1"),
 	}
-	want := []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("2001:db8::53")}
-	if got := dnsOutsideTUN(servers, prefixes); !slices.Equal(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	// Only to the addresses of their CIDRs, if any, and "misconfigtun" over
+	// an IP version without routes to the TUN blocks DNS as well.
+	for _, c := range []struct {
+		values         []string
+		route4, route6 bool
+		want           []string
+	}{
+		{[]string{"dns"}, true, true, []string{"8.8.8.8", "2001:db8::53"}},
+		{[]string{"0.0.0.0/0:53"}, true, true, []string{"8.8.8.8"}},
+		{[]string{"8.8.8.0/24:windnsclient", "[2001:db8::/32]:tcp/853"}, true, true, []string{"8.8.8.8"}},
+		{[]string{"[2001:db8::53/128]:all", "9.9.9.9/32:53"}, true, true, []string{"2001:db8::53"}},
+		{[]string{"misconfigtun"}, true, false, []string{"2001:db8::53"}},
+		{[]string{"misconfigtun"}, true, true, nil},
+		{[]string{"tcp/853", "udp/5353", "icmp", "10.0.0.0/8:all"}, true, true, nil},
+		{[]string{"[::/0]:allexceptlan"}, true, true, []string{"2001:db8::53"}},
+	} {
+		leaks, err := ExpandWfpBlockLeak(c.values)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var want []netip.Addr
+		for _, server := range c.want {
+			want = append(want, netip.MustParseAddr(server))
+		}
+		if got := dnsOutsideTUN(servers, prefixes, newLeakFilters(leaks, c.route4, c.route6)); !slices.Equal(got, want) {
+			t.Errorf("%v: got %v, want %v", c.values, got, want)
+		}
 	}
 }
 
