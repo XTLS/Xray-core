@@ -22,12 +22,8 @@ import (
 // reuses a slot only once that says what was in it before was taken
 
 const (
-	slotMagic = "XDRVSL02"
-	// slotMagicV1 frames have no checksum, they are still read
-	slotMagicV1   = "XDRVSL01"
+	slotMagic     = "XDRVSL02"
 	slotHeaderLen = len(slotMagic) + 8 + 1 + 4 + 4
-	// slotHeaderLenV1 is the header without the checksum
-	slotHeaderLenV1 = len(slotMagicV1) + 8 + 1 + 4
 	// slotInlineLimit is how large a segment is at most to go in the description
 	// of its slot, which takes one request less than a body
 	slotInlineLimit = 14 << 10
@@ -83,8 +79,6 @@ type slotFrame struct {
 	size int
 	crc  uint32
 	data []byte
-	// legacy frames carry no checksum
-	legacy bool
 }
 
 func newSlotFrame(seq int64, mode byte, data []byte) slotFrame {
@@ -107,20 +101,7 @@ func (f slotFrame) encode() string {
 
 func decodeSlot(description string) (slotFrame, bool) {
 	b, err := base64.StdEncoding.DecodeString(description)
-	if err != nil || len(b) < slotHeaderLenV1 {
-		return slotFrame{}, false
-	}
-	switch string(b[:len(slotMagic)]) {
-	case slotMagic:
-		return decodeSlotV2(b)
-	case slotMagicV1:
-		return decodeSlotV1(b)
-	}
-	return slotFrame{}, false
-}
-
-func decodeSlotV2(b []byte) (slotFrame, bool) {
-	if len(b) < slotHeaderLen {
+	if err != nil || len(b) < slotHeaderLen || string(b[:len(slotMagic)]) != slotMagic {
 		return slotFrame{}, false
 	}
 	f := slotFrame{
@@ -138,28 +119,10 @@ func decodeSlotV2(b []byte) (slotFrame, bool) {
 	return f, true
 }
 
-func decodeSlotV1(b []byte) (slotFrame, bool) {
-	f := slotFrame{
-		seq:  int64(binary.BigEndian.Uint64(b[8:])),
-		mode: b[16],
-		size: int(binary.BigEndian.Uint32(b[17:])),
-
-		legacy: true,
-	}
-	if f.mode == slotInline {
-		f.data = b[slotHeaderLenV1:]
-		if len(f.data) != f.size {
-			return slotFrame{}, false
-		}
-		f.crc = crc32.ChecksumIEEE(f.data)
-	}
-	return f, true
-}
-
 // holds reports whether body is the one that f is about, which a body read
 // right after its description need not be yet
 func (f slotFrame) holds(body []byte) bool {
-	return len(body) == f.size && (f.legacy || crc32.ChecksumIEEE(body) == f.crc)
+	return len(body) == f.size && crc32.ChecksumIEEE(body) == f.crc
 }
 
 // slotTable is the ring of one direction: the ids of its slots and of the
