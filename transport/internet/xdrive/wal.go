@@ -53,6 +53,8 @@ type walWriter struct {
 	buf      []byte
 	seq      int64
 	lastSize int
+	segBytes int
+	ramped   int
 	held     int
 	closed   bool
 	err      error
@@ -66,6 +68,10 @@ func newWALWriter(ctx context.Context, storage Storage, prefix string, p params)
 		params:  p,
 		sem:     make(chan struct{}, p.concurrency),
 	}
+	// A session being set up is latency bound: small segments fit in a
+	// single inline create, so start there and double up to the configured
+	// size once full segments keep coming.
+	w.segBytes = min(p.segmentBytes, driveInlineLimit)
 	go w.flushLoop()
 	return w
 }
@@ -82,7 +88,7 @@ func (w *walWriter) Write(p []byte) (int, error) {
 	}
 
 	w.buf = append(w.buf, p...)
-	for len(w.buf) >= w.segmentBytes {
+	for len(w.buf) >= w.segBytes {
 		if err := w.flushLocked(); err != nil {
 			return 0, err
 		}
@@ -133,8 +139,15 @@ func (w *walWriter) flushLocked() error {
 	}
 
 	n := len(w.buf)
-	if n > w.segmentBytes {
-		n = w.segmentBytes
+	if n > w.segBytes {
+		n = w.segBytes
+	}
+	if n == w.segBytes && w.segBytes < w.segmentBytes {
+		w.ramped++
+		if w.ramped >= inlineRampSegments {
+			w.ramped = 0
+			w.segBytes = min(w.segBytes*2, w.segmentBytes)
+		}
 	}
 
 	chunk := make([]byte, n)
@@ -324,83 +337,73 @@ func (r *walReader) poll() (advanced, eof bool, err error) {
 		r.holeSince = time.Time{}
 	}
 
+	type result struct {
+		chunk []byte
+		err   error
+	}
+	outstanding := make(map[int64]chan result)
+
 	for {
 		if entry, ok := pending[r.seq]; ok && strings.HasSuffix(entry.Name, errSuffix) {
 			r.discard(r.prefix + "/" + entry.Name)
 			return advanced, false, errors.New("the peer could not store segment ", r.seq)
 		}
-
-		batch, done := r.nextBatch(pending)
-		if done {
+		if entry, ok := pending[r.seq]; ok && strings.HasSuffix(entry.Name, endSuffix) && len(outstanding) == 0 {
+			r.discard(r.prefix + "/" + entry.Name)
 			return advanced, true, nil
 		}
-		if len(batch) == 0 {
+
+		// keep the window of fetches full, so the next segments download
+		// while the head one is handed over
+		for i := int64(0); len(outstanding) < r.concurrency; i++ {
+			seq := r.seq + i
+			entry, ok := pending[seq]
+			if !ok || !strings.HasSuffix(entry.Name, segSuffix) {
+				break
+			}
+			if _, ok := outstanding[seq]; ok {
+				continue
+			}
+			ch := make(chan result, 1)
+			outstanding[seq] = ch
+			if entry.Inline != nil {
+				ch <- result{chunk: entry.Inline}
+				continue
+			}
+			go func(name string) {
+				chunk, err := r.storage.Get(r.ctx, r.prefix+"/"+name)
+				ch <- result{chunk, err}
+			}(entry.Name)
+		}
+
+		head, ok := outstanding[r.seq]
+		if !ok {
 			return advanced, false, nil
 		}
-
-		chunks, err := r.fetch(batch)
-		if err != nil {
-			if err == errNotFound {
+		var res result
+		select {
+		case res = <-head:
+		case <-r.ctx.Done():
+			return advanced, true, nil
+		}
+		delete(outstanding, r.seq)
+		if res.err != nil {
+			if res.err == errNotFound {
 				return advanced, false, nil
 			}
-			return advanced, false, err
+			return advanced, false, res.err
 		}
-
-		for i, chunk := range chunks {
-			select {
-			case r.ch <- chunk:
-			case <-r.ctx.Done():
-				return advanced, true, nil
-			}
-			r.seq++
-			advanced = true
-			r.discard(r.prefix + "/" + batch[i].Name)
+		select {
+		case r.ch <- res.chunk:
+		case <-r.ctx.Done():
+			return advanced, true, nil
 		}
+		name := pending[r.seq].Name
+		delete(pending, r.seq)
+		r.seq++
+		advanced = true
+		r.discard(r.prefix + "/" + name)
 	}
-}
-
-func (r *walReader) nextBatch(pending map[int64]Entry) (batch []Entry, done bool) {
-	for i := 0; i < r.concurrency; i++ {
-		entry, ok := pending[r.seq+int64(i)]
-		if !ok {
-			break
-		}
-		if !strings.HasSuffix(entry.Name, segSuffix) {
-			if i == 0 && strings.HasSuffix(entry.Name, endSuffix) {
-				r.discard(r.prefix + "/" + entry.Name)
-				return nil, true
-			}
-			break
-		}
-		batch = append(batch, entry)
-	}
-	return batch, false
-}
-
-func (r *walReader) fetch(batch []Entry) ([][]byte, error) {
-	chunks := make([][]byte, len(batch))
-	failures := make([]error, len(batch))
-
-	var wg sync.WaitGroup
-	for i, entry := range batch {
-		if entry.Inline != nil {
-			chunks[i] = entry.Inline
-			continue
-		}
-		wg.Add(1)
-		go func(i int, name string) {
-			defer wg.Done()
-			chunks[i], failures[i] = r.storage.Get(r.ctx, r.prefix+"/"+name)
-		}(i, entry.Name)
-	}
-	wg.Wait()
-
-	for i := range batch {
-		if failures[i] != nil {
-			return nil, failures[i]
-		}
-	}
-	return chunks, nil
 }
 
 func (r *walReader) discard(name string) {
