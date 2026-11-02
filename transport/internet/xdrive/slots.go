@@ -27,7 +27,7 @@ const (
 	// slotInlineLimit is how large a segment is at most to go in the description
 	// of its slot, which takes one request less than a body
 	slotInlineLimit = 14 << 10
-	slotDepthLimit  = 8
+	slotDepthLimit  = 16
 	// inlineRampSegments segments of one size in a row double it, from
 	// slotInlineLimit up to segmentBytes
 	inlineRampSegments = 8
@@ -42,13 +42,13 @@ var (
 	// the head is asked for between slotHuntFloor and slotHuntCeiling, a segment
 	// behind it at about the pace that segments come
 	slotHuntFloor   = 50 * time.Millisecond
-	slotHuntCeiling = 200 * time.Millisecond
+	slotHuntCeiling = 100 * time.Millisecond
 	slotTailMin     = 150 * time.Millisecond
 	slotTailMax     = 800 * time.Millisecond
-	slotFetchAhead  = 6
+	slotFetchAhead  = 10
 
-	slotAckRetry     = 100 * time.Millisecond
-	slotWatermarkTTL = 250 * time.Millisecond
+	slotAckRetry     = 30 * time.Millisecond
+	slotWatermarkTTL = 100 * time.Millisecond
 	slotStallTimeout = 60 * time.Second
 	slotCloseGrace   = 10 * time.Second
 	slotGoneTimeout  = 60 * time.Second
@@ -271,6 +271,11 @@ func (w *slotWriter) readyToFlush() bool {
 	grew := len(w.buf) > w.lastSize
 	w.lastSize = len(w.buf)
 
+	// slots are busy and the buffer small, so a bigger segment is worth the wait
+	if len(w.slots) > 0 && w.held < maxCoalescedTicks && len(w.buf) < w.size/2 {
+		w.held++
+		return false
+	}
 	if grew && w.held < maxCoalescedTicks {
 		w.held++
 		return false
@@ -294,6 +299,12 @@ func (w *slotWriter) flushLocked() error {
 	if w.err != nil || len(w.buf) == 0 {
 		<-w.slots
 		return w.err
+	}
+
+	// a ring three quarters busy is saturated by small segments, so widen at once
+	if w.size < w.segmentBytes && len(w.buf) >= w.size && len(w.slots)*4 > cap(w.slots)*3 {
+		w.size = w.segmentBytes
+		w.full = 0
 	}
 
 	n := min(len(w.buf), w.size)
@@ -393,7 +404,7 @@ func (w *slotWriter) await(seq int64) error {
 		w.ackMu.Lock()
 		still := time.Since(w.progress)
 		w.ackMu.Unlock()
-		if time.Since(start) > slotStallTimeout || closed && still > slotCloseGrace {
+		if min(time.Since(start), still) > slotStallTimeout || closed && still > slotCloseGrace {
 			return errors.New("the reader took nothing from slot ", w.slotID(seq), " for ", still).Base(err)
 		}
 
