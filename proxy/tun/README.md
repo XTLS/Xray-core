@@ -236,7 +236,7 @@ With `autoSystemWfpBlockLeak`, which needs `autoSystemRoutingTable` (the config 
 
 Whatever is blocked, loopback, which cannot leave the system, and what Windows itself needs on the local link stay allowed: DHCP, DHCPv6, and IPv6 neighbor and multicast listener discovery.
 
-Keeping the system's DNS inside the TUN, with `"all"`, `"allexceptlan"`, `"dns"`, `"windnsclient"`, or anything covering TCP or UDP port 53, needs `dns` (the config is rejected otherwise). The `dns` servers then have to lie within `gateway` or `autoSystemRoutingTable` (a warning is logged otherwise), and DNS servers that should be reached directly belong in Xray's own `dns` settings.
+Keeping the system's DNS inside the TUN, with `"all"`, `"allexceptlan"`, `"dns"`, `"windnsclient"`, or anything covering TCP or UDP port 53, needs `dns` (the config is rejected otherwise). The `dns` servers then have to lie within `gateway` or `autoSystemRoutingTable`, or be loopback addresses like `127.0.0.1` for a local resolver (a warning is logged otherwise), and DNS servers that should be reached directly belong in Xray's own `dns` settings.
 
 With the filters in place, Xray's own connections out also get past Windows Firewall's block rules (other firewalls may still block them), while connections to Xray's inbounds stay subject to them.
 

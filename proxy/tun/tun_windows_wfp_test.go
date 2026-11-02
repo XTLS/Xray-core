@@ -214,6 +214,10 @@ func TestDNSOutsideTUN(t *testing.T) {
 		netip.MustParseAddr("::ffff:203.0.113.54"),
 		netip.MustParseAddr("8.8.8.8"),
 		netip.MustParseAddr("2001:db8::53"),
+		// Local resolvers, reachable over loopback whatever is blocked.
+		netip.MustParseAddr("127.0.0.1"),
+		netip.MustParseAddr("::ffff:127.0.0.53"),
+		netip.MustParseAddr("::1"),
 	}
 	want := []netip.Addr{netip.MustParseAddr("8.8.8.8"), netip.MustParseAddr("2001:db8::53")}
 	if got := dnsOutsideTUN(servers, prefixes); !slices.Equal(got, want) {

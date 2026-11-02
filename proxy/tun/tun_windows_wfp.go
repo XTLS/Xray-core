@@ -618,13 +618,15 @@ func addFilter(engine windows.Handle, sublayer, layer *windows.GUID, name string
 	return nil
 }
 
-// dnsOutsideTUN returns the servers outside all of prefixes, the TUN's own
-// subnets and routes: queries to them cannot go through the TUN.
+// dnsOutsideTUN returns the servers whose queries the filters block: those
+// outside all of prefixes, the TUN's own subnets and routes, as queries to
+// them cannot go through the TUN. Loopback ones, local resolvers, are not
+// among them, as loopback stays allowed.
 func dnsOutsideTUN(servers []netip.Addr, prefixes []netip.Prefix) []netip.Addr {
 	var outside []netip.Addr
 	for _, server := range servers {
 		server = server.Unmap()
-		if !slices.ContainsFunc(prefixes, func(p netip.Prefix) bool { return p.Contains(server) }) {
+		if !server.IsLoopback() && !slices.ContainsFunc(prefixes, func(p netip.Prefix) bool { return p.Contains(server) }) {
 			outside = append(outside, server)
 		}
 	}
