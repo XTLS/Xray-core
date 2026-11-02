@@ -250,17 +250,19 @@ startOver:
 	// keep the protocols and ports given ("dns" stands for those of DNS),
 	// Windows' DNS Client service, an IP version no route of which leads to
 	// the TUN ("misconfigtun"), or everything ("all", or "allexceptlan" but
-	// for the local network), over IPv4, IPv6 or both, from leaving through
-	// the other interfaces. Addresses do not matter: without one of a version
-	// in gateway, Windows gives the TUN a link-local one.
+	// for the local network), to the addresses of a CIDR or to all, from
+	// leaving through the other interfaces. The TUN's own addresses do not
+	// matter: without one of a version in gateway, Windows gives it a
+	// link-local one.
 	leaks, err := ExpandWfpBlockLeak(t.options.AutoSystemWfpBlockLeak)
 	if err != nil {
 		return err
 	}
 	block := newLeakFilters(leaks, route4, route6)
 	if route4 || route6 {
-		if block.dnsClient != 0 && !dnsClientUsesAnyPort() {
-			block.dnsClient = 0
+		dnsClient := func(l leak) bool { return l.name == "windnsclient" }
+		if slices.ContainsFunc(block, dnsClient) && !dnsClientUsesAnyPort() {
+			block = slices.DeleteFunc(block, dnsClient)
 			errors.LogInfo(context.Background(), "[tun] windnsclient skipped: before Windows 11 and Server 2022, the DNS Client service only queries port 53")
 		}
 		if block.systemDNS() && len(dns) == 0 {
@@ -273,19 +275,17 @@ startOver:
 			return errors.New("unable to block ", blocked, " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
 		}
 		errors.LogInfo(context.Background(), "[tun] blocked outside the TUN: ", blocked)
-		if block.systemDNS() {
-			covered := slices.Clone(addresses)
-			for _, route := range routesData {
-				covered = append(covered, route.Destination)
-			}
-			for _, server := range dnsOutsideTUN(dns, covered) {
-				errors.LogWarning(context.Background(), "[tun] DNS server ", server, " is in neither gateway nor autoSystemRoutingTable, so queries to it cannot go through the TUN and are blocked")
-			}
-			// With updater, the dialer controllers bind Xray's own sockets
-			// to the physical interface.
-			if updater != nil {
-				t.resolver = resolveOnOwn()
-			}
+		covered := slices.Clone(addresses)
+		for _, route := range routesData {
+			covered = append(covered, route.Destination)
+		}
+		for _, server := range dnsOutsideTUN(dns, covered, block) {
+			errors.LogWarning(context.Background(), "[tun] DNS server ", server, " is in neither gateway nor autoSystemRoutingTable, so queries to it cannot go through the TUN and are blocked")
+		}
+		// With updater, the dialer controllers bind Xray's own sockets to the
+		// physical interface.
+		if block.systemDNS() && updater != nil {
+			t.resolver = resolveOnOwn()
 		}
 	}
 	if len(dns) > 0 || route4 || route6 {

@@ -207,79 +207,106 @@ func condition(field *windows.GUID, typ uint32, value uintptr) fwpmFilterConditi
 	}
 }
 
-// leakFilters is what blockLeaks keeps from leaving outside the TUN, each over
-// the IP versions given.
-type leakFilters struct {
-	traffic   []leak     // connections of these protocols and ports
-	dnsClient ipVersions // Windows' DNS Client service
-	all       ipVersions // everything ("all" or "allexceptlan")
-	lan       ipVersions // but to and from the local network ("allexceptlan")
-	unrouted  ipVersions // everything, as no route leads to the TUN ("misconfigtun")
-}
+// leakFilters are the values of autoSystemWfpBlockLeak that blockLeaks keeps
+// from leaving outside the TUN.
+type leakFilters []leak
 
 // newLeakFilters turns expanded autoSystemWfpBlockLeak values into the filters
-// for a TUN that the routes of route4 (IPv4) and route6 (IPv6) lead to.
+// for a TUN that the routes of route4 (IPv4) and route6 (IPv6) lead to, which
+// leave "misconfigtun" over the IP versions without such routes only.
 func newLeakFilters(leaks []string, route4, route6 bool) leakFilters {
 	var block leakFilters
-	var routed, allExceptLAN ipVersions
-	if route4 {
-		routed |= ipv4Version
-	}
-	if route6 {
-		routed |= ipv6Version
-	}
 	for _, value := range leaks {
-		switch l, _ := parseLeak(value); l.name {
-		case "windnsclient":
-			block.dnsClient |= l.versions
-		case "misconfigtun":
-			block.unrouted |= l.versions &^ routed
-		case "all":
-			block.all |= l.versions
-		case "allexceptlan":
-			allExceptLAN |= l.versions
-		case "tcp", "udp", "icmp":
-			block.traffic = append(block.traffic, l)
+		l, ok := parseLeak(value)
+		if !ok {
+			continue
+		}
+		if l.name == "misconfigtun" {
+			unrouted4, unrouted6 := !route4, !route6
+			if l.prefix.IsValid() {
+				unrouted4, unrouted6 = unrouted4 && l.prefix.Addr().Is4(), unrouted6 && l.prefix.Addr().Is6()
+			}
+			switch {
+			case !unrouted4 && !unrouted6:
+				continue
+			case !l.prefix.IsValid() && !unrouted4:
+				l.prefix = allAddresses(true)
+			case !l.prefix.IsValid() && !unrouted6:
+				l.prefix = allAddresses(false)
+			}
+		}
+		if !slices.Contains(block, l) {
+			block = append(block, l)
 		}
 	}
-	// "all" overrides "allexceptlan".
-	block.lan = allExceptLAN &^ block.all
-	block.all |= allExceptLAN
 	return block
 }
 
 // String lists what block keeps inside the TUN, or is empty for nothing.
 func (block leakFilters) String() string {
-	var blocked []string
-	for _, traffic := range block.traffic {
-		blocked = append(blocked, traffic.String())
+	values := make([]string, len(block))
+	for i, l := range block {
+		values[i] = l.String()
 	}
-	if block.dnsClient != 0 {
-		blocked = append(blocked, leak{versions: block.dnsClient, name: "windnsclient"}.String())
-	}
-	for _, family := range []struct {
-		version ipVersions
-		name    string
-	}{{ipv4Version, "IPv4"}, {ipv6Version, "IPv6"}} {
-		if (block.all|block.unrouted)&family.version == 0 {
-			continue
-		}
-		if block.lan&family.version != 0 {
-			family.name += " except LAN"
-		}
-		blocked = append(blocked, family.name)
-	}
-	return strings.Join(blocked, ", ")
+	return strings.Join(values, ", ")
 }
 
-// systemDNS tells whether block keeps the system's DNS inside the TUN, over at
-// least one IP version: port 53, the DNS Client service, or everything ("all"),
-// though not with the local network left open, where a resolver like the
-// router's may be.
+// systemDNS tells whether block keeps the system's DNS inside the TUN, to at
+// least some addresses: port 53, the DNS Client service, or everything ("all"),
+// though not everything but the local network ("allexceptlan"), where a
+// resolver like the router's may be.
 func (block leakFilters) systemDNS() bool {
-	return block.dnsClient != 0 || block.all&^block.lan != 0 || slices.ContainsFunc(block.traffic, func(traffic leak) bool {
-		return traffic.covers("udp", 53) || traffic.covers("tcp", 53)
-	})
+	return slices.ContainsFunc(block, leak.blocksDNS)
+}
+
+// prefixes returns the CIDRs of the values of block named name over an IP
+// version.
+func (block leakFilters) prefixes(name string, ipv6 bool) []netip.Prefix {
+	var prefixes []netip.Prefix
+	for _, l := range block {
+		if prefix, ok := l.over(ipv6); ok && l.name == name {
+			prefixes = append(prefixes, prefix)
+		}
+	}
+	return prefixes
+}
+
+// over returns the CIDR of l over an IP version, all its addresses for l
+// without one, or false for l over the other IP version only.
+func (l leak) over(ipv6 bool) (netip.Prefix, bool) {
+	if !l.prefix.IsValid() {
+		return allAddresses(ipv6), true
+	}
+	return l.prefix, l.prefix.Addr().Is6() == ipv6
+}
+
+// allAddresses is the CIDR of all addresses of an IP version.
+func allAddresses(ipv6 bool) netip.Prefix {
+	if ipv6 {
+		return netip.PrefixFrom(netip.IPv6Unspecified(), 0)
+	}
+	return netip.PrefixFrom(netip.IPv4Unspecified(), 0)
+}
+
+// lanWithin returns the parts of lanPrefixes that lie in any of prefixes: two
+// prefixes either share no address, or one holds the other.
+func lanWithin(prefixes ...netip.Prefix) []netip.Prefix {
+	var parts []netip.Prefix
+	for _, lan := range lanPrefixes {
+		for _, prefix := range prefixes {
+			if !prefix.Overlaps(lan) {
+				continue
+			}
+			part := lan
+			if prefix.Bits() > lan.Bits() {
+				part = prefix
+			}
+			if !slices.Contains(parts, part) {
+				parts = append(parts, part)
+			}
+		}
+	}
+	return parts
 }
 
 // dnsClientUsesAnyPort tells whether Windows' DNS Client service may send its
@@ -292,11 +319,24 @@ func dnsClientUsesAnyPort() bool {
 	return build >= 20348
 }
 
+// The weights of the filters of blockLeaks, the heaviest matching one of which
+// decides.
+const (
+	weightAllExceptLAN uint8 = iota // block "allexceptlan"
+	weightLAN                       // permit its local network
+	weightDNSClient                 // block "windnsclient"
+	weightLocalLink                 // permit its mDNS and LLMNR on the local network
+	weightBlock                     // block the other values
+	weightPermit                    // permit what always stays allowed, and the TUN
+	weightXray                      // permit Xray
+)
+
 // blockLeaks keeps traffic from leaving through interfaces other than tun,
 // for every program but Xray itself, whose outbounds (DNS included) use the
-// other interfaces on purpose, each over the IP versions block gives:
+// other interfaces on purpose, as the values of block say, each to the
+// addresses of its CIDR, or to all:
 //
-//   - traffic: connections of these protocols, TCP and UDP to some or all
+//   - Protocols and ports: connections of these, TCP or UDP to some or all
 //     ports, or ICMP, may only go through the TUN, those of DNS (53), DNS
 //     over TLS (TCP 853) and DNS over QUIC (UDP 853) with "dns". Windows
 //     sends a name query to the DNS servers of all interfaces, not only to
@@ -306,22 +346,22 @@ func dnsClientUsesAnyPort() bool {
 //     whatever the routes say, and other programs reach an on-link resolver,
 //     like 192.168.1.1 from DHCP, through its LAN route, which is more
 //     specific than the TUN's default route.
-//   - dnsClient: since Windows 11 and Server 2022, Windows may also send its
-//     queries over HTTPS or TLS, to any port, so its DNS Client service may not
-//     connect outside the TUN at all, except for name resolution on the local
-//     link (mDNS, LLMNR).
-//   - all, unrouted: nothing at all outside the TUN, in either direction:
-//     with "all", or with "allexceptlan" (lan) but to and from the local
-//     network, below the other filters, which so still apply there, or with
-//     "misconfigtun" for an IP version no route of which leads to the TUN.
-//     The TUN carries what is routed to it even without an address of that
-//     IP version in gateway: Windows gives it link-local ones itself, an IPv6
+//   - "windnsclient": since Windows 11 and Server 2022, Windows may also send
+//     its queries over HTTPS or TLS, to any port, so its DNS Client service
+//     may not connect outside the TUN at all, except for name resolution on
+//     the local network (mDNS, LLMNR).
+//   - "all", and "misconfigtun" over an IP version no route of which leads to
+//     the TUN: nothing at all outside the TUN, in either direction. The TUN
+//     carries what is routed to it even without an address of that IP
+//     version in gateway: Windows gives it link-local ones itself, an IPv6
 //     one at once, an IPv4 one from 169.254.0.0/16 after some seconds (until
 //     then, IPv4 routed to the TUN is unreachable).
+//   - "allexceptlan": the same, but to and from the local network.
 //
-// Whatever is blocked, loopback, which cannot leave the system, and what
-// Windows itself needs on the local link stay allowed: DHCP, and for IPv6
-// neighbor and multicast listener discovery.
+// The other values still apply to what "allexceptlan" and "windnsclient" leave
+// open on the local network. Whatever is blocked, loopback, which cannot leave
+// the system, and what Windows itself needs on the local link stay allowed:
+// DHCP, and for IPv6 neighbor and multicast listener discovery.
 //
 // The filters live in a dynamic WFP session: closing the returned engine handle
 // with closeWFPEngine deletes them, and so does Windows when the process dies.
@@ -422,17 +462,18 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters)
 	onTUN := func(field *windows.GUID) fwpmFilterCondition0 {
 		return condition(field, fwpUint64, uintptr(unsafe.Pointer(tunLUID)))
 	}
-	// toLAN matches the remote addresses of lanPrefixes of an IP version:
-	// conditions on the same field match when any of them does.
-	toLAN := func(ipv6 bool) []fwpmFilterCondition0 {
+	// remote matches the remote addresses in any of prefixes, all of one IP
+	// version: conditions on the same field match when any of them does. With
+	// all addresses among them, no condition is needed.
+	remote := func(prefixes ...netip.Prefix) []fwpmFilterCondition0 {
+		if slices.ContainsFunc(prefixes, func(prefix netip.Prefix) bool { return prefix.Bits() == 0 }) {
+			return nil
+		}
 		var conditions []fwpmFilterCondition0
-		for _, prefix := range lanPrefixes {
-			if prefix.Addr().Is6() != ipv6 {
-				continue
-			}
+		for _, prefix := range prefixes {
 			var value uintptr
 			typ := uint32(fwpV4AddrMask)
-			if ipv6 {
+			if prefix.Addr().Is6() {
 				addr := &fwpV6AddrAndMask{addr: prefix.Addr().As16(), prefixLength: uint8(prefix.Bits())}
 				pinner.Pin(addr) // the condition only holds it as uintptr
 				value, typ = uintptr(unsafe.Pointer(addr)), fwpV6AddrMask
@@ -506,60 +547,64 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters)
 		key       *windows.GUID
 		selfFlags uint32
 		via       *windows.GUID // the interface that has to be the TUN as well
-		version   ipVersions
+		ipv6      bool
 		permits   []permit
 	}{
-		{&fwpmLayerALEAuthConnectV4, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface, ipv4Version, []permit{loopback, dhcp}},
-		{&fwpmLayerALEAuthRecvAcceptV4, 0, &fwpmConditionIPArrivalInterface, ipv4Version, []permit{loopback, dhcp}},
-		{&fwpmLayerALEAuthConnectV6, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface, ipv6Version, []permit{loopback, discovery, dhcpv6Out}},
-		{&fwpmLayerALEAuthRecvAcceptV6, 0, &fwpmConditionIPArrivalInterface, ipv6Version, []permit{loopback, discovery, dhcpv6In}},
+		{&fwpmLayerALEAuthConnectV4, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface, false, []permit{loopback, dhcp}},
+		{&fwpmLayerALEAuthRecvAcceptV4, 0, &fwpmConditionIPArrivalInterface, false, []permit{loopback, dhcp}},
+		{&fwpmLayerALEAuthConnectV6, fwpmFilterFlagClearActionRight, &fwpmConditionIPNexthopInterface, true, []permit{loopback, discovery, dhcpv6Out}},
+		{&fwpmLayerALEAuthRecvAcceptV6, 0, &fwpmConditionIPArrivalInterface, true, []permit{loopback, discovery, dhcpv6In}},
 	} {
-		ipv6 := layer.version == ipv6Version
-		throughTUN := []fwpmFilterCondition0{onTUN(&fwpmConditionIPLocalInterface), onTUN(layer.via)}
-		if err := add(layer.key, "permit Xray", layer.selfFlags, fwpActionPermit, 4, self); err != nil {
+		throughTUN := permit{"through the TUN", []fwpmFilterCondition0{onTUN(&fwpmConditionIPLocalInterface), onTUN(layer.via)}}
+		if err := add(layer.key, "permit Xray", layer.selfFlags, fwpActionPermit, weightXray, self); err != nil {
 			return err
 		}
-		for _, p := range layer.permits {
-			if err := add(layer.key, "permit "+p.name, 0, fwpActionPermit, 3, p.conditions...); err != nil {
+		for _, p := range append(layer.permits, throughTUN) {
+			if err := add(layer.key, "permit "+p.name, 0, fwpActionPermit, weightPermit, p.conditions...); err != nil {
 				return err
 			}
 		}
-		for _, traffic := range block.traffic {
-			if traffic.versions&layer.version == 0 {
+		for _, l := range block {
+			prefix, ok := l.over(layer.ipv6)
+			if !ok {
 				continue // for the other IP version only
 			}
-			protocol := uintptr(windows.IPPROTO_UDP)
-			switch {
-			case traffic.name == "tcp":
-				protocol = windows.IPPROTO_TCP
-			case traffic.name == "icmp" && ipv6:
-				protocol = windows.IPPROTO_ICMPV6
-			case traffic.name == "icmp":
-				protocol = windows.IPPROTO_ICMP
+			var protocols []uintptr
+			switch l.name {
+			case "tcp":
+				protocols = []uintptr{windows.IPPROTO_TCP}
+			case "udp":
+				protocols = []uintptr{windows.IPPROTO_UDP}
+			case "":
+				protocols = []uintptr{windows.IPPROTO_TCP, windows.IPPROTO_UDP}
+			case "icmp":
+				protocols = []uintptr{windows.IPPROTO_ICMP}
+				if layer.ipv6 {
+					protocols = []uintptr{windows.IPPROTO_ICMPV6}
+				}
+			case "all", "misconfigtun":
+				// every protocol
+			default:
+				continue // "allexceptlan" and "windnsclient" have filters of their own
 			}
-			matches := slices.Concat([]fwpmFilterCondition0{condition(&fwpmConditionIPProtocol, fwpUint8, protocol)}, toPorts(traffic))
-			if err := add(layer.key, "permit "+traffic.String()+" through the TUN", 0, fwpActionPermit, 3, slices.Concat(matches, throughTUN)...); err != nil {
-				return err
+			var matches []fwpmFilterCondition0
+			for _, protocol := range protocols {
+				matches = append(matches, condition(&fwpmConditionIPProtocol, fwpUint8, protocol))
 			}
-			if err := add(layer.key, "block "+traffic.String(), 0, fwpActionBlock, 2, matches...); err != nil {
+			matches = slices.Concat(matches, toPorts(l), remote(prefix))
+			if err := add(layer.key, "block "+l.String(), 0, fwpActionBlock, weightBlock, matches...); err != nil {
 				return err
 			}
 		}
-		if family := "IPv4"; (block.all|block.unrouted)&layer.version != 0 {
-			if ipv6 {
-				family = "IPv6"
-			}
-			if err := add(layer.key, "permit "+family+" through the TUN", 0, fwpActionPermit, 1, throughTUN...); err != nil {
-				return err
-			}
-			// Below the other values, which so still apply on the local
-			// network, DNS with "allexceptlan" among them.
-			if block.lan&layer.version != 0 {
-				if err := add(layer.key, "permit "+family+" LAN", 0, fwpActionPermit, 1, toLAN(ipv6)...); err != nil {
+		if allExceptLAN := block.prefixes("allexceptlan", layer.ipv6); len(allExceptLAN) > 0 {
+			// Lighter than the other values, which so still apply on the
+			// local network, DNS with "allexceptlan" among them.
+			if lan := lanWithin(allExceptLAN...); len(lan) > 0 {
+				if err := add(layer.key, "permit the local network", 0, fwpActionPermit, weightLAN, remote(lan...)...); err != nil {
 					return err
 				}
 			}
-			if err := add(layer.key, "block "+family, 0, fwpActionBlock, 0); err != nil {
+			if err := add(layer.key, "block allexceptlan", 0, fwpActionBlock, weightAllExceptLAN, remote(allExceptLAN...)...); err != nil {
 				return err
 			}
 		}
@@ -568,13 +613,11 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters)
 	// Since Windows 11 and Server 2022, the DNS Client service may also send
 	// the queries for an interface's servers over HTTPS or TLS, out through
 	// that interface and to any port. So there it may only connect through
-	// the TUN, except for mDNS and LLMNR, which stay on the local link (over
-	// an IP version only while it is not blocked altogether, or with
-	// "allexceptlan" to the local network's addresses). Like Windows
+	// the TUN, except for mDNS and LLMNR on the local network. Like Windows
 	// Firewall's rules for it, the filters recognize the service by its SID,
 	// which Windows puts in the token of its process: the security descriptor
 	// grants that SID the right to match (FWP_ACTRL_MATCH_FILTER, CC in SDDL).
-	if block.dnsClient != 0 {
+	if slices.ContainsFunc(block, func(l leak) bool { return l.name == "windnsclient" }) {
 		sd, err := windows.SecurityDescriptorFromString("O:SYG:SYD:(A;;CCRC;;;" + dnsClientSID + ")")
 		if err != nil {
 			return err
@@ -585,29 +628,20 @@ func addLeakFilters(engine windows.Handle, tun winipcfg.LUID, block leakFilters)
 		// Conditions on the same field match when any of them does.
 		mdnsLLMNR := []fwpmFilterCondition0{dnsClient, condition(&fwpmConditionIPRemotePort, fwpUint16, 5353), condition(&fwpmConditionIPRemotePort, fwpUint16, 5355)}
 		for _, layer := range []struct {
-			key     *windows.GUID
-			version ipVersions
+			key  *windows.GUID
+			ipv6 bool
 		}{
-			{&fwpmLayerALEAuthConnectV4, ipv4Version},
-			{&fwpmLayerALEAuthConnectV6, ipv6Version},
+			{&fwpmLayerALEAuthConnectV4, false},
+			{&fwpmLayerALEAuthConnectV6, true},
 		} {
-			if block.dnsClient&layer.version == 0 {
+			prefixes := block.prefixes("windnsclient", layer.ipv6)
+			if len(prefixes) == 0 {
 				continue
 			}
-			if err := add(layer.key, "permit the DNS Client service through the TUN", 0, fwpActionPermit, 3, dnsClient, onTUN(&fwpmConditionIPLocalInterface), onTUN(&fwpmConditionIPNexthopInterface)); err != nil {
+			if err := add(layer.key, "permit the DNS Client service's mDNS and LLMNR", 0, fwpActionPermit, weightLocalLink, slices.Concat(mdnsLLMNR, remote(lanWithin(allAddresses(layer.ipv6))...))...); err != nil {
 				return err
 			}
-			lan := block.lan&layer.version != 0
-			if (block.all|block.unrouted)&layer.version == 0 || lan {
-				localLink := mdnsLLMNR
-				if lan {
-					localLink = slices.Concat(mdnsLLMNR, toLAN(layer.version == ipv6Version))
-				}
-				if err := add(layer.key, "permit the DNS Client service's mDNS and LLMNR", 0, fwpActionPermit, 3, localLink...); err != nil {
-					return err
-				}
-			}
-			if err := add(layer.key, "block the DNS Client service", 0, fwpActionBlock, 2, dnsClient); err != nil {
+			if err := add(layer.key, "block the DNS Client service", 0, fwpActionBlock, weightDNSClient, slices.Concat([]fwpmFilterCondition0{dnsClient}, remote(prefixes...))...); err != nil {
 				return err
 			}
 		}
@@ -634,15 +668,22 @@ func addFilter(engine windows.Handle, sublayer, layer *windows.GUID, name string
 	return nil
 }
 
-// dnsOutsideTUN returns the servers whose queries the filters block: those
-// outside all of prefixes, the TUN's own subnets and routes, as queries to
-// them cannot go through the TUN. Loopback ones, local resolvers, are not
-// among them, as loopback stays allowed.
-func dnsOutsideTUN(servers []netip.Addr, prefixes []netip.Prefix) []netip.Addr {
+// dnsOutsideTUN returns the servers whose queries block blocks: those outside
+// all of prefixes, the TUN's own subnets and routes, as queries to them cannot
+// go through the TUN, and inside the CIDR of a value that keeps DNS inside the
+// TUN, or of "misconfigtun". Loopback ones, local resolvers, are not among
+// them, as loopback stays allowed.
+func dnsOutsideTUN(servers []netip.Addr, prefixes []netip.Prefix, block leakFilters) []netip.Addr {
 	var outside []netip.Addr
 	for _, server := range servers {
 		server = server.Unmap()
-		if !server.IsLoopback() && !slices.ContainsFunc(prefixes, func(p netip.Prefix) bool { return p.Contains(server) }) {
+		if server.IsLoopback() || slices.ContainsFunc(prefixes, func(p netip.Prefix) bool { return p.Contains(server) }) {
+			continue
+		}
+		if slices.ContainsFunc(block, func(l leak) bool {
+			prefix, ok := l.over(server.Is6())
+			return ok && prefix.Contains(server) && (l.blocksDNS() || l.name == "misconfigtun")
+		}) {
 			outside = append(outside, server)
 		}
 	}
