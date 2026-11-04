@@ -9,6 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
+	"github.com/xtls/xray-core/common/log"
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/freedom"
@@ -44,11 +45,16 @@ type Noise struct {
 }
 
 type FreedomFinalRuleConfig struct {
-	Action     string       `json:"action"`
-	Network    *NetworkList `json:"network"`
-	Port       *PortList    `json:"port"`
-	IP         *StringList  `json:"ip"`
-	BlockDelay *Int32Range  `json:"blockDelay"`
+	Action        string                `json:"action"`
+	Network       *NetworkList          `json:"network"`
+	Port          *PortList             `json:"port"`
+	IP            *StringList           `json:"ip"`
+	BlockSettings *FreedomBlockSettings `json:"blockSettings"`
+}
+
+type FreedomBlockSettings struct {
+	Delay    *Int32Range `json:"delay"`
+	LogLevel string      `json:"loglevel"`
 }
 
 // Build implements Buildable
@@ -279,12 +285,46 @@ func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
 		rule.Ip = rules
 	}
 
-	if c.BlockDelay != nil {
-		rule.BlockDelay = &freedom.Range{
-			Min: uint64(c.BlockDelay.From),
-			Max: uint64(c.BlockDelay.To),
+	if c.BlockSettings != nil {
+		if rule.Action != freedom.RuleAction_Block {
+			return nil, errors.New("blockSettings is only supported for block finalRules")
 		}
+		settings, err := c.BlockSettings.Build()
+		if err != nil {
+			return nil, err
+		}
+		rule.BlockSettings = settings
 	}
 
 	return rule, nil
+}
+
+func (c *FreedomBlockSettings) Build() (*freedom.BlockSettings, error) {
+	settings := &freedom.BlockSettings{}
+	if c.Delay != nil {
+		if c.Delay.From < 0 || c.Delay.To < 0 {
+			return nil, errors.New("blockSettings.delay must not be negative")
+		}
+		settings.Delay = &freedom.Range{
+			Min: uint64(c.Delay.From),
+			Max: uint64(c.Delay.To),
+		}
+	}
+
+	switch strings.ToLower(c.LogLevel) {
+	case "", "info":
+		settings.LogLevel = log.Severity_Info.Enum()
+	case "none":
+		settings.LogLevel = log.Severity_Unknown.Enum()
+	case "debug":
+		settings.LogLevel = log.Severity_Debug.Enum()
+	case "warning":
+		settings.LogLevel = log.Severity_Warning.Enum()
+	case "error":
+		settings.LogLevel = log.Severity_Error.Enum()
+	default:
+		return nil, errors.New("unknown blockSettings.loglevel: ", c.LogLevel)
+	}
+
+	return settings, nil
 }

@@ -661,8 +661,8 @@ func TestVlessRealityFingerprints(t *testing.T) {
 	wg.Wait()
 }
 
-// A blocked connection must be closed after blockDelay even while the client keeps it open and sends nothing.
-func TestVlessBlockDelay(t *testing.T) {
+// A blocked connection must close after blockSettings.delay even while the client keeps it open and sends nothing.
+func TestVlessBlockSettingsDelay(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -671,7 +671,7 @@ func TestVlessBlockDelay(t *testing.T) {
 	defer tcpServer.Close()
 
 	for _, delay := range []uint64{0, 1} {
-		t.Run(fmt.Sprint("blockDelay=", delay), func(t *testing.T) {
+		t.Run(fmt.Sprint("delay=", delay), func(t *testing.T) {
 			userID := protocol.NewID(uuid.New())
 			serverPort := tcp.PickPort()
 			serverConfig := &core.Config{
@@ -697,8 +697,8 @@ func TestVlessBlockDelay(t *testing.T) {
 						ProxySettings: serial.ToTypedMessage(&freedom.Config{
 							FinalRules: []*freedom.FinalRuleConfig{
 								{
-									Action:     freedom.RuleAction_Block,
-									BlockDelay: &freedom.Range{Min: delay, Max: delay},
+									Action:        freedom.RuleAction_Block,
+									BlockSettings: &freedom.BlockSettings{Delay: &freedom.Range{Min: delay, Max: delay}},
 								},
 							},
 						}),
@@ -726,15 +726,15 @@ func TestVlessBlockDelay(t *testing.T) {
 				Port:    dest.Port,
 			}, &encoding.Addons{}))
 
-			blockDelay := time.Duration(delay) * time.Second
-			common.Must(conn.SetReadDeadline(time.Now().Add(blockDelay + 5*time.Second)))
+			blockDuration := time.Duration(delay) * time.Second
+			common.Must(conn.SetReadDeadline(time.Now().Add(blockDuration + 5*time.Second)))
 			_, err = io.Copy(io.Discard, conn)
 			elapsed := time.Since(start)
 			if err, ok := err.(net.Error); ok && err.Timeout() {
 				t.Fatalf("connection is still open after %v", elapsed)
 			}
-			if elapsed < blockDelay {
-				t.Fatalf("connection is closed after %v, before blockDelay", elapsed)
+			if elapsed < blockDuration {
+				t.Fatalf("connection is closed after %v, before blockSettings.delay", elapsed)
 			}
 		})
 	}
