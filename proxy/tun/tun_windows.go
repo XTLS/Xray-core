@@ -201,6 +201,12 @@ startOver:
 		}
 		err = t.luid.SetDNS(family, dns, nil)
 		if err != nil {
+			// Skip IPv6 the config does not ask for also when setting its DNS
+			// servers fails, as reported on Windows 11 24H2 with IPv6 disabled
+			// (Access is denied).
+			if family == windows.AF_INET6 && !address6 && !route6 {
+				continue
+			}
 			firstErr = errors.New("unable to set DNS").Base(err)
 			if err == windows.ERROR_NOT_FOUND {
 				goto startOver
