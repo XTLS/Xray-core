@@ -232,7 +232,7 @@ func (h *Handler) blackhole(ctx context.Context, input buf.Reader, output buf.Wr
 	if rule == defaultBlockPrivateRule || rule == defaultBlockAllRule {
 		log = errors.LogWarning
 	}
-	log(ctx, "target blocked by a final rule: ", *dest, ", blackholing connection for ", delay)
+	log(ctx, "target blocked by a finalrule: ", *dest, ", blackholing connection for ", delay)
 	defer common.Close(output)
 	done := make(chan struct{})
 	go func() { // a DispatchLink inbound's reader ignores Interrupt, so don't wait for this copy
