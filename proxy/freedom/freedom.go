@@ -73,25 +73,26 @@ func init() {
 	}
 
 	defaultBlockPrivateRule = &FinalRule{
-		action:        RuleAction_Block,
-		network:       allNetworks,
-		ip:            geodata.GetPrivateIPMatcher(),
-		blockSettings: &BlockSettings{LogLevel: log.Severity_Warning.Enum()},
+		action:   RuleAction_Block,
+		network:  allNetworks,
+		ip:       geodata.GetPrivateIPMatcher(),
+		logLevel: log.Severity_Warning.Enum(),
 	}
 
 	defaultBlockAllRule = &FinalRule{
-		action:        RuleAction_Block,
-		network:       allNetworks,
-		blockSettings: &BlockSettings{LogLevel: log.Severity_Warning.Enum()},
+		action:   RuleAction_Block,
+		network:  allNetworks,
+		logLevel: log.Severity_Warning.Enum(),
 	}
 }
 
 type FinalRule struct {
-	action        RuleAction
-	network       [8]bool
-	port          net.MemoryPortList
-	ip            geodata.IPMatcher
-	blockSettings *BlockSettings
+	action   RuleAction
+	network  [8]bool
+	port     net.MemoryPortList
+	ip       geodata.IPMatcher
+	delay    *Range
+	logLevel *log.Severity
 }
 
 // Handler handles Freedom connections.
@@ -105,8 +106,9 @@ type Handler struct {
 
 func buildFinalRule(config *FinalRuleConfig) (*FinalRule, error) {
 	rule := &FinalRule{
-		action:        config.GetAction(),
-		blockSettings: config.GetBlockSettings(),
+		action:   config.GetAction(),
+		delay:    config.GetDelay(),
+		logLevel: config.LogLevel,
 	}
 
 	if len(config.Networks) == 0 {
@@ -218,9 +220,9 @@ func (h *Handler) policy() policy.Session {
 func (r *FinalRule) blockDuration() time.Duration {
 	min := uint64(30)
 	max := uint64(90)
-	if delay := r.blockSettings.GetDelay(); delay != nil {
-		min = delay.Min
-		max = delay.Max
+	if r.delay != nil {
+		min = r.delay.Min
+		max = r.delay.Max
 	}
 	if max < min {
 		min, max = max, min
@@ -230,8 +232,8 @@ func (r *FinalRule) blockDuration() time.Duration {
 
 func (r *FinalRule) log(ctx context.Context, msg ...interface{}) {
 	level := log.Severity_Info
-	if r.blockSettings != nil && r.blockSettings.LogLevel != nil {
-		level = r.blockSettings.GetLogLevel()
+	if r.logLevel != nil {
+		level = *r.logLevel
 	}
 	switch level {
 	case log.Severity_Debug:

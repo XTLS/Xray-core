@@ -661,8 +661,8 @@ func TestVlessRealityFingerprints(t *testing.T) {
 	wg.Wait()
 }
 
-// A blocked connection must close after blockSettings.delay even while the client keeps it open and sends nothing.
-func TestVlessBlockSettingsDelay(t *testing.T) {
+// A blocked connection must close after finalRules.delay even while the client keeps it open and sends nothing.
+func TestVlessBlockDelay(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -697,8 +697,8 @@ func TestVlessBlockSettingsDelay(t *testing.T) {
 						ProxySettings: serial.ToTypedMessage(&freedom.Config{
 							FinalRules: []*freedom.FinalRuleConfig{
 								{
-									Action:        freedom.RuleAction_Block,
-									BlockSettings: &freedom.BlockSettings{Delay: &freedom.Range{Min: delay, Max: delay}},
+									Action: freedom.RuleAction_Block,
+									Delay:  &freedom.Range{Min: delay, Max: delay},
 								},
 							},
 						}),
@@ -734,7 +734,7 @@ func TestVlessBlockSettingsDelay(t *testing.T) {
 				t.Fatalf("connection is still open after %v", elapsed)
 			}
 			if elapsed < blockDuration {
-				t.Fatalf("connection is closed after %v, before blockSettings.delay", elapsed)
+				t.Fatalf("connection is closed after %v, before finalRules.delay", elapsed)
 			}
 		})
 	}

@@ -45,17 +45,13 @@ type Noise struct {
 }
 
 type FreedomFinalRuleConfig struct {
-	Action        string                `json:"action"`
-	Network       *NetworkList          `json:"network"`
-	Port          *PortList             `json:"port"`
-	IP            *StringList           `json:"ip"`
-	BlockSettings *FreedomBlockSettings `json:"blockSettings"`
-	BlockDelay    *Int32Range           `json:"blockDelay"`
-}
-
-type FreedomBlockSettings struct {
-	Delay    *Int32Range `json:"delay"`
-	LogLevel string      `json:"logLevel"`
+	Action     string       `json:"action"`
+	Network    *NetworkList `json:"network"`
+	Port       *PortList    `json:"port"`
+	IP         *StringList  `json:"ip"`
+	Delay      *Int32Range  `json:"delay"`
+	LogLevel   string       `json:"logLevel"`
+	BlockDelay *Int32Range  `json:"blockDelay"`
 }
 
 // Build implements Buildable
@@ -287,31 +283,22 @@ func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
 	}
 
 	if c.BlockDelay != nil {
-		errors.PrintDeprecatedFeatureWarning("finalRules.blockDelay", "finalRules.blockSettings.delay")
-		c.BlockSettings = &FreedomBlockSettings{Delay: c.BlockDelay}
+		errors.PrintDeprecatedFeatureWarning("finalRules.blockDelay", "finalRules.delay")
+		c.Delay = c.BlockDelay
 	}
 
-	if c.BlockSettings != nil {
-		if rule.Action != freedom.RuleAction_Block {
-			return nil, errors.New("blockSettings is only supported for block finalRules")
+	if rule.Action != freedom.RuleAction_Block {
+		if c.Delay != nil || c.LogLevel != "" {
+			return nil, errors.New("delay and logLevel are only supported for block finalRules")
 		}
-		settings, err := c.BlockSettings.Build()
-		if err != nil {
-			return nil, err
-		}
-		rule.BlockSettings = settings
+		return rule, nil
 	}
 
-	return rule, nil
-}
-
-func (c *FreedomBlockSettings) Build() (*freedom.BlockSettings, error) {
-	settings := &freedom.BlockSettings{}
 	if c.Delay != nil {
 		if c.Delay.From < 0 || c.Delay.To < 0 {
-			return nil, errors.New("blockSettings.delay must not be negative")
+			return nil, errors.New("finalRules.delay must not be negative")
 		}
-		settings.Delay = &freedom.Range{
+		rule.Delay = &freedom.Range{
 			Min: uint64(c.Delay.From),
 			Max: uint64(c.Delay.To),
 		}
@@ -319,18 +306,18 @@ func (c *FreedomBlockSettings) Build() (*freedom.BlockSettings, error) {
 
 	switch strings.ToLower(c.LogLevel) {
 	case "", "info":
-		settings.LogLevel = log.Severity_Info.Enum()
+		rule.LogLevel = log.Severity_Info.Enum()
 	case "none":
-		settings.LogLevel = log.Severity_Unknown.Enum()
+		rule.LogLevel = log.Severity_Unknown.Enum()
 	case "debug":
-		settings.LogLevel = log.Severity_Debug.Enum()
+		rule.LogLevel = log.Severity_Debug.Enum()
 	case "warning":
-		settings.LogLevel = log.Severity_Warning.Enum()
+		rule.LogLevel = log.Severity_Warning.Enum()
 	case "error":
-		settings.LogLevel = log.Severity_Error.Enum()
+		rule.LogLevel = log.Severity_Error.Enum()
 	default:
-		return nil, errors.New("unknown blockSettings.logLevel: ", c.LogLevel)
+		return nil, errors.New("unknown finalRules.logLevel: ", c.LogLevel)
 	}
 
-	return settings, nil
+	return rule, nil
 }

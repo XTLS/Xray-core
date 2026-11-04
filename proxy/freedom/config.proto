@@ -47,18 +47,13 @@ enum RuleAction {
   Block = 1;
 }
 
-message BlockSettings {
-  Range delay = 1;
-  optional xray.common.log.Severity log_level = 2;
-}
-
 message FinalRuleConfig {
   RuleAction action = 1;
   repeated xray.common.net.Network networks = 2;
   xray.common.net.PortList port_list = 3;
   repeated xray.common.geodata.IPRule ip = 4;
-  reserved 5;
-  BlockSettings block_settings = 6;
+  Range delay = 5;
+  optional xray.common.log.Severity log_level = 6;
 }
 
 message Config {
