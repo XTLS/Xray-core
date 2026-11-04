@@ -50,6 +50,7 @@ type FreedomFinalRuleConfig struct {
 	Port          *PortList             `json:"port"`
 	IP            *StringList           `json:"ip"`
 	BlockSettings *FreedomBlockSettings `json:"blockSettings"`
+	BlockDelay    *Int32Range           `json:"blockDelay"`
 }
 
 type FreedomBlockSettings struct {
@@ -283,6 +284,11 @@ func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
 			return nil, err
 		}
 		rule.Ip = rules
+	}
+
+	if c.BlockDelay != nil {
+		errors.PrintDeprecatedFeatureWarning("finalRules.blockDelay", "finalRules.blockSettings.delay")
+		c.BlockSettings = &FreedomBlockSettings{Delay: c.BlockDelay}
 	}
 
 	if c.BlockSettings != nil {
