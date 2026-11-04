@@ -134,7 +134,14 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 		if gotlsConfig != nil {
 			if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
 				conn = tls.UClient(conn, gotlsConfig, fingerprint)
-				if err := conn.(*tls.UConn).HandshakeContext(ctxInner); err != nil {
+				if httpVersion == "1.1" {
+					// The fingerprint's own ALPN (usually h2, http/1.1) must not be sent,
+					// otherwise the server may negotiate h2 while we speak HTTP/1.1
+					err = conn.(*tls.UConn).WebsocketHandshakeContext(ctxInner)
+				} else {
+					err = conn.(*tls.UConn).HandshakeContext(ctxInner)
+				}
+				if err != nil {
 					return nil, err
 				}
 			} else {
