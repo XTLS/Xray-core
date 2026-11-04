@@ -151,12 +151,6 @@ startOver:
 	}
 	retryTimes++
 	for _, family := range []winipcfg.AddressFamily{windows.AF_INET, windows.AF_INET6} {
-		if family == windows.AF_INET && !address4 && !route4 {
-			continue
-		}
-		if family == windows.AF_INET6 && !address6 && !route6 {
-			continue
-		}
 		if family == windows.AF_INET && route4 || family == windows.AF_INET6 && route6 {
 			err = t.luid.SetRoutesForFamily(family, routesData)
 			if err != nil {
@@ -205,17 +199,14 @@ startOver:
 			}
 			return firstErr
 		}
-		if (family == windows.AF_INET && !address4) || (family == windows.AF_INET6 && !address6) {
-			continue
-		}
-		var familyDNS []netip.Addr
-		for _, s := range dns {
-			if (s.Is4() && family == windows.AF_INET) || (s.Is6() && family == windows.AF_INET6) {
-				familyDNS = append(familyDNS, s)
-			}
-		}
-		err = t.luid.SetDNS(family, familyDNS, nil)
+		err = t.luid.SetDNS(family, dns, nil)
 		if err != nil {
+			// Skip IPv6 the config does not ask for also when setting its DNS
+			// servers fails, as reported on Windows 11 24H2 with IPv6 disabled
+			// (Access is denied).
+			if family == windows.AF_INET6 && !address6 && !route6 {
+				continue
+			}
 			firstErr = errors.New("unable to set DNS").Base(err)
 			if err == windows.ERROR_NOT_FOUND {
 				goto startOver
