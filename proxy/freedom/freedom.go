@@ -224,10 +224,11 @@ func (r *FinalRule) blockDuration() time.Duration {
 		min = r.delay.Min
 		max = r.delay.Max
 	}
+	span := max - min
 	if max < min {
-		min, max = max, min
+		span = min - max
 	}
-	return time.Duration(min+uint64(dice.RollInt63n(int64(max-min+1)))) * time.Second
+	return time.Duration(min+uint64(dice.Roll(int(span+1)))) * time.Second
 }
 
 func (r *FinalRule) log(ctx context.Context, msg ...interface{}) {

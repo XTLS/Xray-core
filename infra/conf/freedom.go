@@ -295,9 +295,6 @@ func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
 	}
 
 	if c.Delay != nil {
-		if c.Delay.From < 0 || c.Delay.To < 0 {
-			return nil, errors.New("finalRules.delay must not be negative")
-		}
 		rule.Delay = &freedom.Range{
 			Min: uint64(c.Delay.From),
 			Max: uint64(c.Delay.To),
