@@ -55,7 +55,7 @@ type FreedomFinalRuleConfig struct {
 
 type FreedomBlockSettings struct {
 	Delay    *Int32Range `json:"delay"`
-	LogLevel string      `json:"loglevel"`
+	LogLevel string      `json:"logLevel"`
 }
 
 // Build implements Buildable
@@ -329,7 +329,7 @@ func (c *FreedomBlockSettings) Build() (*freedom.BlockSettings, error) {
 	case "error":
 		settings.LogLevel = log.Severity_Error.Enum()
 	default:
-		return nil, errors.New("unknown blockSettings.loglevel: ", c.LogLevel)
+		return nil, errors.New("unknown blockSettings.logLevel: ", c.LogLevel)
 	}
 
 	return settings, nil

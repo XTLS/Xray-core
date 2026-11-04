@@ -49,7 +49,7 @@ func TestFreedomConfig(t *testing.T) {
 					"ip": ["10.0.0.0/8", "2001:db8::/32"],
 					"blockSettings": {
 						"delay": "30-60",
-						"loglevel": "debug"
+						"logLevel": "debug"
 					}
 				}, {
 					"action": "allow",
