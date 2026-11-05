@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/features/routing"
@@ -95,6 +96,9 @@ func (s *pingClient) measure(ctx context.Context, httpMethod string) (time.Durat
 // health results. ctx must carry the Xray instance; cancelling it aborts
 // the request.
 func ProbeOnce(ctx context.Context, dispatcher routing.Dispatcher, tag, destination, httpMethod string, timeout time.Duration) (time.Duration, int, error) {
+	if tagged.Dialer == nil {
+		return rttFailed, 0, errors.New("tagged dialer is not registered")
+	}
 	c := newPingClient(ctx, dispatcher, destination, timeout, tag)
 	return c.measure(ctx, httpMethod)
 }
