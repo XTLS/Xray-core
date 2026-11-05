@@ -195,6 +195,10 @@ func (s *handlerServer) ListOutbounds(ctx context.Context, request *ListOutbound
 		if _, ok := handler.(*commander.Outbound); ok {
 			continue
 		}
+		// Ignore temporary outbounds of ProbeOutbound
+		if outbound.IsProbeTag(handler.Tag()) {
+			continue
+		}
 		response.Outbounds = append(response.Outbounds, &core.OutboundHandlerConfig{
 			Tag:            handler.Tag(),
 			SenderSettings: handler.SenderSettings(),

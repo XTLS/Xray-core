@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"context"
+	"strings"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/serial"
@@ -22,6 +23,17 @@ type Handler interface {
 
 type HandlerSelector interface {
 	Select([]string) []string
+}
+
+// ProbeTagPrefix is reserved for temporary outbounds created by the
+// ProbeOutbound API for the duration of one check. Such outbounds are never
+// returned by HandlerSelector.Select, so observatories and balancers do not
+// pick them up, and are hidden from the ListOutbounds API.
+const ProbeTagPrefix = "xdprobe-"
+
+// IsProbeTag reports whether tag belongs to a temporary probe outbound.
+func IsProbeTag(tag string) bool {
+	return strings.HasPrefix(tag, ProbeTagPrefix)
 }
 
 // Manager is a feature that manages outbound.Handlers.

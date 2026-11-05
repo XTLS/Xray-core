@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ObservatoryService_GetOutboundStatus_FullMethodName   = "/xray.core.app.observatory.command.ObservatoryService/GetOutboundStatus"
 	ObservatoryService_ResetOutboundStatus_FullMethodName = "/xray.core.app.observatory.command.ObservatoryService/ResetOutboundStatus"
+	ObservatoryService_ProbeOutbound_FullMethodName       = "/xray.core.app.observatory.command.ObservatoryService/ProbeOutbound"
 )
 
 // ObservatoryServiceClient is the client API for ObservatoryService service.
@@ -30,6 +31,10 @@ type ObservatoryServiceClient interface {
 	GetOutboundStatus(ctx context.Context, in *GetOutboundStatusRequest, opts ...grpc.CallOption) (*GetOutboundStatusResponse, error)
 	// ResetOutboundStatus clears health results (burstObservatory only).
 	ResetOutboundStatus(ctx context.Context, in *ResetOutboundStatusRequest, opts ...grpc.CallOption) (*ResetOutboundStatusResponse, error)
+	// ProbeOutbound sends test HTTP requests through one outbound (an existing
+	// one by tag, or a temporary one built from the request) and returns every
+	// attempt. Observatory results are not changed.
+	ProbeOutbound(ctx context.Context, in *ProbeOutboundRequest, opts ...grpc.CallOption) (*ProbeOutboundResponse, error)
 }
 
 type observatoryServiceClient struct {
@@ -60,6 +65,16 @@ func (c *observatoryServiceClient) ResetOutboundStatus(ctx context.Context, in *
 	return out, nil
 }
 
+func (c *observatoryServiceClient) ProbeOutbound(ctx context.Context, in *ProbeOutboundRequest, opts ...grpc.CallOption) (*ProbeOutboundResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ProbeOutboundResponse)
+	err := c.cc.Invoke(ctx, ObservatoryService_ProbeOutbound_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ObservatoryServiceServer is the server API for ObservatoryService service.
 // All implementations must embed UnimplementedObservatoryServiceServer
 // for forward compatibility.
@@ -67,6 +82,10 @@ type ObservatoryServiceServer interface {
 	GetOutboundStatus(context.Context, *GetOutboundStatusRequest) (*GetOutboundStatusResponse, error)
 	// ResetOutboundStatus clears health results (burstObservatory only).
 	ResetOutboundStatus(context.Context, *ResetOutboundStatusRequest) (*ResetOutboundStatusResponse, error)
+	// ProbeOutbound sends test HTTP requests through one outbound (an existing
+	// one by tag, or a temporary one built from the request) and returns every
+	// attempt. Observatory results are not changed.
+	ProbeOutbound(context.Context, *ProbeOutboundRequest) (*ProbeOutboundResponse, error)
 	mustEmbedUnimplementedObservatoryServiceServer()
 }
 
@@ -82,6 +101,9 @@ func (UnimplementedObservatoryServiceServer) GetOutboundStatus(context.Context, 
 }
 func (UnimplementedObservatoryServiceServer) ResetOutboundStatus(context.Context, *ResetOutboundStatusRequest) (*ResetOutboundStatusResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResetOutboundStatus not implemented")
+}
+func (UnimplementedObservatoryServiceServer) ProbeOutbound(context.Context, *ProbeOutboundRequest) (*ProbeOutboundResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ProbeOutbound not implemented")
 }
 func (UnimplementedObservatoryServiceServer) mustEmbedUnimplementedObservatoryServiceServer() {}
 func (UnimplementedObservatoryServiceServer) testEmbeddedByValue()                            {}
@@ -140,6 +162,24 @@ func _ObservatoryService_ResetOutboundStatus_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ObservatoryService_ProbeOutbound_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProbeOutboundRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ObservatoryServiceServer).ProbeOutbound(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ObservatoryService_ProbeOutbound_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ObservatoryServiceServer).ProbeOutbound(ctx, req.(*ProbeOutboundRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ObservatoryService_ServiceDesc is the grpc.ServiceDesc for ObservatoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -154,6 +194,10 @@ var ObservatoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResetOutboundStatus",
 			Handler:    _ObservatoryService_ResetOutboundStatus_Handler,
+		},
+		{
+			MethodName: "ProbeOutbound",
+			Handler:    _ObservatoryService_ProbeOutbound_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
