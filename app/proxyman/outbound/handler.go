@@ -7,7 +7,7 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/xtls/xray-core/common/dice"
+	mrand "math/rand/v2"
 
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
@@ -196,7 +196,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			}
 		} else {
 			unchangedDomain := ob.Target.Address.Domain()
-			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+			ob.Target.Address = net.IPAddress(ips[mrand.N(len(ips))])
 			errors.LogInfo(ctx, "target: ", unchangedDomain, " resolved to: ", ob.Target.Address.String())
 		}
 	}

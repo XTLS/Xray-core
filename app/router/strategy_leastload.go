@@ -3,13 +3,13 @@ package router
 import (
 	"context"
 	"math"
+	"math/rand/v2"
 	"slices"
 	"sort"
 	"time"
 
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
@@ -74,7 +74,7 @@ func (s *LeastLoadStrategy) PickOutbound(candidates []string) string {
 		// goes to fallbackTag
 		return ""
 	}
-	return selects[dice.Roll(count)].Tag
+	return selects[rand.N(count)].Tag
 }
 
 func (s *LeastLoadStrategy) pickOutbounds(candidates []string) []*node {

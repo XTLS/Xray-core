@@ -7,13 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet"
 )
@@ -182,7 +182,7 @@ func jitter(backoff time.Duration) time.Duration {
 	if half <= 0 {
 		return backoff
 	}
-	return half + time.Duration(dice.RollInt63n(int64(half)))
+	return half + rand.N(half)
 }
 
 func rateLimited(payload []byte) bool {

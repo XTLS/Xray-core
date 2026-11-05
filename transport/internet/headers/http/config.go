@@ -1,9 +1,8 @@
 package http
 
 import (
+	"math/rand/v2"
 	"strings"
-
-	"github.com/xtls/xray-core/common/dice"
 )
 
 func pickString(arr []string) string {
@@ -14,7 +13,7 @@ func pickString(arr []string) string {
 	case 1:
 		return arr[0]
 	default:
-		return arr[dice.Roll(n)]
+		return arr[rand.N(n)]
 	}
 }
 

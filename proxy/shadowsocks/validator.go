@@ -5,10 +5,10 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"hash/crc64"
+	"math/rand/v2"
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 )
@@ -158,7 +158,7 @@ func (v *Validator) GetBehaviorSeed() uint64 {
 
 	v.behaviorFused = true
 	if v.behaviorSeed == 0 {
-		v.behaviorSeed = dice.RollUint64()
+		v.behaviorSeed = rand.Uint64()
 	}
 	return v.behaviorSeed
 }

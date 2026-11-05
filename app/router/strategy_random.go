@@ -2,10 +2,10 @@ package router
 
 import (
 	"context"
+	"math/rand/v2"
 
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/extension"
 )
@@ -63,5 +63,5 @@ func (s *RandomStrategy) PickOutbound(candidates []string) string {
 		// goes to fallbackTag
 		return ""
 	}
-	return candidates[dice.Roll(count)]
+	return candidates[rand.N(count)]
 }

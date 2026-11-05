@@ -3,6 +3,7 @@ package wireguard
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"net/netip"
 	"reflect"
 	"strings"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
@@ -364,7 +364,7 @@ func MakeResolveLocal(d dns.Client, streamSettings *internet.MemoryStreamConfig)
 				return nil, dns.ErrEmptyResponse
 			}
 		}
-		return got[dice.Roll(len(got))], nil
+		return got[rand.N(len(got))], nil
 	}
 }
 

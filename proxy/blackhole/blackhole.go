@@ -4,12 +4,12 @@ package blackhole
 import (
 	"bytes"
 	"context"
+	"math/rand/v2"
 	"net/http"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
@@ -74,7 +74,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		ctx, cancel := context.WithCancel(ctx)
 		timer := signal.CancelAfterInactivity(ctx, func() {
 			cancel()
-		}, time.Duration(30+dice.Roll(61))*time.Second)
+		}, time.Duration(30+rand.N(61))*time.Second)
 		go buf.Copy(link.Reader, buf.Discard, buf.UpdateActivity(timer))
 		<-ctx.Done()
 	}

@@ -12,7 +12,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/log"
@@ -30,6 +29,7 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	mrand "math/rand/v2"
 )
 
 var (
@@ -228,7 +228,7 @@ func (r *FinalRule) blockDuration() time.Duration {
 	if max < min {
 		span = min - max
 	}
-	return time.Duration(min+uint64(dice.Roll(int(span+1)))) * time.Second
+	return time.Duration(min+mrand.N(span+1)) * time.Second
 }
 
 func (r *FinalRule) log(ctx context.Context, msg ...interface{}) {
@@ -634,7 +634,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 								continue
 							}
 						} else {
-							ip = net.IPAddress(ips[dice.Roll(len(ips))])
+							ip = net.IPAddress(ips[mrand.N(len(ips))])
 							shouldUseSystemResolver = false
 						}
 					}

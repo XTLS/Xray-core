@@ -3,8 +3,7 @@ package header
 import (
 	"encoding/binary"
 	"errors"
-
-	"github.com/xtls/xray-core/common/dice"
+	"math/rand/v2"
 )
 
 type dns struct {
@@ -17,7 +16,7 @@ func (h *dns) Size() int {
 
 func (h *dns) Serialize(b []byte) {
 	copy(b, h.header)
-	binary.BigEndian.PutUint16(b[0:], dice.RollUint16())
+	binary.BigEndian.PutUint16(b[0:], uint16(rand.Uint32()))
 }
 
 func NewHeaderDNS(domain string) (*dns, error) {

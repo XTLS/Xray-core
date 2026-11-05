@@ -3,12 +3,12 @@ package burst
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/routing"
 )
@@ -181,7 +181,7 @@ func (h *HealthPing) doCheck(ctx context.Context, tags []string, duration time.D
 		for i := 0; i < rounds; i++ {
 			delay := time.Duration(0)
 			if duration > 0 {
-				delay = time.Duration(dice.RollInt63n(int64(duration)))
+				delay = rand.N(duration)
 			}
 			timers = append(timers, time.AfterFunc(delay, func() {
 				errors.LogDebug(h.ctx, "checking ", handler)
