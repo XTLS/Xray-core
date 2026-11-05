@@ -291,6 +291,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		switch request.Command {
 		case protocol.RequestCommandUDP:
 			if !allowUDP443 && request.Port == 443 {
+				proxy.DropUDP(ctx, link.Reader)
 				return nil, nil, errors.New("XTLS rejected UDP/443 traffic")
 			}
 		case protocol.RequestCommandTCP, protocol.RequestCommandMux, protocol.RequestCommandRvs:
