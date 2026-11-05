@@ -28,6 +28,7 @@ import (
 	featurestats "github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy/blackhole"
 	"github.com/xtls/xray-core/proxy/freedom"
+	_ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
