@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/xtls/xray-core/common/geodata"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	. "github.com/xtls/xray-core/infra/conf"
@@ -46,7 +47,8 @@ func TestFreedomConfig(t *testing.T) {
 					"network": "tcp,udp",
 					"port": "53,443",
 					"ip": ["10.0.0.0/8", "2001:db8::/32"],
-					"blockDelay": "30-60"
+					"delay": "30-60",
+					"logLevel": "debug"
 				}, {
 					"action": "allow",
 					"network": ["udp"]
@@ -86,10 +88,8 @@ func TestFreedomConfig(t *testing.T) {
 								},
 							},
 						},
-						BlockDelay: &freedom.Range{
-							Min: 30,
-							Max: 60,
-						},
+						Delay:    &freedom.Range{Min: 30, Max: 60},
+						LogLevel: log.Severity_Debug.Enum(),
 					},
 					{
 						Action:   freedom.RuleAction_Allow,

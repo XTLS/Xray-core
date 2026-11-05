@@ -134,7 +134,7 @@ func TestMarshalConfigJson(t *testing.T) {
 func getConfig() string {
 	return `{
   "log": {
-    "loglevel": "debug"
+    "logLevel": "debug"
   },
   "stats": {},
   "policy": {

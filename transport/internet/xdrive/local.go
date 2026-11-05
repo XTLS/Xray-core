@@ -72,7 +72,7 @@ func (s *localStorage) Get(ctx context.Context, name string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(full)
+	data, err := readFile(ctx, full)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, errNotFound

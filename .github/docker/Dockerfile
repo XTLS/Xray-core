@@ -20,7 +20,7 @@ RUN cat <<EOF >/tmp/usr/local/etc/xray/00_log.json
 {
   "log": {
     "error": "/var/log/xray/error.log",
-    "loglevel": "warning",
+    "logLevel": "warning",
     "access": "none",
     "dnsLog": false
   }

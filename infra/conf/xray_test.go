@@ -42,7 +42,7 @@ func TestXrayConfig(t *testing.T) {
 			Input: `{
 				"log": {
 					"access": "/var/log/xray/access.log",
-					"loglevel": "error",
+					"logLevel": "error",
 					"error": "/var/log/xray/error.log"
 				},
 				"inbounds": [{

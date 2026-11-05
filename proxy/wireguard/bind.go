@@ -17,7 +17,7 @@ import (
 
 type bind struct {
 	ctx         context.Context
-	resolveFunc func(host string) (net.IP, error)
+	resolveFunc func(ctx context.Context, host string) (net.IP, error)
 	listenFunc  func(ctx context.Context) (net.PacketConn, error)
 	downFunc    func() error
 	reserved    []byte
@@ -143,7 +143,11 @@ func (b *bind) ParseEndpoint(s string) (conn.Endpoint, error) {
 	if port < 0 || port > 65535 {
 		return nil, errors.New("invalid port " + sport)
 	}
-	ip, err := b.resolveFunc(host)
+	// up sets the connection's context right before it hands over the endpoint
+	b.mu.Lock()
+	ctx := b.ctx
+	b.mu.Unlock()
+	ip, err := b.resolveFunc(ctx, host)
 	if err != nil {
 		return nil, err
 	}
