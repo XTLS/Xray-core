@@ -302,7 +302,6 @@ type VisionWriter struct {
 	// internal
 	writeOnceUserUUID  []byte
 	directWriteCounter stats.Counter
-	// Mux workers write from one goroutine per session, padding state and wire order must change together
 	access sync.Mutex
 
 	testseed []uint32
