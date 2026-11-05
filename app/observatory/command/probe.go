@@ -285,7 +285,7 @@ func probeErrorText(err error) string {
 	}
 	text := err.Error()
 	if len(text) > probeMaxErrorLen {
-		text = text[:probeMaxErrorLen] + "…"
+		text = strings.ToValidUTF8(text[:probeMaxErrorLen], "") + "…"
 	}
 	return text
 }
