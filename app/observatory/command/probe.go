@@ -206,10 +206,12 @@ func (s *service) addTemporary(config *core.OutboundHandlerConfig) (outbound.Han
 		cfg.Tag = tag
 		raw, err := core.CreateObject(s.v, cfg)
 		if err != nil {
+			s.dropCounters(tag)
 			return nil, err
 		}
 		h, ok := raw.(outbound.Handler)
 		if !ok {
+			s.dropCounters(tag)
 			return nil, stderrors.New("not an outbound handler")
 		}
 		if err := s.ohm.AddHandler(s.ctx, h); err != nil {
@@ -217,13 +219,15 @@ func (s *service) addTemporary(config *core.OutboundHandlerConfig) (outbound.Han
 			if s.ohm.GetHandler(tag) == h {
 				s.ohm.RemoveHandler(s.ctx, tag)
 				h.Close()
+				s.dropCounters(tag)
 				return nil, err
 			}
+			h.Close()
 			if strings.Contains(err.Error(), "existing tag") {
-				h.Close()
+				// another outbound took the tag meanwhile: its counters stay
 				continue
 			}
-			h.Close()
+			s.dropCounters(tag)
 			return nil, err
 		}
 		return h, nil
@@ -237,15 +241,7 @@ func (s *service) removeTemporary(h outbound.Handler) error {
 	tag := h.Tag()
 	err := s.ohm.RemoveHandler(s.ctx, tag)
 	h.Close()
-	// traffic counters registered for the temporary tag go away with it
-	if sm, ok := s.v.GetFeature(stats.ManagerType()).(stats.Manager); ok && sm != nil {
-		for _, dir := range []string{"uplink", "downlink"} {
-			name := "outbound>>>" + tag + ">>>traffic>>>" + dir
-			if sm.GetCounter(name) != nil {
-				sm.UnregisterCounter(name)
-			}
-		}
-	}
+	s.dropCounters(tag)
 	if err == nil && s.ohm.GetHandler(tag) != nil {
 		err = stderrors.New("still present")
 	}
@@ -253,6 +249,21 @@ func (s *service) removeTemporary(h outbound.Handler) error {
 		return fmt.Errorf("temporary outbound %s was not removed: %v", tag, err)
 	}
 	return nil
+}
+
+// dropCounters unregisters the traffic counters that creating an outbound
+// registers for its tag (with outbound stats enabled in policy).
+func (s *service) dropCounters(tag string) {
+	sm, ok := s.v.GetFeature(stats.ManagerType()).(stats.Manager)
+	if !ok || sm == nil {
+		return
+	}
+	for _, dir := range []string{"uplink", "downlink"} {
+		name := "outbound>>>" + tag + ">>>traffic>>>" + dir
+		if sm.GetCounter(name) != nil {
+			sm.UnregisterCounter(name)
+		}
+	}
 }
 
 func randomProbeSuffix() string {

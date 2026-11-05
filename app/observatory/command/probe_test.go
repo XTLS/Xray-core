@@ -291,7 +291,7 @@ func TestProbeTemporaryRemovedAfterSuccessAndFailure(t *testing.T) {
 }
 
 func TestProbeTemporaryConfigError(t *testing.T) {
-	s, _ := newProbeService(t, "")
+	s, v := newProbeService(t, "")
 	before := len(s.ohm.ListHandlers(context.Background()))
 	_, err := s.ProbeOutbound(context.Background(), &ProbeOutboundRequest{
 		Outbound: &core.OutboundHandlerConfig{
@@ -305,6 +305,13 @@ func TestProbeTemporaryConfigError(t *testing.T) {
 	if after := len(s.ohm.ListHandlers(context.Background())); after != before {
 		t.Errorf("handlers %d -> %d", before, after)
 	}
+	sm := v.GetFeature(featurestats.ManagerType()).(featurestats.Manager)
+	sm.VisitCounters(func(name string, _ featurestats.Counter) bool {
+		if strings.Contains(name, outbound.ProbeTagPrefix) {
+			t.Errorf("counter left: %s", name)
+		}
+		return true
+	})
 }
 
 // blockingTarget answers only after release is closed and reports every
