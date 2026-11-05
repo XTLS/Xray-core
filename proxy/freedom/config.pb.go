@@ -8,6 +8,7 @@ package freedom
 
 import (
 	geodata "github.com/xtls/xray-core/common/geodata"
+	log "github.com/xtls/xray-core/common/log"
 	net "github.com/xtls/xray-core/common/net"
 	protocol "github.com/xtls/xray-core/common/protocol"
 	internet "github.com/xtls/xray-core/transport/internet"
@@ -357,7 +358,8 @@ type FinalRuleConfig struct {
 	Networks      []net.Network          `protobuf:"varint,2,rep,packed,name=networks,proto3,enum=xray.common.net.Network" json:"networks,omitempty"`
 	PortList      *net.PortList          `protobuf:"bytes,3,opt,name=port_list,json=portList,proto3" json:"port_list,omitempty"`
 	Ip            []*geodata.IPRule      `protobuf:"bytes,4,rep,name=ip,proto3" json:"ip,omitempty"`
-	BlockDelay    *Range                 `protobuf:"bytes,5,opt,name=block_delay,json=blockDelay,proto3" json:"block_delay,omitempty"`
+	Delay         *Range                 `protobuf:"bytes,5,opt,name=delay,proto3" json:"delay,omitempty"`
+	LogLevel      *log.Severity          `protobuf:"varint,6,opt,name=log_level,json=logLevel,proto3,enum=xray.common.log.Severity,oneof" json:"log_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -420,11 +422,18 @@ func (x *FinalRuleConfig) GetIp() []*geodata.IPRule {
 	return nil
 }
 
-func (x *FinalRuleConfig) GetBlockDelay() *Range {
+func (x *FinalRuleConfig) GetDelay() *Range {
 	if x != nil {
-		return x.BlockDelay
+		return x.Delay
 	}
 	return nil
+}
+
+func (x *FinalRuleConfig) GetLogLevel() log.Severity {
+	if x != nil && x.LogLevel != nil {
+		return *x.LogLevel
+	}
+	return log.Severity(0)
 }
 
 type Config struct {
@@ -523,7 +532,7 @@ var File_proxy_freedom_config_proto protoreflect.FileDescriptor
 
 const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproxy/freedom/config.proto\x12\x12xray.proxy.freedom\x1a!common/protocol/server_spec.proto\x1a\x1ftransport/internet/config.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\"S\n" +
+	"\x1aproxy/freedom/config.proto\x12\x12xray.proxy.freedom\x1a!common/protocol/server_spec.proto\x1a\x1ftransport/internet/config.proto\x1a\x15common/net/port.proto\x1a\x18common/net/network.proto\x1a\x1bcommon/geodata/geodat.proto\x1a\x14common/log/log.proto\"S\n" +
 	"\x13DestinationOverride\x12<\n" +
 	"\x06server\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x06server\"\x98\x02\n" +
 	"\bFragment\x12!\n" +
@@ -549,14 +558,16 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\bapply_to\x18\x06 \x01(\tR\aapplyTo\"+\n" +
 	"\x05Range\x12\x10\n" +
 	"\x03min\x18\x01 \x01(\x04R\x03min\x12\x10\n" +
-	"\x03max\x18\x02 \x01(\x04R\x03max\"\xa0\x02\n" +
+	"\x03max\x18\x02 \x01(\x04R\x03max\"\xe0\x02\n" +
 	"\x0fFinalRuleConfig\x126\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x1e.xray.proxy.freedom.RuleActionR\x06action\x124\n" +
 	"\bnetworks\x18\x02 \x03(\x0e2\x18.xray.common.net.NetworkR\bnetworks\x126\n" +
 	"\tport_list\x18\x03 \x01(\v2\x19.xray.common.net.PortListR\bportList\x12+\n" +
-	"\x02ip\x18\x04 \x03(\v2\x1b.xray.common.geodata.IPRuleR\x02ip\x12:\n" +
-	"\vblock_delay\x18\x05 \x01(\v2\x19.xray.proxy.freedom.RangeR\n" +
-	"blockDelay\"\xaf\x03\n" +
+	"\x02ip\x18\x04 \x03(\v2\x1b.xray.common.geodata.IPRuleR\x02ip\x12/\n" +
+	"\x05delay\x18\x05 \x01(\v2\x19.xray.proxy.freedom.RangeR\x05delay\x12;\n" +
+	"\tlog_level\x18\x06 \x01(\x0e2\x19.xray.common.log.SeverityH\x00R\blogLevel\x88\x01\x01B\f\n" +
+	"\n" +
+	"_log_level\"\xaf\x03\n" +
 	"\x06Config\x12P\n" +
 	"\x0fdomain_strategy\x18\x01 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0edomainStrategy\x12Z\n" +
 	"\x14destination_override\x18\x03 \x01(\v2'.xray.proxy.freedom.DestinationOverrideR\x13destinationOverride\x12\x1d\n" +
@@ -599,7 +610,8 @@ var file_proxy_freedom_config_proto_goTypes = []any{
 	(net.Network)(0),                // 8: xray.common.net.Network
 	(*net.PortList)(nil),            // 9: xray.common.net.PortList
 	(*geodata.IPRule)(nil),          // 10: xray.common.geodata.IPRule
-	(internet.DomainStrategy)(0),    // 11: xray.transport.internet.DomainStrategy
+	(log.Severity)(0),               // 11: xray.common.log.Severity
+	(internet.DomainStrategy)(0),    // 12: xray.transport.internet.DomainStrategy
 }
 var file_proxy_freedom_config_proto_depIdxs = []int32{
 	7,  // 0: xray.proxy.freedom.DestinationOverride.server:type_name -> xray.common.protocol.ServerEndpoint
@@ -607,17 +619,18 @@ var file_proxy_freedom_config_proto_depIdxs = []int32{
 	8,  // 2: xray.proxy.freedom.FinalRuleConfig.networks:type_name -> xray.common.net.Network
 	9,  // 3: xray.proxy.freedom.FinalRuleConfig.port_list:type_name -> xray.common.net.PortList
 	10, // 4: xray.proxy.freedom.FinalRuleConfig.ip:type_name -> xray.common.geodata.IPRule
-	4,  // 5: xray.proxy.freedom.FinalRuleConfig.block_delay:type_name -> xray.proxy.freedom.Range
-	11, // 6: xray.proxy.freedom.Config.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
-	1,  // 7: xray.proxy.freedom.Config.destination_override:type_name -> xray.proxy.freedom.DestinationOverride
-	2,  // 8: xray.proxy.freedom.Config.fragment:type_name -> xray.proxy.freedom.Fragment
-	3,  // 9: xray.proxy.freedom.Config.noises:type_name -> xray.proxy.freedom.Noise
-	5,  // 10: xray.proxy.freedom.Config.final_rules:type_name -> xray.proxy.freedom.FinalRuleConfig
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	4,  // 5: xray.proxy.freedom.FinalRuleConfig.delay:type_name -> xray.proxy.freedom.Range
+	11, // 6: xray.proxy.freedom.FinalRuleConfig.log_level:type_name -> xray.common.log.Severity
+	12, // 7: xray.proxy.freedom.Config.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
+	1,  // 8: xray.proxy.freedom.Config.destination_override:type_name -> xray.proxy.freedom.DestinationOverride
+	2,  // 9: xray.proxy.freedom.Config.fragment:type_name -> xray.proxy.freedom.Fragment
+	3,  // 10: xray.proxy.freedom.Config.noises:type_name -> xray.proxy.freedom.Noise
+	5,  // 11: xray.proxy.freedom.Config.final_rules:type_name -> xray.proxy.freedom.FinalRuleConfig
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_proxy_freedom_config_proto_init() }
@@ -625,6 +638,7 @@ func file_proxy_freedom_config_proto_init() {
 	if File_proxy_freedom_config_proto != nil {
 		return
 	}
+	file_proxy_freedom_config_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

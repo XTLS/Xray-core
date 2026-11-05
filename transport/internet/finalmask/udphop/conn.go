@@ -6,6 +6,7 @@ import (
 	goerrors "errors"
 	"io"
 	mrand "math/rand"
+	stdnet "net"
 	"net/netip"
 	"sync"
 	"time"
@@ -164,7 +165,7 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 		n, addr, err := conn.ReadFrom(p)
 		if err != nil {
 			pool.Put(p[:cap(p)])
-			if c.closed() {
+			if c.closed() || goerrors.Is(err, stdnet.ErrClosed) {
 				return
 			}
 			var netErr net.Error
