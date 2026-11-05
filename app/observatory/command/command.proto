@@ -7,6 +7,7 @@ option java_package = "com.xray.core.app.observatory.command";
 option java_multiple_files = true;
 
 import "app/observatory/config.proto";
+import "core/config.proto";
 
 message GetOutboundStatusRequest {
 }
@@ -34,7 +35,36 @@ service ObservatoryService {
   // ResetOutboundStatus clears health results (burstObservatory only).
   rpc ResetOutboundStatus(ResetOutboundStatusRequest)
       returns (ResetOutboundStatusResponse) {}
+  // ProbeOutbound sends test HTTP requests through one outbound (an existing
+  // one by tag, or a temporary one built from the request) and returns every
+  // attempt. Observatory results are not changed.
+  rpc ProbeOutbound(ProbeOutboundRequest) returns (ProbeOutboundResponse) {}
 }
 
 
 message Config {}
+
+message ProbeOutboundRequest {
+  string tag = 1;
+  xray.core.OutboundHandlerConfig outbound = 2;
+  string destination = 3;
+  string method = 4;
+  uint32 timeout_ms = 5;
+  uint32 samples = 6;
+  uint32 interval_ms = 7;
+}
+
+message ProbeSample {
+  bool ok = 1;
+  int64 rtt_ms = 2;
+  string error = 3;
+  int32 http_status = 4;
+}
+
+message ProbeOutboundResponse {
+  string tag = 1;
+  repeated ProbeSample samples = 2;
+  string destination = 3;
+  string method = 4;
+  repeated string warnings = 5;
+}

@@ -173,6 +173,10 @@ func (m *Manager) Select(selectors []string) []string {
 	tags := make([]string, 0, len(selectors))
 
 	for tag := range m.taggedHandler {
+		// temporary outbounds of ProbeOutbound are never selected
+		if outbound.IsProbeTag(tag) {
+			continue
+		}
 		for _, selector := range selectors {
 			if strings.HasPrefix(tag, selector) {
 				tags = append(tags, tag)

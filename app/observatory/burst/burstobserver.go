@@ -3,6 +3,7 @@ package burst
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/app/observatory"
 	"github.com/xtls/xray-core/common"
@@ -59,6 +60,12 @@ func (o *Observer) createResult() []*observatory.OutboundStatus {
 		result = append(result, &status)
 	}
 	return result
+}
+
+// ProbeDefaults returns pingConfig.destination and pingConfig.timeout with
+// their defaults applied, for the ProbeOutbound API.
+func (o *Observer) ProbeDefaults() (string, time.Duration) {
+	return o.hp.Settings.Destination, o.hp.Settings.Timeout
 }
 
 func (o *Observer) Type() interface{} {
