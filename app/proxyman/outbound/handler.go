@@ -217,6 +217,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		if ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 {
 			switch h.udp443 {
 			case "reject":
+				proxy.DropUDP(ctx, link.Reader)
 				test(errors.New("XUDP rejected UDP/443 traffic"))
 				return
 			case "skip":
