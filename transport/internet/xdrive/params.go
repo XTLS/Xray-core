@@ -13,7 +13,7 @@ const (
 	defaultConcurrency     = 8
 
 	maxSegmentBytes = 16 * 1024 * 1024
-	maxConcurrency  = 64
+	maxConcurrency  = 256
 )
 
 type params struct {

@@ -21,11 +21,12 @@ import (
 const (
 	flatSeparator = "~"
 
-	driveBoundary    = "xdrive-boundary"
-	drivePageSize    = 1000
-	driveMaxAttempts = 8
-	driveMaxInflight = 32
-	driveInlineLimit = 12000
+	driveBoundary         = "xdrive-boundary"
+	drivePageSize         = 1000
+	driveMaxAttempts      = 8
+	driveMaxInflight      = 64
+	driveReservedInflight = 8
+	driveInlineLimit      = 12000
 	// driveTimeout ends a request that makes no progress for that long
 	driveTimeout = 60 * time.Second
 )
@@ -36,13 +37,21 @@ var (
 	driveFilesURL       = "https://www.googleapis.com/drive/v3/files"
 	driveUploadURL      = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name"
 	driveInitialBackoff = 200 * time.Millisecond
+	driveCooldown       = 2 * time.Second
+	driveSlotRead       = 3 * time.Second
+	driveSlotWrite      = 5 * time.Second
 )
+
+type laneKey struct{}
+
+type attemptKey struct{}
 
 type driveStorage struct {
 	*driveShared
 	// a session has a client and inflight of its own, see session
 	client   *http.Client
 	inflight chan struct{}
+	reserved chan struct{}
 	release  func()
 }
 
@@ -65,6 +74,9 @@ type driveShared struct {
 
 	idMu sync.Mutex
 	ids  map[string]string
+
+	coolMu    sync.Mutex
+	coolUntil time.Time
 }
 
 func newDriveStorage(streamSettings *internet.MemoryStreamConfig, config *Config) (*driveStorage, error) {
@@ -100,6 +112,7 @@ func newDriveStorage(streamSettings *internet.MemoryStreamConfig, config *Config
 		},
 		client:   client,
 		inflight: make(chan struct{}, driveMaxInflight),
+		reserved: make(chan struct{}, driveReservedInflight),
 	}, nil
 }
 
@@ -111,6 +124,7 @@ func (s *driveStorage) session() Storage {
 		driveShared: s.driveShared,
 		client:      &http.Client{Transport: transport},
 		inflight:    make(chan struct{}, driveMaxInflight),
+		reserved:    make(chan struct{}, driveReservedInflight),
 		release:     transport.Close,
 	}
 }
@@ -219,6 +233,17 @@ func (s *driveStorage) do(ctx context.Context, method, target, contentType strin
 	backoff := s.backoff
 	var lastErr error
 
+	s.coolMu.Lock()
+	until := s.coolUntil
+	s.coolMu.Unlock()
+	if d := time.Until(until); d > 0 {
+		select {
+		case <-ctx.Done():
+			return 0, nil, ctx.Err()
+		case <-time.After(d):
+		}
+	}
+
 	for attempt := 0; attempt < driveMaxAttempts; attempt++ {
 		if attempt > 0 {
 			select {
@@ -238,8 +263,12 @@ func (s *driveStorage) do(ctx context.Context, method, target, contentType strin
 			continue
 		}
 
+		pool := s.inflight
+		if ctx.Value(laneKey{}) != nil {
+			pool = s.reserved
+		}
 		select {
-		case s.inflight <- struct{}{}:
+		case pool <- struct{}{}:
 		case <-ctx.Done():
 			return 0, nil, ctx.Err()
 		}
@@ -248,8 +277,14 @@ func (s *driveStorage) do(ctx context.Context, method, target, contentType strin
 		if body != nil {
 			reader = bytes.NewReader(body)
 		}
-		req, err := http.NewRequestWithContext(ctx, method, target, reader)
+		attemptCtx, cancel := ctx, context.CancelFunc(func() {})
+		if d, ok := ctx.Value(attemptKey{}).(time.Duration); ok {
+			attemptCtx, cancel = context.WithTimeout(ctx, d)
+		}
+		req, err := http.NewRequestWithContext(attemptCtx, method, target, reader)
 		if err != nil {
+			cancel()
+			<-pool
 			return 0, nil, errors.New("failed to build a Drive request").Base(err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -257,9 +292,17 @@ func (s *driveStorage) do(ctx context.Context, method, target, contentType strin
 			req.Header.Set("Content-Type", contentType)
 		}
 
+		began := time.Now()
 		resp, err := s.client.Do(req)
-		<-s.inflight
+		<-pool
 		if err != nil {
+			timedOut := attemptCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil
+			cancel()
+			if timedOut {
+				if t, ok := s.client.Transport.(*sessionTransport); ok {
+					t.stalled(began)
+				}
+			}
 			if ctx.Err() != nil {
 				return 0, nil, ctx.Err()
 			}
@@ -270,6 +313,7 @@ func (s *driveStorage) do(ctx context.Context, method, target, contentType strin
 		}
 		payload, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		cancel()
 		if err != nil {
 			if ctx.Err() != nil {
 				return 0, nil, ctx.Err()
@@ -286,19 +330,31 @@ func (s *driveStorage) do(ctx context.Context, method, target, contentType strin
 		if resp.StatusCode == http.StatusForbidden && rateLimited(payload) {
 			lastErr = errors.New("Drive is rate limiting: ", string(payload))
 			errors.LogWarning(ctx, "rate limited by Drive, attempt ",
-				attempt+1, " of ", driveMaxAttempts)
+				attempt+1, " of ", driveMaxAttempts, ", ", method, " ", len(body),
+				" bytes, body read ", strings.Contains(target, "alt=media"),
+				", lane ", ctx.Value(laneKey{}) != nil, ": ", string(payload[:min(len(payload), 300)]))
+			s.cool()
 			continue
 		}
 		if retryableStatus(resp.StatusCode) {
 			lastErr = errors.New("Drive answered ", resp.StatusCode, ": ", string(payload))
 			errors.LogWarning(ctx, "retrying after Drive answered ", resp.StatusCode,
 				", attempt ", attempt+1, " of ", driveMaxAttempts)
+			if resp.StatusCode == http.StatusTooManyRequests {
+				s.cool()
+			}
 			continue
 		}
 		return resp.StatusCode, payload, nil
 	}
 
 	return 0, nil, lastErr
+}
+
+func (s *driveStorage) cool() {
+	s.coolMu.Lock()
+	s.coolUntil = time.Now().Add(jitter(driveCooldown))
+	s.coolMu.Unlock()
 }
 
 func (s *driveStorage) invalidateToken() {
@@ -542,12 +598,27 @@ func (s *driveStorage) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var first error
 	for childName, file := range children {
-		if err := s.deleteID(ctx, childName, file.id); err != nil {
-			return err
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(name, id string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := s.deleteID(ctx, name, id); err != nil {
+				mu.Lock()
+				if first == nil {
+					first = err
+				}
+				mu.Unlock()
+			}
+		}(childName, file.id)
 	}
-	return nil
+	wg.Wait()
+	return first
 }
 
 func (s *driveStorage) List(ctx context.Context, prefix string) ([]Entry, error) {
@@ -604,6 +675,9 @@ func (s *driveStorage) makeSlot(ctx context.Context, name string) (string, error
 
 // setSlot implements slotStore, a description and a body go in one request
 func (s *driveStorage) setSlot(ctx context.Context, id, description string, body []byte) error {
+	if body == nil {
+		ctx = context.WithValue(ctx, attemptKey{}, driveSlotWrite)
+	}
 	metadata, err := json.Marshal(map[string]string{"description": description})
 	if err != nil {
 		return errors.New("failed to build the slot metadata").Base(err)
@@ -631,6 +705,7 @@ func (s *driveStorage) setSlot(ctx context.Context, id, description string, body
 
 // readDescription implements slotStore
 func (s *driveStorage) readDescription(ctx context.Context, id string) (string, error) {
+	ctx = context.WithValue(ctx, attemptKey{}, driveSlotRead)
 	status, payload, err := s.do(ctx, http.MethodGet,
 		s.filesURL+"/"+url.PathEscape(id)+"?fields=description&supportsAllDrives=true", "", nil)
 	switch {

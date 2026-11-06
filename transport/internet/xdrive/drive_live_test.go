@@ -7,8 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptrace"
+	"net/url"
 	"os"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -342,4 +347,131 @@ func TestLiveDriveListLag(t *testing.T) {
 		t.Logf("round %d: the object became listable after %v", i, lag.Round(time.Millisecond))
 	}
 	t.Logf("worst listing lag: %v", worst.Round(time.Millisecond))
+}
+
+func TestLiveDriveLatencyFloor(t *testing.T) {
+	config := liveDriveConfig(t)
+	root, err := newDriveStorage(&internet.MemoryStreamConfig{}, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	store := root.session().(*driveStorage)
+	defer store.Close()
+
+	ctx := context.Background()
+	const probe = "latency-floor/probe"
+	id, err := store.makeSlot(ctx, probe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.deleteID(ctx, flatten(probe), id)
+
+	small := newSlotFrame(1, slotInline, randomPayload(700)).encode()
+	large := newSlotFrame(1, slotInline, randomPayload(slotInlineLimit)).encode()
+	file := store.filesURL + "/" + url.PathEscape(id)
+
+	type sample struct {
+		total, ttfb time.Duration
+		reused      bool
+	}
+	measure := func(label string, op func(context.Context) error) []sample {
+		var out []sample
+		for i := 0; i < 28; i++ {
+			var wrote, first time.Time
+			var reused bool
+			trace := &httptrace.ClientTrace{
+				GotConn:              func(info httptrace.GotConnInfo) { reused = info.Reused },
+				WroteRequest:         func(httptrace.WroteRequestInfo) { wrote = time.Now() },
+				GotFirstResponseByte: func() { first = time.Now() },
+			}
+			start := time.Now()
+			err := op(httptrace.WithClientTrace(ctx, trace))
+			total := time.Since(start)
+			if err != nil {
+				t.Logf("latency-floor: %s sample failed: %v", label, err)
+			} else if i >= 3 {
+				var ttfb time.Duration
+				if !wrote.IsZero() && !first.IsZero() {
+					ttfb = first.Sub(wrote)
+				}
+				out = append(out, sample{total, ttfb, reused})
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+		return out
+	}
+	report := func(label string, s []sample) time.Duration {
+		if len(s) == 0 {
+			t.Logf("latency-floor: %-30s no samples", label)
+			return 0
+		}
+		totals := make([]time.Duration, len(s))
+		ttfbs := make([]time.Duration, len(s))
+		reused := 0
+		for i, x := range s {
+			totals[i], ttfbs[i] = x.total, x.ttfb
+			if x.reused {
+				reused++
+			}
+		}
+		sort.Slice(totals, func(a, b int) bool { return totals[a] < totals[b] })
+		sort.Slice(ttfbs, func(a, b int) bool { return ttfbs[a] < ttfbs[b] })
+		q := func(v []time.Duration, p float64) time.Duration { return v[min(int(p*float64(len(v))), len(v)-1)] }
+		t.Logf("latency-floor: %-30s n=%d min=%v p50=%v p95=%v ttfb_p50=%v reused=%d/%d",
+			label, len(s), totals[0], q(totals, 0.5), q(totals, 0.95), q(ttfbs, 0.5), reused, len(s))
+		return q(ttfbs, 0.5)
+	}
+	patch := func(target string, doc map[string]any) func(context.Context) error {
+		body, _ := json.Marshal(doc)
+		return func(ctx context.Context) error {
+			status, reply, err := store.do(ctx, http.MethodPatch, target, "application/json; charset=UTF-8", body)
+			if err == nil && status != http.StatusOK {
+				err = fmt.Errorf("status %d: %s", status, reply)
+			}
+			return err
+		}
+	}
+	get := func(target string) func(context.Context) error {
+		return func(ctx context.Context) error {
+			status, reply, err := store.do(ctx, http.MethodGet, target, "", nil)
+			if err == nil && status != http.StatusOK {
+				err = fmt.Errorf("status %d: %s", status, reply)
+			}
+			return err
+		}
+	}
+
+	proto := ""
+	netFloor := report("net floor (401, no auth)", measure("net", func(ctx context.Context) error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.googleapis.com/drive/v3/about?fields=user", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := store.client.Do(req)
+		if err != nil {
+			return err
+		}
+		proto = resp.Proto
+		io.Copy(io.Discard, resp.Body)
+		return resp.Body.Close()
+	}))
+	t.Logf("latency-floor: negotiated protocol %s", proto)
+	readDesc := report("GET description (prod)", measure("get", func(ctx context.Context) error {
+		_, err := store.readDescription(ctx, id)
+		return err
+	}))
+	report("GET fields=id", measure("getid", get(file+"?fields=id&supportsAllDrives=true")))
+	report("GET description, no allDrives", measure("getnoall", get(file+"?fields=description")))
+	write1k := report("PATCH inline 1 KB (prod)", measure("p1k", func(ctx context.Context) error {
+		return store.setSlot(ctx, id, small, nil)
+	}))
+	write14k := report("PATCH inline 14 KB (prod)", measure("p14k", func(ctx context.Context) error {
+		return store.setSlot(ctx, id, large, nil)
+	}))
+	report("PATCH 1 KB, no allDrives", measure("pnoall", patch(file+"?fields=id", map[string]any{"description": small})))
+	report("PATCH name 200 B", measure("pname", patch(file+"?fields=id&supportsAllDrives=true", map[string]any{"name": strings.Repeat("n", 200)})))
+	report("PATCH appProperties 100 B", measure("pprop", patch(file+"?fields=id&supportsAllDrives=true", map[string]any{"appProperties": map[string]string{"k": strings.Repeat("a", 100)}})))
+	t.Logf("latency-floor: derived: write backend ~ %v, read backend ~ %v, 14 KB payload cost ~ %v",
+		write1k-netFloor, readDesc-netFloor, write14k-write1k)
 }
