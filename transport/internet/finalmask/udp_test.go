@@ -17,10 +17,10 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	finalmasklua "github.com/xtls/xray-core/transport/internet/finalmask/lua"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/aes128gcm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
-	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
 )
@@ -1048,21 +1048,32 @@ func TestSudokuBDD(t *testing.T) {
 	})
 }
 
-func TestNoiseScriptOverRealSockets(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "noise.lua")
+func TestLuaMaskOverRealSockets(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "mask.lua")
 	script := `
-local noise = require("xray.finalmask.noise")
+local fm = require("xray.finalmask")
 
-function HandleNoise(plan, address)
+function HandleNoise(plan, address, role)
     plan:Add("\22\3\1")
-    plan:Add(noise.Random(noise.RandomBetween(16, 16)), 1)
+    plan:AddRandom(16, 1)
+end
+
+function HandleHeaderWrite(header, address, role)
+    header:Add("\1\2")
+end
+
+function HandleHeaderRead(packet, address, role)
+    if not packet:Match(1, "\1\2") then
+        return nil
+    end
+    return 2
 end
 `
 	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	mask, err := (&conf.NoiseMask{Script: path}).Build()
+	mask, err := (&conf.LuaMask{Script: path}).Build()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1078,7 +1089,11 @@ end
 	}
 	t.Cleanup(func() { _ = serverRaw.Close() })
 
-	client, err := mask.(*noise.Config).WrapPacketConnClient(clientRaw, nil, nil)
+	client, err := mask.(*finalmasklua.Config).WrapPacketConnClient(clientRaw, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := mask.(*finalmasklua.Config).WrapPacketConnServer(serverRaw, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1090,27 +1105,16 @@ end
 		writeErr <- err
 	}()
 
-	_ = serverRaw.SetDeadline(time.Now().Add(5 * time.Second))
-	var got [][]byte
-	for i := 0; i < 3; i++ {
-		buf := make([]byte, 64)
-		n, _, err := serverRaw.ReadFrom(buf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got = append(got, buf[:n])
+	_ = server.SetReadDeadline(time.Now().Add(5 * time.Second))
+	buf := make([]byte, 2048)
+	n, _, err := server.ReadFrom(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(buf[:n]) != string(payload) {
+		t.Fatalf("the server got %q, want the payload without the header", buf[:n])
 	}
 	if err := <-writeErr; err != nil {
 		t.Fatal(err)
-	}
-
-	if !bytes.Equal(got[0], []byte{0x16, 0x03, 0x01}) {
-		t.Fatalf("unexpected first noise packet: %x", got[0])
-	}
-	if len(got[1]) != 16 {
-		t.Fatalf("unexpected second noise packet size: got=%d want=16", len(got[1]))
-	}
-	if !bytes.Equal(got[2], payload) {
-		t.Fatalf("unexpected payload: %q", got[2])
 	}
 }
