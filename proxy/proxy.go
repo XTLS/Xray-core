@@ -302,7 +302,7 @@ type VisionWriter struct {
 	// internal
 	writeOnceUserUUID  []byte
 	directWriteCounter stats.Counter
-	access sync.Mutex
+	access             sync.Mutex
 
 	testseed []uint32
 }
