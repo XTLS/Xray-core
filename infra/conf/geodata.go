@@ -26,7 +26,8 @@ func (c *GeodataAssetConfig) Build() (*geodata.Asset, error) {
 }
 
 func migrateGeodataURL(assetURL string) string {
-	if strings.HasSuffix(assetURL, ".dat") && (strings.HasPrefix(strings.ToLower(assetURL), "https://raw.githubusercontent.com/xtls/xray-rules-dat/") || strings.HasPrefix(strings.ToLower(assetURL), "https://github.com/xtls/xray-rules-dat/")) {
+	if strings.HasSuffix(strings.ToLower(assetURL), ".dat") && (strings.HasPrefix(strings.ToLower(assetURL), "https://github.com/xtls/xray-rules-dat/") ||
+		strings.HasPrefix(strings.ToLower(assetURL), "https://raw.githubusercontent.com/xtls/xray-rules-dat/")) {
 		errors.PrintDeprecatedFeatureWarning(assetURL, assetURL+".gz")
 		return assetURL + ".gz"
 	}
