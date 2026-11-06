@@ -223,8 +223,22 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 		cancel()
 		conn.Close()
 	}
-	timer := signal.CancelAfterInactivity(ctx, terminate, h.timeout)
+
+	// A UDP session never reads EOF and would last until the idle timeout, one per client
+	// source port, so end it soon after its queries are answered. Our own DNS client
+	// reuses one session, which keeps the idle timeout.
+	timeout := h.timeout
+	trackQueries := srcNetwork == net.Network_UDP && !h.isOwnLink(ctx)
+	if trackQueries {
+		timeout = min(h.timeout, udpLinger)
+	}
+	timer := signal.CancelAfterInactivity(ctx, terminate, timeout)
 	defer timer.SetTimeout(0)
+
+	var pending *pendingQueries
+	if trackQueries {
+		pending = &pendingQueries{timer: timer, idle: h.timeout, linger: timeout}
+	}
 
 	request := func() error {
 		defer timer.SetTimeout(0)
@@ -271,9 +285,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 						return err
 					}
 				} else {
-					go h.handleIPQuery(id, qType, domain, writer, timer)
+					pending.add()
+					go func() {
+						h.handleIPQuery(id, qType, domain, writer, timer)
+						pending.done()
+					}()
 				}
 			case RuleAction_Direct:
+				pending.add()
 				if err := connWriter.WriteMessage(b); err != nil {
 					return err
 				}
@@ -300,6 +319,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 			if err := writer.WriteMessage(b); err != nil {
 				return err
 			}
+			pending.done()
 		}
 	}
 
@@ -438,6 +458,49 @@ func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain stri
 		return err
 	}
 	return nil
+}
+
+// udpLinger is how long a UDP session waits for another query once all are answered,
+// such as AAAA sent after A from the same socket.
+const udpLinger = time.Second
+
+// pendingQueries keeps a UDP session alive for the idle timeout while any query
+// is unanswered, and for linger after the last answer. Methods on nil do nothing.
+// The count and the timer change under one lock, so a new query cannot be followed
+// by a stale switch to linger.
+type pendingQueries struct {
+	sync.Mutex
+	count  int
+	timer  *signal.ActivityTimer
+	idle   time.Duration
+	linger time.Duration
+}
+
+func (p *pendingQueries) add() {
+	if p == nil {
+		return
+	}
+	p.Lock()
+	defer p.Unlock()
+	if p.count == 0 {
+		p.timer.SetTimeout(p.idle)
+	}
+	p.count++
+}
+
+func (p *pendingQueries) done() {
+	if p == nil {
+		return
+	}
+	p.Lock()
+	defer p.Unlock()
+	if p.count == 0 {
+		return
+	}
+	p.count--
+	if p.count == 0 {
+		p.timer.SetTimeout(p.linger)
+	}
 }
 
 type outboundConn struct {
