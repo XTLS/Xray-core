@@ -987,3 +987,103 @@ func TestDriveXmuxOverH3(t *testing.T) {
 	}
 	waitFor(t, "the first connection of XMUX to close", func() bool { return server.closed.Load() == 1 })
 }
+
+type stallConn struct{}
+
+func (stallConn) RoundTrip(r *http.Request) (*http.Response, error) {
+	<-r.Context().Done()
+	return nil, r.Context().Err()
+}
+
+type okConn struct{}
+
+func (okConn) RoundTrip(r *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(`{"id":"file-1"}`)),
+	}, nil
+}
+
+func TestSessionRetiresStalledConn(t *testing.T) {
+	made := atomic.Int32{}
+	transport := &sessionTransport{pool: newConnPool(nil, func(connCtx context.Context) *http.Client {
+		if made.Add(1) == 1 {
+			return &http.Client{Transport: stallConn{}}
+		}
+		return &http.Client{Transport: okConn{}}
+	})}
+	storage := &driveStorage{
+		driveShared: &driveShared{
+			token:       "token",
+			tokenExpiry: time.Now().Add(time.Hour),
+			backoff:     time.Millisecond,
+		},
+		client:   &http.Client{Transport: transport},
+		inflight: make(chan struct{}, 1),
+		reserved: make(chan struct{}, 1),
+	}
+
+	ctx := context.WithValue(context.Background(), attemptKey{}, 100*time.Millisecond)
+	code, body, err := storage.do(ctx, http.MethodPost, "http://drive.invalid/files", "", nil)
+	if err != nil {
+		t.Fatalf("the first request over a stalled connection: %v", err)
+	}
+	if code != http.StatusOK || string(body) != `{"id":"file-1"}` {
+		t.Fatalf("the stalled connection gave %d %q", code, body)
+	}
+	if n := made.Load(); n != 2 {
+		t.Fatalf("a stalled connection took %d connections, want it retired and one made after it", n)
+	}
+	if _, _, err := storage.do(ctx, http.MethodPost, "http://drive.invalid/files", "", nil); err != nil {
+		t.Fatalf("the request after the retirement: %v", err)
+	}
+	if n := made.Load(); n != 2 {
+		t.Fatalf("%d connections were made, want the healthy one kept", n)
+	}
+}
+
+func TestSessionIgnoresStallOfRetiredConn(t *testing.T) {
+	var made atomic.Int32
+	transport := &sessionTransport{pool: newConnPool(nil, func(connCtx context.Context) *http.Client {
+		made.Add(1)
+		return &http.Client{Transport: okConn{}}
+	})}
+	send := func() {
+		req, err := http.NewRequest(http.MethodGet, "http://drive.invalid/files", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := transport.RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	send()
+	old := time.Now()
+	time.Sleep(2 * time.Millisecond)
+	transport.stalled(old)
+	transport.stalled(old)
+	send()
+	if n := made.Load(); n != 2 {
+		t.Fatalf("a stalled connection took %d connections, want it retired and one made after it", n)
+	}
+	transport.mu.Lock()
+	transport.slowAt, transport.retiredAt = time.Time{}, time.Time{}
+	transport.mu.Unlock()
+	transport.stalled(old)
+	transport.stalled(old)
+	send()
+	if n := made.Load(); n != 2 {
+		t.Fatalf("the stall of a retired connection took the healthy one too, %d connections", n)
+	}
+	time.Sleep(2 * time.Millisecond)
+	fresh := time.Now()
+	transport.stalled(fresh)
+	transport.stalled(fresh)
+	send()
+	if n := made.Load(); n != 3 {
+		t.Fatalf("a stall of the current connection made %d connections, want it retired", n)
+	}
+}

@@ -2,6 +2,7 @@ package conf
 
 import (
 	"net/url"
+	"strings"
 
 	"github.com/robfig/cron/v3"
 	"github.com/xtls/xray-core/app/geodata"
@@ -19,9 +20,18 @@ func (c *GeodataAssetConfig) Build() (*geodata.Asset, error) {
 		return nil, errors.New("invalid geodata asset url: ", c.URL).Base(err)
 	}
 	return &geodata.Asset{
-		Url:  c.URL,
+		Url:  migrateGeodataURL(c.URL),
 		File: c.File,
 	}, nil
+}
+
+func migrateGeodataURL(assetURL string) string {
+	if strings.HasSuffix(strings.ToLower(assetURL), ".dat") && (strings.HasPrefix(strings.ToLower(assetURL), "https://github.com/xtls/xray-rules-dat/") ||
+		strings.HasPrefix(strings.ToLower(assetURL), "https://raw.githubusercontent.com/xtls/xray-rules-dat/")) {
+		errors.PrintDeprecatedFeatureWarning(assetURL, assetURL+".gz")
+		return assetURL + ".gz"
+	}
+	return assetURL
 }
 
 func validateHTTPS(s string) error {

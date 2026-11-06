@@ -9,8 +9,8 @@ ARG TARGETARCH
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags "-s -w -buildid=" ./main
 
 # Download geodat into a staging directory
-ADD https://raw.githubusercontent.com/XTLS/Xray-rules-dat/release/geoip/geoip-full.dat /tmp/geodat/geoip.dat
-ADD https://raw.githubusercontent.com/XTLS/Xray-rules-dat/release/geosite/geosite-expand.dat /tmp/geodat/geosite.dat
+ADD https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geoip-full.dat /tmp/geodat/geoip.dat
+ADD https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geosite-expand.dat /tmp/geodat/geosite.dat
 
 RUN mkdir -p /tmp/empty
 

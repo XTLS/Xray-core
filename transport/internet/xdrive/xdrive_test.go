@@ -69,6 +69,13 @@ func pairWith(t *testing.T, streamSettings *internet.MemoryStreamConfig) (client
 	}
 
 	return client, server, func() {
+		if config, err := streamConfig(streamSettings); err == nil {
+			box := spareBoxFor(config)
+			box.stop.Store(true)
+			for box.busy.Load() {
+				time.Sleep(10 * time.Millisecond)
+			}
+		}
 		client.Close()
 		server.Close()
 		listener.Close()
