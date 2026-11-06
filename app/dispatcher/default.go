@@ -490,6 +490,16 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 
 	ob.Tag = handler.Tag()
 	if accessMessage := log.AccessMessageFromContext(ctx); accessMessage != nil {
+		// Transparent proxy inbounds (dokodemo-door, tun, or SOCKS fed by
+		// tun2socks) only know the IP they intercepted, and they build the
+		// access message before sniffing runs. By this point sniffing may have
+		// resolved a domain into destination, so log that instead of the IP.
+		// Inbounds that already provided a domain are left untouched.
+		if destination.Address != nil && destination.Address.Family().IsDomain() {
+			if orig, ok := accessMessage.To.(net.Destination); !ok || orig.Address == nil || !orig.Address.Family().IsDomain() {
+				accessMessage.To = destination
+			}
+		}
 		if tag := handler.Tag(); tag != "" {
 			if inTag == "" {
 				accessMessage.Detour = tag
