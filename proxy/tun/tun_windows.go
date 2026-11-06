@@ -23,6 +23,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 	"golang.zx2c4.com/wintun"
 	"golang.zx2c4.com/wireguard/windows/tunnel/winipcfg"
 )
@@ -98,13 +99,34 @@ func open(name, desc string) (*wintun.Adapter, error) {
 	return nil, err
 }
 
+// ipv6Off tells whether DisabledComponents turns IPv6 off on all interfaces
+// but loopback, the tunnel (0x01) and the native (0x10) ones, as 0xFF does.
+// Windows applies it at boot only.
+func ipv6Off() bool {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Services\Tcpip6\Parameters`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+	value, _, err := key.GetIntegerValue("DisabledComponents")
+	return err == nil && value&0x11 == 0x11
+}
+
 func (t *WindowsTun) Start() (err error) {
+	// With IPv6 off on all interfaces, the TUN can have IPv4 only, so the
+	// IPv6 entries are left out, for one config to work either way.
+	off6 := ipv6Off()
+	var ignored6, ignoredRoute6 bool
+
 	var address4, address6 bool
 	addresses := make([]netip.Prefix, 0, len(t.options.Gateway))
 	for _, cidr := range t.options.Gateway {
 		prefix := netip.MustParsePrefix(cidr)
 		if prefix.Addr().Is4() {
 			address4 = true
+		} else if off6 {
+			ignored6 = true
+			continue
 		} else {
 			address6 = true
 		}
@@ -113,7 +135,12 @@ func (t *WindowsTun) Start() (err error) {
 
 	dns := make([]netip.Addr, 0, len(t.options.DNS))
 	for _, ip := range t.options.DNS {
-		dns = append(dns, netip.MustParseAddr(ip))
+		addr := netip.MustParseAddr(ip)
+		if addr.Is6() && off6 {
+			ignored6 = true
+			continue
+		}
+		dns = append(dns, addr)
 	}
 	dns6 := slices.ContainsFunc(dns, netip.Addr.Is6)
 
@@ -128,11 +155,17 @@ func (t *WindowsTun) Start() (err error) {
 		if prefix.Addr().Is4() {
 			route4 = true
 			route.NextHop = netip.IPv4Unspecified()
+		} else if off6 {
+			ignored6, ignoredRoute6 = true, true
+			continue
 		} else {
 			route6 = true
 			route.NextHop = netip.IPv6Unspecified()
 		}
 		routesMap[route] = struct{}{}
+	}
+	if ignored6 {
+		errors.LogInfo(context.Background(), "[tun] IPv6 is off on all interfaces (DisabledComponents), so the IPv6 entries of gateway, dns and autoSystemRoutingTable are ignored")
 	}
 	routesData := make([]*winipcfg.RouteData, 0, len(routesMap))
 	for route := range routesMap {
@@ -265,21 +298,38 @@ startOver:
 	if err != nil {
 		return err
 	}
+	// DisabledComponents takes effect at the next boot only, and until then,
+	// IPv6 of the ignored routes would go around the TUN. So IPv6 is kept from
+	// leaving outside it, as by "misconfigtun".
+	if ignoredRoute6 {
+		leaks = append(leaks, "[::/0]:misconfigtun")
+	}
+	routed := route4 || route6 || ignoredRoute6
 	block := newLeakFilters(leaks, route4, route6)
-	if route4 || route6 {
+	if routed {
 		dnsClient := func(l leak) bool { return l.name == "windnsclient" }
 		if slices.ContainsFunc(block, dnsClient) && !dnsClientUsesAnyPort() {
 			block = slices.DeleteFunc(block, dnsClient)
 			errors.LogInfo(context.Background(), "[tun] windnsclient skipped: before Windows 11 and Server 2022, the DNS Client service only queries port 53")
 		}
 		if block.systemDNS() && len(dns) == 0 {
+			if len(t.options.DNS) > 0 {
+				return errors.New("keeping the system's DNS inside the TUN needs IPv4 servers in dns, as IPv6 is off on all interfaces")
+			}
 			return errors.New("keeping the system's DNS inside the TUN needs dns to be set")
 		}
 	}
-	if blocked := block.String(); (route4 || route6) && blocked != "" {
+	if blocked := block.String(); routed && blocked != "" {
 		if t.wfp, err = blockLeaks(t.luid, block); err != nil {
 			// Rather no TUN than a leaking one.
-			return errors.New("unable to block ", blocked, " outside the TUN (remove autoSystemWfpBlockLeak to run without)").Base(err)
+			without := "autoSystemWfpBlockLeak"
+			switch {
+			case len(t.options.AutoSystemWfpBlockLeak) == 0:
+				without = "the IPv6 entries of autoSystemRoutingTable"
+			case ignoredRoute6:
+				without += " and the IPv6 entries of autoSystemRoutingTable"
+			}
+			return errors.New("unable to block ", blocked, " outside the TUN (remove ", without, " to run without)").Base(err)
 		}
 		errors.LogInfo(context.Background(), "[tun] blocked outside the TUN: ", blocked)
 		covered := slices.Clone(addresses)

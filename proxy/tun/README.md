@@ -223,7 +223,7 @@ To make it start, wintun.dll specific for your Windows/arch must be present next
 
 After the start network adapter with the name you chose in the config will be created in the system, and exist while Xray is running. A Wintun adapter that already has that name is reused.
 
-With IPv6 disabled system-wide (the `DisabledComponents` registry value), the adapter has no IPv6, and the TUN starts with IPv4 only, unless `gateway`, `dns` or `autoSystemRoutingTable` has IPv6 entries, which then keep it from starting.
+With IPv6 off on all interfaces by the `DisabledComponents` registry value (0x01 and 0x10 both set, as in 0xFF), the TUN starts with IPv4 only, ignoring the IPv6 entries of `gateway`, `dns` and `autoSystemRoutingTable`. As Windows applies the value at boot only, ignored IPv6 routes add `"[::/0]:misconfigtun"` to `autoSystemWfpBlockLeak`, so IPv6 cannot bypass the TUN before the reboot either. Should the adapter lack IPv6 otherwise, or refuse its IPv6 DNS servers, a config without IPv6 entries starts with IPv4 only, and IPv6 entries keep the TUN from starting.
 
 When `dns` is set, those servers are applied to the adapter. Windows is kept from registering the TUN's addresses in DNS, and its DNS cache is flushed when the TUN starts and stops. Xray's own lookups through the system's DNS servers, like those of the `localhost` DNS server with `autoOutboundsInterface`, skip them, unless another interface uses them as well, as they would lead back into the TUN.
 
