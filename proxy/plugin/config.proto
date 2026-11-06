@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package xray.proxy.plugin;
+option go_package = "github.com/xtls/xray-core/proxy/plugin";
+
+message ClientConfig {
+  string name = 1;
+  bytes params = 2;
+}
