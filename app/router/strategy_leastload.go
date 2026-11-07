@@ -61,6 +61,7 @@ type node struct {
 
 func (s *LeastLoadStrategy) InjectContext(ctx context.Context) {
 	s.ctx = ctx
+	s.logWeightedPick()
 	common.Must(core.RequireFeatures(s.ctx, func(observatory extension.Observatory) error {
 		s.observer = observatory
 		return nil
@@ -73,6 +74,9 @@ func (s *LeastLoadStrategy) PickOutbound(candidates []string) string {
 	if count == 0 {
 		// goes to fallbackTag
 		return ""
+	}
+	if s.useWeightedPick() {
+		return s.weightedPick(selects).Tag
 	}
 	return selects[dice.Roll(count)].Tag
 }
