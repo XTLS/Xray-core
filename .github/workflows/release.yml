@@ -212,7 +212,7 @@ jobs:
             # go build -o build_assets/wxray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
           elif [[ ${GOOS} == 'android' ]]; then
             echo 'Building Xray for Android...'
-            go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0" -v ./main
+            go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0 -extldflags=-Wl,--pack-dyn-relocs=android" -v ./main
           else
             echo 'Building Xray...'
             if [[ ${GOARCH} == 'mips' || ${GOARCH} == 'mipsle' ]]; then
