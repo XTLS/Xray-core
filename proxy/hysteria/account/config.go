@@ -1,8 +1,10 @@
 package account
 
 import (
+	"strings"
 	"sync"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 
@@ -49,31 +51,41 @@ func NewValidator() *Validator {
 	return &Validator{}
 }
 
-func (v *Validator) Add(user *protocol.MemoryUser) (err error) {
+// Add a Hysteria user, Email must be empty or unique.
+func (v *Validator) Add(user *protocol.MemoryUser) error {
 	v.mu.Lock()
+	defer v.mu.Unlock()
+	if user.Email != "" && v.GetByEmail(user.Email) != nil {
+		return errors.New("User ", user.Email, " already exists.")
+	}
 	v.users.Store(user.Account.(*MemoryAccount).Auth, user)
 	if id, err := uuid.Parse(user.Account.(*MemoryAccount).Auth); err == nil {
 		id[6] = 0
 		id[7] = 0
 		v.ids.Store(id, user)
 	}
-	v.mu.Unlock()
-	return
+	return nil
 }
 
-func (v *Validator) DelByEmail(email string) (err error) {
-	v.mu.Lock()
-	if user := v.GetByEmail(email); user != nil {
-		auth := user.Account.(*MemoryAccount).Auth
-		v.users.Delete(auth)
-		if id, err := uuid.Parse(auth); err == nil {
-			id[6] = 0
-			id[7] = 0
-			v.ids.Delete(id)
-		}
+// DelByEmail deletes a Hysteria user with a non-empty Email.
+func (v *Validator) DelByEmail(email string) error {
+	if email == "" {
+		return errors.New("Email must not be empty.")
 	}
-	v.mu.Unlock()
-	return
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	user := v.GetByEmail(email)
+	if user == nil {
+		return errors.New("User ", email, " not found.")
+	}
+	auth := user.Account.(*MemoryAccount).Auth
+	v.users.Delete(auth)
+	if id, err := uuid.Parse(auth); err == nil {
+		id[6] = 0
+		id[7] = 0
+		v.ids.Delete(id)
+	}
+	return nil
 }
 
 func (v *Validator) Get(auth string) (user *protocol.MemoryUser) {
@@ -109,8 +121,11 @@ func (v *Validator) GetByID(id uuid.UUID) (user *protocol.MemoryUser) {
 }
 
 func (v *Validator) GetByEmail(email string) (user *protocol.MemoryUser) {
+	if email == "" {
+		return nil
+	}
 	v.users.Range(func(key, value any) bool {
-		if value.(*protocol.MemoryUser).Email == email {
+		if strings.EqualFold(value.(*protocol.MemoryUser).Email, email) {
 			user = value.(*protocol.MemoryUser)
 			return false
 		}
