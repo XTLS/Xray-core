@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -304,6 +305,373 @@ func TestSlotStaleBody(t *testing.T) {
 	client, server := slotPair(t, &staleSlots{memSlots: newMemSlots(), served: make(map[string]bool)}, 2, 64<<10)
 	payload := randomPayload(200 << 10)
 	errs := make(chan error, 1)
+	go func() {
+		_, err := client.Write(payload)
+		if err == nil {
+			err = client.Close()
+		}
+		errs <- err
+	}()
+	readAll(t, server, payload)
+}
+
+func TestSlotBurstSplitsInline(t *testing.T) {
+	store := newMemSlots()
+	client, server := slotPair(t, store, 8, 512<<10)
+	payload := randomPayload(90 << 10)
+	errs := make(chan error, 1)
 	writeAll(client, payload, true, errs)
 	readAll(t, server, payload)
+	store.mu.Lock()
+	bodies := len(store.bodies)
+	store.mu.Unlock()
+	if bodies != 0 {
+		t.Fatalf("a burst of 90 KiB went in %d bodies, want none", bodies)
+	}
+}
+
+type stuckBodySlots struct {
+	*memSlots
+	calls atomic.Int32
+}
+
+func (s *stuckBodySlots) readBody(ctx context.Context, id string) ([]byte, error) {
+	if s.calls.Add(1) == 1 {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return s.memSlots.readBody(ctx, id)
+}
+
+func TestSlotBodyHedge(t *testing.T) {
+	old := slotBodyHedge
+	slotBodyHedge = 50 * time.Millisecond
+	defer func() { slotBodyHedge = old }()
+
+	store := &stuckBodySlots{memSlots: newMemSlots()}
+	client, server := slotPair(t, store, 2, 64<<10)
+	payload := randomPayload(200 << 10)
+	errs := make(chan error, 1)
+	go func() {
+		_, err := client.Write(payload)
+		if err == nil {
+			err = client.Close()
+		}
+		errs <- err
+	}()
+	readAll(t, server, payload)
+	if store.calls.Load() < 2 {
+		t.Fatalf("the stuck body read was not hedged, %d reads", store.calls.Load())
+	}
+}
+
+func TestTakeSpareSkipsStale(t *testing.T) {
+	cfg := &Config{}
+	p := params{sessionTTL: 5 * time.Minute}
+	st1, err := newLocalStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st2, err := newLocalStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	box := spareBoxFor(cfg)
+	box.ch <- spareRing{storage: st1, session: "old", at: time.Now().Add(-time.Hour)}
+	box.ch <- spareRing{storage: st2, session: "new", at: time.Now()}
+	got, ok := takeSpare(cfg, p)
+	if !ok || got.session != "new" {
+		t.Fatalf("takeSpare gave %q, %v, want the fresh one", got.session, ok)
+	}
+	if _, ok := takeSpare(cfg, p); ok {
+		t.Fatal("takeSpare returned a second spare")
+	}
+}
+
+func TestDropSpareDeletesSession(t *testing.T) {
+	st, err := newLocalStorage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := sessionPrefix("gone") + "/" + uplinkDir + "/s0"
+	if err := st.Put(context.Background(), name, []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	dropSpare(spareRing{storage: st, session: "gone"})
+	if got, _ := st.List(context.Background(), sessionPrefix("gone")); len(got) != 0 {
+		t.Fatalf("%d entries left of a dropped spare", len(got))
+	}
+}
+
+type stuckHeadSlots struct {
+	*memSlots
+	calls atomic.Int32
+}
+
+func (s *stuckHeadSlots) readDescription(ctx context.Context, id string) (string, error) {
+	if s.calls.Add(1) == 1 {
+		<-ctx.Done()
+		return "", ctx.Err()
+	}
+	return s.memSlots.readDescription(ctx, id)
+}
+
+func TestSlotHeadReadOverlaps(t *testing.T) {
+	client, server := slotPair(t, &stuckHeadSlots{memSlots: newMemSlots()}, 4, 64<<10)
+	for _, c := range [][2]*Conn{{client, server}, {server, client}} {
+		c[0].Write([]byte("ping"))
+		if _, err := io.ReadFull(c[1], make([]byte, 4)); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSlotBurstReadsTogether(t *testing.T) {
+	client, server := slotPair(t, newMemSlots(), 16, 512<<10)
+	payload := randomPayload(8 * slotInlineLimit)
+	go client.Write(payload)
+	start := time.Now()
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(server, got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatal("the burst came back changed")
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("a burst of 8 segments took %v to read", took)
+	}
+}
+
+type lagSlots struct{ *memSlots }
+
+func (s lagSlots) readDescription(ctx context.Context, id string) (string, error) {
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-time.After(200 * time.Millisecond):
+	}
+	return s.memSlots.readDescription(ctx, id)
+}
+
+func (s lagSlots) setSlot(ctx context.Context, id, description string, body []byte) error {
+	if _, ok := decodeSlot(description); ok {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(600 * time.Millisecond):
+		}
+	}
+	return s.memSlots.setSlot(ctx, id, description, body)
+}
+
+func TestSlotReadAheadBurst(t *testing.T) {
+	oldMin, oldMax := slotTailMin, slotTailMax
+	slotTailMin, slotTailMax = 150*time.Millisecond, 800*time.Millisecond
+	t.Cleanup(func() { slotTailMin, slotTailMax = oldMin, oldMax })
+
+	client, server := slotPair(t, lagSlots{newMemSlots()}, 16, 512<<10)
+	payload := randomPayload(8 * slotInlineLimit)
+	go client.Write(payload)
+	start := time.Now()
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(server, got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatal("the burst came back changed")
+	}
+	if took := time.Since(start); took > 1700*time.Millisecond {
+		t.Fatalf("a burst of 8 segments took %v to read", took)
+	}
+	client.Close()
+	server.Close()
+}
+
+func TestSlotLargeBurstInline(t *testing.T) {
+	store := newMemSlots()
+	client, server := slotPair(t, store, 16, 512<<10)
+	payload := randomPayload(10 * slotInlineLimit)
+	go client.Write(payload)
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(server, got); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatal("the burst came back changed")
+	}
+	store.mu.Lock()
+	bodies := len(store.bodies)
+	store.mu.Unlock()
+	if bodies != 0 {
+		t.Fatalf("a burst of 140 KiB went in %d bodies, want none", bodies)
+	}
+}
+
+func TestSlotDepthFollowsConcurrency(t *testing.T) {
+	for _, c := range []struct{ set, want int }{{100, 100}, {maxConcurrency, maxConcurrency}, {1 << 20, maxConcurrency}} {
+		p := paramsFromConfig(&Config{Concurrency: uint32(c.set)})
+		r, err := makeRing(context.Background(), newMemSlots(), "session", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(r.Up.Slots) != c.want || len(r.Down.Slots) != c.want {
+			t.Fatalf("concurrency %d made %d and %d slots, want %d", c.set, len(r.Up.Slots), len(r.Down.Slots), c.want)
+		}
+	}
+}
+
+func TestSlotDeepRingRoundTrip(t *testing.T) {
+	client, server := slotPair(t, newMemSlots(), 64, 64<<10)
+	payload := randomPayload(2 << 20)
+	errs := make(chan error, 1)
+	writeAll(client, payload, true, errs)
+	readAll(t, server, payload)
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+}
+
+type pollSlots struct {
+	*memSlots
+	pmu    sync.Mutex
+	polled map[string]bool
+}
+
+func (s *pollSlots) readDescription(ctx context.Context, id string) (string, error) {
+	s.pmu.Lock()
+	s.polled[id] = true
+	s.pmu.Unlock()
+	return s.memSlots.readDescription(ctx, id)
+}
+
+func TestSlotReaderReachesPastWindow(t *testing.T) {
+	store := &pollSlots{memSlots: newMemSlots(), polled: make(map[string]bool)}
+	p := paramsFromConfig(&Config{FlushIntervalMs: 1, PollIntervalMs: 1, MaxPollIntervalMs: 20, EagerWindowMs: 50, Concurrency: 64})
+	ring, err := makeRing(context.Background(), store, "session", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	put := func(seq int64) {
+		slot := ring.Down.Slots[seq%int64(len(ring.Down.Slots))]
+		if err := store.setSlot(ctx, slot, newSlotFrame(seq, slotInline, []byte{byte(seq)}).encode(), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader := newSlotReader(ctx, store, ring.Down, p)
+	next := func() []byte {
+		select {
+		case chunk := <-reader.chunks():
+			return chunk
+		case <-time.After(10 * time.Second):
+			t.Fatal("no segment came")
+			return nil
+		}
+	}
+	put(0)
+	if got := next(); !bytes.Equal(got, []byte{0}) {
+		t.Fatalf("segment 0 came as %v", got)
+	}
+	for seq := int64(2); seq <= 40; seq++ {
+		put(seq)
+	}
+	last := ring.Down.Slots[40]
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		reader.Wake()
+		store.pmu.Lock()
+		polled := store.polled[last]
+		store.pmu.Unlock()
+		if polled {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("segment 40 was never asked for while segment 1 was missing")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	put(1)
+	for seq := int64(1); seq <= 40; seq++ {
+		if got := next(); !bytes.Equal(got, []byte{byte(seq)}) {
+			t.Fatalf("segment %d came as %v", seq, got)
+		}
+	}
+}
+
+type countSlots struct {
+	*memSlots
+	cur  atomic.Int32
+	peak atomic.Int32
+}
+
+func (s *countSlots) setSlot(ctx context.Context, id, description string, body []byte) error {
+	if _, ok := decodeSlot(description); !ok {
+		return s.memSlots.setSlot(ctx, id, description, body)
+	}
+	n := s.cur.Add(1)
+	for {
+		p := s.peak.Load()
+		if n <= p || s.peak.CompareAndSwap(p, n) {
+			break
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	s.cur.Add(-1)
+	return s.memSlots.setSlot(ctx, id, description, body)
+}
+
+func TestSlotWriteInflightCap(t *testing.T) {
+	store := &countSlots{memSlots: newMemSlots()}
+	client, server := slotPair(t, store, 48, 512<<10)
+	payload := randomPayload(60 * slotInlineLimit)
+	errs := make(chan error, 1)
+	go func() {
+		for off := 0; off < len(payload); off += slotInlineLimit {
+			if _, err := client.Write(payload[off : off+slotInlineLimit]); err != nil {
+				errs <- err
+				return
+			}
+		}
+		errs <- nil
+	}()
+	got := make([]byte, len(payload))
+	if _, err := io.ReadFull(server, got); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, payload) {
+		t.Fatal("the payload came back changed")
+	}
+	if p := int(store.peak.Load()); p > slotWriteInflight {
+		t.Fatalf("%d segments were written at once, want at most %d", p, slotWriteInflight)
+	}
+}
+
+func TestSlotBurstInlineWaves(t *testing.T) {
+	for _, c := range []struct {
+		pieces int
+		media  bool
+	}{{20, false}, {30, true}} {
+		store := newMemSlots()
+		client, server := slotPair(t, store, 16, 512<<10)
+		payload := randomPayload(c.pieces * slotInlineLimit)
+		go client.Write(payload)
+		got := make([]byte, len(payload))
+		if _, err := io.ReadFull(server, got); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, payload) {
+			t.Fatal("the burst came back changed")
+		}
+		store.mu.Lock()
+		bodies := len(store.bodies)
+		store.mu.Unlock()
+		if (bodies > 0) != c.media {
+			t.Fatalf("a burst of %d pieces went in %d bodies, media wanted %v", c.pieces, bodies, c.media)
+		}
+	}
 }

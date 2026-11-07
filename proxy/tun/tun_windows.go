@@ -115,6 +115,7 @@ func (t *WindowsTun) Start() (err error) {
 	for _, ip := range t.options.DNS {
 		dns = append(dns, netip.MustParseAddr(ip))
 	}
+	dns6 := slices.ContainsFunc(dns, netip.Addr.Is6)
 
 	var route4, route6 bool
 	routesMap := make(map[winipcfg.RouteData]struct{})
@@ -175,7 +176,7 @@ startOver:
 		if err != nil {
 			// With IPv6 disabled system-wide (DisabledComponents), the adapter has no
 			// IPv6 interface at all. Skip the family unless the config asks for it.
-			if err == windows.ERROR_NOT_FOUND && family == windows.AF_INET6 && !address6 && !route6 {
+			if err == windows.ERROR_NOT_FOUND && family == windows.AF_INET6 && !address6 && !route6 && !dns6 {
 				continue
 			}
 			return err
@@ -204,7 +205,7 @@ startOver:
 			// Skip IPv6 the config does not ask for also when setting its DNS
 			// servers fails, as reported on Windows 11 24H2 with IPv6 disabled
 			// (Access is denied).
-			if family == windows.AF_INET6 && !address6 && !route6 {
+			if family == windows.AF_INET6 && !address6 && !route6 && !dns6 {
 				continue
 			}
 			firstErr = errors.New("unable to set DNS").Base(err)

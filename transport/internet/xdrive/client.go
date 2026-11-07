@@ -438,9 +438,11 @@ func (b *doneBody) Close() error {
 type sessionTransport struct {
 	pool *connPool
 
-	mu     sync.Mutex
-	client *splithttp.XmuxClient
-	closed bool
+	mu                sync.Mutex
+	client            *splithttp.XmuxClient
+	closed            bool
+	slowAt, retiredAt time.Time
+	movedAt           time.Time
 }
 
 func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -450,7 +452,7 @@ func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		return nil, errSessionClosed
 	}
 	client := t.client
-	if client == nil || client.LeftRequests.Add(-1) < 0 || !client.UnreusableAt.IsZero() && time.Now().After(client.UnreusableAt) {
+	if client == nil || client.XmuxConn.IsClosed() || client.LeftRequests.Add(-1) < 0 || !client.UnreusableAt.IsZero() && time.Now().After(client.UnreusableAt) {
 		t.pool.mu.Lock()
 		t.client = t.pool.xmux.GetXmuxClient(r.Context())
 		t.pool.mu.Unlock()
@@ -458,6 +460,7 @@ func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		t.client.LeftRequests.Add(-1)
 		if client != nil {
 			client.DoneRunning()
+			t.movedAt = time.Now()
 		}
 		client = t.client
 	}
@@ -469,6 +472,22 @@ func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	conn.mu.Unlock()
 	t.mu.Unlock()
 	return conn.roundTrip(r)
+}
+
+func (t *sessionTransport) stalled(began time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if began.Before(t.movedAt) {
+		return
+	}
+	now := time.Now()
+	slow := now.Sub(t.slowAt) < 3*time.Second
+	t.slowAt = now
+	if !slow || t.client == nil || now.Sub(t.retiredAt) < 2*time.Second {
+		return
+	}
+	t.retiredAt = now
+	t.client.XmuxConn.(*poolConn).Close()
 }
 
 func (t *sessionTransport) Close() {
