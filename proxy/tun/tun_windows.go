@@ -204,7 +204,7 @@ startOver:
 		}
 		ipif, err := t.luid.IPInterface(family)
 		if err != nil {
-			if ignored(family, err) {
+			if ignored(family, errors.New("unable to get the interface").Base(err)) {
 				continue
 			}
 			return err
