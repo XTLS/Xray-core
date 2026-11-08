@@ -188,6 +188,7 @@ var (
 
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
+	stream.Writer = &MutexWriter{Writer: stream.Writer}
 	c := &ClientWorker{
 		sessionManager: NewSessionManager(),
 		link:           stream,
