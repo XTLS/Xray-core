@@ -190,6 +190,7 @@ type Config struct {
 	SessionIDTable       string                 `protobuf:"bytes,28,opt,name=sessionIDTable,proto3" json:"sessionIDTable,omitempty"`
 	SessionIDLength      *RangeConfig           `protobuf:"bytes,29,opt,name=sessionIDLength,proto3" json:"sessionIDLength,omitempty"`
 	H2Params             []byte                 `protobuf:"bytes,30,opt,name=h2Params,proto3" json:"h2Params,omitempty"`
+	ScMaxPostRetries     int32                  `protobuf:"varint,31,opt,name=scMaxPostRetries,proto3" json:"scMaxPostRetries,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -434,6 +435,13 @@ func (x *Config) GetH2Params() []byte {
 	return nil
 }
 
+func (x *Config) GetScMaxPostRetries() int32 {
+	if x != nil {
+		return x.ScMaxPostRetries
+	}
+	return 0
+}
+
 var File_transport_internet_splithttp_config_proto protoreflect.FileDescriptor
 
 const file_transport_internet_splithttp_config_proto_rawDesc = "" +
@@ -449,7 +457,7 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x0ecMaxReuseTimes\x18\x03 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0ecMaxReuseTimes\x12Z\n" +
 	"\x10hMaxRequestTimes\x18\x04 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxRequestTimes\x12Z\n" +
 	"\x10hMaxReusableSecs\x18\x05 \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x10hMaxReusableSecs\x12*\n" +
-	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\xe8\f\n" +
+	"\x10hKeepAlivePeriod\x18\x06 \x01(\x03R\x10hKeepAlivePeriod\"\x94\r\n" +
 	"\x06Config\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -481,7 +489,8 @@ const file_transport_internet_splithttp_config_proto_rawDesc = "" +
 	"\x14serverMaxHeaderBytes\x18\x1b \x01(\x05R\x14serverMaxHeaderBytes\x12&\n" +
 	"\x0esessionIDTable\x18\x1c \x01(\tR\x0esessionIDTable\x12X\n" +
 	"\x0fsessionIDLength\x18\x1d \x01(\v2..xray.transport.internet.splithttp.RangeConfigR\x0fsessionIDLength\x12\x1a\n" +
-	"\bh2Params\x18\x1e \x01(\fR\bh2Params\x1a:\n" +
+	"\bh2Params\x18\x1e \x01(\fR\bh2Params\x12*\n" +
+	"\x10scMaxPostRetries\x18\x1f \x01(\x05R\x10scMaxPostRetries\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x85\x01\n" +

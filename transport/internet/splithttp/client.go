@@ -100,7 +100,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 
 func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessionId string, seqStr string, payload buf.MultiBuffer) error {
 	method := c.transportConfig.GetNormalizedUplinkHTTPMethod()
-	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,10 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	if c.httpVersion != "1.1" {
 		resp, err := c.client.Do(req)
 		if err != nil {
-			c.closed.Store(true)
+			// a cancelled copy of a resent packet says nothing about the connection
+			if ctx.Err() == nil {
+				c.closed.Store(true)
+			}
 			return err
 		}
 

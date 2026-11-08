@@ -4,10 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	gotls "crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"runtime"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -597,5 +603,96 @@ func Test_ServerMaxHeaderBytes(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusRequestHeaderFieldsTooLarge {
 		t.Fatalf("oversized header status = %d, want 431", resp.StatusCode)
+	}
+}
+
+// A CDN in front of the server answers 502 to one upload, the client resends it.
+func Test_PacketUpRetriesFailedPost(t *testing.T) {
+	serverPort := tcp.PickPort()
+	upload := make([]byte, 3000)
+	rand.Read(upload)
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, serverPort, &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "/sh", Mode: "packet-up"},
+	}, func(conn stat.Connection) {
+		go func(c stat.Connection) {
+			defer c.Close()
+			b := make([]byte, len(upload))
+			c.SetReadDeadline(time.Now().Add(5 * time.Second))
+			if _, err := io.ReadFull(c, b); err != nil {
+				return
+			}
+			common.Must2(c.Write(b))
+		}(conn)
+	})
+	common.Must(err)
+	defer listen.Close()
+
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+	certPEM, keyPEM := ct.ToPEM()
+	keyPair, err := gotls.X509KeyPair(certPEM, keyPEM)
+	common.Must(err)
+	backend, err := url.Parse("http://" + net.LocalHostIP.String() + ":" + serverPort.String())
+	common.Must(err)
+	proxy := &httputil.ReverseProxy{
+		Rewrite:       func(r *httputil.ProxyRequest) { r.SetURL(backend) },
+		FlushInterval: -1,
+	}
+	var seq1Posts atomic.Int32
+	cdn := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/1") && seq1Posts.Add(1) == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	cdn.EnableHTTP2 = true
+	cdn.TLS = &gotls.Config{Certificates: []gotls.Certificate{keyPair}}
+	cdn.StartTLS()
+	defer cdn.Close()
+	defer cdn.CloseClientConnections()
+	cdnPort := net.Port(cdn.Listener.Addr().(*net.TCPAddr).Port)
+
+	echo := func() error {
+		conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), cdnPort), &internet.MemoryStreamConfig{
+			ProtocolName: "splithttp",
+			ProtocolSettings: &Config{
+				Path:               "/sh",
+				Mode:               "packet-up",
+				ScMaxEachPostBytes: &RangeConfig{From: 1000, To: 1000},
+				ScMaxPostRetries:   2,
+			},
+			SecurityType: "tls",
+			SecuritySettings: &tls.Config{
+				Certificate:          []*tls.Certificate{tls.ParseCertificate(ct)},
+				PinnedPeerCertSha256: [][]byte{ctHash[:]},
+			},
+		})
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		if _, err := conn.Write(upload); err != nil {
+			return err
+		}
+		b := make([]byte, len(upload))
+		if _, err := io.ReadFull(conn, b); err != nil {
+			return err
+		}
+		if !bytes.Equal(b, upload) {
+			return fmt.Errorf("incorrect echo")
+		}
+		return nil
+	}
+	res := make(chan error, 1)
+	go func() { res <- echo() }()
+	select {
+	case err := <-res:
+		common.Must(err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out")
+	}
+	if seq1Posts.Load() < 2 {
+		t.Error("seq 1 was not resent")
 	}
 }
