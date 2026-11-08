@@ -56,8 +56,8 @@ func (w *tunUDPStatsWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return nil
 }
 
-// TCPWriter is the writing side of a TCP connection of the stack for the dispatcher. It has no Close: the outbound
-// closes its writer when the other side has no more to send, and the system may still be sending
+// TCPWriter is the writing side of a TCP connection of the stack for the dispatcher. Its Close only sends FIN: the
+// outbound closes its writer when the other side has no more to send, and the system may still be sending
 type TCPWriter struct {
 	Writer buf.Writer
 	// Counter counts what is written, if there is one
@@ -71,6 +71,13 @@ func (w *TCPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	}
 	if w.Counter != nil {
 		w.Counter.Add(int64(size))
+	}
+	return nil
+}
+
+func (w *TCPWriter) Close() error {
+	if c, ok := w.Writer.(interface{ CloseWrite() error }); ok {
+		return c.CloseWrite()
 	}
 	return nil
 }

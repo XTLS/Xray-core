@@ -2339,3 +2339,46 @@ func TestChecksum(t *testing.T) {
 		}
 	}
 }
+
+// CloseWrite sends FIN and still reads what the system sends until Close.
+func TestTCPCloseWrite(t *testing.T) {
+	conns := make(chan accepted, 1)
+	p, l := newPeer(t, "10.0.0.1:1234", "10.0.0.2:80")
+	s := newTestStack(t, l, accept(conns))
+	p.connect(nil)
+	a := take(t, conns)
+
+	write(t, a.conn, []byte("reply"))
+	if s := p.receive(); string(s.payload) != "reply" || s.seq != p.ack {
+		t.Fatal("wrong segment: seq ", s.seq, ", payload ", s.payload)
+	}
+	p.ack += 5
+	if err := a.conn.(interface{ CloseWrite() error }).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	if s := p.receive(); s.flags != tcpFin|tcpAck || s.seq != p.ack {
+		t.Fatal("not a FIN: flags ", s.flags, ", seq ", s.seq)
+	}
+	p.ack++
+	if err := a.conn.(buf.Writer).WriteMultiBuffer(buf.MergeBytes(nil, []byte("late"))); err == nil {
+		t.Fatal("a write after CloseWrite went through")
+	}
+
+	p.send(p.seq, tcpAck|tcpPsh, nil, []byte("more"))
+	p.seq += 4
+	if s := p.receive(); s.flags != tcpAck || s.ack != p.seq {
+		t.Fatal("not acknowledged: flags ", s.flags, ", ack ", s.ack)
+	}
+	read(t, a.conn, "more")
+	p.send(p.seq, tcpAck|tcpFin, nil, nil)
+	p.seq++
+	if s := p.receive(); s.flags != tcpAck || s.ack != p.seq {
+		t.Fatal("the FIN is not acknowledged: flags ", s.flags, ", ack ", s.ack)
+	}
+	if _, err := a.conn.(buf.Reader).ReadMultiBuffer(); err != io.EOF {
+		t.Fatal("no end of the stream: ", err)
+	}
+	a.conn.Close()
+	p.silent(100 * time.Millisecond)
+	forgotten(t, s)
+}
