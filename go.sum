@@ -83,8 +83,8 @@ github.com/vishvananda/netns v0.0.5 h1:DfiHV+j8bA32MFM7bfEunvT8IAqQ/NzSJHtcmW5zd
 github.com/vishvananda/netns v0.0.5/go.mod h1:SpkAiCQRtJ6TvvxPnOSyH3BMl6unz3xZlaprSwhNNJM=
 github.com/wlynxg/anet v0.0.5 h1:J3VJGi1gvo0JwZ/P1/Yc/8p63SoW98B5dHkYDmpgvvU=
 github.com/wlynxg/anet v0.0.5/go.mod h1:eay5PRQr7fIVAMbTbchTnO9gG65Hg/uYGdc7mguHxoA=
-github.com/xtls/reality v0.0.0-20261014101318-83f621788ca8 h1:RjLnVvlzK4q6zWaSBPNRGsrgx2fbJDeUWffjw574uzs=
-github.com/xtls/reality v0.0.0-20261014101318-83f621788ca8/go.mod h1:ptlSkJ8k/7IDauNH0SA96JPOo+nYGLTv2Y3UMpwvAsY=
+github.com/xtls/reality v0.0.0-20261108102217-4a26e87788f5 h1:34XENppeOVlB10VLSH4igXmqd3+Rj9Jr3Oy1Ht+batQ=
+github.com/xtls/reality v0.0.0-20261108102217-4a26e87788f5/go.mod h1:3XtOc956L0/A/CRlq/4zYAURfW4hWCwC2IZDiXKPJkw=
 github.com/xtls/utls v0.0.0-20261106062530-666e20f266ac h1:nRlqo57FDFc2UfII/rARfuqT+pY0V3p3v38+LCtLSbA=
 github.com/xtls/utls v0.0.0-20261106062530-666e20f266ac/go.mod h1:fWZDN7axSrekwnSY/FXuRW2OEFR7M5cJaecV9p95vS8=
 github.com/xyproto/randomstring v1.0.5 h1:YtlWPoRdgMu3NZtP45drfy1GKoojuR7hmRcnhZqKjWU=

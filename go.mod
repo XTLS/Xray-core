@@ -19,7 +19,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.12.1
 	github.com/vishvananda/netlink v1.3.1
-	github.com/xtls/reality v0.0.0-20261014101318-83f621788ca8
+	github.com/xtls/reality v0.0.0-20261108102217-4a26e87788f5
 	github.com/xtls/utls v0.0.0-20261106062530-666e20f266ac
 	github.com/yuin/gopher-lua v1.1.2
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
