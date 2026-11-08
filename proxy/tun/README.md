@@ -223,16 +223,16 @@ To make it start, wintun.dll specific for your Windows/arch must be present next
 
 After the start network adapter with the name you chose in the config will be created in the system, and exist while Xray is running. A Wintun adapter that already has that name is reused.
 
-With IPv6 disabled system-wide (the `DisabledComponents` registry value), the adapter has no IPv6, and the TUN starts with IPv4 only, unless `gateway`, `dns` or `autoSystemRoutingTable` has IPv6 entries, which then keep it from starting.
+With IPv6 turned off by the `DisabledComponents` registry value (0x10 set, as in 0xFF), errors setting up IPv6 for `gateway`, `dns` and `autoSystemRoutingTable`, clearing the IPv6 DNS servers when `dns` has none included, are only logged. Otherwise, they keep the TUN from starting.
 
 When `dns` is set, those servers are applied to the adapter. Windows is kept from registering the TUN's addresses in DNS, and its DNS cache is flushed when the TUN starts and stops. Xray's own lookups through the system's DNS servers, like those of the `localhost` DNS server with `autoOutboundsInterface`, skip them, unless another interface uses them as well, as they would lead back into the TUN.
 
-Setting `autoSystemWfpBlockLeak` to at least `["dns"]` is recommended, to block DNS leaks. It needs `autoSystemRoutingTable` (the config is rejected otherwise), and adds Windows Filtering Platform filters that let traffic of every program but Xray itself leave only through the TUN, each kind chosen by a value:
+Setting `autoSystemWfpBlockLeak` to at least `["dns", "misconfigtun"]` is recommended, to block DNS leaks and the traffic of an IP version without routes. It needs `autoSystemRoutingTable` (the config is rejected otherwise), and adds Windows Filtering Platform filters that let traffic of every program but Xray itself leave only through the TUN, each kind chosen by a value:
 - `"dns"`: stands for `"53"`, `"853"` (DNS over TLS and QUIC) and `"windnsclient"`. Windows also queries the DNS servers of the other interfaces, through those interfaces whatever the routes say, and other programs reach a resolver on the local network (e.g. `192.168.1.1` from DHCP) through its more specific route.
 - `"windnsclient"`: Windows' DNS Client service, except for name resolution on the local network (LLMNR, mDNS). Since Windows 11 and Server 2022, it may query over HTTPS or TLS, to any port; earlier versions only query port 53, so there it does nothing.
 - `"tcp"`, `"udp"`: that protocol, to all ports, or with `/<port>` or `/<low>-<high>` (1 to 65535) to some, e.g. `"tcp/853"` or `"udp/10-20"`. The ports alone stand for both, e.g. `"53"` or `"10-20"`.
 - `"icmp"`: ICMP and ICMPv6, e.g. `ping`.
-- `"misconfigtun"`: an IP version without routes in `autoSystemRoutingTable`, which would bypass the TUN.
+- `"misconfigtun"`: an IP version without routes in `autoSystemRoutingTable`, which would bypass the TUN. With IPv6 turned off by `DisabledComponents`, it covers IPv6 whatever the routes, as IPv6 setup errors are then only logged, and IPv6 still works until the reboot that applies the value.
 - `"all"`: everything, in both directions. Access to the local network then breaks unless it is routed into the TUN as well, and so do incoming connections to other programs, other VPNs, and virtual machines whose NAT runs on the host.
 - `"allexceptlan"`: like `"all"`, but traffic to and from the local network stays allowed, e.g. for printers or casting to a TV: private, link-local, multicast and broadcast addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `224.0.0.0/4`, `255.255.255.255`, `fc00::/7`, `fe80::/10`, `ff00::/8`), not global IPv6 ones. It includes `"dns"`, and the other values apply there as well. `"all"` overrides it.
 
