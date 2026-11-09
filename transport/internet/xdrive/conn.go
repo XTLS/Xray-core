@@ -47,12 +47,12 @@ func newConn(ctx context.Context, storage Storage, writePrefix, readPrefix strin
 	}
 }
 
-func newSlotConn(ctx context.Context, store slotStore, write, read slotTable, p params, onClose func()) *Conn {
+func newSlotConn(ctx context.Context, store slotStore, write, read slotTable, p params, first []byte, onClose func()) *Conn {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Conn{
 		cancel:  cancel,
 		writer:  newSlotWriter(ctx, store, write, p),
-		reader:  newSlotReader(ctx, store, read, p),
+		reader:  newSlotReader(ctx, store, read, p, first),
 		onClose: onClose,
 	}
 }

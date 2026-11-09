@@ -433,6 +433,10 @@ func (b *doneBody) Close() error {
 	return err
 }
 
+// a connection that has not answered yet is given this long before its
+// timeouts retire it, so that a dial or handshake is not cut short again
+var stalledGrace = 12 * time.Second
+
 // sessionTransport sends the requests of one session over a connection of
 // XMUX, and over another once that one has no requests or time left
 type sessionTransport struct {
@@ -443,6 +447,8 @@ type sessionTransport struct {
 	closed            bool
 	slowAt, retiredAt time.Time
 	movedAt           time.Time
+	takenAt           time.Time
+	served            bool
 }
 
 func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
@@ -463,6 +469,7 @@ func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 			t.movedAt = time.Now()
 		}
 		client = t.client
+		t.takenAt, t.served = time.Now(), false
 	}
 	// counted under mu, or another request of the session that moves on could
 	// close the connection before this one is sent
@@ -471,7 +478,15 @@ func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	conn.inflight++
 	conn.mu.Unlock()
 	t.mu.Unlock()
-	return conn.roundTrip(r)
+	resp, err := conn.roundTrip(r)
+	if err == nil {
+		t.mu.Lock()
+		if t.client == client {
+			t.served = true
+		}
+		t.mu.Unlock()
+	}
+	return resp, err
 }
 
 func (t *sessionTransport) stalled(began time.Time) {
@@ -481,6 +496,9 @@ func (t *sessionTransport) stalled(began time.Time) {
 		return
 	}
 	now := time.Now()
+	if !t.served && now.Sub(t.takenAt) < stalledGrace {
+		return
+	}
 	slow := now.Sub(t.slowAt) < 3*time.Second
 	t.slowAt = now
 	if !slow || t.client == nil || now.Sub(t.retiredAt) < 2*time.Second {

@@ -375,6 +375,10 @@ func TestStaleAnnounce(t *testing.T) {
 	if err := listener.storage.Put(ctx, uplinkPrefix("ghost")+"/000000000.seg", []byte("x")); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
+	// The listener first saw this entry an hour ago on its own clock.
+	listener.firstSeen = map[string]time.Time{
+		strings.TrimPrefix(stale, sessionsDir+"/"): time.Now().Add(-time.Hour),
+	}
 
 	accepted, err := listener.acceptPending(ctx)
 	if err != nil {

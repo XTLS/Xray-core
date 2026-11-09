@@ -67,3 +67,23 @@ func paramsFromConfig(c *Config) params {
 	}
 	return p
 }
+
+// paramsForStorage applies the Drive slot-path defaults only where the storage
+// is a slotStore and only to fields the config leaves at 0; wal-based backends
+// keep the defaults above because their concurrency and flush mean other things
+func paramsForStorage(c *Config, storage Storage) params {
+	if _, ok := storage.(slotStore); ok {
+		cc := *c
+		if cc.Concurrency == 0 {
+			cc.Concurrency = 64
+		}
+		if cc.FlushIntervalMs == 0 {
+			cc.FlushIntervalMs = 10
+		}
+		if cc.MaxPollIntervalMs == 0 {
+			cc.MaxPollIntervalMs = 200
+		}
+		c = &cc
+	}
+	return paramsFromConfig(c)
+}

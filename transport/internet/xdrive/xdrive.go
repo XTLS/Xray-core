@@ -224,30 +224,51 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 	}
 
-	var announce []byte
+	p = paramsForStorage(config, storage)
+
 	slots, ok := storage.(slotStore)
-	if ok {
-		if warm {
-			announce, _ = json.Marshal(r)
-		} else if r, err = makeRing(ctx, slots, session, p); err == nil {
-			announce, _ = json.Marshal(r)
-		} else {
+	if ok && !warm {
+		if r, err = makeRing(ctx, slots, session, p); err != nil {
 			ok = false
 			errors.LogWarningInner(ctx, err, "failed to make the slots of session ", session, ", it goes in segments")
 		}
 	}
 
-	if err := storage.Put(ctx, announceName(session, time.Now()), announce); err != nil {
-		storage.Close()
-		return nil, errors.New("failed to announce session ", session).Base(err)
-	}
-
 	if ok {
 		warmSpares(streamSettings, config, p)
 		errors.LogInfo(ctx, "opened session ", session, " in ", len(r.Up.Slots), " slots")
-		return newSlotConn(context.Background(), slots, r.Up, r.Down, p, func() {
+		conn := newSlotConn(context.Background(), slots, r.Up, r.Down, p, nil, func() {
 			storage.Close()
-		}), nil
+		})
+		writer := conn.writer.(*slotWriter)
+		writer.first = make(chan []byte, 1)
+		go func() {
+			var first []byte
+			select {
+			case first = <-writer.first:
+			case <-time.After(25 * time.Millisecond):
+			}
+			announce, _ := json.Marshal(r)
+			if len(first) > 0 && len(first) <= slotInlineLimit {
+				withFirst := r
+				withFirst.First = first
+				if encoded, err := json.Marshal(withFirst); err == nil && len(encoded) <= driveInlineLimit {
+					announce = encoded
+				}
+			}
+			// An announce failure surfaces as a connection error on the next Write/Read.
+			if err := storage.Put(context.Background(), announceName(session, time.Now()), announce); err != nil {
+				err = errors.New("failed to announce session ", session).Base(err)
+				writer.fail(err)
+				conn.reader.(*slotReader).setErr(err)
+			}
+		}()
+		return conn, nil
+	}
+
+	if err := storage.Put(ctx, announceName(session, time.Now()), nil); err != nil {
+		storage.Close()
+		return nil, errors.New("failed to announce session ", session).Base(err)
 	}
 	errors.LogInfo(ctx, "opened session ", session)
 	return newConn(context.Background(), storage,
@@ -263,10 +284,12 @@ type Listener struct {
 	addConn internet.ConnHandler
 	params
 
-	mu        sync.Mutex
-	active    map[string]bool
-	handled   map[string]time.Time
-	idleSince map[string]time.Time
+	mu             sync.Mutex
+	active         map[string]bool
+	handled        map[string]time.Time
+	idleSince      map[string]time.Time
+	announceWarned map[string]bool
+	firstSeen      map[string]time.Time
 }
 
 func Serve(ctx context.Context, address net.Address, port net.Port, streamSettings *internet.MemoryStreamConfig, addConn internet.ConnHandler) (internet.Listener, error) {
@@ -282,14 +305,16 @@ func Serve(ctx context.Context, address net.Address, port net.Port, streamSettin
 
 	listenerCtx, cancel := context.WithCancel(context.Background())
 	listener := &Listener{
-		ctx:       listenerCtx,
-		cancel:    cancel,
-		storage:   storage,
-		addConn:   addConn,
-		params:    paramsFromConfig(config),
-		active:    make(map[string]bool),
-		handled:   make(map[string]time.Time),
-		idleSince: make(map[string]time.Time),
+		ctx:            listenerCtx,
+		cancel:         cancel,
+		storage:        storage,
+		addConn:        addConn,
+		params:         paramsForStorage(config, storage),
+		active:         make(map[string]bool),
+		handled:        make(map[string]time.Time),
+		idleSince:      make(map[string]time.Time),
+		announceWarned: make(map[string]bool),
+		firstSeen:      make(map[string]time.Time),
 	}
 
 	go listener.acceptLoop(ctx)
@@ -303,7 +328,7 @@ func (l *Listener) acceptLoop(logCtx context.Context) {
 	active := time.Now()
 	for {
 		accepted, err := l.acceptPending(logCtx)
-		if err != nil {
+		if err != nil && !isAuthError(err) {
 			errors.LogWarningInner(logCtx, err, "failed to list sessions")
 		}
 
@@ -335,27 +360,72 @@ func (l *Listener) acceptPending(logCtx context.Context) (bool, error) {
 	}
 
 	accepted := false
+	l.mu.Lock()
+	if l.firstSeen == nil {
+		l.firstSeen = make(map[string]time.Time)
+	}
+	now := time.Now()
+	listedEntries := make(map[string]bool, len(sessions))
+	for _, listed := range sessions {
+		listedEntries[listed.Name] = true
+		if _, seen := l.firstSeen[listed.Name]; !seen {
+			l.firstSeen[listed.Name] = now
+		}
+	}
+	for entry := range l.firstSeen {
+		if !listedEntries[entry] {
+			delete(l.firstSeen, entry)
+		}
+	}
+	l.mu.Unlock()
+
 	for _, listed := range sessions {
 		entry := listed.Name
 		full := sessionsDir + "/" + entry
 
-		session, at, ok := parseAnnounce(entry)
+		session, _, ok := parseAnnounce(entry)
 		if !ok {
 			go l.drop(full)
 			continue
 		}
-		if time.Since(at) > l.sessionTTL {
+		l.mu.Lock()
+		age := now.Sub(l.firstSeen[entry])
+		l.mu.Unlock()
+		if age > l.sessionTTL {
 			errors.LogInfo(logCtx, "dropping the stale announcement of session ", session)
 			go l.drop(full)
-			go l.drop(sessionPrefix(session))
+			l.mu.Lock()
+			protected := l.active[session] || !l.handled[session].IsZero()
+			l.mu.Unlock()
+			if !protected {
+				go l.drop(sessionPrefix(session))
+			}
 			continue
 		}
 		if !l.claim(session) {
 			continue
 		}
+		announce := listed.Inline
+		if len(announce) == 0 {
+			if _, ok := sessionStorage(l.storage).(slotStore); ok {
+				announce, err = l.storage.Get(context.WithValue(l.ctx, maxBodyKey{}, int64(driveMaxAnnounce)), full)
+				if err != nil {
+					l.mu.Lock()
+					delete(l.active, session)
+					delete(l.handled, session)
+					warn := !l.announceWarned[session]
+					l.announceWarned[session] = true
+					l.mu.Unlock()
+					if warn {
+						errors.LogWarningInner(logCtx, err, "failed to read the announcement of session ", session)
+					}
+					continue
+				}
+			}
+		}
 		go l.drop(full)
 		accepted = true
-		l.addConn(l.newSessionConn(logCtx, session, listed.Inline))
+		l.addConn(l.newSessionConn(logCtx, session, announce))
 	}
 	return accepted, nil
 }
@@ -388,7 +458,7 @@ func (l *Listener) newSessionConn(logCtx context.Context, session string, announ
 	if slots, ok := storage.(slotStore); ok {
 		if r, ok := decodeRing(announce); ok {
 			errors.LogInfo(logCtx, "accepted session ", session, " in ", len(r.Down.Slots), " slots")
-			return newSlotConn(l.ctx, slots, r.Down, r.Up, l.params, onClose)
+			return newSlotConn(l.ctx, slots, r.Down, r.Up, l.params, r.First, onClose)
 		}
 	}
 	errors.LogInfo(logCtx, "accepted session ", session)
