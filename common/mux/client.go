@@ -14,7 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
@@ -41,6 +40,13 @@ func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) erro
 	return errors.New("unable to find an available mux client")
 }
 
+func (m *ClientManager) Close() error {
+	if m == nil {
+		return nil
+	}
+	return common.Close(m.Picker)
+}
+
 type WorkerPicker interface {
 	PickAvailable() (*ClientWorker, error)
 }
@@ -48,21 +54,25 @@ type WorkerPicker interface {
 type IncrementalWorkerPicker struct {
 	Factory ClientWorkerFactory
 
-	access      sync.Mutex
-	workers     []*ClientWorker
-	cleanupTask *task.Periodic
+	access       sync.Mutex
+	workers      []*ClientWorker
+	cleanupTimer *time.Timer
+	closed       bool
 }
 
-func (p *IncrementalWorkerPicker) cleanupFunc() error {
+func (p *IncrementalWorkerPicker) cleanupFunc() {
 	p.access.Lock()
 	defer p.access.Unlock()
 
-	if len(p.workers) == 0 {
-		return errors.New("no worker")
+	if p.closed {
+		return
 	}
-
 	p.cleanup()
-	return nil
+	if len(p.workers) == 0 {
+		p.cleanupTimer = nil
+		return
+	}
+	p.cleanupTimer.Reset(30 * time.Second)
 }
 
 func (p *IncrementalWorkerPicker) cleanup() {
@@ -85,44 +95,53 @@ func (p *IncrementalWorkerPicker) findAvailable() int {
 	return -1
 }
 
-func (p *IncrementalWorkerPicker) pickInternal() (*ClientWorker, bool, error) {
+func (p *IncrementalWorkerPicker) PickAvailable() (*ClientWorker, error) {
 	p.access.Lock()
 	defer p.access.Unlock()
 
+	if p.closed {
+		return nil, io.ErrClosedPipe
+	}
 	idx := p.findAvailable()
 	if idx >= 0 {
 		n := len(p.workers)
 		if n > 1 && idx != n-1 {
 			p.workers[n-1], p.workers[idx] = p.workers[idx], p.workers[n-1]
 		}
-		return p.workers[idx], false, nil
+		return p.workers[idx], nil
 	}
 
 	p.cleanup()
 
 	worker, err := p.Factory.Create()
 	if err != nil {
-		return nil, false, err
+		return nil, err
 	}
 	p.workers = append(p.workers, worker)
-
-	if p.cleanupTask == nil {
-		p.cleanupTask = &task.Periodic{
-			Interval: time.Second * 30,
-			Execute:  p.cleanupFunc,
-		}
+	if p.cleanupTimer == nil {
+		p.cleanupTimer = time.AfterFunc(30*time.Second, p.cleanupFunc)
 	}
-
-	return worker, true, nil
+	return worker, nil
 }
 
-func (p *IncrementalWorkerPicker) PickAvailable() (*ClientWorker, error) {
-	worker, start, err := p.pickInternal()
-	if start {
-		common.Must(p.cleanupTask.Start())
+func (p *IncrementalWorkerPicker) Close() error {
+	if p == nil {
+		return nil
 	}
+	p.access.Lock()
+	p.closed = true
+	workers := p.workers
+	p.workers = nil
+	if p.cleanupTimer != nil {
+		p.cleanupTimer.Stop()
+		p.cleanupTimer = nil
+	}
+	p.access.Unlock()
 
-	return worker, err
+	for _, worker := range workers {
+		common.Must(worker.Close())
+	}
+	return nil
 }
 
 type ClientWorkerFactory interface {
@@ -188,7 +207,9 @@ var (
 
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
-	stream.Writer = &MutexWriter{Writer: stream.Writer}
+	if _, ok := stream.Writer.(*MutexWriter); !ok {
+		stream.Writer = &MutexWriter{Writer: stream.Writer}
+	}
 	c := &ClientWorker{
 		sessionManager: NewSessionManager(),
 		link:           stream,
