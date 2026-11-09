@@ -236,6 +236,10 @@ func (w *BufferedWriter) Close() error {
 	return common.Close(w.writer)
 }
 
+func (w *BufferedWriter) Interrupt() {
+	common.Interrupt(w.writer)
+}
+
 // SequentialWriter is a Writer that writes MultiBuffer sequentially into the underlying io.Writer.
 type SequentialWriter struct {
 	io.Writer
