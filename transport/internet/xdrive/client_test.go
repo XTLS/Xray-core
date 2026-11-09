@@ -1006,6 +1006,9 @@ func (okConn) RoundTrip(r *http.Request) (*http.Response, error) {
 }
 
 func TestSessionRetiresStalledConn(t *testing.T) {
+	oldGrace := stalledGrace
+	stalledGrace = 0
+	t.Cleanup(func() { stalledGrace = oldGrace })
 	made := atomic.Int32{}
 	transport := &sessionTransport{pool: newConnPool(nil, func(connCtx context.Context) *http.Client {
 		if made.Add(1) == 1 {
@@ -1085,5 +1088,56 @@ func TestSessionIgnoresStallOfRetiredConn(t *testing.T) {
 	send()
 	if n := made.Load(); n != 3 {
 		t.Fatalf("a stall of the current connection made %d connections, want it retired", n)
+	}
+}
+
+func TestSessionSparesFreshConn(t *testing.T) {
+	transport := &sessionTransport{pool: newConnPool(nil, func(connCtx context.Context) *http.Client {
+		return &http.Client{Transport: okConn{}}
+	})}
+	send := func() {
+		req, err := http.NewRequest(http.MethodGet, "http://drive.invalid/files", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := transport.RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+	}
+	current := func() *poolConn {
+		transport.mu.Lock()
+		defer transport.mu.Unlock()
+		return transport.client.XmuxConn.(*poolConn)
+	}
+	send()
+	conn := current()
+	transport.mu.Lock()
+	transport.takenAt, transport.served = time.Now(), false
+	transport.mu.Unlock()
+	transport.stalled(time.Now())
+	transport.stalled(time.Now())
+	if conn.IsClosed() {
+		t.Fatal("a fresh connection was retired before its grace period ended")
+	}
+	transport.mu.Lock()
+	transport.takenAt = time.Now().Add(-stalledGrace - time.Second)
+	transport.mu.Unlock()
+	transport.stalled(time.Now())
+	transport.stalled(time.Now())
+	if !conn.IsClosed() {
+		t.Fatal("a fresh connection older than its grace period was not retired")
+	}
+	send()
+	conn = current()
+	transport.mu.Lock()
+	transport.takenAt, transport.served = time.Now(), true
+	transport.slowAt, transport.retiredAt = time.Time{}, time.Time{}
+	transport.mu.Unlock()
+	transport.stalled(time.Now())
+	transport.stalled(time.Now())
+	if !conn.IsClosed() {
+		t.Fatal("a connection that had answered was not retired")
 	}
 }

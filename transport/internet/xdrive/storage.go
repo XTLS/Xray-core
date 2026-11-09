@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet"
@@ -26,10 +27,17 @@ type Storage interface {
 	Close() error
 }
 
+// testStorageFactory lets tests substitute a backend for newStorage; nil in
+// production so behaviour is unchanged.
+var testStorageFactory atomic.Pointer[func(config *Config) (Storage, error)]
+
 func newStorage(streamSettings *internet.MemoryStreamConfig) (Storage, error) {
 	config, err := streamConfig(streamSettings)
 	if err != nil {
 		return nil, err
+	}
+	if f := testStorageFactory.Load(); f != nil {
+		return (*f)(config)
 	}
 
 	switch config.Service {

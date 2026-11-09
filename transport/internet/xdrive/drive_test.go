@@ -17,6 +17,7 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 type fakeFile struct {
@@ -29,14 +30,17 @@ type fakeFile struct {
 type fakeDrive struct {
 	server *httptest.Server
 
-	mu         sync.Mutex
-	files      map[string]*fakeFile
-	nextID     int
-	failOnce   map[string]bool
-	failStatus map[string]int
-	failBody   map[string]string
-	tokens     int
-	hosts      map[string]bool
+	mu          sync.Mutex
+	files       map[string]*fakeFile
+	nextID      int
+	failOnce    map[string]bool
+	failStatus  map[string]int
+	failBody    map[string]string
+	tokens      int
+	tokenStatus int
+	tokenBody   string
+	uploadAt    []time.Time
+	hosts       map[string]bool
 }
 
 func newFakeDrive(t *testing.T) *fakeDrive {
@@ -89,7 +93,13 @@ func newFakeDrive(t *testing.T) *fakeDrive {
 func (d *fakeDrive) handleToken(w http.ResponseWriter, r *http.Request) {
 	d.mu.Lock()
 	d.tokens++
+	status, body := d.tokenStatus, d.tokenBody
 	d.mu.Unlock()
+	if status != 0 {
+		w.WriteHeader(status)
+		w.Write([]byte(body))
+		return
+	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"access_token": "fake-token",
 		"expires_in":   3600,
@@ -97,6 +107,9 @@ func (d *fakeDrive) handleToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *fakeDrive) handleUpload(w http.ResponseWriter, r *http.Request) {
+	d.mu.Lock()
+	d.uploadAt = append(d.uploadAt, time.Now())
+	d.mu.Unlock()
 	if d.shouldFail("upload") {
 		if status, body := d.failure("upload"); status != 0 {
 			w.WriteHeader(status)
@@ -167,6 +180,9 @@ func (d *fakeDrive) handleFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *fakeDrive) handleCreate(w http.ResponseWriter, r *http.Request) {
+	d.mu.Lock()
+	d.uploadAt = append(d.uploadAt, time.Now())
+	d.mu.Unlock()
 	if d.shouldFail("upload") {
 		if status, body := d.failure("upload"); status != 0 {
 			w.WriteHeader(status)
@@ -739,5 +755,367 @@ func TestDriveFronting(t *testing.T) {
 		if host != "www.googleapis.com" {
 			t.Fatalf("inner host was %q, want www.googleapis.com regardless of address", host)
 		}
+	}
+}
+
+func TestDriveLargeAnnouncement(t *testing.T) {
+	listenerCtx, cancelListener := context.WithCancel(context.Background())
+	defer cancelListener()
+	newFakeDrive(t)
+	storage := newDriveBackend(t)
+	ctx := context.Background()
+	p := paramsFromConfig(driveSettings().ProtocolSettings.(*Config))
+
+	session := "large-announcement"
+	r := ring{
+		Up:   slotTable{Watermark: "up-watermark"},
+		Down: slotTable{Watermark: "down-watermark"},
+	}
+	for i := range 200 {
+		id := fmt.Sprintf("%s-%03d", strings.Repeat("s", 40), i)
+		r.Up.Slots = append(r.Up.Slots, id)
+		r.Down.Slots = append(r.Down.Slots, id)
+	}
+	announce, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(announce) <= driveInlineLimit {
+		t.Fatalf("announcement is %d bytes, want more than %d", len(announce), driveInlineLimit)
+	}
+	if err := storage.Put(ctx, announceName(session, time.Now()), announce); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := storage.List(ctx, sessionsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Inline != nil {
+		t.Fatalf("large announcement was inlined: %v", entries)
+	}
+
+	conns := make(chan *Conn, 2)
+	l := &Listener{
+		ctx:            listenerCtx,
+		storage:        storage,
+		addConn:        func(c stat.Connection) { conns <- c.(*Conn) },
+		params:         p,
+		active:         make(map[string]bool),
+		handled:        make(map[string]time.Time),
+		idleSince:      make(map[string]time.Time),
+		announceWarned: make(map[string]bool),
+	}
+	accepted, err := l.acceptPending(ctx)
+	if err != nil || !accepted {
+		t.Fatalf("acceptPending: %v, accepted %v", err, accepted)
+	}
+	conn := <-conns
+	reader, ok := conn.reader.(*slotReader)
+	if !ok || len(reader.table.Slots) != 200 {
+		t.Fatalf("large announcement did not become a 200-slot connection: %T", conn.reader)
+	}
+	conn.Close()
+
+	empty := "empty-announcement"
+	if err := storage.Put(ctx, announceName(empty, time.Now()), nil); err != nil {
+		t.Fatal(err)
+	}
+	accepted, err = l.acceptPending(ctx)
+	if err != nil || !accepted {
+		t.Fatalf("acceptPending empty: %v, accepted %v", err, accepted)
+	}
+	conn = <-conns
+	if _, ok := conn.reader.(*walReader); !ok {
+		t.Fatalf("empty announcement did not become a segment connection: %T", conn.reader)
+	}
+	conn.Close()
+}
+
+func TestDriveDeadCredentials(t *testing.T) {
+	drive := newFakeDrive(t)
+	drive.mu.Lock()
+	drive.tokenStatus = http.StatusBadRequest
+	drive.tokenBody = `{"error":"invalid_grant"}`
+	drive.mu.Unlock()
+	storage := newDriveBackend(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	start := time.Now()
+	_, _, err := storage.do(ctx, http.MethodGet, storage.filesURL, "", nil)
+	if !isAuthError(err) {
+		t.Fatalf("do returned %v, want the sticky OAuth error", err)
+	}
+	if time.Since(start) > time.Second {
+		t.Fatalf("do took %v, want it to fail at once", time.Since(start))
+	}
+	for range 3 {
+		if _, err := storage.readDescription(ctx, "id"); !isAuthError(err) {
+			t.Fatalf("readDescription returned %v, want the sticky OAuth error", err)
+		}
+	}
+	drive.mu.Lock()
+	tokens := drive.tokens
+	drive.mu.Unlock()
+	if tokens != 1 {
+		t.Fatalf("the fake saw %d token requests, want exactly one", tokens)
+	}
+
+	reader := newSlotReader(ctx, storage, slotTable{Slots: []string{"id"}, Watermark: "w"}, params{concurrency: 1}, nil)
+	select {
+	case <-reader.chunks():
+	case <-time.After(time.Second):
+		t.Fatal("the slot reader kept polling after the credentials were rejected")
+	}
+	if !isAuthError(reader.Err()) {
+		t.Fatalf("the slot reader ended with %v, want the sticky OAuth error", reader.Err())
+	}
+}
+
+func TestDriveRetryWaitsCooldown(t *testing.T) {
+	drive := newFakeDrive(t)
+	oldCooldown := driveCooldown
+	driveCooldown = 200 * time.Millisecond
+	t.Cleanup(func() { driveCooldown = oldCooldown })
+	storage := newDriveBackend(t)
+
+	drive.failOnceWith("upload", http.StatusForbidden,
+		`{"error":{"code":403,"errors":[{"reason":"userRateLimitExceeded"}]}}`)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	start := time.Now()
+	if err := storage.Put(ctx, "sessions/abc", nil); err != nil {
+		t.Fatalf("Put did not survive a 403: %v", err)
+	}
+	drive.mu.Lock()
+	times := append([]time.Time(nil), drive.uploadAt...)
+	drive.mu.Unlock()
+	if len(times) < 2 {
+		t.Fatalf("the fake saw %d writes, want a retry", len(times))
+	}
+	if gap := times[1].Sub(times[0]); gap < driveCooldown/2 {
+		t.Fatalf("the retry arrived after %v, less than the jitter floor %v", gap, driveCooldown/2)
+	}
+	storage.coolMu.Lock()
+	until := storage.coolUntil
+	storage.coolMu.Unlock()
+	if times[1].Before(until) {
+		t.Fatalf("the retry reached the fake at %v, before the cooldown ended at %v", times[1], until)
+	}
+	if took := time.Since(start); took < until.Sub(times[0]) {
+		t.Fatalf("the request took %v, less than the cooldown %v", took, until.Sub(times[0]))
+	}
+}
+
+func TestDriveBackgroundTokenRefresh(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	mode := "ok"
+	delay := 100 * time.Millisecond
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		n := calls
+		current := mode
+		pause := delay
+		mu.Unlock()
+		time.Sleep(pause)
+		switch current {
+		case "transient":
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error":"temporarily_unavailable"}`))
+		case "auth":
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(`{"error":"invalid_grant"}`))
+		default:
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"access_token": fmt.Sprintf("token-%d", n),
+				"expires_in":   100,
+			})
+		}
+	}))
+	defer server.Close()
+
+	newStorage := func() *driveStorage {
+		return &driveStorage{driveShared: &driveShared{
+			tokenClient: server.Client(),
+			tokenURL:    server.URL,
+		}}
+	}
+	seed := func(s *driveStorage) {
+		s.tokenMu.Lock()
+		s.token = "old"
+		s.tokenLifetime = 100 * time.Second
+		s.tokenExpiry = time.Now().Add(10 * time.Second)
+		s.tokenMu.Unlock()
+	}
+	setMode := func(m string) {
+		mu.Lock()
+		mode = m
+		mu.Unlock()
+	}
+	callCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return calls
+	}
+
+	t.Run("returns at once inside the window", func(t *testing.T) {
+		s := newStorage()
+		seed(s)
+		start := time.Now()
+		token, err := s.accessToken(context.Background())
+		if err != nil || token != "old" {
+			t.Fatalf("accessToken gave %q, %v", token, err)
+		}
+		if time.Since(start) > 50*time.Millisecond {
+			t.Fatalf("accessToken waited %v for the background refresh", time.Since(start))
+		}
+		waitFor(t, "the background refresh", func() bool {
+			s.tokenMu.Lock()
+			defer s.tokenMu.Unlock()
+			return s.token != "old" && !s.refreshing
+		})
+	})
+
+	t.Run("concurrent calls start one refresh", func(t *testing.T) {
+		mu.Lock()
+		calls = 0
+		mu.Unlock()
+		s := newStorage()
+		seed(s)
+		var wg sync.WaitGroup
+		for i := 0; i < 10; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if token, err := s.accessToken(context.Background()); err != nil || token != "old" {
+					t.Errorf("accessToken gave %q, %v", token, err)
+				}
+			}()
+		}
+		wg.Wait()
+		waitFor(t, "one background refresh", func() bool {
+			s.tokenMu.Lock()
+			defer s.tokenMu.Unlock()
+			return !s.refreshing && s.token != "old"
+		})
+		if n := callCount(); n != 1 {
+			t.Fatalf("concurrent calls started %d refreshes, want one", n)
+		}
+	})
+
+	t.Run("transient failure keeps the old token", func(t *testing.T) {
+		mu.Lock()
+		calls = 0
+		mu.Unlock()
+		setMode("transient")
+		defer setMode("ok")
+		s := newStorage()
+		seed(s)
+		if token, err := s.accessToken(context.Background()); err != nil || token != "old" {
+			t.Fatalf("accessToken gave %q, %v", token, err)
+		}
+		waitFor(t, "the failed refresh to clear", func() bool {
+			s.tokenMu.Lock()
+			defer s.tokenMu.Unlock()
+			return !s.refreshing
+		})
+		s.tokenMu.Lock()
+		token := s.token
+		s.tokenMu.Unlock()
+		if token != "old" {
+			t.Fatalf("a transient failure replaced the token with %q", token)
+		}
+		// Simulate the backoff having elapsed so the next call may retry.
+		s.tokenMu.Lock()
+		s.tokenRetryAt = time.Time{}
+		s.tokenBackoff = 0
+		s.tokenMu.Unlock()
+		setMode("ok")
+		if _, err := s.accessToken(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, "the later refresh", func() bool {
+			s.tokenMu.Lock()
+			defer s.tokenMu.Unlock()
+			return s.token != "old" && !s.refreshing
+		})
+		if n := callCount(); n != 2 {
+			t.Fatalf("the retry made %d token requests, want two", n)
+		}
+	})
+
+	t.Run("auth failure turns sticky", func(t *testing.T) {
+		mu.Lock()
+		calls = 0
+		mu.Unlock()
+		setMode("auth")
+		defer setMode("ok")
+		s := newStorage()
+		seed(s)
+		if _, err := s.accessToken(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, "the sticky auth error", func() bool {
+			s.tokenMu.Lock()
+			defer s.tokenMu.Unlock()
+			return s.authErr != nil && !s.refreshing
+		})
+		before := callCount()
+		if _, err := s.accessToken(context.Background()); !isAuthError(err) {
+			t.Fatalf("accessToken gave %v, want the sticky auth error", err)
+		}
+		if n := callCount(); n != before {
+			t.Fatalf("the sticky error made %d more token requests", n-before)
+		}
+	})
+}
+
+func TestSlotPathDefaults(t *testing.T) {
+	p := paramsForStorage(&Config{}, &driveStorage{})
+	if p.concurrency != 64 || p.flushInterval != 10*time.Millisecond || p.maxPollInterval != 200*time.Millisecond {
+		t.Fatalf("slot defaults gave concurrency %d, flush %v, max poll %v", p.concurrency, p.flushInterval, p.maxPollInterval)
+	}
+	if wal, base := paramsForStorage(&Config{}, &localStorage{}), paramsFromConfig(&Config{}); wal != base {
+		t.Fatalf("wal defaults changed: %+v, want %+v", wal, base)
+	}
+	explicit := paramsForStorage(&Config{Concurrency: 4, FlushIntervalMs: 30, MaxPollIntervalMs: 100}, &driveStorage{})
+	if explicit.concurrency != 4 || explicit.flushInterval != 30*time.Millisecond || explicit.maxPollInterval != 100*time.Millisecond {
+		t.Fatalf("explicit values did not win: %+v", explicit)
+	}
+	if p := paramsForStorage(&Config{PollIntervalMs: 500}, &driveStorage{}); p.maxPollInterval < p.minPollInterval {
+		t.Fatalf("max poll %v is below min poll %v", p.maxPollInterval, p.minPollInterval)
+	}
+}
+
+func TestDialDefaultRingDepth(t *testing.T) {
+	newFakeDrive(t)
+	config := &Config{
+		RemoteFolder: "folder-id",
+		Service:      "google-drive",
+		Secrets:      []string{"client", "secret", "refresh"},
+	}
+	settings := &internet.MemoryStreamConfig{
+		ProtocolName:     protocolName,
+		ProtocolSettings: config,
+	}
+	conn, err := Dial(context.Background(), net.Destination{}, settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	writer, ok := conn.(*Conn).writer.(*slotWriter)
+	if !ok {
+		t.Fatalf("Dial with unset concurrency built %T, want a slot writer", conn.(*Conn).writer)
+	}
+	if len(writer.table.Slots) != 64 {
+		t.Fatalf("Dial with unset concurrency built %d slots, want 64", len(writer.table.Slots))
+	}
+	box := spareBoxFor(config)
+	box.stop.Store(true)
+	for box.busy.Load() {
+		time.Sleep(10 * time.Millisecond)
 	}
 }

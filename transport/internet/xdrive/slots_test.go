@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"math/rand"
@@ -87,8 +88,8 @@ func slotPair(t *testing.T, store slotStore, concurrency, segmentBytes uint32) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := newSlotConn(context.Background(), store, r.Up, r.Down, p, nil)
-	server := newSlotConn(context.Background(), store, r.Down, r.Up, p, nil)
+	client := newSlotConn(context.Background(), store, r.Up, r.Down, p, nil, nil)
+	server := newSlotConn(context.Background(), store, r.Down, r.Up, p, nil, nil)
 	t.Cleanup(func() {
 		client.Close()
 		server.Close()
@@ -365,6 +366,84 @@ func TestSlotBodyHedge(t *testing.T) {
 	}
 }
 
+type timedBodySlots struct {
+	*memSlots
+	calls atomic.Int32
+	delay time.Duration
+	stuck atomic.Bool
+}
+
+func (s *timedBodySlots) readBody(ctx context.Context, id string) ([]byte, error) {
+	n := s.calls.Add(1)
+	if s.stuck.Load() && n == 1 {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(s.delay):
+	}
+	return make([]byte, 1000), nil
+}
+
+func TestSlotBodyHedgeRate(t *testing.T) {
+	old := slotBodyHedge
+	slotBodyHedge = 20 * time.Millisecond
+	t.Cleanup(func() { slotBodyHedge = old })
+
+	store := &timedBodySlots{memSlots: newMemSlots(), delay: 60 * time.Millisecond}
+	r := &slotReader{store: store}
+	ctx := context.Background()
+	if _, err := r.readBodyHedged(ctx, "id", 1000); err != nil {
+		t.Fatal(err)
+	}
+	store.calls.Store(0)
+	start := time.Now()
+	if _, err := r.readBodyHedged(ctx, "id", 1000); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed < 60*time.Millisecond {
+		t.Fatalf("the progressing read returned in %v, before its body was ready", elapsed)
+	}
+	if n := store.calls.Load(); n != 1 {
+		t.Fatalf("a progressing read after a learned slow rate hedged, %d reads", n)
+	}
+
+	r.mu.Lock()
+	rate := r.bodyRate
+	r.mu.Unlock()
+	if rate <= 0 {
+		t.Fatal("no body read rate was learned")
+	}
+	expected := max(slotBodyHedge, time.Duration(float64(2*1000)/rate*float64(time.Second)))
+	store.stuck.Store(true)
+	store.calls.Store(0)
+	start = time.Now()
+	if _, err := r.readBodyHedged(ctx, "id", 1000); err != nil {
+		t.Fatal(err)
+	}
+	elapsed := time.Since(start)
+	if n := store.calls.Load(); n < 2 {
+		t.Fatalf("a stuck read after a learned rate was not hedged, %d reads", n)
+	}
+	if elapsed < expected/2 {
+		t.Fatalf("the stuck read hedged after %v, want about %v", elapsed, expected)
+	}
+
+	freshStore := &timedBodySlots{memSlots: newMemSlots()}
+	freshStore.stuck.Store(true)
+	fresh := &slotReader{store: freshStore}
+	store.calls.Store(0)
+	start = time.Now()
+	if _, err := fresh.readBodyHedged(ctx, "id", 1000); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(start); elapsed < slotBodyHedge {
+		t.Fatalf("with no learned rate the hedge came after %v, want at least %v", elapsed, slotBodyHedge)
+	}
+}
+
 func TestTakeSpareSkipsStale(t *testing.T) {
 	cfg := &Config{}
 	p := params{sessionTTL: 5 * time.Minute}
@@ -560,7 +639,7 @@ func TestSlotReaderReachesPastWindow(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	reader := newSlotReader(ctx, store, ring.Down, p)
+	reader := newSlotReader(ctx, store, ring.Down, p, nil)
 	next := func() []byte {
 		select {
 		case chunk := <-reader.chunks():
@@ -673,5 +752,175 @@ func TestSlotBurstInlineWaves(t *testing.T) {
 		if (bodies > 0) != c.media {
 			t.Fatalf("a burst of %d pieces went in %d bodies, media wanted %v", c.pieces, bodies, c.media)
 		}
+	}
+}
+
+type holdSlots struct {
+	*memSlots
+	target string
+	hold   chan struct{}
+}
+
+func (s *holdSlots) setSlot(ctx context.Context, id, description string, body []byte) error {
+	if id == s.target {
+		select {
+		case <-s.hold:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return s.memSlots.setSlot(ctx, id, description, body)
+}
+
+func TestSlotFirstAnnouncement(t *testing.T) {
+	p := params{
+		concurrency:     2,
+		segmentBytes:    4096,
+		flushInterval:   time.Millisecond,
+		minPollInterval: time.Millisecond,
+		maxPollInterval: 5 * time.Millisecond,
+		sessionTTL:      time.Minute,
+	}
+	store := &holdSlots{memSlots: newMemSlots(), hold: make(chan struct{})}
+	ctx := context.Background()
+	r, err := makeRing(ctx, store, "first", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.target = r.Up.Slots[0]
+	client := newSlotConn(ctx, store, r.Up, r.Down, p, nil, nil)
+	defer client.Close()
+	writer := client.writer.(*slotWriter)
+	writer.first = make(chan []byte, 1)
+
+	payload := randomPayload(10000)
+	errs := make(chan error, 1)
+	go func() {
+		_, err := client.Write(payload)
+		if err == nil {
+			err = client.Close()
+		}
+		errs <- err
+	}()
+	var first []byte
+	select {
+	case first = <-writer.first:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the writer never flushed seq 0")
+	}
+	announced := r
+	announced.First = first
+	encoded, err := json.Marshal(announced)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > driveInlineLimit {
+		t.Fatalf("the test announcement is %d bytes, want the inline path", len(encoded))
+	}
+	decoded, ok := decodeRing(encoded)
+	if !ok {
+		t.Fatal("the announcement with First did not decode")
+	}
+	server := newSlotConn(ctx, store, decoded.Down, decoded.Up, p, decoded.First, nil)
+	defer server.Close()
+	if err := server.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	gotFirst := make([]byte, len(first))
+	if _, err := io.ReadFull(server, gotFirst); err != nil {
+		t.Fatalf("the first bytes did not arrive before the ring write: %v", err)
+	}
+	if !bytes.Equal(gotFirst, first) {
+		t.Fatal("the primed first bytes changed")
+	}
+	close(store.hold)
+	rest := make([]byte, len(payload)-len(first))
+	if _, err := io.ReadFull(server, rest); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(append(gotFirst, rest...), payload) {
+		t.Fatal("the stream was duplicated or changed")
+	}
+	if err := <-errs; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSlotFirstAnnouncementTooLarge(t *testing.T) {
+	p := params{
+		concurrency:   2,
+		segmentBytes:  256 << 10,
+		flushInterval: time.Millisecond,
+		sessionTTL:    time.Minute,
+	}
+	store := newMemSlots()
+	ctx := context.Background()
+	r, err := makeRing(ctx, store, "large-first", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := newSlotConn(ctx, store, r.Up, r.Down, p, nil, nil)
+	defer client.Close()
+	writer := client.writer.(*slotWriter)
+	writer.first = make(chan []byte, 1)
+	go client.Write(randomPayload(300 << 10))
+	var first []byte
+	select {
+	case first = <-writer.first:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the writer never flushed seq 0")
+	}
+	if len(first) <= slotInlineLimit {
+		t.Fatalf("the first segment is %d bytes, want a media segment", len(first))
+	}
+	withFirst := r
+	withFirst.First = first
+	encoded, err := json.Marshal(withFirst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) <= driveInlineLimit {
+		t.Fatalf("a %d byte first segment fit the inline announcement", len(first))
+	}
+	plain, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, ok := decodeRing(plain)
+	if !ok || decoded.First != nil {
+		t.Fatal("the announcement without First did not decode cleanly")
+	}
+}
+
+func TestSlotRingFirstCompatibility(t *testing.T) {
+	p := params{concurrency: 2, sessionTTL: time.Minute}
+	store := newMemSlots()
+	r, err := makeRing(context.Background(), store, "compat", p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.First = []byte("hello")
+	encoded, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oldServer struct {
+		Up   slotTable `json:"u"`
+		Down slotTable `json:"d"`
+	}
+	if err := json.Unmarshal(encoded, &oldServer); err != nil {
+		t.Fatalf("an old server could not ignore First: %v", err)
+	}
+	if len(oldServer.Up.Slots) != len(r.Up.Slots) || len(oldServer.Down.Slots) != len(r.Down.Slots) {
+		t.Fatal("an old server lost the ring tables")
+	}
+	r.First = nil
+	plain, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, ok := decodeRing(plain)
+	if !ok || decoded.First != nil {
+		t.Fatal("an old client announcement did not decode")
 	}
 }

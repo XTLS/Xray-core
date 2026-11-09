@@ -36,6 +36,9 @@ const (
 	slotMedia  = 2
 	slotEnd    = 3
 	slotErr    = 4
+
+	// maxSlotIDLen bounds any slot or watermark id accepted from a peer.
+	maxSlotIDLen = 128
 )
 
 var (
@@ -69,6 +72,12 @@ type slotStore interface {
 	setSlot(ctx context.Context, id, description string, body []byte) error
 	readDescription(ctx context.Context, id string) (string, error)
 	readBody(ctx context.Context, id string) ([]byte, error)
+}
+
+// throttleStore is the optional part of a slotStore that reports how often
+// Drive throttled or timed out its requests; only driveStorage implements it
+type throttleStore interface {
+	throttled() int64
 }
 
 // slotFrame is what the description of a slot says: which segment it holds,
@@ -135,8 +144,9 @@ type slotTable struct {
 // ring is what a client announces a session with, the tables are named from
 // its side
 type ring struct {
-	Up   slotTable `json:"u"`
-	Down slotTable `json:"d"`
+	Up    slotTable `json:"u"`
+	Down  slotTable `json:"d"`
+	First []byte    `json:"first,omitempty"`
 }
 
 func decodeRing(b []byte) (ring, bool) {
@@ -144,6 +154,19 @@ func decodeRing(b []byte) (ring, bool) {
 	if json.Unmarshal(b, &r) != nil || len(r.Up.Slots) == 0 || len(r.Down.Slots) == 0 ||
 		r.Up.Watermark == "" || r.Down.Watermark == "" {
 		return ring{}, false
+	}
+	if len(r.Up.Slots) > maxConcurrency || len(r.Down.Slots) > maxConcurrency {
+		return ring{}, false
+	}
+	for _, t := range []slotTable{r.Up, r.Down} {
+		if len(t.Watermark) > maxSlotIDLen {
+			return ring{}, false
+		}
+		for _, id := range t.Slots {
+			if len(id) == 0 || len(id) > maxSlotIDLen {
+				return ring{}, false
+			}
+		}
 	}
 	return r, true
 }
@@ -209,6 +232,7 @@ type slotWriter struct {
 	held     int
 	closed   bool
 	err      error
+	first    chan []byte
 
 	// ackMu is held while the watermark is read, which other uploads wait for
 	ackMu    sync.Mutex
@@ -331,6 +355,12 @@ func (w *slotWriter) flushLocked() error {
 	w.buf = append(w.buf[:0], w.buf[n:]...)
 	seq := w.seq
 	w.seq++
+	if seq == 0 && w.first != nil {
+		select {
+		case w.first <- chunk:
+		default:
+		}
+	}
 	w.lastSize = len(w.buf)
 	w.held = 0
 
@@ -494,32 +524,51 @@ type slotReader struct {
 	// hitAt is when a segment last came and gap the time between them, activeAt
 	// when a segment came, was seen coming or Wake. Nothing for the eager window
 	// is idle, and active is closed when that ends
-	hitAt    time.Time
-	gap      time.Duration
-	activeAt time.Time
-	active   chan struct{}
-	frontier int64
-	err      error
-	reads    atomic.Int64
-	tailMin  time.Duration
-	tailMax  time.Duration
+	hitAt        time.Time
+	gap          time.Duration
+	activeAt     time.Time
+	active       chan struct{}
+	frontier     int64
+	err          error
+	stop         context.CancelFunc
+	reads        atomic.Int64
+	tailMin      time.Duration
+	tailMax      time.Duration
+	stallTimeout time.Duration
+	bodyRate     float64
 }
 
-func newSlotReader(ctx context.Context, store slotStore, table slotTable, p params) *slotReader {
+func newSlotReader(ctx context.Context, store slotStore, table slotTable, p params, first []byte) *slotReader {
+	head := int64(0)
+	if len(first) > 0 {
+		head = 1
+	}
+	runCtx, stop := context.WithCancel(ctx)
 	r := &slotReader{
-		ctx:      ctx,
-		store:    store,
-		table:    table,
-		params:   p,
-		ch:       make(chan []byte, p.concurrency),
-		wake:     make(chan struct{}, 1),
-		acks:     make(chan struct{}, 1),
-		grow:     make(chan struct{}, 1),
-		hitAt:    time.Now(),
-		activeAt: time.Now(),
-		active:   make(chan struct{}),
-		tailMin:  slotTailMin,
-		tailMax:  slotTailMax,
+		ctx:          runCtx,
+		stop:         stop,
+		store:        store,
+		table:        table,
+		params:       p,
+		head:         head,
+		started:      len(first) > 0,
+		ch:           make(chan []byte, max(p.concurrency, 1)),
+		wake:         make(chan struct{}, 1),
+		acks:         make(chan struct{}, 1),
+		grow:         make(chan struct{}, 1),
+		hitAt:        time.Now(),
+		activeAt:     time.Now(),
+		active:       make(chan struct{}),
+		tailMin:      slotTailMin,
+		tailMax:      slotTailMax,
+		stallTimeout: slotStallTimeout,
+	}
+	if len(first) > 0 {
+		r.ch <- first
+		select {
+		case r.acks <- struct{}{}:
+		default:
+		}
 	}
 	go r.run()
 	go r.ackLoop()
@@ -675,7 +724,7 @@ func (r *slotReader) fetch(ctx context.Context, seq int64, offset int, f *slotFe
 
 	id := r.slotID(seq)
 	backoff := slotHuntFloor
-	var goneSince, warnedAt time.Time
+	var goneSince, warnedAt, visibleSince time.Time
 	for {
 		var description string
 		var err error
@@ -689,6 +738,10 @@ func (r *slotReader) fetch(ctx context.Context, seq int64, offset int, f *slotFe
 			description, err = r.store.readDescription(ctx, id)
 		}
 		frame, ok := decodeSlot(description)
+		if err == errNotFound || (err == nil && description == "") {
+			// An absent or empty slot is idle, not a failure.
+			visibleSince = time.Time{}
+		}
 		switch {
 		case err == nil && ok && frame.seq == seq:
 			// what follows it is asked for while its body comes
@@ -708,11 +761,37 @@ func (r *slotReader) fetch(ctx context.Context, seq int64, offset int, f *slotFe
 				r.hit()
 				return
 			case slotMedia:
-				if body, err := r.readBodyHedged(ctx, id); err == nil && frame.holds(body) {
+				body, bodyErr := r.readBodyHedged(ctx, id, frame.size)
+				if bodyErr == nil && frame.holds(body) {
 					f.body = body
 					r.hit()
 					return
 				}
+				if ctx.Err() == nil && time.Since(warnedAt) > 10*time.Second {
+					warnedAt = time.Now()
+					if bodyErr != nil {
+						errors.LogWarningInner(ctx, bodyErr, "failed to read body of slot ", id)
+					} else {
+						errors.LogWarning(ctx, "body of slot ", id, " does not match segment ", seq)
+					}
+				}
+				if visibleSince.IsZero() {
+					visibleSince = time.Now()
+				}
+				if time.Since(visibleSince) > r.stallTimeout {
+					f.err = errors.New("segment ", seq, " has no usable body after ", r.stallTimeout).Base(bodyErr)
+					return
+				}
+			}
+		case err == nil && !ok && description != "":
+			// A present but undecodable description for this slot is not idle;
+			// fail once it has persisted beyond the stall timeout.
+			if visibleSince.IsZero() {
+				visibleSince = time.Now()
+			}
+			if time.Since(visibleSince) > r.stallTimeout {
+				f.err = errors.New("slot ", id, " of segment ", seq, " holds an invalid frame")
+				return
 			}
 		case err == errNotFound:
 			if goneSince.IsZero() {
@@ -722,6 +801,10 @@ func (r *slotReader) fetch(ctx context.Context, seq int64, offset int, f *slotFe
 				return
 			}
 		case err != nil:
+			if isAuthError(err) {
+				f.err = err
+				return
+			}
 			goneSince = time.Time{}
 			if ctx.Err() == nil && time.Since(warnedAt) > 10*time.Second {
 				warnedAt = time.Now()
@@ -815,12 +898,22 @@ func (r *slotReader) readHead(ctx context.Context, id string, seq int64) (string
 	}
 }
 
-func (r *slotReader) readBodyHedged(ctx context.Context, id string) ([]byte, error) {
+func (r *slotReader) readBodyHedged(ctx context.Context, id string, size int) ([]byte, error) {
 	if slotBodyHedge <= 0 {
 		return r.store.readBody(ctx, id)
 	}
+	delay := slotBodyHedge
+	r.mu.Lock()
+	rate := r.bodyRate
+	r.mu.Unlock()
+	if rate > 0 && size > 0 {
+		if scaled := time.Duration(float64(2*size) / rate * float64(time.Second)); scaled > delay {
+			delay = scaled
+		}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	start := time.Now()
 
 	type result struct {
 		body []byte
@@ -835,7 +928,7 @@ func (r *slotReader) readBodyHedged(ctx context.Context, id string) ([]byte, err
 	}
 	launch()
 	outstanding := 1
-	timer := time.NewTimer(slotBodyHedge)
+	timer := time.NewTimer(delay)
 	defer timer.Stop()
 	var last result
 	for {
@@ -843,6 +936,16 @@ func (r *slotReader) readBodyHedged(ctx context.Context, id string) ([]byte, err
 		case res := <-results:
 			outstanding--
 			if res.err == nil {
+				if elapsed := time.Since(start); elapsed > 0 && len(res.body) > 0 {
+					instant := float64(len(res.body)) / elapsed.Seconds()
+					r.mu.Lock()
+					if r.bodyRate == 0 {
+						r.bodyRate = instant
+					} else {
+						r.bodyRate = (r.bodyRate + instant) / 2
+					}
+					r.mu.Unlock()
+				}
 				return res.body, nil
 			}
 			last = res
@@ -940,9 +1043,14 @@ func (r *slotReader) ackLoop() {
 
 func (r *slotReader) setErr(err error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.err == nil {
 		r.err = err
+	}
+	r.mu.Unlock()
+	// A stored error means the connection is dead: stop the run loop so the
+	// chunk channel closes and Read returns the error instead of blocking.
+	if r.stop != nil {
+		r.stop()
 	}
 }
 
