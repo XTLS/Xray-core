@@ -41,18 +41,6 @@ func NewConnClientTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	return conn, nil
 }
 
-func (c *tcpCustomClientConn) TcpMaskConn() {}
-
-func (c *tcpCustomClientConn) RawConn() net.Conn {
-	// c.wg.Wait()
-
-	return c.Conn
-}
-
-func (c *tcpCustomClientConn) Splice() bool {
-	return true
-}
-
 func (c *tcpCustomClientConn) Read(p []byte) (n int, err error) {
 	c.wg.Wait()
 
@@ -138,18 +126,6 @@ func NewConnServerTCP(c *TCPConfig, raw net.Conn) (net.Conn, error) {
 	conn.wg.Add(1)
 
 	return conn, nil
-}
-
-func (c *tcpCustomServerConn) TcpMaskConn() {}
-
-func (c *tcpCustomServerConn) RawConn() net.Conn {
-	// c.wg.Wait()
-
-	return c.Conn
-}
-
-func (c *tcpCustomServerConn) Splice() bool {
-	return true
 }
 
 func (c *tcpCustomServerConn) Read(p []byte) (n int, err error) {
