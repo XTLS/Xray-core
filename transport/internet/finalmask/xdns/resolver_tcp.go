@@ -60,9 +60,23 @@ func (r *TCPResolver) setaddr(addr net.Addr) {
 	}
 }
 
+func (r *TCPResolver) read(reader io.Reader, p []byte) (l int, err error) {
+	if _, err := io.ReadFull(reader, p[:2]); err != nil {
+		return 0, err
+	}
+	l = int(p[0])<<8 | int(p[1])
+	if l == 0 || l > 4096 {
+		return 0, errors.New("err resp len ", l)
+	}
+	if _, err = io.ReadFull(reader, p[:l]); err != nil {
+		return 0, err
+	}
+	return l, nil
+}
+
 func (r *TCPResolver) do(conn *net.Conn, buf *[4096 + 2]byte, p []byte) error {
+	var err error
 	if *conn == nil {
-		var err error
 		*conn, err = r.dialer.DialTCP(r.dest)
 		if err != nil {
 			*conn = nil
@@ -76,7 +90,7 @@ func (r *TCPResolver) do(conn *net.Conn, buf *[4096 + 2]byte, p []byte) error {
 	buf[0] = byte(l >> 8)
 	buf[1] = byte(l)
 	copy(buf[2:], p)
-	_, err := c.Write(buf[:2+len(p)])
+	_, err = c.Write(buf[:2+len(p)])
 	if err != nil {
 		c.Close()
 		*conn = nil
@@ -84,19 +98,8 @@ func (r *TCPResolver) do(conn *net.Conn, buf *[4096 + 2]byte, p []byte) error {
 	}
 
 	b := pool4K.Get().([]byte)
-	if _, err := io.ReadFull(c, b[:2]); err != nil {
-		c.Close()
-		*conn = nil
-		pool4K.Put(b[:cap(b)])
-		return err
-	}
-	l = int(b[0])<<8 | int(b[1])
-	if l == 0 || l > 4096 {
-		io.CopyN(io.Discard, c, int64(l))
-		pool4K.Put(b[:cap(b)])
-		return errors.New("err resp len ", l)
-	}
-	if _, err = io.ReadFull(c, b[:l]); err != nil {
+	l, err = r.read(c, b)
+	if err != nil {
 		c.Close()
 		*conn = nil
 		pool4K.Put(b[:cap(b)])
