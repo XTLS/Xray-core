@@ -95,7 +95,7 @@ type ServerWorker struct {
 func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.Link) (*ServerWorker, error) {
 	worker := &ServerWorker{
 		dispatcher:     d,
-		link:           &transport.Link{Reader: link.Reader, Writer: &MutexWriter{Writer: link.Writer}},
+		link:           link,
 		sessionManager: NewSessionManager(),
 		done:           done.New(),
 		timer:          time.NewTicker(60 * time.Second),
