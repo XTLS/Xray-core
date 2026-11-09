@@ -108,8 +108,15 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 		return nil, err
 	}
 	ascii = strings.Trim(ascii, ".")
-
-	name, err := dnsmessage.NewName(domain + ".")
+	if ascii == "" {
+		return nil, errors.New("empty domain")
+	}
+	for _, label := range strings.Split(ascii, ".") {
+		if len(label) == 0 || len(label) > 63 {
+			return nil, errors.New("invalid domain")
+		}
+	}
+	name, err := dnsmessage.NewName(ascii + ".")
 	if err != nil {
 		return nil, err
 	}
