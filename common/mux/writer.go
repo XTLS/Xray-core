@@ -22,6 +22,17 @@ func (w *MutexWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return w.Writer.WriteMultiBuffer(mb)
 }
 
+// Interrupt and Close reach the writer inside without the lock: a worker
+// ends its link through them, and a write stuck on a peer that stopped
+// reading holds the lock until the link ends.
+func (w *MutexWriter) Interrupt() {
+	common.Interrupt(w.Writer)
+}
+
+func (w *MutexWriter) Close() error {
+	return common.Close(w.Writer)
+}
+
 type Writer struct {
 	dest         net.Destination
 	writer       buf.Writer
