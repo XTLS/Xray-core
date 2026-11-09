@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"text/tabwriter"
 
-	utls "github.com/xtls/utls"
+	utls "github.com/refraction-networking/utls"
 
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/main/commands/base"
