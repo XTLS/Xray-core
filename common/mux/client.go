@@ -188,6 +188,9 @@ var (
 
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
+	writer := buf.NewBufferedWriter(stream.Writer)
+	writer.SetBuffered(false)
+	stream.Writer = writer
 	c := &ClientWorker{
 		sessionManager: NewSessionManager(),
 		link:           stream,
