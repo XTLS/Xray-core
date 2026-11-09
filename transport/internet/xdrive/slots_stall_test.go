@@ -15,9 +15,11 @@ func (badBodySlots) makeSlot(ctx context.Context, name string) (string, error) {
 func (badBodySlots) setSlot(ctx context.Context, id, description string, body []byte) error {
 	return nil
 }
+
 func (badBodySlots) readDescription(ctx context.Context, id string) (string, error) {
 	return newSlotFrame(0, slotMedia, make([]byte, 64)).encode(), nil
 }
+
 func (badBodySlots) readBody(ctx context.Context, id string) ([]byte, error) {
 	return bytes.Repeat([]byte{1}, 64), nil
 }
