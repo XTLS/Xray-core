@@ -91,20 +91,28 @@ func (g *Instance) reloadWithUpdate() error {
 	}
 	defer clean(staged)
 
-	tx, err := swapAll(staged)
-	if err != nil {
-		return err
-	}
-
-	if err := reload(); err != nil {
-		errors.LogErrorInner(context.Background(), err, "failed to reload geodata after downloading assets, rolling back")
-		if rollbackErr := tx.rollback(); rollbackErr != nil {
-			return errors.Combine(err, rollbackErr)
+	var errs []error
+	for _, asset := range staged {
+		tx, err := swapAll([]stage{asset})
+		if err != nil {
+			return errors.Combine(append(errs, err)...)
 		}
-		return errors.Combine(err, reload())
+		if err := reload(); err != nil {
+			errors.LogErrorInner(context.Background(), err, "failed to reload geodata after updating ", asset.target, ", rolling back")
+			errs = append(errs, err)
+			if err := tx.rollback(); err != nil {
+				return errors.Combine(append(errs, err)...)
+			}
+			if err := reload(); err != nil {
+				return errors.Combine(append(errs, err)...)
+			}
+			continue
+		}
+		if err := tx.commit(); err != nil {
+			errs = append(errs, err)
+		}
 	}
-
-	return tx.commit()
+	return errors.Combine(errs...)
 }
 
 func reload() error {

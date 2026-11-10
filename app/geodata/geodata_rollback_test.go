@@ -62,13 +62,17 @@ func TestUpdateRollbackRestoresMatchers(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		name, ipCode, siteCode string
-		wantError              bool
+		name, ipCode, siteCode                      string
+		wantError, ipUpdated, siteUpdated, reversed bool
 	}{
-		{"missing GeoSite category", "TEST", "OTHER", true},
-		{"missing GeoIP category", "OTHER", "TEST", true},
-		{"both categories missing", "OTHER", "OTHER", true},
-		{"successful update", "TEST", "TEST", false},
+		{"missing GeoSite category", "TEST", "OTHER", true, true, false, false},
+		{"missing GeoIP category", "OTHER", "TEST", true, false, true, false},
+		{"both categories missing", "OTHER", "OTHER", true, false, false, false},
+		{"successful update", "TEST", "TEST", false, true, true, false},
+		{"missing GeoSite category reversed", "TEST", "OTHER", true, true, false, true},
+		{"missing GeoIP category reversed", "OTHER", "TEST", true, false, true, true},
+		{"both categories missing reversed", "OTHER", "OTHER", true, false, false, true},
+		{"successful update reversed", "TEST", "TEST", false, true, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			write("ip.dat", oldIP)
@@ -85,8 +89,12 @@ func TestUpdateRollbackRestoresMatchers(t *testing.T) {
 				}
 			}))
 			defer server.Close()
+			assets := []*Asset{{Url: server.URL + "/ip", File: "ip.dat"}, {Url: server.URL + "/site", File: "site.dat"}}
+			if tc.reversed {
+				assets[0], assets[1] = assets[1], assets[0]
+			}
 			instance := &Instance{
-				assets:     []*Asset{{Url: server.URL + "/ip", File: "ip.dat"}, {Url: server.URL + "/site", File: "site.dat"}},
+				assets:     assets,
 				downloader: &downloader{ctx: context.Background(), httpsClient: server.Client()},
 			}
 			err := instance.reloadWithUpdate()
@@ -97,21 +105,20 @@ func TestUpdateRollbackRestoresMatchers(t *testing.T) {
 				t.Errorf("original missing-category error was lost: %v", err)
 			}
 			for name, expected := range map[string][]byte{"ip.dat": oldIP, "site.dat": oldSite} {
-				if !tc.wantError {
+				if name == "ip.dat" && tc.ipUpdated {
 					expected = append([]byte(luaGuardHeader), newIP...)
-					if name == "site.dat" {
-						expected = append([]byte(luaGuardHeader), newSite...)
-					}
+				} else if name == "site.dat" && tc.siteUpdated {
+					expected = append([]byte(luaGuardHeader), newSite...)
 				}
 				actual, err := os.ReadFile(filepath.Join(dir, name))
 				if err != nil || !bytes.Equal(actual, expected) {
 					t.Errorf("%s does not contain the expected asset after update: %v", name, err)
 				}
 			}
-			if ipMatcher.Match(net.ParseIP("192.0.2.1")) != tc.wantError || ipMatcher.Match(net.ParseIP("192.0.2.2")) == tc.wantError {
+			if ipMatcher.Match(net.ParseIP("192.0.2.1")) == tc.ipUpdated || ipMatcher.Match(net.ParseIP("192.0.2.2")) != tc.ipUpdated {
 				t.Error("live IP matcher differs from the assets left on disk")
 			}
-			if domainMatcher.MatchAny("before.example") != tc.wantError || domainMatcher.MatchAny("after.example") == tc.wantError {
+			if domainMatcher.MatchAny("before.example") == tc.siteUpdated || domainMatcher.MatchAny("after.example") != tc.siteUpdated {
 				t.Error("live domain matcher differs from the assets left on disk")
 			}
 		})
