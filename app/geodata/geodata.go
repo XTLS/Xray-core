@@ -98,8 +98,10 @@ func (g *Instance) reloadWithUpdate() error {
 
 	if err := reload(); err != nil {
 		errors.LogErrorInner(context.Background(), err, "failed to reload geodata after downloading assets, rolling back")
-		rollbackErr := tx.rollback()
-		return errors.Combine(err, rollbackErr)
+		if rollbackErr := tx.rollback(); rollbackErr != nil {
+			return errors.Combine(err, rollbackErr)
+		}
+		return errors.Combine(err, reload())
 	}
 
 	return tx.commit()
