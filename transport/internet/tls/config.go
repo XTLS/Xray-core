@@ -107,28 +107,36 @@ func setupOcspTicker(entry *Certificate, callback func(isReloaded, isOcspstaplin
 		}
 		t := time.NewTicker(time.Duration(hotReloadCertInterval) * time.Second)
 		for {
-			var isReloaded bool
-			if entry.CertificatePath != "" && entry.KeyPath != "" {
-				newCert, err := filesystem.ReadCert(entry.CertificatePath)
-				if err != nil {
-					errors.LogErrorInner(context.Background(), err, "failed to parse certificate")
-					return
-				}
-				newKey, err := filesystem.ReadCert(entry.KeyPath)
-				if err != nil {
-					errors.LogErrorInner(context.Background(), err, "failed to parse key")
-					return
-				}
-				if string(newCert) != string(entry.Certificate) || string(newKey) != string(entry.Key) {
-					entry.Certificate = newCert
-					entry.Key = newKey
-					isReloaded = true
-				}
+			isReloaded, err := reloadFromFiles(entry)
+			if err != nil {
+				errors.LogErrorInner(context.Background(), err, "certificate hot reload failed, will retry")
 			}
 			callback(isReloaded, isOcspstapling)
 			<-t.C
 		}
 	}()
+}
+
+// reloadFromFiles re-reads the certificate and key files of entry, if it has
+// them, and reports whether either has changed. On error entry is left untouched.
+func reloadFromFiles(entry *Certificate) (bool, error) {
+	if entry.CertificatePath == "" || entry.KeyPath == "" {
+		return false, nil
+	}
+	newCert, err := filesystem.ReadCert(entry.CertificatePath)
+	if err != nil {
+		return false, errors.New("failed to read certificate").Base(err)
+	}
+	newKey, err := filesystem.ReadCert(entry.KeyPath)
+	if err != nil {
+		return false, errors.New("failed to read key").Base(err)
+	}
+	if bytes.Equal(newCert, entry.Certificate) && bytes.Equal(newKey, entry.Key) {
+		return false, nil
+	}
+	entry.Certificate = newCert
+	entry.Key = newKey
+	return true, nil
 }
 
 func isCertificateExpired(c *tls.Certificate) bool {
