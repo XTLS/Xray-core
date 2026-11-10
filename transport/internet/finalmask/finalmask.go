@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -14,6 +15,22 @@ import (
 type Dialer struct {
 	DialTCP func(net.Destination) (net.Conn, error)
 	DialUDP func(net.Destination) (net.Conn, error)
+	UDPPath *UDPPath
+}
+
+// UDPPath serializes complete masked writes with endpoint changes. Its fields
+// are accessed while holding Mutex; Generation changes only when endpoints do.
+type UDPPath struct {
+	net.PacketConn
+	sync.Mutex
+	Generation  uint64
+	Destination net.Addr
+}
+
+func (c *UDPPath) WriteTo(p []byte, addr net.Addr) (int, error) {
+	c.Lock()
+	defer c.Unlock()
+	return c.PacketConn.WriteTo(p, addr)
 }
 
 type ListenConfig struct {
@@ -207,6 +224,10 @@ func (fm *FinalMask) DialUDP(ctx context.Context, dest net.Destination) (net.Con
 	}
 	if addr == nil {
 		addr = &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
+	}
+	if dialer.UDPPath != nil {
+		dialer.UDPPath.PacketConn = conn
+		conn = dialer.UDPPath
 	}
 	return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, nil
 }

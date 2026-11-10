@@ -12,18 +12,21 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const asciiLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 type noiseConn struct {
 	net.PacketConn
-	config  *Config
-	script  *scriptEngine
-	noise   []scriptPacket
-	m       map[string]time.Time
-	mu      sync.Mutex
-	counter atomic.Uint32
+	config     *Config
+	script     *scriptEngine
+	noise      []scriptPacket
+	m          map[string]time.Time
+	mu         sync.Mutex
+	counter    atomic.Uint32
+	path       *finalmask.UDPPath
+	generation uint64
 }
 
 func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
@@ -105,6 +108,14 @@ func (c *noiseConn) buildSegment(seg *Segment) []byte {
 func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.path != nil {
+		if c.generation != c.path.Generation {
+			clear(c.m)
+			c.generation = c.path.Generation
+		}
+		addr = c.path.Destination
+	}
 
 	t := c.m[addr.String()]
 
