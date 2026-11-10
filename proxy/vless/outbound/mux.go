@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
@@ -14,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func (h *Handler) DispatchMux(ctx context.Context, link *transport.Link) (bool, error) {
@@ -161,4 +163,23 @@ func (c *muxCarrier) write(mb buf.MultiBuffer) error {
 
 func (c *muxCarrier) Interrupt() {
 	c.cancel()
+}
+
+// Keep the transport's graceful close when the carrier is ready and idle.
+// A write or handshake in progress can need an independent transport abort.
+func (c *muxCarrier) stopTransport(conn stat.Connection) {
+	if interrupter, ok := stat.TryUnwrapStatsConn(conn).(common.Interruptible); ok {
+		select {
+		case <-c.ready:
+			if c.writeGate.TryLock() {
+				c.writeGate.Unlock()
+				conn.Close()
+				return
+			}
+		default:
+		}
+		interrupter.Interrupt()
+		return
+	}
+	conn.Close()
 }

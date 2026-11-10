@@ -263,7 +263,7 @@ func (w *slotWriter) Write(p []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
-	if w.closed {
+	if w.closed || w.ctx.Err() != nil {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -326,6 +326,10 @@ func (w *slotWriter) flushLocked() error {
 		return w.ctx.Err()
 	}
 	w.mu.Lock()
+	if err := w.ctx.Err(); err != nil {
+		<-w.slots
+		return err
+	}
 	if w.err != nil || len(w.buf) == 0 {
 		<-w.slots
 		return w.err

@@ -15,6 +15,7 @@ var placeholderAddr = &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 0}
 // Conn is a session in segments, walWriter and walReader, or in slots,
 // slotWriter and slotReader
 type Conn struct {
+	ctx     context.Context
 	cancel  context.CancelFunc
 	writer  io.WriteCloser
 	reader  chunkReader
@@ -41,6 +42,7 @@ func newConn(ctx context.Context, storage Storage, writePrefix, readPrefix strin
 	ctx, cancel := context.WithCancel(ctx)
 	return &Conn{
 		cancel:  cancel,
+		ctx:     ctx,
 		writer:  newWALWriter(ctx, storage, writePrefix, p),
 		reader:  newWALReader(ctx, storage, readPrefix, p),
 		onClose: onClose,
@@ -51,6 +53,7 @@ func newSlotConn(ctx context.Context, store slotStore, write, read slotTable, p 
 	ctx, cancel := context.WithCancel(ctx)
 	return &Conn{
 		cancel:  cancel,
+		ctx:     ctx,
 		writer:  newSlotWriter(ctx, store, write, p),
 		reader:  newSlotReader(ctx, store, read, p, first),
 		onClose: onClose,
@@ -98,6 +101,9 @@ func (c *Conn) receive() ([]byte, error) {
 }
 
 func (c *Conn) Write(b []byte) (int, error) {
+	if c.ctx.Err() != nil {
+		return 0, io.ErrClosedPipe
+	}
 	if deadline := c.getDeadline(false); !deadline.IsZero() && !time.Now().Before(deadline) {
 		return 0, os.ErrDeadlineExceeded
 	}
@@ -112,11 +118,22 @@ func (c *Conn) Close() error {
 	c.closeOnce.Do(func() {
 		c.closeErr = c.writer.Close()
 		c.cancel()
-		if c.onClose != nil {
-			c.onClose()
-		}
+		c.release()
 	})
 	return c.closeErr
+}
+
+// Interrupt cancels an active transfer without waiting to flush its writer.
+// Cancel before acquiring closeOnce so it also wakes an ongoing Close.
+func (c *Conn) Interrupt() {
+	c.cancel()
+	c.closeOnce.Do(c.release)
+}
+
+func (c *Conn) release() {
+	if c.onClose != nil {
+		c.onClose()
+	}
 }
 
 func (c *Conn) LocalAddr() net.Addr {

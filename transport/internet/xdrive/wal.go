@@ -77,7 +77,7 @@ func (w *walWriter) Write(p []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
-	if w.closed {
+	if w.closed || w.ctx.Err() != nil {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -125,6 +125,9 @@ func (w *walWriter) readyToFlush() bool {
 }
 
 func (w *walWriter) flushLocked() error {
+	if err := w.ctx.Err(); err != nil {
+		return err
+	}
 	if len(w.buf) == 0 {
 		return nil
 	}
@@ -164,8 +167,11 @@ func (w *walWriter) upload(seq int64, chunk []byte) {
 		return
 	}
 	defer func() { <-w.sem }()
+	if w.ctx.Err() != nil {
+		return
+	}
 
-	if err := w.storage.Put(w.ctx, objectName(w.prefix, seq, segSuffix), chunk); err != nil {
+	if err := w.storage.Put(w.ctx, objectName(w.prefix, seq, segSuffix), chunk); err != nil && w.ctx.Err() == nil {
 		w.mu.Lock()
 		if w.err == nil {
 			w.err = errors.New("failed to store segment").Base(err)
@@ -182,7 +188,7 @@ func (w *walWriter) Close() error {
 		return nil
 	}
 	w.closed = true
-	for len(w.buf) > 0 && w.err == nil {
+	for len(w.buf) > 0 && w.err == nil && w.ctx.Err() == nil {
 		w.flushLocked()
 	}
 	w.mu.Unlock()
@@ -194,6 +200,9 @@ func (w *walWriter) Close() error {
 	w.mu.Unlock()
 
 	if err != nil {
+		return err
+	}
+	if err := w.ctx.Err(); err != nil {
 		return err
 	}
 	return w.storage.Put(w.ctx, objectName(w.prefix, seq, endSuffix), nil)

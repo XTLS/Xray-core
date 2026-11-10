@@ -258,10 +258,11 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	if carrier != nil {
 		transportConn := conn
-		stop := context.AfterFunc(ctx, func() { transportConn.Close() })
+		finish := func() { carrier.stopTransport(transportConn) }
+		stop := context.AfterFunc(ctx, finish)
 		defer func() {
 			if stop() {
-				transportConn.Close()
+				finish()
 			}
 		}()
 	} else {

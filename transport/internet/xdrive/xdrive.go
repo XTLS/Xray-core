@@ -247,6 +247,8 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			select {
 			case first = <-writer.first:
 			case <-time.After(25 * time.Millisecond):
+			case <-conn.ctx.Done():
+				return
 			}
 			announce, _ := json.Marshal(r)
 			if len(first) > 0 && len(first) <= slotInlineLimit {
@@ -257,7 +259,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 			}
 			// An announce failure surfaces as a connection error on the next Write/Read.
-			if err := storage.Put(context.Background(), announceName(session, time.Now()), announce); err != nil {
+			if err := storage.Put(conn.ctx, announceName(session, time.Now()), announce); err != nil && conn.ctx.Err() == nil {
 				err = errors.New("failed to announce session ", session).Base(err)
 				writer.fail(err)
 				conn.reader.(*slotReader).setErr(err)
