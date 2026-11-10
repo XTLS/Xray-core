@@ -110,7 +110,6 @@ jobs:
           # BEGIN Android AMD64
           - goos: android
             goarch: amd64
-            patch-assetname: android-amd64
           # END Android AMD64
           # Windows ARM
           - goos: windows
