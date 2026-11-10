@@ -187,8 +187,8 @@ jobs:
       - name: Show workflow information
         run: |
           _NAME=${{ matrix.patch-assetname }}
-          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM$GOMIPS\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
+          [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM\"].friendlyName" -r < .github/build/friendly-filenames.json)
+          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
@@ -202,6 +202,25 @@ jobs:
 
       - name: Build Xray
         run: |
+          # Special processing for x86-64 and ARM64
+          if [[ ${GOARCH} == 'amd64' ]]; then
+            if [[ ${GOOS} == 'windows' ]]; then
+              GOAMD64="v2"
+            elif [[ ${GOOS} == 'darwin' ]]; then
+              GOAMD64="v2"
+            fi
+          elif [[ ${GOARCH} == 'arm64' ]]; then
+            if [[ ${GOOS} == 'windows' ]]; then
+              GOARM64="v8.2"
+            elif [[ ${GOOS} == 'darwin' ]]; then
+              GOARM64="v8.4"
+            fi
+          fi
+          # Special processing for 32-bit ARM, after linux/arm v5/v6 removed
+          # if [[ ${GOARCH} == 'arm' ]]; then
+          #   GOARM="7"
+          # fi
+          # Building
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)
           if [[ ${GOOS} == 'windows' ]]; then
