@@ -122,10 +122,8 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 			if config.Concurrency < 0 {
 				h.mux = &mux.ClientManager{Enabled: false}
 			}
-			if config.Concurrency >= 0 && config.Concurrency <= 128 {
-				config.Concurrency = 128
-			}
-			if config.Concurrency > 0 {
+			concurrency := muxConcurrency(config.Concurrency)
+			if concurrency > 0 {
 				h.mux = &mux.ClientManager{
 					Enabled: true,
 					Picker: &mux.IncrementalWorkerPicker{
@@ -133,7 +131,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 							Proxy:  proxyHandler,
 							Dialer: h,
 							Strategy: mux.ClientStrategy{
-								MaxConcurrency: uint32(config.Concurrency),
+								MaxConcurrency: uint32(concurrency),
 								MaxConnection:  1024,
 							},
 						},
