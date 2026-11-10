@@ -1,4 +1,4 @@
-//go:build js || netbsd || solaris
+//go:build !windows && !darwin && !linux && !freebsd && !openbsd
 
 package internet
 

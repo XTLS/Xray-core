@@ -1,4 +1,4 @@
-//go:build !windows && !wasm && !illumos && !openbsd
+//go:build !windows && !openbsd
 
 package buf
 

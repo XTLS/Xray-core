@@ -1,4 +1,4 @@
-//go:build !wasm && !openbsd
+//go:build !openbsd
 
 package buf
 
