@@ -2,6 +2,7 @@ package account
 
 import (
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -43,6 +44,56 @@ type Validator struct {
 	users sync.Map
 	ids   sync.Map
 	mu    sync.Mutex
+
+	// Connections authenticated with each auth, closed when that auth is
+	// removed and not added back within removeGrace (an update may be a
+	// remove followed by an add).
+	connMu sync.Mutex
+	conns  map[string]map[uint64]func()
+	nextID uint64
+}
+
+const removeGrace = 2 * time.Second
+
+// Track registers closeFn for a connection authenticated with auth. The
+// returned func unregisters it.
+func (v *Validator) Track(auth string, closeFn func()) (untrack func()) {
+	v.connMu.Lock()
+	defer v.connMu.Unlock()
+	if v.conns == nil {
+		v.conns = make(map[string]map[uint64]func())
+	}
+	if v.conns[auth] == nil {
+		v.conns[auth] = make(map[uint64]func())
+	}
+	v.nextID++
+	id := v.nextID
+	v.conns[auth][id] = closeFn
+	return func() {
+		v.connMu.Lock()
+		defer v.connMu.Unlock()
+		if m := v.conns[auth]; m != nil {
+			delete(m, id)
+			if len(m) == 0 {
+				delete(v.conns, auth)
+			}
+		}
+	}
+}
+
+func (v *Validator) closeIfStillAbsent(auth string) {
+	if v.Get(auth) != nil {
+		return
+	}
+	v.connMu.Lock()
+	fns := make([]func(), 0, len(v.conns[auth]))
+	for _, fn := range v.conns[auth] {
+		fns = append(fns, fn)
+	}
+	v.connMu.Unlock()
+	for _, fn := range fns {
+		fn()
+	}
 }
 
 func NewValidator() *Validator {
@@ -71,6 +122,7 @@ func (v *Validator) DelByEmail(email string) (err error) {
 			id[7] = 0
 			v.ids.Delete(id)
 		}
+		time.AfterFunc(removeGrace, func() { v.closeIfStillAbsent(auth) })
 	}
 	v.mu.Unlock()
 	return

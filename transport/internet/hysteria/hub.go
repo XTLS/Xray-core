@@ -39,6 +39,9 @@ type httpHandler struct {
 
 	auth bool
 	user *protocol.MemoryUser
+
+	authKey string
+	untrack func()
 }
 
 func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
@@ -68,6 +71,13 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 		if user != nil || ok {
 			h.auth = true
 			h.user = user
+			if user != nil {
+				h.authKey = auth
+				conn := h.conn
+				h.untrack = h.validator.Track(auth, func() {
+					_ = conn.CloseWithError(closeErrCodeOK, "")
+				})
+			}
 
 			conn := h.conn
 			quicParams := h.quicParams
@@ -121,6 +131,11 @@ func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, 
 	if err != nil || !h.auth {
 		return false, nil
 	}
+	// The user was removed after this connection authenticated.
+	if h.user != nil && h.validator.Get(h.authKey) == nil {
+		_ = h.conn.CloseWithError(closeErrCodeOK, "")
+		return true, nil
+	}
 
 	switch ft {
 	case FrameTypeTCPRequest:
@@ -169,6 +184,9 @@ func (l *Listener) handleClient(conn *quic.Conn) {
 	}
 	err := h3s.ServeQUICConn(conn)
 	_ = conn.CloseWithError(closeErrCodeOK, "")
+	if handler.untrack != nil {
+		handler.untrack()
+	}
 	errors.LogDebug(context.Background(), conn.RemoteAddr(), " ServeQUICConn exited with ", err)
 }
 
