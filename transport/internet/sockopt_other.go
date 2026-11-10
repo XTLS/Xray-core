@@ -1,5 +1,4 @@
 //go:build js || netbsd || solaris
-// +build js netbsd solaris
 
 package internet
 

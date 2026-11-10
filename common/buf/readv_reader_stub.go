@@ -1,5 +1,4 @@
 //go:build wasm || openbsd
-// +build wasm openbsd
 
 package buf
 
