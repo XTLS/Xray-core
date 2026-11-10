@@ -95,6 +95,7 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 					addConn:        h.addConn,
 					udpIdleTimeout: time.Duration(h.config.UdpIdleTimeout) * time.Second,
 					user:           h.user,
+					userRemoved:    h.userRemoved,
 				}
 				go udpSM.clean()
 				go udpSM.run()
@@ -117,9 +118,21 @@ func (h *httpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.masqHandler.ServeHTTP(w, r)
 }
 
+// userRemoved closes the connection if its user is no longer in the validator.
+func (h *httpHandler) userRemoved() bool {
+	if h.user == nil || h.validator.Get(h.user.Account.(*account.MemoryAccount).Auth) != nil {
+		return false
+	}
+	_ = h.conn.CloseWithError(closeErrCodeOK, "")
+	return true
+}
+
 func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, err error) (bool, error) {
 	if err != nil || !h.auth {
 		return false, nil
+	}
+	if h.userRemoved() {
+		return true, nil
 	}
 
 	switch ft {

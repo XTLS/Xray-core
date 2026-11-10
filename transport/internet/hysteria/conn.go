@@ -176,6 +176,7 @@ type udpSessionManager struct {
 	addConn        internet.ConnHandler
 	udpIdleTimeout time.Duration
 	user           *protocol.MemoryUser
+	userRemoved    func() bool
 }
 
 func (m *udpSessionManager) close(udpConn *InterConn) {
@@ -279,6 +280,9 @@ func (m *udpSessionManager) feed(id uint32, d []byte) {
 	m.RUnlock()
 
 	if m.addConn == nil {
+		return
+	}
+	if m.userRemoved != nil && m.userRemoved() {
 		return
 	}
 
