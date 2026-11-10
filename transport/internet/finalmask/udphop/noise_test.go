@@ -41,10 +41,12 @@ func (c *noiseSocket) WriteTo(p []byte, addr net.Addr) (int, error) {
 	}
 	return len(p), nil
 }
+
 func (c *noiseSocket) ReadFrom([]byte) (int, net.Addr, error) {
 	<-c.closed
 	return 0, nil, stdnet.ErrClosed
 }
+
 func (c *noiseSocket) Close() error                       { c.once.Do(func() { close(c.closed) }); return nil }
 func (c *noiseSocket) LocalAddr() net.Addr                { return c.local }
 func (c *noiseSocket) SetDeadline(v time.Time) error      { c.deadline = v; return nil }
@@ -65,15 +67,19 @@ func (c *captureHop) WrapPacketConnClient(raw net.PacketConn, dest *net.Destinat
 }
 
 // A mask between noise and hopping must still process both noise and payload.
-type prefixMask struct{}
-type prefixConn struct{ net.PacketConn }
+type (
+	prefixMask struct{}
+	prefixConn struct{ net.PacketConn }
+)
 
 func (*prefixMask) WrapPacketConnClient(c net.PacketConn, _ *net.Destination, _ *finalmask.Dialer) (net.PacketConn, error) {
 	return &prefixConn{c}, nil
 }
+
 func (*prefixMask) WrapPacketConnServer(c net.PacketConn, _ net.Addr, _ *finalmask.ListenConfig) (net.PacketConn, error) {
 	return c, nil
 }
+
 func (c *prefixConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	_, err := c.PacketConn.WriteTo(append([]byte("mask:"), p...), addr)
 	return len(p), err
@@ -103,7 +109,7 @@ func newNoiseFixture(t *testing.T, script bool, delay int64) *noiseFixture {
 		} else {
 			code = `function HandleNoise(plan, address) plan:Add(address, 20); plan:Add("second", 20) end`
 		}
-		if err := os.WriteFile(path, []byte(code), 0600); err != nil {
+		if err := os.WriteFile(path, []byte(code), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		nc.Script = path
