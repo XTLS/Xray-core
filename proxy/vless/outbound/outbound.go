@@ -54,7 +54,6 @@ type Handler struct {
 	cone          bool
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
-	multiplexer   *proxyman.Multiplexer
 
 	testpre    uint32
 	initpre    sync.Once
@@ -99,22 +98,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}
 	}
 
-	if outbound := session.FullHandlerFromContext(ctx); outbound != nil {
-		if settings := outbound.SenderSettings(); settings != nil {
-			config, err := settings.GetInstance()
-			if err != nil {
-				return nil, err
-			}
-			if sender, ok := config.(*proxymanConfig.SenderConfig); ok {
-				if dialer, ok := outbound.(internet.Dialer); ok {
-					handler.multiplexer = proxyman.NewMultiplexer(sender.MultiplexSettings, func(strategy mux.ClientStrategy) mux.ClientWorkerFactory {
-						return &muxWorkerFactory{handler: handler, dialer: dialer, strategy: strategy}
-					})
-				}
-			}
-		}
-	}
-
 	if a.Reverse != nil {
 		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
 			Tag:  a.Reverse.Tag,
@@ -152,7 +135,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	h.multiplexer.Close()
 	h.initpre.Do(func() {}) // Prevent preconnecting after Close.
 	if h.stopPre != nil {
 		h.stopPre()

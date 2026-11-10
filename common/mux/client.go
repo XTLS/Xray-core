@@ -155,6 +155,15 @@ type DialingWorkerFactory struct {
 }
 
 func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
+	}})
+	if direct, ok := f.Proxy.(interface {
+		CreateMuxWorker(context.Context, internet.Dialer, ClientStrategy) (*ClientWorker, error)
+	}); ok {
+		return direct.CreateMuxWorker(ctx, f.Dialer, f.Strategy)
+	}
+
 	opts := []pipe.Option{pipe.WithSizeLimit(64 * 1024)}
 	uplinkReader, upLinkWriter := pipe.New(opts...)
 	downlinkReader, downlinkWriter := pipe.New(opts...)
@@ -168,10 +177,6 @@ func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
 	}
 
 	go func(p proxy.Outbound, d internet.Dialer, c common.Closable) {
-		outbounds := []*session.Outbound{{
-			Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
-		}}
-		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
 		ctx, cancel := context.WithCancel(ctx)
 
 		if errP := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); errP != nil {

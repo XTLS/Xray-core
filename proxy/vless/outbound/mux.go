@@ -10,32 +10,18 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/mux"
-	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
-func (h *Handler) DispatchMux(ctx context.Context, link *transport.Link) (bool, error) {
-	return h.multiplexer.Dispatch(ctx, link)
-}
-
-type muxWorkerFactory struct {
-	handler  *Handler
-	dialer   internet.Dialer
-	strategy mux.ClientStrategy
-}
-
-func (f *muxWorkerFactory) Create() (*mux.ClientWorker, error) {
-	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
-		Target: net.TCPDestination(net.DomainAddress("v1.mux.cool"), 9527),
-	}})
+// CreateMuxWorker connects the Mux worker directly to a VLESS transport.
+func (h *Handler) CreateMuxWorker(ctx context.Context, dialer internet.Dialer, strategy mux.ClientStrategy) (*mux.ClientWorker, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	carrier := &muxCarrier{ctx: ctx, cancel: cancel, ready: make(chan struct{})}
 	carrier.writeGate = &mux.MutexWriter{Writer: carrier}
-	worker, err := mux.NewClientWorker(transport.Link{Reader: carrier, Writer: carrier.writeGate}, f.strategy)
+	worker, err := mux.NewClientWorker(transport.Link{Reader: carrier, Writer: carrier.writeGate}, strategy)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -48,7 +34,7 @@ func (f *muxWorkerFactory) Create() (*mux.ClientWorker, error) {
 	go func() {
 		defer worker.Close()
 		defer cancel()
-		err := f.handler.process(ctx, nil, f.dialer, carrier)
+		err := h.process(ctx, nil, dialer, carrier)
 		cause := errors.Cause(err)
 		if err != nil && !goerrors.Is(cause, io.EOF) && !goerrors.Is(cause, io.ErrClosedPipe) && !goerrors.Is(cause, context.Canceled) {
 			errors.LogInfoInner(ctx, err, "failed to handle VLESS mux connection")
