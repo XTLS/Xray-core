@@ -259,7 +259,7 @@ GOOS=android GOARCH=amd64 CGO_ENABLED=1 CC=/path/to/x86_64-linux-android24-clang
 If you are compiling a 32-bit MIPS/MIPSLE target, use this command instead:
 
 ```bash
-CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
 
 ## Stargazers over time

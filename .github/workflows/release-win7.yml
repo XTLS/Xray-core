@@ -1,4 +1,5 @@
 name: Build and Release for Windows 7
+# Pre-compiling support removal since 1.29
 
 on:
   workflow_dispatch:
