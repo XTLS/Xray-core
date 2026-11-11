@@ -4,57 +4,62 @@ import (
 	"io"
 
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 )
 
-// PacketReader is an io.Reader that reads whole chunk of Mux frames every time.
-type PacketReader struct {
-	reader io.Reader
-	eof    bool
-	dest   net.Destination
-}
-
-// NewPacketReader creates a new PacketReader.
-// dest is copied because the caller reuses it for the next frame.
-func NewPacketReader(reader io.Reader, dest *net.Destination) *PacketReader {
-	return &PacketReader{
-		reader: reader,
-		eof:    false,
-		dest:   *dest,
-	}
-}
-
-// ReadMultiBuffer implements buf.Reader.
-func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if r.eof {
-		return nil, io.EOF
-	}
-
-	size, err := serial.ReadUint16(r.reader)
+// readPacket reads one complete packet; its destination belongs to the buffer.
+func readPacket(reader io.Reader, dest net.Destination) (buf.MultiBuffer, error) {
+	size, err := serial.ReadUint16(reader)
 	if err != nil {
 		return nil, err
 	}
-
 	if size > buf.Size {
 		return nil, errors.New("packet size too large: ", size)
 	}
-
 	b := buf.New()
-	if _, err := b.ReadFullFrom(r.reader, int32(size)); err != nil {
+	if _, err := b.ReadFullFrom(reader, int32(size)); err != nil {
 		b.Release()
 		return nil, err
 	}
-	r.eof = true
-	if r.dest.Network == net.Network_UDP {
-		b.UDP = &r.dest // only one packet is read, so b owns r.dest
+	if dest.Network == net.Network_UDP {
+		b.UDP = &dest
 	}
 	return buf.MultiBuffer{b}, nil
 }
 
-// NewStreamReader creates a new StreamReader.
-func NewStreamReader(reader *buf.BufferedReader) buf.Reader {
-	return crypto.NewChunkStreamReaderWithChunkCount(crypto.PlainChunkSizeParser{}, reader, 1)
+// copyFramePayload gathers the declared stream frame before publication. On a
+// terminal read failure, preserve its accumulated bytes and observed cause.
+func copyFramePayload(reader *buf.BufferedReader, s *Session, dest net.Destination) (err error) {
+	var mb buf.MultiBuffer
+	if s != nil && s.transferType == protocol.TransferTypePacket {
+		mb, err = readPacket(reader, dest)
+	} else {
+		size, sizeErr := serial.ReadUint16(reader)
+		if sizeErr != nil {
+			return sizeErr
+		}
+		left := int32(size)
+		for left > 0 {
+			var part buf.MultiBuffer
+			part, err = reader.ReadAtMost(left)
+			left -= part.Len()
+			if s == nil {
+				buf.ReleaseMulti(part)
+			} else {
+				mb = buf.Compact(append(mb, part...))
+			}
+			if err != nil {
+				break
+			}
+		}
+	}
+	if s == nil || mb.IsEmpty() {
+		buf.ReleaseMulti(mb)
+	} else if werr := s.output.WriteMultiBuffer(mb); werr != nil {
+		s.Close() // complete frame already consumed; no drain adapter needed
+	}
+	return err
 }

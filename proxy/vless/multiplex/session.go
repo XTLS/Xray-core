@@ -3,14 +3,12 @@ package multiplex
 import (
 	"context"
 	"io"
-	"runtime"
 	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -41,7 +39,18 @@ func (m *SessionManager) Size() int {
 	m.RLock()
 	defer m.RUnlock()
 
-	return len(m.sessions)
+	return m.sizeLocked()
+}
+
+// Closed server entries drain in-flight ingress without counting as activity.
+func (m *SessionManager) sizeLocked() int {
+	active := 0
+	for _, s := range m.sessions {
+		if !s.closed {
+			active++
+		}
+	}
+	return active
 }
 
 func (m *SessionManager) Count() int {
@@ -51,7 +60,7 @@ func (m *SessionManager) Count() int {
 	return int(m.count)
 }
 
-func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer) *Session {
+func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer, transferType protocol.TransferType) *Session {
 	m.Lock()
 	defer m.Unlock()
 
@@ -64,11 +73,12 @@ func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, ou
 
 	m.count++
 	s := &Session{
-		input:  input,
-		output: output,
-		ID:     m.count,
-		parent: m,
-		done:   done.New(),
+		transferType: transferType,
+		input:        input,
+		output:       output,
+		ID:           m.count,
+		parent:       m,
+		done:         done.New(),
 	}
 	m.sessions[s.ID] = s
 	return s
@@ -85,26 +95,6 @@ func (m *SessionManager) Add(s *Session) bool {
 	m.count++
 	m.sessions[s.ID] = s
 	return true
-}
-
-func (m *SessionManager) Remove(locked bool, id uint16) {
-	if !locked {
-		m.Lock()
-		defer m.Unlock()
-	}
-	locked = true
-
-	if m.closed {
-		return
-	}
-
-	delete(m.sessions, id)
-
-	/*
-		if len(m.sessions) == 0 {
-			m.sessions = make(map[uint16]*Session, 16)
-		}
-	*/
 }
 
 func (m *SessionManager) Get(id uint16) (*Session, bool) {
@@ -127,7 +117,7 @@ func (m *SessionManager) CloseIfNoSessionAndIdle(checkSize int, checkCount int) 
 		return true
 	}
 
-	if len(m.sessions) != 0 || checkSize != 0 || checkCount != int(m.count) {
+	if m.sizeLocked() != 0 || checkSize != 0 || checkCount != int(m.count) {
 		return false
 	}
 
@@ -139,19 +129,17 @@ func (m *SessionManager) CloseIfNoSessionAndIdle(checkSize int, checkCount int) 
 
 func (m *SessionManager) Close() error {
 	m.Lock()
-	defer m.Unlock()
-
 	if m.closed {
+		m.Unlock()
 		return nil
 	}
-
 	m.closed = true
-
-	for _, s := range m.sessions {
-		s.Close(true)
-	}
-
+	sessions := m.sessions
 	m.sessions = nil
+	m.Unlock()
+	for _, current := range sessions {
+		current.Close()
+	}
 	return nil
 }
 
@@ -163,52 +151,78 @@ type Session struct {
 	ID           uint16
 	transferType protocol.TransferType
 	closed       bool
+	keepUntilEnd bool // server ingress identity survives logical close until END returns
 	done         *done.Instance
 	XUDP         *XUDP
+	onClose      func(bool) // immutable direct response completion, set before admission
+}
+
+// ReadMultiBuffer keeps retained XUDP reads inside their admitted generation.
+func (s *Session) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if s.XUDP == nil {
+		return s.input.ReadMultiBuffer()
+	}
+	s.XUDP.readAccess.Lock()
+	defer s.XUDP.readAccess.Unlock()
+	if s.done.Done() {
+		return nil, io.EOF
+	}
+	return s.input.ReadMultiBuffer()
 }
 
 // Close closes all resources associated with this session.
-func (s *Session) Close(locked bool) error {
-	if !locked {
-		s.parent.Lock()
-		defer s.parent.Unlock()
-	}
-	locked = true
+func (s *Session) Close() error { s.close(true); return nil }
+
+// close atomically chooses logical completion and its reason, then notifies the
+// response owner outside the registry lock. It never waits for physical output.
+func (s *Session) close(failed bool) {
+	s.parent.Lock()
 	if s.closed {
-		return nil
+		s.parent.Unlock()
+		return
 	}
 	s.closed = true
 	if s.done != nil {
 		s.done.Close()
 	}
+	if !s.keepUntilEnd && s.parent.sessions[s.ID] == s {
+		delete(s.parent.sessions, s.ID)
+	}
 	if s.XUDP == nil {
+		s.parent.Unlock()
 		common.Interrupt(s.input)
 		common.Close(s.output)
-	} else {
-		// Stop existing handle(), then trigger writer.Close().
-		// Note that s.output may be dispatcher.SizeStatWriter.
-		s.input.(*pipe.Reader).ReturnAnError(io.EOF)
-		runtime.Gosched()
-		// If the error set by ReturnAnError still exists, clear it.
-		s.input.(*pipe.Reader).Recover()
-		XUDPManager.Lock()
-		if s.XUDP.Status == Active {
-			s.XUDP.Expire = time.Now().Add(time.Minute)
-			s.XUDP.Status = Expiring
-			errors.LogDebug(context.Background(), "XUDP put ", s.XUDP.GlobalID)
+		if s.onClose != nil {
+			s.onClose(failed)
 		}
-		XUDPManager.Unlock()
+		return
 	}
-	s.parent.Remove(locked, s.ID)
-	return nil
+	// Retained XUDP rebind still joins detach through the parent lock.
+	defer s.parent.Unlock()
+	// Wake and join only an admitted read, never a carrier DATA or END write.
+	input := s.input.(*pipe.Reader)
+	input.ReturnAnError(io.EOF)
+	s.XUDP.readAccess.Lock()
+	input.Recover()
+	s.XUDP.readAccess.Unlock()
+	XUDPManager.Lock()
+	if s.XUDP.Status == Active {
+		s.XUDP.Expire = time.Now().Add(time.Minute)
+		s.XUDP.Status = Expiring
+		errors.LogDebug(context.Background(), "XUDP put ", s.XUDP.GlobalID)
+	}
+	XUDPManager.Unlock()
+	return
 }
 
-// NewReader creates a buf.Reader based on the transfer type of this Session.
-func (s *Session) NewReader(reader *buf.BufferedReader, dest *net.Destination) buf.Reader {
-	if s.transferType == protocol.TransferTypeStream {
-		return NewStreamReader(reader)
+// endWritten releases only this ingress identity; the peer may already have
+// reused its ID after observing END but before the physical write returned.
+func (s *Session) endWritten() {
+	s.parent.Lock()
+	defer s.parent.Unlock()
+	if s.parent.sessions[s.ID] == s {
+		delete(s.parent.sessions, s.ID)
 	}
-	return NewPacketReader(reader, dest)
 }
 
 const (
@@ -218,10 +232,11 @@ const (
 )
 
 type XUDP struct {
-	GlobalID [8]byte
-	Status   uint64
-	Expire   time.Time
-	Mux      *Session
+	readAccess sync.Mutex
+	GlobalID   [8]byte
+	Status     uint64
+	Expire     time.Time
+	Mux        *Session
 }
 
 func (x *XUDP) Interrupt() {

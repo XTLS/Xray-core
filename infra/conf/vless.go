@@ -17,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/inbound"
-	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vless/outbound"
 	"google.golang.org/protobuf/proto"
 )
@@ -243,7 +242,7 @@ type MultiplexConfig struct {
 	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
 }
 
-func (c *MultiplexConfig) Build() (*multiplex.Config, error) {
+func (c *MultiplexConfig) Build() (*vless.Multiplex, error) {
 	switch c.XudpProxyUDP443 {
 	case "":
 		c.XudpProxyUDP443 = "reject"
@@ -251,7 +250,7 @@ func (c *MultiplexConfig) Build() (*multiplex.Config, error) {
 	default:
 		return nil, errors.New(`unknown "xudpProxyUDP443": `, c.XudpProxyUDP443)
 	}
-	return &multiplex.Config{Concurrency: int32(c.Concurrency), XudpConcurrency: int32(c.XudpConcurrency), XudpProxyUDP443: c.XudpProxyUDP443}, nil
+	return &vless.Multiplex{Concurrency: int32(c.Concurrency), XudpConcurrency: int32(c.XudpConcurrency), XudpProxyUDP443: c.XudpProxyUDP443}, nil
 }
 
 type VLessOutboundVnext struct {

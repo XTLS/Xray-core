@@ -286,10 +286,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if request.Command == protocol.RequestCommandMux {
 		uplinkReader, uplinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
 		downlinkReader, downlinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
-		worker, err := multiplex.NewServerWorker(ctx, dispatcher, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
-		if err != nil {
-			return err
-		}
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
 		defer worker.Close()
 		link = &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}
 	} else {

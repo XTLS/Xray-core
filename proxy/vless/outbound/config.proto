@@ -7,9 +7,9 @@ option java_package = "com.xray.proxy.vless.outbound";
 option java_multiple_files = true;
 
 import "common/protocol/server_spec.proto";
-import "proxy/vless/multiplex/config.proto";
+import "proxy/vless/account.proto";
 
 message Config {
   xray.common.protocol.ServerEndpoint vnext = 1;
-  xray.proxy.vless.multiplex.Config multiplex = 2;
+  xray.proxy.vless.Multiplex multiplex = 2;
 }

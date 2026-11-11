@@ -15,18 +15,3 @@ message Control {
   State state = 1;
   bytes random = 99;
 }
-
-message BridgeConfig {
-  string tag = 1;
-  string domain = 2;
-}
-
-message PortalConfig {
-  string tag = 1;
-  string domain = 2;
-}
-
-message Config {
-  repeated BridgeConfig bridge_config = 1;
-  repeated PortalConfig portal_config = 2;
-}

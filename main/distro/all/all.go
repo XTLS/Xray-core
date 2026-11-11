@@ -26,7 +26,6 @@ import (
 	_ "github.com/xtls/xray-core/app/policy"
 	_ "github.com/xtls/xray-core/app/router"
 	_ "github.com/xtls/xray-core/app/stats"
-	_ "github.com/xtls/xray-core/proxy/vless/reverse"
 
 	// Fix dependency cycle caused by core import in internet package
 	_ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"

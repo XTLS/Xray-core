@@ -58,18 +58,8 @@ message SenderConfig {
   xray.common.net.IPOrDomain via = 1;
   xray.transport.internet.StreamConfig stream_settings = 2;
   reserved 3;
-  MultiplexingConfig multiplex_settings = 4;
+  // Recognize obsolete length-delimited settings and report migration.
+  optional bytes deprecated_multiplex_settings = 4 [deprecated = true];
   string via_cidr = 5;
   xray.transport.internet.DomainStrategy target_strategy = 6;
-}
-
-message MultiplexingConfig {
-  // Whether or not Mux is enabled.
-  bool enabled = 1;
-  // Max number of concurrent connections that one Mux connection can handle.
-  int32 concurrency = 2;
-  // Transport XUDP in another Mux.
-  int32 xudpConcurrency = 3;
-  // "reject" (default), "allow" or "skip".
-  string xudpProxyUDP443 = 4;
 }
