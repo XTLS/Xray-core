@@ -447,8 +447,10 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	if start != nil {
+		receiveLimit := 64 * 1024
 		bufferWriter.SetFlushNext()
 		if request.Command == protocol.RequestCommandRvs {
+			receiveLimit = 2 * buf.Size
 			if requestAddons.Flow == vless.XRV {
 				if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{nil}); err != nil {
 					return err
@@ -458,7 +460,6 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 				return err
 			}
 		}
-		carrier.activity = timer
 		var ok bool
 		carrier.gate, ok = serverWriter.(*buf.BufferedWriter)
 		if !ok {
@@ -470,7 +471,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		if !opening.Stop() {
 			return context.DeadlineExceeded
 		}
-		reader, writer := pipe.New(pipe.WithSizeLimit(64 * 1024))
+		reader, writer := pipe.New(pipe.WithSizeLimit(int32(receiveLimit)))
 		carrier.reader = reader
 		defer reader.Interrupt()
 		go func() {
