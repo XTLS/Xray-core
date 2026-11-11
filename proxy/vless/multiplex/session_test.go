@@ -1,9 +1,9 @@
 package multiplex_test
 
 import (
-	"github.com/xtls/xray-core/common/protocol"
 	"testing"
 
+	"github.com/xtls/xray-core/common/protocol"
 	. "github.com/xtls/xray-core/proxy/vless/multiplex"
 )
 
