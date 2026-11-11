@@ -12,7 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/testing/mocks"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -25,7 +25,7 @@ func TestIncrementalPickerFailure(t *testing.T) {
 	mockWorkerFactory := mocks.NewMuxClientWorkerFactory(mockCtl)
 	mockWorkerFactory.EXPECT().Create().Return(nil, errors.New("test"))
 
-	picker := mux.IncrementalWorkerPicker{
+	picker := multiplex.IncrementalWorkerPicker{
 		Factory: mockWorkerFactory,
 	}
 
@@ -39,7 +39,7 @@ func TestClientWorkerEOF(t *testing.T) {
 	reader, writer := pipe.New(pipe.WithoutSizeLimit())
 	common.Must(writer.Close())
 
-	worker, err := mux.NewClientWorker(transport.Link{Reader: reader, Writer: writer}, mux.ClientStrategy{})
+	worker, err := multiplex.NewClientWorker(transport.Link{Reader: reader, Writer: writer}, multiplex.ClientStrategy{})
 	common.Must(err)
 
 	time.Sleep(time.Millisecond * 500)
@@ -55,20 +55,20 @@ func TestClientWorkerClose(t *testing.T) {
 	defer mockCtl.Finish()
 
 	r1, w1 := pipe.New(pipe.WithoutSizeLimit())
-	worker1, err := mux.NewClientWorker(transport.Link{
+	worker1, err := multiplex.NewClientWorker(transport.Link{
 		Reader: r1,
 		Writer: w1,
-	}, mux.ClientStrategy{
+	}, multiplex.ClientStrategy{
 		MaxConcurrency: 4,
 		MaxConnection:  4,
 	})
 	common.Must(err)
 
 	r2, w2 := pipe.New(pipe.WithoutSizeLimit())
-	worker2, err := mux.NewClientWorker(transport.Link{
+	worker2, err := multiplex.NewClientWorker(transport.Link{
 		Reader: r2,
 		Writer: w2,
-	}, mux.ClientStrategy{
+	}, multiplex.ClientStrategy{
 		MaxConcurrency: 4,
 		MaxConnection:  4,
 	})
@@ -80,10 +80,10 @@ func TestClientWorkerClose(t *testing.T) {
 		factory.EXPECT().Create().Return(worker2, nil),
 	)
 
-	picker := &mux.IncrementalWorkerPicker{
+	picker := &multiplex.IncrementalWorkerPicker{
 		Factory: factory,
 	}
-	manager := &mux.ClientManager{
+	manager := &multiplex.ClientManager{
 		Picker: picker,
 	}
 
@@ -120,7 +120,7 @@ func TestClientWorkerClose(t *testing.T) {
 func TestClientWorkerUDPSource(t *testing.T) {
 	downR, downW := pipe.New(pipe.WithoutSizeLimit())
 	upR, upW := pipe.New(pipe.WithoutSizeLimit())
-	worker, err := mux.NewClientWorker(transport.Link{Reader: downR, Writer: upW}, mux.ClientStrategy{})
+	worker, err := multiplex.NewClientWorker(transport.Link{Reader: downR, Writer: upW}, multiplex.ClientStrategy{})
 	common.Must(err)
 
 	inR, inW := pipe.New(pipe.WithoutSizeLimit())
@@ -143,7 +143,7 @@ func TestClientWorkerUDPSource(t *testing.T) {
 		net.UDPDestination(net.DomainAddress("example.com"), 2222),
 		net.UDPDestination(net.ParseAddress("3.3.3.3"), 3333),
 	}
-	w := mux.NewResponseWriter(1, downW, protocol.TransferTypePacket)
+	w := multiplex.NewResponseWriter(1, downW, protocol.TransferTypePacket)
 	var got buf.MultiBuffer
 	for i := range srcs {
 		b := buf.New()

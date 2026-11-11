@@ -6,14 +6,14 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
-	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 )
 
 func BenchmarkFrameWrite(b *testing.B) {
-	frame := mux.FrameMetadata{
+	frame := multiplex.FrameMetadata{
 		Target:        net.TCPDestination(net.DomainAddress("www.example.com"), net.Port(80)),
 		SessionID:     1,
-		SessionStatus: mux.SessionStatusNew,
+		SessionStatus: multiplex.SessionStatusNew,
 	}
 	writer := buf.New()
 	defer writer.Release()

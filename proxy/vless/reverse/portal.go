@@ -13,19 +13,22 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/features"
+	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/features/outbound"
-	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 	"google.golang.org/protobuf/proto"
 )
 
 type Portal struct {
-	ohm    outbound.Manager
-	tag    string
-	domain string
-	picker *StaticMuxPicker
-	client *mux.ClientManager
+	observer features.Feature
+	ohm      outbound.Manager
+	tag      string
+	domain   string
+	picker   *StaticPicker
+	client   *multiplex.ClientManager
 }
 
 func NewPortal(config *PortalConfig, ohm outbound.Manager) (*Portal, error) {
@@ -37,30 +40,73 @@ func NewPortal(config *PortalConfig, ohm outbound.Manager) (*Portal, error) {
 		return nil, errors.New("portal domain is empty")
 	}
 
-	picker, err := NewStaticMuxPicker()
-	if err != nil {
-		return nil, err
-	}
+	picker := NewStaticPicker()
 
 	return &Portal{
 		ohm:    ohm,
 		tag:    config.Tag,
 		domain: config.Domain,
 		picker: picker,
-		client: &mux.ClientManager{
+		client: &multiplex.ClientManager{
 			Picker: picker,
 		},
 	}, nil
 }
 
+func NewVLESSPortal(tag string, observer features.Feature) *Portal {
+	picker := NewStaticPicker()
+	return &Portal{tag: tag, observer: observer, picker: picker, client: &multiplex.ClientManager{Picker: picker}}
+}
+
+func (p *Portal) Tag() string                          { return p.tag }
+func (p *Portal) SenderSettings() *serial.TypedMessage { return nil }
+func (p *Portal) ProxySettings() *serial.TypedMessage  { return nil }
+func (p *Portal) Dispatch(ctx context.Context, link *transport.Link) {
+	if err := p.HandleConnection(ctx, link); err != nil {
+		errors.LogInfoInner(ctx, err, "failed to process reverse connection")
+		common.Interrupt(link.Writer)
+		common.Interrupt(link.Reader)
+	}
+}
+
+func (p *Portal) Accept(ctx context.Context, link *transport.Link) error {
+	client, err := multiplex.NewClientWorker(*link, multiplex.ClientStrategy{})
+	if err != nil {
+		return errors.New("failed to create multiplex client worker").Base(err)
+	}
+	worker, err := NewPortalWorker(client)
+	if err != nil {
+		client.Close()
+		return errors.New("failed to create portal worker").Base(err)
+	}
+	p.picker.AddWorker(worker)
+	if observer, ok := p.observer.(extension.BurstObservatory); ok {
+		go observer.Check([]string{p.tag})
+	}
+	if _, ok := link.Reader.(*pipe.Reader); !ok || p.domain == "" {
+		defer client.Close()
+		select {
+		case <-ctx.Done():
+		case <-client.WaitClosed():
+		}
+	}
+	return nil
+}
+
 func (p *Portal) Start() error {
+	if p.ohm == nil {
+		return nil
+	}
 	return p.ohm.AddHandler(context.Background(), &Outbound{
-		portal: p,
-		tag:    p.tag,
+		Portal: p,
 	})
 }
 
 func (p *Portal) Close() error {
+	p.picker.Close()
+	if p.ohm == nil {
+		return nil
+	}
 	return p.ohm.RemoveHandler(context.Background(), p.tag)
 }
 
@@ -72,25 +118,10 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 	}
 
 	if isDomain(ob.Target, p.domain) {
-		muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
-		if err != nil {
-			return errors.New("failed to create mux client worker").Base(err)
-		}
-
-		worker, err := NewPortalWorker(muxClient)
-		if err != nil {
-			return errors.New("failed to create portal worker").Base(err)
-		}
-
-		p.picker.AddWorker(worker)
-
-		if _, ok := link.Reader.(*pipe.Reader); !ok {
-			select {
-			case <-ctx.Done():
-			case <-muxClient.WaitClosed():
-			}
-		}
-		return nil
+		return p.Accept(ctx, link)
+	}
+	if p.domain == "" {
+		ctx = session.ContextWithIsReverseMux(ctx, true)
 	}
 
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
@@ -102,20 +133,7 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 }
 
 type Outbound struct {
-	portal *Portal
-	tag    string
-}
-
-func (o *Outbound) Tag() string {
-	return o.tag
-}
-
-func (o *Outbound) Dispatch(ctx context.Context, link *transport.Link) {
-	if err := o.portal.HandleConnection(ctx, link); err != nil {
-		errors.LogInfoInner(ctx, err, "failed to process reverse connection")
-		common.Interrupt(link.Writer)
-		common.Interrupt(link.Reader)
-	}
+	*Portal
 }
 
 func (o *Outbound) Start() error {
@@ -126,33 +144,24 @@ func (o *Outbound) Close() error {
 	return nil
 }
 
-// SenderSettings implements outbound.Handler.
-func (o *Outbound) SenderSettings() *serial.TypedMessage {
-	return nil
-}
-
-// ProxySettings implements outbound.Handler.
-func (o *Outbound) ProxySettings() *serial.TypedMessage {
-	return nil
-}
-
-type StaticMuxPicker struct {
+type StaticPicker struct {
+	closed  bool
 	access  sync.Mutex
 	workers []*PortalWorker
 	cTask   *task.Periodic
 }
 
-func NewStaticMuxPicker() (*StaticMuxPicker, error) {
-	p := &StaticMuxPicker{}
+func NewStaticPicker() *StaticPicker {
+	p := &StaticPicker{}
 	p.cTask = &task.Periodic{
 		Execute:  p.cleanup,
 		Interval: time.Second * 30,
 	}
 	p.cTask.Start()
-	return p, nil
+	return p
 }
 
-func (p *StaticMuxPicker) cleanup() error {
+func (p *StaticPicker) cleanup() error {
 	p.access.Lock()
 	defer p.access.Unlock()
 
@@ -172,11 +181,11 @@ func (p *StaticMuxPicker) cleanup() error {
 	return nil
 }
 
-func (p *StaticMuxPicker) PickAvailable(context.Context) (*mux.ClientWorker, error) {
+func (p *StaticPicker) PickAvailable(context.Context) (*multiplex.ClientWorker, error) {
 	p.access.Lock()
 	defer p.access.Unlock()
 
-	if len(p.workers) == 0 {
+	if p.closed || len(p.workers) == 0 {
 		return nil, errors.New("empty worker list")
 	}
 
@@ -214,15 +223,30 @@ func (p *StaticMuxPicker) PickAvailable(context.Context) (*mux.ClientWorker, err
 	return nil, errors.New("no mux client worker available")
 }
 
-func (p *StaticMuxPicker) AddWorker(worker *PortalWorker) {
+func (p *StaticPicker) AddWorker(worker *PortalWorker) {
 	p.access.Lock()
 	defer p.access.Unlock()
 
+	if p.closed {
+		worker.Close()
+		return
+	}
 	p.workers = append(p.workers, worker)
 }
 
+func (p *StaticPicker) Close() {
+	p.cTask.Close()
+	p.access.Lock()
+	defer p.access.Unlock()
+	p.closed = true
+	for _, worker := range p.workers {
+		worker.Close()
+	}
+	p.workers = nil
+}
+
 type PortalWorker struct {
-	client   *mux.ClientWorker
+	client   *multiplex.ClientWorker
 	control  *task.Periodic
 	writer   buf.Writer
 	reader   buf.Reader
@@ -231,7 +255,7 @@ type PortalWorker struct {
 	timer    *signal.ActivityTimer
 }
 
-func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
+func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
 	opt := []pipe.Option{pipe.WithSizeLimit(16 * 1024)}
 	uplinkReader, uplinkWriter := pipe.New(opt...)
 	downlinkReader, downlinkWriter := pipe.New(opt...)
@@ -263,6 +287,12 @@ func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 	}
 	w.control.Start()
 	return w, nil
+}
+
+func (w *PortalWorker) Close() {
+	w.client.Close()
+	w.control.Close()
+	w.timer.SetTimeout(0)
 }
 
 func (w *PortalWorker) heartbeat() error {

@@ -21,7 +21,7 @@ import (
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
-	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport"
@@ -286,7 +286,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if request.Command == protocol.RequestCommandMux {
 		uplinkReader, uplinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
 		downlinkReader, downlinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
-		worker, err := mux.NewServerWorker(ctx, dispatcher, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
+		worker, err := multiplex.NewServerWorker(ctx, dispatcher, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
 		if err != nil {
 			return err
 		}

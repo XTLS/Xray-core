@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 )
 
 // MuxClientWorkerFactory is a mock of ClientWorkerFactory interface
@@ -35,10 +35,10 @@ func (m *MuxClientWorkerFactory) EXPECT() *MuxClientWorkerFactoryMockRecorder {
 }
 
 // Create mocks base method
-func (m *MuxClientWorkerFactory) Create() (*mux.ClientWorker, error) {
+func (m *MuxClientWorkerFactory) Create() (*multiplex.ClientWorker, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create")
-	ret0, _ := ret[0].(*mux.ClientWorker)
+	ret0, _ := ret[0].(*multiplex.ClientWorker)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

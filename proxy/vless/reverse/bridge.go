@@ -2,6 +2,7 @@ package reverse
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -10,7 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/features/routing"
-	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 	"google.golang.org/protobuf/proto"
@@ -18,6 +19,10 @@ import (
 
 // Bridge is a component in reverse proxy, that relays connections from Portal to local address.
 type Bridge struct {
+	ctx         context.Context
+	cancel      context.CancelFunc
+	open        func(context.Context, func(context.Context, *transport.Link) error) error
+	access      sync.Mutex
 	dispatcher  routing.Dispatcher
 	tag         string
 	domain      string
@@ -39,11 +44,19 @@ func NewBridge(config *BridgeConfig, dispatcher routing.Dispatcher) (*Bridge, er
 		tag:        config.Tag,
 		domain:     config.Domain,
 	}
+	b.ctx, b.cancel = context.WithCancel(context.Background())
 	b.monitorTask = &task.Periodic{
 		Execute:  b.monitor,
 		Interval: time.Second * 2,
 	}
 	return b, nil
+}
+
+func NewVLESSBridge(ctx context.Context, tag string, dispatcher routing.Dispatcher, open func(context.Context, func(context.Context, *transport.Link) error) error) *Bridge {
+	b := &Bridge{tag: tag, dispatcher: dispatcher, open: open}
+	b.ctx, b.cancel = context.WithCancel(ctx)
+	b.monitorTask = &task.Periodic{Execute: b.monitor, Interval: 2 * time.Second}
+	return b
 }
 
 func (b *Bridge) cleanup() {
@@ -66,6 +79,11 @@ func (b *Bridge) cleanup() {
 }
 
 func (b *Bridge) monitor() error {
+	b.access.Lock()
+	defer b.access.Unlock()
+	if err := b.ctx.Err(); err != nil {
+		return err
+	}
 	b.cleanup()
 
 	var numConnections uint32
@@ -79,7 +97,7 @@ func (b *Bridge) monitor() error {
 	}
 
 	if numWorker == 0 || numConnections/numWorker > 16 {
-		worker, err := NewBridgeWorker(b.domain, b.tag, b.dispatcher)
+		worker, err := b.newWorker()
 		if err != nil {
 			errors.LogWarningInner(context.Background(), err, "failed to create bridge worker")
 			return nil
@@ -90,17 +108,61 @@ func (b *Bridge) monitor() error {
 	return nil
 }
 
+func (b *Bridge) newWorker() (*BridgeWorker, error) {
+	if b.open == nil {
+		return NewBridgeWorker(b.domain, b.tag, b.dispatcher)
+	}
+	w := &BridgeWorker{Tag: b.tag, Dispatcher: b.dispatcher}
+	ready := make(chan error, 1)
+	go func() {
+		err := b.open(b.ctx, func(ctx context.Context, link *transport.Link) error {
+			worker, err := multiplex.NewServerWorker(session.ContextWithIsReverseMux(ctx, true), w, link)
+			if err != nil {
+				return err
+			}
+			w.Worker = worker
+			defer worker.Close()
+			ready <- nil
+			select {
+			case <-ctx.Done():
+			case <-worker.WaitClosed():
+			}
+			return nil
+		})
+		if err != nil {
+			ready <- err
+		}
+	}()
+	if err := <-ready; err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
 func (b *Bridge) Start() error {
+	if err := b.ctx.Err(); err != nil {
+		return err
+	}
 	return b.monitorTask.Start()
 }
 
 func (b *Bridge) Close() error {
-	return b.monitorTask.Close()
+	b.cancel()
+	err := b.monitorTask.Close()
+	b.access.Lock()
+	defer b.access.Unlock()
+	for _, w := range b.workers {
+		w.Worker.Close()
+		if w.Timer != nil {
+			w.Timer.SetTimeout(0)
+		}
+	}
+	return err
 }
 
 type BridgeWorker struct {
 	Tag        string
-	Worker     *mux.ServerWorker
+	Worker     *multiplex.ServerWorker
 	Dispatcher routing.Dispatcher
 	State      Control_State
 	Timer      *signal.ActivityTimer
@@ -125,7 +187,7 @@ func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWo
 		Tag:        tag,
 	}
 
-	worker, err := mux.NewServerWorker(context.Background(), w, link)
+	worker, err := multiplex.NewServerWorker(context.Background(), w, link)
 	if err != nil {
 		return nil, err
 	}
