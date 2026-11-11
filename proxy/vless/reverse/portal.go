@@ -31,7 +31,7 @@ type Portal struct {
 	client   *multiplex.ClientManager
 }
 
-func NewPortal(config *PortalConfig, ohm outbound.Manager) (*Portal, error) {
+func newLegacyPortal(config *PortalConfig, ohm outbound.Manager) (*Portal, error) {
 	if config.Tag == "" {
 		return nil, errors.New("portal tag is empty")
 	}
@@ -40,20 +40,13 @@ func NewPortal(config *PortalConfig, ohm outbound.Manager) (*Portal, error) {
 		return nil, errors.New("portal domain is empty")
 	}
 
-	picker := NewStaticPicker()
-
-	return &Portal{
-		ohm:    ohm,
-		tag:    config.Tag,
-		domain: config.Domain,
-		picker: picker,
-		client: &multiplex.ClientManager{
-			Picker: picker,
-		},
-	}, nil
+	p := NewPortal(config.Tag, nil)
+	p.ohm = ohm
+	p.domain = config.Domain
+	return p, nil
 }
 
-func NewVLESSPortal(tag string, observer features.Feature) *Portal {
+func NewPortal(tag string, observer features.Feature) *Portal {
 	picker := NewStaticPicker()
 	return &Portal{tag: tag, observer: observer, picker: picker, client: &multiplex.ClientManager{Picker: picker}}
 }
@@ -249,7 +242,6 @@ type PortalWorker struct {
 	client   *multiplex.ClientWorker
 	control  *task.Periodic
 	writer   buf.Writer
-	reader   buf.Reader
 	draining bool
 	counter  uint32
 	timer    *signal.ActivityTimer
@@ -258,7 +250,6 @@ type PortalWorker struct {
 func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
 	opt := []pipe.Option{pipe.WithSizeLimit(16 * 1024)}
 	uplinkReader, uplinkWriter := pipe.New(opt...)
-	downlinkReader, downlinkWriter := pipe.New(opt...)
 
 	ctx := context.Background()
 	outbounds := []*session.Outbound{{
@@ -267,7 +258,7 @@ func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
 	ctx = session.ContextWithOutbounds(ctx, outbounds)
 	f := client.Dispatch(ctx, &transport.Link{
 		Reader: uplinkReader,
-		Writer: downlinkWriter,
+		Writer: buf.Discard,
 	}, false)
 	if !f {
 		return nil, errors.New("unable to dispatch control connection")
@@ -277,7 +268,6 @@ func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
 	}
 	w := &PortalWorker{
 		client: client,
-		reader: downlinkReader,
 		writer: uplinkWriter,
 		timer:  signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour), // // prevent leak
 	}
@@ -313,7 +303,6 @@ func (w *PortalWorker) heartbeat() error {
 
 		defer func() {
 			common.Close(w.writer)
-			common.Interrupt(w.reader)
 			w.writer = nil
 		}()
 	}

@@ -30,8 +30,8 @@ type Bridge struct {
 	monitorTask *task.Periodic
 }
 
-// NewBridge creates a new Bridge instance.
-func NewBridge(config *BridgeConfig, dispatcher routing.Dispatcher) (*Bridge, error) {
+// newLegacyBridge creates a Bridge from the legacy protobuf configuration.
+func newLegacyBridge(config *BridgeConfig, dispatcher routing.Dispatcher) (*Bridge, error) {
 	if config.Tag == "" {
 		return nil, errors.New("bridge tag is empty")
 	}
@@ -39,20 +39,12 @@ func NewBridge(config *BridgeConfig, dispatcher routing.Dispatcher) (*Bridge, er
 		return nil, errors.New("bridge domain is empty")
 	}
 
-	b := &Bridge{
-		dispatcher: dispatcher,
-		tag:        config.Tag,
-		domain:     config.Domain,
-	}
-	b.ctx, b.cancel = context.WithCancel(context.Background())
-	b.monitorTask = &task.Periodic{
-		Execute:  b.monitor,
-		Interval: time.Second * 2,
-	}
+	b := NewBridge(context.Background(), config.Tag, dispatcher, nil)
+	b.domain = config.Domain
 	return b, nil
 }
 
-func NewVLESSBridge(ctx context.Context, tag string, dispatcher routing.Dispatcher, open func(context.Context, func(context.Context, *transport.Link) error) error) *Bridge {
+func NewBridge(ctx context.Context, tag string, dispatcher routing.Dispatcher, open func(context.Context, func(context.Context, *transport.Link) error) error) *Bridge {
 	b := &Bridge{tag: tag, dispatcher: dispatcher, open: open}
 	b.ctx, b.cancel = context.WithCancel(ctx)
 	b.monitorTask = &task.Periodic{Execute: b.monitor, Interval: 2 * time.Second}
