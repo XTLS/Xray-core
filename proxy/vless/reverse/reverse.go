@@ -42,7 +42,7 @@ type Reverse struct {
 
 func (r *Reverse) Init(config *Config, d routing.Dispatcher, ohm outbound.Manager) error {
 	for _, bConfig := range config.BridgeConfig {
-		b, err := NewBridge(bConfig, d)
+		b, err := newLegacyBridge(bConfig, d)
 		if err != nil {
 			return err
 		}
@@ -50,7 +50,7 @@ func (r *Reverse) Init(config *Config, d routing.Dispatcher, ohm outbound.Manage
 	}
 
 	for _, pConfig := range config.PortalConfig {
-		p, err := NewPortal(pConfig, ohm)
+		p, err := newLegacyPortal(pConfig, ohm)
 		if err != nil {
 			return err
 		}

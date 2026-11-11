@@ -113,7 +113,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 				SniffingRequest: request,
 			})
 		}
-		handler.reverse = reverse.NewVLESSBridge(rvsCtx, a.Reverse.Tag,
+		handler.reverse = reverse.NewBridge(rvsCtx, a.Reverse.Tag,
 			v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 			func(ctx context.Context, start func(context.Context, *transport.Link) error) error {
 				ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{

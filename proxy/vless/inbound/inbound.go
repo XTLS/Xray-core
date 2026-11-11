@@ -198,7 +198,7 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*reverse.Portal, error) {
 	}
 	r := h.outboundHandlerManager.GetHandler(a.Reverse.Tag)
 	if r == nil {
-		r = reverse.NewVLESSPortal(a.Reverse.Tag, h.observer)
+		r = reverse.NewPortal(a.Reverse.Tag, h.observer)
 		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
 			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
 		}
