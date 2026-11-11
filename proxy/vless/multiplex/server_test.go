@@ -9,7 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
-	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -72,10 +72,10 @@ func TestRegressionOutboundLeak(t *testing.T) {
 	}
 
 	muxServerUplink, muxServerDownlink := newLinkPair()
-	_, err := mux.NewServerWorker(serverCtx, &dispatcher, muxServerUplink)
+	_, err := multiplex.NewServerWorker(serverCtx, &dispatcher, muxServerUplink)
 	common.Must(err)
 
-	client, err := mux.NewClientWorker(*muxServerDownlink, mux.ClientStrategy{})
+	client, err := multiplex.NewClientWorker(*muxServerDownlink, multiplex.ClientStrategy{})
 	common.Must(err)
 
 	clientCtx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{

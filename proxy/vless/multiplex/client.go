@@ -22,6 +22,112 @@ type ClientManager struct {
 	Picker WorkerPicker
 }
 
+// Client owns the VLESS stream pools. A nil configuration disables multiplexing.
+type Client struct {
+	config *Config
+	tcp    *ClientManager
+	udp    *ClientManager
+}
+
+func NewClient(ctx context.Context, config *Config, network string, open func(context.Context, func(context.Context, *transport.Link) error) error) *Client {
+	c := &Client{config: config}
+	manager := func(concurrency int32) *ClientManager {
+		return &ClientManager{Picker: &IncrementalWorkerPicker{Factory: &clientFactory{
+			ctx: ctx, open: open,
+			strategy: ClientStrategy{MaxConcurrency: uint32(concurrency), MaxConnection: 1024},
+		}}}
+	}
+	concurrency := config.Concurrency
+	if concurrency == 0 {
+		concurrency = 8
+	}
+	if concurrency > 0 {
+		if network == "xdrive" {
+			concurrency = max(concurrency, 128)
+		}
+		c.tcp = manager(concurrency)
+	}
+	if config.XudpConcurrency > 0 {
+		c.udp = manager(config.XudpConcurrency)
+	}
+	return c
+}
+
+func (c *Client) Close() {
+	if c.tcp != nil {
+		common.Close(c.tcp.Picker)
+	}
+	if c.udp != nil {
+		common.Close(c.udp.Picker)
+	}
+}
+
+func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, error) {
+	if c == nil {
+		return false, nil
+	}
+	manager := c.tcp
+	outbounds := session.OutboundsFromContext(ctx)
+	target := outbounds[len(outbounds)-1].Target
+	if target.Network == net.Network_UDP {
+		if target.Port == 443 {
+			switch c.config.XudpProxyUDP443 {
+			case "reject", "":
+				return true, errors.New("XUDP rejected UDP/443 traffic")
+			case "skip":
+				return false, nil
+			}
+		}
+		if c.config.XudpConcurrency < 0 {
+			return false, nil
+		}
+		if c.udp != nil {
+			manager = c.udp
+		}
+	}
+	if manager == nil {
+		return false, nil
+	}
+	return true, manager.Dispatch(ctx, link, true)
+}
+
+type clientFactory struct {
+	ctx      context.Context
+	open     func(context.Context, func(context.Context, *transport.Link) error) error
+	strategy ClientStrategy
+}
+
+func (f *clientFactory) Create() (*ClientWorker, error) {
+	type result struct {
+		worker *ClientWorker
+		err    error
+	}
+	ready := make(chan result, 1)
+	ctx := session.ContextWithOutbounds(f.ctx, []*session.Outbound{{
+		Target: net.TCPDestination(net.DomainAddress("v1.mux.cool"), 9527),
+	}})
+	go func() {
+		err := f.open(ctx, func(ctx context.Context, link *transport.Link) error {
+			worker, err := NewClientWorker(*link, f.strategy)
+			if err != nil {
+				return err
+			}
+			defer worker.Close()
+			ready <- result{worker: worker}
+			select {
+			case <-ctx.Done():
+			case <-worker.WaitClosed():
+			}
+			return nil
+		})
+		if err != nil {
+			ready <- result{err: err}
+		}
+	}()
+	r := <-ready
+	return r.worker, r.err
+}
+
 // Dispatch waits for the child when the caller owns its link lifetime.
 func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link, wait bool) error {
 	for i := 0; i < 16; i++ {

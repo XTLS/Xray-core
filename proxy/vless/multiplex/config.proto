@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package xray.proxy.vless.multiplex;
+option csharp_namespace = "Xray.Proxy.Vless.Multiplex";
+option go_package = "github.com/xtls/xray-core/proxy/vless/multiplex";
+option java_package = "com.xray.proxy.vless.multiplex";
+option java_multiple_files = true;
+
+message Config {
+  int32 concurrency = 1;
+  int32 xudpConcurrency = 2;
+  string xudpProxyUDP443 = 3;
+}

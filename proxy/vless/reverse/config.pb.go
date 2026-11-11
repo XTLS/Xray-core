@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.12
 // 	protoc        (unknown)
-// source: app/reverse/config.proto
+// source: proxy/vless/reverse/config.proto
 
 package reverse
 
@@ -51,11 +51,11 @@ func (x Control_State) String() string {
 }
 
 func (Control_State) Descriptor() protoreflect.EnumDescriptor {
-	return file_app_reverse_config_proto_enumTypes[0].Descriptor()
+	return file_proxy_vless_reverse_config_proto_enumTypes[0].Descriptor()
 }
 
 func (Control_State) Type() protoreflect.EnumType {
-	return &file_app_reverse_config_proto_enumTypes[0]
+	return &file_proxy_vless_reverse_config_proto_enumTypes[0]
 }
 
 func (x Control_State) Number() protoreflect.EnumNumber {
@@ -64,7 +64,7 @@ func (x Control_State) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Control_State.Descriptor instead.
 func (Control_State) EnumDescriptor() ([]byte, []int) {
-	return file_app_reverse_config_proto_rawDescGZIP(), []int{0, 0}
+	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{0, 0}
 }
 
 type Control struct {
@@ -77,7 +77,7 @@ type Control struct {
 
 func (x *Control) Reset() {
 	*x = Control{}
-	mi := &file_app_reverse_config_proto_msgTypes[0]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -89,7 +89,7 @@ func (x *Control) String() string {
 func (*Control) ProtoMessage() {}
 
 func (x *Control) ProtoReflect() protoreflect.Message {
-	mi := &file_app_reverse_config_proto_msgTypes[0]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -102,7 +102,7 @@ func (x *Control) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Control.ProtoReflect.Descriptor instead.
 func (*Control) Descriptor() ([]byte, []int) {
-	return file_app_reverse_config_proto_rawDescGZIP(), []int{0}
+	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Control) GetState() Control_State {
@@ -129,7 +129,7 @@ type BridgeConfig struct {
 
 func (x *BridgeConfig) Reset() {
 	*x = BridgeConfig{}
-	mi := &file_app_reverse_config_proto_msgTypes[1]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -141,7 +141,7 @@ func (x *BridgeConfig) String() string {
 func (*BridgeConfig) ProtoMessage() {}
 
 func (x *BridgeConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_app_reverse_config_proto_msgTypes[1]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -154,7 +154,7 @@ func (x *BridgeConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BridgeConfig.ProtoReflect.Descriptor instead.
 func (*BridgeConfig) Descriptor() ([]byte, []int) {
-	return file_app_reverse_config_proto_rawDescGZIP(), []int{1}
+	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *BridgeConfig) GetTag() string {
@@ -181,7 +181,7 @@ type PortalConfig struct {
 
 func (x *PortalConfig) Reset() {
 	*x = PortalConfig{}
-	mi := &file_app_reverse_config_proto_msgTypes[2]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -193,7 +193,7 @@ func (x *PortalConfig) String() string {
 func (*PortalConfig) ProtoMessage() {}
 
 func (x *PortalConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_app_reverse_config_proto_msgTypes[2]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -206,7 +206,7 @@ func (x *PortalConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PortalConfig.ProtoReflect.Descriptor instead.
 func (*PortalConfig) Descriptor() ([]byte, []int) {
-	return file_app_reverse_config_proto_rawDescGZIP(), []int{2}
+	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *PortalConfig) GetTag() string {
@@ -233,7 +233,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_app_reverse_config_proto_msgTypes[3]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -245,7 +245,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_app_reverse_config_proto_msgTypes[3]
+	mi := &file_proxy_vless_reverse_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -258,7 +258,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_app_reverse_config_proto_rawDescGZIP(), []int{3}
+	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Config) GetBridgeConfig() []*BridgeConfig {
@@ -275,11 +275,11 @@ func (x *Config) GetPortalConfig() []*PortalConfig {
 	return nil
 }
 
-var File_app_reverse_config_proto protoreflect.FileDescriptor
+var File_proxy_vless_reverse_config_proto protoreflect.FileDescriptor
 
-const file_app_reverse_config_proto_rawDesc = "" +
+const file_proxy_vless_reverse_config_proto_rawDesc = "" +
 	"\n" +
-	"\x18app/reverse/config.proto\x12\x10xray.app.reverse\"x\n" +
+	" proxy/vless/reverse/config.proto\x12\x10xray.app.reverse\"x\n" +
 	"\aControl\x125\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1f.xray.app.reverse.Control.StateR\x05state\x12\x16\n" +
 	"\x06random\x18c \x01(\fR\x06random\"\x1e\n" +
@@ -295,31 +295,31 @@ const file_app_reverse_config_proto_rawDesc = "" +
 	"\x06domain\x18\x02 \x01(\tR\x06domain\"\x92\x01\n" +
 	"\x06Config\x12C\n" +
 	"\rbridge_config\x18\x01 \x03(\v2\x1e.xray.app.reverse.BridgeConfigR\fbridgeConfig\x12C\n" +
-	"\rportal_config\x18\x02 \x03(\v2\x1e.xray.app.reverse.PortalConfigR\fportalConfigBV\n" +
-	"\x16com.xray.proxy.reverseP\x01Z%github.com/xtls/xray-core/app/reverse\xaa\x02\x12Xray.Proxy.Reverseb\x06proto3"
+	"\rportal_config\x18\x02 \x03(\v2\x1e.xray.app.reverse.PortalConfigR\fportalConfigB^\n" +
+	"\x16com.xray.proxy.reverseP\x01Z-github.com/xtls/xray-core/proxy/vless/reverse\xaa\x02\x12Xray.Proxy.Reverseb\x06proto3"
 
 var (
-	file_app_reverse_config_proto_rawDescOnce sync.Once
-	file_app_reverse_config_proto_rawDescData []byte
+	file_proxy_vless_reverse_config_proto_rawDescOnce sync.Once
+	file_proxy_vless_reverse_config_proto_rawDescData []byte
 )
 
-func file_app_reverse_config_proto_rawDescGZIP() []byte {
-	file_app_reverse_config_proto_rawDescOnce.Do(func() {
-		file_app_reverse_config_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_app_reverse_config_proto_rawDesc), len(file_app_reverse_config_proto_rawDesc)))
+func file_proxy_vless_reverse_config_proto_rawDescGZIP() []byte {
+	file_proxy_vless_reverse_config_proto_rawDescOnce.Do(func() {
+		file_proxy_vless_reverse_config_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proxy_vless_reverse_config_proto_rawDesc), len(file_proxy_vless_reverse_config_proto_rawDesc)))
 	})
-	return file_app_reverse_config_proto_rawDescData
+	return file_proxy_vless_reverse_config_proto_rawDescData
 }
 
-var file_app_reverse_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_app_reverse_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_app_reverse_config_proto_goTypes = []any{
+var file_proxy_vless_reverse_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_proxy_vless_reverse_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proxy_vless_reverse_config_proto_goTypes = []any{
 	(Control_State)(0),   // 0: xray.app.reverse.Control.State
 	(*Control)(nil),      // 1: xray.app.reverse.Control
 	(*BridgeConfig)(nil), // 2: xray.app.reverse.BridgeConfig
 	(*PortalConfig)(nil), // 3: xray.app.reverse.PortalConfig
 	(*Config)(nil),       // 4: xray.app.reverse.Config
 }
-var file_app_reverse_config_proto_depIdxs = []int32{
+var file_proxy_vless_reverse_config_proto_depIdxs = []int32{
 	0, // 0: xray.app.reverse.Control.state:type_name -> xray.app.reverse.Control.State
 	2, // 1: xray.app.reverse.Config.bridge_config:type_name -> xray.app.reverse.BridgeConfig
 	3, // 2: xray.app.reverse.Config.portal_config:type_name -> xray.app.reverse.PortalConfig
@@ -330,27 +330,27 @@ var file_app_reverse_config_proto_depIdxs = []int32{
 	0, // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_app_reverse_config_proto_init() }
-func file_app_reverse_config_proto_init() {
-	if File_app_reverse_config_proto != nil {
+func init() { file_proxy_vless_reverse_config_proto_init() }
+func file_proxy_vless_reverse_config_proto_init() {
+	if File_proxy_vless_reverse_config_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_reverse_config_proto_rawDesc), len(file_app_reverse_config_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_vless_reverse_config_proto_rawDesc), len(file_proxy_vless_reverse_config_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_app_reverse_config_proto_goTypes,
-		DependencyIndexes: file_app_reverse_config_proto_depIdxs,
-		EnumInfos:         file_app_reverse_config_proto_enumTypes,
-		MessageInfos:      file_app_reverse_config_proto_msgTypes,
+		GoTypes:           file_proxy_vless_reverse_config_proto_goTypes,
+		DependencyIndexes: file_proxy_vless_reverse_config_proto_depIdxs,
+		EnumInfos:         file_proxy_vless_reverse_config_proto_enumTypes,
+		MessageInfos:      file_proxy_vless_reverse_config_proto_msgTypes,
 	}.Build()
-	File_app_reverse_config_proto = out.File
-	file_app_reverse_config_proto_goTypes = nil
-	file_app_reverse_config_proto_depIdxs = nil
+	File_proxy_vless_reverse_config_proto = out.File
+	file_proxy_vless_reverse_config_proto_goTypes = nil
+	file_proxy_vless_reverse_config_proto_depIdxs = nil
 }
