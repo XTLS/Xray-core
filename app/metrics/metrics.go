@@ -29,6 +29,7 @@ type MetricsHandler struct {
 	listen       string
 	tcpListener  xnet.Listener
 	listener     *OutboundListener
+	server       *http.Server
 }
 
 // NewMetricsHandler creates a new MetricsHandler based on the given config.
@@ -50,7 +51,8 @@ func (p *MetricsHandler) Type() interface{} {
 }
 
 func (p *MetricsHandler) Start() error {
-	handler := p.httpHandler()
+	server := &http.Server{Handler: p.httpHandler()}
+	p.server = server
 
 	// direct listen a port if listen is set
 	if p.listen != "" {
@@ -61,7 +63,7 @@ func (p *MetricsHandler) Start() error {
 		p.tcpListener = TCPlistener
 		errors.LogInfo(context.Background(), "Metrics server listening on ", p.listen)
 
-		go p.serve(TCPlistener, handler)
+		go p.serve(TCPlistener, server)
 	}
 
 	if p.tag == "" {
@@ -77,7 +79,7 @@ func (p *MetricsHandler) Start() error {
 	}
 	p.listener = listener
 
-	go p.serve(listener, handler)
+	go p.serve(listener, server)
 
 	if err := p.ohm.RemoveHandler(context.Background(), p.tag); err != nil {
 		errors.LogInfo(context.Background(), "failed to remove existing handler")
@@ -106,6 +108,12 @@ func (p *MetricsHandler) Close() error {
 		errs = append(errs, p.listener.Close())
 		p.listener = nil
 	}
+	if p.server != nil {
+		if err := p.server.Close(); !isClosedListenerError(err) {
+			errs = append(errs, err)
+		}
+		p.server = nil
+	}
 	if p.ohm != nil && p.tag != "" {
 		if err := p.ohm.RemoveHandler(context.Background(), p.tag); err != nil {
 			errors.LogInfo(context.Background(), "failed to remove metrics handler")
@@ -114,8 +122,8 @@ func (p *MetricsHandler) Close() error {
 	return errors.Combine(errs...)
 }
 
-func (p *MetricsHandler) serve(listener xnet.Listener, handler http.Handler) {
-	if err := http.Serve(listener, handler); err != nil && !isClosedListenerError(err) {
+func (p *MetricsHandler) serve(listener xnet.Listener, server *http.Server) {
+	if err := server.Serve(listener); err != nil && !isClosedListenerError(err) {
 		errors.LogErrorInner(context.Background(), err, "failed to start metrics server")
 	}
 }
