@@ -2,13 +2,13 @@ package buf
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common"
 	"io"
 	"net"
 	"os"
 	"syscall"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport/internet/stat"
