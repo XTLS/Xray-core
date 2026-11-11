@@ -102,6 +102,10 @@ func (l *generalLogger) run() {
 }
 
 func (l *generalLogger) Handle(msg Message) {
+	if l.done.Done() {
+		return
+	}
+
 	select {
 	case l.buffer <- msg:
 	default:
@@ -109,13 +113,21 @@ func (l *generalLogger) Handle(msg Message) {
 
 	select {
 	case <-l.access.Wait():
+		if l.done.Done() {
+			l.access.Signal()
+			return
+		}
 		go l.run()
 	default:
 	}
 }
 
 func (l *generalLogger) Close() error {
-	return l.done.Close()
+	l.done.Close()
+	// The worker returns its permit after closing the writer.
+	<-l.access.Wait()
+	l.access.Signal()
+	return nil
 }
 
 type consoleLogWriter struct {
