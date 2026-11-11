@@ -1,4 +1,4 @@
-package mux_test
+package multiplex_test
 
 import (
 	"context"
@@ -9,10 +9,10 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/testing/mocks"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -29,7 +29,7 @@ func TestIncrementalPickerFailure(t *testing.T) {
 		Factory: mockWorkerFactory,
 	}
 
-	_, err := picker.PickAvailable()
+	_, err := picker.PickAvailable(context.Background())
 	if err == nil {
 		t.Error("expected error, but nil")
 	}
@@ -44,7 +44,7 @@ func TestClientWorkerEOF(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 500)
 
-	f := worker.Dispatch(context.Background(), nil)
+	f := worker.Dispatch(context.Background(), nil, false)
 	if f {
 		t.Error("expected failed dispatching, but actually not")
 	}
@@ -94,7 +94,7 @@ func TestClientWorkerClose(t *testing.T) {
 	common.Must(manager.Dispatch(ctx1, &transport.Link{
 		Reader: tr1,
 		Writer: tw1,
-	}))
+	}, false))
 	defer tw1.Close()
 
 	common.Must(w1.Close())
@@ -111,7 +111,7 @@ func TestClientWorkerClose(t *testing.T) {
 	common.Must(manager.Dispatch(ctx2, &transport.Link{
 		Reader: tr2,
 		Writer: tw2,
-	}))
+	}, false))
 	defer tw2.Close()
 
 	common.Must(w2.Close())
@@ -128,7 +128,7 @@ func TestClientWorkerUDPSource(t *testing.T) {
 	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
 		Target: net.UDPDestination(net.ParseAddress("8.8.8.8"), 53),
 	}})
-	if !worker.Dispatch(ctx, &transport.Link{Reader: inR, Writer: outW}) {
+	if !worker.Dispatch(ctx, &transport.Link{Reader: inR, Writer: outW}, false) {
 		t.Fatal("failed to dispatch")
 	}
 	b := buf.New()

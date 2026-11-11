@@ -1,12 +1,12 @@
-package mux_test
+package multiplex_test
 
 import (
 	"testing"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
+	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 )
 
 func BenchmarkFrameWrite(b *testing.B) {

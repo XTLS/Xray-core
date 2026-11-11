@@ -1,8 +1,7 @@
-package mux
+package multiplex
 
 import (
 	"context"
-	goerrors "errors"
 	"io"
 	"sync"
 	"time"
@@ -14,26 +13,23 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/xudp"
-	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type ClientManager struct {
-	Enabled bool // whether mux is enabled from user config
-	Picker  WorkerPicker
+	Picker WorkerPicker
 }
 
-func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) error {
+// Dispatch waits for the child when the caller owns its link lifetime.
+func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link, wait bool) error {
 	for i := 0; i < 16; i++ {
-		worker, err := m.Picker.PickAvailable()
+		worker, err := m.Picker.PickAvailable(ctx)
 		if err != nil {
 			return err
 		}
-		if worker.Dispatch(ctx, link) {
+		if worker.Dispatch(ctx, link, wait) {
 			return nil
 		}
 	}
@@ -42,27 +38,38 @@ func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link) erro
 }
 
 type WorkerPicker interface {
-	PickAvailable() (*ClientWorker, error)
+	PickAvailable(context.Context) (*ClientWorker, error)
 }
 
 type IncrementalWorkerPicker struct {
 	Factory ClientWorkerFactory
 
-	access      sync.Mutex
-	workers     []*ClientWorker
-	cleanupTask *task.Periodic
+	access       sync.Mutex
+	workers      []*ClientWorker
+	cleanupTimer *time.Timer
+	closed       bool
+	pending      *workerCreation
 }
 
-func (p *IncrementalWorkerPicker) cleanupFunc() error {
+type workerCreation struct {
+	done   chan struct{}
+	worker *ClientWorker
+	err    error
+}
+
+func (p *IncrementalWorkerPicker) cleanupFunc() {
 	p.access.Lock()
 	defer p.access.Unlock()
 
-	if len(p.workers) == 0 {
-		return errors.New("no worker")
+	if p.closed {
+		return
 	}
-
 	p.cleanup()
-	return nil
+	if len(p.workers) == 0 {
+		p.cleanupTimer = nil
+		return
+	}
+	p.cleanupTimer.Reset(30 * time.Second)
 }
 
 func (p *IncrementalWorkerPicker) cleanup() {
@@ -85,87 +92,89 @@ func (p *IncrementalWorkerPicker) findAvailable() int {
 	return -1
 }
 
-func (p *IncrementalWorkerPicker) pickInternal() (*ClientWorker, bool, error) {
+func (p *IncrementalWorkerPicker) PickAvailable(ctx context.Context) (*ClientWorker, error) {
 	p.access.Lock()
-	defer p.access.Unlock()
 
+	if p.closed {
+		p.access.Unlock()
+		return nil, io.ErrClosedPipe
+	}
 	idx := p.findAvailable()
 	if idx >= 0 {
 		n := len(p.workers)
 		if n > 1 && idx != n-1 {
 			p.workers[n-1], p.workers[idx] = p.workers[idx], p.workers[n-1]
 		}
-		return p.workers[idx], false, nil
+		worker := p.workers[idx]
+		p.access.Unlock()
+		return worker, nil
 	}
 
 	p.cleanup()
 
-	worker, err := p.Factory.Create()
-	if err != nil {
-		return nil, false, err
+	if p.pending == nil {
+		p.pending = &workerCreation{done: make(chan struct{})}
+		go p.create(p.pending)
 	}
-	p.workers = append(p.workers, worker)
-
-	if p.cleanupTask == nil {
-		p.cleanupTask = &task.Periodic{
-			Interval: time.Second * 30,
-			Execute:  p.cleanupFunc,
-		}
+	pending := p.pending
+	p.access.Unlock()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-pending.done:
+		return pending.worker, pending.err
 	}
-
-	return worker, true, nil
 }
 
-func (p *IncrementalWorkerPicker) PickAvailable() (*ClientWorker, error) {
-	worker, start, err := p.pickInternal()
-	if start {
-		common.Must(p.cleanupTask.Start())
+func (p *IncrementalWorkerPicker) create(pending *workerCreation) {
+	worker, err := p.Factory.Create()
+	p.access.Lock()
+	if p.closed {
+		p.access.Unlock()
+		if worker != nil {
+			worker.Close()
+		}
+		return
 	}
+	pending.worker, pending.err = worker, err
+	if err == nil {
+		p.workers = append(p.workers, worker)
+	}
+	if p.cleanupTimer == nil {
+		p.cleanupTimer = time.AfterFunc(30*time.Second, p.cleanupFunc)
+	}
+	p.pending = nil
+	close(pending.done)
+	p.access.Unlock()
+}
 
-	return worker, err
+func (p *IncrementalWorkerPicker) Close() error {
+	if p == nil {
+		return nil
+	}
+	p.access.Lock()
+	p.closed = true
+	if p.pending != nil {
+		p.pending.err = io.ErrClosedPipe
+		close(p.pending.done)
+		p.pending = nil
+	}
+	workers := p.workers
+	p.workers = nil
+	if p.cleanupTimer != nil {
+		p.cleanupTimer.Stop()
+		p.cleanupTimer = nil
+	}
+	p.access.Unlock()
+
+	for _, worker := range workers {
+		common.Must(worker.Close())
+	}
+	return nil
 }
 
 type ClientWorkerFactory interface {
 	Create() (*ClientWorker, error)
-}
-
-type DialingWorkerFactory struct {
-	Proxy    proxy.Outbound
-	Dialer   internet.Dialer
-	Strategy ClientStrategy
-}
-
-func (f *DialingWorkerFactory) Create() (*ClientWorker, error) {
-	opts := []pipe.Option{pipe.WithSizeLimit(64 * 1024)}
-	uplinkReader, upLinkWriter := pipe.New(opts...)
-	downlinkReader, downlinkWriter := pipe.New(opts...)
-
-	c, err := NewClientWorker(transport.Link{
-		Reader: downlinkReader,
-		Writer: upLinkWriter,
-	}, f.Strategy)
-	if err != nil {
-		return nil, err
-	}
-
-	go func(p proxy.Outbound, d internet.Dialer, c common.Closable) {
-		outbounds := []*session.Outbound{{
-			Target: net.TCPDestination(muxCoolAddress, muxCoolPort),
-		}}
-		ctx := session.ContextWithOutbounds(context.Background(), outbounds)
-		ctx, cancel := context.WithCancel(ctx)
-
-		if errP := p.Process(ctx, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter}, d); errP != nil {
-			errC := errors.Cause(errP)
-			if !(goerrors.Is(errC, io.EOF) || goerrors.Is(errC, io.ErrClosedPipe) || goerrors.Is(errC, context.Canceled)) {
-				errors.LogInfoInner(ctx, errP, "failed to handler mux client connection")
-			}
-		}
-		common.Must(c.Close())
-		cancel()
-	}(f.Proxy, f.Dialer, c.done)
-
-	return c, nil
 }
 
 type ClientStrategy struct {
@@ -181,16 +190,13 @@ type ClientWorker struct {
 	strategy       ClientStrategy
 }
 
-var (
-	muxCoolAddress = net.DomainAddress("v1.mux.cool")
-	muxCoolPort    = net.Port(9527)
-)
-
 // NewClientWorker creates a new mux.Client.
 func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
-	writer := buf.NewBufferedWriter(stream.Writer)
-	writer.SetBuffered(false)
-	stream.Writer = writer
+	if _, ok := stream.Writer.(*buf.BufferedWriter); !ok {
+		writer := buf.NewBufferedWriter(stream.Writer)
+		writer.SetBuffered(false)
+		stream.Writer = writer
+	}
 	c := &ClientWorker{
 		sessionManager: NewSessionManager(),
 		link:           stream,
@@ -311,20 +317,20 @@ func (m *ClientWorker) IsFull() bool {
 	return false
 }
 
-func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link) bool {
-	if m.IsFull() {
+func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link, wait bool) bool {
+	if ctx.Err() != nil || m.IsFull() {
 		return false
 	}
-
-	sm := m.sessionManager
-	s := sm.Allocate(&m.strategy, link.Reader, link.Writer)
+	s := m.sessionManager.Allocate(&m.strategy, link.Reader, link.Writer)
 	if s == nil {
 		return false
 	}
 	go fetchInput(ctx, s, m.link.Writer)
-	if _, ok := link.Reader.(*pipe.Reader); !ok {
+	_, pipeReader := link.Reader.(*pipe.Reader)
+	if wait || !pipeReader {
 		select {
 		case <-ctx.Done():
+			s.Close(false)
 		case <-s.done.Wait():
 		}
 	}

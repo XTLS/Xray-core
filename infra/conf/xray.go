@@ -399,6 +399,9 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err := validateXDrive(ts, senderSettings.StreamSettings, senderSettings.MultiplexSettings, nil); err != nil {
 		return nil, err
 	}
+	if c.MuxSettings != nil && c.MuxSettings.Enabled && !strings.EqualFold(c.Protocol, "vless") {
+		return nil, errors.New("mux.cool is only supported by VLESS outbound")
+	}
 	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
 		return nil, err
 	}

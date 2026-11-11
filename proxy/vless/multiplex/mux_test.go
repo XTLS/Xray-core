@@ -1,4 +1,4 @@
-package mux_test
+package multiplex_test
 
 import (
 	"io"
@@ -7,10 +7,10 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	. "github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	. "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 

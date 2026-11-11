@@ -259,14 +259,14 @@ func TestMasqueOutboundConfig(t *testing.T) {
 
 	for _, input := range []string{
 		`{"protocol": "masque", "settings": {"address": "example.com", "port": 443}, "streamSettings": {"network": "masque", "security": "tls"}, "mux": {"enabled": false, "concurrency": -1}}`,
-		`{"protocol": "masque", "settings": {"address": "example.com", "port": 443}, "streamSettings": {"network": "masque", "security": "tls"}, "mux": {"enabled": true}}`,
-		`{"protocol": "masque", "settings": {"address": "example.com", "port": 443}, "streamSettings": {"network": "masque", "security": "tls"}, "mux": {"enabled": true, "concurrency": -1, "xudpConcurrency": 8}}`,
 	} {
 		if err := build(input); err != nil {
 			t.Errorf("%s: %v", input, err)
 		}
 	}
 	for _, input := range []string{
+		`{"protocol": "masque", "settings": {"address": "example.com", "port": 443}, "streamSettings": {"network": "masque", "security": "tls"}, "mux": {"enabled": true}}`,
+		`{"protocol": "masque", "settings": {"address": "example.com", "port": 443}, "streamSettings": {"network": "masque", "security": "tls"}, "mux": {"enabled": true, "concurrency": -1, "xudpConcurrency": 8}}`,
 		`{"protocol": "masque", "settings": {"address": "example.com"}, "streamSettings": {"network": "masque", "security": "tls"}}`,
 		`{"protocol": "freedom", "streamSettings": {"network": "masque", "security": "tls"}}`,
 	} {

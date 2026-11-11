@@ -8,13 +8,13 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/features/outbound"
+	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 	"google.golang.org/protobuf/proto"
@@ -98,7 +98,7 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
 
-	return p.client.Dispatch(ctx, link)
+	return p.client.Dispatch(ctx, link, false)
 }
 
 type Outbound struct {
@@ -172,7 +172,7 @@ func (p *StaticMuxPicker) cleanup() error {
 	return nil
 }
 
-func (p *StaticMuxPicker) PickAvailable() (*mux.ClientWorker, error) {
+func (p *StaticMuxPicker) PickAvailable(context.Context) (*mux.ClientWorker, error) {
 	p.access.Lock()
 	defer p.access.Unlock()
 
@@ -244,7 +244,7 @@ func NewPortalWorker(client *mux.ClientWorker) (*PortalWorker, error) {
 	f := client.Dispatch(ctx, &transport.Link{
 		Reader: uplinkReader,
 		Writer: downlinkWriter,
-	})
+	}, false)
 	if !f {
 		return nil, errors.New("unable to dispatch control connection")
 	}

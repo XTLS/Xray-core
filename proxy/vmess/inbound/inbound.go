@@ -21,9 +21,12 @@ import (
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
+	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type userByEmail struct {
@@ -279,7 +282,19 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-	link, err := dispatcher.Dispatch(ctx, request.Destination())
+	var link *transport.Link
+	if request.Command == protocol.RequestCommandMux {
+		uplinkReader, uplinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
+		downlinkReader, downlinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
+		worker, err := mux.NewServerWorker(ctx, dispatcher, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
+		if err != nil {
+			return err
+		}
+		defer worker.Close()
+		link = &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}
+	} else {
+		link, err = dispatcher.Dispatch(ctx, request.Destination())
+	}
 	if err != nil {
 		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
 	}

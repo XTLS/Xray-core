@@ -16,7 +16,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
@@ -37,6 +36,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
+	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -621,6 +621,19 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
 	}
 
+	if request.Command == protocol.RequestCommandMux {
+		worker, err := mux.NewServerWorker(ctx, dispatch, &transport.Link{Reader: clientReader, Writer: clientWriter})
+		if err != nil {
+			return err
+		}
+		defer worker.Close()
+		select {
+		case <-ctx.Done():
+		case <-worker.WaitClosed():
+		}
+		return nil
+	}
+
 	if err := dispatch.DispatchLink(
 		ctx, request.Destination(), &transport.Link{
 			Reader: clientReader,
@@ -670,7 +683,7 @@ func (r *Reverse) Dispatch(ctx context.Context, link *transport.Link) {
 			link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 			link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		}
-		r.client.Dispatch(session.ContextWithIsReverseMux(ctx, true), link)
+		r.client.Dispatch(session.ContextWithIsReverseMux(ctx, true), link, false)
 	}
 }
 

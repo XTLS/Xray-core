@@ -89,9 +89,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if target.Network == net.Network_UDP {
 		command = protocol.RequestCommandUDP
 	}
-	if target.Address.Family().IsDomain() && target.Address.Domain() == "v1.mux.cool" {
-		command = protocol.RequestCommandMux
-	}
 
 	user := rec.User
 	request := &protocol.RequestHeader{

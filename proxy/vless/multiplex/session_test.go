@@ -1,9 +1,9 @@
-package mux_test
+package multiplex_test
 
 import (
 	"testing"
 
-	. "github.com/xtls/xray-core/common/mux"
+	. "github.com/xtls/xray-core/proxy/vless/multiplex"
 )
 
 func TestSessionManagerAdd(t *testing.T) {

@@ -1,4 +1,4 @@
-package mux
+package multiplex
 
 import (
 	"context"
@@ -13,76 +13,9 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/pipe"
 )
-
-type Server struct {
-	dispatcher routing.Dispatcher
-}
-
-// NewServer creates a new mux.Server.
-func NewServer(ctx context.Context) *Server {
-	s := &Server{}
-	core.RequireFeatures(ctx, func(d routing.Dispatcher) {
-		s.dispatcher = d
-	})
-	return s
-}
-
-// Type implements common.HasType.
-func (s *Server) Type() interface{} {
-	return s.dispatcher.Type()
-}
-
-// Dispatch implements routing.Dispatcher
-func (s *Server) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
-	if dest.Address != muxCoolAddress {
-		return s.dispatcher.Dispatch(ctx, dest)
-	}
-
-	opts := pipe.OptionsFromContext(ctx)
-	uplinkReader, uplinkWriter := pipe.New(opts...)
-	downlinkReader, downlinkWriter := pipe.New(opts...)
-
-	_, err := NewServerWorker(ctx, s.dispatcher, &transport.Link{
-		Reader: uplinkReader,
-		Writer: downlinkWriter,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}, nil
-}
-
-// DispatchLink implements routing.Dispatcher
-func (s *Server) DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error {
-	if dest.Address != muxCoolAddress {
-		return s.dispatcher.DispatchLink(ctx, dest, link)
-	}
-	worker, err := NewServerWorker(ctx, s.dispatcher, link)
-	if err != nil {
-		return err
-	}
-	select {
-	case <-ctx.Done():
-	case <-worker.done.Wait():
-	}
-	return nil
-}
-
-// Start implements common.Runnable.
-func (s *Server) Start() error {
-	return nil
-}
-
-// Close implements common.Closable.
-func (s *Server) Close() error {
-	return nil
-}
 
 type ServerWorker struct {
 	dispatcher     routing.Dispatcher
@@ -93,8 +26,11 @@ type ServerWorker struct {
 }
 
 func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.Link) (*ServerWorker, error) {
-	writer := buf.NewBufferedWriter(link.Writer)
-	writer.SetBuffered(false)
+	writer, ok := link.Writer.(*buf.BufferedWriter)
+	if !ok {
+		writer = buf.NewBufferedWriter(link.Writer)
+		writer.SetBuffered(false)
+	}
 	worker := &ServerWorker{
 		dispatcher:     d,
 		link:           &transport.Link{Reader: link.Reader, Writer: writer},

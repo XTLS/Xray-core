@@ -17,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	xctx "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
@@ -32,12 +31,12 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
+	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
 func init() {
@@ -53,6 +52,11 @@ type Handler struct {
 	cone          bool
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
+	ctx           context.Context
+	stop          context.CancelFunc
+	mux           *mux.ClientManager
+	xudp          *mux.ClientManager
+	muxConfig     *proxymanConfig.MultiplexingConfig
 
 	testpre  uint32
 	initpre  sync.Once
@@ -80,6 +84,8 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		cone:          ctx.Value("cone").(bool),
 	}
+
+	handler.ctx, handler.stop = context.WithCancel(context.Background())
 
 	a := handler.server.User.Account.(*vless.MemoryAccount)
 	if a.Encryption != "" && a.Encryption != "none" {
@@ -121,8 +127,11 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 			Interval: time.Second * 2,
 		}
 		go func() {
-			time.Sleep(2 * time.Second)
-			handler.reverse.Start()
+			select {
+			case <-handler.ctx.Done():
+			case <-time.After(2 * time.Second):
+				handler.reverse.Start()
+			}
 		}()
 	}
 
@@ -133,8 +142,12 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	if h.preConns != nil {
-		close(h.preConns)
+	h.stop()
+	if h.mux != nil {
+		common.Close(h.mux.Picker)
+	}
+	if h.xudp != nil {
+		common.Close(h.xudp.Picker)
 	}
 	if h.reverse != nil {
 		return h.reverse.Close()
@@ -144,6 +157,22 @@ func (h *Handler) Close() error {
 
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
+	if manager, err := h.muxFor(ctx); err != nil {
+		return err
+	} else if manager != nil {
+		return manager.Dispatch(ctx, link, true)
+	}
+	return h.process(ctx, link, dialer, nil)
+}
+
+func (h *Handler) process(ctx context.Context, link *transport.Link, dialer internet.Dialer, start func(context.Context, *transport.Link) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var opening *time.Timer
+	if start != nil {
+		opening = time.AfterFunc(h.policyManager.ForLevel(h.server.User.Level).Timeouts.Handshake, cancel)
+		defer opening.Stop()
+	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() && ob.Target.Address.String() != "v1.rvs.cool" {
@@ -159,24 +188,32 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			h.preConns = make(chan *ConnExpire)
 			for range h.testpre { // TODO: randomize
 				go func() {
-					defer func() { recover() }()
-					ctx := xctx.ContextWithID(context.Background(), session.NewID())
-					for {
+					ctx := xctx.ContextWithID(h.ctx, session.NewID())
+					for ctx.Err() == nil {
 						conn, err := dialer.Dial(ctx, rec.Destination)
 						if err != nil {
 							errors.LogWarningInner(ctx, err, "pre-connect failed")
 							continue
 						}
-						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
-						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
+						select {
+						case <-ctx.Done():
+							conn.Close()
+							return
+						case h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)}:
+						}
+						time.Sleep(time.Millisecond * 200) // TODO: customize & randomize
 					}
 				}()
 			}
 		})
 		for {
-			connTime := <-h.preConns
-			if connTime == nil {
-				return errors.New("closed handler")
+			var connTime *ConnExpire
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-h.ctx.Done():
+				return h.ctx.Err()
+			case connTime = <-h.preConns:
 			}
 			if time.Now().Before(connTime.Expire) {
 				conn = connTime.Conn
@@ -199,6 +236,17 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}
 	defer conn.Close()
+	var carrier *muxCarrier
+	if start != nil {
+		carrier = &muxCarrier{ctx: ctx, cancel: cancel}
+		raw := conn
+		stop := context.AfterFunc(ctx, func() { carrier.stopTransport(raw) })
+		defer stop()
+		defer func() {
+			cancel()
+			carrier.stopTransport(raw)
+		}()
+	}
 
 	iConn := stat.TryUnwrapStatsConn(conn)
 	target := ob.Target
@@ -215,7 +263,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if target.Network == net.Network_UDP {
 		command = protocol.RequestCommandUDP
 	}
-	if target.Address.Family().IsDomain() {
+	if start != nil && target.Address.Family().IsDomain() {
 		switch target.Address.Domain() {
 		case "v1.mux.cool":
 			command = protocol.RequestCommandMux
@@ -289,16 +337,17 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
 	timer := signal.CancelAfterInactivity(ctx, func() {
 		cancel()
 		if newCancel != nil {
 			newCancel()
 		}
 	}, sessionPolicy.Timeouts.ConnectionIdle)
+	defer timer.SetTimeout(0)
+	if carrier != nil {
+		carrier.activity = timer
+	}
 
-	clientReader := link.Reader // .(*pipe.Reader)
-	clientWriter := link.Writer // .(*pipe.Writer)
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
 	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMux
@@ -306,19 +355,38 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Port = net.Port(666)
 	}
 
+	requestWriter := buf.NewWriter(conn)
+	if carrier != nil && requestAddons.Flow == "" {
+		carrier.writer = requestWriter
+		requestWriter = carrier
+	}
+	bufferWriter := buf.NewBufferedWriter(requestWriter)
+	if err := encoding.EncodeRequestHeader(bufferWriter, request, requestAddons); err != nil {
+		return errors.New("failed to encode request header").Base(err)
+	}
+
+	// default: serverWriter := bufferWriter
+	serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
+	if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+		serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
+	}
+
+	if requestAddons.Flow == vless.XRV {
+		if tlsConn, ok := iConn.(*tls.Conn); ok {
+			if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
+				return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version)
+			}
+		} else if utlsConn, ok := iConn.(*tls.UConn); ok {
+			if utlsConn.ConnectionState().Version != utls.VersionTLS13 {
+				return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version)
+			}
+		}
+	}
+
 	postRequest := func() error {
+		clientReader := link.Reader
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
-		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
-		if err := encoding.EncodeRequestHeader(bufferWriter, request, requestAddons); err != nil {
-			return errors.New("failed to encode request header").Base(err)
-		}
-
-		// default: serverWriter := bufferWriter
-		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
-		}
 		timeoutReader, ok := clientReader.(buf.TimeoutReader)
 		if ok {
 			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
@@ -343,17 +411,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to write A request payload").Base(err)
 		}
 
-		if requestAddons.Flow == vless.XRV {
-			if tlsConn, ok := iConn.(*tls.Conn); ok {
-				if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
-					return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version)
-				}
-			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
-				if utlsConn.ConnectionState().Version != utls.VersionTLS13 {
-					return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version)
-				}
-			}
-		}
 		err := buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 		if err != nil {
 			return errors.New("failed to transfer request payload").Base(err)
@@ -366,12 +423,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return nil
 	}
 
-	getResponse := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-
+	openResponse := func() (buf.Reader, error) {
 		responseAddons, err := encoding.DecodeResponseHeader(conn, request)
 		if err != nil {
-			return errors.New("failed to decode response header").Base(err)
+			return nil, errors.New("failed to decode response header").Base(err)
 		}
 
 		// default: serverReader := buf.NewReader(conn)
@@ -385,6 +440,44 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			} else {
 				serverReader = xudp.NewPacketReader(conn)
 			}
+		}
+
+		return serverReader, nil
+	}
+
+	if start != nil {
+		bufferWriter.SetFlushNext()
+		if request.Command == protocol.RequestCommandRvs {
+			if requestAddons.Flow == vless.XRV {
+				if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{nil}); err != nil {
+					return err
+				}
+			}
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return err
+			}
+		}
+		carrier.openResponse, carrier.activity = openResponse, timer
+		var ok bool
+		carrier.gate, ok = serverWriter.(*buf.BufferedWriter)
+		if !ok {
+			carrier.writer = serverWriter
+			carrier.gate = buf.NewBufferedWriter(carrier)
+			carrier.gate.SetBuffered(false)
+		}
+		carrier.ready.Store(true)
+		if !opening.Stop() {
+			return context.DeadlineExceeded
+		}
+		return start(ctx, &transport.Link{Reader: carrier, Writer: carrier.gate})
+	}
+
+	clientWriter := link.Writer
+	getResponse := func() error {
+		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
+		serverReader, err := openResponse()
+		if err != nil {
+			return err
 		}
 
 		if requestAddons.Flow == vless.XRV {
@@ -422,6 +515,9 @@ type Reverse struct {
 }
 
 func (r *Reverse) monitor() error {
+	if err := r.handler.ctx.Err(); err != nil {
+		return err
+	}
 	var activeWorkers []*reverse.BridgeWorker
 	for _, w := range r.workers {
 		if w.IsActive() {
@@ -441,29 +537,38 @@ func (r *Reverse) monitor() error {
 		}
 	}
 	if numWorker == 0 || numConnections/numWorker > 16 {
-		reader1, writer1 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
-		reader2, writer2 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
-		link1 := &transport.Link{Reader: reader1, Writer: writer2}
-		link2 := &transport.Link{Reader: reader2, Writer: writer1}
-		w := &reverse.BridgeWorker{
-			Tag:        r.tag,
-			Dispatcher: r.dispatcher,
-		}
-		worker, err := mux.NewServerWorker(session.ContextWithIsReverseMux(r.ctx, true), w, link1)
-		if err != nil {
-			errors.LogWarningInner(r.ctx, err, "failed to create mux server worker")
-			return nil
-		}
-		w.Worker = worker
-		r.workers = append(r.workers, w)
+		w := &reverse.BridgeWorker{Tag: r.tag, Dispatcher: r.dispatcher}
+		ctx := session.ContextWithOutbounds(r.ctx, []*session.Outbound{{
+			Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
+		}})
+		ctx, cancel := context.WithCancel(ctx)
+		stop := context.AfterFunc(r.handler.ctx, cancel)
+		ready := make(chan error, 1)
 		go func() {
-			ctx := session.ContextWithOutbounds(r.ctx, []*session.Outbound{{
-				Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
-			}})
-			r.handler.Process(ctx, link2, session.FullHandlerFromContext(ctx).(*proxyman.Handler))
-			common.Interrupt(reader1)
-			common.Interrupt(reader2)
+			defer cancel()
+			defer stop()
+			err := r.handler.process(ctx, nil, session.FullHandlerFromContext(ctx).(*proxyman.Handler), func(ctx context.Context, link *transport.Link) error {
+				worker, err := mux.NewServerWorker(session.ContextWithIsReverseMux(ctx, true), w, link)
+				if err != nil {
+					return err
+				}
+				w.Worker = worker
+				defer worker.Close()
+				ready <- nil
+				select {
+				case <-ctx.Done():
+				case <-worker.WaitClosed():
+				}
+				return nil
+			})
+			if err != nil {
+				ready <- err
+			}
 		}()
+		if err := <-ready; err != nil {
+			return err
+		}
+		r.workers = append(r.workers, w)
 	}
 	return nil
 }

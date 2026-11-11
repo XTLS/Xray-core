@@ -1,4 +1,4 @@
-package mux_test
+package multiplex_test
 
 import (
 	"context"
@@ -6,10 +6,10 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/routing"
+	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -84,7 +84,7 @@ func TestRegressionOutboundLeak(t *testing.T) {
 
 	muxClientUplink, muxClientDownlink := newLinkPair()
 
-	ok := client.Dispatch(clientCtx, muxClientUplink)
+	ok := client.Dispatch(clientCtx, muxClientUplink, false)
 	if !ok {
 		t.Error("failed to dispatch")
 	}
