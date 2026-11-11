@@ -119,162 +119,6 @@ func (x *Control) GetRandom() []byte {
 	return nil
 }
 
-type BridgeConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tag           string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
-	Domain        string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BridgeConfig) Reset() {
-	*x = BridgeConfig{}
-	mi := &file_proxy_vless_reverse_config_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BridgeConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BridgeConfig) ProtoMessage() {}
-
-func (x *BridgeConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_vless_reverse_config_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BridgeConfig.ProtoReflect.Descriptor instead.
-func (*BridgeConfig) Descriptor() ([]byte, []int) {
-	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *BridgeConfig) GetTag() string {
-	if x != nil {
-		return x.Tag
-	}
-	return ""
-}
-
-func (x *BridgeConfig) GetDomain() string {
-	if x != nil {
-		return x.Domain
-	}
-	return ""
-}
-
-type PortalConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tag           string                 `protobuf:"bytes,1,opt,name=tag,proto3" json:"tag,omitempty"`
-	Domain        string                 `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PortalConfig) Reset() {
-	*x = PortalConfig{}
-	mi := &file_proxy_vless_reverse_config_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PortalConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PortalConfig) ProtoMessage() {}
-
-func (x *PortalConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_vless_reverse_config_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PortalConfig.ProtoReflect.Descriptor instead.
-func (*PortalConfig) Descriptor() ([]byte, []int) {
-	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *PortalConfig) GetTag() string {
-	if x != nil {
-		return x.Tag
-	}
-	return ""
-}
-
-func (x *PortalConfig) GetDomain() string {
-	if x != nil {
-		return x.Domain
-	}
-	return ""
-}
-
-type Config struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BridgeConfig  []*BridgeConfig        `protobuf:"bytes,1,rep,name=bridge_config,json=bridgeConfig,proto3" json:"bridge_config,omitempty"`
-	PortalConfig  []*PortalConfig        `protobuf:"bytes,2,rep,name=portal_config,json=portalConfig,proto3" json:"portal_config,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Config) Reset() {
-	*x = Config{}
-	mi := &file_proxy_vless_reverse_config_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Config) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Config) ProtoMessage() {}
-
-func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_proxy_vless_reverse_config_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Config.ProtoReflect.Descriptor instead.
-func (*Config) Descriptor() ([]byte, []int) {
-	return file_proxy_vless_reverse_config_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *Config) GetBridgeConfig() []*BridgeConfig {
-	if x != nil {
-		return x.BridgeConfig
-	}
-	return nil
-}
-
-func (x *Config) GetPortalConfig() []*PortalConfig {
-	if x != nil {
-		return x.PortalConfig
-	}
-	return nil
-}
-
 var File_proxy_vless_reverse_config_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_reverse_config_proto_rawDesc = "" +
@@ -286,16 +130,7 @@ const file_proxy_vless_reverse_config_proto_rawDesc = "" +
 	"\x05State\x12\n" +
 	"\n" +
 	"\x06ACTIVE\x10\x00\x12\t\n" +
-	"\x05DRAIN\x10\x01\"8\n" +
-	"\fBridgeConfig\x12\x10\n" +
-	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x16\n" +
-	"\x06domain\x18\x02 \x01(\tR\x06domain\"8\n" +
-	"\fPortalConfig\x12\x10\n" +
-	"\x03tag\x18\x01 \x01(\tR\x03tag\x12\x16\n" +
-	"\x06domain\x18\x02 \x01(\tR\x06domain\"\x92\x01\n" +
-	"\x06Config\x12C\n" +
-	"\rbridge_config\x18\x01 \x03(\v2\x1e.xray.app.reverse.BridgeConfigR\fbridgeConfig\x12C\n" +
-	"\rportal_config\x18\x02 \x03(\v2\x1e.xray.app.reverse.PortalConfigR\fportalConfigB^\n" +
+	"\x05DRAIN\x10\x01B^\n" +
 	"\x16com.xray.proxy.reverseP\x01Z-github.com/xtls/xray-core/proxy/vless/reverse\xaa\x02\x12Xray.Proxy.Reverseb\x06proto3"
 
 var (
@@ -311,23 +146,18 @@ func file_proxy_vless_reverse_config_proto_rawDescGZIP() []byte {
 }
 
 var file_proxy_vless_reverse_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proxy_vless_reverse_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proxy_vless_reverse_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_proxy_vless_reverse_config_proto_goTypes = []any{
-	(Control_State)(0),   // 0: xray.app.reverse.Control.State
-	(*Control)(nil),      // 1: xray.app.reverse.Control
-	(*BridgeConfig)(nil), // 2: xray.app.reverse.BridgeConfig
-	(*PortalConfig)(nil), // 3: xray.app.reverse.PortalConfig
-	(*Config)(nil),       // 4: xray.app.reverse.Config
+	(Control_State)(0), // 0: xray.app.reverse.Control.State
+	(*Control)(nil),    // 1: xray.app.reverse.Control
 }
 var file_proxy_vless_reverse_config_proto_depIdxs = []int32{
 	0, // 0: xray.app.reverse.Control.state:type_name -> xray.app.reverse.Control.State
-	2, // 1: xray.app.reverse.Config.bridge_config:type_name -> xray.app.reverse.BridgeConfig
-	3, // 2: xray.app.reverse.Config.portal_config:type_name -> xray.app.reverse.PortalConfig
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_proxy_vless_reverse_config_proto_init() }
@@ -341,7 +171,7 @@ func file_proxy_vless_reverse_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_vless_reverse_config_proto_rawDesc), len(file_proxy_vless_reverse_config_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

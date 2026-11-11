@@ -328,13 +328,16 @@ func (*OutboundConfig) Descriptor() ([]byte, []int) {
 type SenderConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Send traffic through the given IP. Only IP is allowed.
-	Via               *net.IPOrDomain         `protobuf:"bytes,1,opt,name=via,proto3" json:"via,omitempty"`
-	StreamSettings    *internet.StreamConfig  `protobuf:"bytes,2,opt,name=stream_settings,json=streamSettings,proto3" json:"stream_settings,omitempty"`
-	MultiplexSettings *MultiplexingConfig     `protobuf:"bytes,4,opt,name=multiplex_settings,json=multiplexSettings,proto3" json:"multiplex_settings,omitempty"`
-	ViaCidr           string                  `protobuf:"bytes,5,opt,name=via_cidr,json=viaCidr,proto3" json:"via_cidr,omitempty"`
-	TargetStrategy    internet.DomainStrategy `protobuf:"varint,6,opt,name=target_strategy,json=targetStrategy,proto3,enum=xray.transport.internet.DomainStrategy" json:"target_strategy,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	Via            *net.IPOrDomain        `protobuf:"bytes,1,opt,name=via,proto3" json:"via,omitempty"`
+	StreamSettings *internet.StreamConfig `protobuf:"bytes,2,opt,name=stream_settings,json=streamSettings,proto3" json:"stream_settings,omitempty"`
+	// Recognize obsolete length-delimited settings and report migration.
+	//
+	// Deprecated: Marked as deprecated in app/proxyman/config.proto.
+	DeprecatedMultiplexSettings []byte                  `protobuf:"bytes,4,opt,name=deprecated_multiplex_settings,json=deprecatedMultiplexSettings,proto3,oneof" json:"deprecated_multiplex_settings,omitempty"`
+	ViaCidr                     string                  `protobuf:"bytes,5,opt,name=via_cidr,json=viaCidr,proto3" json:"via_cidr,omitempty"`
+	TargetStrategy              internet.DomainStrategy `protobuf:"varint,6,opt,name=target_strategy,json=targetStrategy,proto3,enum=xray.transport.internet.DomainStrategy" json:"target_strategy,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *SenderConfig) Reset() {
@@ -381,9 +384,10 @@ func (x *SenderConfig) GetStreamSettings() *internet.StreamConfig {
 	return nil
 }
 
-func (x *SenderConfig) GetMultiplexSettings() *MultiplexingConfig {
+// Deprecated: Marked as deprecated in app/proxyman/config.proto.
+func (x *SenderConfig) GetDeprecatedMultiplexSettings() []byte {
 	if x != nil {
-		return x.MultiplexSettings
+		return x.DeprecatedMultiplexSettings
 	}
 	return nil
 }
@@ -400,78 +404,6 @@ func (x *SenderConfig) GetTargetStrategy() internet.DomainStrategy {
 		return x.TargetStrategy
 	}
 	return internet.DomainStrategy(0)
-}
-
-type MultiplexingConfig struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Whether or not Mux is enabled.
-	Enabled bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	// Max number of concurrent connections that one Mux connection can handle.
-	Concurrency int32 `protobuf:"varint,2,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
-	// Transport XUDP in another Mux.
-	XudpConcurrency int32 `protobuf:"varint,3,opt,name=xudpConcurrency,proto3" json:"xudpConcurrency,omitempty"`
-	// "reject" (default), "allow" or "skip".
-	XudpProxyUDP443 string `protobuf:"bytes,4,opt,name=xudpProxyUDP443,proto3" json:"xudpProxyUDP443,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *MultiplexingConfig) Reset() {
-	*x = MultiplexingConfig{}
-	mi := &file_app_proxyman_config_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MultiplexingConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MultiplexingConfig) ProtoMessage() {}
-
-func (x *MultiplexingConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_app_proxyman_config_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MultiplexingConfig.ProtoReflect.Descriptor instead.
-func (*MultiplexingConfig) Descriptor() ([]byte, []int) {
-	return file_app_proxyman_config_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *MultiplexingConfig) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
-}
-
-func (x *MultiplexingConfig) GetConcurrency() int32 {
-	if x != nil {
-		return x.Concurrency
-	}
-	return 0
-}
-
-func (x *MultiplexingConfig) GetXudpConcurrency() int32 {
-	if x != nil {
-		return x.XudpConcurrency
-	}
-	return 0
-}
-
-func (x *MultiplexingConfig) GetXudpProxyUDP443() string {
-	if x != nil {
-		return x.XudpProxyUDP443
-	}
-	return ""
 }
 
 var File_app_proxyman_config_proto protoreflect.FileDescriptor
@@ -498,18 +430,14 @@ const file_app_proxyman_config_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tR\x03tag\x12M\n" +
 	"\x11receiver_settings\x18\x02 \x01(\v2 .xray.common.serial.TypedMessageR\x10receiverSettings\x12G\n" +
 	"\x0eproxy_settings\x18\x03 \x01(\v2 .xray.common.serial.TypedMessageR\rproxySettings\"\x10\n" +
-	"\x0eOutboundConfig\"\xd6\x02\n" +
+	"\x0eOutboundConfig\"\xef\x02\n" +
 	"\fSenderConfig\x12-\n" +
 	"\x03via\x18\x01 \x01(\v2\x1b.xray.common.net.IPOrDomainR\x03via\x12N\n" +
-	"\x0fstream_settings\x18\x02 \x01(\v2%.xray.transport.internet.StreamConfigR\x0estreamSettings\x12T\n" +
-	"\x12multiplex_settings\x18\x04 \x01(\v2%.xray.app.proxyman.MultiplexingConfigR\x11multiplexSettings\x12\x19\n" +
+	"\x0fstream_settings\x18\x02 \x01(\v2%.xray.transport.internet.StreamConfigR\x0estreamSettings\x12K\n" +
+	"\x1ddeprecated_multiplex_settings\x18\x04 \x01(\fB\x02\x18\x01H\x00R\x1bdeprecatedMultiplexSettings\x88\x01\x01\x12\x19\n" +
 	"\bvia_cidr\x18\x05 \x01(\tR\aviaCidr\x12P\n" +
-	"\x0ftarget_strategy\x18\x06 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0etargetStrategyJ\x04\b\x03\x10\x04\"\xa4\x01\n" +
-	"\x12MultiplexingConfig\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\x12 \n" +
-	"\vconcurrency\x18\x02 \x01(\x05R\vconcurrency\x12(\n" +
-	"\x0fxudpConcurrency\x18\x03 \x01(\x05R\x0fxudpConcurrency\x12(\n" +
-	"\x0fxudpProxyUDP443\x18\x04 \x01(\tR\x0fxudpProxyUDP443BU\n" +
+	"\x0ftarget_strategy\x18\x06 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0etargetStrategyB \n" +
+	"\x1e_deprecated_multiplex_settingsJ\x04\b\x03\x10\x04BU\n" +
 	"\x15com.xray.app.proxymanP\x01Z&github.com/xtls/xray-core/app/proxyman\xaa\x02\x11Xray.App.Proxymanb\x06proto3"
 
 var (
@@ -524,7 +452,7 @@ func file_app_proxyman_config_proto_rawDescGZIP() []byte {
 	return file_app_proxyman_config_proto_rawDescData
 }
 
-var file_app_proxyman_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_app_proxyman_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_app_proxyman_config_proto_goTypes = []any{
 	(*InboundConfig)(nil),         // 0: xray.app.proxyman.InboundConfig
 	(*SniffingConfig)(nil),        // 1: xray.app.proxyman.SniffingConfig
@@ -532,33 +460,31 @@ var file_app_proxyman_config_proto_goTypes = []any{
 	(*InboundHandlerConfig)(nil),  // 3: xray.app.proxyman.InboundHandlerConfig
 	(*OutboundConfig)(nil),        // 4: xray.app.proxyman.OutboundConfig
 	(*SenderConfig)(nil),          // 5: xray.app.proxyman.SenderConfig
-	(*MultiplexingConfig)(nil),    // 6: xray.app.proxyman.MultiplexingConfig
-	(*geodata.DomainRule)(nil),    // 7: xray.common.geodata.DomainRule
-	(*geodata.IPRule)(nil),        // 8: xray.common.geodata.IPRule
-	(*net.PortList)(nil),          // 9: xray.common.net.PortList
-	(*net.IPOrDomain)(nil),        // 10: xray.common.net.IPOrDomain
-	(*internet.StreamConfig)(nil), // 11: xray.transport.internet.StreamConfig
-	(*serial.TypedMessage)(nil),   // 12: xray.common.serial.TypedMessage
-	(internet.DomainStrategy)(0),  // 13: xray.transport.internet.DomainStrategy
+	(*geodata.DomainRule)(nil),    // 6: xray.common.geodata.DomainRule
+	(*geodata.IPRule)(nil),        // 7: xray.common.geodata.IPRule
+	(*net.PortList)(nil),          // 8: xray.common.net.PortList
+	(*net.IPOrDomain)(nil),        // 9: xray.common.net.IPOrDomain
+	(*internet.StreamConfig)(nil), // 10: xray.transport.internet.StreamConfig
+	(*serial.TypedMessage)(nil),   // 11: xray.common.serial.TypedMessage
+	(internet.DomainStrategy)(0),  // 12: xray.transport.internet.DomainStrategy
 }
 var file_app_proxyman_config_proto_depIdxs = []int32{
-	7,  // 0: xray.app.proxyman.SniffingConfig.domains_excluded:type_name -> xray.common.geodata.DomainRule
-	8,  // 1: xray.app.proxyman.SniffingConfig.ips_excluded:type_name -> xray.common.geodata.IPRule
-	9,  // 2: xray.app.proxyman.ReceiverConfig.port_list:type_name -> xray.common.net.PortList
-	10, // 3: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
-	11, // 4: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	6,  // 0: xray.app.proxyman.SniffingConfig.domains_excluded:type_name -> xray.common.geodata.DomainRule
+	7,  // 1: xray.app.proxyman.SniffingConfig.ips_excluded:type_name -> xray.common.geodata.IPRule
+	8,  // 2: xray.app.proxyman.ReceiverConfig.port_list:type_name -> xray.common.net.PortList
+	9,  // 3: xray.app.proxyman.ReceiverConfig.listen:type_name -> xray.common.net.IPOrDomain
+	10, // 4: xray.app.proxyman.ReceiverConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
 	1,  // 5: xray.app.proxyman.ReceiverConfig.sniffing_settings:type_name -> xray.app.proxyman.SniffingConfig
-	12, // 6: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
-	12, // 7: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
-	10, // 8: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
-	11, // 9: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
-	6,  // 10: xray.app.proxyman.SenderConfig.multiplex_settings:type_name -> xray.app.proxyman.MultiplexingConfig
-	13, // 11: xray.app.proxyman.SenderConfig.target_strategy:type_name -> xray.transport.internet.DomainStrategy
-	12, // [12:12] is the sub-list for method output_type
-	12, // [12:12] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	11, // 6: xray.app.proxyman.InboundHandlerConfig.receiver_settings:type_name -> xray.common.serial.TypedMessage
+	11, // 7: xray.app.proxyman.InboundHandlerConfig.proxy_settings:type_name -> xray.common.serial.TypedMessage
+	9,  // 8: xray.app.proxyman.SenderConfig.via:type_name -> xray.common.net.IPOrDomain
+	10, // 9: xray.app.proxyman.SenderConfig.stream_settings:type_name -> xray.transport.internet.StreamConfig
+	12, // 10: xray.app.proxyman.SenderConfig.target_strategy:type_name -> xray.transport.internet.DomainStrategy
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_app_proxyman_config_proto_init() }
@@ -566,13 +492,14 @@ func file_app_proxyman_config_proto_init() {
 	if File_app_proxyman_config_proto != nil {
 		return
 	}
+	file_app_proxyman_config_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_app_proxyman_config_proto_rawDesc), len(file_app_proxyman_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

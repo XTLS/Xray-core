@@ -8,7 +8,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
@@ -32,51 +32,25 @@ func newLinkPair() (*transport.Link, *transport.Link) {
 	return uplink, downlink
 }
 
-type TestDispatcher struct {
-	OnDispatch func(ctx context.Context, dest net.Destination) (*transport.Link, error)
-}
-
-func (d *TestDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
-	return d.OnDispatch(ctx, dest)
-}
-
-func (d *TestDispatcher) DispatchLink(ctx context.Context, destination net.Destination, outbound *transport.Link) error {
-	return nil
-}
-
-func (d *TestDispatcher) Start() error {
-	return nil
-}
-
-func (d *TestDispatcher) Close() error {
-	return nil
-}
-
-func (*TestDispatcher) Type() interface{} {
-	return routing.DispatcherType()
-}
-
 func TestRegressionOutboundLeak(t *testing.T) {
 	originalOutbounds := []*session.Outbound{{}}
 	serverCtx := session.ContextWithOutbounds(context.Background(), originalOutbounds)
 
 	websiteUplink, websiteDownlink := newLinkPair()
 
-	dispatcher := TestDispatcher{
-		OnDispatch: func(ctx context.Context, dest net.Destination) (*transport.Link, error) {
-			// emulate what DefaultRouter.Dispatch does, and mutate something on the context
-			ob := session.OutboundsFromContext(ctx)[0]
-			ob.Target = dest
-			return websiteDownlink, nil
-		},
+	dispatch := func(ctx context.Context, dest net.Destination, link *transport.Link) error {
+		// Emulate DefaultDispatcher's context mutation while forwarding real data.
+		ob := session.OutboundsFromContext(ctx)[0]
+		ob.Target = dest
+		return task.Run(ctx,
+			func() error { return buf.Copy(link.Reader, websiteDownlink.Writer) },
+			func() error { return buf.Copy(websiteDownlink.Reader, link.Writer) })
 	}
 
 	muxServerUplink, muxServerDownlink := newLinkPair()
-	_, err := multiplex.NewServerWorker(serverCtx, &dispatcher, muxServerUplink)
-	common.Must(err)
+	multiplex.NewServerWorker(serverCtx, dispatch, muxServerUplink)
 
-	client, err := multiplex.NewClientWorker(*muxServerDownlink, multiplex.ClientStrategy{})
-	common.Must(err)
+	client := multiplex.NewClientWorker(*muxServerDownlink, multiplex.ClientStrategy{})
 
 	clientCtx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
 		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),

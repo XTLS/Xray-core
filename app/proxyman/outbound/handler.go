@@ -113,7 +113,7 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		return nil, errors.New("not an outbound handler")
 	}
 
-	if h.senderSettings != nil && h.senderSettings.MultiplexSettings.GetEnabled() {
+	if h.senderSettings != nil && h.senderSettings.DeprecatedMultiplexSettings != nil {
 		common.Close(proxyHandler)
 		return nil, errors.New("use VLESS settings.multiplex instead of SenderConfig.multiplex_settings")
 	}

@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"strings"
 	"testing"
 
 	"github.com/xtls/xray-core/common/protocol"
@@ -258,7 +259,7 @@ func TestMasqueOutboundConfig(t *testing.T) {
 	}
 
 	for _, input := range []string{
-		`{"protocol": "masque", "settings": {"address": "example.com", "port": 443}, "streamSettings": {"network": "masque", "security": "tls"}, "mux": {"enabled": false, "concurrency": -1}}`,
+		`{"protocol": "masque", "settings": {"address": "example.com", "port": 443}, "streamSettings": {"network": "masque", "security": "tls"}}`,
 	} {
 		if err := build(input); err != nil {
 			t.Errorf("%s: %v", input, err)
@@ -272,6 +273,8 @@ func TestMasqueOutboundConfig(t *testing.T) {
 	} {
 		if err := build(input); err == nil {
 			t.Errorf("expected an error for %s", input)
+		} else if strings.Contains(input, `"mux"`) && !strings.Contains(err.Error(), "VLESS settings.multiplex") {
+			t.Errorf("expected a legacy mux migration error for %s, got %v", input, err)
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package buf
 
 import (
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
 )
 
@@ -36,3 +37,8 @@ func (w *EndpointOverrideWriter) WriteMultiBuffer(mb MultiBuffer) error {
 	}
 	return w.Writer.WriteMultiBuffer(mb)
 }
+
+// Endpoint translation preserves custody of the wrapped native endpoints.
+func (r *EndpointOverrideReader) Interrupt()   { common.Interrupt(r.Reader) }
+func (w *EndpointOverrideWriter) Close() error { return common.Close(w.Writer) }
+func (w *EndpointOverrideWriter) Interrupt()   { common.Interrupt(w.Writer) }

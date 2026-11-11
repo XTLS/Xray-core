@@ -7,6 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
@@ -73,7 +74,7 @@ func TestReaderWriter(t *testing.T) {
 			t.Error("metadata: ", r)
 		}
 
-		data, err := readAll(NewStreamReader(bytesReader))
+		data, err := readAll(crypto.NewChunkStreamReaderWithChunkCount(crypto.PlainChunkSizeParser{}, bytesReader, 1))
 		common.Must(err)
 		if s := data.String(); s != "abcd" {
 			t.Error("data: ", s)
@@ -104,7 +105,7 @@ func TestReaderWriter(t *testing.T) {
 			t.Error("meta: ", r)
 		}
 
-		data, err := readAll(NewStreamReader(bytesReader))
+		data, err := readAll(crypto.NewChunkStreamReaderWithChunkCount(crypto.PlainChunkSizeParser{}, bytesReader, 1))
 		common.Must(err)
 		if s := data.String(); s != "efgh" {
 			t.Error("data: ", s)
@@ -123,7 +124,7 @@ func TestReaderWriter(t *testing.T) {
 			t.Error("meta: ", r)
 		}
 
-		data, err := readAll(NewStreamReader(bytesReader))
+		data, err := readAll(crypto.NewChunkStreamReaderWithChunkCount(crypto.PlainChunkSizeParser{}, bytesReader, 1))
 		common.Must(err)
 		if s := data.String(); s != "x" {
 			t.Error("data: ", s)
@@ -165,7 +166,7 @@ func TestReaderWriter(t *testing.T) {
 			t.Error("meta: ", r)
 		}
 
-		data, err := readAll(NewStreamReader(bytesReader))
+		data, err := readAll(crypto.NewChunkStreamReaderWithChunkCount(crypto.PlainChunkSizeParser{}, bytesReader, 1))
 		common.Must(err)
 		if s := data.String(); s != "y" {
 			t.Error("data: ", s)

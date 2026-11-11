@@ -624,10 +624,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	if request.Command == protocol.RequestCommandMux {
-		worker, err := multiplex.NewServerWorker(ctx, dispatch, &transport.Link{Reader: clientReader, Writer: clientWriter})
-		if err != nil {
-			return err
-		}
+		worker := multiplex.NewServerWorker(ctx, dispatch.DispatchLink, &transport.Link{Reader: clientReader, Writer: clientWriter})
 		defer worker.Close()
 		select {
 		case <-ctx.Done():

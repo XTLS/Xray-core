@@ -8,7 +8,7 @@ package outbound
 
 import (
 	protocol "github.com/xtls/xray-core/common/protocol"
-	multiplex "github.com/xtls/xray-core/proxy/vless/multiplex"
+	vless "github.com/xtls/xray-core/proxy/vless"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -26,7 +26,7 @@ const (
 type Config struct {
 	state         protoimpl.MessageState   `protogen:"open.v1"`
 	Vnext         *protocol.ServerEndpoint `protobuf:"bytes,1,opt,name=vnext,proto3" json:"vnext,omitempty"`
-	Multiplex     *multiplex.Config        `protobuf:"bytes,2,opt,name=multiplex,proto3" json:"multiplex,omitempty"`
+	Multiplex     *vless.Multiplex         `protobuf:"bytes,2,opt,name=multiplex,proto3" json:"multiplex,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -68,7 +68,7 @@ func (x *Config) GetVnext() *protocol.ServerEndpoint {
 	return nil
 }
 
-func (x *Config) GetMultiplex() *multiplex.Config {
+func (x *Config) GetMultiplex() *vless.Multiplex {
 	if x != nil {
 		return x.Multiplex
 	}
@@ -79,10 +79,10 @@ var File_proxy_vless_outbound_config_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_outbound_config_proto_rawDesc = "" +
 	"\n" +
-	"!proxy/vless/outbound/config.proto\x12\x19xray.proxy.vless.outbound\x1a!common/protocol/server_spec.proto\x1a\"proxy/vless/multiplex/config.proto\"\x86\x01\n" +
+	"!proxy/vless/outbound/config.proto\x12\x19xray.proxy.vless.outbound\x1a!common/protocol/server_spec.proto\x1a\x19proxy/vless/account.proto\"\x7f\n" +
 	"\x06Config\x12:\n" +
-	"\x05vnext\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x05vnext\x12@\n" +
-	"\tmultiplex\x18\x02 \x01(\v2\".xray.proxy.vless.multiplex.ConfigR\tmultiplexBm\n" +
+	"\x05vnext\x18\x01 \x01(\v2$.xray.common.protocol.ServerEndpointR\x05vnext\x129\n" +
+	"\tmultiplex\x18\x02 \x01(\v2\x1b.xray.proxy.vless.MultiplexR\tmultiplexBm\n" +
 	"\x1dcom.xray.proxy.vless.outboundP\x01Z.github.com/xtls/xray-core/proxy/vless/outbound\xaa\x02\x19Xray.Proxy.Vless.Outboundb\x06proto3"
 
 var (
@@ -101,11 +101,11 @@ var file_proxy_vless_outbound_config_proto_msgTypes = make([]protoimpl.MessageIn
 var file_proxy_vless_outbound_config_proto_goTypes = []any{
 	(*Config)(nil),                  // 0: xray.proxy.vless.outbound.Config
 	(*protocol.ServerEndpoint)(nil), // 1: xray.common.protocol.ServerEndpoint
-	(*multiplex.Config)(nil),        // 2: xray.proxy.vless.multiplex.Config
+	(*vless.Multiplex)(nil),         // 2: xray.proxy.vless.Multiplex
 }
 var file_proxy_vless_outbound_config_proto_depIdxs = []int32{
 	1, // 0: xray.proxy.vless.outbound.Config.vnext:type_name -> xray.common.protocol.ServerEndpoint
-	2, // 1: xray.proxy.vless.outbound.Config.multiplex:type_name -> xray.proxy.vless.multiplex.Config
+	2, // 1: xray.proxy.vless.outbound.Config.multiplex:type_name -> xray.proxy.vless.Multiplex
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

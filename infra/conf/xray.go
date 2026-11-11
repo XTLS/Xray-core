@@ -107,13 +107,6 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 	}, nil
 }
 
-type MuxConfig struct {
-	Enabled         bool   `json:"enabled"`
-	Concurrency     int16  `json:"concurrency"`
-	XudpConcurrency int16  `json:"xudpConcurrency"`
-	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
-}
-
 type InboundDetourConfig struct {
 	Protocol       string           `json:"protocol"`
 	PortList       *PortList        `json:"port"`
@@ -214,7 +207,7 @@ type OutboundDetourConfig struct {
 	Settings       *json.RawMessage `json:"settings"`
 	StreamSetting  *StreamConfig    `json:"streamSettings"`
 	ProxySettings  *json.RawMessage `json:"proxySettings"`
-	MuxSettings    *MuxConfig       `json:"mux"`
+	MuxSettings    *json.RawMessage `json:"mux"`
 	TargetStrategy string           `json:"targetStrategy"`
 }
 
@@ -368,20 +361,8 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
-	if legacy := c.MuxSettings; legacy != nil {
-		config := &MultiplexConfig{Concurrency: legacy.Concurrency, XudpConcurrency: legacy.XudpConcurrency, XudpProxyUDP443: legacy.XudpProxyUDP443}
-		if _, err := config.Build(); err != nil {
-			return nil, err
-		}
-		if legacy.Enabled {
-			vless, ok := rawConfig.(*VLessOutboundConfig)
-			if ok {
-				if vless.Multiplex != nil {
-					return nil, errors.New("use either mux or VLESS settings.multiplex, not both")
-				}
-				vless.Multiplex = config
-			}
-		}
+	if c.MuxSettings != nil {
+		return nil, errors.PrintRemovedFeatureError(`"mux"`, `"VLESS settings.multiplex"`)
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
@@ -390,9 +371,7 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err := validateXDrive(ts, senderSettings.StreamSettings, nil); err != nil {
 		return nil, err
 	}
-	if c.MuxSettings != nil && c.MuxSettings.Enabled && !strings.EqualFold(c.Protocol, "vless") {
-		return nil, errors.New("mux.cool is only supported by VLESS outbound")
-	}
+
 	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
 		return nil, err
 	}
@@ -463,7 +442,7 @@ type Config struct {
 	API              *APIConfig              `json:"api"`
 	Metrics          *MetricsConfig          `json:"metrics"`
 	Stats            *StatsConfig            `json:"stats"`
-	Reverse          *ReverseConfig          `json:"reverse"`
+	Reverse          *json.RawMessage        `json:"reverse"`
 	FakeDNS          *FakeDNSConfig          `json:"fakeDns"`
 	Observatory      *ObservatoryConfig      `json:"observatory"`
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`

@@ -12,30 +12,23 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/xudp"
+	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
-type ClientManager struct {
-	Picker WorkerPicker
-}
-
 // Client owns the VLESS stream pools. A nil configuration disables multiplexing.
 type Client struct {
-	config *Config
-	tcp    *ClientManager
-	udp    *ClientManager
+	config *vless.Multiplex
+	tcp    *Pool
+	udp    *Pool
 }
 
-func NewClient(ctx context.Context, config *Config, network string, open func(context.Context, func(context.Context, *transport.Link) error) error) *Client {
+func NewClient(ctx context.Context, config *vless.Multiplex, network string, open func(context.Context) (context.Context, *transport.Link, error)) *Client {
 	c := &Client{config: config}
-	manager := func(concurrency int32) *ClientManager {
-		return &ClientManager{Picker: &IncrementalWorkerPicker{Factory: &clientFactory{
-			ctx: ctx, open: open,
-			strategy: ClientStrategy{MaxConcurrency: uint32(concurrency), MaxConnection: 1024},
-		}}}
+	pool := func(concurrency int32) *Pool {
+		return NewPool(ctx, ClientStrategy{MaxConcurrency: uint32(concurrency), MaxConnection: 1024}, open)
 	}
 	concurrency := config.Concurrency
 	if concurrency == 0 {
@@ -45,20 +38,20 @@ func NewClient(ctx context.Context, config *Config, network string, open func(co
 		if network == "xdrive" {
 			concurrency = max(concurrency, 128)
 		}
-		c.tcp = manager(concurrency)
+		c.tcp = pool(concurrency)
 	}
 	if config.XudpConcurrency > 0 {
-		c.udp = manager(config.XudpConcurrency)
+		c.udp = pool(config.XudpConcurrency)
 	}
 	return c
 }
 
 func (c *Client) Close() {
 	if c.tcp != nil {
-		common.Close(c.tcp.Picker)
+		c.tcp.Close()
 	}
 	if c.udp != nil {
-		common.Close(c.udp.Picker)
+		c.udp.Close()
 	}
 }
 
@@ -66,7 +59,7 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 	if c == nil {
 		return false, nil
 	}
-	manager := c.tcp
+	pool := c.tcp
 	outbounds := session.OutboundsFromContext(ctx)
 	target := outbounds[len(outbounds)-1].Target
 	if target.Network == net.Network_UDP {
@@ -82,56 +75,19 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 			return false, nil
 		}
 		if c.udp != nil {
-			manager = c.udp
+			pool = c.udp
 		}
 	}
-	if manager == nil {
+	if pool == nil {
 		return false, nil
 	}
-	return true, manager.Dispatch(ctx, link, true)
+	return true, Dispatch(ctx, link, true, pool.PickAvailable)
 }
 
-type clientFactory struct {
-	ctx      context.Context
-	open     func(context.Context, func(context.Context, *transport.Link) error) error
-	strategy ClientStrategy
-}
-
-func (f *clientFactory) Create() (*ClientWorker, error) {
-	type result struct {
-		worker *ClientWorker
-		err    error
-	}
-	ready := make(chan result, 1)
-	ctx := session.ContextWithOutbounds(f.ctx, []*session.Outbound{{
-		Target: net.TCPDestination(net.DomainAddress("v1.mux.cool"), 9527),
-	}})
-	go func() {
-		err := f.open(ctx, func(ctx context.Context, link *transport.Link) error {
-			worker, err := NewClientWorker(*link, f.strategy)
-			if err != nil {
-				return err
-			}
-			defer worker.Close()
-			ready <- result{worker: worker}
-			select {
-			case <-ctx.Done():
-			case <-worker.WaitClosed():
-			}
-			return nil
-		})
-		if err != nil {
-			ready <- result{err: err}
-		}
-	}()
-	r := <-ready
-	return r.worker, r.err
-}
-
-// Dispatch waits for the child when the caller owns its link lifetime.
-func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link, wait bool) error {
-	for i := 0; i < 16; i++ {
-		worker, err := m.Picker.PickAvailable(ctx)
+// Dispatch shares child admission between native pools and Reverse static picks.
+func Dispatch(ctx context.Context, link *transport.Link, wait bool, pick func(context.Context) (*ClientWorker, error)) error {
+	for attempt := 0; attempt < 16; attempt++ {
+		worker, err := pick(ctx)
 		if err != nil {
 			return err
 		}
@@ -139,148 +95,124 @@ func (m *ClientManager) Dispatch(ctx context.Context, link *transport.Link, wait
 			return nil
 		}
 	}
-
-	return errors.New("unable to find an available mux client")
+	return errors.New("unable to find an available multiplex client")
 }
 
-type WorkerPicker interface {
-	PickAvailable(context.Context) (*ClientWorker, error)
+// Pool serializes unpublished opening with cancelable admission.
+type Pool struct {
+	ctx      context.Context
+	cancel   context.CancelFunc
+	access   sync.Mutex
+	opening  chan struct{}
+	workers  []*ClientWorker
+	strategy ClientStrategy
+	open     func(context.Context) (context.Context, *transport.Link, error)
 }
 
-type IncrementalWorkerPicker struct {
-	Factory ClientWorkerFactory
-
-	access       sync.Mutex
-	workers      []*ClientWorker
-	cleanupTimer *time.Timer
-	closed       bool
-	pending      *workerCreation
+func NewPool(ctx context.Context, strategy ClientStrategy, open func(context.Context) (context.Context, *transport.Link, error)) *Pool {
+	ctx, cancel := context.WithCancel(ctx)
+	p := &Pool{ctx: ctx, cancel: cancel, opening: make(chan struct{}, 1), strategy: strategy, open: open}
+	p.opening <- struct{}{}
+	return p
 }
 
-type workerCreation struct {
-	done   chan struct{}
-	worker *ClientWorker
-	err    error
+func (p *Pool) Close() error {
+	p.cancel()
+	return nil
 }
 
-func (p *IncrementalWorkerPicker) cleanupFunc() {
+func (p *Pool) available() *ClientWorker {
 	p.access.Lock()
 	defer p.access.Unlock()
-
-	if p.closed {
-		return
-	}
-	p.cleanup()
-	if len(p.workers) == 0 {
-		p.cleanupTimer = nil
-		return
-	}
-	p.cleanupTimer.Reset(30 * time.Second)
-}
-
-func (p *IncrementalWorkerPicker) cleanup() {
-	var activeWorkers []*ClientWorker
-	for _, w := range p.workers {
-		if !w.Closed() {
-			activeWorkers = append(activeWorkers, w)
+	for _, worker := range p.workers {
+		if !worker.IsFull() {
+			return worker
 		}
-	}
-	p.workers = activeWorkers
-}
-
-func (p *IncrementalWorkerPicker) findAvailable() int {
-	for idx, w := range p.workers {
-		if !w.IsFull() {
-			return idx
-		}
-	}
-
-	return -1
-}
-
-func (p *IncrementalWorkerPicker) PickAvailable(ctx context.Context) (*ClientWorker, error) {
-	p.access.Lock()
-
-	if p.closed {
-		p.access.Unlock()
-		return nil, io.ErrClosedPipe
-	}
-	idx := p.findAvailable()
-	if idx >= 0 {
-		n := len(p.workers)
-		if n > 1 && idx != n-1 {
-			p.workers[n-1], p.workers[idx] = p.workers[idx], p.workers[n-1]
-		}
-		worker := p.workers[idx]
-		p.access.Unlock()
-		return worker, nil
-	}
-
-	p.cleanup()
-
-	if p.pending == nil {
-		p.pending = &workerCreation{done: make(chan struct{})}
-		go p.create(p.pending)
-	}
-	pending := p.pending
-	p.access.Unlock()
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-pending.done:
-		return pending.worker, pending.err
-	}
-}
-
-func (p *IncrementalWorkerPicker) create(pending *workerCreation) {
-	worker, err := p.Factory.Create()
-	p.access.Lock()
-	if p.closed {
-		p.access.Unlock()
-		if worker != nil {
-			worker.Close()
-		}
-		return
-	}
-	pending.worker, pending.err = worker, err
-	if err == nil {
-		p.workers = append(p.workers, worker)
-	}
-	if p.cleanupTimer == nil {
-		p.cleanupTimer = time.AfterFunc(30*time.Second, p.cleanupFunc)
-	}
-	p.pending = nil
-	close(pending.done)
-	p.access.Unlock()
-}
-
-func (p *IncrementalWorkerPicker) Close() error {
-	if p == nil {
-		return nil
-	}
-	p.access.Lock()
-	p.closed = true
-	if p.pending != nil {
-		p.pending.err = io.ErrClosedPipe
-		close(p.pending.done)
-		p.pending = nil
-	}
-	workers := p.workers
-	p.workers = nil
-	if p.cleanupTimer != nil {
-		p.cleanupTimer.Stop()
-		p.cleanupTimer = nil
-	}
-	p.access.Unlock()
-
-	for _, worker := range workers {
-		common.Must(worker.Close())
 	}
 	return nil
 }
 
-type ClientWorkerFactory interface {
-	Create() (*ClientWorker, error)
+func (p *Pool) PickAvailable(ctx context.Context) (*ClientWorker, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if p.ctx.Err() != nil {
+		return nil, io.ErrClosedPipe
+	}
+	if worker := p.available(); worker != nil {
+		return worker, nil
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-p.ctx.Done():
+		return nil, io.ErrClosedPipe
+	case <-p.opening:
+	}
+	defer func() { p.opening <- struct{}{} }()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if p.ctx.Err() != nil {
+		return nil, io.ErrClosedPipe
+	}
+	if worker := p.available(); worker != nil {
+		return worker, nil
+	}
+	opening, cancel := context.WithCancel(p.ctx)
+	stopCaller := context.AfterFunc(ctx, cancel)
+	opening = session.ContextWithOutbounds(opening, []*session.Outbound{{
+		Target: net.TCPDestination(net.DomainAddress("v1.mux.cool"), 9527),
+	}})
+	physicalCtx, link, err := p.open(opening)
+	detached := stopCaller()
+	if !detached && err == nil {
+		err = context.Canceled
+	}
+	if err == nil {
+		err = ctx.Err()
+	}
+	if p.ctx.Err() != nil {
+		err = io.ErrClosedPipe
+	}
+	if err != nil {
+		cancel()
+		if link != nil {
+			common.Interrupt(link.Reader)
+			common.Interrupt(link.Writer)
+		}
+		return nil, err
+	}
+	worker := NewClientWorker(*link, p.strategy)
+	p.access.Lock()
+	err = ctx.Err()
+	if p.ctx.Err() != nil {
+		err = io.ErrClosedPipe
+	}
+	if err == nil {
+		p.workers = append(p.workers, worker)
+	}
+	p.access.Unlock()
+	if err != nil {
+		cancel()
+		worker.Close()
+		return nil, err
+	}
+	context.AfterFunc(physicalCtx, func() {
+		cancel()
+		worker.Close()
+		p.access.Lock()
+		defer p.access.Unlock()
+		for i, current := range p.workers {
+			if current == worker {
+				copy(p.workers[i:], p.workers[i+1:])
+				p.workers[len(p.workers)-1] = nil
+				p.workers = p.workers[:len(p.workers)-1]
+				break
+			}
+		}
+	})
+	return worker, nil
 }
 
 type ClientStrategy struct {
@@ -289,74 +221,17 @@ type ClientStrategy struct {
 }
 
 type ClientWorker struct {
-	sessionManager *SessionManager
-	link           transport.Link
-	done           *done.Instance
-	timer          *time.Ticker
-	strategy       ClientStrategy
+	*carrier
+	strategy ClientStrategy
 }
 
-// NewClientWorker creates a new mux.Client.
-func NewClientWorker(stream transport.Link, s ClientStrategy) (*ClientWorker, error) {
-	if _, ok := stream.Writer.(*buf.BufferedWriter); !ok {
-		writer := buf.NewBufferedWriter(stream.Writer)
-		writer.SetBuffered(false)
-		stream.Writer = writer
-	}
-	c := &ClientWorker{
-		sessionManager: NewSessionManager(),
-		link:           stream,
-		done:           done.New(),
-		timer:          time.NewTicker(time.Second * 16),
-		strategy:       s,
-	}
-
-	go c.fetchOutput()
-	go c.monitor()
-
-	return c, nil
+func NewClientWorker(stream transport.Link, strategy ClientStrategy) *ClientWorker {
+	c := &ClientWorker{carrier: newCarrier(stream, 16*time.Second), strategy: strategy}
+	go c.run(context.Background(), nil)
+	return c
 }
 
-func (m *ClientWorker) TotalConnections() uint32 {
-	return uint32(m.sessionManager.Count())
-}
-
-func (m *ClientWorker) ActiveConnections() uint32 {
-	return uint32(m.sessionManager.Size())
-}
-
-// Closed returns true if this Client is closed.
-func (m *ClientWorker) Closed() bool {
-	return m.done.Done()
-}
-
-func (m *ClientWorker) WaitClosed() <-chan struct{} {
-	return m.done.Wait()
-}
-
-func (m *ClientWorker) Close() error {
-	return m.done.Close()
-}
-
-func (m *ClientWorker) monitor() {
-	defer m.timer.Stop()
-
-	for {
-		checkSize := m.sessionManager.Size()
-		checkCount := m.sessionManager.Count()
-		select {
-		case <-m.done.Wait():
-			m.sessionManager.Close()
-			common.Interrupt(m.link.Writer)
-			common.Interrupt(m.link.Reader)
-			return
-		case <-m.timer.C:
-			if m.sessionManager.CloseIfNoSessionAndIdle(checkSize, checkCount) {
-				common.Must(m.done.Close())
-			}
-		}
-	}
-}
+func (c *ClientWorker) TotalConnections() uint32 { return uint32(c.sessionManager.Count()) }
 
 func writeFirstPayload(reader buf.Reader, writer *Writer) error {
 	err := buf.CopyOnceTimeout(reader, writer, time.Millisecond*100)
@@ -374,17 +249,12 @@ func writeFirstPayload(reader buf.Reader, writer *Writer) error {
 func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
-	transferType := protocol.TransferTypeStream
-	if ob.Target.Network == net.Network_UDP {
-		transferType = protocol.TransferTypePacket
-	}
-	s.transferType = transferType
 	var inbound *session.Inbound
 	if session.IsReverseMuxFromContext(ctx) {
 		inbound = session.InboundFromContext(ctx)
 	}
-	writer := NewWriter(s.ID, ob.Target, output, transferType, xudp.GetGlobalID(ctx), inbound)
-	defer s.Close(false)
+	writer := NewWriter(s.ID, ob.Target, output, s.transferType, xudp.GetGlobalID(ctx), inbound)
+	defer s.Close()
 	defer writer.Close()
 
 	errors.LogInfo(ctx, "dispatching request to ", ob.Target)
@@ -427,7 +297,12 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link, wait 
 	if ctx.Err() != nil || m.IsFull() {
 		return false
 	}
-	s := m.sessionManager.Allocate(&m.strategy, link.Reader, link.Writer)
+	transferType := protocol.TransferTypeStream
+	outbounds := session.OutboundsFromContext(ctx)
+	if outbounds[len(outbounds)-1].Target.Network == net.Network_UDP {
+		transferType = protocol.TransferTypePacket
+	}
+	s := m.sessionManager.Allocate(&m.strategy, link.Reader, link.Writer, transferType)
 	if s == nil {
 		return false
 	}
@@ -436,97 +311,9 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link, wait 
 	if wait || !pipeReader {
 		select {
 		case <-ctx.Done():
-			s.Close(false)
+			s.Close()
 		case <-s.done.Wait():
 		}
 	}
 	return true
-}
-
-func (m *ClientWorker) handleStatueKeepAlive(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
-	}
-	return nil
-}
-
-func (m *ClientWorker) handleStatusNew(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
-	}
-	return nil
-}
-
-func (m *ClientWorker) handleStatusKeep(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	if !meta.Option.Has(OptionData) {
-		return nil
-	}
-
-	s, found := m.sessionManager.Get(meta.SessionID)
-	if !found {
-		// Notify remote peer to close this session.
-		closingWriter := NewResponseWriter(meta.SessionID, m.link.Writer, protocol.TransferTypeStream)
-		closingWriter.Close()
-
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
-	}
-
-	rr := s.NewReader(reader, &meta.Target)
-	err := buf.Copy(rr, s.output)
-	if err != nil && buf.IsWriteError(err) {
-		errors.LogInfoInner(context.Background(), err, "failed to write to downstream. closing session ", s.ID)
-		s.Close(false)
-		return buf.Copy(rr, buf.Discard)
-	}
-
-	return err
-}
-
-func (m *ClientWorker) handleStatusEnd(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	if s, found := m.sessionManager.Get(meta.SessionID); found {
-		s.Close(false)
-	}
-	if meta.Option.Has(OptionData) {
-		return buf.Copy(NewStreamReader(reader), buf.Discard)
-	}
-	return nil
-}
-
-func (m *ClientWorker) fetchOutput() {
-	defer func() {
-		common.Must(m.done.Close())
-	}()
-
-	reader := &buf.BufferedReader{Reader: m.link.Reader}
-
-	var meta FrameMetadata
-	for {
-		err := meta.Unmarshal(reader, false)
-		if err != nil {
-			if errors.Cause(err) != io.EOF {
-				errors.LogInfoInner(context.Background(), err, "failed to read metadata")
-			}
-			break
-		}
-
-		switch meta.SessionStatus {
-		case SessionStatusKeepAlive:
-			err = m.handleStatueKeepAlive(&meta, reader)
-		case SessionStatusEnd:
-			err = m.handleStatusEnd(&meta, reader)
-		case SessionStatusNew:
-			err = m.handleStatusNew(&meta, reader)
-		case SessionStatusKeep:
-			err = m.handleStatusKeep(&meta, reader)
-		default:
-			status := meta.SessionStatus
-			errors.LogError(context.Background(), "unknown status: ", status)
-			return
-		}
-
-		if err != nil {
-			errors.LogInfoInner(context.Background(), err, "failed to process data")
-			return
-		}
-	}
 }

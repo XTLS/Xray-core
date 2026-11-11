@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
@@ -13,25 +12,19 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
-	"github.com/xtls/xray-core/testing/mocks"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
-func TestIncrementalPickerFailure(t *testing.T) {
-	mockCtl := gomock.NewController(t)
-	defer mockCtl.Finish()
-
-	mockWorkerFactory := mocks.NewMuxClientWorkerFactory(mockCtl)
-	mockWorkerFactory.EXPECT().Create().Return(nil, errors.New("test"))
-
-	picker := multiplex.IncrementalWorkerPicker{
-		Factory: mockWorkerFactory,
-	}
-
-	_, err := picker.PickAvailable(context.Background())
-	if err == nil {
-		t.Error("expected error, but nil")
+func TestPoolFailure(t *testing.T) {
+	calls := 0
+	pool := multiplex.NewPool(context.Background(), multiplex.ClientStrategy{}, func(context.Context) (context.Context, *transport.Link, error) {
+		calls++
+		return nil, nil, errors.New("test")
+	})
+	defer pool.Close()
+	if _, err := pool.PickAvailable(context.Background()); err == nil || calls != 1 {
+		t.Fatalf("expected one failed opening, got %d calls and %v", calls, err)
 	}
 }
 
@@ -39,8 +32,7 @@ func TestClientWorkerEOF(t *testing.T) {
 	reader, writer := pipe.New(pipe.WithoutSizeLimit())
 	common.Must(writer.Close())
 
-	worker, err := multiplex.NewClientWorker(transport.Link{Reader: reader, Writer: writer}, multiplex.ClientStrategy{})
-	common.Must(err)
+	worker := multiplex.NewClientWorker(transport.Link{Reader: reader, Writer: writer}, multiplex.ClientStrategy{})
 
 	time.Sleep(time.Millisecond * 500)
 
@@ -51,77 +43,40 @@ func TestClientWorkerEOF(t *testing.T) {
 }
 
 func TestClientWorkerClose(t *testing.T) {
-	mockCtl := gomock.NewController(t)
-	defer mockCtl.Finish()
-
 	r1, w1 := pipe.New(pipe.WithoutSizeLimit())
-	worker1, err := multiplex.NewClientWorker(transport.Link{
-		Reader: r1,
-		Writer: w1,
-	}, multiplex.ClientStrategy{
-		MaxConcurrency: 4,
-		MaxConnection:  4,
-	})
-	common.Must(err)
-
 	r2, w2 := pipe.New(pipe.WithoutSizeLimit())
-	worker2, err := multiplex.NewClientWorker(transport.Link{
-		Reader: r2,
-		Writer: w2,
-	}, multiplex.ClientStrategy{
-		MaxConcurrency: 4,
-		MaxConnection:  4,
+	links := []*transport.Link{{Reader: r1, Writer: w1}, {Reader: r2, Writer: w2}}
+	pool := multiplex.NewPool(context.Background(), multiplex.ClientStrategy{MaxConcurrency: 4, MaxConnection: 4}, func(ctx context.Context) (context.Context, *transport.Link, error) {
+		if len(links) == 0 {
+			return nil, nil, errors.New("unexpected opening")
+		}
+		link := links[0]
+		links = links[1:]
+		return ctx, link, nil
 	})
+	defer pool.Close()
+	worker1, err := pool.PickAvailable(context.Background())
 	common.Must(err)
-
-	factory := mocks.NewMuxClientWorkerFactory(mockCtl)
-	gomock.InOrder(
-		factory.EXPECT().Create().Return(worker1, nil),
-		factory.EXPECT().Create().Return(worker2, nil),
-	)
-
-	picker := &multiplex.IncrementalWorkerPicker{
-		Factory: factory,
-	}
-	manager := &multiplex.ClientManager{
-		Picker: picker,
-	}
-
 	tr1, tw1 := pipe.New(pipe.WithoutSizeLimit())
-	ctx1 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
-		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
-	}})
-	common.Must(manager.Dispatch(ctx1, &transport.Link{
-		Reader: tr1,
-		Writer: tw1,
-	}, false))
+	ctx1 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80)}})
+	common.Must(multiplex.Dispatch(ctx1, &transport.Link{Reader: tr1, Writer: tw1}, false, pool.PickAvailable))
 	defer tw1.Close()
-
 	common.Must(w1.Close())
-
 	time.Sleep(time.Millisecond * 500)
 	if !worker1.Closed() {
 		t.Error("worker1 is not finished")
 	}
-
 	tr2, tw2 := pipe.New(pipe.WithoutSizeLimit())
-	ctx2 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
-		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
-	}})
-	common.Must(manager.Dispatch(ctx2, &transport.Link{
-		Reader: tr2,
-		Writer: tw2,
-	}, false))
+	ctx2 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80)}})
+	common.Must(multiplex.Dispatch(ctx2, &transport.Link{Reader: tr2, Writer: tw2}, false, pool.PickAvailable))
 	defer tw2.Close()
-
 	common.Must(w2.Close())
 }
 
 func TestClientWorkerUDPSource(t *testing.T) {
 	downR, downW := pipe.New(pipe.WithoutSizeLimit())
 	upR, upW := pipe.New(pipe.WithoutSizeLimit())
-	worker, err := multiplex.NewClientWorker(transport.Link{Reader: downR, Writer: upW}, multiplex.ClientStrategy{})
-	common.Must(err)
+	worker := multiplex.NewClientWorker(transport.Link{Reader: downR, Writer: upW}, multiplex.ClientStrategy{})
 
 	inR, inW := pipe.New(pipe.WithoutSizeLimit())
 	outR, outW := pipe.New(pipe.WithoutSizeLimit())
