@@ -115,13 +115,13 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 
 	if h.senderSettings != nil && h.senderSettings.MultiplexSettings.GetEnabled() {
 		owner, ok := proxyHandler.(interface {
-			ConfigureMux(*proxyman.MultiplexingConfig, internet.Dialer)
+			ConfigureMux(*proxyman.MultiplexingConfig, internet.Dialer, string)
 		})
 		if !ok {
 			common.Close(proxyHandler)
 			return nil, errors.New("mux.cool is only supported by VLESS outbound")
 		}
-		owner.ConfigureMux(h.senderSettings.MultiplexSettings, h)
+		owner.ConfigureMux(h.senderSettings.MultiplexSettings, h, h.senderSettings.StreamSettings.GetProtocolName())
 	}
 
 	h.proxy = proxyHandler

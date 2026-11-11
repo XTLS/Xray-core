@@ -19,7 +19,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
-func (h *Handler) ConfigureMux(config *proxyman.MultiplexingConfig, dialer internet.Dialer) {
+func (h *Handler) ConfigureMux(config *proxyman.MultiplexingConfig, dialer internet.Dialer, network string) {
 	if config == nil || !config.Enabled {
 		return
 	}
@@ -31,8 +31,13 @@ func (h *Handler) ConfigureMux(config *proxyman.MultiplexingConfig, dialer inter
 			}},
 		}}
 	}
-	if config.Concurrency >= 0 {
-		config.Concurrency = max(config.Concurrency, 128)
+	if config.Concurrency == 0 {
+		config.Concurrency = 8
+	}
+	if config.Concurrency > 0 {
+		if network == "xdrive" {
+			config.Concurrency = max(config.Concurrency, 128)
+		}
 		h.mux = manager(config.Concurrency)
 	}
 	if config.XudpConcurrency > 0 {
