@@ -231,6 +231,20 @@ Make sure that you are using the same Go version, and remember to set the git co
 CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
 
+For Windows (x86-64 and AArch64, not win7):
+
+```bash
+GOOS=windows GOARCH=amd64 GOAMD64=v2 CGO_ENABLED=0 go build -o xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+GOOS=windows GOARCH=arm64 GOARM64=v8.2 CGO_ENABLED=0 go build -o xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+```
+
+For macOS:
+
+```bash
+GOOS=darwin GOARCH=amd64 GOAMD64=v2 CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+GOOS=darwin GOARCH=arm64 GOARM64=v8.4 CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+```
+
 For Android:
 
 ```bash
@@ -238,10 +252,13 @@ GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC=/path/to/aarch64-linux-android24-clan
 GOOS=android GOARCH=amd64 CGO_ENABLED=1 CC=/path/to/x86_64-linux-android24-clang go build -o xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid= -checklinkname=0 -extldflags=-Wl,--pack-dyn-relocs=android" -v ./main
 ```
 
-If you are compiling a 32-bit MIPS/MIPSLE target, use this command instead:
+For Linux (MIPS32 and MIPS32LE):
 
 ```bash
-CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -gcflags="-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+GOOS=linux GOARCH=mips GOMIPS=hardfloat CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+GOOS=linux GOARCH=mips GOMIPS=softfloat CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+GOOS=linux GOARCH=mipsle GOMIPS=hardfloat CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
+GOOS=linux GOARCH=mipsle GOMIPS=softfloat CGO_ENABLED=0 go build -o xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=REPLACE -s -w -buildid=" -v ./main
 ```
 
 ## Stargazers over time

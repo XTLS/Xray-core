@@ -55,7 +55,8 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 		}
 
 		auth := r.Header.Get(RequestHeaderAuth)
-		down, _ := strconv.ParseUint(r.Header.Get(CommonHeaderCCRX), 10, 64)
+		remote_rx, _ := strconv.ParseUint(r.Header.Get(CommonHeaderCCRX), 10, 64)
+		tx := h.quicParams.BrutalUp
 
 		var user *protocol.MemoryUser
 		var ok bool
@@ -76,10 +77,13 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 			case "bbr":
 				congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 			case "", "brutal":
-				if quicParams.BrutalUp == 0 || down == 0 {
+				if remote_rx == 0 {
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				} else {
-					congestion.UseBrutal(conn, min(quicParams.BrutalUp, down), quicParams.BrutalDisableLossCompensation)
+					if tx > 0 {
+						remote_rx = min(remote_rx, tx)
+					}
+					congestion.UseBrutal(conn, remote_rx, quicParams.BrutalDisableLossCompensation)
 				}
 			case "force-brutal":
 				congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)

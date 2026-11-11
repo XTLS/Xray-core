@@ -3,7 +3,7 @@ module github.com/xtls/xray-core
 go 1.27
 
 require (
-	github.com/apernet/quic-go v0.61.1-0.20260806010916-184d081eef3e
+	github.com/apernet/quic-go v0.63.1-0.20261004180939-a10df75c260c
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/golang/mock v1.7.0-rc.1

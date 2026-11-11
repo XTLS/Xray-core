@@ -2,12 +2,15 @@ package dns
 
 import (
 	"context"
+	"io"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
@@ -15,6 +18,8 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/udp"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -57,6 +62,46 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 
 	errors.LogInfo(context.Background(), "DNS: created UDP client initialized for ", address.NetAddr())
 	return s
+}
+
+// NewUDPNameServer creates a UDP DNS client from a URL.
+func NewUDPNameServer(url *url.URL, dispatcher routing.Dispatcher, local bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*ClassicNameServer, error) {
+	if url.Hostname() == "" {
+		return nil, errors.New("missing UDP nameserver host")
+	}
+	port := net.Port(53)
+	if url.Port() != "" {
+		var err error
+		if port, err = net.PortFromString(url.Port()); err != nil {
+			return nil, err
+		}
+	}
+	if local {
+		dispatcher = &localUDPDispatcher{dispatcher}
+	}
+	s := NewClassicNameServer(net.UDPDestination(net.ParseAddress(url.Hostname()), port), dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
+	if local {
+		s.cacheController.name = "UDPL//" + s.address.NetAddr()
+	}
+	return s, nil
+}
+
+type localUDPDispatcher struct {
+	routing.Dispatcher
+}
+
+func (*localUDPDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+	conn, err := internet.DialSystem(ctx, dest, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &transport.Link{
+		Reader: &struct {
+			buf.Reader
+			io.Closer
+		}{buf.NewPacketReader(conn), conn},
+		Writer: buf.NewWriter(conn),
+	}, nil
 }
 
 // Name implements Server.

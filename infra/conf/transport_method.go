@@ -697,10 +697,10 @@ func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
 
 const (
 	Byte     = 1
-	Kilobyte = 1024 * Byte
-	Megabyte = 1024 * Kilobyte
-	Gigabyte = 1024 * Megabyte
-	Terabyte = 1024 * Gigabyte
+	Kilobyte = 1000 * Byte
+	Megabyte = 1000 * Kilobyte
+	Gigabyte = 1000 * Megabyte
+	Terabyte = 1000 * Gigabyte
 )
 
 type Bandwidth string

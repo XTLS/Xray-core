@@ -23,4 +23,28 @@ message Config {
     bytes rsa_public_key = 9;
     string hostname = 10;
     repeated Profile profiles = 11;
+    // Padding turns. Empty uses the built-in preset, unless no_padding is set.
+    // A configured list is the complete schedule and replaces the preset
+    // entirely: the preset's Play-state join tail runs only with the preset.
+    repeated Padding paddings = 12;
+    // Disables startup padding. The configuration sets this for an explicit
+    // empty "paddings" array, which an unset repeated field cannot express.
+    bool no_padding = 14;
+}
+
+message Padding {
+    int64 length_min = 1;
+    int64 length_max = 2;
+    // 1 = client to server, 2 = server to client
+    int32 direction = 3;
+    // Millisecond pause that leads into this turn: it sits between the previous
+    // padding turn (or Login Acknowledged, for the first turn) and this turn's
+    // bytes, so a captured gap is written on the turn that follows it. The side
+    // that sends the turn waits for a uniformly selected value in
+    // [delay_min, delay_max]; the peer spends exactly delay_min at the same
+    // place, so only the sending side jitters: use delay_min == delay_max to
+    // reproduce a captured gap. Nothing pauses after the last turn. Zero means
+    // no pause.
+    int64 delay_min = 4;
+    int64 delay_max = 5;
 }

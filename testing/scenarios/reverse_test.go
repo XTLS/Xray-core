@@ -17,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
 	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/proxy/blackhole"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/proxy/vmess"
@@ -100,7 +99,7 @@ func TestReverseProxy(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Block, Delay: &freedom.Range{}}}}),
 			},
 		},
 	}
@@ -151,7 +150,7 @@ func TestReverseProxy(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				Tag:           "freedom",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 			{
 				Tag: "reverse",
@@ -275,7 +274,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Block, Delay: &freedom.Range{}}}}),
 			},
 		},
 	}
@@ -340,7 +339,7 @@ func TestReverseProxyLongRunning(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				Tag:           "freedom",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 			{
 				Tag: "reverse",

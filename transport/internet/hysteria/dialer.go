@@ -197,7 +197,8 @@ func (c *client) dial(ctx context.Context) error {
 	}
 
 	// udp, _ := strconv.ParseBool(resp.Header.Get(ResponseHeaderUDPEnabled))
-	down, _ := strconv.ParseUint(resp.Header.Get(CommonHeaderCCRX), 10, 64)
+	remote_rx, _ := strconv.ParseUint(resp.Header.Get(CommonHeaderCCRX), 10, 64)
+	tx := quicParams.BrutalUp
 	errors.LogDebug(context.Background(), "ECHAccepted ", conn.ConnectionState().TLS.ECHAccepted)
 
 	switch quicParams.Congestion {
@@ -205,10 +206,13 @@ func (c *client) dial(ctx context.Context) error {
 	case "bbr":
 		congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 	case "", "brutal":
-		if quicParams.BrutalUp == 0 || down == 0 {
+		if tx == 0 {
 			congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 		} else {
-			congestion.UseBrutal(conn, min(quicParams.BrutalUp, down), quicParams.BrutalDisableLossCompensation)
+			if remote_rx > 0 {
+				tx = min(tx, remote_rx)
+			}
+			congestion.UseBrutal(conn, tx, quicParams.BrutalDisableLossCompensation)
 		}
 	case "force-brutal":
 		congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)
