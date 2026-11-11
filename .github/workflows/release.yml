@@ -273,7 +273,7 @@ jobs:
       fail-fast: false
 
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
@@ -362,7 +362,8 @@ jobs:
           path: |
             ./build_assets/*
 
-      - name: Create ZIP archived
+      - name: Create ZIP archive
+        if: github.event_name == 'release'
         shell: bash
         run: |
           pushd build_assets || exit 1
@@ -378,6 +379,7 @@ jobs:
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
+        if: github.event_name == 'release'
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./Xray-${{ env.ASSET_NAME }}.zip*
