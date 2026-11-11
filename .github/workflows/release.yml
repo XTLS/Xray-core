@@ -96,33 +96,6 @@ jobs:
           - goos: linux
             goarch: loong64
           # END Linux specified
-          # Second batch of removal [In the future]
-          - goos: linux
-            goarch: mipsle
-          - goos: linux
-            goarch: arm
-            goarm: 7
-          - goos: freebsd
-            goarch: arm
-            goarm: 7
-          - goos: openbsd
-            goarch: arm
-            goarm: 7
-          # END of second batch
-          # First batch of removal [Go 1.29]
-          - goos: windows
-            goarch: 386
-          - goos: linux
-            goarch: 386
-          - goos: linux
-            goarch: arm
-            goarm: 5
-          - goos: linux
-            goarch: arm
-            goarm: 6
-          - goos: linux
-            goarch: mips
-          # END of first batch
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -130,7 +103,6 @@ jobs:
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
-      GOARM: ${{ matrix.goarm }}
       CGO_ENABLED: 0
     steps:
       - name: Checkout codebase
@@ -153,7 +125,7 @@ jobs:
         run: |
           _NAME=${{ matrix.patch-assetname }}
           [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM\"].friendlyName" -r < .github/build/friendly-filenames.json)
-          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, RELEASE_NAME: $_NAME"
+          echo "GOOS: $GOOS, GOARCH: $GOARCH, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
 
       - name: Set up Go
@@ -167,25 +139,18 @@ jobs:
 
       - name: Build Xray
         run: |
-          # Special processing for x86-64 and ARM64
-          if [[ ${GOARCH} == 'amd64' ]]; then
-            if [[ ${GOOS} == 'windows' ]]; then
+          case "${GOARCH}:${GOOS}" in
+            # Special processing for x86-64 and ARM64
+            amd64:windows|amd64:darwin)
               GOAMD64="v2"
-            elif [[ ${GOOS} == 'darwin' ]]; then
-              GOAMD64="v2"
-            fi
-          elif [[ ${GOARCH} == 'arm64' ]]; then
-            if [[ ${GOOS} == 'windows' ]]; then
+              ;;
+            arm64:windows)
               GOARM64="v8.2"
-            elif [[ ${GOOS} == 'darwin' ]]; then
+              ;;
+            arm64:darwin)
               GOARM64="v8.4"
-            fi
-          fi
-          # Special processing for 32-bit ARM, after linux/arm v5/v6 removed
-          # if [[ ${GOARCH} == 'arm' ]]; then
-          #   GOARM="7"
-          # fi
-          # Building
+              ;;
+          esac
           mkdir -p build_assets
           COMMID=$(git describe --always --dirty)
           if [[ ${GOOS} == 'windows' ]]; then
@@ -198,7 +163,157 @@ jobs:
             go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid= -checklinkname=0 -extldflags=-Wl,--pack-dyn-relocs=android" -v ./main
           else
             echo 'Building Xray...'
-            # Remove MIPS/MIPSLE specified conditions in the second batch
+            go build -o build_assets/xray -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          fi
+
+      - name: Restore Geodat Cache
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-geodat-
+
+      - name: Restore Wintun Cache
+        if: matrix.goos == 'windows'
+        uses: actions/cache/restore@v6
+        with:
+          path: resources
+          key: xray-wintun-
+
+      - name: Add additional assets into package
+        run: |
+          mv -f resources/geo* build_assets/
+          if [[ ${GOOS} == 'windows' ]]; then
+            cp .github/build/windows/* build_assets/
+          fi
+          if [[ ${GOOS} == 'windows' ]]; then
+            echo 'Adding Wintun into packages'
+            if [[ ${GOARCH} == 'amd64' ]]; then
+              mv resources/wintun/bin/amd64/wintun.dll build_assets/
+            fi
+            if [[ ${GOARCH} == 'arm64' ]]; then
+              mv resources/wintun/bin/arm64/wintun.dll build_assets/
+            fi
+            mv resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
+          fi
+
+      - name: Copy README.md & LICENSE
+        run: |
+          cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
+          cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
+
+      - name: Upload files to Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Xray-${{ env.ASSET_NAME }}
+          path: |
+            ./build_assets/*
+
+      - name: Create ZIP archive
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          pushd build_assets || exit 1
+          touch -mt $(date +%Y01010000) *
+          zip -9vr ../Xray-${{ env.ASSET_NAME }}.zip .
+          popd || exit 1
+          FILE=./Xray-${{ env.ASSET_NAME }}.zip
+          DGST=$FILE.dgst
+          for METHOD in {"md5","sha1","sha256","sha512"}
+          do
+            openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
+          done
+
+      - name: Upload binaries to release
+        uses: svenstaro/upload-release-action@v2
+        if: github.event_name == 'release'
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ./Xray-${{ env.ASSET_NAME }}.zip*
+          tag: ${{ github.ref }}
+          file_glob: true
+
+  build-release-only:
+    needs: check-assets
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        # First batch (since Go 1.29) of removal:
+        # x86: windows, linux, freebsd, openbsd
+        # arm: linux(v5), linux(v6)
+        # other: linux(mips), linux(mips64), linux(mips64le)
+        # Second batch (needs discussion) of removal
+        # arm(v7): freebsd, openbsd, linux
+        # other: linux(mipsle)
+        goos: [windows, freebsd, openbsd, linux]
+        goarch: [arm, 386]
+        goarm: [7]
+        exclude:
+          - goos: windows
+            goarch: arm
+        include:
+          # Second batch of removal [In the future]
+          - goos: linux
+            goarch: mipsle
+          # END of second batch
+          # First batch of removal [Go 1.29]
+          - goos: linux
+            goarch: arm
+            goarm: 5
+          - goos: linux
+            goarch: arm
+            goarm: 6
+          - goos: linux
+            goarch: mips
+          - goos: linux
+            goarch: mips64
+          - goos: linux
+            goarch: mips64le
+          # END of first batch
+      fail-fast: false
+
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      GOARM: ${{ matrix.goarm }}
+      CGO_ENABLED: 0
+    steps:
+      - name: Checkout codebase
+        uses: actions/checkout@v7
+
+      - name: Show workflow information
+        run: |
+          _NAME=${{ matrix.patch-assetname }}
+          if [[ ${GOARCH} == 'arm' ]]; then
+            [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH$GOARM\"].friendlyName" -r < .github/build/friendly-filenames.json)
+            echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, RELEASE_NAME: $_NAME"
+          else
+            echo "GOARM=''" >> $GITHUB_ENV
+            [ -n "$_NAME" ] || _NAME=$(jq ".[\"$GOOS-$GOARCH\"].friendlyName" -r < .github/build/friendly-filenames.json)
+            echo "GOOS: $GOOS, GOARCH: $GOARCH, RELEASE_NAME: $_NAME"
+          fi
+          echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Get project dependencies
+        run: go mod download
+
+      - name: Build Xray
+        run: |
+          mkdir -p build_assets
+          COMMID=$(git describe --always --dirty)
+          if [[ ${GOOS} == 'windows' ]]; then
+            echo 'Building Xray for Windows...'
+            go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
+          else
+            echo 'Building Xray...'
             if [[ ${GOARCH} == 'mips' || ${GOARCH} == 'mipsle' ]]; then
               go build -o build_assets/xray -trimpath -buildvcs=false -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
               echo 'Building soft-float Xray for MIPS/MIPSLE 32-bit...'
@@ -229,14 +344,8 @@ jobs:
           fi
           if [[ ${GOOS} == 'windows' ]]; then
             echo 'Adding Wintun into packages'
-            if [[ ${GOARCH} == 'amd64' ]]; then
-              mv resources/wintun/bin/amd64/wintun.dll build_assets/
-            fi
             if [[ ${GOARCH} == '386' ]]; then
               mv resources/wintun/bin/x86/wintun.dll build_assets/
-            fi
-            if [[ ${GOARCH} == 'arm64' ]]; then
-              mv resources/wintun/bin/arm64/wintun.dll build_assets/
             fi
             mv resources/wintun/LICENSE.txt build_assets/LICENSE-Wintun
           fi
@@ -246,8 +355,14 @@ jobs:
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
 
-      - name: Create ZIP archive
-        if: github.event_name == 'release'
+      - name: Upload files to Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Xray-${{ env.ASSET_NAME }}
+          path: |
+            ./build_assets/*
+
+      - name: Create ZIP archived
         shell: bash
         run: |
           pushd build_assets || exit 1
@@ -263,16 +378,8 @@ jobs:
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'release'
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ./Xray-${{ env.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true
-
-      - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: Xray-${{ env.ASSET_NAME }}
-          path: |
-            ./build_assets/*
