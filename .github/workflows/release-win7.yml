@@ -1,17 +1,14 @@
 name: Build and Release for Windows 7
+# Pre-compiling support removal since 1.29
 
 on:
   workflow_dispatch:
   release:
     types: [published]
-  push:
-  pull_request:
-    types: [opened, synchronize, reopened]
 
 jobs:
   check-assets:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     steps:
       - name: Restore Geodat Cache
         uses: actions/cache/restore@v6
@@ -115,8 +112,6 @@ jobs:
           COMMID=$(git describe --always --dirty)
           echo 'Building Xray for Windows 7...'
           go build -o build_assets/xray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
-          # The line below is for without running conhost.exe version. Commented for not being used. Provided for reference.
-          # go build -o build_assets/wxray.exe -trimpath -buildvcs=false -gcflags="all=-l=4" -ldflags="-H windowsgui -X github.com/xtls/xray-core/core.build=${COMMID} -s -w -buildid=" -v ./main
 
       - name: Restore Geodat Cache
         uses: actions/cache/restore@v6
@@ -152,6 +147,13 @@ jobs:
           cp ${GITHUB_WORKSPACE}/README.md ./build_assets/README.md
           cp ${GITHUB_WORKSPACE}/LICENSE ./build_assets/LICENSE
 
+      - name: Upload files to Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: Xray-${{ env.ASSET_NAME }}
+          path: |
+            ./build_assets/*
+
       - name: Create ZIP archive
         if: github.event_name == 'release'
         shell: bash
@@ -175,10 +177,3 @@ jobs:
           file: ./Xray-${{ env.ASSET_NAME }}.zip*
           tag: ${{ github.ref }}
           file_glob: true
-
-      - name: Upload files to Artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: Xray-${{ env.ASSET_NAME }}
-          path: |
-            ./build_assets/*
