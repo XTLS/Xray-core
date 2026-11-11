@@ -2,11 +2,12 @@ package outbound
 
 import (
 	"context"
-	"github.com/xtls/xray-core/common"
-	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/pipe"
+	"io"
 	"sync/atomic"
 
 	"github.com/xtls/xray-core/app/proxyman"
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
@@ -15,6 +16,7 @@ import (
 	mux "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
+	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 func (h *Handler) ConfigureMux(config *proxyman.MultiplexingConfig, dialer internet.Dialer) {
@@ -100,38 +102,26 @@ func (f *muxWorkerFactory) Create() (*mux.ClientWorker, error) {
 	return r.worker, r.err
 }
 
-// muxCarrier owns the decoded VLESS stream. Response headers are read only
-// after the worker has admitted its first child and sent a request frame.
+// muxCarrier owns the VLESS codecs and transport. Native response reads are
+// accumulated independently of Mux frame parsing in one bounded receive pipe.
 type muxCarrier struct {
-	ctx          context.Context
-	gate         *buf.BufferedWriter
-	ready        atomic.Bool
-	openResponse func() (buf.Reader, error)
-	reader       buf.Reader
-	writer       buf.Writer
-	activity     *signal.ActivityTimer
-	cancel       context.CancelFunc
-	readErr      error
+	ctx      context.Context
+	gate     *buf.BufferedWriter
+	ready    atomic.Bool
+	reader   *pipe.Reader
+	writer   buf.Writer
+	activity *signal.ActivityTimer
+	cancel   context.CancelFunc
+	readErr  error
 }
 
 func (c *muxCarrier) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if c.readErr != nil {
-		return nil, c.readErr
+	data, err := c.reader.ReadMultiBuffer()
+	// The producer publishes readErr before closing the pipe writer.
+	if err == io.EOF && c.readErr != nil {
+		err = c.readErr
 	}
-	if c.reader == nil {
-		reader, err := c.openResponse()
-		if err != nil {
-			return nil, err
-		}
-		c.reader = reader
-	}
-	mb, err := c.reader.ReadMultiBuffer()
-	if !mb.IsEmpty() {
-		c.activity.Update()
-		c.readErr = err
-		return mb, nil
-	}
-	return mb, err
+	return data, err
 }
 
 func (c *muxCarrier) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -151,6 +141,7 @@ func (c *muxCarrier) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 func (c *muxCarrier) Interrupt() {
 	c.cancel()
+	c.reader.Interrupt()
 }
 
 // A quiescent writer can drain and send EOF. Handshake or blocked writes

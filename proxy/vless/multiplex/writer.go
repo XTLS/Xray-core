@@ -68,14 +68,15 @@ func (w *Writer) writeMetaOnly() error {
 	return w.writer.WriteMultiBuffer(buf.MultiBuffer{b})
 }
 
-// WriteMultiBuffer emits the frames of one input batch in one carrier write.
-// Frame boundaries and per-packet destinations remain part of each header.
+// WriteMultiBuffer submits at most two frames per carrier write.
+// Each frame keeps its wire boundary and per-packet destination.
 func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
 	if mb.IsEmpty() {
 		return w.writeMetaOnly()
 	}
 	var frames buf.MultiBuffer
+	framesInBatch := 0
 	defer func() { buf.ReleaseMulti(frames) }()
 	for !mb.IsEmpty() {
 		var chunk buf.MultiBuffer
@@ -100,6 +101,18 @@ func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if _, err := serial.WriteUint16(frame, uint16(chunk.Len())); err != nil {
 			return err
 		}
+		framesInBatch++
+		if framesInBatch == 2 {
+			output := frames
+			frames = nil
+			framesInBatch = 0
+			if err := w.writer.WriteMultiBuffer(output); err != nil {
+				return err
+			}
+		}
+	}
+	if len(frames) == 0 {
+		return nil
 	}
 	output := frames
 	frames = nil

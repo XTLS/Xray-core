@@ -37,6 +37,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
+	"github.com/xtls/xray-core/transport/pipe"
 )
 
 func init() {
@@ -457,7 +458,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 				return err
 			}
 		}
-		carrier.openResponse, carrier.activity = openResponse, timer
+		carrier.activity = timer
 		var ok bool
 		carrier.gate, ok = serverWriter.(*buf.BufferedWriter)
 		if !ok {
@@ -469,6 +470,17 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		if !opening.Stop() {
 			return context.DeadlineExceeded
 		}
+		reader, writer := pipe.New(pipe.WithSizeLimit(64 * 1024))
+		carrier.reader = reader
+		defer reader.Interrupt()
+		go func() {
+			response, err := openResponse()
+			if err == nil {
+				err = buf.Copy(response, writer, buf.UpdateActivity(timer))
+			}
+			carrier.readErr = err
+			writer.Close()
+		}()
 		return start(ctx, &transport.Link{Reader: carrier, Writer: carrier.gate})
 	}
 
