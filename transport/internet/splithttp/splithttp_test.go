@@ -599,3 +599,48 @@ func Test_ServerMaxHeaderBytes(t *testing.T) {
 		t.Fatalf("oversized header status = %d, want 431", resp.StatusCode)
 	}
 }
+
+func Test_DialBlackholedHandshake(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	common.Must(err)
+	defer listener.Close()
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			defer conn.Close() // the kernel takes the ClientHello, nobody answers
+		}
+	}()
+
+	ct, ctHash := cert.MustGenerate(nil, cert.CommonName("localhost"))
+	streamSettings := &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "shs"},
+		SecurityType:     "tls",
+		SecuritySettings: &tls.Config{
+			Certificate:          []*tls.Certificate{tls.ParseCertificate(ct)},
+			PinnedPeerCertSha256: [][]byte{ctHash[:]},
+		},
+	}
+	port := net.Port(listener.Addr().(*net.TCPAddr).Port)
+
+	done := make(chan error, 1)
+	go func() {
+		conn, err := Dial(context.Background(), net.TCPDestination(net.DomainAddress("localhost"), port), streamSettings)
+		if err == nil {
+			_, err = conn.Read(make([]byte, 1))
+			conn.Close()
+		}
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("read through a blackholed handshake succeeded")
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("dial still waits on a handshake blackholed after ClientHello")
+	}
+}

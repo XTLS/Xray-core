@@ -127,6 +127,10 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			return nil, err
 		}
 
+		// a handshake blackholed after ClientHello would hold every request queued behind this dial
+		ctxInner, cancel := context.WithTimeout(ctxInner, 10*time.Second)
+		defer cancel()
+
 		if realityConfig != nil {
 			return reality.UClient(conn, realityConfig, ctxInner, dest)
 		}
