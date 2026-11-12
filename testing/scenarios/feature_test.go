@@ -21,7 +21,6 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
 	core "github.com/xtls/xray-core/core"
-	"github.com/xtls/xray-core/proxy/blackhole"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
 	v2http "github.com/xtls/xray-core/proxy/http"
@@ -406,7 +405,7 @@ func TestBlackhole(t *testing.T) {
 			},
 			{
 				Tag:           "blocked",
-				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Block, Delay: &freedom.Range{}}}}),
 			},
 		},
 		App: []*serial.TypedMessage{

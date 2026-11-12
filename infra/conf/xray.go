@@ -407,7 +407,10 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, errors.New("the masque transport can only be used by the masque outbound")
 	}
 
-	if fc, ok := ts.(*freedom.Config); ok {
+	if _, ok := rawConfig.(*BlackholeConfig); ok {
+		// The legacy blackhole outbound never used its transport settings.
+		senderSettings.StreamSettings = nil
+	} else if fc, ok := ts.(*freedom.Config); ok {
 		if legacy := rawConfig.(*FreedomConfig); legacy.ProxyProtocol > 0 && legacy.ProxyProtocol <= 2 {
 			if senderSettings.StreamSettings == nil {
 				senderSettings.StreamSettings = &internet.StreamConfig{}

@@ -24,7 +24,6 @@ import (
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/routing"
 	routing_session "github.com/xtls/xray-core/features/routing/session"
-	"github.com/xtls/xray-core/proxy/blackhole"
 	"github.com/xtls/xray-core/proxy/freedom"
 )
 
@@ -397,7 +396,7 @@ end`)
 			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
 		},
 		Outbound: []*core.OutboundHandlerConfig{
-			{Tag: "default", ProxySettings: serial.ToTypedMessage(&blackhole.Config{})},
+			{Tag: "default", ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Block, Delay: &freedom.Range{}}}})},
 			{Tag: "direct", ProxySettings: serial.ToTypedMessage(&freedom.Config{
 				Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 			})},

@@ -3,8 +3,9 @@ package conf_test
 import (
 	"testing"
 
+	"github.com/xtls/xray-core/common/log"
 	. "github.com/xtls/xray-core/infra/conf"
-	"github.com/xtls/xray-core/proxy/blackhole"
+	"github.com/xtls/xray-core/proxy/freedom"
 )
 
 func TestHTTPResponseJSON(t *testing.T) {
@@ -20,14 +21,25 @@ func TestHTTPResponseJSON(t *testing.T) {
 				}
 			}`,
 			Parser: loadJSON(creator),
-			Output: &blackhole.Config{
-				Response: &blackhole.Response{Type: "http"},
+			Output: &freedom.Config{
+				Firewall: []*freedom.FirewallConfig{{
+					Action:   freedom.RuleAction_Block,
+					Delay:    &freedom.Range{},
+					LogLevel: log.Severity_Unknown.Enum(),
+					Reply:    &freedom.Reply{Type: "http"},
+				}},
 			},
 		},
 		{
 			Input:  `{}`,
 			Parser: loadJSON(creator),
-			Output: &blackhole.Config{},
+			Output: &freedom.Config{
+				Firewall: []*freedom.FirewallConfig{{
+					Action:   freedom.RuleAction_Block,
+					Delay:    &freedom.Range{},
+					LogLevel: log.Severity_Unknown.Enum(),
+				}},
+			},
 		},
 	})
 }
@@ -46,11 +58,16 @@ func TestCustomResponseJSON(t *testing.T) {
 				}
 			}`,
 			Parser: loadJSON(creator),
-			Output: &blackhole.Config{
-				Response: &blackhole.Response{
-					Type:               "custom",
-					CustomResponseData: []byte("custom response"),
-				},
+			Output: &freedom.Config{
+				Firewall: []*freedom.FirewallConfig{{
+					Action:   freedom.RuleAction_Block,
+					Delay:    &freedom.Range{},
+					LogLevel: log.Severity_Unknown.Enum(),
+					Reply: &freedom.Reply{
+						Type:               "custom",
+						CustomResponseData: []byte("custom response"),
+					},
+				}},
 			},
 		},
 	})
