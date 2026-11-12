@@ -268,21 +268,28 @@ func TestMultiplexConfig_Build(t *testing.T) {
 		})
 	}
 
-	for _, legacy := range []string{
-		`{"enabled": true, "concurrency": 16}`,
-		`{"enabled": false, "concurrency": 4}`,
-		`{"enabled": false, "concurrency": -1}`,
-		`{}`,
+	for _, tc := range []struct {
+		legacy  string
+		removed bool
+	}{
+		{`{"enabled": true, "concurrency": 16}`, true},
+		{`{"enabled": false, "concurrency": 4}`, false},
+		{`{"enabled": false, "concurrency": -1}`, false},
+		{`{}`, false},
 	} {
-		t.Run("legacy top-level mux "+legacy, func(t *testing.T) {
+		t.Run("legacy top-level mux "+tc.legacy, func(t *testing.T) {
 			var config OutboundDetourConfig
-			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","mux":`+legacy+`}`), &config))
+			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":443,"users":[{"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d","encryption":"none"}]}]},"mux":`+tc.legacy+`}`), &config))
 			if config.MuxSettings == nil {
 				t.Fatal("legacy mux input was not recognized")
 			}
 			_, err := config.Build()
-			if err == nil || !strings.Contains(err.Error(), "VLESS settings.multiplex") {
-				t.Fatalf("legacy mux Build() error = %v, want multiplex migration error", err)
+			if tc.removed {
+				if err == nil || !strings.Contains(err.Error(), "VLESS settings.multiplex") {
+					t.Fatalf("legacy mux Build() error = %v, want multiplex migration error", err)
+				}
+			} else if err != nil {
+				t.Fatalf("disabled legacy mux Build() error = %v", err)
 			}
 		})
 	}

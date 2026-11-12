@@ -237,12 +237,16 @@ func (c *VLessReverseConfig) Build() (*vless.Reverse, error) {
 }
 
 type MultiplexConfig struct {
+	Enabled         *bool  `json:"enabled,omitempty"`
 	Concurrency     int16  `json:"concurrency"`
 	XudpConcurrency int16  `json:"xudpConcurrency"`
 	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
 }
 
 func (c *MultiplexConfig) Build() (*vless.Multiplex, error) {
+	if c.Enabled != nil && !*c.Enabled {
+		return nil, nil
+	}
 	switch c.XudpProxyUDP443 {
 	case "":
 		c.XudpProxyUDP443 = "reject"

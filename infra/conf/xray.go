@@ -362,7 +362,13 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
 	if c.MuxSettings != nil {
-		return nil, errors.PrintRemovedFeatureError(`"mux"`, `"VLESS settings.multiplex"`)
+		var legacy MultiplexConfig
+		if err := json.Unmarshal(*c.MuxSettings, &legacy); err != nil {
+			return nil, errors.New("failed to parse mux settings").Base(err)
+		}
+		if legacy.Enabled != nil && *legacy.Enabled {
+			return nil, errors.PrintRemovedFeatureError(`"mux"`, `"VLESS settings.multiplex"`)
+		}
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
