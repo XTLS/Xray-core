@@ -318,6 +318,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
+	if !h.usesDialerProxy && len(h.firewall) > 0 {
+		rule := h.firewall[0]
+		if rule.action == RuleAction_Block && rule.network == allNetworks && len(rule.port) == 0 && rule.ip == nil {
+			return h.blackhole(ctx, link.Reader, link.Writer, rule, &ob.Target)
+		}
+	}
 	inbound := session.InboundFromContext(ctx)
 	var defaultRule *Firewall
 	if !h.usesDialerProxy { // freedom is not the final outbound, firewall does not apply (and the domain is not resolved)
