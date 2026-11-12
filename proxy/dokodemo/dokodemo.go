@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -205,6 +206,8 @@ func NewPacketWriter(conn net.PacketConn, d *net.Destination, mark int, back *ne
 	writer := &PacketWriter{
 		conn:  conn,
 		conns: make(map[net.Destination]net.PacketConn),
+		used:  make(map[net.Destination]time.Time),
+		sweep: time.Now(),
 		mark:  mark,
 		back:  back,
 	}
@@ -212,14 +215,43 @@ func NewPacketWriter(conn net.PacketConn, d *net.Destination, mark int, back *ne
 	return writer
 }
 
+// A cone UDP session lives while its client port keeps sending, which for a P2P/DHT client
+// can be days, and gets replies from thousands of remotes. Each remote holds its own fake
+// socket, so without eviction every remote ever seen keeps a socket until the session ends.
+// Sockets of remotes that sent nothing for fakeUDPIdle are closed; a new reply reopens one.
+var (
+	fakeUDPIdle  = 2 * time.Minute
+	fakeUDPSweep = 30 * time.Second
+)
+
 type PacketWriter struct {
 	conn  net.PacketConn
 	conns map[net.Destination]net.PacketConn
+	used  map[net.Destination]time.Time
+	sweep time.Time
 	mark  int
 	back  *net.UDPAddr
 }
 
+func (w *PacketWriter) sweepIdle(now time.Time) {
+	w.sweep = now
+	for d, conn := range w.conns {
+		if conn == w.conn || now.Sub(w.used[d]) < fakeUDPIdle {
+			continue
+		}
+		if conn != nil {
+			conn.Close()
+		}
+		delete(w.conns, d)
+		delete(w.used, d)
+	}
+}
+
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	now := time.Now()
+	if now.Sub(w.sweep) >= fakeUDPSweep {
+		w.sweepIdle(now)
+	}
 	for {
 		mb2, b := buf.SplitFirst(mb)
 		mb = mb2
@@ -244,11 +276,15 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				}
 				w.conns[*b.UDP] = conn
 			}
+			w.used[*b.UDP] = now
 			_, err = conn.WriteTo(b.Bytes(), w.back)
 			if err != nil {
 				errors.LogInfo(context.Background(), err.Error())
-				w.conns[*b.UDP] = nil
-				conn.Close()
+				if conn != w.conn {
+					delete(w.conns, *b.UDP)
+					delete(w.used, *b.UDP)
+					conn.Close()
+				}
 			}
 			b.Release()
 		} else {
