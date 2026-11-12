@@ -30,36 +30,42 @@ func readPacket(reader io.Reader, dest net.Destination) (buf.MultiBuffer, error)
 	return buf.MultiBuffer{b}, nil
 }
 
-// copyFramePayload gathers the declared stream frame before publication. On a
-// terminal read failure, preserve its accumulated bytes and observed cause.
+// copyFramePayload publishes stream data as it arrives and keeps packets whole.
+// A closed child discards the remainder without crossing the frame boundary.
 func copyFramePayload(reader *buf.BufferedReader, s *Session, dest net.Destination) (err error) {
-	var mb buf.MultiBuffer
-	if s != nil && s.transferType == protocol.TransferTypePacket {
-		mb, err = readPacket(reader, dest)
-	} else {
+	packet := s != nil && s.transferType == protocol.TransferTypePacket
+	var left int32
+	if !packet {
 		size, sizeErr := serial.ReadUint16(reader)
 		if sizeErr != nil {
 			return sizeErr
 		}
-		left := int32(size)
-		for left > 0 {
-			var part buf.MultiBuffer
-			part, err = reader.ReadAtMost(left)
-			left -= part.Len()
-			if s == nil {
-				buf.ReleaseMulti(part)
-			} else {
-				mb = buf.Compact(append(mb, part...))
-			}
-			if err != nil {
-				break
+		left = int32(size)
+	}
+	for packet || left > 0 {
+		var mb buf.MultiBuffer
+		if packet {
+			mb, err = readPacket(reader, dest)
+		} else {
+			mb, err = reader.ReadAtMost(left)
+			left -= mb.Len()
+			// Coalesce cached pieces without reading more from the transport.
+			for s != nil && left > 0 && reader.BufferedBytes() > 0 {
+				var part buf.MultiBuffer
+				part, err = reader.ReadAtMost(left)
+				left -= part.Len()
+				mb = append(mb, part...)
 			}
 		}
+		if s == nil || mb.IsEmpty() {
+			buf.ReleaseMulti(mb)
+		} else if werr := s.output.WriteMultiBuffer(mb); werr != nil {
+			s.Close()
+			s = nil
+		}
+		if packet || err != nil {
+			return err
+		}
 	}
-	if s == nil || mb.IsEmpty() {
-		buf.ReleaseMulti(mb)
-	} else if werr := s.output.WriteMultiBuffer(mb); werr != nil {
-		s.Close() // complete frame already consumed; no drain adapter needed
-	}
-	return err
+	return nil
 }
