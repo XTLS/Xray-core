@@ -23,6 +23,7 @@ message Policy {
     bool user_uplink = 1;
     bool user_downlink = 2;
     bool user_online = 3;
+    uint32 max_user_online = 4;
   }
 
   message Buffer {

@@ -12,6 +12,7 @@ type Policy struct {
 	StatsUserUplink   bool    `json:"statsUserUplink"`
 	StatsUserDownlink bool    `json:"statsUserDownlink"`
 	StatsUserOnline   bool    `json:"statsUserOnline"`
+	MaxUserOnline     uint32  `json:"maxUserOnline"`
 	BufferSize        *int32  `json:"bufferSize"`
 }
 
@@ -33,9 +34,10 @@ func (t *Policy) Build() (*policy.Policy, error) {
 	p := &policy.Policy{
 		Timeout: config,
 		Stats: &policy.Policy_Stats{
-			UserUplink:   t.StatsUserUplink,
-			UserDownlink: t.StatsUserDownlink,
-			UserOnline:   t.StatsUserOnline,
+			UserUplink:    t.StatsUserUplink,
+			UserDownlink:  t.StatsUserDownlink,
+			UserOnline:    t.StatsUserOnline,
+			MaxUserOnline: t.MaxUserOnline,
 		},
 	}
 
