@@ -46,13 +46,37 @@ type Noise struct {
 }
 
 type FreedomFirewallConfig struct {
-	Action     string       `json:"action"`
-	Network    *NetworkList `json:"network"`
-	Port       *PortList    `json:"port"`
-	IP         *StringList  `json:"ip"`
-	Delay      *Int32Range  `json:"delay"`
-	LogLevel   string       `json:"logLevel"`
-	BlockDelay *Int32Range  `json:"blockDelay"`
+	Action     string              `json:"action"`
+	Network    *NetworkList        `json:"network"`
+	Port       *PortList           `json:"port"`
+	IP         *StringList         `json:"ip"`
+	Delay      *Int32Range         `json:"delay"`
+	LogLevel   string              `json:"logLevel"`
+	Reply      *FreedomReplyConfig `json:"reply"`
+	BlockDelay *Int32Range         `json:"blockDelay"`
+}
+
+type FreedomReplyConfig struct {
+	Type               string `json:"type"`
+	CustomResponseData string `json:"customResponseData"`
+}
+
+func (c *FreedomReplyConfig) Build() (*freedom.Reply, error) {
+	replyType := strings.ToLower(c.Type)
+	switch replyType {
+	case "none", "":
+		return &freedom.Reply{Type: "none"}, nil
+	case "http":
+		return &freedom.Reply{Type: "http"}, nil
+	case "custom":
+		data, err := base64.StdEncoding.DecodeString(c.CustomResponseData)
+		if err != nil {
+			return nil, errors.New("failed to decode custom reply data: " + err.Error())
+		}
+		return &freedom.Reply{Type: "custom", CustomResponseData: data}, nil
+	default:
+		return nil, errors.New("unknown firewall reply: " + replyType)
+	}
 }
 
 // Build implements Buildable
@@ -296,8 +320,8 @@ func (c *FreedomFirewallConfig) Build() (*freedom.FirewallConfig, error) {
 	}
 
 	if rule.Action != freedom.RuleAction_Block {
-		if c.Delay != nil || c.LogLevel != "" {
-			return nil, errors.New("delay and logLevel are only supported for firewall action block")
+		if c.Delay != nil || c.LogLevel != "" || c.Reply != nil {
+			return nil, errors.New("delay, logLevel and reply are only supported for firewall action block")
 		}
 		return rule, nil
 	}
@@ -307,6 +331,14 @@ func (c *FreedomFirewallConfig) Build() (*freedom.FirewallConfig, error) {
 			Min: uint64(c.Delay.From),
 			Max: uint64(c.Delay.To),
 		}
+	}
+
+	if c.Reply != nil {
+		reply, err := c.Reply.Build()
+		if err != nil {
+			return nil, err
+		}
+		rule.Reply = reply
 	}
 
 	switch strings.ToLower(c.LogLevel) {

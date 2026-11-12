@@ -48,7 +48,11 @@ func TestFreedomConfig(t *testing.T) {
 					"port": "53,443",
 					"ip": ["10.0.0.0/8", "2001:db8::/32"],
 					"delay": "30-60",
-					"logLevel": "debug"
+					"logLevel": "debug",
+					"reply": {
+						"type": "custom",
+						"customResponseData": "Y3VzdG9tIHJlc3BvbnNl"
+					}
 				}, {
 					"action": "allow",
 					"network": ["udp"]
@@ -90,6 +94,10 @@ func TestFreedomConfig(t *testing.T) {
 						},
 						Delay:    &freedom.Range{Min: 30, Max: 60},
 						LogLevel: log.Severity_Debug.Enum(),
+						Reply: &freedom.Reply{
+							Type:               "custom",
+							CustomResponseData: []byte("custom response"),
+						},
 					},
 					{
 						Action:   freedom.RuleAction_Allow,

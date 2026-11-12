@@ -1,9 +1,11 @@
 package freedom
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"io"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -37,6 +39,16 @@ var (
 	defaultBlockPrivateRule *Firewall
 	defaultBlockAllRule     *Firewall
 )
+
+var http403response = http.Response{
+	StatusCode: 403,
+	ProtoMajor: 1,
+	ProtoMinor: 1,
+	Header: http.Header{
+		"Connection":    {"close"},
+		"Cache-Control": {"max-age=3600, public"},
+	},
+}
 
 func reloadEnvSettings() error {
 	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
@@ -92,6 +104,7 @@ type Firewall struct {
 	ip       geodata.IPMatcher
 	delay    *Range
 	logLevel *log.Severity
+	reply    []byte
 }
 
 // Handler handles Freedom connections.
@@ -108,6 +121,20 @@ func buildRule(config *FirewallConfig) (*Firewall, error) {
 		action:   config.GetAction(),
 		delay:    config.GetDelay(),
 		logLevel: config.LogLevel,
+	}
+
+	if config.Reply != nil {
+		switch config.Reply.Type {
+		case "", "none":
+		case "http":
+			var data bytes.Buffer
+			common.Must(http403response.Write(&data))
+			rule.reply = data.Bytes()
+		case "custom":
+			rule.reply = config.Reply.CustomResponseData
+		default:
+			return nil, errors.New("unknown firewall reply: " + config.Reply.Type)
+		}
 	}
 
 	if len(config.Networks) == 0 {
@@ -251,6 +278,13 @@ func (h *Handler) blackhole(ctx context.Context, input buf.Reader, output buf.Wr
 	delay := rule.blockDuration()
 	rule.log(ctx, "target blocked by a firewall rule: ", *dest, ", blackholing connection for ", delay)
 	defer common.Close(output)
+	if len(rule.reply) > 0 {
+		mbc := buf.MultiBufferContainer{}
+		common.Must2(mbc.Write(rule.reply))
+		output.WriteMultiBuffer(mbc.MultiBuffer)
+		// Sleep a little here to make sure the reply is sent to client.
+		time.Sleep(time.Second)
+	}
 	done := make(chan struct{})
 	go func() { // a DispatchLink inbound's reader ignores Interrupt, so don't wait for this copy
 		_ = buf.Copy(input, buf.Discard)

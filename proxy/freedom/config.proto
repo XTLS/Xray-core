@@ -47,6 +47,11 @@ enum RuleAction {
   Block = 1;
 }
 
+message Reply {
+  string type = 1;
+  bytes custom_response_data = 2;
+}
+
 message FirewallConfig {
   RuleAction action = 1;
   repeated xray.common.net.Network networks = 2;
@@ -54,6 +59,7 @@ message FirewallConfig {
   repeated xray.common.geodata.IPRule ip = 4;
   Range delay = 5;
   optional xray.common.log.Severity log_level = 6;
+  Reply reply = 7;
 }
 
 message Config {
