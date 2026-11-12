@@ -279,7 +279,7 @@ func runVLESSRealityCase(t *testing.T, bin string, mode trafficMode, payloadSize
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
@@ -398,7 +398,7 @@ func runHysteria2Case(t *testing.T, bin string, mode trafficMode, payloadSize in
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
@@ -514,7 +514,7 @@ func runVLesseEncCase(t *testing.T, bin string, mode trafficMode, payloadSize in
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
@@ -614,7 +614,7 @@ func runVLESSXHTTPCase(t *testing.T, bin string, mode trafficMode, payloadSize i
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})

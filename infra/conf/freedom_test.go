@@ -42,7 +42,7 @@ func TestFreedomConfig(t *testing.T) {
 		},
 		{
 			Input: `{
-				"finalRules": [{
+				"firewall": [{
 					"action": "block",
 					"network": "tcp,udp",
 					"port": "53,443",
@@ -56,7 +56,7 @@ func TestFreedomConfig(t *testing.T) {
 			}`,
 			Parser: loadJSON(creator),
 			Output: &freedom.Config{
-				FinalRules: []*freedom.FinalRuleConfig{
+				Firewall: []*freedom.FirewallConfig{
 					{
 						Action:   freedom.RuleAction_Block,
 						Networks: []net.Network{net.Network_TCP, net.Network_UDP},

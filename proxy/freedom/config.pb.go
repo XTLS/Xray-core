@@ -352,7 +352,7 @@ func (x *Range) GetMax() uint64 {
 	return 0
 }
 
-type FinalRuleConfig struct {
+type FirewallConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Action        RuleAction             `protobuf:"varint,1,opt,name=action,proto3,enum=xray.proxy.freedom.RuleAction" json:"action,omitempty"`
 	Networks      []net.Network          `protobuf:"varint,2,rep,packed,name=networks,proto3,enum=xray.common.net.Network" json:"networks,omitempty"`
@@ -364,20 +364,20 @@ type FinalRuleConfig struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *FinalRuleConfig) Reset() {
-	*x = FinalRuleConfig{}
+func (x *FirewallConfig) Reset() {
+	*x = FirewallConfig{}
 	mi := &file_proxy_freedom_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *FinalRuleConfig) String() string {
+func (x *FirewallConfig) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*FinalRuleConfig) ProtoMessage() {}
+func (*FirewallConfig) ProtoMessage() {}
 
-func (x *FinalRuleConfig) ProtoReflect() protoreflect.Message {
+func (x *FirewallConfig) ProtoReflect() protoreflect.Message {
 	mi := &file_proxy_freedom_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -389,47 +389,47 @@ func (x *FinalRuleConfig) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use FinalRuleConfig.ProtoReflect.Descriptor instead.
-func (*FinalRuleConfig) Descriptor() ([]byte, []int) {
+// Deprecated: Use FirewallConfig.ProtoReflect.Descriptor instead.
+func (*FirewallConfig) Descriptor() ([]byte, []int) {
 	return file_proxy_freedom_config_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *FinalRuleConfig) GetAction() RuleAction {
+func (x *FirewallConfig) GetAction() RuleAction {
 	if x != nil {
 		return x.Action
 	}
 	return RuleAction_Allow
 }
 
-func (x *FinalRuleConfig) GetNetworks() []net.Network {
+func (x *FirewallConfig) GetNetworks() []net.Network {
 	if x != nil {
 		return x.Networks
 	}
 	return nil
 }
 
-func (x *FinalRuleConfig) GetPortList() *net.PortList {
+func (x *FirewallConfig) GetPortList() *net.PortList {
 	if x != nil {
 		return x.PortList
 	}
 	return nil
 }
 
-func (x *FinalRuleConfig) GetIp() []*geodata.IPRule {
+func (x *FirewallConfig) GetIp() []*geodata.IPRule {
 	if x != nil {
 		return x.Ip
 	}
 	return nil
 }
 
-func (x *FinalRuleConfig) GetDelay() *Range {
+func (x *FirewallConfig) GetDelay() *Range {
 	if x != nil {
 		return x.Delay
 	}
 	return nil
 }
 
-func (x *FinalRuleConfig) GetLogLevel() log.Severity {
+func (x *FirewallConfig) GetLogLevel() log.Severity {
 	if x != nil && x.LogLevel != nil {
 		return *x.LogLevel
 	}
@@ -444,7 +444,7 @@ type Config struct {
 	Fragment            *Fragment               `protobuf:"bytes,5,opt,name=fragment,proto3" json:"fragment,omitempty"`
 	ProxyProtocol       uint32                  `protobuf:"varint,6,opt,name=proxy_protocol,json=proxyProtocol,proto3" json:"proxy_protocol,omitempty"`
 	Noises              []*Noise                `protobuf:"bytes,7,rep,name=noises,proto3" json:"noises,omitempty"`
-	FinalRules          []*FinalRuleConfig      `protobuf:"bytes,8,rep,name=final_rules,json=finalRules,proto3" json:"final_rules,omitempty"`
+	Firewall            []*FirewallConfig       `protobuf:"bytes,8,rep,name=firewall,proto3" json:"firewall,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -521,9 +521,9 @@ func (x *Config) GetNoises() []*Noise {
 	return nil
 }
 
-func (x *Config) GetFinalRules() []*FinalRuleConfig {
+func (x *Config) GetFirewall() []*FirewallConfig {
 	if x != nil {
-		return x.FinalRules
+		return x.Firewall
 	}
 	return nil
 }
@@ -558,8 +558,8 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\bapply_to\x18\x06 \x01(\tR\aapplyTo\"+\n" +
 	"\x05Range\x12\x10\n" +
 	"\x03min\x18\x01 \x01(\x04R\x03min\x12\x10\n" +
-	"\x03max\x18\x02 \x01(\x04R\x03max\"\xe0\x02\n" +
-	"\x0fFinalRuleConfig\x126\n" +
+	"\x03max\x18\x02 \x01(\x04R\x03max\"\xdf\x02\n" +
+	"\x0eFirewallConfig\x126\n" +
 	"\x06action\x18\x01 \x01(\x0e2\x1e.xray.proxy.freedom.RuleActionR\x06action\x124\n" +
 	"\bnetworks\x18\x02 \x03(\x0e2\x18.xray.common.net.NetworkR\bnetworks\x126\n" +
 	"\tport_list\x18\x03 \x01(\v2\x19.xray.common.net.PortListR\bportList\x12+\n" +
@@ -567,7 +567,7 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\x05delay\x18\x05 \x01(\v2\x19.xray.proxy.freedom.RangeR\x05delay\x12;\n" +
 	"\tlog_level\x18\x06 \x01(\x0e2\x19.xray.common.log.SeverityH\x00R\blogLevel\x88\x01\x01B\f\n" +
 	"\n" +
-	"_log_level\"\xaf\x03\n" +
+	"_log_level\"\xa9\x03\n" +
 	"\x06Config\x12P\n" +
 	"\x0fdomain_strategy\x18\x01 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0edomainStrategy\x12Z\n" +
 	"\x14destination_override\x18\x03 \x01(\v2'.xray.proxy.freedom.DestinationOverrideR\x13destinationOverride\x12\x1d\n" +
@@ -575,9 +575,8 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"user_level\x18\x04 \x01(\rR\tuserLevel\x128\n" +
 	"\bfragment\x18\x05 \x01(\v2\x1c.xray.proxy.freedom.FragmentR\bfragment\x12%\n" +
 	"\x0eproxy_protocol\x18\x06 \x01(\rR\rproxyProtocol\x121\n" +
-	"\x06noises\x18\a \x03(\v2\x19.xray.proxy.freedom.NoiseR\x06noises\x12D\n" +
-	"\vfinal_rules\x18\b \x03(\v2#.xray.proxy.freedom.FinalRuleConfigR\n" +
-	"finalRules*\"\n" +
+	"\x06noises\x18\a \x03(\v2\x19.xray.proxy.freedom.NoiseR\x06noises\x12>\n" +
+	"\bfirewall\x18\b \x03(\v2\".xray.proxy.freedom.FirewallConfigR\bfirewall*\"\n" +
 	"\n" +
 	"RuleAction\x12\t\n" +
 	"\x05Allow\x10\x00\x12\t\n" +
@@ -604,7 +603,7 @@ var file_proxy_freedom_config_proto_goTypes = []any{
 	(*Fragment)(nil),                // 2: xray.proxy.freedom.Fragment
 	(*Noise)(nil),                   // 3: xray.proxy.freedom.Noise
 	(*Range)(nil),                   // 4: xray.proxy.freedom.Range
-	(*FinalRuleConfig)(nil),         // 5: xray.proxy.freedom.FinalRuleConfig
+	(*FirewallConfig)(nil),          // 5: xray.proxy.freedom.FirewallConfig
 	(*Config)(nil),                  // 6: xray.proxy.freedom.Config
 	(*protocol.ServerEndpoint)(nil), // 7: xray.common.protocol.ServerEndpoint
 	(net.Network)(0),                // 8: xray.common.net.Network
@@ -615,17 +614,17 @@ var file_proxy_freedom_config_proto_goTypes = []any{
 }
 var file_proxy_freedom_config_proto_depIdxs = []int32{
 	7,  // 0: xray.proxy.freedom.DestinationOverride.server:type_name -> xray.common.protocol.ServerEndpoint
-	0,  // 1: xray.proxy.freedom.FinalRuleConfig.action:type_name -> xray.proxy.freedom.RuleAction
-	8,  // 2: xray.proxy.freedom.FinalRuleConfig.networks:type_name -> xray.common.net.Network
-	9,  // 3: xray.proxy.freedom.FinalRuleConfig.port_list:type_name -> xray.common.net.PortList
-	10, // 4: xray.proxy.freedom.FinalRuleConfig.ip:type_name -> xray.common.geodata.IPRule
-	4,  // 5: xray.proxy.freedom.FinalRuleConfig.delay:type_name -> xray.proxy.freedom.Range
-	11, // 6: xray.proxy.freedom.FinalRuleConfig.log_level:type_name -> xray.common.log.Severity
+	0,  // 1: xray.proxy.freedom.FirewallConfig.action:type_name -> xray.proxy.freedom.RuleAction
+	8,  // 2: xray.proxy.freedom.FirewallConfig.networks:type_name -> xray.common.net.Network
+	9,  // 3: xray.proxy.freedom.FirewallConfig.port_list:type_name -> xray.common.net.PortList
+	10, // 4: xray.proxy.freedom.FirewallConfig.ip:type_name -> xray.common.geodata.IPRule
+	4,  // 5: xray.proxy.freedom.FirewallConfig.delay:type_name -> xray.proxy.freedom.Range
+	11, // 6: xray.proxy.freedom.FirewallConfig.log_level:type_name -> xray.common.log.Severity
 	12, // 7: xray.proxy.freedom.Config.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
 	1,  // 8: xray.proxy.freedom.Config.destination_override:type_name -> xray.proxy.freedom.DestinationOverride
 	2,  // 9: xray.proxy.freedom.Config.fragment:type_name -> xray.proxy.freedom.Fragment
 	3,  // 10: xray.proxy.freedom.Config.noises:type_name -> xray.proxy.freedom.Noise
-	5,  // 11: xray.proxy.freedom.Config.final_rules:type_name -> xray.proxy.freedom.FinalRuleConfig
+	5,  // 11: xray.proxy.freedom.Config.firewall:type_name -> xray.proxy.freedom.FirewallConfig
 	12, // [12:12] is the sub-list for method output_type
 	12, // [12:12] is the sub-list for method input_type
 	12, // [12:12] is the sub-list for extension type_name

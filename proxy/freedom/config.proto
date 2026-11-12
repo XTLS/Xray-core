@@ -47,7 +47,7 @@ enum RuleAction {
   Block = 1;
 }
 
-message FinalRuleConfig {
+message FirewallConfig {
   RuleAction action = 1;
   repeated xray.common.net.Network networks = 2;
   xray.common.net.PortList port_list = 3;
@@ -63,5 +63,5 @@ message Config {
   Fragment fragment = 5;
   uint32 proxy_protocol = 6;
   repeated Noise noises = 7;
-  repeated FinalRuleConfig final_rules = 8;
+  repeated FirewallConfig firewall = 8;
 }

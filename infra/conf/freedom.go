@@ -18,16 +18,17 @@ import (
 )
 
 type FreedomConfig struct {
-	TargetStrategy string                    `json:"targetStrategy"`
-	DomainStrategy string                    `json:"domainStrategy"`
-	Redirect       string                    `json:"redirect"`
-	UserLevel      uint32                    `json:"userLevel"`
-	Fragment       *Fragment                 `json:"fragment"`
-	Noise          *Noise                    `json:"noise"`
-	Noises         []*Noise                  `json:"noises"`
-	ProxyProtocol  uint32                    `json:"proxyProtocol"`
-	IPsBlocked     *StringList               `json:"ipsBlocked"`
-	FinalRules     []*FreedomFinalRuleConfig `json:"finalRules"`
+	TargetStrategy string                   `json:"targetStrategy"`
+	DomainStrategy string                   `json:"domainStrategy"`
+	Redirect       string                   `json:"redirect"`
+	UserLevel      uint32                   `json:"userLevel"`
+	Fragment       *Fragment                `json:"fragment"`
+	Noise          *Noise                   `json:"noise"`
+	Noises         []*Noise                 `json:"noises"`
+	ProxyProtocol  uint32                   `json:"proxyProtocol"`
+	IPsBlocked     *StringList              `json:"ipsBlocked"`
+	Firewall       []*FreedomFirewallConfig `json:"firewall"`
+	FinalRules     []*FreedomFirewallConfig `json:"finalRules"`
 }
 
 type Fragment struct {
@@ -44,7 +45,7 @@ type Noise struct {
 	ApplyTo string      `json:"applyTo"`
 }
 
-type FreedomFinalRuleConfig struct {
+type FreedomFirewallConfig struct {
 	Action     string       `json:"action"`
 	Network    *NetworkList `json:"network"`
 	Port       *PortList    `json:"port"`
@@ -58,7 +59,7 @@ type FreedomFinalRuleConfig struct {
 func (c *FreedomConfig) Build() (proto.Message, error) {
 	if c.IPsBlocked != nil {
 		// todo: remove legacy
-		errors.LogWarning(context.Background(), `The feature "ipsBlocked" has been removed and migrated to "finalRules". Please update your config(s) according to release note and documentation.`)
+		errors.LogWarning(context.Background(), `The feature "ipsBlocked" has been removed and migrated to "firewall". Please update your config(s) according to release note and documentation.`)
 	}
 
 	config := new(freedom.Config)
@@ -187,12 +188,19 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 		config.ProxyProtocol = c.ProxyProtocol
 	}
 
-	for _, r := range c.FinalRules {
+	firewall := c.Firewall
+	if c.FinalRules != nil {
+		errors.PrintDeprecatedFeatureWarning("finalRules", "firewall")
+		if firewall == nil {
+			firewall = c.FinalRules
+		}
+	}
+	for _, r := range firewall {
 		rule, err := r.Build()
 		if err != nil {
 			return nil, err
 		}
-		config.FinalRules = append(config.FinalRules, rule)
+		config.Firewall = append(config.Firewall, rule)
 	}
 
 	return config, nil
@@ -254,8 +262,8 @@ func ParseNoise(noise *Noise) (*freedom.Noise, error) {
 	return NConfig, nil
 }
 
-func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
-	rule := &freedom.FinalRuleConfig{}
+func (c *FreedomFirewallConfig) Build() (*freedom.FirewallConfig, error) {
+	rule := &freedom.FirewallConfig{}
 
 	switch strings.ToLower(c.Action) {
 	case "allow":
@@ -283,13 +291,13 @@ func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
 	}
 
 	if c.BlockDelay != nil {
-		errors.PrintDeprecatedFeatureWarning("finalRules.blockDelay", "finalRules.delay")
+		errors.PrintDeprecatedFeatureWarning("firewall.blockDelay", "firewall.delay")
 		c.Delay = c.BlockDelay
 	}
 
 	if rule.Action != freedom.RuleAction_Block {
 		if c.Delay != nil || c.LogLevel != "" {
-			return nil, errors.New("delay and logLevel are only supported for block finalRules")
+			return nil, errors.New("delay and logLevel are only supported for firewall action block")
 		}
 		return rule, nil
 	}
@@ -313,7 +321,7 @@ func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
 	case "error":
 		rule.LogLevel = log.Severity_Error.Enum()
 	default:
-		return nil, errors.New("unknown finalRules.logLevel: ", c.LogLevel)
+		return nil, errors.New("unknown firewall.logLevel: ", c.LogLevel)
 	}
 
 	return rule, nil

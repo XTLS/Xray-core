@@ -62,7 +62,7 @@ func TestPassiveConnection(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -123,7 +123,7 @@ func TestDialerProxy(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -152,7 +152,7 @@ func TestDialerProxy(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -254,7 +254,7 @@ func TestDialerProxyOverKCP(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -283,7 +283,7 @@ func TestDialerProxyOverKCP(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
@@ -402,7 +402,7 @@ func TestBlackhole(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				Tag:           "direct",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 			{
 				Tag:           "blocked",
@@ -517,7 +517,7 @@ func TestUDPConnection(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -582,7 +582,7 @@ func TestDomainSniffing(t *testing.T) {
 			},
 			{
 				Tag:           "direct",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 		},
 		App: []*serial.TypedMessage{
@@ -669,7 +669,7 @@ func TestDialXray(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},

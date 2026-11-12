@@ -399,7 +399,7 @@ end`)
 		Outbound: []*core.OutboundHandlerConfig{
 			{Tag: "default", ProxySettings: serial.ToTypedMessage(&blackhole.Config{})},
 			{Tag: "direct", ProxySettings: serial.ToTypedMessage(&freedom.Config{
-				FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 			})},
 		},
 	})
