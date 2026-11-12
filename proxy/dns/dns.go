@@ -507,6 +507,9 @@ func (p *pendingQueries) add(q queryKey) {
 	}
 	if len(p.queries) == 0 {
 		p.timer.SetTimeout(p.idle)
+		// SetTimeout used up the activity of this query; renew it, so the query
+		// waits as long as it would without tracking.
+		p.timer.Update()
 	}
 	if _, ok := p.queries[q]; !ok && len(p.queries) == maxPendingQueries {
 		p.overflow = true
