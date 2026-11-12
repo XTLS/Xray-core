@@ -68,7 +68,7 @@ func (w *Writer) writeMetaOnly() error {
 	return w.writer.WriteMultiBuffer(buf.MultiBuffer{b})
 }
 
-// WriteMultiBuffer submits at most two frames per carrier write.
+// WriteMultiBuffer submits at most four frames per carrier write.
 // Each frame keeps its wire boundary and per-packet destination.
 func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
@@ -102,7 +102,7 @@ func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			return err
 		}
 		framesInBatch++
-		if framesInBatch == 2 {
+		if framesInBatch == 4 {
 			output := frames
 			frames = nil
 			framesInBatch = 0
@@ -132,10 +132,6 @@ func (w *Writer) Close() error {
 	frame := buf.New()
 	common.Must(meta.WriteTo(frame))
 
-	if sender, ok := w.writer.(*frameSender); ok {
-		sender.writeEnd(buf.MultiBuffer{frame})
-	} else {
-		w.writer.WriteMultiBuffer(buf.MultiBuffer{frame})
-	}
+	w.writer.WriteMultiBuffer(buf.MultiBuffer{frame})
 	return nil
 }

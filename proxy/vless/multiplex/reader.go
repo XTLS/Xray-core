@@ -59,7 +59,7 @@ func copyFramePayload(reader *buf.BufferedReader, s *Session, dest net.Destinati
 		}
 		if s == nil || mb.IsEmpty() {
 			buf.ReleaseMulti(mb)
-		} else if werr := s.output.WriteMultiBuffer(mb); werr != nil {
+		} else if werr := s.writePayload(mb); werr != nil {
 			s.Close()
 			s = nil
 		}

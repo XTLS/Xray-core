@@ -2,14 +2,12 @@ package multiplex
 
 import (
 	"context"
-	"io"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type activityWriter struct {
@@ -38,43 +36,54 @@ func (w *activityWriter) WriteMultiBuffer(data buf.MultiBuffer) error {
 	return err
 }
 
-// responseQueue overlaps codec reads with demultiplexing once per carrier.
-// Its completion channel publishes the source cause after buffered data drains.
-type responseQueue struct {
-	*pipe.Reader
-	cancel    context.CancelFunc
-	completed chan error
-	terminal  error
+// readResult transfers one native decoded result, including its exact cause.
+type readResult struct {
+	data buf.MultiBuffer
+	err  error
 }
 
-func (q *responseQueue) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if q.terminal != nil {
-		return nil, q.terminal
+type responseReader struct {
+	ctx      context.Context
+	cancel   context.CancelFunc
+	results  chan readResult
+	terminal error
+}
+
+func (r *responseReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if r.terminal != nil {
+		return nil, r.terminal
 	}
-	mb, err := q.Reader.ReadMultiBuffer()
-	if err == io.EOF {
-		q.terminal = <-q.completed
-		if q.terminal == nil {
-			q.terminal = io.EOF
+	if err := r.ctx.Err(); err != nil {
+		return nil, err
+	}
+	select {
+	case result := <-r.results:
+		if err := r.ctx.Err(); err != nil {
+			buf.ReleaseMulti(result.data)
+			return nil, err
 		}
-		err = q.terminal
+		r.terminal = result.err
+		// BufferedReader.Read ignores data returned alongside an error.
+		if !result.data.IsEmpty() {
+			return result.data, nil
+		}
+		return result.data, r.terminal
+	case <-r.ctx.Done():
+		return nil, r.ctx.Err()
 	}
-	return mb, err
 }
 
-func (q *responseQueue) Interrupt() { q.Reader.Interrupt(); q.cancel() }
+func (r *responseReader) Interrupt() { r.cancel() }
 
 // OpenLink installs one immutable owner after VLESS codec preparation.
-func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connection, writer buf.Writer, activity *signal.ActivityTimer, receiveLimit int32, openResponse func() (buf.Reader, error)) (*transport.Link, error) {
+func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connection, writer buf.Writer, activity *signal.ActivityTimer, openResponse func() (buf.Reader, error)) (*transport.Link, error) {
 	gate, ok := writer.(*buf.BufferedWriter)
 	if !ok {
 		gate = buf.NewBufferedWriter(WrapWriter(ctx, cancel, writer, activity))
 		gate.SetBuffered(false)
 	}
-	queueReader, queueWriter := pipe.New(pipe.WithSizeLimit(receiveLimit))
-	queue := &responseQueue{Reader: queueReader, cancel: cancel, completed: make(chan error, 1)}
+	response := &responseReader{ctx: ctx, cancel: cancel, results: make(chan readResult)}
 	context.AfterFunc(ctx, func() {
-		queueReader.Interrupt()
 		activity.SetTimeout(0)
 		if gate.TryLock() {
 			gate.Unlock()
@@ -88,12 +97,36 @@ func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connecti
 		return nil, err
 	}
 	go func() {
-		body, err := openResponse()
-		if err == nil {
-			err = buf.Copy(body, queueWriter, buf.UpdateActivity(activity))
+		if ctx.Err() != nil {
+			return
 		}
-		queue.completed <- err
-		queueWriter.Close()
+		body, err := openResponse()
+		for {
+			var data buf.MultiBuffer
+			if err == nil {
+				if ctx.Err() != nil {
+					return
+				}
+				data, err = body.ReadMultiBuffer()
+			}
+			if !data.IsEmpty() {
+				activity.Update()
+			} else {
+				data = buf.ReleaseMulti(data)
+				if err == nil {
+					continue
+				}
+			}
+			select {
+			case response.results <- readResult{data: data, err: err}:
+			case <-ctx.Done():
+				buf.ReleaseMulti(data)
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
 	}()
-	return &transport.Link{Reader: queue, Writer: gate}, nil
+	return &transport.Link{Reader: response, Writer: gate}, nil
 }

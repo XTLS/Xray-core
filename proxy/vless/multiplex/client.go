@@ -3,6 +3,7 @@ package multiplex
 import (
 	"context"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
 // Client owns the VLESS stream pools. A nil configuration disables multiplexing.
@@ -124,6 +124,7 @@ func (p *Pool) Close() error {
 func (p *Pool) available() *ClientWorker {
 	p.access.Lock()
 	defer p.access.Unlock()
+	p.workers = slices.DeleteFunc(p.workers, func(worker *ClientWorker) bool { return worker.Closed() })
 	for _, worker := range p.workers {
 		if !worker.IsFull() {
 			return worker
@@ -161,9 +162,6 @@ func (p *Pool) PickAvailable(ctx context.Context) (*ClientWorker, error) {
 	}
 	opening, cancel := context.WithCancel(p.ctx)
 	stopCaller := context.AfterFunc(ctx, cancel)
-	opening = session.ContextWithOutbounds(opening, []*session.Outbound{{
-		Target: net.TCPDestination(net.DomainAddress("v1.mux.cool"), 9527),
-	}})
 	physicalCtx, link, err := p.open(opening)
 	detached := stopCaller()
 	if !detached && err == nil {
@@ -201,16 +199,8 @@ func (p *Pool) PickAvailable(ctx context.Context) (*ClientWorker, error) {
 	context.AfterFunc(physicalCtx, func() {
 		cancel()
 		worker.Close()
-		p.access.Lock()
-		defer p.access.Unlock()
-		for i, current := range p.workers {
-			if current == worker {
-				copy(p.workers[i:], p.workers[i+1:])
-				p.workers[len(p.workers)-1] = nil
-				p.workers = p.workers[:len(p.workers)-1]
-				break
-			}
-		}
+		p.available()
+
 	})
 	return worker, nil
 }
@@ -226,7 +216,7 @@ type ClientWorker struct {
 }
 
 func NewClientWorker(stream transport.Link, strategy ClientStrategy) *ClientWorker {
-	c := &ClientWorker{carrier: newCarrier(stream, 16*time.Second), strategy: strategy}
+	c := &ClientWorker{carrier: newCarrier(stream, 16*time.Second, true), strategy: strategy}
 	go c.run(context.Background(), nil)
 	return c
 }
@@ -239,11 +229,7 @@ func writeFirstPayload(reader buf.Reader, writer *Writer) error {
 		return writer.WriteMultiBuffer(buf.MultiBuffer{})
 	}
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
@@ -271,26 +257,13 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 	}
 }
 
-func (m *ClientWorker) IsClosing() bool {
-	sm := m.sessionManager
-	if m.strategy.MaxConnection > 0 && sm.Count() >= int(m.strategy.MaxConnection) {
-		return true
-	}
-	return false
-}
-
 // IsFull returns true if this ClientWorker is unable to accept more connections.
 // it might be because it is closing, or the number of connections has reached the limit.
 func (m *ClientWorker) IsFull() bool {
-	if m.IsClosing() || m.Closed() {
-		return true
-	}
-
 	sm := m.sessionManager
-	if m.strategy.MaxConcurrency > 0 && sm.Size() >= int(m.strategy.MaxConcurrency) {
-		return true
-	}
-	return false
+	return m.Closed() ||
+		(m.strategy.MaxConnection > 0 && sm.Count() >= int(m.strategy.MaxConnection)) ||
+		(m.strategy.MaxConcurrency > 0 && sm.Size() >= int(m.strategy.MaxConcurrency))
 }
 
 func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link, wait bool) bool {
@@ -306,9 +279,8 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link, wait 
 	if s == nil {
 		return false
 	}
-	go fetchInput(ctx, s, m.link.Writer)
-	_, pipeReader := link.Reader.(*pipe.Reader)
-	if wait || !pipeReader {
+	go fetchInput(ctx, s, m.carrier)
+	if wait {
 		select {
 		case <-ctx.Done():
 			s.Close()
@@ -316,4 +288,63 @@ func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link, wait 
 		}
 	}
 	return true
+}
+
+// NewPacketWriter admits a packet producer that already owns its input loop.
+func (m *ClientWorker) NewPacketWriter(target net.Destination) (buf.Writer, error) {
+	m.sessionManager.Lock()
+	defer m.sessionManager.Unlock()
+	if m.Closed() {
+		return nil, io.ErrClosedPipe
+	}
+	s := m.sessionManager.allocate(&m.strategy, nil, buf.Discard, protocol.TransferTypePacket)
+	if s == nil {
+		return nil, errors.New("unable to admit packet producer")
+	}
+	r := &childResponse{session: s, writer: NewWriter(s.ID, target, m.carrier, protocol.TransferTypePacket, [8]byte{}, nil)}
+	s.packetProducer = r
+	return r, nil
+}
+
+// childResponse serializes the client packet producer into its encoded FIFO.
+type childResponse struct {
+	access  sync.Mutex
+	session *Session
+	writer  *Writer
+}
+
+func (r *childResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	r.access.Lock()
+	defer r.access.Unlock()
+	r.session.parent.RLock()
+	closed := r.session.closed
+	r.session.parent.RUnlock()
+	if closed {
+		buf.ReleaseMulti(mb)
+		return io.ErrClosedPipe
+	}
+	err := r.writer.WriteMultiBuffer(mb)
+	if err != nil {
+		r.writer.hasError = true
+		r.Interrupt()
+	}
+	return err
+}
+
+func (r *childResponse) Close() error { r.session.close(false); return nil }
+func (r *childResponse) Interrupt()   { r.session.Close() }
+
+// end is called once, after logical retirement and request-writer EOF.
+func (r *childResponse) end(failed bool) {
+	if c, ok := r.writer.writer.(*carrier); ok && c.Closed() {
+		r.session.endWritten()
+		return
+	}
+	go func() {
+		r.access.Lock()
+		defer r.access.Unlock()
+		r.writer.hasError = r.writer.hasError || failed
+		r.writer.Close()
+		r.session.endWritten()
+	}()
 }

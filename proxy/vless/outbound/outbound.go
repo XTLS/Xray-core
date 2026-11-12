@@ -99,6 +99,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	if a.Reverse != nil {
+		dialer := session.FullHandlerFromContext(ctx).(internet.Dialer)
 		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
 			Tag:  a.Reverse.Tag,
 			Name: "vless-reverse",
@@ -116,10 +117,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		handler.reverse = reverse.NewBridge(rvsCtx, a.Reverse.Tag,
 			v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 			func(ctx context.Context) (context.Context, *transport.Link, error) {
-				ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{
-					Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
-				}})
-				return handler.process(ctx, nil, session.FullHandlerFromContext(ctx).(internet.Dialer), true)
+				return handler.process(ctx, nil, dialer, protocol.RequestCommandRvs)
 			})
 		go func() {
 			select {
@@ -138,7 +136,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}
 		handler.multiplex = multiplex.NewClient(handler.ctx, config.Multiplex, network,
 			func(ctx context.Context) (context.Context, *transport.Link, error) {
-				return handler.process(ctx, nil, dialer, true)
+				return handler.process(ctx, nil, dialer, protocol.RequestCommandMux)
 			})
 	}
 
@@ -164,11 +162,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if handled, err := h.multiplex.Dispatch(ctx, link); handled || err != nil {
 		return err
 	}
-	_, _, err := h.process(ctx, link, dialer, false)
+	_, _, err := h.process(ctx, link, dialer, 0)
 	return err
 }
 
-func (h *Handler) process(ctx context.Context, link *transport.Link, dialer internet.Dialer, native bool) (nativeCtx context.Context, nativeLink *transport.Link, err error) {
+func (h *Handler) process(ctx context.Context, link *transport.Link, dialer internet.Dialer, command protocol.RequestCommand) (nativeCtx context.Context, nativeLink *transport.Link, err error) {
+	native := command != 0
+	if native {
+		ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{Target: h.server.Destination}})
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	var rawConn stat.Connection
 	var stopOpening func() bool
@@ -192,7 +194,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
-	if !ob.Target.IsValid() && ob.Target.Address.String() != "v1.rvs.cool" {
+	if !ob.Target.IsValid() {
 		return nil, nil, errors.New("target not specified")
 	}
 	ob.Name = "vless"
@@ -268,19 +270,10 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}
 
-	command := protocol.RequestCommandTCP
-	if target.Network == net.Network_UDP {
-		command = protocol.RequestCommandUDP
-	}
-	if native && target.Address.Family().IsDomain() {
-		switch target.Address.Domain() {
-		case "v1.mux.cool":
-			command = protocol.RequestCommandMux
-		case "v1.rvs.cool":
-			if target.Network != net.Network_Unknown {
-				return nil, nil, errors.New("nice try baby")
-			}
-			command = protocol.RequestCommandRvs
+	if !native {
+		command = protocol.RequestCommandTCP
+		if target.Network == net.Network_UDP {
+			command = protocol.RequestCommandUDP
 		}
 	}
 
@@ -288,8 +281,9 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		Version: encoding.Version,
 		User:    rec.User,
 		Command: command,
-		Address: target.Address,
-		Port:    target.Port,
+	}
+	if !native {
+		request.Address, request.Port = target.Address, target.Port
 	}
 
 	account := request.User.Account.(*vless.MemoryAccount)
@@ -450,10 +444,8 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	if native {
-		receiveLimit := int32(64 * 1024)
 		bufferWriter.SetFlushNext()
 		if request.Command == protocol.RequestCommandRvs {
-			receiveLimit = 2 * buf.Size
 			if requestAddons.Flow == vless.XRV {
 				if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{nil}); err != nil {
 					return nil, nil, err
@@ -469,7 +461,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 			}
 			return nil, nil, context.DeadlineExceeded
 		}
-		directLink, openErr := multiplex.OpenLink(ctx, cancel, rawConn, serverWriter, timer, receiveLimit, openResponse)
+		directLink, openErr := multiplex.OpenLink(ctx, cancel, rawConn, serverWriter, timer, openResponse)
 		if openErr != nil {
 			return nil, nil, openErr
 		}

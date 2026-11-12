@@ -19,15 +19,86 @@ import (
 type carrier struct {
 	sessionManager *SessionManager
 	link           transport.Link
+	pending        chan buf.MultiBuffer // client-only encoded write lead
 	done           *done.Instance
 	timer          *time.Ticker
 }
 
-func newCarrier(link transport.Link, idle time.Duration) *carrier {
+func newCarrier(link transport.Link, idle time.Duration, queueWrites bool) *carrier {
+	// Reuse the prepared codec gate so physical cancellation sees its lock.
+	if _, ok := link.Writer.(*buf.BufferedWriter); !ok {
+		writer := buf.NewBufferedWriter(link.Writer)
+		writer.SetBuffered(false)
+		link.Writer = writer
+	}
 	c := &carrier{sessionManager: NewSessionManager(), link: link, done: done.New(), timer: time.NewTicker(idle)}
-	c.link.Writer = newFrameSender(link.Writer, func() { c.Close() })
+	if queueWrites {
+		c.pending = make(chan buf.MultiBuffer, 2)
+		go c.sendLoop()
+	}
 	go c.monitor()
 	return c
+}
+
+// WriteMultiBuffer takes native write custody and closes the carrier on failure.
+func (c *carrier) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	if c.Closed() {
+		buf.ReleaseMulti(mb)
+		return io.ErrClosedPipe
+	}
+	if c.pending != nil {
+		select {
+		case c.pending <- mb:
+			if c.Closed() {
+				c.discardPending()
+			}
+			return nil // the client carrier now owns accepted encoded bytes
+		case <-c.done.Wait():
+			buf.ReleaseMulti(mb)
+			return io.ErrClosedPipe
+		}
+	}
+	err := c.link.Writer.WriteMultiBuffer(mb)
+	if err != nil {
+		c.Close()
+	}
+	return err
+}
+
+// sendLoop is the sole client physical writer; server writes remain direct.
+func (c *carrier) sendLoop() {
+	defer c.Close()
+	for {
+		select {
+		case <-c.done.Wait():
+			return
+		case data := <-c.pending:
+			select {
+			case next := <-c.pending:
+				data, _ = buf.MergeMulti(data, next)
+			default:
+			}
+			if c.Closed() {
+				buf.ReleaseMulti(data)
+				return
+			}
+			if err := c.link.Writer.WriteMultiBuffer(data); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// Drain only accepted queue ownership, before arbitrary foreign interruption.
+func (c *carrier) discardPending() {
+	for {
+		select {
+		case data := <-c.pending:
+			buf.ReleaseMulti(data)
+		default:
+			return
+		}
+	}
 }
 
 func (c *carrier) ActiveConnections() uint32   { return uint32(c.sessionManager.Size()) }
@@ -35,6 +106,7 @@ func (c *carrier) Closed() bool                { return c.done.Done() }
 func (c *carrier) WaitClosed() <-chan struct{} { return c.done.Wait() }
 func (c *carrier) Close() error {
 	err := c.done.Close()
+	c.discardPending()
 	common.Interrupt(c.link.Reader)
 	return err
 }
@@ -69,7 +141,7 @@ func (c *carrier) handleStatusKeep(meta *FrameMetadata, reader *buf.BufferedRead
 	}
 	s, found := c.sessionManager.Get(meta.SessionID)
 	if !found {
-		NewResponseWriter(meta.SessionID, c.link.Writer, protocol.TransferTypeStream).Close()
+		NewResponseWriter(meta.SessionID, c, protocol.TransferTypeStream).Close()
 	} else {
 		s.parent.RLock()
 		closed := s.closed
