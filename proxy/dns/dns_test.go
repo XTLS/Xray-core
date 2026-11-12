@@ -30,7 +30,7 @@ type staticHandler struct{}
 
 func (*staticHandler) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	ans := new(dns.Msg)
-	ans.Id = r.Id
+	ans.SetReply(r)
 
 	var clientIP net.IP
 
@@ -305,6 +305,90 @@ func TestUDPDNSSessionsEnd(t *testing.T) {
 			t.Fatal("sessions are still open: ", runtime.NumGoroutine()-base, " goroutines above the baseline")
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestUDPDNSRepeatedAnswer(t *testing.T) {
+	port := udp.PickPort()
+
+	// A is answered at once and again 100 ms later, AAAA after two seconds.
+	dnsServer := dns.Server{
+		Addr: "127.0.0.1:" + port.String(),
+		Net:  "udp",
+		Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+			ans := new(dns.Msg).SetReply(r)
+			if r.Question[0].Qtype == dns.TypeA {
+				w.WriteMsg(ans)
+				time.Sleep(100 * time.Millisecond)
+			} else {
+				time.Sleep(2 * time.Second)
+			}
+			w.WriteMsg(ans)
+		}),
+	}
+	defer dnsServer.Shutdown()
+
+	go dnsServer.ListenAndServe()
+	time.Sleep(time.Second)
+
+	serverPort := udp.PickPort()
+	config := &core.Config{
+		App: []*serial.TypedMessage{
+			serial.ToTypedMessage(&dispatcher.Config{}),
+			serial.ToTypedMessage(&proxyman.OutboundConfig{}),
+			serial.ToTypedMessage(&proxyman.InboundConfig{}),
+			serial.ToTypedMessage(&policy.Config{}),
+		},
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					RewriteAddress:  net.NewIPOrDomain(net.LocalHostIP),
+					RewritePort:     uint32(port),
+					AllowedNetworks: []net.Network{net.Network_UDP},
+				}),
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&dns_proxy.Config{
+					Rule: []*dns_proxy.DNSRuleConfig{
+						{
+							Action: dns_proxy.RuleAction_Direct,
+						},
+					},
+				}),
+			},
+		},
+	}
+
+	v, err := core.New(config)
+	common.Must(err)
+	common.Must(v.Start())
+	defer v.Close()
+
+	// Both queries come from one socket and so share a session.
+	conn, err := dns.Dial("udp", "127.0.0.1:"+serverPort.String())
+	common.Must(err)
+	defer conn.Close()
+	for _, qType := range []uint16{dns.TypeA, dns.TypeAAAA} {
+		m := new(dns.Msg)
+		m.SetQuestion("google.com.", qType)
+		common.Must(conn.WriteMsg(m))
+	}
+
+	common.Must(conn.SetReadDeadline(time.Now().Add(5 * time.Second)))
+	for {
+		in, err := conn.ReadMsg()
+		if err != nil {
+			t.Fatal("no answer to AAAA: ", err)
+		}
+		if in.Question[0].Qtype == dns.TypeAAAA {
+			break
+		}
 	}
 }
 

@@ -237,7 +237,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 
 	var pending *pendingQueries
 	if trackQueries {
-		pending = &pendingQueries{timer: timer, idle: h.timeout, linger: timeout}
+		pending = &pendingQueries{queries: map[queryKey]int{}, timer: timer, idle: h.timeout, linger: timeout}
 	}
 
 	request := func() error {
@@ -285,14 +285,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 						return err
 					}
 				} else {
-					pending.add()
+					q := queryKey{id, qType, strings.ToLower(domain)}
+					pending.add(q)
 					go func() {
 						h.handleIPQuery(id, qType, domain, writer, timer)
-						pending.done()
+						pending.done(q)
 					}()
 				}
 			case RuleAction_Direct:
-				pending.add()
+				pending.add(queryKey{id, qType, strings.ToLower(domain)})
 				if err := connWriter.WriteMessage(b); err != nil {
 					return err
 				}
@@ -316,10 +317,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, d internet.
 
 			timer.Update()
 
+			// An answer carries the ID and question of its query; read them before
+			// the write hands the buffer over.
+			q, answered := pending.answerTo(b)
 			if err := writer.WriteMessage(b); err != nil {
 				return err
 			}
-			pending.done()
+			if answered {
+				pending.done(q)
+			}
 		}
 	}
 
@@ -464,43 +470,79 @@ func (h *Handler) rejectNonIPQuery(id uint16, qType dnsmessage.Type, domain stri
 // such as AAAA sent after A from the same socket.
 const udpLinger = time.Second
 
+// maxPendingQueries bounds the distinct queries a UDP session tracks. A session
+// with more open at once keeps the idle timeout until it ends.
+const maxPendingQueries = 256
+
+// queryKey is a query by its ID and question, the name in lower case.
+type queryKey struct {
+	id    uint16
+	qType dnsmessage.Type
+	name  string
+}
+
 // pendingQueries keeps a UDP session alive for the idle timeout while any query
-// is unanswered, and for linger after the last answer. Methods on nil do nothing.
-// The count and the timer change under one lock, so a new query cannot be followed
-// by a stale switch to linger.
+// is unanswered, and for linger after the last answer. An answer settles only the
+// query with its ID and question, so a repeated answer cannot end the session while
+// another query waits; each copy of a repeated query waits for its own answer.
+// Methods on nil do nothing. The queries and the timer change under one lock, so
+// a new query cannot be followed by a stale switch to linger.
 type pendingQueries struct {
 	sync.Mutex
-	count  int
-	timer  *signal.ActivityTimer
-	idle   time.Duration
-	linger time.Duration
+	queries  map[queryKey]int
+	overflow bool
+	timer    *signal.ActivityTimer
+	idle     time.Duration
+	linger   time.Duration
 }
 
-func (p *pendingQueries) add() {
+func (p *pendingQueries) add(q queryKey) {
 	if p == nil {
 		return
 	}
 	p.Lock()
 	defer p.Unlock()
-	if p.count == 0 {
+	if p.overflow {
+		return
+	}
+	if len(p.queries) == 0 {
 		p.timer.SetTimeout(p.idle)
 	}
-	p.count++
+	if _, ok := p.queries[q]; !ok && len(p.queries) == maxPendingQueries {
+		p.overflow = true
+		return
+	}
+	p.queries[q]++
 }
 
-func (p *pendingQueries) done() {
+func (p *pendingQueries) done(q queryKey) {
 	if p == nil {
 		return
 	}
 	p.Lock()
 	defer p.Unlock()
-	if p.count == 0 {
+	if p.overflow {
 		return
 	}
-	p.count--
-	if p.count == 0 {
-		p.timer.SetTimeout(p.linger)
+	switch n := p.queries[q]; {
+	case n > 1:
+		p.queries[q] = n - 1
+	case n == 1:
+		delete(p.queries, q)
+		if len(p.queries) == 0 {
+			p.timer.SetTimeout(p.linger)
+		}
 	}
+}
+
+// answerTo returns the query an answer is for. An answer without a question is
+// for none and settles nothing.
+func (p *pendingQueries) answerTo(b *buf.Buffer) (queryKey, bool) {
+	if p == nil {
+		return queryKey{}, false
+	}
+	id, qType, name, ok := parseQuery(b.Bytes())
+	return queryKey{id, qType, strings.ToLower(name)}, ok
 }
 
 type outboundConn struct {
