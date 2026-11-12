@@ -11,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/signal/done"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type SessionManager struct {
@@ -26,13 +25,6 @@ func NewSessionManager() *SessionManager {
 		count:    0,
 		sessions: make(map[uint16]*Session, 16),
 	}
-}
-
-func (m *SessionManager) Closed() bool {
-	m.RLock()
-	defer m.RUnlock()
-
-	return m.closed
 }
 
 func (m *SessionManager) Size() int {
@@ -63,7 +55,10 @@ func (m *SessionManager) Count() int {
 func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer, transferType protocol.TransferType) *Session {
 	m.Lock()
 	defer m.Unlock()
+	return m.allocate(Strategy, input, output, transferType)
+}
 
+func (m *SessionManager) allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer, transferType protocol.TransferType) *Session {
 	MaxConcurrency := int(Strategy.MaxConcurrency)
 	MaxConnection := uint16(Strategy.MaxConnection)
 
@@ -145,29 +140,29 @@ func (m *SessionManager) Close() error {
 
 // Session represents a client connection in a Mux connection.
 type Session struct {
-	input        buf.Reader
-	output       buf.Writer
-	parent       *SessionManager
-	ID           uint16
-	transferType protocol.TransferType
-	closed       bool
-	keepUntilEnd bool // server ingress identity survives logical close until END returns
-	done         *done.Instance
-	XUDP         *XUDP
-	onClose      func(bool) // immutable direct response completion, set before admission
+	input          buf.Reader
+	output         buf.Writer
+	parent         *SessionManager
+	ID             uint16
+	transferType   protocol.TransferType
+	closed         bool
+	failed         bool // immutable winning close reason, guarded by parent
+	done           *done.Instance
+	flow           *inboundFlow
+	sender         *carrier
+	packetProducer *childResponse // client producer, set before publication
 }
 
-// ReadMultiBuffer keeps retained XUDP reads inside their admitted generation.
-func (s *Session) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if s.XUDP == nil {
-		return s.input.ReadMultiBuffer()
+// writePayload transfers parser custody to the admitted native flow.
+func (s *Session) writePayload(data buf.MultiBuffer) error {
+	if s.flow == nil {
+		return s.output.WriteMultiBuffer(data)
 	}
-	s.XUDP.readAccess.Lock()
-	defer s.XUDP.readAccess.Unlock()
-	if s.done.Done() {
-		return nil, io.EOF
+	err := s.flow.accept(data, s)
+	if err != nil {
+		buf.ReleaseMulti(data)
 	}
-	return s.input.ReadMultiBuffer()
+	return err
 }
 
 // Close closes all resources associated with this session.
@@ -175,44 +170,65 @@ func (s *Session) Close() error { s.close(true); return nil }
 
 // close atomically chooses logical completion and its reason, then notifies the
 // response owner outside the registry lock. It never waits for physical output.
-func (s *Session) close(failed bool) {
+func (s *Session) close(failed bool) { s.closeOwned(failed, nil) }
+func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
 	s.parent.Lock()
-	if s.closed {
+	if s.closed || (owner != nil && s.flow != owner) {
 		s.parent.Unlock()
 		return
 	}
-	s.closed = true
+	x := s.flow
+	if x != nil {
+		if x.GlobalID != [8]byte{} {
+			XUDPManager.Lock()
+		}
+		x.access.Lock()
+		if owner != nil && x.Status == Initializing {
+			x.access.Unlock()
+			if x.GlobalID != [8]byte{} {
+				XUDPManager.Unlock()
+			}
+			s.parent.Unlock()
+			return
+		}
+		failed = failed || x.responseErr == io.ErrClosedPipe
+	}
+	s.closed, s.failed = true, failed
+	if x == nil && s.parent.sessions[s.ID] == s {
+		delete(s.parent.sessions, s.ID)
+	}
 	if s.done != nil {
 		s.done.Close()
 	}
-	if !s.keepUntilEnd && s.parent.sessions[s.ID] == s {
-		delete(s.parent.sessions, s.ID)
+	if x != nil {
+		if x.binding == s {
+			x.binding = nil
+			if x.GlobalID == [8]byte{} {
+				if x.requestErr == nil {
+					x.requestErr = io.EOF
+				}
+				x.responseErr = io.ErrClosedPipe
+				x.response = buf.ReleaseMulti(x.response)
+			} else if x.Status == Active {
+				x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
+			}
+			x.notify()
+		}
+		x.access.Unlock()
+		if x.GlobalID != [8]byte{} {
+			XUDPManager.Unlock()
+		}
 	}
-	if s.XUDP == nil {
-		s.parent.Unlock()
+	s.parent.Unlock()
+	if s.flow == nil {
 		common.Interrupt(s.input)
 		common.Close(s.output)
-		if s.onClose != nil {
-			s.onClose(failed)
-		}
-		return
 	}
-	// Retained XUDP rebind still joins detach through the parent lock.
-	defer s.parent.Unlock()
-	// Wake and join only an admitted read, never a carrier DATA or END write.
-	input := s.input.(*pipe.Reader)
-	input.ReturnAnError(io.EOF)
-	s.XUDP.readAccess.Lock()
-	input.Recover()
-	s.XUDP.readAccess.Unlock()
-	XUDPManager.Lock()
-	if s.XUDP.Status == Active {
-		s.XUDP.Expire = time.Now().Add(time.Minute)
-		s.XUDP.Status = Expiring
-		errors.LogDebug(context.Background(), "XUDP put ", s.XUDP.GlobalID)
+
+	if s.packetProducer != nil {
+		s.packetProducer.end(failed)
 	}
-	XUDPManager.Unlock()
-	return
+
 }
 
 // endWritten releases only this ingress identity; the peer may already have
@@ -231,39 +247,30 @@ const (
 	Expiring     = 2
 )
 
-type XUDP struct {
-	readAccess sync.Mutex
-	GlobalID   [8]byte
-	Status     uint64
-	Expire     time.Time
-	Mux        *Session
-}
-
-func (x *XUDP) Interrupt() {
-	common.Interrupt(x.Mux.input)
-	common.Close(x.Mux.output)
-}
-
 var XUDPManager struct {
 	sync.Mutex
-	Map map[[8]byte]*XUDP
+	Map map[[8]byte]*inboundFlow
 }
 
 func init() {
-	XUDPManager.Map = make(map[[8]byte]*XUDP)
+	XUDPManager.Map = make(map[[8]byte]*inboundFlow)
 	go func() {
 		for {
 			time.Sleep(time.Minute)
 			now := time.Now()
+			var expired []*inboundFlow
 			XUDPManager.Lock()
 			for id, x := range XUDPManager.Map {
 				if x.Status == Expiring && now.After(x.Expire) {
-					x.Interrupt()
+					expired = append(expired, x)
 					delete(XUDPManager.Map, id)
 					errors.LogDebug(context.Background(), "XUDP del ", id)
 				}
 			}
 			XUDPManager.Unlock()
+			for _, x := range expired {
+				x.expire()
+			}
 		}
 	}()
 }

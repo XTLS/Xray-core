@@ -143,6 +143,16 @@ func (w *BufferedWriter) WriteMultiBuffer(b MultiBuffer) error {
 	w.Lock()
 	defer w.Unlock()
 
+	return w.WriteMultiBufferLocked(b)
+}
+
+// WriteMultiBufferLocked takes buffer ownership with the same semantics as
+// WriteMultiBuffer. The caller must hold w.Lock throughout this call.
+func (w *BufferedWriter) WriteMultiBufferLocked(b MultiBuffer) error {
+	if b.IsEmpty() {
+		return nil
+	}
+
 	if !w.buffered {
 		return w.writer.WriteMultiBuffer(b)
 	}

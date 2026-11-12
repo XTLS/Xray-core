@@ -19,7 +19,6 @@ import (
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/pipe"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -47,6 +46,8 @@ func (p *Portal) Dispatch(ctx context.Context, link *transport.Link) {
 
 func (p *Portal) Accept(ctx context.Context, link *transport.Link) error {
 	client := multiplex.NewClientWorker(*link, multiplex.ClientStrategy{})
+	stop := context.AfterFunc(ctx, func() { client.Close() })
+	defer stop()
 	worker, err := NewPortalWorker(client)
 	if err != nil {
 		client.Close()
@@ -183,27 +184,17 @@ type PortalWorker struct {
 }
 
 func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
-	opt := []pipe.Option{pipe.WithSizeLimit(16 * 1024)}
-	uplinkReader, uplinkWriter := pipe.New(opt...)
-
 	ctx := context.Background()
-	outbounds := []*session.Outbound{{
-		Target: net.UDPDestination(net.DomainAddress(internalDomain), 0),
-	}}
-	ctx = session.ContextWithOutbounds(ctx, outbounds)
-	f := client.Dispatch(ctx, &transport.Link{
-		Reader: uplinkReader,
-		Writer: buf.Discard,
-	}, false)
-	if !f {
-		return nil, errors.New("unable to dispatch control connection")
+	writer, err := client.NewPacketWriter(net.UDPDestination(net.DomainAddress(internalDomain), 0))
+	if err != nil {
+		return nil, err
 	}
 	terminate := func() {
 		client.Close()
 	}
 	w := &PortalWorker{
 		client: client,
-		writer: uplinkWriter,
+		writer: writer,
 		timer:  signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour), // // prevent leak
 	}
 	w.control = &task.Periodic{
