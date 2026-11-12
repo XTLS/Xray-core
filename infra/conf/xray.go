@@ -408,6 +408,12 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	}
 
 	if fc, ok := ts.(*freedom.Config); ok {
+		if legacy := rawConfig.(*FreedomConfig); legacy.ProxyProtocol > 0 && legacy.ProxyProtocol <= 2 {
+			if senderSettings.StreamSettings == nil {
+				senderSettings.StreamSettings = &internet.StreamConfig{}
+			}
+			addProxyProtocolMask(senderSettings.StreamSettings, legacy.ProxyProtocol)
+		}
 		if senderSettings.StreamSettings != nil &&
 			senderSettings.StreamSettings.SocketSettings != nil &&
 			senderSettings.StreamSettings.SocketSettings.AddressPortStrategy != internet.AddressPortStrategy_None {

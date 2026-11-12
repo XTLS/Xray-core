@@ -9,9 +9,11 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
 )
 
 type Dialer struct {
+	Source  net.Addr
 	DialTCP func(net.Destination) (net.Conn, error)
 	DialUDP func(net.Destination) (net.Conn, error)
 }
@@ -84,6 +86,9 @@ func (fm *FinalMask) DialTCP(ctx context.Context, dest net.Destination) (net.Con
 			}
 			return &net.PacketConnWrapper{PacketConn: conn, Dest: addr}, err
 		},
+	}
+	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+		dialer.Source = inbound.Source.RawNetAddr()
 	}
 	for i := range fm.tcpMasks {
 		var newConn net.Conn

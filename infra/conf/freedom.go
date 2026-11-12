@@ -185,7 +185,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.ProxyProtocol > 0 && c.ProxyProtocol <= 2 {
-		config.ProxyProtocol = c.ProxyProtocol
+		errors.PrintDeprecatedFeatureWarning(`"proxyProtocol" in Freedom`, `"proxy-protocol" in "streamSettings.finalmask.tcp"`)
 	}
 
 	firewall := c.Firewall

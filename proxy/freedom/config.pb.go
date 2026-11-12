@@ -442,7 +442,6 @@ type Config struct {
 	DestinationOverride *DestinationOverride    `protobuf:"bytes,3,opt,name=destination_override,json=destinationOverride,proto3" json:"destination_override,omitempty"`
 	UserLevel           uint32                  `protobuf:"varint,4,opt,name=user_level,json=userLevel,proto3" json:"user_level,omitempty"`
 	Fragment            *Fragment               `protobuf:"bytes,5,opt,name=fragment,proto3" json:"fragment,omitempty"`
-	ProxyProtocol       uint32                  `protobuf:"varint,6,opt,name=proxy_protocol,json=proxyProtocol,proto3" json:"proxy_protocol,omitempty"`
 	Noises              []*Noise                `protobuf:"bytes,7,rep,name=noises,proto3" json:"noises,omitempty"`
 	Firewall            []*FirewallConfig       `protobuf:"bytes,8,rep,name=firewall,proto3" json:"firewall,omitempty"`
 	unknownFields       protoimpl.UnknownFields
@@ -507,13 +506,6 @@ func (x *Config) GetFragment() *Fragment {
 	return nil
 }
 
-func (x *Config) GetProxyProtocol() uint32 {
-	if x != nil {
-		return x.ProxyProtocol
-	}
-	return 0
-}
-
 func (x *Config) GetNoises() []*Noise {
 	if x != nil {
 		return x.Noises
@@ -567,16 +559,15 @@ const file_proxy_freedom_config_proto_rawDesc = "" +
 	"\x05delay\x18\x05 \x01(\v2\x19.xray.proxy.freedom.RangeR\x05delay\x12;\n" +
 	"\tlog_level\x18\x06 \x01(\x0e2\x19.xray.common.log.SeverityH\x00R\blogLevel\x88\x01\x01B\f\n" +
 	"\n" +
-	"_log_level\"\xa9\x03\n" +
+	"_log_level\"\x88\x03\n" +
 	"\x06Config\x12P\n" +
 	"\x0fdomain_strategy\x18\x01 \x01(\x0e2'.xray.transport.internet.DomainStrategyR\x0edomainStrategy\x12Z\n" +
 	"\x14destination_override\x18\x03 \x01(\v2'.xray.proxy.freedom.DestinationOverrideR\x13destinationOverride\x12\x1d\n" +
 	"\n" +
 	"user_level\x18\x04 \x01(\rR\tuserLevel\x128\n" +
-	"\bfragment\x18\x05 \x01(\v2\x1c.xray.proxy.freedom.FragmentR\bfragment\x12%\n" +
-	"\x0eproxy_protocol\x18\x06 \x01(\rR\rproxyProtocol\x121\n" +
+	"\bfragment\x18\x05 \x01(\v2\x1c.xray.proxy.freedom.FragmentR\bfragment\x121\n" +
 	"\x06noises\x18\a \x03(\v2\x19.xray.proxy.freedom.NoiseR\x06noises\x12>\n" +
-	"\bfirewall\x18\b \x03(\v2\".xray.proxy.freedom.FirewallConfigR\bfirewall*\"\n" +
+	"\bfirewall\x18\b \x03(\v2\".xray.proxy.freedom.FirewallConfigR\bfirewallJ\x04\b\x06\x10\a*\"\n" +
 	"\n" +
 	"RuleAction\x12\t\n" +
 	"\x05Allow\x10\x00\x12\t\n" +
