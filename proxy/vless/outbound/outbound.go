@@ -50,7 +50,7 @@ type Handler struct {
 	policyManager policy.Manager
 	cone          bool
 	encryption    *encryption.ClientInstance
-	reverse       *reverse.Bridge
+	reverse       *reverse.IntranetEndpoint
 	ctx           context.Context
 	stop          context.CancelFunc
 	multiplex     *multiplex.Client
@@ -114,7 +114,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 				SniffingRequest: request,
 			})
 		}
-		handler.reverse = reverse.NewBridge(rvsCtx, a.Reverse.Tag,
+		handler.reverse = reverse.NewIntranetEndpoint(rvsCtx, a.Reverse.Tag,
 			v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 			func(ctx context.Context) (context.Context, *transport.Link, error) {
 				return handler.process(ctx, nil, dialer, protocol.RequestCommandRvs)
@@ -347,7 +347,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
 	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMultiplex
-		request.Address = net.DomainAddress("v1.mux.cool")
+		request.Address = net.DomainAddress("v1.multiplex.cool")
 		request.Port = net.Port(666)
 	}
 

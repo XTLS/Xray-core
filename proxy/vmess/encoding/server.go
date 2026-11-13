@@ -206,7 +206,7 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 
 	switch request.Command {
 	case protocol.RequestCommandMultiplex:
-		request.Address = net.DomainAddress("v1.mux.cool")
+		request.Address = net.DomainAddress("v1.multiplex.cool")
 		request.Port = 0
 
 	case protocol.RequestCommandTCP, protocol.RequestCommandUDP:

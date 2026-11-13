@@ -113,7 +113,7 @@ func DecodeRequestHeader(isfb bool, first *buf.Buffer, reader io.Reader, validat
 		request.Command = protocol.RequestCommand(buffer.Byte(0))
 		switch request.Command {
 		case protocol.RequestCommandMultiplex:
-			request.Address = net.DomainAddress("v1.mux.cool")
+			request.Address = net.DomainAddress("v1.multiplex.cool")
 		case protocol.RequestCommandRvs:
 			request.Address = net.DomainAddress("v1.rvs.cool")
 		case protocol.RequestCommandTCP, protocol.RequestCommandUDP:

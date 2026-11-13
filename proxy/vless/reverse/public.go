@@ -23,21 +23,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type Portal struct {
+type PublicEndpoint struct {
 	observer features.Feature
 	tag      string
 	picker   *StaticPicker
 }
 
-func NewPortal(tag string, observer features.Feature) *Portal {
+func NewPublicEndpoint(tag string, observer features.Feature) *PublicEndpoint {
 	picker := NewStaticPicker()
-	return &Portal{tag: tag, observer: observer, picker: picker}
+	return &PublicEndpoint{tag: tag, observer: observer, picker: picker}
 }
 
-func (p *Portal) Tag() string                          { return p.tag }
-func (p *Portal) SenderSettings() *serial.TypedMessage { return nil }
-func (p *Portal) ProxySettings() *serial.TypedMessage  { return nil }
-func (p *Portal) Dispatch(ctx context.Context, link *transport.Link) {
+func (p *PublicEndpoint) Tag() string                          { return p.tag }
+func (p *PublicEndpoint) SenderSettings() *serial.TypedMessage { return nil }
+func (p *PublicEndpoint) ProxySettings() *serial.TypedMessage  { return nil }
+func (p *PublicEndpoint) Dispatch(ctx context.Context, link *transport.Link) {
 	if err := p.HandleConnection(ctx, link); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to process reverse connection")
 		common.Interrupt(link.Writer)
@@ -45,14 +45,14 @@ func (p *Portal) Dispatch(ctx context.Context, link *transport.Link) {
 	}
 }
 
-func (p *Portal) Accept(ctx context.Context, link *transport.Link) error {
+func (p *PublicEndpoint) Accept(ctx context.Context, link *transport.Link) error {
 	client := multiplex.NewClientWorker(*link, multiplex.ClientStrategy{})
 	stop := context.AfterFunc(ctx, func() { client.Close() })
 	defer stop()
-	worker, err := NewPortalWorker(client)
+	worker, err := NewPublicWorker(client)
 	if err != nil {
 		client.Close()
-		return errors.New("failed to create portal worker").Base(err)
+		return errors.New("failed to create public worker").Base(err)
 	}
 	defer func() {
 		p.picker.RemoveWorker(worker)
@@ -69,16 +69,16 @@ func (p *Portal) Accept(ctx context.Context, link *transport.Link) error {
 	return nil
 }
 
-func (p *Portal) Start() error {
+func (p *PublicEndpoint) Start() error {
 	return nil
 }
 
-func (p *Portal) Close() error {
+func (p *PublicEndpoint) Close() error {
 	p.picker.Close()
 	return nil
 }
 
-func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) error {
+func (p *PublicEndpoint) HandleConnection(ctx context.Context, link *transport.Link) error {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if ob == nil {
@@ -98,7 +98,7 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 type StaticPicker struct {
 	closed  bool
 	access  sync.Mutex
-	workers []*PortalWorker
+	workers []*PublicWorker
 }
 
 func NewStaticPicker() *StaticPicker {
@@ -139,7 +139,7 @@ func (p *StaticPicker) Admit(ctx context.Context, link *transport.Link) (*multip
 	return nil, errors.New("no multiplex client worker available")
 }
 
-func (p *StaticPicker) AddWorker(worker *PortalWorker) {
+func (p *StaticPicker) AddWorker(worker *PublicWorker) {
 	p.access.Lock()
 	if p.closed {
 		p.access.Unlock()
@@ -150,10 +150,10 @@ func (p *StaticPicker) AddWorker(worker *PortalWorker) {
 	p.access.Unlock()
 }
 
-func (p *StaticPicker) RemoveWorker(worker *PortalWorker) {
+func (p *StaticPicker) RemoveWorker(worker *PublicWorker) {
 	p.access.Lock()
 	defer p.access.Unlock()
-	p.workers = slices.DeleteFunc(p.workers, func(current *PortalWorker) bool { return current == worker })
+	p.workers = slices.DeleteFunc(p.workers, func(current *PublicWorker) bool { return current == worker })
 }
 
 func (p *StaticPicker) Close() {
@@ -167,14 +167,14 @@ func (p *StaticPicker) Close() {
 	}
 }
 
-type PortalWorker struct {
+type PublicWorker struct {
 	client   *multiplex.ClientWorker
 	draining atomic.Bool
 	timer    *signal.ActivityTimer
 }
 
-func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
-	w := &PortalWorker{
+func NewPublicWorker(client *multiplex.ClientWorker) (*PublicWorker, error) {
+	w := &PublicWorker{
 		client: client,
 		timer:  signal.CancelAfterInactivity(context.Background(), func() { client.Close() }, 24*time.Hour),
 	}
@@ -208,13 +208,13 @@ func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
 	return nil, errors.New("failed to initialize reverse control session")
 }
 
-func (w *PortalWorker) Close() {
+func (w *PublicWorker) Close() {
 	w.client.Close()
 	w.timer.SetTimeout(0)
 }
 
 type controlReader struct {
-	worker  *PortalWorker
+	worker  *PublicWorker
 	ready   *done.Instance
 	stopped *done.Instance
 	first   bool
@@ -272,6 +272,6 @@ func (r *controlReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	}
 }
 
-func (w *PortalWorker) Closed() bool {
+func (w *PublicWorker) Closed() bool {
 	return w.client.Closed()
 }

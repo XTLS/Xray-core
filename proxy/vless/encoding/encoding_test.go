@@ -107,7 +107,7 @@ func TestMultiplexRequest(t *testing.T) {
 		Version: Version,
 		User:    user,
 		Command: protocol.RequestCommandMultiplex,
-		Address: net.DomainAddress("v1.mux.cool"),
+		Address: net.DomainAddress("v1.multiplex.cool"),
 	}
 	expectedAddons := &Addons{}
 
