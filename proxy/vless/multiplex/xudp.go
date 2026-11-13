@@ -55,6 +55,7 @@ func (x *inboundFlow) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	defer x.access.Unlock()
 	return x.readLocked(nil)
 }
+
 func (x *inboundFlow) ReadMultiBufferTimeout(duration time.Duration) (buf.MultiBuffer, error) {
 	x.access.Lock()
 	defer x.access.Unlock()
@@ -138,6 +139,7 @@ func (x *inboundFlow) finish(abort bool) {
 	x.notify()
 	x.access.Unlock()
 }
+
 func (x *inboundFlow) expire() {
 	x.access.Lock()
 	if x.requestErr == nil {
@@ -280,8 +282,10 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 	if previous != nil {
 		previous.Close()
 	}
-	s := &Session{parent: w.sessionManager, ID: meta.SessionID, transferType: protocol.TransferTypePacket,
-		flow: x, sender: w.carrier}
+	s := &Session{
+		parent: w.sessionManager, ID: meta.SessionID, transferType: protocol.TransferTypePacket,
+		flow: x, sender: w.carrier,
+	}
 	w.sessionManager.Lock()
 	XUDPManager.Lock()
 	x.access.Lock()

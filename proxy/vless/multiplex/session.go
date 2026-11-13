@@ -161,6 +161,7 @@ func (s *Session) Close() error { s.close(true); return nil }
 // close atomically chooses logical completion and its reason, then notifies the
 // response owner outside the registry lock. It never waits for physical output.
 func (s *Session) close(failed bool) { s.closeOwned(failed, nil) }
+
 func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
 	s.parent.Lock()
 	if s.closed || (owner != nil && s.flow != owner) {
@@ -217,7 +218,6 @@ func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
 		common.Interrupt(s.input)
 		common.Close(s.output)
 	}
-
 }
 
 // endWritten releases only this ingress identity; the peer may already have
