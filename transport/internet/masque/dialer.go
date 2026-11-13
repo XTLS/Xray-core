@@ -158,29 +158,25 @@ func dialHTTP2(ctx context.Context, dest net.Destination, streamSettings *intern
 		return nil, err
 	}
 
-	var conn net.Conn
-	var err error
-	if streamSettings.FinalMask != nil {
-		conn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
-	} else {
-		conn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-	}
+	conn, err := internet.DialTCPWithHandshake(ctx, dest, streamSettings, func(ctx context.Context, conn net.Conn) (net.Conn, error) {
+		if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+			conn = tls.UClient(conn, gotlsConfig, fingerprint)
+		} else {
+			conn = tls.Client(conn, gotlsConfig)
+		}
+		tlsConn := conn.(tls.Interface)
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		if protocol := tlsConn.NegotiatedProtocol(); protocol != http2.NextProtoTLS && (config.Warp == nil || protocol != "") {
+			conn.Close()
+			return nil, errors.New("the server negotiated ", strconv.Quote(protocol), " instead of h2")
+		}
+		return conn, nil
+	})
 	if err != nil {
-		return nil, errors.New("failed to dial to dest").Base(err)
-	}
-	if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-		conn = tls.UClient(conn, gotlsConfig, fingerprint)
-	} else {
-		conn = tls.Client(conn, gotlsConfig)
-	}
-	tlsConn := conn.(tls.Interface)
-	if err := tlsConn.HandshakeContext(ctx); err != nil {
-		conn.Close()
 		return nil, err
-	}
-	if protocol := tlsConn.NegotiatedProtocol(); protocol != http2.NextProtoTLS && (config.Warp == nil || protocol != "") {
-		conn.Close()
-		return nil, errors.New("the server negotiated ", strconv.Quote(protocol), " instead of h2")
 	}
 
 	keepAlivePeriod := config.keepAlivePeriod()
