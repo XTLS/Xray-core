@@ -2,6 +2,8 @@ package conf
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -992,13 +994,7 @@ func (c *XMCProfile) Build() (*xmc.Profile, error) {
 }
 
 func (c *XMC) Build() (proto.Message, error) {
-	if c.Password == "" {
-		return nil, fmt.Errorf("empty password")
-	}
-	if len(c.Password) > xmc.MaxLegacyPasswordLength {
-		return nil, fmt.Errorf("minecraft password is longer than %d bytes", xmc.MaxLegacyPasswordLength)
-	}
-	config := &xmc.Config{Password: c.Password, Hostname: c.Hostname}
+	config := &xmc.Config{Hostname: c.Hostname}
 	for i, turn := range c.Paddings {
 		minimum, maximum, err := ParseRangeString(turn.Length)
 		if err != nil {
@@ -1067,9 +1063,39 @@ func (c *XMC) Build() (proto.Message, error) {
 		return nil, fmt.Errorf("minecraft profiles are required")
 	}
 
-	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
-	if err != nil {
-		return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
+	var (
+		rsaPrivateKey *rsa.PrivateKey
+		password      string
+	)
+	if yggdrasil != nil {
+		// Yggdrasil mode binds the transport through the session hash: the
+		// client joins with the server's actual public key and the server
+		// checks hasJoined. The key pair is therefore generated per process
+		// instead of being derived from the password.
+		generated, err := rsa.GenerateKey(rand.Reader, 1024)
+		if err != nil {
+			return nil, fmt.Errorf("generate minecraft rsa key: %w", err)
+		}
+		rsaPrivateKey = generated
+
+		warning := `XMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and "password" is no longer used to derive it or to authenticate the transport; players are verified through ` + yggdrasil.Api + ` (client /join, server /hasJoined). Both ends must be able to reach the Yggdrasil API.`
+		if c.Password != "" {
+			warning += ` The configured "password" is ignored.`
+		}
+		errors.LogWarning(context.Background(), warning)
+	} else {
+		if c.Password == "" {
+			return nil, fmt.Errorf("empty password")
+		}
+		if len(c.Password) > xmc.MaxLegacyPasswordLength {
+			return nil, fmt.Errorf("minecraft password is longer than %d bytes", xmc.MaxLegacyPasswordLength)
+		}
+		derived, err := xmc.DeriveRSAKey(c.Password)
+		if err != nil {
+			return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
+		}
+		rsaPrivateKey = derived
+		password = c.Password
 	}
 
 	rsaPublicKey, err := x509.MarshalPKIXPublicKey(&rsaPrivateKey.PublicKey)
@@ -1086,6 +1112,7 @@ func (c *XMC) Build() (proto.Message, error) {
 		profiles = append(profiles, profile)
 	}
 
+	config.Password = password
 	config.RsaPrivateKey = x509.MarshalPKCS1PrivateKey(rsaPrivateKey)
 	config.RsaPublicKey = rsaPublicKey
 	config.Profiles = profiles

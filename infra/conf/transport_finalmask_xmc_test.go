@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -137,11 +138,27 @@ func TestXMCBuildYggdrasil(t *testing.T) {
 	if config.Yggdrasil.Username != "user@example.com" || config.Yggdrasil.Password != "login-password" || config.Yggdrasil.Player != "TestUser" {
 		t.Fatalf("unexpected yggdrasil config: %+v", config.Yggdrasil)
 	}
+	if config.Password != "" {
+		t.Fatalf("password must not be used in yggdrasil mode: %q", config.Password)
+	}
+	if len(config.RsaPrivateKey) == 0 || len(config.RsaPublicKey) == 0 {
+		t.Fatal("yggdrasil mode must build a random rsa key pair")
+	}
+	privateKey, err := x509.ParsePKCS1PrivateKey(config.RsaPrivateKey)
+	if err != nil {
+		t.Fatalf("parse generated rsa private key: %v", err)
+	}
+	publicKey, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal generated rsa public key: %v", err)
+	}
+	if string(publicKey) != string(config.RsaPublicKey) {
+		t.Fatal("generated rsa key pair does not match")
+	}
 }
 
 func TestXMCBuildYggdrasilServerWithoutCredentials(t *testing.T) {
 	built, err := (&XMC{
-		Password: "test-password",
 		Yggdrasil: &XMCYggdrasil{
 			API: "https://skin.example.com/api/yggdrasil",
 		},
@@ -164,9 +181,25 @@ func TestXMCBuildRejectsInvalidYggdrasil(t *testing.T) {
 		{API: "https://skin.example.com/api/yggdrasil", Player: "bad name"},
 	}
 	for i, yggdrasil := range cases {
-		_, err := (&XMC{Password: "test-password", Yggdrasil: yggdrasil}).Build()
+		_, err := (&XMC{Yggdrasil: yggdrasil}).Build()
 		if err == nil {
 			t.Fatalf("case %d was accepted: %+v", i, yggdrasil)
 		}
+	}
+}
+
+func TestXMCBuildRequiresPasswordInLegacyMode(t *testing.T) {
+	_, err := (&XMC{
+		Profiles: []XMCProfile{
+			{
+				Username:          "TestUser",
+				UUID:              "00112233-4455-6677-8899-aabbccddeeff",
+				TexturesValue:     "textures-value",
+				TexturesSignature: "textures-signature",
+			},
+		},
+	}).Build()
+	if err == nil || !strings.Contains(err.Error(), "empty password") {
+		t.Fatalf("expected empty password error, got %v", err)
 	}
 }

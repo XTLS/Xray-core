@@ -3,9 +3,14 @@ package xmc
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"math/big"
@@ -44,6 +49,9 @@ type fakeYggdrasil struct {
 
 	profile fakeYggdrasilProfile
 
+	signingKey   *rsa.PrivateKey
+	publicKeyPEM string
+
 	authenticateCalls int
 	refreshCalls      int
 	joinCalls         int
@@ -61,6 +69,18 @@ func writeFakeYggdrasilJSON(w http.ResponseWriter, status int, body string) {
 func newFakeYggdrasilHandler(state *fakeYggdrasil) http.Handler {
 	mux := http.NewServeMux()
 	prefix := "/api/yggdrasil"
+
+	metadata := func(w http.ResponseWriter, r *http.Request) {
+		state.mu.Lock()
+		key := state.publicKeyPEM
+		state.mu.Unlock()
+		writeFakeYggdrasilJSON(w, http.StatusOK, fmt.Sprintf(
+			`{"meta":{"serverName":"Fake Skin"},"skinDomains":["example.com"],"signaturePublickey":%q}`,
+			key,
+		))
+	}
+	mux.HandleFunc(prefix, metadata)
+	mux.HandleFunc(prefix+"/", metadata)
 
 	mux.HandleFunc(prefix+"/authserver/authenticate", func(w http.ResponseWriter, r *http.Request) {
 		var request yggdrasilAuthenticateRequest
@@ -116,9 +136,15 @@ func newFakeYggdrasilHandler(state *fakeYggdrasil) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		digest := sha1.Sum([]byte("textures-value"))
+		signature, err := rsa.SignPKCS1v15(rand.Reader, state.signingKey, crypto.SHA1, digest[:])
+		if err != nil {
+			writeFakeYggdrasilJSON(w, http.StatusInternalServerError, `{"error":"InternalError"}`)
+			return
+		}
 		writeFakeYggdrasilJSON(w, http.StatusOK, fmt.Sprintf(
-			`{"id":%q,"name":%q,"properties":[{"name":"textures","value":"textures-value","signature":"textures-signature"},{"name":"uploadableTextures","value":"skin,cape","signature":"uploadable-signature"}]}`,
-			state.profile.ID, state.profile.Name,
+			`{"id":%q,"name":%q,"properties":[{"name":"textures","value":"textures-value","signature":%q},{"name":"uploadableTextures","value":"skin,cape"}]}`,
+			state.profile.ID, state.profile.Name, base64.StdEncoding.EncodeToString(signature),
 		))
 	})
 
@@ -128,12 +154,23 @@ func newFakeYggdrasilHandler(state *fakeYggdrasil) http.Handler {
 func newFakeYggdrasilServer(t *testing.T) (*fakeYggdrasil, string) {
 	t.Helper()
 
+	signingKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate signing key: %v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&signingKey.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal signing key: %v", err)
+	}
+
 	state := &fakeYggdrasil{
 		profile: fakeYggdrasilProfile{
 			ID:   "0123456789abcdef0123456789abcdef",
 			Name: "SkinUser",
 		},
-		joined: make(map[string]string),
+		signingKey:   signingKey,
+		publicKeyPEM: string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})),
+		joined:       make(map[string]string),
 	}
 	server := httptest.NewServer(newFakeYggdrasilHandler(state))
 	t.Cleanup(server.Close)
@@ -348,7 +385,9 @@ func TestHandshakeWithYggdrasil(t *testing.T) {
 	}
 	defer rawClient.Close()
 
-	client, err := newClientConn(rawClient, nil, password, publicKey, "localhost", nil, newTestYggdrasilAuth(t, api, "SkinUser"))
+	// The client intentionally has no pinned server key: Yggdrasil mode accepts
+	// the key sent by the server and binds it through the session hash.
+	client, err := newClientConn(rawClient, nil, password, nil, "localhost", nil, newTestYggdrasilAuth(t, api, "SkinUser"))
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -379,6 +418,71 @@ func TestHandshakeWithYggdrasil(t *testing.T) {
 	}
 	if state.boundProfile != state.profile.ID {
 		t.Errorf("joined profile = %q", state.boundProfile)
+	}
+}
+
+func TestYggdrasilVerifiesTexturesSignature(t *testing.T) {
+	state, api := newFakeYggdrasilServer(t)
+	auth := newTestYggdrasilAuth(t, api, "SkinUser")
+
+	signTextures := func(key *rsa.PrivateKey, value string) loginProfile {
+		digest := sha1.Sum([]byte(value))
+		signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA1, digest[:])
+		if err != nil {
+			t.Fatalf("sign textures: %v", err)
+		}
+		return loginProfile{
+			Username: "SkinUser",
+			Properties: loginProperties{
+				{Name: "textures", Value: value, Signature: base64.StdEncoding.EncodeToString(signature), Signed: true},
+			},
+		}
+	}
+
+	valid := signTextures(state.signingKey, "textures-value")
+	if err := auth.verifyLoginProfile(valid); err != nil {
+		t.Fatalf("valid textures signature was rejected: %v", err)
+	}
+
+	tampered := valid
+	tampered.Properties = loginProperties{
+		{Name: "textures", Value: "tampered-value", Signature: valid.Properties[0].Signature, Signed: true},
+	}
+	if err := auth.verifyLoginProfile(tampered); err == nil {
+		t.Fatal("tampered textures value was accepted")
+	}
+
+	unsigned := loginProfile{
+		Username: "SkinUser",
+		Properties: loginProperties{
+			{Name: "textures", Value: "textures-value"},
+		},
+	}
+	if err := auth.verifyLoginProfile(unsigned); err == nil {
+		t.Fatal("unsigned textures property was accepted")
+	}
+
+	missing := loginProfile{Username: "SkinUser"}
+	if err := auth.verifyLoginProfile(missing); err == nil {
+		t.Fatal("missing textures property was accepted")
+	}
+
+	// The API may rotate its signing key; the cached key must be refreshed.
+	rotatedKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate rotated key: %v", err)
+	}
+	der, err := x509.MarshalPKIXPublicKey(&rotatedKey.PublicKey)
+	if err != nil {
+		t.Fatalf("marshal rotated key: %v", err)
+	}
+	state.mu.Lock()
+	state.signingKey = rotatedKey
+	state.publicKeyPEM = string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+	state.mu.Unlock()
+
+	if err := auth.verifyLoginProfile(signTextures(rotatedKey, "textures-value")); err != nil {
+		t.Fatalf("rotated textures signature was rejected: %v", err)
 	}
 }
 

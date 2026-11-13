@@ -3,10 +3,15 @@ package xmc
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -336,6 +341,77 @@ func (c *yggdrasilConfig) hasJoined(ctx context.Context, client *http.Client, us
 	return &profile, nil
 }
 
+type yggdrasilMetadata struct {
+	SignaturePublicKey string `json:"signaturePublickey"`
+}
+
+// metadata fetches the API description, which carries the public key used to
+// sign texture properties. Both the API root and its trailing-slash form are
+// tried because implementations differ.
+func (c *yggdrasilConfig) metadata(ctx context.Context, client *http.Client) (*yggdrasilMetadata, error) {
+	endpoints := []string{c.baseURL.String()}
+	if c.baseURL.Path != "" && !strings.HasSuffix(c.baseURL.Path, "/") {
+		withSlash := *c.baseURL
+		withSlash.Path += "/"
+		endpoints = append(endpoints, withSlash.String())
+	}
+
+	var lastErr error
+	for _, endpoint := range endpoints {
+		var metadata yggdrasilMetadata
+		if err := doYggdrasilJSON(ctx, client, http.MethodGet, endpoint, nil, &metadata); err != nil {
+			lastErr = err
+			continue
+		}
+		return &metadata, nil
+	}
+	return nil, fmt.Errorf("yggdrasil metadata: %w", lastErr)
+}
+
+func parseYggdrasilPublicKey(value string) (*rsa.PublicKey, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, fmt.Errorf("yggdrasil api does not expose signaturePublickey")
+	}
+
+	var der []byte
+	if block, _ := pem.Decode([]byte(value)); block != nil {
+		der = block.Bytes
+	} else {
+		decoded, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(value), ""))
+		if err != nil {
+			return nil, fmt.Errorf("decode signaturePublickey: %w", err)
+		}
+		der = decoded
+	}
+
+	parsed, err := x509.ParsePKIXPublicKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("parse signaturePublickey: %w", err)
+	}
+	key, ok := parsed.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("signaturePublickey is not an RSA key")
+	}
+	return key, nil
+}
+
+func verifyYggdrasilProperty(key *rsa.PublicKey, value, signature string) error {
+	raw, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		raw, err = base64.RawStdEncoding.DecodeString(signature)
+		if err != nil {
+			return fmt.Errorf("decode property signature: %w", err)
+		}
+	}
+
+	digest := sha1.Sum([]byte(value))
+	if err := rsa.VerifyPKCS1v15(key, crypto.SHA1, digest[:], raw); err != nil {
+		return fmt.Errorf("verify property signature: %w", err)
+	}
+	return nil
+}
+
 // selectProfile picks the player owned by the authenticated account.
 func (c *yggdrasilConfig) selectProfile(response *yggdrasilAuthenticateResponse) (yggdrasilProfile, error) {
 	if c.player != "" {
@@ -389,6 +465,9 @@ type yggdrasilAuth struct {
 
 	mu    sync.Mutex
 	token yggdrasilToken
+
+	keyMu        sync.Mutex
+	signatureKey *rsa.PublicKey
 }
 
 func newYggdrasilAuth(config *yggdrasilConfig) *yggdrasilAuth {
@@ -507,6 +586,76 @@ func (a *yggdrasilAuth) join(ctx context.Context, serverID string) (yggdrasilTok
 		a.token = yggdrasilToken{}
 	}
 	return yggdrasilToken{}, lastErr
+}
+
+// verifyLoginProfile validates the signature of the signed textures property
+// returned in Login Success, like a vanilla Minecraft client does.
+func (a *yggdrasilAuth) verifyLoginProfile(profile loginProfile) error {
+	textures, found := profile.textures()
+	if !found {
+		return fmt.Errorf("login success has no textures property")
+	}
+	if !textures.Signed || textures.Signature == "" {
+		return fmt.Errorf("textures property is not signed")
+	}
+
+	key, err := a.signaturePublicKey()
+	if err == nil {
+		if verifyErr := verifyYggdrasilProperty(key, textures.Value, textures.Signature); verifyErr == nil {
+			return nil
+		}
+	}
+
+	// The API may have rotated its key pair, so fetch it again and retry once.
+	key, refreshErr := a.refreshSignaturePublicKey()
+	if refreshErr != nil {
+		if err != nil {
+			return fmt.Errorf("fetch texture signature key: %w", err)
+		}
+		return fmt.Errorf("refresh texture signature key: %w", refreshErr)
+	}
+	if verifyErr := verifyYggdrasilProperty(key, textures.Value, textures.Signature); verifyErr != nil {
+		return fmt.Errorf("invalid textures signature: %w", verifyErr)
+	}
+	return nil
+}
+
+func (a *yggdrasilAuth) signaturePublicKey() (*rsa.PublicKey, error) {
+	a.keyMu.Lock()
+	defer a.keyMu.Unlock()
+
+	if a.signatureKey != nil {
+		return a.signatureKey, nil
+	}
+	key, err := a.fetchSignaturePublicKeyLocked()
+	if err != nil {
+		return nil, err
+	}
+	a.signatureKey = key
+	return key, nil
+}
+
+func (a *yggdrasilAuth) refreshSignaturePublicKey() (*rsa.PublicKey, error) {
+	a.keyMu.Lock()
+	defer a.keyMu.Unlock()
+
+	key, err := a.fetchSignaturePublicKeyLocked()
+	if err != nil {
+		return nil, err
+	}
+	a.signatureKey = key
+	return key, nil
+}
+
+func (a *yggdrasilAuth) fetchSignaturePublicKeyLocked() (*rsa.PublicKey, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), yggdrasilRequestTimeout)
+	defer cancel()
+
+	metadata, err := a.config.metadata(ctx, a.client)
+	if err != nil {
+		return nil, err
+	}
+	return parseYggdrasilPublicKey(metadata.SignaturePublicKey)
 }
 
 // yggdrasilVerifier is the server side hasJoined check.

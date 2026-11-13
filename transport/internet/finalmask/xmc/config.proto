@@ -19,8 +19,10 @@ message Profile {
 message Yggdrasil {
     // API root of a third-party Yggdrasil API server, for example
     // https://skin.example.com/api/yggdrasil. The client logs in to this API
-    // and the server verifies players through
-    // sessionserver/session/minecraft/hasJoined.
+    // and joins the session with the server's actual public key, while the
+    // server verifies players through
+    // sessionserver/session/minecraft/hasJoined. The API's
+    // signaturePublickey is used to verify the signed textures property.
     string api = 1;
     // Account used by the client to authenticate with the API. Usually an
     // email address, depending on the API implementation.
@@ -31,8 +33,10 @@ message Yggdrasil {
 }
 
 message Config {
-    // Seeds the derived RSA key pair shared by both sides. In legacy mode it
-    // is also the pre-shared password checked during login.
+    // Legacy mode only: seeds the derived RSA key pair and is the pre-shared
+    // password checked during login. Ignored in Yggdrasil mode, where the RSA
+    // key pair is generated randomly and players are authenticated through the
+    // Yggdrasil API.
     string password = 1;
     reserved 2;
     bytes rsa_private_key = 8;

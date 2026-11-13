@@ -44,7 +44,7 @@ var (
 )
 
 func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, padding []*Padding, yggdrasil *yggdrasilAuth) (*clientConn, error) {
-	if len(rsaPublicKey) == 0 {
+	if len(rsaPublicKey) == 0 && yggdrasil == nil {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
 	if len(profiles) == 0 && yggdrasil == nil {
@@ -160,7 +160,7 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("read encryption request fields: %w", err)
 	}
 
-	if !bytes.Equal(publicKey, c.rsaPublicKey) {
+	if c.yggdrasil == nil && !bytes.Equal(publicKey, c.rsaPublicKey) {
 		return fmt.Errorf("server public key mismatch")
 	}
 
@@ -172,6 +172,9 @@ func (c *clientConn) handshake() error {
 	rsaPublicKey, ok := k.(*rsa.PublicKey)
 	if !ok {
 		return fmt.Errorf("parse server public key: not rsa")
+	}
+	if rsaPublicKey.N.BitLen() < 1024 {
+		return fmt.Errorf("server public key is too short: %d bits", rsaPublicKey.N.BitLen())
 	}
 
 	sharedSecret := make([]byte, 16)
@@ -271,6 +274,9 @@ func (c *clientConn) handshake() error {
 	if c.yggdrasil != nil {
 		if !sameProfileIdentity(receivedProfile, selectedProfile) {
 			return fmt.Errorf("login profile mismatch")
+		}
+		if verifyErr := c.yggdrasil.verifyLoginProfile(receivedProfile); verifyErr != nil {
+			return fmt.Errorf("verify login profile: %w", verifyErr)
 		}
 	} else if !sameLoginProfile(receivedProfile, selectedProfile) {
 		return fmt.Errorf("login profile mismatch")

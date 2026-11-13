@@ -44,7 +44,15 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 		return nil, fmt.Errorf("minecraft finalmask: empty profiles")
 	}
 
-	cc, err := newClientConn(conn, profiles, c.Password, c.RsaPublicKey, c.Hostname, c.Paddings, auth)
+	// In Yggdrasil mode the server key is authenticated by the session hash
+	// handshake, so the client accepts the key sent in Encryption Request
+	// instead of pinning a configured one.
+	var rsaPublicKey []byte
+	if auth == nil {
+		rsaPublicKey = c.RsaPublicKey
+	}
+
+	cc, err := newClientConn(conn, profiles, c.Password, rsaPublicKey, c.Hostname, c.Paddings, auth)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}

@@ -96,8 +96,10 @@ type Yggdrasil struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// API root of a third-party Yggdrasil API server, for example
 	// https://skin.example.com/api/yggdrasil. The client logs in to this API
-	// and the server verifies players through
-	// sessionserver/session/minecraft/hasJoined.
+	// and joins the session with the server's actual public key, while the
+	// server verifies players through
+	// sessionserver/session/minecraft/hasJoined. The API's
+	// signaturePublickey is used to verify the signed textures property.
 	Api string `protobuf:"bytes,1,opt,name=api,proto3" json:"api,omitempty"`
 	// Account used by the client to authenticate with the API. Usually an
 	// email address, depending on the API implementation.
@@ -169,8 +171,10 @@ func (x *Yggdrasil) GetPlayer() string {
 
 type Config struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Seeds the derived RSA key pair shared by both sides. In legacy mode it
-	// is also the pre-shared password checked during login.
+	// Legacy mode only: seeds the derived RSA key pair and is the pre-shared
+	// password checked during login. Ignored in Yggdrasil mode, where the RSA
+	// key pair is generated randomly and players are authenticated through the
+	// Yggdrasil API.
 	Password      string     `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
 	RsaPrivateKey []byte     `protobuf:"bytes,8,opt,name=rsa_private_key,json=rsaPrivateKey,proto3" json:"rsa_private_key,omitempty"`
 	RsaPublicKey  []byte     `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
