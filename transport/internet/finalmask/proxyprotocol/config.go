@@ -27,5 +27,5 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 }
 
 func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
-	return conn, nil
+	return proxyproto.NewConn(conn, proxyproto.WithPolicy(proxyproto.REQUIRE)), nil
 }

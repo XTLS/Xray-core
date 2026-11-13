@@ -31,17 +31,22 @@ func TestClientHeader(t *testing.T) {
 				fm := finalmask.NewFinalMask([]finalmask.TCPMask{&Config{Version: version}}, nil,
 					func(ctx context.Context, dest net.Destination) (net.Conn, error) {
 						return net.Dial("tcp", dest.NetAddr())
-					}, nil, nil, nil)
+					}, func(ctx context.Context, addr net.Addr) (net.Listener, error) {
+						return listener, nil
+					}, nil, nil)
+				maskedListener, err := fm.Listen(context.Background(), listener.Addr())
+				if err != nil {
+					t.Fatal(err)
+				}
 				client, err := fm.DialTCP(ctx, net.DestinationFromAddr(listener.Addr()))
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer client.Close()
-				raw, err := listener.Accept()
+				server, err := maskedListener.Accept()
 				if err != nil {
 					t.Fatal(err)
 				}
-				server := proxyproto.NewConn(raw, proxyproto.WithPolicy(proxyproto.REQUIRE))
 				defer server.Close()
 				deadline := time.Now().Add(5 * time.Second)
 				if err := client.SetDeadline(deadline); err != nil {
@@ -50,7 +55,11 @@ func TestClientHeader(t *testing.T) {
 				if err := server.SetDeadline(deadline); err != nil {
 					t.Fatal(err)
 				}
-				header := server.ProxyHeader()
+				proxyConn, ok := server.(*proxyproto.Conn)
+				if !ok {
+					t.Fatalf("server connection type = %T, want *proxyproto.Conn", server)
+				}
+				header := proxyConn.ProxyHeader()
 				wantVersion := byte(version)
 				if wantVersion == 0 {
 					wantVersion = 2
