@@ -332,7 +332,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 
 	var newCtx context.Context
 	var newCancel context.CancelFunc
-	if session.TimeoutOnlyFromContext(ctx) {
+	if !native && session.TimeoutOnlyFromContext(ctx) {
 		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
@@ -376,46 +376,6 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 				return nil, nil, errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version)
 			}
 		}
-	}
-
-	postRequest := func() error {
-		clientReader := link.Reader
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-
-		timeoutReader, ok := clientReader.(buf.TimeoutReader)
-		if ok {
-			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
-			if err1 == nil {
-				if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
-					return err // ...
-				}
-			} else if err1 != buf.ErrReadTimeout {
-				return err1
-			} else if requestAddons.Flow == vless.XRV {
-				mb := make(buf.MultiBuffer, 1)
-				errors.LogInfo(ctx, "Insert padding with empty content to camouflage VLESS header ", mb.Len())
-				if err := serverWriter.WriteMultiBuffer(mb); err != nil {
-					return err // ...
-				}
-			}
-		} else {
-			errors.LogDebug(ctx, "Reader is not timeout reader, will send out vless header separately from first payload")
-		}
-		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
-		if err := bufferWriter.SetBuffered(false); err != nil {
-			return errors.New("failed to write A request payload").Base(err)
-		}
-
-		err := buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
-		if err != nil {
-			return errors.New("failed to transfer request payload").Base(err)
-		}
-
-		// Indicates the end of request payload.
-		switch requestAddons.Flow {
-		default:
-		}
-		return nil
 	}
 
 	openResponse := func() (buf.Reader, error) {
@@ -463,6 +423,42 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 			return nil, nil, openErr
 		}
 		return ctx, directLink, nil
+	}
+
+	postRequest := func() error {
+		clientReader := link.Reader
+		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
+
+		timeoutReader, ok := clientReader.(buf.TimeoutReader)
+		if ok {
+			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
+			if err1 == nil {
+				if err := serverWriter.WriteMultiBuffer(multiBuffer); err != nil {
+					return err // ...
+				}
+			} else if err1 != buf.ErrReadTimeout {
+				return err1
+			} else if requestAddons.Flow == vless.XRV {
+				mb := make(buf.MultiBuffer, 1)
+				errors.LogInfo(ctx, "Insert padding with empty content to camouflage VLESS header ", mb.Len())
+				if err := serverWriter.WriteMultiBuffer(mb); err != nil {
+					return err // ...
+				}
+			}
+		} else {
+			errors.LogDebug(ctx, "Reader is not timeout reader, will send out vless header separately from first payload")
+		}
+		// Flush; bufferWriter.WriteMultiBuffer now is bufferWriter.writer.WriteMultiBuffer
+		if err := bufferWriter.SetBuffered(false); err != nil {
+			return errors.New("failed to write A request payload").Base(err)
+		}
+
+		err := buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
+		if err != nil {
+			return errors.New("failed to transfer request payload").Base(err)
+		}
+
+		return nil
 	}
 
 	clientWriter := link.Writer

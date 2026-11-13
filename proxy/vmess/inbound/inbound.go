@@ -17,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
@@ -189,13 +188,11 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	return nil
 }
 
-// multiplexBody keeps decoded activity and errors at the borrowed codec boundary.
+// multiplexBody guards cancellation at the borrowed codec boundary.
 type multiplexBody struct {
-	ctx          context.Context
-	reader       buf.Reader
-	writer       buf.Writer
-	timer        *signal.ActivityTimer
-	downlinkOnly time.Duration
+	ctx    context.Context
+	reader buf.Reader
+	writer buf.Writer
 }
 
 func (b *multiplexBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -207,12 +204,6 @@ func (b *multiplexBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		buf.ReleaseMulti(mb)
 		return nil, canceled
 	}
-	if !mb.IsEmpty() {
-		b.timer.Update()
-	}
-	if err != nil {
-		b.timer.SetTimeout(b.downlinkOnly)
-	}
 	return mb, err
 }
 
@@ -220,9 +211,6 @@ func (b *multiplexBody) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if err := b.ctx.Err(); err != nil {
 		buf.ReleaseMulti(mb)
 		return err
-	}
-	if !mb.IsEmpty() {
-		b.timer.Update()
 	}
 	return b.writer.WriteMultiBuffer(mb)
 }
@@ -234,8 +222,6 @@ type ordinaryResponse struct {
 	connection   net.Conn
 	body         buf.Writer
 	output       *buf.BufferedWriter
-	timer        *signal.ActivityTimer
-	uplinkOnly   time.Duration
 	terminate    bool
 	mu           sync.Mutex
 	closed       bool
@@ -259,11 +245,6 @@ func (w *ordinaryResponse) rememberIO(err error) error {
 	return w.remember(err)
 }
 
-func (w *ordinaryResponse) SubmitError(err error) {
-	w.remember(err)
-	session.SubmitOutboundErrorToOriginator(w.ctx, err)
-}
-
 func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -279,7 +260,6 @@ func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		buf.ReleaseMulti(mb)
 		return nil
 	}
-	w.timer.Update()
 	if err := w.body.WriteMultiBuffer(mb); err != nil {
 		return w.rememberIO(err)
 	}
@@ -300,8 +280,6 @@ func (w *ordinaryResponse) Close() error {
 		return nil
 	}
 	w.closed = true
-	// Apply the directional timeout only after checked finalization I/O completes.
-	defer w.timer.SetTimeout(w.uplinkOnly)
 	if terminal := w.err.Load(); terminal != nil {
 		return *terminal
 	}
@@ -327,47 +305,25 @@ func (w *ordinaryResponse) Interrupt() {
 }
 
 type ordinaryReader struct {
-	body     *multiplexBody
+	reader   buf.Reader
 	response *ordinaryResponse
 }
 
 func (r *ordinaryReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if err := r.body.ctx.Err(); err != nil {
-		if !r.response.readTeardown.Load() {
-			r.response.remember(err)
-		}
+	if err := r.response.ctx.Err(); err != nil {
 		return nil, err
 	}
 	if r.response.readTeardown.Load() {
 		return nil, io.ErrClosedPipe
 	}
-	mb, err := r.body.reader.ReadMultiBuffer()
-	canceled := r.body.ctx.Err()
-	teardown := r.response.readTeardown.Load()
-	cause := errors.Cause(err)
-	closedRead := goerrors.Is(err, gonet.ErrClosed) || goerrors.Is(err, io.ErrClosedPipe) || cause == context.Canceled
-	if err != nil && cause != io.EOF && !((teardown || canceled != nil) && closedRead) {
-		r.response.remember(err)
-	}
-	if canceled != nil {
+	mb, err := r.reader.ReadMultiBuffer()
+	if canceled := r.response.ctx.Err(); canceled != nil {
 		buf.ReleaseMulti(mb)
-		if !teardown {
-			r.response.remember(canceled)
-		}
 		return nil, canceled
 	}
-	if teardown {
+	if r.response.readTeardown.Load() {
 		buf.ReleaseMulti(mb)
-		if err != nil && cause != io.EOF && !closedRead {
-			return nil, err
-		}
 		return nil, io.ErrClosedPipe
-	}
-	if !mb.IsEmpty() {
-		r.body.timer.Update()
-	}
-	if err != nil {
-		r.body.timer.SetTimeout(r.body.downlinkOnly)
 	}
 	return mb, err
 }
@@ -430,26 +386,25 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	defer cancel()
+	stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
+	defer stopClose()
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
+	bodyReader, err := svrSession.DecodeRequestBody(request, reader)
+	if err != nil {
+		return errors.New("failed to start decoding").Base(err)
+	}
+	// Derive response keys in memory; socket failures must remain ordinary errors.
+	header := buf.New()
+	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, header)
 	if request.Command == protocol.RequestCommandMultiplex {
-		defer cancel()
-		stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
-		defer stopClose()
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-		bodyReader, err := svrSession.DecodeRequestBody(request, reader)
-		if err != nil {
-			return errors.New("failed to start decoding").Base(err)
-		}
-		header := buf.New()
-		svrSession.EncodeResponseHeader(&protocol.ResponseHeader{Command: h.generateCommand(ctx, request)}, header)
 		bodyWriter, err := svrSession.EncodeResponseBody(request, connection)
 		if err != nil {
 			header.Release()
 			return errors.New("failed to start decoding response").Base(err)
 		}
-		body := &multiplexBody{ctx: ctx, reader: bodyReader, writer: bodyWriter, timer: timer, downlinkOnly: sessionPolicy.Timeouts.DownlinkOnly}
+		body := &multiplexBody{ctx: ctx, reader: bodyReader, writer: bodyWriter}
 		writer := buf.NewBufferedWriter(body)
 		writer.SetBuffered(false)
 		// Start decoding before physical header I/O; body output must wait for it.
@@ -481,16 +436,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 		return nil
 	}
-	defer cancel()
-	stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
-	defer stopClose()
-	bodyReader, err := svrSession.DecodeRequestBody(request, reader)
-	if err != nil {
-		return errors.New("failed to start decoding").Base(err)
-	}
-	// Derive response keys in memory; socket failures must remain ordinary errors.
-	header := buf.New()
-	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{Command: h.generateCommand(ctx, request)}, header)
 	writer := buf.NewBufferedWriter(buf.NewWriter(connection))
 	bodyWriter, err := svrSession.EncodeResponseBody(request, writer)
 	if err != nil {
@@ -502,15 +447,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	account := request.User.Account.(*vmess.MemoryAccount)
 	response := &ordinaryResponse{
-		ctx: ctx, connection: iConn, body: bodyWriter, output: writer, timer: timer,
-		uplinkOnly: sessionPolicy.Timeouts.UplinkOnly,
-		terminate:  request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
+		ctx: ctx, connection: iConn, body: bodyWriter, output: writer,
+		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
 	}
 	input := &ordinaryReader{
-		body:     &multiplexBody{ctx: ctx, reader: bodyReader, timer: timer, downlinkOnly: sessionPolicy.Timeouts.DownlinkOnly},
+		reader:   bodyReader,
 		response: response,
 	}
-	if err := dispatcher.DispatchLink(session.TrackedConnectionError(ctx, response), request.Destination(), &transport.Link{Reader: input, Writer: response}); err != nil {
+	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: input, Writer: response}); err != nil {
 		response.remember(err)
 		response.Interrupt()
 	} else if response.err.Load() == nil && ctx.Err() == nil {
@@ -526,11 +470,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("connection ends").Base(io.ErrClosedPipe)
 	}
 
-	return nil
-}
-
-// Stub command generator
-func (h *Handler) generateCommand(ctx context.Context, request *protocol.RequestHeader) protocol.ResponseCommand {
 	return nil
 }
 
