@@ -2,6 +2,7 @@ package multiplex_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
@@ -47,25 +48,31 @@ func TestRegressionOutboundLeak(t *testing.T) {
 			func() error { return buf.Copy(websiteDownlink.Reader, link.Writer) })
 	}
 
-	muxServerUplink, muxServerDownlink := newLinkPair()
-	multiplex.NewServerWorker(serverCtx, dispatch, muxServerUplink)
+	multiplexServerUplink, multiplexServerDownlink := newLinkPair()
+	multiplex.NewServerWorker(serverCtx, dispatch, multiplexServerUplink)
 
-	client := multiplex.NewClientWorker(*muxServerDownlink, multiplex.ClientStrategy{})
+	client := multiplex.NewClientWorker(*multiplexServerDownlink, multiplex.ClientStrategy{})
 
 	clientCtx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
 		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
 	}})
 
-	muxClientUplink, muxClientDownlink := newLinkPair()
+	multiplexClientUplink, multiplexClientDownlink := newLinkPair()
 
-	ok := client.Dispatch(clientCtx, muxClientUplink, false)
-	if !ok {
+	err := multiplex.Dispatch(clientCtx, multiplexClientUplink, false, func(ctx context.Context, link *transport.Link) (*multiplex.Session, error) {
+		s := client.TryAdmit(ctx, link)
+		if s == nil {
+			return nil, fmt.Errorf("unable to admit test child")
+		}
+		return s, nil
+	})
+	if err != nil {
 		t.Error("failed to dispatch")
 	}
 
 	{
 		b := buf.FromBytes([]byte("hello"))
-		common.Must(muxClientDownlink.Writer.WriteMultiBuffer(buf.MultiBuffer{b}))
+		common.Must(multiplexClientDownlink.Writer.WriteMultiBuffer(buf.MultiBuffer{b}))
 	}
 
 	resMb, err := websiteUplink.Reader.ReadMultiBuffer()
@@ -80,7 +87,7 @@ func TestRegressionOutboundLeak(t *testing.T) {
 		common.Must(websiteUplink.Writer.WriteMultiBuffer(buf.MultiBuffer{b}))
 	}
 
-	resMb, err = muxClientDownlink.Reader.ReadMultiBuffer()
+	resMb, err = multiplexClientDownlink.Reader.ReadMultiBuffer()
 	common.Must(err)
 	res = resMb.String()
 	if res != "world" {

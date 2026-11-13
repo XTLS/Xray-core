@@ -132,6 +132,5 @@ func (w *Writer) Close() error {
 	frame := buf.New()
 	common.Must(meta.WriteTo(frame))
 
-	w.writer.WriteMultiBuffer(buf.MultiBuffer{frame})
-	return nil
+	return w.writer.WriteMultiBuffer(buf.MultiBuffer{frame})
 }

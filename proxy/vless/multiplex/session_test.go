@@ -1,16 +1,16 @@
-package multiplex_test
+package multiplex
 
 import (
 	"testing"
 
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/protocol"
-	. "github.com/xtls/xray-core/proxy/vless/multiplex"
 )
 
 func TestSessionManagerAdd(t *testing.T) {
 	m := NewSessionManager()
 
-	s := m.Allocate(&ClientStrategy{}, nil, nil, protocol.TransferTypeStream)
+	s := allocateTestSession(m, &ClientStrategy{}, nil, nil, protocol.TransferTypeStream)
 	if s.ID != 1 {
 		t.Error("id: ", s.ID)
 	}
@@ -18,7 +18,7 @@ func TestSessionManagerAdd(t *testing.T) {
 		t.Error("size: ", m.Size())
 	}
 
-	s = m.Allocate(&ClientStrategy{}, nil, nil, protocol.TransferTypeStream)
+	s = allocateTestSession(m, &ClientStrategy{}, nil, nil, protocol.TransferTypeStream)
 	if s.ID != 2 {
 		t.Error("id: ", s.ID)
 	}
@@ -40,7 +40,7 @@ func TestSessionManagerAdd(t *testing.T) {
 
 func TestSessionManagerClose(t *testing.T) {
 	m := NewSessionManager()
-	s := m.Allocate(&ClientStrategy{}, nil, nil, protocol.TransferTypeStream)
+	s := allocateTestSession(m, &ClientStrategy{}, nil, nil, protocol.TransferTypeStream)
 
 	if m.CloseIfNoSessionAndIdle(m.Size(), m.Count()) {
 		t.Error("able to close")
@@ -49,4 +49,10 @@ func TestSessionManagerClose(t *testing.T) {
 	if !m.CloseIfNoSessionAndIdle(m.Size(), m.Count()) {
 		t.Error("not able to close")
 	}
+}
+
+func allocateTestSession(m *SessionManager, strategy *ClientStrategy, input buf.Reader, output buf.Writer, transfer protocol.TransferType) *Session {
+	m.Lock()
+	defer m.Unlock()
+	return m.allocate(strategy, input, output, transfer)
 }

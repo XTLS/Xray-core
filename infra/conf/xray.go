@@ -201,14 +201,14 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 }
 
 type OutboundDetourConfig struct {
-	Protocol       string           `json:"protocol"`
-	SendThrough    *string          `json:"sendThrough"`
-	Tag            string           `json:"tag"`
-	Settings       *json.RawMessage `json:"settings"`
-	StreamSetting  *StreamConfig    `json:"streamSettings"`
-	ProxySettings  *json.RawMessage `json:"proxySettings"`
-	MuxSettings    *json.RawMessage `json:"mux"`
-	TargetStrategy string           `json:"targetStrategy"`
+	Protocol          string           `json:"protocol"`
+	SendThrough       *string          `json:"sendThrough"`
+	Tag               string           `json:"tag"`
+	Settings          *json.RawMessage `json:"settings"`
+	StreamSetting     *StreamConfig    `json:"streamSettings"`
+	ProxySettings     *json.RawMessage `json:"proxySettings"`
+	LegacyMuxSettings *json.RawMessage `json:"mux"` // Legacy top-level input; enabled settings are rejected.
+	TargetStrategy    string           `json:"targetStrategy"`
 }
 
 func requiresTransportSecurity(address *Address) bool {
@@ -246,7 +246,7 @@ func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *pr
 	return nil
 }
 
-// validateXDrive allows only VLESS with encryption on xdrive, and on the client Mux.Cool for every connection
+// validateXDrive allows only encrypted VLESS on xdrive, with native multiplex on every client connection.
 func validateXDrive(ts proto.Message, ss *internet.StreamConfig, pl *net.PortList) error {
 	if ss == nil || ss.ProtocolName != "xdrive" {
 		return nil
@@ -361,9 +361,9 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
-	if c.MuxSettings != nil {
+	if c.LegacyMuxSettings != nil {
 		var legacy MultiplexConfig
-		if err := json.Unmarshal(*c.MuxSettings, &legacy); err != nil {
+		if err := json.Unmarshal(*c.LegacyMuxSettings, &legacy); err != nil {
 			return nil, errors.New("failed to parse mux settings").Base(err)
 		}
 		if legacy.Enabled != nil && *legacy.Enabled {

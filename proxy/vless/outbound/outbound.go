@@ -136,7 +136,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}
 		handler.multiplex = multiplex.NewClient(handler.ctx, config.Multiplex, network,
 			func(ctx context.Context) (context.Context, *transport.Link, error) {
-				return handler.process(ctx, nil, dialer, protocol.RequestCommandMux)
+				return handler.process(ctx, nil, dialer, protocol.RequestCommandMultiplex)
 			})
 	}
 
@@ -148,9 +148,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
 	h.stop()
-	if h.multiplex != nil {
-		h.multiplex.Close()
-	}
 	if h.reverse != nil {
 		return h.reverse.Close()
 	}
@@ -307,8 +304,8 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 			if !allowUDP443 && request.Port == 443 {
 				return nil, nil, errors.New("XTLS rejected UDP/443 traffic")
 			}
-		case protocol.RequestCommandMux:
-			fallthrough // let server break Mux connections that contain TCP requests
+		case protocol.RequestCommandMultiplex:
+			fallthrough // let server break multiplex connections that contain TCP requests
 		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
 			var target net.Conn
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
@@ -349,7 +346,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
 	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
-		request.Command = protocol.RequestCommandMux
+		request.Command = protocol.RequestCommandMultiplex
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)
 	}
@@ -365,7 +362,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 
 	// default: serverWriter := bufferWriter
 	serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
-	if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+	if request.Command == protocol.RequestCommandMultiplex && request.Port == 666 {
 		serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
 	}
 
@@ -432,7 +429,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		if requestAddons.Flow == vless.XRV {
 			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx, conn, input, rawInput, ob)
 		}
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+		if request.Command == protocol.RequestCommandMultiplex && request.Port == 666 {
 			if requestAddons.Flow == vless.XRV {
 				serverReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: serverReader})
 			} else {

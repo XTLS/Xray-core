@@ -26,7 +26,6 @@ import (
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
 type userByEmail struct {
@@ -226,6 +225,44 @@ func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSess
 	return nil
 }
 
+// multiplexBody keeps decoded activity and errors at the borrowed codec boundary.
+type multiplexBody struct {
+	ctx          context.Context
+	reader       buf.Reader
+	writer       buf.Writer
+	timer        *signal.ActivityTimer
+	downlinkOnly time.Duration
+}
+
+func (b *multiplexBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if err := b.ctx.Err(); err != nil {
+		return nil, err
+	}
+	mb, err := b.reader.ReadMultiBuffer()
+	if canceled := b.ctx.Err(); canceled != nil {
+		buf.ReleaseMulti(mb)
+		return nil, canceled
+	}
+	if !mb.IsEmpty() {
+		b.timer.Update()
+	}
+	if err != nil {
+		b.timer.SetTimeout(b.downlinkOnly)
+	}
+	return mb, err
+}
+
+func (b *multiplexBody) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	if err := b.ctx.Err(); err != nil {
+		buf.ReleaseMulti(mb)
+		return err
+	}
+	if !mb.IsEmpty() {
+		b.timer.Update()
+	}
+	return b.writer.WriteMultiBuffer(mb)
+}
+
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
@@ -255,7 +292,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return err
 	}
 
-	if request.Command != protocol.RequestCommandMux {
+	if request.Command != protocol.RequestCommandMultiplex {
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 			From:   connection.RemoteAddr(),
 			To:     request.Destination(),
@@ -282,16 +319,55 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-	var link *transport.Link
-	if request.Command == protocol.RequestCommandMux {
-		uplinkReader, uplinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
-		downlinkReader, downlinkWriter := pipe.New(pipe.OptionsFromContext(ctx)...)
-		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: uplinkReader, Writer: downlinkWriter})
+	if request.Command == protocol.RequestCommandMultiplex {
+		defer cancel()
+		stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
+		defer stopClose()
+		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
+		bodyReader, err := svrSession.DecodeRequestBody(request, reader)
+		if err != nil {
+			return errors.New("failed to start decoding").Base(err)
+		}
+		header := buf.New()
+		svrSession.EncodeResponseHeader(&protocol.ResponseHeader{Command: h.generateCommand(ctx, request)}, header)
+		bodyWriter, err := svrSession.EncodeResponseBody(request, connection)
+		if err != nil {
+			header.Release()
+			return errors.New("failed to start decoding response").Base(err)
+		}
+		body := &multiplexBody{ctx: ctx, reader: bodyReader, writer: bodyWriter, timer: timer, downlinkOnly: sessionPolicy.Timeouts.DownlinkOnly}
+		writer := buf.NewBufferedWriter(body)
+		writer.SetBuffered(false)
+		// Start decoding before physical header I/O; body output must wait for it.
+		writer.Lock()
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: writer})
 		defer worker.Close()
-		link = &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}
-	} else {
-		link, err = dispatcher.Dispatch(ctx, request.Destination())
+		err = buf.NewWriter(connection).WriteMultiBuffer(buf.MultiBuffer{header})
+		if err != nil {
+			if canceled := ctx.Err(); canceled != nil {
+				err = canceled
+			}
+			cancel()
+		}
+		writer.Unlock()
+		if err != nil {
+			return errors.New("failed to write response header").Base(err)
+		}
+		select {
+		case <-ctx.Done():
+			cancel()
+			return errors.New("connection ends").Base(ctx.Err())
+		case <-worker.WaitClosed():
+		}
+		if err := ctx.Err(); err != nil {
+			return errors.New("connection ends").Base(err)
+		}
+		if err := worker.Err(); err != nil {
+			return errors.New("connection ends").Base(err)
+		}
+		return nil
 	}
+	link, err := dispatcher.Dispatch(ctx, request.Destination())
 	if err != nil {
 		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
 	}

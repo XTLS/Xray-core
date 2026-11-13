@@ -80,6 +80,9 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		}
 		switch s := senderSettings.(type) {
 		case *proxyman.SenderConfig:
+			if s.GetMultiplexSettings().GetEnabled() {
+				return nil, errors.New("use VLESS settings.multiplex instead of SenderConfig.multiplex_settings")
+			}
 			h.senderSettings = s
 			mss, err := internet.ToMemoryStreamConfig(s.StreamSettings)
 			if err != nil {
@@ -111,11 +114,6 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	proxyHandler, ok := rawProxyHandler.(proxy.Outbound)
 	if !ok {
 		return nil, errors.New("not an outbound handler")
-	}
-
-	if h.senderSettings != nil && h.senderSettings.DeprecatedMultiplexSettings != nil {
-		common.Close(proxyHandler)
-		return nil, errors.New("use VLESS settings.multiplex instead of SenderConfig.multiplex_settings")
 	}
 
 	h.proxy = proxyHandler

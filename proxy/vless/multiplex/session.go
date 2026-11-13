@@ -17,6 +17,7 @@ type SessionManager struct {
 	sync.RWMutex
 	sessions map[uint16]*Session
 	count    uint16
+	active   int
 	closed   bool
 }
 
@@ -31,18 +32,7 @@ func (m *SessionManager) Size() int {
 	m.RLock()
 	defer m.RUnlock()
 
-	return m.sizeLocked()
-}
-
-// Closed server entries drain in-flight ingress without counting as activity.
-func (m *SessionManager) sizeLocked() int {
-	active := 0
-	for _, s := range m.sessions {
-		if !s.closed {
-			active++
-		}
-	}
-	return active
+	return m.active
 }
 
 func (m *SessionManager) Count() int {
@@ -52,42 +42,42 @@ func (m *SessionManager) Count() int {
 	return int(m.count)
 }
 
-func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer, transferType protocol.TransferType) *Session {
-	m.Lock()
-	defer m.Unlock()
-	return m.allocate(Strategy, input, output, transferType)
-}
-
-func (m *SessionManager) allocate(Strategy *ClientStrategy, input buf.Reader, output buf.Writer, transferType protocol.TransferType) *Session {
-	MaxConcurrency := int(Strategy.MaxConcurrency)
-	MaxConnection := uint16(Strategy.MaxConnection)
-
-	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) || (MaxConnection > 0 && m.count >= MaxConnection) {
+func (m *SessionManager) allocate(strategy *ClientStrategy, input buf.Reader, output buf.Writer, transferType protocol.TransferType) *Session {
+	maxConnection := uint16(strategy.MaxConnection)
+	if m.closed ||
+		(strategy.MaxConcurrency > 0 && m.active >= int(strategy.MaxConcurrency)) ||
+		(maxConnection > 0 && m.count >= maxConnection) {
 		return nil
 	}
 
-	m.count++
 	s := &Session{
 		transferType: transferType,
 		input:        input,
 		output:       output,
-		ID:           m.count,
+		ID:           m.count + 1,
 		parent:       m,
 		done:         done.New(),
 	}
-	m.sessions[s.ID] = s
+	m.add(s)
 	return s
 }
 
 func (m *SessionManager) Add(s *Session) bool {
 	m.Lock()
 	defer m.Unlock()
+	return m.add(s)
+}
 
+func (m *SessionManager) add(s *Session) bool {
 	if m.closed {
 		return false
 	}
 
+	if previous := m.sessions[s.ID]; previous != nil && !previous.closed {
+		m.active--
+	}
 	m.count++
+	m.active++
 	m.sessions[s.ID] = s
 	return true
 }
@@ -112,7 +102,7 @@ func (m *SessionManager) CloseIfNoSessionAndIdle(checkSize int, checkCount int) 
 		return true
 	}
 
-	if m.sizeLocked() != 0 || checkSize != 0 || checkCount != int(m.count) {
+	if m.active != 0 || checkSize != 0 || checkCount != int(m.count) {
 		return false
 	}
 
@@ -131,6 +121,7 @@ func (m *SessionManager) Close() error {
 	m.closed = true
 	sessions := m.sessions
 	m.sessions = nil
+	m.active = 0
 	m.Unlock()
 	for _, current := range sessions {
 		current.Close()
@@ -138,19 +129,18 @@ func (m *SessionManager) Close() error {
 	return nil
 }
 
-// Session represents a client connection in a Mux connection.
+// Session represents a client connection in a multiplex connection.
 type Session struct {
-	input          buf.Reader
-	output         buf.Writer
-	parent         *SessionManager
-	ID             uint16
-	transferType   protocol.TransferType
-	closed         bool
-	failed         bool // immutable winning close reason, guarded by parent
-	done           *done.Instance
-	flow           *inboundFlow
-	sender         *carrier
-	packetProducer *childResponse // client producer, set before publication
+	input        buf.Reader
+	output       buf.Writer
+	parent       *SessionManager
+	ID           uint16
+	transferType protocol.TransferType
+	closed       bool
+	failed       bool // immutable winning close reason, guarded by parent
+	done         *done.Instance
+	flow         *inboundFlow
+	sender       *carrier
 }
 
 // writePayload transfers parser custody to the admitted native flow.
@@ -194,8 +184,11 @@ func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
 		failed = failed || x.responseErr == io.ErrClosedPipe
 	}
 	s.closed, s.failed = true, failed
-	if x == nil && s.parent.sessions[s.ID] == s {
-		delete(s.parent.sessions, s.ID)
+	if s.parent.sessions[s.ID] == s {
+		s.parent.active--
+		if x == nil {
+			delete(s.parent.sessions, s.ID)
+		}
 	}
 	if s.done != nil {
 		s.done.Close()
@@ -223,10 +216,6 @@ func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
 	if s.flow == nil {
 		common.Interrupt(s.input)
 		common.Close(s.output)
-	}
-
-	if s.packetProducer != nil {
-		s.packetProducer.end(failed)
 	}
 
 }

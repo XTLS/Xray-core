@@ -36,38 +36,28 @@ func (w *activityWriter) WriteMultiBuffer(data buf.MultiBuffer) error {
 	return err
 }
 
-// readResult transfers one native decoded result, including its exact cause.
-type readResult struct {
-	data buf.MultiBuffer
-	err  error
-}
-
 type responseReader struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	results  chan readResult
+	ctx     context.Context
+	cancel  context.CancelFunc
+	results chan buf.MultiBuffer
+	// The producer publishes terminal before closing results.
 	terminal error
 }
 
 func (r *responseReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if r.terminal != nil {
-		return nil, r.terminal
-	}
 	if err := r.ctx.Err(); err != nil {
 		return nil, err
 	}
 	select {
-	case result := <-r.results:
+	case data, ok := <-r.results:
 		if err := r.ctx.Err(); err != nil {
-			buf.ReleaseMulti(result.data)
+			buf.ReleaseMulti(data)
 			return nil, err
 		}
-		r.terminal = result.err
-		// BufferedReader.Read ignores data returned alongside an error.
-		if !result.data.IsEmpty() {
-			return result.data, nil
+		if !ok {
+			return nil, r.terminal
 		}
-		return result.data, r.terminal
+		return data, nil
 	case <-r.ctx.Done():
 		return nil, r.ctx.Err()
 	}
@@ -82,7 +72,7 @@ func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connecti
 		gate = buf.NewBufferedWriter(WrapWriter(ctx, cancel, writer, activity))
 		gate.SetBuffered(false)
 	}
-	response := &responseReader{ctx: ctx, cancel: cancel, results: make(chan readResult)}
+	response := &responseReader{ctx: ctx, cancel: cancel, results: make(chan buf.MultiBuffer)}
 	context.AfterFunc(ctx, func() {
 		activity.SetTimeout(0)
 		if gate.TryLock() {
@@ -97,33 +87,31 @@ func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connecti
 		return nil, err
 	}
 	go func() {
-		if ctx.Err() != nil {
+		err := ctx.Err()
+		defer func() {
+			response.terminal = err
+			close(response.results)
+		}()
+		if err != nil {
 			return
 		}
 		body, err := openResponse()
-		for {
-			var data buf.MultiBuffer
-			if err == nil {
-				if ctx.Err() != nil {
-					return
-				}
-				data, err = body.ReadMultiBuffer()
-			}
-			if !data.IsEmpty() {
-				activity.Update()
-			} else {
-				data = buf.ReleaseMulti(data)
-				if err == nil {
-					continue
-				}
-			}
-			select {
-			case response.results <- readResult{data: data, err: err}:
-			case <-ctx.Done():
-				buf.ReleaseMulti(data)
+		for err == nil {
+			if err = ctx.Err(); err != nil {
 				return
 			}
-			if err != nil {
+			var data buf.MultiBuffer
+			data, err = body.ReadMultiBuffer()
+			if data.IsEmpty() {
+				buf.ReleaseMulti(data)
+				continue
+			}
+			activity.Update()
+			select {
+			case response.results <- data:
+			case <-ctx.Done():
+				buf.ReleaseMulti(data)
+				err = ctx.Err()
 				return
 			}
 		}

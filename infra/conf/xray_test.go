@@ -280,7 +280,7 @@ func TestMultiplexConfig_Build(t *testing.T) {
 		t.Run("legacy top-level mux "+tc.legacy, func(t *testing.T) {
 			var config OutboundDetourConfig
 			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":443,"users":[{"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d","encryption":"none"}]}]},"mux":`+tc.legacy+`}`), &config))
-			if config.MuxSettings == nil {
+			if config.LegacyMuxSettings == nil {
 				t.Fatal("legacy mux input was not recognized")
 			}
 			_, err := config.Build()

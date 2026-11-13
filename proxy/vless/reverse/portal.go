@@ -2,6 +2,7 @@ package reverse
 
 import (
 	"context"
+	"io"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -14,7 +15,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
+	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
@@ -84,14 +85,14 @@ func (p *Portal) HandleConnection(ctx context.Context, link *transport.Link) err
 		return errors.New("outbound metadata not found")
 	}
 
-	ctx = session.ContextWithIsReverseMux(ctx, true)
+	ctx = session.ContextWithIsReverseMultiplex(ctx, true)
 
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
 
-	return multiplex.Dispatch(ctx, link, true, p.picker.PickAvailable)
+	return multiplex.Dispatch(ctx, link, true, p.picker.Admit)
 }
 
 type StaticPicker struct {
@@ -104,46 +105,38 @@ func NewStaticPicker() *StaticPicker {
 	return &StaticPicker{}
 }
 
-func (p *StaticPicker) PickAvailable(context.Context) (*multiplex.ClientWorker, error) {
+func (p *StaticPicker) Admit(ctx context.Context, link *transport.Link) (*multiplex.Session, error) {
 	p.access.Lock()
 	defer p.access.Unlock()
-
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if p.closed || len(p.workers) == 0 {
 		return nil, errors.New("empty worker list")
 	}
 
-	var minIdx int = -1
-	var minConn uint32 = 9999
-	for i, w := range p.workers {
-		if w.draining.Load() {
-			continue
-		}
-		if w.IsFull() {
-			continue
-		}
-		if w.client.ActiveConnections() < minConn {
-			minConn = w.client.ActiveConnections()
-			minIdx = i
-		}
-	}
-
-	if minIdx == -1 {
-		for i, w := range p.workers {
-			if w.IsFull() {
-				continue
-			}
-			if w.client.ActiveConnections() < minConn {
-				minConn = w.client.ActiveConnections()
-				minIdx = i
+	// Failed reservations move out of this admission's candidate prefix.
+	for remaining := len(p.workers); remaining > 0; {
+		best := 0
+		draining, active := p.workers[0].draining.Load(), p.workers[0].client.ActiveConnections()
+		for i := 1; i < remaining; i++ {
+			w := p.workers[i]
+			d, a := w.draining.Load(), w.client.ActiveConnections()
+			if (draining && !d) || (draining == d && a < active) {
+				best, draining, active = i, d, a
 			}
 		}
+		if s := p.workers[best].client.TryAdmit(ctx, link); s != nil {
+			return s, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		remaining--
+		p.workers[best], p.workers[remaining] = p.workers[remaining], p.workers[best]
 	}
 
-	if minIdx != -1 {
-		return p.workers[minIdx].client, nil
-	}
-
-	return nil, errors.New("no mux client worker available")
+	return nil, errors.New("no multiplex client worker available")
 }
 
 func (p *StaticPicker) AddWorker(worker *PortalWorker) {
@@ -176,76 +169,107 @@ func (p *StaticPicker) Close() {
 
 type PortalWorker struct {
 	client   *multiplex.ClientWorker
-	control  *task.Periodic
-	writer   buf.Writer
 	draining atomic.Bool
-	counter  uint32
 	timer    *signal.ActivityTimer
 }
 
 func NewPortalWorker(client *multiplex.ClientWorker) (*PortalWorker, error) {
-	ctx := context.Background()
-	writer, err := client.NewPacketWriter(net.UDPDestination(net.DomainAddress(internalDomain), 0))
-	if err != nil {
-		return nil, err
-	}
-	terminate := func() {
-		client.Close()
-	}
 	w := &PortalWorker{
 		client: client,
-		writer: writer,
-		timer:  signal.CancelAfterInactivity(ctx, terminate, 24*time.Hour), // // prevent leak
+		timer:  signal.CancelAfterInactivity(context.Background(), func() { client.Close() }, 24*time.Hour),
 	}
-	w.control = &task.Periodic{
-		Execute:  w.heartbeat,
-		Interval: time.Second * 2,
+	r := &controlReader{worker: w, ready: done.New(), stopped: done.New(), first: true}
+	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
+		Target: net.UDPDestination(net.DomainAddress(internalDomain), 0),
+	}})
+	err := multiplex.Dispatch(ctx, &transport.Link{Reader: r, Writer: buf.Discard}, false, func(ctx context.Context, link *transport.Link) (*multiplex.Session, error) {
+		if s := client.TryAdmit(ctx, link); s != nil {
+			return s, nil
+		}
+		return nil, errors.New("failed to admit reverse control session")
+	})
+	if err != nil {
+		w.Close()
+		return nil, err
 	}
-	w.control.Start()
-	return w, nil
+	select {
+	case <-r.ready.Wait():
+	case <-r.stopped.Wait():
+	case <-client.WaitClosed():
+	}
+	select {
+	case <-r.ready.Wait():
+		if !client.Closed() {
+			return w, nil
+		}
+	default:
+	}
+	w.Close()
+	return nil, errors.New("failed to initialize reverse control session")
 }
 
 func (w *PortalWorker) Close() {
 	w.client.Close()
-	w.control.Close()
 	w.timer.SetTimeout(0)
 }
 
-func (w *PortalWorker) heartbeat() error {
-	if w.Closed() {
-		return errors.New("client worker stopped")
-	}
-
-	if w.draining.Load() || w.writer == nil {
-		return errors.New("already disposed")
-	}
-
-	msg := &Control{}
-	msg.FillInRandom()
-
-	if w.client.TotalConnections() > 256 {
-		w.draining.Store(true)
-		msg.State = Control_DRAIN
-
-		defer func() {
-			common.Close(w.writer)
-			w.writer = nil
-		}()
-	}
-
-	w.counter = (w.counter + 1) % 5
-	if w.draining.Load() || w.counter == 1 {
-		b, err := proto.Marshal(msg)
-		common.Must(err)
-		mb := buf.MergeBytes(nil, b)
-		w.timer.Update()
-		return w.writer.WriteMultiBuffer(mb)
-	}
-	return nil
+type controlReader struct {
+	worker  *PortalWorker
+	ready   *done.Instance
+	stopped *done.Instance
+	first   bool
+	counter uint32
 }
 
-func (w *PortalWorker) IsFull() bool {
-	return w.client.IsFull()
+func (r *controlReader) Interrupt() { r.stopped.Close() }
+
+func (r *controlReader) ReadMultiBufferTimeout(time.Duration) (buf.MultiBuffer, error) {
+	return r.ReadMultiBuffer()
+}
+
+func (r *controlReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if !r.first {
+		// fetchInput enters here only after the preceding encoded write returns.
+		r.ready.Close()
+	}
+	for {
+		if r.stopped.Done() || r.worker.Closed() {
+			return nil, io.ErrClosedPipe
+		}
+		if r.worker.draining.Load() {
+			return nil, io.EOF
+		}
+		if !r.first {
+			timer := time.NewTimer(2 * time.Second)
+			select {
+			case <-timer.C:
+			case <-r.stopped.Wait():
+				timer.Stop()
+				return nil, io.ErrClosedPipe
+			case <-r.worker.client.WaitClosed():
+				timer.Stop()
+				return nil, io.ErrClosedPipe
+			}
+		}
+		if r.stopped.Done() || r.worker.Closed() {
+			return nil, io.ErrClosedPipe
+		}
+		r.first = false
+		msg := &Control{}
+		msg.FillInRandom()
+		if r.worker.client.TotalConnections() > 256 {
+			r.worker.draining.Store(true)
+			msg.State = Control_DRAIN
+		}
+
+		r.counter = (r.counter + 1) % 5
+		if r.worker.draining.Load() || r.counter == 1 {
+			b, err := proto.Marshal(msg)
+			common.Must(err)
+			r.worker.timer.Update()
+			return buf.MergeBytes(nil, b), nil
+		}
+	}
 }
 
 func (w *PortalWorker) Closed() bool {

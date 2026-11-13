@@ -9,7 +9,7 @@ import (
 
 func TestStaticPickerEmpty(t *testing.T) {
 	picker := reverse.NewStaticPicker()
-	worker, err := picker.PickAvailable(context.Background())
+	worker, err := picker.Admit(context.Background(), nil)
 	if err == nil {
 		t.Error("expected error, but nil")
 	}
