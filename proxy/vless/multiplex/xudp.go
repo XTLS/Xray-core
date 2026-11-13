@@ -11,7 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/features/stats"
 )
 
 // inboundFlow owns native route input and response custody. A nonzero GlobalID
@@ -23,6 +23,9 @@ type inboundFlow struct {
 	responseWake            *sync.Cond
 	request, response       buf.MultiBuffer
 	requestErr, responseErr error
+	uplinkCounter           stats.Counter
+	uplinkPending           int64
+	uplinkBound             bool
 	limit                   int32
 	binding                 *Session
 	GlobalID                [8]byte
@@ -42,8 +45,24 @@ func (x *inboundFlow) notify() {
 	x.responseWake.Broadcast()
 }
 
-// publishBinding requires access and a persistent association. Activation must
-// precede first-packet admission, which can wait for native request capacity.
+// SetUplinkCounter binds attempted-input accounting once, including disabled stats.
+func (x *inboundFlow) SetUplinkCounter(counter stats.Counter) {
+	x.access.Lock()
+	if x.uplinkBound {
+		x.access.Unlock()
+		return
+	}
+	x.uplinkCounter, x.uplinkBound = counter, true
+	pending := x.uplinkPending
+	x.uplinkPending = 0
+	x.access.Unlock()
+	if counter != nil && pending != 0 {
+		counter.Add(pending)
+	}
+}
+
+// publishBinding requires access and a persistent association. Start the response
+// drain before first-packet admission, which can wait for native request capacity.
 func (x *inboundFlow) publishBinding(s *Session) {
 	x.binding = s
 	go x.emit(s)
@@ -94,6 +113,13 @@ func (x *inboundFlow) readLocked(timedOut *bool) (buf.MultiBuffer, error) {
 // restart with the very same first packet and destination.
 func (x *inboundFlow) accept(data buf.MultiBuffer, binding *Session) error {
 	x.access.Lock()
+	if !x.uplinkBound {
+		x.uplinkPending += int64(data.Len())
+	} else if counter := x.uplinkCounter; counter != nil {
+		x.access.Unlock()
+		counter.Add(int64(data.Len()))
+		x.access.Lock()
+	}
 	defer x.access.Unlock()
 	for {
 		if x.requestErr != nil || x.binding != binding ||
@@ -286,74 +312,87 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 		parent: w.sessionManager, ID: meta.SessionID, transferType: protocol.TransferTypePacket,
 		flow: x, sender: w.carrier,
 	}
-	w.sessionManager.Lock()
-	XUDPManager.Lock()
-	x.access.Lock()
-	admitted := w.sessionManager.add(s)
-	if admitted {
-		x.publishBinding(s)
-	} else {
-		x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
-		x.notify()
-	}
-	x.access.Unlock()
-	XUDPManager.Unlock()
-	w.sessionManager.Unlock()
-	if !admitted {
-		buf.ReleaseMulti(data)
-		s.Close()
-		return errors.New("failed to add new session")
-	}
-	for x.accept(data, s) != nil {
+	stopProvisional := context.AfterFunc(w.carrier.ctx, func() { s.Close() })
+	defer stopProvisional()
+	ctx = session.ContextWithTimeoutOnly(ctx, true)
+	dest := meta.Target
+	for {
+		w.sessionManager.Lock()
+		XUDPManager.Lock()
+		x.access.Lock()
+		if !s.closed && XUDPManager.Map[meta.GlobalID] == x {
+			x.publishBinding(s)
+		}
+		x.access.Unlock()
+		XUDPManager.Unlock()
+		w.sessionManager.Unlock()
+		if fresh {
+			go w.dispatchFlow(ctx, dest, x)
+		}
+		err = x.accept(data, s)
+		if err == nil || fresh {
+			break
+		}
+
 		w.sessionManager.Lock()
 		if s.closed || w.Closed() {
-			w.sessionManager.Unlock()
-			buf.ReleaseMulti(data)
-			s.Close()
 			XUDPManager.Lock()
 			x.access.Lock()
-			x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
+			if XUDPManager.Map[meta.GlobalID] == x && x.Status == Initializing {
+				x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
+			}
 			x.notify()
 			x.access.Unlock()
 			XUDPManager.Unlock()
+			w.sessionManager.Unlock()
+			buf.ReleaseMulti(data)
+			s.Close()
 			return nil
 		}
+		replacement := newInboundFlow(ctx, meta.GlobalID)
 		XUDPManager.Lock()
 		x.access.Lock()
-		x.binding = nil
-		x.Status = Expiring
-		replacement := newInboundFlow(ctx, meta.GlobalID)
-		replacement.access.Lock()
-		s.flow = replacement
-		replacement.publishBinding(s)
-		replacement.access.Unlock()
-		XUDPManager.Map[meta.GlobalID] = replacement
+		if x.binding == s {
+			x.binding = nil
+			x.notify()
+		}
+		current := XUDPManager.Map[meta.GlobalID]
+		replaced := current == x || current == nil
+		if replaced {
+			if x.Status == Initializing {
+				x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
+			}
+			XUDPManager.Map[meta.GlobalID] = replacement
+			s.flow = replacement
+		}
 		x.access.Unlock()
 		XUDPManager.Unlock()
 		w.sessionManager.Unlock()
 		x.expire()
+		if !replaced {
+			break
+		}
 		x, fresh = replacement, true
 	}
+	if err != nil {
+		buf.ReleaseMulti(data)
+	}
+	w.sessionManager.Lock()
 	XUDPManager.Lock()
 	x.access.Lock()
-	if x.binding == s {
+	admitted := XUDPManager.Map[meta.GlobalID] == x && x.binding == s && w.sessionManager.add(s)
+	if admitted {
 		x.Status = Active
-	} else {
+	} else if XUDPManager.Map[meta.GlobalID] == x && x.Status == Initializing {
 		x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
 	}
 	x.notify()
 	x.access.Unlock()
 	XUDPManager.Unlock()
-	if fresh {
-		ctx = session.ContextWithTimeoutOnly(ctx, true)
-		dest := meta.Target
-		go func() {
-			if err := w.dispatch(ctx, dest, &transport.Link{Reader: x, Writer: &flowOutput{x}}); err != nil {
-				errors.LogInfoInner(ctx, err, "failed to dispatch request to ", dest)
-				x.Interrupt()
-				x.expire()
-			}
-		}()
+	w.sessionManager.Unlock()
+	if !admitted {
+		s.Close()
+		return errors.New("failed to add new session")
 	}
 	return nil
 }

@@ -92,8 +92,12 @@ func Dispatch(ctx context.Context, link *transport.Link, wait bool, admit func(c
 	}
 	go fetchInput(ctx, s, s.sender)
 	if wait {
+		callerDone := ctx.Done()
+		if session.TimeoutOnlyFromContext(ctx) {
+			callerDone = nil
+		}
 		select {
-		case <-ctx.Done():
+		case <-callerDone:
 			s.Close()
 		case <-s.done.Wait():
 		}

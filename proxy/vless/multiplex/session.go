@@ -69,7 +69,7 @@ func (m *SessionManager) Add(s *Session) bool {
 }
 
 func (m *SessionManager) add(s *Session) bool {
-	if m.closed {
+	if m.closed || s.closed {
 		return false
 	}
 
@@ -214,7 +214,7 @@ func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
 		}
 	}
 	s.parent.Unlock()
-	if s.flow == nil {
+	if x == nil {
 		common.Interrupt(s.input)
 		common.Close(s.output)
 	}
