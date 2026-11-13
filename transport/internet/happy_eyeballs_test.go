@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +37,19 @@ type raceTestDialer struct {
 	mu      sync.Mutex
 	targets map[string]string
 	dialed  []string
+	conns   []*raceTestConn
+}
+
+// raceTestConn records whether the client has closed the connection.
+type raceTestConn struct {
+	net.Conn
+	ip     string
+	closed atomic.Bool
+}
+
+func (c *raceTestConn) Close() error {
+	c.closed.Store(true)
+	return c.Conn.Close()
 }
 
 func (d *raceTestDialer) Dial(ctx context.Context, _ net.Address, dest net.Destination, _ *SocketConfig) (net.Conn, error) {
@@ -45,7 +59,15 @@ func (d *raceTestDialer) Dial(ctx context.Context, _ net.Address, dest net.Desti
 	target := d.targets[ip]
 	d.mu.Unlock()
 	var dialer net.Dialer
-	return dialer.DialContext(ctx, "tcp", target)
+	conn, err := dialer.DialContext(ctx, "tcp", target)
+	if err != nil {
+		return nil, err
+	}
+	c := &raceTestConn{Conn: conn, ip: ip}
+	d.mu.Lock()
+	d.conns = append(d.conns, c)
+	d.mu.Unlock()
+	return c, nil
 }
 
 func (*raceTestDialer) DestIpAddress() net.IP { return nil }
@@ -54,6 +76,19 @@ func (d *raceTestDialer) dialedIPs() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return append([]string(nil), d.dialed...)
+}
+
+// openIPs returns the IPs of the connections the client has not closed.
+func (d *raceTestDialer) openIPs() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var ips []string
+	for _, c := range d.conns {
+		if !c.closed.Load() {
+			ips = append(ips, c.ip)
+		}
+	}
+	return ips
 }
 
 type raceTestServer struct {
@@ -153,6 +188,7 @@ func raceTestHandshake(dest net.Destination, pool *x509.CertPool, dialedAddrs ch
 		}
 		tlsConn := gotls.Client(conn, &gotls.Config{ServerName: dest.Address.String(), RootCAs: pool})
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			tlsConn.Close()
 			return nil, err
 		}
 		return tlsConn, nil
@@ -300,6 +336,40 @@ func TestHandshakeRaceMaxConcurrentTryCoversHandshake(t *testing.T) {
 	}
 	if dialed := dialer.dialedIPs(); len(dialed) != 1 || dialed[0] != "192.0.2.1" {
 		t.Fatalf("dialed %v, want only 192.0.2.1", dialed)
+	}
+}
+
+func TestHandshakeRaceFinishesLazyHandshake(t *testing.T) {
+	wrongCertificate, _ := raceTestCertificate(t, "other.example.com")
+	certificate, pool := raceTestCertificate(t, raceTestDomain)
+	servers := map[string]*raceTestServer{
+		"192.0.2.1": startRaceTestServer(t, wrongCertificate, false),
+		"192.0.2.2": startRaceTestServer(t, certificate, false),
+	}
+	dialer := setupHandshakeRace(t, servers, []string{"192.0.2.1", "192.0.2.2"})
+	dest := net.TCPDestination(net.DomainAddress(raceTestDomain), 443)
+
+	// As gRPC does, and HTTPUpgrade and XHTTP with Go TLS, the handshake is
+	// left to the first write.
+	lazyHandshake := func(_ context.Context, conn net.Conn) (net.Conn, error) {
+		return gotls.Client(conn, &gotls.Config{ServerName: dest.Address.String(), RootCAs: pool}), nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := DialTCPWithHandshake(ctx, dest, raceTestStreamSettings(HappyEyeballsConfig_TlsHandshakeComplete, 4), lazyHandshake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := conn.RemoteAddr().String(), servers["192.0.2.2"].listener.Addr().String(); got != want {
+		t.Fatalf("won by %s, want %s", got, want)
+	}
+	if !conn.(*gotls.Conn).ConnectionState().HandshakeComplete {
+		t.Fatal("the race did not finish the handshake")
+	}
+	conn.Close()
+	// The connection whose certificate was rejected is closed as well.
+	if open := dialer.openIPs(); len(open) != 0 {
+		t.Fatalf("the connections to %v were left open", open)
 	}
 }
 

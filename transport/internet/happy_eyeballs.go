@@ -273,7 +273,9 @@ func handshakeTryDial(ctx context.Context, dest net.Destination, dialTCP func(co
 		// Some transports leave the handshake to the first write; the race has
 		// to finish it here.
 		if c, ok := conn.(interface{ HandshakeContext(context.Context) error }); ok {
-			err = c.HandshakeContext(ctx)
+			if err = c.HandshakeContext(ctx); err != nil {
+				conn.Close()
+			}
 		}
 	}
 	if !stop() {

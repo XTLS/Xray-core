@@ -71,10 +71,12 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 				// The same handshake as the websocket package does by itself
 				cn := gotls.Client(pconn, tlsConfig)
 				if err := cn.HandshakeContext(ctx); err != nil {
+					cn.Close()
 					return nil, err
 				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
+						cn.Close()
 						return nil, err
 					}
 				}
@@ -84,10 +86,12 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 			// TLS and apply the handshake
 			cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
 			if err := cn.WebsocketHandshakeContext(ctx); err != nil {
+				cn.Close()
 				return nil, err
 			}
 			if !tlsConfig.InsecureSkipVerify {
 				if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
+					cn.Close()
 					return nil, err
 				}
 			}
