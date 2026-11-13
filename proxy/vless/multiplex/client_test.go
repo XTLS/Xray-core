@@ -119,6 +119,7 @@ func TestClientWorkerUDPSource(t *testing.T) {
 func testOutboundContext() context.Context {
 	return session.ContextWithOutbounds(context.Background(), []*session.Outbound{{Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80)}})
 }
+
 func testWorkerAdmission(worker *ClientWorker) func(context.Context, *transport.Link) (*Session, error) {
 	return func(ctx context.Context, link *transport.Link) (*Session, error) {
 		s := worker.TryAdmit(ctx, link)
