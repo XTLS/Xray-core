@@ -28,7 +28,7 @@ func NewServerWorker(ctx context.Context, dispatch func(context.Context, net.Des
 }
 
 func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
-	ctx = session.SubContextFromMuxInbound(ctx)
+	ctx = session.SubContextFromMultiplexInbound(ctx)
 	if meta.Inbound != nil && meta.Inbound.Source.IsValid() && meta.Inbound.Local.IsValid() {
 		if inbound := session.InboundFromContext(ctx); inbound != nil {
 			newInbound := *inbound
@@ -53,7 +53,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 
 	if network := session.AllowedNetworkFromContext(ctx); network != net.Network_Unknown {
 		if meta.Target.Network != network {
-			return errors.New("unexpected network ", meta.Target.Network) // it will break the whole Mux connection
+			return errors.New("unexpected network ", meta.Target.Network) // it will break the whole multiplex connection
 		}
 	}
 

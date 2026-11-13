@@ -10,17 +10,17 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport"
 )
 
-// carrier owns the physical frame loop and child registry for either mux role.
+// carrier owns the physical frame loop and child registry for either multiplex role.
 // Client and server roles differ only in initiating or accepting new children.
 type carrier struct {
 	sessionManager *SessionManager
 	link           transport.Link
 	pending        chan buf.MultiBuffer // client-only encoded write lead
-	done           *done.Instance
+	ctx            context.Context
+	cancel         context.CancelCauseFunc
 	timer          *time.Ticker
 }
 
@@ -31,7 +31,8 @@ func newCarrier(link transport.Link, idle time.Duration, queueWrites bool) *carr
 		writer.SetBuffered(false)
 		link.Writer = writer
 	}
-	c := &carrier{sessionManager: NewSessionManager(), link: link, done: done.New(), timer: time.NewTicker(idle)}
+	ctx, cancel := context.WithCancelCause(context.Background())
+	c := &carrier{sessionManager: NewSessionManager(), link: link, ctx: ctx, cancel: cancel, timer: time.NewTicker(idle)}
 	if queueWrites {
 		c.pending = make(chan buf.MultiBuffer, 2)
 		go c.sendLoop()
@@ -53,24 +54,25 @@ func (c *carrier) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				c.discardPending()
 			}
 			return nil // the client carrier now owns accepted encoded bytes
-		case <-c.done.Wait():
+		case <-c.ctx.Done():
 			buf.ReleaseMulti(mb)
 			return io.ErrClosedPipe
 		}
 	}
 	err := c.link.Writer.WriteMultiBuffer(mb)
 	if err != nil {
-		c.Close()
+		c.closeCause(err)
 	}
 	return err
 }
 
 // sendLoop is the sole client physical writer; server writes remain direct.
 func (c *carrier) sendLoop() {
-	defer c.Close()
+	var err error
+	defer func() { c.closeCause(err) }()
 	for {
 		select {
-		case <-c.done.Wait():
+		case <-c.ctx.Done():
 			return
 		case data := <-c.pending:
 			select {
@@ -82,7 +84,7 @@ func (c *carrier) sendLoop() {
 				buf.ReleaseMulti(data)
 				return
 			}
-			if err := c.link.Writer.WriteMultiBuffer(data); err != nil {
+			if err = c.link.Writer.WriteMultiBuffer(data); err != nil {
 				return
 			}
 		}
@@ -102,21 +104,37 @@ func (c *carrier) discardPending() {
 }
 
 func (c *carrier) ActiveConnections() uint32   { return uint32(c.sessionManager.Size()) }
-func (c *carrier) Closed() bool                { return c.done.Done() }
-func (c *carrier) WaitClosed() <-chan struct{} { return c.done.Wait() }
+func (c *carrier) Closed() bool                { return c.ctx.Err() != nil }
+func (c *carrier) WaitClosed() <-chan struct{} { return c.ctx.Done() }
+
+// Err reports the first close cause, excluding normal cancellation.
+func (c *carrier) Err() error {
+	err := context.Cause(c.ctx)
+	if err == context.Canceled {
+		return nil
+	}
+	return err
+}
+
 func (c *carrier) Close() error {
-	err := c.done.Close()
+	return c.closeCause(nil)
+}
+
+func (c *carrier) closeCause(err error) error {
+	c.cancel(err)
 	c.discardPending()
 	common.Interrupt(c.link.Reader)
-	return err
+	return nil
 }
 
 func (c *carrier) monitor() {
 	defer c.timer.Stop()
 	for {
-		checkSize, checkCount := c.sessionManager.Size(), c.sessionManager.Count()
+		c.sessionManager.RLock()
+		checkSize, checkCount := c.sessionManager.active, int(c.sessionManager.count)
+		c.sessionManager.RUnlock()
 		select {
-		case <-c.done.Wait():
+		case <-c.ctx.Done():
 			c.sessionManager.Close()
 			common.Interrupt(c.link.Writer)
 			return
@@ -161,11 +179,16 @@ func (c *carrier) handleStatusEnd(meta *FrameMetadata, reader *buf.BufferedReade
 }
 
 func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMetadata, *buf.BufferedReader) error) {
-	defer c.Close()
+	var err error
+	defer func() { c.closeCause(err) }()
 	reader := &buf.BufferedReader{Reader: c.link.Reader}
 	for ctx.Err() == nil {
 		var meta FrameMetadata
-		err := meta.Unmarshal(reader, session.IsReverseMuxFromContext(ctx))
+		err = meta.Unmarshal(reader, session.IsReverseMultiplexFromContext(ctx))
+		if errors.Cause(err) == io.EOF {
+			err = nil // clean EOF before the next metadata prefix
+			return
+		}
 		if err == nil {
 			switch meta.SessionStatus {
 			case SessionStatusKeepAlive:
@@ -178,16 +201,14 @@ func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMe
 				if accept == nil {
 					err = discardFrame(&meta, reader)
 				} else {
-					err = accept(session.ContextWithIsReverseMux(ctx, false), &meta, reader)
+					err = accept(session.ContextWithIsReverseMultiplex(ctx, false), &meta, reader)
 				}
 			default:
 				err = errors.New("unknown status: ", meta.SessionStatus)
 			}
 		}
 		if err != nil {
-			if errors.Cause(err) != io.EOF {
-				errors.LogInfoInner(ctx, err, "failed to process mux frame")
-			}
+			errors.LogInfoInner(ctx, err, "failed to process multiplex frame")
 			return
 		}
 	}

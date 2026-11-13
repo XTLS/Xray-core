@@ -124,9 +124,9 @@ func (f *FrameMetadata) Unmarshal(reader io.Reader, readSourceAndLocal bool) err
 	defer b.Release()
 
 	if _, err := b.ReadFullFrom(reader, int32(metaLen)); err != nil {
-		return err
+		return frameReadError(err)
 	}
-	return f.UnmarshalFromBuffer(b, readSourceAndLocal)
+	return frameReadError(f.UnmarshalFromBuffer(b, readSourceAndLocal))
 }
 
 // UnmarshalFromBuffer reads a FrameMetadata from the given buffer.

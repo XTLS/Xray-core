@@ -363,7 +363,7 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	ctx = session.ContextWithContent(ctx, &session.Content{
 		SniffingRequest: s.sniffingRequest,
 	})
-	ctx = session.SubContextFromMuxInbound(ctx)
+	ctx = session.SubContextFromMultiplexInbound(ctx)
 
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   inbound.Source,

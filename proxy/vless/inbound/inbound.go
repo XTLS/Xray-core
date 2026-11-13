@@ -174,8 +174,8 @@ func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Val
 	return handler, nil
 }
 
-func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
-	if request.Command != protocol.RequestCommandMux {
+func isMultiplexAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
+	if request.Command != protocol.RequestCommandMultiplex {
 		return false
 	}
 	if first.Len() < 7 {
@@ -556,9 +556,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			switch request.Command {
 			case protocol.RequestCommandUDP:
 				return errors.New(requestAddons.Flow + " doesn't support UDP")
-			case protocol.RequestCommandMux, protocol.RequestCommandRvs:
+			case protocol.RequestCommandMultiplex, protocol.RequestCommandRvs:
 				inbound.CanSpliceCopy = 3
-				fallthrough // we will break Mux connections that contain TCP requests
+				fallthrough // we will break multiplex connections that contain TCP requests
 			case protocol.RequestCommandTCP:
 				var target net.Conn
 				if commonConn, ok := connection.(*encryption.CommonConn); ok {
@@ -583,14 +583,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		}
 	case "":
 		inbound.CanSpliceCopy = 3
-		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
+		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMultiplexAndNotXUDP(request, first)) {
 			return errors.New("account " + account.ID.String() + " is rejected since the client flow is empty. Note that the pure TLS proxy has certain TLS in TLS characters.")
 		}
 	default:
 		return errors.New("unknown request flow " + requestAddons.Flow)
 	}
 
-	if request.Command != protocol.RequestCommandMux {
+	if request.Command != protocol.RequestCommandMultiplex {
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 			From:   connection.RemoteAddr(),
 			To:     request.Destination(),
@@ -623,7 +623,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return r.Accept(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}))
 	}
 
-	if request.Command == protocol.RequestCommandMux {
+	if request.Command == protocol.RequestCommandMultiplex {
 		worker := multiplex.NewServerWorker(ctx, dispatch.DispatchLink, &transport.Link{Reader: clientReader, Writer: clientWriter})
 		defer worker.Close()
 		select {

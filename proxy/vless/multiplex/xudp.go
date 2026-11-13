@@ -248,7 +248,7 @@ func (x *inboundFlow) emit(s *Session) {
 		err := writer.WriteMultiBuffer(data)
 		gate.Unlock()
 		if err != nil {
-			c.Close()
+			c.closeCause(err)
 			return
 		}
 	}
@@ -285,10 +285,8 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 	w.sessionManager.Lock()
 	XUDPManager.Lock()
 	x.access.Lock()
-	admitted := !w.sessionManager.closed
+	admitted := w.sessionManager.add(s)
 	if admitted {
-		w.sessionManager.count++
-		w.sessionManager.sessions[s.ID] = s
 		x.publishBinding(s)
 	} else {
 		x.Expire, x.Status = time.Now().Add(time.Minute), Expiring

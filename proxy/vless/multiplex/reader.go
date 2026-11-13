@@ -10,11 +10,19 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 )
 
+// frameReadError distinguishes truncation inside a frame from EOF between frames.
+func frameReadError(err error) error {
+	if errors.Cause(err) == io.EOF {
+		return io.ErrUnexpectedEOF
+	}
+	return err
+}
+
 // readPacket reads one complete packet; its destination belongs to the buffer.
 func readPacket(reader io.Reader, dest net.Destination) (buf.MultiBuffer, error) {
 	size, err := serial.ReadUint16(reader)
 	if err != nil {
-		return nil, err
+		return nil, frameReadError(err)
 	}
 	if size > buf.Size {
 		return nil, errors.New("packet size too large: ", size)
@@ -22,7 +30,7 @@ func readPacket(reader io.Reader, dest net.Destination) (buf.MultiBuffer, error)
 	b := buf.New()
 	if _, err := b.ReadFullFrom(reader, int32(size)); err != nil {
 		b.Release()
-		return nil, err
+		return nil, frameReadError(err)
 	}
 	if dest.Network == net.Network_UDP {
 		b.UDP = &dest
@@ -38,7 +46,7 @@ func copyFramePayload(reader *buf.BufferedReader, s *Session, dest net.Destinati
 	if !packet {
 		size, sizeErr := serial.ReadUint16(reader)
 		if sizeErr != nil {
-			return sizeErr
+			return frameReadError(sizeErr)
 		}
 		left = int32(size)
 	}
@@ -64,7 +72,7 @@ func copyFramePayload(reader *buf.BufferedReader, s *Session, dest net.Destinati
 			s = nil
 		}
 		if packet || err != nil {
-			return err
+			return frameReadError(err)
 		}
 	}
 	return nil

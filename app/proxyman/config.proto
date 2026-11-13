@@ -53,13 +53,19 @@ message InboundHandlerConfig {
 
 message OutboundConfig {}
 
+// Retained only to recognize obsolete settings and preserve protobuf merging.
+message MultiplexingConfig {
+  option deprecated = true;
+  bool enabled = 1;
+}
+
 message SenderConfig {
   // Send traffic through the given IP. Only IP is allowed.
   xray.common.net.IPOrDomain via = 1;
   xray.transport.internet.StreamConfig stream_settings = 2;
   reserved 3;
-  // Recognize obsolete length-delimited settings and report migration.
-  optional bytes deprecated_multiplex_settings = 4 [deprecated = true];
+  // Recognize obsolete settings and report migration when enabled.
+  MultiplexingConfig multiplex_settings = 4 [deprecated = true];
   string via_cidr = 5;
   xray.transport.internet.DomainStrategy target_strategy = 6;
 }

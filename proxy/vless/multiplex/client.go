@@ -81,21 +81,24 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 	if pool == nil {
 		return false, nil
 	}
-	return true, Dispatch(ctx, link, true, pool.PickAvailable)
+	return true, Dispatch(ctx, link, true, pool.Admit)
 }
 
-// Dispatch shares child admission between native pools and Reverse static picks.
-func Dispatch(ctx context.Context, link *transport.Link, wait bool, pick func(context.Context) (*ClientWorker, error)) error {
-	for attempt := 0; attempt < 16; attempt++ {
-		worker, err := pick(ctx)
-		if err != nil {
-			return err
-		}
-		if worker.Dispatch(ctx, link, wait) {
-			return nil
+// Dispatch starts the reserved child after pool or Reverse admission releases its lock.
+func Dispatch(ctx context.Context, link *transport.Link, wait bool, admit func(context.Context, *transport.Link) (*Session, error)) error {
+	s, err := admit(ctx, link)
+	if err != nil {
+		return err
+	}
+	go fetchInput(ctx, s, s.sender)
+	if wait {
+		select {
+		case <-ctx.Done():
+			s.Close()
+		case <-s.done.Wait():
 		}
 	}
-	return errors.New("unable to find an available multiplex client")
+	return nil
 }
 
 // Pool serializes unpublished opening with cancelable admission.
@@ -109,6 +112,7 @@ type Pool struct {
 	open     func(context.Context) (context.Context, *transport.Link, error)
 }
 
+// NewPool requires open to return a context derived from its input context.
 func NewPool(ctx context.Context, strategy ClientStrategy, open func(context.Context) (context.Context, *transport.Link, error)) *Pool {
 	ctx, cancel := context.WithCancel(ctx)
 	p := &Pool{ctx: ctx, cancel: cancel, opening: make(chan struct{}, 1), strategy: strategy, open: open}
@@ -121,27 +125,26 @@ func (p *Pool) Close() error {
 	return nil
 }
 
-func (p *Pool) available() *ClientWorker {
+func (p *Pool) tryAdmit(ctx context.Context, link *transport.Link) (*Session, error) {
 	p.access.Lock()
 	defer p.access.Unlock()
-	p.workers = slices.DeleteFunc(p.workers, func(worker *ClientWorker) bool { return worker.Closed() })
-	for _, worker := range p.workers {
-		if !worker.IsFull() {
-			return worker
-		}
-	}
-	return nil
-}
-
-func (p *Pool) PickAvailable(ctx context.Context) (*ClientWorker, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if p.ctx.Err() != nil {
 		return nil, io.ErrClosedPipe
 	}
-	if worker := p.available(); worker != nil {
-		return worker, nil
+	for _, worker := range p.workers {
+		if s := worker.TryAdmit(ctx, link); s != nil {
+			return s, nil
+		}
+	}
+	return nil, nil
+}
+
+func (p *Pool) Admit(ctx context.Context, link *transport.Link) (*Session, error) {
+	if s, err := p.tryAdmit(ctx, link); s != nil || err != nil {
+		return s, err
 	}
 	select {
 	case <-ctx.Done():
@@ -151,44 +154,47 @@ func (p *Pool) PickAvailable(ctx context.Context) (*ClientWorker, error) {
 	case <-p.opening:
 	}
 	defer func() { p.opening <- struct{}{} }()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if p.ctx.Err() != nil {
-		return nil, io.ErrClosedPipe
-	}
-	if worker := p.available(); worker != nil {
-		return worker, nil
+	if s, err := p.tryAdmit(ctx, link); s != nil || err != nil {
+		return s, err
 	}
 	opening, cancel := context.WithCancel(p.ctx)
 	stopCaller := context.AfterFunc(ctx, cancel)
-	physicalCtx, link, err := p.open(opening)
-	detached := stopCaller()
-	if !detached && err == nil {
-		err = context.Canceled
-	}
-	if err == nil {
+	physicalCtx, physicalLink, err := p.open(opening)
+	if ctx.Err() != nil {
 		err = ctx.Err()
 	}
 	if p.ctx.Err() != nil {
 		err = io.ErrClosedPipe
 	}
 	if err != nil {
+		stopCaller()
 		cancel()
-		if link != nil {
-			common.Interrupt(link.Reader)
-			common.Interrupt(link.Writer)
+		if physicalLink != nil {
+			common.Interrupt(physicalLink.Reader)
+			common.Interrupt(physicalLink.Writer)
 		}
 		return nil, err
 	}
-	worker := NewClientWorker(*link, p.strategy)
+	worker := NewClientWorker(*physicalLink, p.strategy)
 	p.access.Lock()
 	err = ctx.Err()
+	if !stopCaller() && err == nil {
+		err = context.Canceled
+	}
 	if p.ctx.Err() != nil {
 		err = io.ErrClosedPipe
 	}
+	var s *Session
 	if err == nil {
-		p.workers = append(p.workers, worker)
+		s = worker.TryAdmit(ctx, link)
+		if s == nil {
+			err = ctx.Err()
+			if err == nil {
+				err = errors.New("unable to admit multiplex child")
+			}
+		} else {
+			p.workers = append(p.workers, worker)
+		}
 	}
 	p.access.Unlock()
 	if err != nil {
@@ -196,13 +202,15 @@ func (p *Pool) PickAvailable(ctx context.Context) (*ClientWorker, error) {
 		worker.Close()
 		return nil, err
 	}
-	context.AfterFunc(physicalCtx, func() {
+	stopPhysical := context.AfterFunc(physicalCtx, func() { worker.Close() })
+	context.AfterFunc(worker.ctx, func() {
+		stopPhysical()
 		cancel()
-		worker.Close()
-		p.available()
-
+		p.access.Lock()
+		p.workers = slices.DeleteFunc(p.workers, func(current *ClientWorker) bool { return current == worker })
+		p.access.Unlock()
 	})
-	return worker, nil
+	return s, nil
 }
 
 type ClientStrategy struct {
@@ -236,7 +244,7 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	var inbound *session.Inbound
-	if session.IsReverseMuxFromContext(ctx) {
+	if session.IsReverseMultiplexFromContext(ctx) {
 		inbound = session.InboundFromContext(ctx)
 	}
 	writer := NewWriter(s.ID, ob.Target, output, s.transferType, xudp.GetGlobalID(ctx), inbound)
@@ -257,94 +265,21 @@ func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
 	}
 }
 
-// IsFull returns true if this ClientWorker is unable to accept more connections.
-// it might be because it is closing, or the number of connections has reached the limit.
-func (m *ClientWorker) IsFull() bool {
-	sm := m.sessionManager
-	return m.Closed() ||
-		(m.strategy.MaxConnection > 0 && sm.Count() >= int(m.strategy.MaxConnection)) ||
-		(m.strategy.MaxConcurrency > 0 && sm.Size() >= int(m.strategy.MaxConcurrency))
-}
-
-func (m *ClientWorker) Dispatch(ctx context.Context, link *transport.Link, wait bool) bool {
-	if ctx.Err() != nil || m.IsFull() {
-		return false
+// TryAdmit reserves a child without starting input or invoking foreign cleanup.
+func (m *ClientWorker) TryAdmit(ctx context.Context, link *transport.Link) *Session {
+	m.sessionManager.Lock()
+	defer m.sessionManager.Unlock()
+	if ctx.Err() != nil || m.Closed() {
+		return nil
 	}
 	transferType := protocol.TransferTypeStream
 	outbounds := session.OutboundsFromContext(ctx)
 	if outbounds[len(outbounds)-1].Target.Network == net.Network_UDP {
 		transferType = protocol.TransferTypePacket
 	}
-	s := m.sessionManager.Allocate(&m.strategy, link.Reader, link.Writer, transferType)
-	if s == nil {
-		return false
+	s := m.sessionManager.allocate(&m.strategy, link.Reader, link.Writer, transferType)
+	if s != nil {
+		s.sender = m.carrier
 	}
-	go fetchInput(ctx, s, m.carrier)
-	if wait {
-		select {
-		case <-ctx.Done():
-			s.Close()
-		case <-s.done.Wait():
-		}
-	}
-	return true
-}
-
-// NewPacketWriter admits a packet producer that already owns its input loop.
-func (m *ClientWorker) NewPacketWriter(target net.Destination) (buf.Writer, error) {
-	m.sessionManager.Lock()
-	defer m.sessionManager.Unlock()
-	if m.Closed() {
-		return nil, io.ErrClosedPipe
-	}
-	s := m.sessionManager.allocate(&m.strategy, nil, buf.Discard, protocol.TransferTypePacket)
-	if s == nil {
-		return nil, errors.New("unable to admit packet producer")
-	}
-	r := &childResponse{session: s, writer: NewWriter(s.ID, target, m.carrier, protocol.TransferTypePacket, [8]byte{}, nil)}
-	s.packetProducer = r
-	return r, nil
-}
-
-// childResponse serializes the client packet producer into its encoded FIFO.
-type childResponse struct {
-	access  sync.Mutex
-	session *Session
-	writer  *Writer
-}
-
-func (r *childResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	r.access.Lock()
-	defer r.access.Unlock()
-	r.session.parent.RLock()
-	closed := r.session.closed
-	r.session.parent.RUnlock()
-	if closed {
-		buf.ReleaseMulti(mb)
-		return io.ErrClosedPipe
-	}
-	err := r.writer.WriteMultiBuffer(mb)
-	if err != nil {
-		r.writer.hasError = true
-		r.Interrupt()
-	}
-	return err
-}
-
-func (r *childResponse) Close() error { r.session.close(false); return nil }
-func (r *childResponse) Interrupt()   { r.session.Close() }
-
-// end is called once, after logical retirement and request-writer EOF.
-func (r *childResponse) end(failed bool) {
-	if c, ok := r.writer.writer.(*carrier); ok && c.Closed() {
-		r.session.endWritten()
-		return
-	}
-	go func() {
-		r.access.Lock()
-		defer r.access.Unlock()
-		r.writer.hasError = r.writer.hasError || failed
-		r.writer.Close()
-		r.session.endWritten()
-	}()
+	return s
 }
