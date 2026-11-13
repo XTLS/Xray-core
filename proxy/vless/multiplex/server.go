@@ -27,6 +27,24 @@ func NewServerWorker(ctx context.Context, dispatch func(context.Context, net.Des
 	return w
 }
 
+// A non-nil dispatch return rejects admission; accepted backend failures use the link.
+func (w *ServerWorker) dispatchFlow(ctx context.Context, dest net.Destination, flow *inboundFlow) {
+	if err := w.dispatch(ctx, dest, &transport.Link{Reader: flow, Writer: &flowOutput{flow}}); err != nil {
+		if flow.GlobalID != [8]byte{} {
+			XUDPManager.Lock()
+			if XUDPManager.Map[flow.GlobalID] == flow {
+				delete(XUDPManager.Map, flow.GlobalID)
+			}
+			XUDPManager.Unlock()
+		}
+		w.cancel(err)
+		flow.Interrupt()
+		flow.expire()
+		errors.LogInfoInner(ctx, err, "failed to dispatch request to ", dest)
+		w.closeCause(err)
+	}
+}
+
 func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
 	ctx = session.SubContextFromMultiplexInbound(ctx)
 	if meta.Inbound != nil && meta.Inbound.Source.IsValid() && meta.Inbound.Local.IsValid() {
@@ -70,20 +88,13 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 	}
 	s.flow = newInboundFlow(ctx, [8]byte{})
 	s.flow.binding, s.flow.Status = s, Active
-	response := &flowOutput{s.flow}
 	if !w.sessionManager.Add(s) {
 		s.flow.Interrupt()
 		return errors.New("failed to add new session")
 	}
 	go s.flow.emit(s)
 	dest := meta.Target
-	go func() {
-		if err := w.dispatch(ctx, dest, &transport.Link{Reader: s.flow, Writer: response}); err != nil {
-			s.flow.Interrupt()
-			errors.LogInfoInner(ctx, err, "failed to dispatch request to ", dest)
-			response.Interrupt()
-		}
-	}()
+	go w.dispatchFlow(ctx, dest, s.flow)
 	if !meta.Option.Has(OptionData) {
 		return nil
 	}
