@@ -55,17 +55,25 @@ func testHandshakeWithPadding(t *testing.T, clientRaw, serverRaw net.Conn, lengt
 	if err != nil {
 		t.Fatal(err)
 	}
-	profiles := []loginProfile{{Username: "TestUser", TexturesValue: "texture", TexturesSignature: "signature"}}
+	profiles := []loginProfile{{
+		Username: "TestUser",
+		Properties: loginProperties{{
+			Name:      "textures",
+			Value:     "texture",
+			Signature: "signature",
+			Signed:    true,
+		}},
+	}}
 	padding := []*Padding{
 		{Direction: 1, LengthMin: length, LengthMax: length},
 		{Direction: 2, LengthMin: length, LengthMax: length},
 	}
-	client, err := newClientConn(clientRaw, profiles, "password", publicKey, "localhost", padding)
+	client, err := newClientConn(clientRaw, profiles, "password", publicKey, "localhost", padding, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	server, err := wrapConnServer(serverRaw, profiles, "password", x509.MarshalPKCS1PrivateKey(key), publicKey, padding)
+	server, err := wrapConnServer(serverRaw, profiles, "password", x509.MarshalPKCS1PrivateKey(key), publicKey, padding, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

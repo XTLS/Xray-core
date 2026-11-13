@@ -18,12 +18,33 @@ const maxPaddingDelayMilliseconds = int64(math.MaxInt64 / int64(time.Millisecond
 // one RSA-1024 PKCS#1 v1.5 block, which holds at most 128-11 bytes.
 const MaxLegacyPasswordLength = 128 - 11 - 4
 
+func (c *Config) wrapClientAuth() (*yggdrasilAuth, error) {
+	if c.Yggdrasil == nil {
+		return nil, nil
+	}
+	return yggdrasilAuthFor(
+		c.Yggdrasil.Api,
+		c.Yggdrasil.Username,
+		c.Yggdrasil.Password,
+		c.Yggdrasil.Player,
+	)
+}
+
 func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	profiles, err := profilesFromConfig(c.Profiles)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
-	cc, err := newClientConn(conn, profiles, c.Password, c.RsaPublicKey, c.Hostname, c.Paddings)
+
+	auth, err := c.wrapClientAuth()
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
+	if auth == nil && len(profiles) == 0 {
+		return nil, fmt.Errorf("minecraft finalmask: empty profiles")
+	}
+
+	cc, err := newClientConn(conn, profiles, c.Password, c.RsaPublicKey, c.Hostname, c.Paddings, auth)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -36,7 +57,19 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
-	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, c.Paddings)
+
+	var verifier *yggdrasilVerifier
+	if c.Yggdrasil != nil {
+		verifier, err = newYggdrasilVerifier(c.Yggdrasil.Api)
+		if err != nil {
+			return nil, fmt.Errorf("minecraft finalmask: %w", err)
+		}
+	}
+	if verifier == nil && len(profiles) == 0 {
+		return nil, fmt.Errorf("minecraft finalmask: empty profiles")
+	}
+
+	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, c.Paddings, verifier)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}

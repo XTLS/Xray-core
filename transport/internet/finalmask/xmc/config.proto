@@ -16,7 +16,23 @@ message Profile {
     string textures_signature = 4;
 }
 
+message Yggdrasil {
+    // API root of a third-party Yggdrasil API server, for example
+    // https://skin.example.com/api/yggdrasil. The client logs in to this API
+    // and the server verifies players through
+    // sessionserver/session/minecraft/hasJoined.
+    string api = 1;
+    // Account used by the client to authenticate with the API. Usually an
+    // email address, depending on the API implementation.
+    string username = 2;
+    string password = 3;
+    // Optional player name. Required when the account owns several players.
+    string player = 4;
+}
+
 message Config {
+    // Seeds the derived RSA key pair shared by both sides. In legacy mode it
+    // is also the pre-shared password checked during login.
     string password = 1;
     reserved 2;
     bytes rsa_private_key = 8;
@@ -25,6 +41,9 @@ message Config {
     repeated Profile profiles = 11;
     // Startup padding turns. Empty uses the built-in preset.
     repeated Padding paddings = 12;
+    // Optional third-party Yggdrasil login. Field 13 keeps configurations
+    // that already set 12 for paddings working unchanged.
+    Yggdrasil yggdrasil = 13;
 }
 
 message Padding {

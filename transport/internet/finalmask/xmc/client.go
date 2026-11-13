@@ -3,6 +3,7 @@ package xmc
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -29,6 +30,7 @@ type clientConn struct {
 	password        string
 	rsaPublicKey    []byte
 	hostname        string
+	yggdrasil       *yggdrasilAuth
 	paddingSchedule []paddingTurn
 	packet          *packetStream
 	deadlines       *connectionDeadlines
@@ -41,11 +43,11 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, padding []*Padding) (*clientConn, error) {
+func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, padding []*Padding, yggdrasil *yggdrasilAuth) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
-	if len(profiles) == 0 {
+	if len(profiles) == 0 && yggdrasil == nil {
 		return nil, fmt.Errorf("empty profiles")
 	}
 	if len(password) > MaxLegacyPasswordLength {
@@ -65,6 +67,7 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 		password:        password,
 		rsaPublicKey:    rsaPublicKey,
 		hostname:        hostname,
+		yggdrasil:       yggdrasil,
 		paddingSchedule: paddingSchedule,
 		deadlines:       newConnectionDeadlines(c),
 	}, nil
@@ -108,11 +111,27 @@ func (c *clientConn) handshake() error {
 	}
 
 	// Login Start
-	randomProfile, err := rand.Int(rand.Reader, big.NewInt(int64(len(c.profiles))))
-	if err != nil {
-		return fmt.Errorf("select profile: %w", err)
+	var selectedProfile loginProfile
+	if c.yggdrasil != nil {
+		token, loginErr := c.yggdrasil.login(context.Background())
+		if loginErr != nil {
+			return fmt.Errorf("yggdrasil login: %w", loginErr)
+		}
+		profileUUID, uuidErr := normalizeMinecraftUUID(token.profile.ID)
+		if uuidErr != nil {
+			return fmt.Errorf("yggdrasil login: %w", uuidErr)
+		}
+		selectedProfile = loginProfile{
+			Username: token.profile.Name,
+			UUID:     profileUUID,
+		}
+	} else {
+		randomProfile, randErr := rand.Int(rand.Reader, big.NewInt(int64(len(c.profiles))))
+		if randErr != nil {
+			return fmt.Errorf("select profile: %w", randErr)
+		}
+		selectedProfile = c.profiles[randomProfile.Int64()]
 	}
-	selectedProfile := c.profiles[randomProfile.Int64()]
 	username := String(selectedProfile.Username)
 
 	err = writePacket(c.writer, 0x00, &username, &selectedProfile.UUID)
@@ -165,7 +184,9 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("encrypt shared secret: %w", err)
 	}
 
-	verifyToken = append(verifyToken, []byte(c.password)...) // append pre-shared password
+	if c.yggdrasil == nil {
+		verifyToken = append(verifyToken, []byte(c.password)...) // append pre-shared password
+	}
 
 	encryptedVerifyToken, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPublicKey, verifyToken)
 	if err != nil {
@@ -192,6 +213,24 @@ func (c *clientConn) handshake() error {
 	c.writer, err = newCryptoWriter(c.writer, sharedSecret)
 	if err != nil {
 		return fmt.Errorf("new crypto writer: %w", err)
+	}
+
+	if c.yggdrasil != nil {
+		// Standard online-mode login: join the session with the hash of the
+		// handshake data, the server verifies it through hasJoined.
+		serverID := minecraftServerID(string(serverId), sharedSecret, publicKey)
+		token, joinErr := c.yggdrasil.join(context.Background(), serverID)
+		if joinErr != nil {
+			return fmt.Errorf("yggdrasil session join: %w", joinErr)
+		}
+		profileUUID, uuidErr := normalizeMinecraftUUID(token.profile.ID)
+		if uuidErr != nil {
+			return fmt.Errorf("yggdrasil session join: %w", uuidErr)
+		}
+		selectedProfile = loginProfile{
+			Username: token.profile.Name,
+			UUID:     profileUUID,
+		}
 	}
 
 	pkt, err = readPacket(c.reader)
@@ -229,7 +268,11 @@ func (c *clientConn) handshake() error {
 	if err != nil {
 		return fmt.Errorf("read login finished fields: %w", err)
 	}
-	if receivedProfile != selectedProfile {
+	if c.yggdrasil != nil {
+		if !sameProfileIdentity(receivedProfile, selectedProfile) {
+			return fmt.Errorf("login profile mismatch")
+		}
+	} else if !sameLoginProfile(receivedProfile, selectedProfile) {
 		return fmt.Errorf("login profile mismatch")
 	}
 	loginAcknowledgedLength, err := writePacketWithLength(c.writer, 0x03)

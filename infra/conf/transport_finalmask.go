@@ -932,10 +932,11 @@ func (c *XDNS) Build() (proto.Message, error) {
 }
 
 type XMC struct {
-	Hostname string           `json:"hostname"`
-	Profiles []XMCProfile     `json:"profiles"`
-	Password string           `json:"password"`
-	Paddings []XMCPaddingTurn `json:"paddings,omitempty"`
+	Hostname  string           `json:"hostname"`
+	Profiles  []XMCProfile     `json:"profiles"`
+	Password  string           `json:"password"`
+	Paddings  []XMCPaddingTurn `json:"paddings,omitempty"`
+	Yggdrasil *XMCYggdrasil    `json:"yggdrasil,omitempty"`
 }
 
 type XMCPaddingTurn struct {
@@ -943,6 +944,19 @@ type XMCPaddingTurn struct {
 	Direction string `json:"direction"`
 	// Delay is an optional millisecond value or inclusive min-max range.
 	Delay string `json:"delay,omitempty"`
+}
+
+// XMCYggdrasil enables third-party login through a Yggdrasil API server such
+// as Blessing Skin. The client authenticates with the API and the server
+// verifies players through its hasJoined endpoint.
+type XMCYggdrasil struct {
+	// API root of the Yggdrasil API, for example
+	// https://skin.example.com/api/yggdrasil
+	API      string `json:"api"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	// Optional player name, required when the account owns several players.
+	Player string `json:"player"`
 }
 
 type XMCProfile struct {
@@ -978,10 +992,6 @@ func (c *XMCProfile) Build() (*xmc.Profile, error) {
 }
 
 func (c *XMC) Build() (proto.Message, error) {
-	if len(c.Profiles) == 0 {
-		return nil, fmt.Errorf("minecraft profiles are required")
-	}
-
 	if c.Password == "" {
 		return nil, fmt.Errorf("empty password")
 	}
@@ -1021,6 +1031,42 @@ func (c *XMC) Build() (proto.Message, error) {
 		return nil, fmt.Errorf("minecraft padding: %w", err)
 	}
 
+	var yggdrasil *xmc.Yggdrasil
+	if c.Yggdrasil != nil {
+		if c.Yggdrasil.API == "" {
+			return nil, fmt.Errorf("empty minecraft yggdrasil api")
+		}
+
+		apiURL, err := url.Parse(c.Yggdrasil.API)
+		if err != nil {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api: %w", err)
+		}
+		if apiURL.Scheme != "http" && apiURL.Scheme != "https" {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api scheme: %q", apiURL.Scheme)
+		}
+		if apiURL.Host == "" {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api: missing host")
+		}
+		if apiURL.RawQuery != "" || apiURL.Fragment != "" {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api: query and fragment are not allowed")
+		}
+		if (c.Yggdrasil.Username == "") != (c.Yggdrasil.Password == "") {
+			return nil, fmt.Errorf("minecraft yggdrasil username and password must be set together")
+		}
+		if c.Yggdrasil.Player != "" && !xmcUsernamePattern.MatchString(c.Yggdrasil.Player) {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil player: %q", c.Yggdrasil.Player)
+		}
+
+		yggdrasil = &xmc.Yggdrasil{
+			Api:      strings.TrimSuffix(c.Yggdrasil.API, "/"),
+			Username: c.Yggdrasil.Username,
+			Password: c.Yggdrasil.Password,
+			Player:   c.Yggdrasil.Player,
+		}
+	} else if len(c.Profiles) == 0 {
+		return nil, fmt.Errorf("minecraft profiles are required")
+	}
+
 	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
 	if err != nil {
 		return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
@@ -1043,6 +1089,7 @@ func (c *XMC) Build() (proto.Message, error) {
 	config.RsaPrivateKey = x509.MarshalPKCS1PrivateKey(rsaPrivateKey)
 	config.RsaPublicKey = rsaPublicKey
 	config.Profiles = profiles
+	config.Yggdrasil = yggdrasil
 	return config, nil
 }
 

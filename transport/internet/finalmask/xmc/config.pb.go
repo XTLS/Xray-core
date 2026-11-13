@@ -92,22 +92,102 @@ func (x *Profile) GetTexturesSignature() string {
 	return ""
 }
 
+type Yggdrasil struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// API root of a third-party Yggdrasil API server, for example
+	// https://skin.example.com/api/yggdrasil. The client logs in to this API
+	// and the server verifies players through
+	// sessionserver/session/minecraft/hasJoined.
+	Api string `protobuf:"bytes,1,opt,name=api,proto3" json:"api,omitempty"`
+	// Account used by the client to authenticate with the API. Usually an
+	// email address, depending on the API implementation.
+	Username string `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	Password string `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
+	// Optional player name. Required when the account owns several players.
+	Player        string `protobuf:"bytes,4,opt,name=player,proto3" json:"player,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Yggdrasil) Reset() {
+	*x = Yggdrasil{}
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Yggdrasil) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Yggdrasil) ProtoMessage() {}
+
+func (x *Yggdrasil) ProtoReflect() protoreflect.Message {
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Yggdrasil.ProtoReflect.Descriptor instead.
+func (*Yggdrasil) Descriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Yggdrasil) GetApi() string {
+	if x != nil {
+		return x.Api
+	}
+	return ""
+}
+
+func (x *Yggdrasil) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *Yggdrasil) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *Yggdrasil) GetPlayer() string {
+	if x != nil {
+		return x.Player
+	}
+	return ""
+}
+
 type Config struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
-	RsaPrivateKey []byte                 `protobuf:"bytes,8,opt,name=rsa_private_key,json=rsaPrivateKey,proto3" json:"rsa_private_key,omitempty"`
-	RsaPublicKey  []byte                 `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
-	Hostname      string                 `protobuf:"bytes,10,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Profiles      []*Profile             `protobuf:"bytes,11,rep,name=profiles,proto3" json:"profiles,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Seeds the derived RSA key pair shared by both sides. In legacy mode it
+	// is also the pre-shared password checked during login.
+	Password      string     `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	RsaPrivateKey []byte     `protobuf:"bytes,8,opt,name=rsa_private_key,json=rsaPrivateKey,proto3" json:"rsa_private_key,omitempty"`
+	RsaPublicKey  []byte     `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
+	Hostname      string     `protobuf:"bytes,10,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Profiles      []*Profile `protobuf:"bytes,11,rep,name=profiles,proto3" json:"profiles,omitempty"`
 	// Startup padding turns. Empty uses the built-in preset.
-	Paddings      []*Padding `protobuf:"bytes,12,rep,name=paddings,proto3" json:"paddings,omitempty"`
+	Paddings []*Padding `protobuf:"bytes,12,rep,name=paddings,proto3" json:"paddings,omitempty"`
+	// Optional third-party Yggdrasil login. Field 13 keeps configurations
+	// that already set 12 for paddings working unchanged.
+	Yggdrasil     *Yggdrasil `protobuf:"bytes,13,opt,name=yggdrasil,proto3" json:"yggdrasil,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[1]
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -119,7 +199,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[1]
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -132,7 +212,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP(), []int{1}
+	return file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Config) GetPassword() string {
@@ -177,6 +257,13 @@ func (x *Config) GetPaddings() []*Padding {
 	return nil
 }
 
+func (x *Config) GetYggdrasil() *Yggdrasil {
+	if x != nil {
+		return x.Yggdrasil
+	}
+	return nil
+}
+
 type Padding struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	LengthMin int64                  `protobuf:"varint,1,opt,name=length_min,json=lengthMin,proto3" json:"length_min,omitempty"`
@@ -194,7 +281,7 @@ type Padding struct {
 
 func (x *Padding) Reset() {
 	*x = Padding{}
-	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[2]
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +293,7 @@ func (x *Padding) String() string {
 func (*Padding) ProtoMessage() {}
 
 func (x *Padding) ProtoReflect() protoreflect.Message {
-	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[2]
+	mi := &file_transport_internet_finalmask_xmc_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +306,7 @@ func (x *Padding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Padding.ProtoReflect.Descriptor instead.
 func (*Padding) Descriptor() ([]byte, []int) {
-	return file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP(), []int{2}
+	return file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Padding) GetLengthMin() int64 {
@@ -266,7 +353,12 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x12\n" +
 	"\x04uuid\x18\x02 \x01(\fR\x04uuid\x12%\n" +
 	"\x0etextures_value\x18\x03 \x01(\tR\rtexturesValue\x12-\n" +
-	"\x12textures_signature\x18\x04 \x01(\tR\x11texturesSignature\"\xac\x02\n" +
+	"\x12textures_signature\x18\x04 \x01(\tR\x11texturesSignature\"m\n" +
+	"\tYggdrasil\x12\x10\n" +
+	"\x03api\x18\x01 \x01(\tR\x03api\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12\x1a\n" +
+	"\bpassword\x18\x03 \x01(\tR\bpassword\x12\x16\n" +
+	"\x06player\x18\x04 \x01(\tR\x06player\"\xfc\x02\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12&\n" +
 	"\x0frsa_private_key\x18\b \x01(\fR\rrsaPrivateKey\x12$\n" +
@@ -274,7 +366,8 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\bhostname\x18\n" +
 	" \x01(\tR\bhostname\x12J\n" +
 	"\bprofiles\x18\v \x03(\v2..xray.transport.internet.finalmask.xmc.ProfileR\bprofiles\x12J\n" +
-	"\bpaddings\x18\f \x03(\v2..xray.transport.internet.finalmask.xmc.PaddingR\bpaddingsJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
+	"\bpaddings\x18\f \x03(\v2..xray.transport.internet.finalmask.xmc.PaddingR\bpaddings\x12N\n" +
+	"\tyggdrasil\x18\r \x01(\v20.xray.transport.internet.finalmask.xmc.YggdrasilR\tyggdrasilJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
 	"\aPadding\x12\x1d\n" +
 	"\n" +
 	"length_min\x18\x01 \x01(\x03R\tlengthMin\x12\x1d\n" +
@@ -297,20 +390,22 @@ func file_transport_internet_finalmask_xmc_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_finalmask_xmc_config_proto_rawDescData
 }
 
-var file_transport_internet_finalmask_xmc_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_transport_internet_finalmask_xmc_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_transport_internet_finalmask_xmc_config_proto_goTypes = []any{
-	(*Profile)(nil), // 0: xray.transport.internet.finalmask.xmc.Profile
-	(*Config)(nil),  // 1: xray.transport.internet.finalmask.xmc.Config
-	(*Padding)(nil), // 2: xray.transport.internet.finalmask.xmc.Padding
+	(*Profile)(nil),   // 0: xray.transport.internet.finalmask.xmc.Profile
+	(*Yggdrasil)(nil), // 1: xray.transport.internet.finalmask.xmc.Yggdrasil
+	(*Config)(nil),    // 2: xray.transport.internet.finalmask.xmc.Config
+	(*Padding)(nil),   // 3: xray.transport.internet.finalmask.xmc.Padding
 }
 var file_transport_internet_finalmask_xmc_config_proto_depIdxs = []int32{
 	0, // 0: xray.transport.internet.finalmask.xmc.Config.profiles:type_name -> xray.transport.internet.finalmask.xmc.Profile
-	2, // 1: xray.transport.internet.finalmask.xmc.Config.paddings:type_name -> xray.transport.internet.finalmask.xmc.Padding
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	3, // 1: xray.transport.internet.finalmask.xmc.Config.paddings:type_name -> xray.transport.internet.finalmask.xmc.Padding
+	1, // 2: xray.transport.internet.finalmask.xmc.Config.yggdrasil:type_name -> xray.transport.internet.finalmask.xmc.Yggdrasil
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_xmc_config_proto_init() }
@@ -324,7 +419,7 @@ func file_transport_internet_finalmask_xmc_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_xmc_config_proto_rawDesc), len(file_transport_internet_finalmask_xmc_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
