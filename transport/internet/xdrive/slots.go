@@ -219,11 +219,12 @@ type slotWriter struct {
 	store slotStore
 	table slotTable
 	params
-	// slots has a token for each segment on its way, at most one for each slot
+	// slots bounds the number of segments on their way.
 	slots chan struct{}
 	wg    sync.WaitGroup
 
 	mu       sync.Mutex
+	uploads  []<-chan struct{} // Last upload completion per physical slot, guarded by mu.
 	buf      []byte
 	seq      int64
 	size     int
@@ -248,6 +249,7 @@ func newSlotWriter(ctx context.Context, store slotStore, table slotTable, p para
 		table:    table,
 		params:   p,
 		slots:    make(chan struct{}, min(len(table.Slots), slotWriteInflight)),
+		uploads:  make([]<-chan struct{}, len(table.Slots)),
 		size:     min(slotInlineLimit, p.segmentBytes),
 		acked:    -1,
 		progress: time.Now(),
@@ -359,6 +361,10 @@ func (w *slotWriter) flushLocked() error {
 	w.buf = append(w.buf[:0], w.buf[n:]...)
 	seq := w.seq
 	w.seq++
+	slot := seq % int64(len(w.table.Slots))
+	previous := w.uploads[slot]
+	done := make(chan struct{})
+	w.uploads[slot] = done
 	if seq == 0 && w.first != nil {
 		select {
 		case w.first <- chunk:
@@ -369,7 +375,7 @@ func (w *slotWriter) flushLocked() error {
 	w.held = 0
 
 	w.wg.Add(1)
-	go w.upload(seq, chunk)
+	go w.upload(seq, chunk, previous, done)
 	return nil
 }
 
@@ -377,9 +383,20 @@ func (w *slotWriter) slotID(seq int64) string {
 	return w.table.Slots[seq%int64(len(w.table.Slots))]
 }
 
-func (w *slotWriter) upload(seq int64, chunk []byte) {
+func (w *slotWriter) upload(seq int64, chunk []byte, previous <-chan struct{}, done chan<- struct{}) {
 	defer w.wg.Done()
 	defer func() { <-w.slots }()
+	defer close(done)
+	if previous != nil {
+		select {
+		case <-previous:
+		case <-w.ctx.Done():
+		}
+	}
+	if err := w.ctx.Err(); err != nil {
+		w.fail(errors.New("failed to store segment ", seq).Base(err))
+		return
+	}
 
 	mode := byte(slotMedia)
 	if len(chunk) <= slotInlineLimit {

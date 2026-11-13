@@ -187,9 +187,6 @@ func (s *DoHNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
 				SkipDNSResolve: true,
 			})
 
-			// forced to use mux for DOH
-			// dnsCtx = session.ContextWithMuxPreferred(dnsCtx, true)
-
 			var cancel context.CancelFunc
 			dnsCtx, cancel = context.WithDeadline(dnsCtx, deadline)
 			defer cancel()

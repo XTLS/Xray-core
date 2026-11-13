@@ -18,26 +18,26 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Bridge is a component in reverse proxy, that relays connections from Portal to local address.
-type Bridge struct {
+// IntranetEndpoint relays Reverse connections from PublicEndpoint to local destinations.
+type IntranetEndpoint struct {
 	ctx         context.Context
 	cancel      context.CancelFunc
 	open        func(context.Context) (context.Context, *transport.Link, error)
 	access      sync.Mutex
 	dispatcher  routing.Dispatcher
 	tag         string
-	workers     []*BridgeWorker
+	workers     []*IntranetWorker
 	monitorTask *task.Periodic
 }
 
-func NewBridge(ctx context.Context, tag string, dispatcher routing.Dispatcher, open func(context.Context) (context.Context, *transport.Link, error)) *Bridge {
-	b := &Bridge{tag: tag, dispatcher: dispatcher, open: open}
+func NewIntranetEndpoint(ctx context.Context, tag string, dispatcher routing.Dispatcher, open func(context.Context) (context.Context, *transport.Link, error)) *IntranetEndpoint {
+	b := &IntranetEndpoint{tag: tag, dispatcher: dispatcher, open: open}
 	b.ctx, b.cancel = context.WithCancel(ctx)
 	b.monitorTask = &task.Periodic{Execute: b.monitor, Interval: 2 * time.Second}
 	return b
 }
 
-func (b *Bridge) monitor() error {
+func (b *IntranetEndpoint) monitor() error {
 	b.access.Lock()
 	defer b.access.Unlock()
 	if err := b.ctx.Err(); err != nil {
@@ -58,7 +58,7 @@ func (b *Bridge) monitor() error {
 	if numWorker == 0 || numConnections/numWorker > 16 {
 		worker, err := b.newWorker()
 		if err != nil {
-			errors.LogWarningInner(context.Background(), err, "failed to create bridge worker")
+			errors.LogWarningInner(context.Background(), err, "failed to create intranet worker")
 			return nil
 		}
 		b.workers = append(b.workers, worker)
@@ -67,24 +67,24 @@ func (b *Bridge) monitor() error {
 	return nil
 }
 
-func (b *Bridge) newWorker() (*BridgeWorker, error) {
+func (b *IntranetEndpoint) newWorker() (*IntranetWorker, error) {
 	ctx, link, err := b.open(b.ctx)
 	if err != nil {
 		return nil, err
 	}
-	w := &BridgeWorker{Tag: b.tag, dispatch: b.dispatcher.DispatchLink}
+	w := &IntranetWorker{Tag: b.tag, dispatch: b.dispatcher.DispatchLink}
 	w.Worker = multiplex.NewServerWorker(session.ContextWithIsReverseMultiplex(ctx, true), w.handle, link)
 	return w, nil
 }
 
-func (b *Bridge) Start() error {
+func (b *IntranetEndpoint) Start() error {
 	if err := b.ctx.Err(); err != nil {
 		return err
 	}
 	return b.monitorTask.Start()
 }
 
-func (b *Bridge) Close() error {
+func (b *IntranetEndpoint) Close() error {
 	b.cancel()
 	err := b.monitorTask.Close()
 	b.access.Lock()
@@ -95,27 +95,27 @@ func (b *Bridge) Close() error {
 	return err
 }
 
-type BridgeWorker struct {
+type IntranetWorker struct {
 	Tag      string
 	Worker   *multiplex.ServerWorker
 	dispatch func(context.Context, net.Destination, *transport.Link) error
 	State    atomic.Int32
 }
 
-func (w *BridgeWorker) IsActive() bool {
+func (w *IntranetWorker) IsActive() bool {
 	return w.State.Load() == int32(Control_ACTIVE) && !w.Worker.Closed()
 }
 
-func (w *BridgeWorker) Closed() bool {
+func (w *IntranetWorker) Closed() bool {
 	return w.Worker.Closed()
 }
 
-func (w *BridgeWorker) Connections() uint32 {
+func (w *IntranetWorker) Connections() uint32 {
 	return w.Worker.ActiveConnections()
 }
 
 // handle forwards user traffic or consumes the native Reverse control stream.
-func (w *BridgeWorker) handle(ctx context.Context, dest net.Destination, link *transport.Link) error {
+func (w *IntranetWorker) handle(ctx context.Context, dest net.Destination, link *transport.Link) error {
 	if !isInternalDomain(dest) {
 		if session.InboundFromContext(ctx) == nil {
 			ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: w.Tag})

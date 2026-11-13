@@ -187,7 +187,7 @@ func isMultiplexAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) b
 		firstBytes[6] == 2) // Network type: UDP
 }
 
-func (h *Handler) GetReverse(a *vless.MemoryAccount) (*reverse.Portal, error) {
+func (h *Handler) GetReverse(a *vless.MemoryAccount) (*reverse.PublicEndpoint, error) {
 	u := h.validator.Get(a.ID.UUID())
 	if u == nil {
 		return nil, errors.New("reverse: user " + a.ID.String() + " doesn't exist anymore")
@@ -198,7 +198,7 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*reverse.Portal, error) {
 	}
 	r := h.outboundHandlerManager.GetHandler(a.Reverse.Tag)
 	if r == nil {
-		r = reverse.NewPortal(a.Reverse.Tag, h.observer)
+		r = reverse.NewPublicEndpoint(a.Reverse.Tag, h.observer)
 		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
 			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
 		}
@@ -207,18 +207,18 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*reverse.Portal, error) {
 			return nil, err
 		}
 	}
-	if r, ok := r.(*reverse.Portal); ok {
+	if r, ok := r.(*reverse.PublicEndpoint); ok {
 		return r, nil
 	}
-	return nil, errors.New("reverse: outbound " + a.Reverse.Tag + " is not type Reverse")
+	return nil, errors.New("reverse: outbound " + a.Reverse.Tag + " is not type PublicEndpoint")
 }
 
 func (h *Handler) RemoveReverse(u *protocol.MemoryUser) {
 	if u != nil {
 		a := u.Account.(*vless.MemoryAccount)
 		if a.Reverse != nil && a.Reverse.Tag != "" {
-			if portal, ok := h.outboundHandlerManager.GetHandler(a.Reverse.Tag).(*reverse.Portal); ok {
-				portal.Close()
+			if publicEndpoint, ok := h.outboundHandlerManager.GetHandler(a.Reverse.Tag).(*reverse.PublicEndpoint); ok {
+				publicEndpoint.Close()
 			}
 			h.outboundHandlerManager.RemoveHandler(h.ctx, a.Reverse.Tag)
 		}

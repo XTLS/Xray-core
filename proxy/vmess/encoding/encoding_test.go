@@ -126,7 +126,7 @@ func TestMultiplexRequest(t *testing.T) {
 		User:     user,
 		Command:  protocol.RequestCommandMultiplex,
 		Security: protocol.SecurityType_AES128_GCM,
-		Address:  net.DomainAddress("v1.mux.cool"),
+		Address:  net.DomainAddress("v1.multiplex.cool"),
 	}
 
 	buffer := buf.New()

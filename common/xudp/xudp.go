@@ -102,7 +102,7 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 
 		eb := buf.New()
-		eb.Write([]byte{0, 0, 0, 0}) // Meta data length; Mux Session ID
+		eb.Write([]byte{0, 0, 0, 0}) // Meta data length; Multiplex Session ID
 		if w.Dest.Network == net.Network_UDP {
 			eb.WriteByte(1) // New
 			eb.WriteByte(1) // Opt
