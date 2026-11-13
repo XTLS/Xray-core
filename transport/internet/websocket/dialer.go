@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"context"
+	gotls "crypto/tls"
 	_ "embed"
 	"encoding/base64"
 	"io"
@@ -48,17 +49,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 	dialer := &websocket.Dialer{
 		NetDial: func(network, addr string) (net.Conn, error) {
-			var conn net.Conn
-			var err error
-			if streamSettings.FinalMask != nil {
-				conn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
-			} else {
-				conn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-			}
-			if err != nil {
-				return nil, errors.New("failed to dial to dest").Base(err)
-			}
-			return conn, err
+			return internet.DialTCPWithHandshake(ctx, dest, streamSettings, nil)
 		},
 		ReadBufferSize:   4 * 1024,
 		WriteBufferSize:  4 * 1024,
@@ -72,33 +63,51 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 		protocol = "wss"
 		tlsConfig := tConfig.GetTLSConfig(tls.WithDestination(dest), tls.WithNextProto("http/1.1"))
 		dialer.TLSClientConfig = tlsConfig
-		if fingerprint := tls.GetFingerprint(tConfig.Fingerprint); fingerprint != nil {
-			dialer.NetDialTLSContext = func(_ context.Context, _, addr string) (net.Conn, error) {
-				// Like the NetDial in the dialer
-				var pconn net.Conn
-				var err error
-				if streamSettings.FinalMask != nil {
-					pconn, err = streamSettings.FinalMask.DialTCP(ctx, dest)
-				} else {
-					pconn, err = internet.DialSystem(ctx, dest, streamSettings.SocketSettings)
-				}
-				if err != nil {
-					return nil, errors.New("failed to dial to dest").Base(err)
-				}
-
-				// TLS and apply the handshake
-				cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
-				if err := cn.WebsocketHandshakeContext(ctx); err != nil {
-					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
+		fingerprint := tls.GetFingerprint(tConfig.Fingerprint)
+		sockopt := streamSettings.SocketSettings
+		raceHandshake := sockopt != nil && sockopt.HappyEyeballs != nil && sockopt.HappyEyeballs.SuccessDefinition == internet.HappyEyeballsConfig_TlsHandshakeComplete
+		handshake := func(ctx context.Context, pconn net.Conn) (net.Conn, error) {
+			if fingerprint == nil {
+				// The same handshake as the websocket package does by itself
+				cn := gotls.Client(pconn, tlsConfig)
+				if err := cn.HandshakeContext(ctx); err != nil {
 					return nil, err
 				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
-						errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
 						return nil, err
 					}
 				}
 				return cn, nil
+			}
+
+			// TLS and apply the handshake
+			cn := tls.UClient(pconn, tlsConfig, fingerprint).(*tls.UConn)
+			if err := cn.WebsocketHandshakeContext(ctx); err != nil {
+				return nil, err
+			}
+			if !tlsConfig.InsecureSkipVerify {
+				if err := cn.VerifyHostname(tlsConfig.ServerName); err != nil {
+					return nil, err
+				}
+			}
+			return cn, nil
+		}
+		// Without uTLS the websocket package does the handshake by itself, unless
+		// Happy Eyeballs has to race it.
+		if fingerprint != nil || raceHandshake {
+			dialer.NetDialTLSContext = func(dialCtx context.Context, _, addr string) (net.Conn, error) {
+				handshakeCtx := ctx
+				if fingerprint == nil {
+					// The websocket package bounds its own handshake by HandshakeTimeout
+					handshakeCtx = dialCtx
+				}
+				conn, err := internet.DialTCPWithHandshake(handshakeCtx, dest, streamSettings, handshake)
+				if err != nil {
+					errors.LogErrorInner(ctx, err, "failed to dial to "+addr)
+					return nil, err
+				}
+				return conn, nil
 			}
 		}
 	}
