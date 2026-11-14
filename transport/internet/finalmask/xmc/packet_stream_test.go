@@ -40,9 +40,9 @@ func TestPacketStreamUsesPlainFraming(t *testing.T) {
 func TestPacketStreamRoundTrip(t *testing.T) {
 	for name, paddings := range map[string][]*Padding{
 		"default": nil,
-		"single":  {{LengthMin: 3, LengthMax: 3, Direction: 1, Delay: 0}},
-		"even":    {{LengthMin: 127, LengthMax: 129, Direction: 1, Delay: 10}, {LengthMin: 16383, LengthMax: 16385, Direction: 2, Delay: 0}},
-		"odd":     {{LengthMin: 3, LengthMax: 3, Direction: 1, Delay: 0}, {LengthMin: 1, LengthMax: 1, Direction: 2, Delay: 5}, {LengthMin: 32768, LengthMax: 32768, Direction: 1, Delay: 0}},
+		"single":  {{LengthMin: 3, LengthMax: 3, Direction: 1}},
+		"even":    {{LengthMin: 127, LengthMax: 129, Direction: 1, DelayMin: 5, DelayMax: 10}, {LengthMin: 16383, LengthMax: 16385, Direction: 2}},
+		"odd":     {{LengthMin: 3, LengthMax: 3, Direction: 1}, {LengthMin: 1, LengthMax: 1, Direction: 2, DelayMin: 2, DelayMax: 5}, {LengthMin: 32768, LengthMax: 32768, Direction: 1}},
 	} {
 		t.Run(name, func(t *testing.T) { testPacketStreamRoundTrip(t, paddings) })
 	}

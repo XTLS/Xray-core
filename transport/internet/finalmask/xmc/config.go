@@ -2,10 +2,16 @@ package xmc
 
 import (
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
+
+// maxPaddingDelayMilliseconds keeps the millisecond value convertible to a
+// time.Duration on every platform.
+const maxPaddingDelayMilliseconds = int64(math.MaxInt64 / int64(time.Millisecond))
 
 func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	profiles, err := profilesFromConfig(c.Profiles)
@@ -48,8 +54,11 @@ func paddingScheduleFromConfig(paddings []*Padding) ([]paddingTurn, error) {
 		if turn == nil || turn.LengthMin < 1 || turn.LengthMax < turn.LengthMin || turn.LengthMax > maxPaddingTurnLength {
 			return nil, fmt.Errorf("invalid padding length range at turn %d", i)
 		}
-		if turn.Delay < 0 {
-			return nil, fmt.Errorf("invalid padding delay %d at turn %d (must be non-negative)", turn.Delay, i)
+		if turn.DelayMin < 0 || turn.DelayMax < turn.DelayMin {
+			return nil, fmt.Errorf("invalid padding delay range %d-%d at turn %d (must be non-negative and ordered)", turn.DelayMin, turn.DelayMax, i)
+		}
+		if turn.DelayMax > maxPaddingDelayMilliseconds {
+			return nil, fmt.Errorf("padding delay range %d-%d at turn %d is too large", turn.DelayMin, turn.DelayMax, i)
 		}
 		var direction paddingDirection
 		switch turn.Direction {
@@ -64,7 +73,10 @@ func paddingScheduleFromConfig(paddings []*Padding) ([]paddingTurn, error) {
 			direction: direction,
 			minLength: int(turn.LengthMin),
 			maxLength: int(turn.LengthMax),
-			delay:     int(turn.Delay),
+			delay: paddingDelayRange{
+				min: time.Duration(turn.DelayMin) * time.Millisecond,
+				max: time.Duration(turn.DelayMax) * time.Millisecond,
+			},
 		}
 	}
 	// The first turn includes the two-byte Login Acknowledged packet.

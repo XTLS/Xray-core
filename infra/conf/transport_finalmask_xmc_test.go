@@ -12,9 +12,9 @@ func TestXMCBuildProfile(t *testing.T) {
 	built, err := (&XMC{
 		Password: "test-password",
 		Paddings: []XMCPaddingTurn{
-			{Length: "3", Direction: "c2s", Delay: 0},
-			{Length: "127-129", Direction: "s2c", Delay: 100},
-			{Length: "8388608", Direction: "c2s", Delay: 50},
+			{Length: "3", Direction: "c2s"},
+			{Length: "127-129", Direction: "s2c", Delay: "100"},
+			{Length: "8388608", Direction: "c2s", Delay: "50-150"},
 		},
 		Profiles: []XMCProfile{
 			{
@@ -40,8 +40,10 @@ func TestXMCBuildProfile(t *testing.T) {
 	if config.Paddings[0].Direction != 1 || config.Paddings[1].Direction != 2 || config.Paddings[2].Direction != 1 {
 		t.Fatalf("unexpected padding directions: %v, %v, %v", config.Paddings[0].Direction, config.Paddings[1].Direction, config.Paddings[2].Direction)
 	}
-	if config.Paddings[0].Delay != 0 || config.Paddings[1].Delay != 100 || config.Paddings[2].Delay != 50 {
-		t.Fatalf("unexpected padding delays: %v, %v, %v", config.Paddings[0].Delay, config.Paddings[1].Delay, config.Paddings[2].Delay)
+	if config.Paddings[0].DelayMin != 0 || config.Paddings[0].DelayMax != 0 ||
+		config.Paddings[1].DelayMin != 100 || config.Paddings[1].DelayMax != 100 ||
+		config.Paddings[2].DelayMin != 50 || config.Paddings[2].DelayMax != 150 {
+		t.Fatalf("unexpected padding delays: %v, %v, %v", config.Paddings[0].DelayMin, config.Paddings[1].DelayMin, config.Paddings[2].DelayMin)
 	}
 }
 
@@ -67,7 +69,10 @@ func TestXMCBuildRejectsPadding(t *testing.T) {
 		"invalid_direction":    `[{"length": "3", "direction": "invalid"}]`,
 		"missing_direction":    `[{"length": "3"}]`,
 		"numeric_direction":    `[{"length": "3", "direction": "1"}]`,
-		"negative_delay":       `[{"length": "3", "direction": "c2s", "delay": -1}]`,
+		"negative_delay":       `[{"length": "3", "direction": "c2s", "delay": "-1"}]`,
+		"reversed_delay":       `[{"length": "3", "direction": "c2s", "delay": "10-5"}]`,
+		"invalid_delay_format": `[{"length": "3", "direction": "c2s", "delay": "abc"}]`,
+		"huge_delay":           `[{"length": "3", "direction": "c2s", "delay": "9223372036854775807"}]`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			var config XMC

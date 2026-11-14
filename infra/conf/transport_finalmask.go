@@ -941,7 +941,8 @@ type XMC struct {
 type XMCPaddingTurn struct {
 	Length    string `json:"length"`
 	Direction string `json:"direction"`
-	Delay     int64  `json:"delay,omitempty"`
+	// Delay is an optional millisecond value or inclusive min-max range.
+	Delay string `json:"delay,omitempty"`
 }
 
 type XMCProfile struct {
@@ -988,7 +989,11 @@ func (c *XMC) Build() (proto.Message, error) {
 	for i, turn := range c.Paddings {
 		minimum, maximum, err := ParseRangeString(turn.Length)
 		if err != nil {
-			return nil, fmt.Errorf("minecraft padding turn %d: %w", i, err)
+			return nil, fmt.Errorf("minecraft padding turn %d length: %w", i, err)
+		}
+		delayMinimum, delayMaximum, err := ParseRangeString(turn.Delay)
+		if err != nil {
+			return nil, fmt.Errorf("minecraft padding turn %d delay: %w", i, err)
 		}
 
 		var direction int32
@@ -1005,7 +1010,8 @@ func (c *XMC) Build() (proto.Message, error) {
 			LengthMin: int64(minimum),
 			LengthMax: int64(maximum),
 			Direction: direction,
-			Delay:     turn.Delay,
+			DelayMin:  int64(delayMinimum),
+			DelayMax:  int64(delayMaximum),
 		})
 	}
 	if err := config.ValidatePadding(); err != nil {

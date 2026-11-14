@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"net"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -215,6 +217,8 @@ func TestValidatePaddingSchedule(t *testing.T) {
 			}},
 		},
 		{name: "reversed start delay", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8, startDelay: paddingDelayRange{min: 2 * time.Millisecond, max: time.Millisecond}}}},
+		{name: "negative turn delay", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8, delay: paddingDelayRange{min: -time.Millisecond}}}},
+		{name: "reversed turn delay", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8, delay: paddingDelayRange{min: 2 * time.Millisecond, max: time.Millisecond}}}},
 		{name: "reversed generated chunk delay", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8, chunkDelay: paddingDelayRange{min: 2 * time.Millisecond, max: time.Millisecond}}}},
 		{name: "oversized generated chunk", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8, writeChunkLength: maxPaddingChunkLength + 1}}},
 		{name: "reversed generated chunk range", schedule: []paddingTurn{{direction: paddingClientToServer, minLength: 8, maxLength: 8, writeChunkMinLength: 9, writeChunkLength: 8}}},
@@ -641,5 +645,72 @@ func TestConsecutiveSameDirectionAllowed(t *testing.T) {
 	}
 	if err := <-serverDone; err != nil {
 		t.Fatalf("server failed to run schedule: %v", err)
+	}
+}
+
+type recordingSleeper struct {
+	mu      sync.Mutex
+	elapsed []time.Duration
+}
+
+func (s *recordingSleeper) sleep(d time.Duration) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.elapsed = append(s.elapsed, d)
+}
+
+func (s *recordingSleeper) snapshot() []time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]time.Duration(nil), s.elapsed...)
+}
+
+func TestPaddingScheduleDelayUsesSenderRangeAndReceiverMinimum(t *testing.T) {
+	schedule := []paddingTurn{
+		{
+			direction: paddingClientToServer,
+			minLength: 8,
+			maxLength: 8,
+			delay:     paddingDelayRange{min: 7 * time.Millisecond, max: 7 * time.Millisecond},
+		},
+		{
+			direction: paddingServerToClient,
+			minLength: 8,
+			maxLength: 8,
+			delay:     paddingDelayRange{min: 3 * time.Millisecond, max: 9 * time.Millisecond},
+		},
+		// The delay of the last turn is intentionally ignored.
+		{direction: paddingClientToServer, minLength: 8, maxLength: 8, delay: paddingDelayRange{min: 20 * time.Millisecond, max: 20 * time.Millisecond}},
+	}
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	var clientSleeps, serverSleeps recordingSleeper
+	serverDone := make(chan error, 1)
+	go func() {
+		serverDone <- runPaddingScheduleWithSleep(server, server, false, 2, schedule, serverSleeps.sleep)
+	}()
+	if err := runPaddingScheduleWithSleep(client, client, true, 2, schedule, clientSleeps.sleep); err != nil {
+		t.Fatalf("client failed to run schedule: %v", err)
+	}
+	if err := <-serverDone; err != nil {
+		t.Fatalf("server failed to run schedule: %v", err)
+	}
+
+	// The client sends turn 0 (fixed delay) and receives turn 1 (minimum wait).
+	wantClient := []time.Duration{7 * time.Millisecond, 3 * time.Millisecond}
+	if got := clientSleeps.snapshot(); !reflect.DeepEqual(got, wantClient) {
+		t.Fatalf("client waited %v, want %v", got, wantClient)
+	}
+	serverWaits := serverSleeps.snapshot()
+	if len(serverWaits) != 2 {
+		t.Fatalf("server waited %d times, want 2 (last turn must not delay): %v", len(serverWaits), serverWaits)
+	}
+	if serverWaits[0] != 7*time.Millisecond {
+		t.Fatalf("server receiver wait = %v, want 7ms", serverWaits[0])
+	}
+	if serverWaits[1] < 3*time.Millisecond || serverWaits[1] > 9*time.Millisecond {
+		t.Fatalf("server sender wait = %v, want within 3-9ms", serverWaits[1])
 	}
 }

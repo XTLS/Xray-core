@@ -34,7 +34,7 @@ type paddingTurn struct {
 	direction           paddingDirection
 	minLength           int
 	maxLength           int
-	delay               int  // milliseconds delay after sending this turn
+	delay               paddingDelayRange // pause between this turn and the next one
 	variants            []paddingVariant
 	startDelay          paddingDelayRange
 	chunkDelay          paddingDelayRange
@@ -46,6 +46,10 @@ type paddingTurn struct {
 }
 
 func runPaddingSchedule(reader io.Reader, writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn) error {
+	return runPaddingScheduleWithSleep(reader, writer, isClient, firstTurnPrefixLength, schedule, time.Sleep)
+}
+
+func runPaddingScheduleWithSleep(reader io.Reader, writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration)) error {
 	if err := validatePaddingSchedule(schedule, firstTurnPrefixLength); err != nil {
 		return err
 	}
@@ -56,19 +60,32 @@ func runPaddingSchedule(reader io.Reader, writer io.Writer, isClient bool, first
 		if i == 0 {
 			prefixLength = firstTurnPrefixLength
 		}
+		hasNextTurn := i+1 < len(schedule)
 
 		localSends := isClient == (turn.direction == paddingClientToServer)
 		if localSends {
-			if err := writePaddingTurnWithBuffer(writer, turn, prefixLength, time.Sleep, &writeBuffer); err != nil {
+			if err := writePaddingTurnWithBuffer(writer, turn, prefixLength, sleep, &writeBuffer); err != nil {
 				return fmt.Errorf("write padding turn %d: %w", i, err)
 			}
-			if turn.delay > 0 {
-				time.Sleep(time.Duration(turn.delay) * time.Millisecond)
+			if !hasNextTurn {
+				continue
+			}
+			delay, err := randomPaddingDelay(turn.delay)
+			if err != nil {
+				return fmt.Errorf("select padding turn %d delay: %w", i, err)
+			}
+			if delay > 0 {
+				sleep(delay)
 			}
 			continue
 		}
 		if err := readPaddingTurn(reader, turn, prefixLength); err != nil {
 			return fmt.Errorf("read padding turn %d: %w", i, err)
+		}
+		// The receiver starts waiting for the next turn only after the
+		// configured minimum, so both endpoints apply the same pause.
+		if hasNextTurn && turn.delay.min > 0 {
+			sleep(turn.delay.min)
 		}
 	}
 	return nil
@@ -94,6 +111,9 @@ func validatePaddingSchedule(schedule []paddingTurn, firstTurnPrefixLength int) 
 		}
 		if err := validatePaddingDelayRange(turn.chunkDelay); err != nil {
 			return fmt.Errorf("padding turn %d has an invalid chunk delay: %w", i, err)
+		}
+		if err := validatePaddingDelayRange(turn.delay); err != nil {
+			return fmt.Errorf("padding turn %d has an invalid inter-turn delay: %w", i, err)
 		}
 		if turn.writeChunkMinLength < 0 || turn.writeChunkLength < turn.writeChunkMinLength || turn.writeChunkLength > maxPaddingChunkLength {
 			return fmt.Errorf("padding turn %d has an invalid write chunk range: %d-%d", i, turn.writeChunkMinLength, turn.writeChunkLength)
