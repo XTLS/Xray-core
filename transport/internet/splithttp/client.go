@@ -27,6 +27,9 @@ type DialerClient interface {
 
 	// ctx, url, sessionId, seqStr, body, contentLength
 	PostPacket(context.Context, string, string, string, buf.MultiBuffer) error
+
+	// ctx, url, sessionId, seqStr — один GET-сегмент режима packet-down
+	GetSegment(context.Context, string, string, string) ([]byte, error)
 }
 
 // implements splithttp.DialerClient in terms of direct network connections
