@@ -41,14 +41,14 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string) (*clientConn, error) {
+func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, padding []*Padding) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
 	if len(profiles) == 0 {
 		return nil, fmt.Errorf("empty profiles")
 	}
-	paddingSchedule, err := newClientPaddingSchedule2612()
+	paddingSchedule, err := newPaddingSchedule(padding, true)
 	if err != nil {
 		return nil, fmt.Errorf("select padding profile: %w", err)
 	}
