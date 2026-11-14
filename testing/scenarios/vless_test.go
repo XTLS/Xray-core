@@ -70,7 +70,7 @@ func TestVless(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -175,7 +175,7 @@ func TestVlessTls(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -298,7 +298,7 @@ func TestVlessXtlsVision(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -430,7 +430,7 @@ func TestVlessXtlsVisionReality(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -569,7 +569,7 @@ func TestVlessRealityFingerprints(t *testing.T) {
 			Outbound: []*core.OutboundHandlerConfig{
 				{
 					ProxySettings: serial.ToTypedMessage(&freedom.Config{
-						FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+						Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 					}),
 				},
 			},
@@ -661,7 +661,7 @@ func TestVlessRealityFingerprints(t *testing.T) {
 	wg.Wait()
 }
 
-// A blocked connection must close after finalRules.delay even while the client keeps it open and sends nothing.
+// A blocked connection must close after firewall.delay even while the client keeps it open and sends nothing.
 func TestVlessBlockDelay(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
@@ -695,7 +695,7 @@ func TestVlessBlockDelay(t *testing.T) {
 				Outbound: []*core.OutboundHandlerConfig{
 					{
 						ProxySettings: serial.ToTypedMessage(&freedom.Config{
-							FinalRules: []*freedom.FinalRuleConfig{
+							Firewall: []*freedom.FirewallConfig{
 								{
 									Action: freedom.RuleAction_Block,
 									Delay:  &freedom.Range{Min: delay, Max: delay},
@@ -734,7 +734,7 @@ func TestVlessBlockDelay(t *testing.T) {
 				t.Fatalf("connection is still open after %v", elapsed)
 			}
 			if elapsed < blockDuration {
-				t.Fatalf("connection is closed after %v, before finalRules.delay", elapsed)
+				t.Fatalf("connection is closed after %v, before firewall.delay", elapsed)
 			}
 		})
 	}

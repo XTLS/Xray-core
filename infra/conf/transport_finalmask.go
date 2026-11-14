@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/filter"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
@@ -26,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
+	"github.com/xtls/xray-core/transport/internet/finalmask/proxyprotocol"
 	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
@@ -76,11 +78,12 @@ var (
 	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"filter":        func() interface{} { return new(Filter) },
-		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
-		"fragment":      func() interface{} { return new(FragmentMask) },
-		"sudoku":        func() interface{} { return new(Sudoku) },
-		"xmc":           func() interface{} { return new(XMC) },
+		"filter":         func() interface{} { return new(Filter) },
+		"header-custom":  func() interface{} { return new(HeaderCustomTCP) },
+		"proxy-protocol": func() interface{} { return new(ProxyProtocol) },
+		"fragment":       func() interface{} { return new(FragmentMask) },
+		"sudoku":         func() interface{} { return new(Sudoku) },
+		"xmc":            func() interface{} { return new(XMC) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -96,6 +99,32 @@ var (
 		"udphop":        func() interface{} { return new(UDPHop) },
 	}, "type", "settings")
 )
+
+type ProxyProtocol struct {
+	Version uint32 `json:"version"`
+}
+
+func (c *ProxyProtocol) Build() (proto.Message, error) {
+	version := c.Version
+	if version == 0 {
+		version = 2
+	}
+	if version != 1 && version != 2 {
+		return nil, errors.New("PROXY protocol version must be 1 or 2")
+	}
+	return &proxyprotocol.Config{Version: version}, nil
+}
+
+func addProxyProtocolMask(config *internet.StreamConfig, version uint32) {
+	mask := serial.ToTypedMessage(&proxyprotocol.Config{Version: version})
+	for _, existing := range config.Tcpmasks {
+		if existing.Type == mask.Type {
+			return
+		}
+	}
+	// Put the header directly on the socket, before the other masks.
+	config.Tcpmasks = append(config.Tcpmasks, mask)
+}
 
 type Filter struct {
 	BlockedSourceIPs []string `json:"blockedSourceIPs"`
