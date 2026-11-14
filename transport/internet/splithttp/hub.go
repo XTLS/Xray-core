@@ -198,6 +198,13 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		isUplinkRequest = true
 	}
 
+	// packet-down: GET с номером вида d0, d1, d2… — это запрос download-сегмента,
+	// а не upload. Префикс 'd' отличает его от чисто числовых upload-номеров.
+	if request.Method == "GET" && sessionId != "" && strings.HasPrefix(seqStr, "d") {
+		h.serveDownlinkSegment(writer, request, currentSession,sessionId, seqStr, remoteAddr)
+		return
+	}
+
 	uplinkDataKey := h.config.UplinkDataKey
 
 	if isUplinkRequest && sessionId != "" { // stream-up, packet-up
@@ -408,7 +415,75 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 		writer.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
+// packetDownSegmentMax — сколько байт сервер отдаёт за один сегмент.
+// packetDownWait — сколько ждать данных, прежде чем вернуть пустой сегмент (long-poll).
+// packetDownGather — сколько «докапливать» после появления первых данных.
+// packetDownBufferLimit — размер исходящего буфера (обратное давление).
+const (
+	packetDownSegmentMax  = 256 * 1024
+	packetDownWait        = 20 * time.Second
+	packetDownGather      = 30 * time.Millisecond
+	packetDownBufferLimit = 2 * 1024 * 1024
+)
 
+// serveDownlinkSegment обслуживает один GET-сегмент режима packet-down.
+// При самом первом сегменте сессии создаётся downlink-буфер и соединение Xray.
+func (h *requestHandler) serveDownlinkSegment(
+	writer http.ResponseWriter,
+	request *http.Request,
+	currentSession *httpSession,
+	sessionId string,
+	seqStr string,
+	remoteAddr net.Addr,
+) {
+	if h.config.Mode != "" && h.config.Mode != "auto" && h.config.Mode != "packet-down" {
+		errors.LogInfo(context.Background(), "packet-down mode is not allowed")
+		writer.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Первый сегмент сессии создаёт буфер и отдаёт соединение ядру Xray.
+	// Делаем это под мьютексом сессии, чтобы два параллельных сегмента
+	// не создали соединение дважды.
+	h.sessionMu.Lock()
+	first := currentSession.downlink == nil
+	if first {
+		currentSession.downlink = newDownlinkBuffer(packetDownBufferLimit)
+
+		// как и в stream-down: сессия больше не истекает по TTL,
+		// её жизнь теперь привязана к соединению.
+		currentSession.isFullyConnected.Close()
+
+		localAddr := h.localAddr
+		if la, ok := request.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && la != nil {
+			localAddr = la
+		}
+		conn := splitConn{
+			writer:     currentSession.downlink, // вниз — через буфер
+			reader:     currentSession.uploadQueue, // вверх — из POST-очереди
+			remoteAddr: remoteAddr,
+			localAddr:  localAddr,
+		}
+		h.ln.addConn(stat.Connection(&conn))
+	}
+	downlink := currentSession.downlink
+	h.sessionMu.Unlock()
+
+	seg, eof := downlink.TakeSegment(packetDownSegmentMax, packetDownWait, packetDownGather)
+
+	writer.Header().Set("Cache-Control", "no-store")
+	if eof {
+		// сессия окончена: пустой ответ со специальным заголовком-маркером.
+		writer.Header().Set("X-Pd-Eof", "1")
+		writer.WriteHeader(http.StatusOK)
+		h.sessions.Delete(sessionId)
+		return
+	}
+	writer.WriteHeader(http.StatusOK)
+	if len(seg) > 0 {
+		writer.Write(seg)
+	}
+}
 type httpServerConn struct {
 	sync.Mutex
 	*done.Instance
