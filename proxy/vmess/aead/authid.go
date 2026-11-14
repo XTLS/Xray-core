@@ -101,6 +101,11 @@ func (a *AuthIDDecoderHolder) RemoveUser(key [16]byte) {
 	delete(a.decoders, string(key[:]))
 }
 
+// CheckReplay shares the replay window with ordinary and generated route credentials.
+func (a *AuthIDDecoderHolder) CheckReplay(authID [16]byte) bool {
+	return a.filter.Check(authID)
+}
+
 func (a *AuthIDDecoderHolder) Match(authID [16]byte) (interface{}, error) {
 	for _, v := range a.decoders {
 		t, z, _, d := v.dec.Decode(authID)

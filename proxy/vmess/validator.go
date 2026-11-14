@@ -6,10 +6,12 @@ import (
 	"hash/crc64"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vmess/aead"
 )
 
@@ -21,7 +23,23 @@ type TimedUserValidator struct {
 	behaviorSeed  uint64
 	behaviorFused bool
 
-	aeadDecoderHolder *aead.AuthIDDecoderHolder
+	aeadDecoderHolder   *aead.AuthIDDecoderHolder
+	exactUsers          map[[16]byte]*protocol.MemoryUser
+	routeIDs            map[*protocol.MemoryUser]uint32
+	nextRouteID         uint32
+	nextRouteGeneration uint64
+	routeSource         routing.UserRouteProvider
+	inboundTag          string
+	routeSnapshot       routing.UserRouteRules
+	routesDirty         bool
+	routeError          error
+	routeAccounts       map[*protocol.MemoryUser]*cacheAccount
+	routeAliasCount     int
+	routeCache          *onlineCache
+	routeScans          chan struct{}
+	cleanupOnce         sync.Once
+	cleanupStop         chan struct{}
+	closed              bool
 }
 
 // NewTimedUserValidator creates a new TimedUserValidator.
@@ -29,6 +47,11 @@ func NewTimedUserValidator() *TimedUserValidator {
 	tuv := &TimedUserValidator{
 		users:             make([]*protocol.MemoryUser, 0, 16),
 		aeadDecoderHolder: aead.NewAuthIDDecoderHolder(),
+		exactUsers:        make(map[[16]byte]*protocol.MemoryUser),
+		routeIDs:          make(map[*protocol.MemoryUser]uint32),
+		routeCache:        newOnlineCache(nil, routeCacheBudget, 2*time.Minute, time.Now),
+		routeScans:        make(chan struct{}, 2),
+		cleanupStop:       make(chan struct{}),
 	}
 	return tuv
 }
@@ -36,6 +59,9 @@ func NewTimedUserValidator() *TimedUserValidator {
 func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 	v.Lock()
 	defer v.Unlock()
+	if v.closed {
+		return errors.New("VMess validator closed")
+	}
 
 	account, ok := u.Account.(*MemoryAccount)
 	if !ok {
@@ -54,6 +80,10 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 
 	v.users = append(v.users, u)
 	v.aeadDecoderHolder.AddUser(cmdkeyfl, u)
+	v.exactUsers[cmdkeyfl] = u
+	v.nextRouteID++
+	v.routeIDs[u] = v.nextRouteID
+	v.routesDirty = true
 
 	return nil
 }
@@ -73,17 +103,11 @@ func (v *TimedUserValidator) GetCount() int64 {
 }
 
 func (v *TimedUserValidator) GetAEAD(userHash []byte) (*protocol.MemoryUser, bool, error) {
-	v.RLock()
-	defer v.RUnlock()
-
-	var userHashFL [16]byte
-	copy(userHashFL[:], userHash)
-
-	userd, err := v.aeadDecoderHolder.Match(userHashFL)
+	match, err := v.MatchAEAD(userHash)
 	if err != nil {
 		return nil, false, err
 	}
-	return userd.(*protocol.MemoryUser), true, nil
+	return match.User, true, nil
 }
 
 func (v *TimedUserValidator) Remove(email string) bool {
@@ -98,6 +122,11 @@ func (v *TimedUserValidator) Remove(email string) bool {
 			var cmdkeyfl [16]byte
 			copy(cmdkeyfl[:], u.Account.(*MemoryAccount).CmdKey())
 			v.aeadDecoderHolder.RemoveUser(cmdkeyfl)
+			delete(v.exactUsers, cmdkeyfl)
+			v.routeCache.remove(v.routeIDs[u])
+			delete(v.routeAccounts, u)
+			delete(v.routeIDs, u)
+			v.routesDirty = true
 			break
 		}
 	}

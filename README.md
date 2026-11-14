@@ -47,33 +47,31 @@ For VLESS, the route is the seventh and eighth bytes of the UUID sent by the cli
 
 Existing `vlessRoute` rules keep their original behavior, including evaluating VMess as `0`. If both fields are present in a rule, `userRoute` takes precedence. In routing scripts, `ctx:GetUserRoute()` reads the shared value.
 
-#### Optional VMess UUID routing extension
+#### VMess routing with an unchanged client
 
-This fork supports selecting a VMess route by changing only the third UUID group on the client, while keeping the server account unchanged. **Both peers must run this extension and enable `userRoute: true` on the VMess account.** This is a fork-specific extension, not part of standard VMess. The account flag is separate from the numeric/string `routing.rules[].userRoute` matcher.
+Update the server to this fork. Standard VMess clients select a declared route by changing the third UUID group; no account flag or new wire field is needed. The remaining 14 UUID bytes must match the original server account.
 
 Server inbound settings:
 
 ```json
-{"clients":[{"id":"317530a8-3c1d-1234-8d8e-7cb70aedf158","userRoute":true}]}
+{"clients":[{"id":"317530a8-3c1d-1234-8d8e-7cb70aedf158","email":"alice@example.com"}]}
 ```
 
-Client outbound settings (or put the same account fields inside `vnext[].users[]`):
-
-```json
-{"address":"SERVER","port":443,"id":"317530a8-3c1d-0002-8d8e-7cb70aedf158","userRoute":true,"security":"auto"}
-```
-
-The example selects route `2`. Changing the third UUID group to `0001` selects route `1`, and `ffff` selects `65535`. All other UUID bytes must match the server account. Server routing rules can map these values to existing outbound tags:
+Server routing rules (the outbound tags must exist):
 
 ```json
 {"rules":[{"userRoute":1,"outboundTag":"route-one"},{"userRoute":2,"outboundTag":"route-two"}]}
 ```
 
-With the account flag absent or `false`, the standard VMess wire format and full-UUID authentication remain unchanged; `userRoute` matches the registered UUID's route bytes. Older peers can use this default mode. Enabling the extension on only one peer fails authentication. Older cores do not implement the new configuration fields; upgrading is required to use them.
+The client UUID `317530a8-3c1d-0002-8d8e-7cb70aedf158` selects route 2. The full original UUID remains valid even when its route is absent from the rules. Additional UUID variants are accepted only for explicit `userRoute` values in rules applicable to that inbound and user; `user` filters, including regular expressions, and `inboundTag` filters constrain the catalog. Other rule conditions still govern outbound selection. Lua-only routing does not declare aliases.
 
-In extension mode, bytes 7 and 8 are routing metadata, not secret identity bits. Accounts with the same remaining 14 bytes are the same identity and duplicate registrations are rejected. Users can choose any route; combine routing rules with `user` or `inboundTag` when access must be restricted. Existing connections, including a Mux connection, retain the route from their handshake; changing UUID requires a new connection.
+Aliases retain the original account's email, level, API identity, statistics and session replay history. Existing connections, including Mux carriers, retain their handshake route; UUID changes require a new connection. Accounts sharing the same remaining 14 UUID bytes retain exact-UUID authentication, but receive no generated aliases, so their identities cannot be merged by cache order.
 
-Wire format v1: zero UUID bytes 7 and 8 before deriving the usual VMess command key, then apply the existing VMess AEAD `KDF16` with path `"VMess User Route v1"`. This separates extension credentials from standard credentials. Set the request header's reserved byte (offset 36) to `1`; use the first two padding bytes for the big-endian route and choose total padding length in `2..15`. The normal header checksum, AEAD protection and replay checks still apply. Unknown extension versions and padding shorter than two bytes are rejected; no fallback to standard authentication is attempted.
+Only successfully authenticated online/recent accounts receive prepared search keys. The cache uses no IP or source-address hints. Entries expire two minutes after the final connection closes; idle entries are evicted first, then the least recently authenticated active entries if necessary. Eviction only removes acceleration data. Rule edits preserve live leases without renewing recency or promoting evicted entries. Removed users and stale route generations cannot create new connections.
+
+Per inbound, prepared keys have a 64 MiB payload budget, raw alias keys have a 128 MiB catalog limit, and at most two alias scans run concurrently. An exhausted scan budget rejects that new alias handshake; exact configured credentials remain on the ordinary path. Oversized catalogs fail startup; if introduced by a live rule/user update, aliases fail closed until the catalog fits again, while exact configured credentials remain usable. These are payload limits, not a total process RSS guarantee. Cached searches still scan the cached population, and cold misses can scan every declared alias; this is not a constant-time VLESS lookup. See [implementation notes](docs/vmess-user-route.md).
+
+The earlier experimental account option `userRoute: true` remains compatible with that fork's opt-in wire format, but is not needed for this server-only design. Accounts using it continue to require both peers to support that earlier extension. Leave it absent when using ordinary clients.
 
 ## Telegram
 

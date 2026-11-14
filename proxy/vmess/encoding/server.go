@@ -101,6 +101,16 @@ type ServerSession struct {
 	responseWriter  io.Writer
 	responseHeader  byte
 	userRoute       net.Port
+	releaseRoute    func()
+}
+
+// Close releases the original account's authenticated connection lease.
+func (s *ServerSession) Close() error {
+	if s.releaseRoute != nil {
+		s.releaseRoute()
+		s.releaseRoute = nil
+	}
+	return nil
 }
 
 // UserRoute returns the route from the last successfully decoded request.
@@ -132,6 +142,7 @@ func parseSecurityType(b byte) protocol.SecurityType {
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
 func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*protocol.RequestHeader, error) {
 	s.userRoute = 0
+	s.Close()
 	buffer := buf.New()
 
 	drainer, err := drain.NewBehaviorSeedLimitedDrainer(int64(s.userValidator.GetBehaviorSeed()), 16+38, 3266, 64)
@@ -159,16 +170,20 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 	var decryptor io.Reader
 	var vmessAccount *vmess.MemoryAccount
 
-	user, foundAEAD, errorAEAD := s.userValidator.GetAEAD(buffer.Bytes())
+	match, errorAEAD := s.userValidator.MatchAEAD(buffer.Bytes())
+	if errorAEAD != nil {
+		return nil, drainConnection(errors.New("invalid user").Base(errorAEAD))
+	}
+	user := match.User
 
 	var fixedSizeAuthID [16]byte
 	copy(fixedSizeAuthID[:], buffer.Bytes())
 
 	switch {
-	case foundAEAD:
+	case match != nil:
 		vmessAccount = user.Account.(*vmess.MemoryAccount)
 		var fixedSizeCmdKey [16]byte
-		copy(fixedSizeCmdKey[:], vmessAccount.CmdKey())
+		copy(fixedSizeCmdKey[:], match.CmdKey[:])
 		aeadData, shouldDrain, bytesRead, errorReason := vmessaead.OpenVMessAEADHeader(fixedSizeCmdKey, fixedSizeAuthID, reader)
 		if errorReason != nil {
 			if shouldDrain {
@@ -253,7 +268,12 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 		return nil, errors.New("unknown security type: ", request.Security)
 	}
 
-	s.userRoute = net.PortFromBytes(vmessAccount.ID.Bytes()[6:8])
+	release, err := s.userValidator.AdmitAEAD(match)
+	if err != nil {
+		return nil, errors.New("VMess user changed during authentication").Base(err)
+	}
+	s.releaseRoute = release
+	s.userRoute = match.Route
 	if vmessAccount.UserRoute {
 		s.userRoute = net.PortFromBytes(buffer.BytesRange(paddingStart, paddingStart+2))
 	}

@@ -61,7 +61,7 @@ func TestVMessDynamicUserRoute(t *testing.T) {
 			serverPort := tcp.PickPort()
 			// One server and one registered identity remain unchanged for every client below.
 			start(t, fmt.Sprintf(`{
-				"inbounds":[{"listen":"127.0.0.1","port":%d,"protocol":"vmess","settings":{"clients":[{"id":"317530a8-3c1d-1234-8d8e-7cb70aedf158","userRoute":true}]}}],
+				"inbounds":[{"listen":"127.0.0.1","port":%d,"protocol":"vmess","settings":{"clients":[{"id":"317530a8-3c1d-1234-8d8e-7cb70aedf158"}]}}],
 				"outbounds":[{"tag":"block","protocol":"blackhole"},
 					{"tag":"A","protocol":"freedom","settings":{"redirect":"127.0.0.1:%d","finalRules":[{"action":"allow"}]}},
 					{"tag":"B","protocol":"freedom","settings":{"redirect":"127.0.0.1:%d","finalRules":[{"action":"allow"}]}}],
@@ -77,7 +77,7 @@ func TestVMessDynamicUserRoute(t *testing.T) {
 							}
 							start(t, fmt.Sprintf(`{
 								"inbounds":[{"listen":"127.0.0.1","port":%d,"protocol":"dokodemo-door","settings":{"address":"127.0.0.1","port":1,"network":%q}}],
-								"outbounds":[{"protocol":"vmess","settings":{"address":"127.0.0.1","port":%d,"id":"317530a8-3c1d-%04x-8d8e-7cb70aedf158","userRoute":true,"security":%q},"mux":{"enabled":%t,"concurrency":4}}]
+								"outbounds":[{"protocol":"vmess","settings":{"address":"127.0.0.1","port":%d,"id":"317530a8-3c1d-%04x-8d8e-7cb70aedf158","security":%q},"mux":{"enabled":%t,"concurrency":4}}]
 							}`, clientPort, network, serverPort, route, security, mux))
 							conn, err := net.Dial(network, fmt.Sprintf("127.0.0.1:%d", clientPort))
 							if err != nil {

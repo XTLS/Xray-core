@@ -110,6 +110,19 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 			return nil, errors.New("failed to initiate user").Base(err)
 		}
 	}
+	if err := core.RequireFeatures(ctx, func(router routing.Router) error {
+		if source, ok := router.(routing.UserRouteProvider); ok {
+			tag := ""
+			if inbound := session.InboundFromContext(ctx); inbound != nil {
+				tag = inbound.Tag
+			}
+			return handler.clients.SetRouteSource(source, tag)
+		}
+		return nil
+	}); err != nil {
+		handler.Close()
+		return nil, err
+	}
 
 	return handler, nil
 }
@@ -118,6 +131,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 func (h *Handler) Close() error {
 	return errors.Combine(
 		h.sessionHistory.Close(),
+		h.clients.Close(),
 		common.Close(h.usersByEmail),
 	)
 }
@@ -230,6 +244,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	reader := &buf.BufferedReader{Reader: buf.NewReader(connection)}
 	svrSession := encoding.NewServerSession(h.clients, h.sessionHistory)
+	defer svrSession.Close()
 	request, err := svrSession.DecodeRequestHeader(reader, isDrain)
 	if err != nil {
 		if errors.Cause(err) != io.EOF {
