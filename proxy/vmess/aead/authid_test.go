@@ -4,10 +4,32 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestAuthIDReplayWithFutureTimestamp(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		holder := NewAuthIDDecoderHolder()
+		key := [16]byte{1}
+		holder.AddUser(key, "user")
+		time.Sleep(119 * time.Second)
+		authID := CreateAuthID(key[:], time.Now().Unix()+120)
+		if _, err := holder.Match(authID); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Second)
+		holder.CheckReplay([16]byte{2})
+		time.Sleep(120 * time.Second)
+		holder.CheckReplay([16]byte{3})
+		time.Sleep(60 * time.Second)
+		if _, err := holder.Match(authID); err != ErrReplay {
+			t.Fatal("still-valid captured AuthID lost replay protection", err)
+		}
+	})
+}
 
 func TestCreateAuthID(t *testing.T) {
 	key := KDF16([]byte("Demo Key for Auth ID Test"), "Demo Path for Auth ID Test")

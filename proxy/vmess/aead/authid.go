@@ -68,7 +68,8 @@ func (aidd *AuthIDDecoder) Decode(data [16]byte) (int64, uint32, int32, []byte) 
 }
 
 func NewAuthIDDecoderHolder() *AuthIDDecoderHolder {
-	return &AuthIDDecoderHolder{make(map[string]*AuthIDDecoderItem), antireplay.NewMapFilter[[16]byte](120)}
+	// A timestamp accepted 120 seconds ahead remains valid through 120 seconds behind.
+	return &AuthIDDecoderHolder{make(map[string]*AuthIDDecoderItem), antireplay.NewMapFilter[[16]byte](2*120 + 1)}
 }
 
 type AuthIDDecoderHolder struct {
