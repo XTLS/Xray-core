@@ -77,7 +77,7 @@ func (w *walWriter) Write(p []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
-	if w.closed || w.ctx.Err() != nil {
+	if w.closed {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -125,9 +125,6 @@ func (w *walWriter) readyToFlush() bool {
 }
 
 func (w *walWriter) flushLocked() error {
-	if err := w.ctx.Err(); err != nil {
-		return err
-	}
 	if len(w.buf) == 0 {
 		return nil
 	}
@@ -185,7 +182,7 @@ func (w *walWriter) Close() error {
 		return nil
 	}
 	w.closed = true
-	for len(w.buf) > 0 && w.err == nil && w.ctx.Err() == nil {
+	for len(w.buf) > 0 && w.err == nil {
 		w.flushLocked()
 	}
 	w.mu.Unlock()
@@ -197,9 +194,6 @@ func (w *walWriter) Close() error {
 	w.mu.Unlock()
 
 	if err != nil {
-		return err
-	}
-	if err := w.ctx.Err(); err != nil {
 		return err
 	}
 	return w.storage.Put(w.ctx, objectName(w.prefix, seq, endSuffix), nil)
