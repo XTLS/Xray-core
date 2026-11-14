@@ -2,12 +2,14 @@ package dns
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
@@ -15,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/udp"
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -38,13 +41,36 @@ type udpDnsRequest struct {
 
 // NewClassicNameServer creates udp server object for remote resolving.
 func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *ClassicNameServer {
-	// default to 53 if unspecific
 	if address.Port == 0 {
 		address.Port = net.Port(53)
 	}
+	s := newClassicNameServer(address, strings.ToUpper(address.String()), disableCache, serveStale, serveExpiredTTL, clientIP)
+	s.udpServer = udp.NewDispatcher(dispatcher, s.HandleResponse)
+	errors.LogInfo(context.Background(), "DNS: created UDP client initialized for ", address.NetAddr())
+	return s
+}
 
+// NewUDPLocalNameServer creates a UDP client that bypasses the Xray dispatcher.
+func NewUDPLocalNameServer(u *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*ClassicNameServer, error) {
+	if u.Hostname() == "" {
+		return nil, errors.New("missing UDP local nameserver host")
+	}
+	port := net.Port(53)
+	if u.Port() != "" {
+		var err error
+		if port, err = net.PortFromString(u.Port()); err != nil {
+			return nil, err
+		}
+	}
+	address := net.UDPDestination(net.ParseAddress(u.Hostname()), port)
+	s := newClassicNameServer(address, "UDPL//"+address.NetAddr(), disableCache, serveStale, serveExpiredTTL, clientIP)
+	errors.LogInfo(context.Background(), "DNS: created Local UDP client initialized for ", u.String())
+	return s, nil
+}
+
+func newClassicNameServer(address net.Destination, name string, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *ClassicNameServer {
 	s := &ClassicNameServer{
-		cacheController: NewCacheController(strings.ToUpper(address.String()), disableCache, serveStale, serveExpiredTTL),
+		cacheController: NewCacheController(name, disableCache, serveStale, serveExpiredTTL),
 		address:         &address,
 		requests:        make(map[uint16]*udpDnsRequest),
 		clientIP:        clientIP,
@@ -53,9 +79,6 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 		Interval: time.Minute,
 		Execute:  s.RequestsCleanup,
 	}
-	s.udpServer = udp.NewDispatcher(dispatcher, s.HandleResponse)
-
-	errors.LogInfo(context.Background(), "DNS: created UDP client initialized for ", address.NetAddr())
 	return s
 }
 
@@ -90,6 +113,50 @@ func (s *ClassicNameServer) RequestsCleanup() error {
 	}
 
 	return nil
+}
+
+// dispatch sends through the router for classic UDP, or directly for local UDP.
+func (s *ClassicNameServer) dispatch(ctx context.Context, payload *buf.Buffer) {
+	if s.udpServer != nil {
+		s.udpServer.Dispatch(toDnsContext(ctx, s.address.String()), *s.address, payload)
+		return
+	}
+	go s.dispatchLocal(ctx, payload)
+}
+
+func (s *ClassicNameServer) dispatchLocal(ctx context.Context, payload *buf.Buffer) {
+	defer payload.Release()
+	conn, err := internet.DialSystem(ctx, *s.address, nil)
+	if err != nil {
+		if ctx.Err() == nil {
+			errors.LogInfoInner(ctx, err, s.Name(), " failed to dial local UDP nameserver")
+		}
+		return
+	}
+	defer conn.Close()
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stop()
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := conn.SetDeadline(deadline); err != nil {
+			errors.LogInfoInner(ctx, err, s.Name(), " failed to set UDP deadline")
+			return
+		}
+	}
+	if _, err := conn.Write(payload.Bytes()); err != nil {
+		if ctx.Err() == nil {
+			errors.LogInfoInner(ctx, err, s.Name(), " failed to send local UDP query")
+		}
+		return
+	}
+	response := buf.New()
+	if _, err := response.ReadFrom(conn); err != nil {
+		response.Release()
+		if ctx.Err() == nil {
+			errors.LogInfoInner(ctx, err, s.Name(), " failed to read local UDP response")
+		}
+		return
+	}
+	s.HandleResponse(ctx, &udp_proto.Packet{Payload: response, Source: *s.address})
 }
 
 // HandleResponse handles udp response packet from remote DNS server.
@@ -131,7 +198,7 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 			newReq.msg = &newMsg
 			s.addPendingRequest(&newReq)
 			b, _ := dns.PackMessage(newReq.msg)
-			s.udpServer.Dispatch(toDnsContext(newReq.ctx, s.address.String()), *s.address, b)
+			s.dispatch(newReq.ctx, b)
 			return
 		}
 	}
@@ -189,7 +256,7 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<
 			}
 			return
 		}
-		s.udpServer.Dispatch(toDnsContext(ctx, s.address.String()), *s.address, b)
+		s.dispatch(ctx, b)
 	}
 }
 
