@@ -884,6 +884,20 @@ func (c *XDNS) Build() (proto.Message, error) {
 		var tlsConfig *tls.Config
 		var quicConfig *internet.QuicParams
 		if c.Resolvers[i].TlsConfig != nil {
+			if c.Resolvers[i].TlsConfig.FingerprintWeights != nil {
+				if len(c.Resolvers[i].Addrs) == 0 {
+					return nil, errors.New("XDNS: fingerprintWeights requires an HTTPS resolver")
+				}
+				for _, addr := range c.Resolvers[i].Addrs {
+					u, err := url.Parse(addr)
+					if err != nil || u.Scheme != "https" {
+						return nil, errors.New("XDNS: fingerprintWeights requires HTTPS resolvers only")
+					}
+				}
+				if err := c.Resolvers[i].TlsConfig.validateFingerprintTransport("xdns"); err != nil {
+					return nil, err
+				}
+			}
 			proto, err := c.Resolvers[i].TlsConfig.Build()
 			if err != nil {
 				return nil, err
@@ -1066,6 +1080,9 @@ type Realm struct {
 }
 
 func (c *Realm) Build() (proto.Message, error) {
+	if c.TlsConfig != nil && c.TlsConfig.FingerprintWeights != nil {
+		return nil, errors.New("Realm: fingerprintWeights is not supported by its Go TLS client")
+	}
 	var scheme, host, port, token, id string
 	var stunServers []string
 	var tlsConfig *tls.Config

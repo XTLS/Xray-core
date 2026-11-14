@@ -308,19 +308,29 @@ type TLSConfig struct {
 	MaxVersion              string           `json:"maxVersion"`
 	CipherSuites            string           `json:"cipherSuites"`
 	Fingerprint             string           `json:"fingerprint"`
-	RejectUnknownSNI        bool             `json:"rejectUnknownSni"`
-	CurvePreferences        *StringList      `json:"curvePreferences"`
-	MasterKeyLog            string           `json:"masterKeyLog"`
-	PinnedPeerCertSha256    string           `json:"pinnedPeerCertSha256"`
-	VerifyPeerCertByName    string           `json:"verifyPeerCertByName"`
-	ECHServerKeys           string           `json:"echServerKeys"`
-	ECHConfigList           string           `json:"echConfigList"`
-	ECHSocketSettings       *SocketConfig    `json:"echSockopt"`
-	UseSystemCA             bool             `json:"useSystemCA"`
+	// Resolved once per policy per process into the existing Fingerprint field.
+	FingerprintWeights   FingerprintWeights `json:"fingerprintWeights"`
+	RejectUnknownSNI     bool               `json:"rejectUnknownSni"`
+	CurvePreferences     *StringList        `json:"curvePreferences"`
+	MasterKeyLog         string             `json:"masterKeyLog"`
+	PinnedPeerCertSha256 string             `json:"pinnedPeerCertSha256"`
+	VerifyPeerCertByName string             `json:"verifyPeerCertByName"`
+	ECHServerKeys        string             `json:"echServerKeys"`
+	ECHConfigList        string             `json:"echConfigList"`
+	ECHSocketSettings    *SocketConfig      `json:"echSockopt"`
+	UseSystemCA          bool               `json:"useSystemCA"`
 }
 
 // Build implements Buildable.
 func (c *TLSConfig) Build() (proto.Message, error) {
+	if c.FingerprintWeights != nil {
+		if c.Fingerprint != "" {
+			return nil, errors.New(`TLS: "fingerprint" and "fingerprintWeights" are mutually exclusive`)
+		}
+		if err := c.FingerprintWeights.Validate(); err != nil {
+			return nil, errors.New("TLS").Base(err)
+		}
+	}
 	config := new(tls.Config)
 	config.Certificate = make([]*tls.Certificate, len(c.Certs))
 	for idx, certConf := range c.Certs {
@@ -405,6 +415,14 @@ func (c *TLSConfig) Build() (proto.Message, error) {
 		config.EchSocketSettings = ss
 	}
 	config.UseSystemCa = c.UseSystemCA
+	if c.FingerprintWeights != nil {
+		name, err := c.FingerprintWeights.Resolve()
+		if err != nil {
+			return nil, errors.New("TLS").Base(err)
+		}
+		config.Fingerprint = name
+		errors.LogDebug(context.Background(), "TLS: fingerprintWeights selected ", name)
+	}
 
 	return config, nil
 }

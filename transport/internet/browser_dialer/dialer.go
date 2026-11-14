@@ -97,6 +97,16 @@ func HasBrowserDialer() bool {
 	return conns != nil
 }
 
+var fingerprintWarning sync.Once
+
+// WarnTLSFingerprint also covers embedders enabling the browser dialer through
+// Reload after building their configuration. The browser owns the handshake.
+func WarnTLSFingerprint(ctx context.Context) {
+	fingerprintWarning.Do(func() {
+		errors.LogWarning(ctx, "Browser dialer uses the browser's TLS fingerprint; Xray fingerprint settings do not apply")
+	})
+}
+
 type webSocketExtra struct {
 	Protocol string `json:"protocol,omitempty"`
 }

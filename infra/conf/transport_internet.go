@@ -98,6 +98,9 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		if tlsSettings == nil {
 			tlsSettings = &TLSConfig{}
 		}
+		if err := tlsSettings.validateFingerprintTransport(config.ProtocolName); err != nil {
+			return nil, err
+		}
 		ts, err := tlsSettings.Build()
 		if err != nil {
 			return nil, errors.New("Failed to build TLS config.").Base(err)
@@ -109,7 +112,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		if config.ProtocolName == "xdrive" && tlsSettings.ALPN != nil && slices.Equal(*tlsSettings.ALPN, StringList{"http/1.1"}) && tlsSettings.ECHConfigList == "" {
 			// a fingerprint puts its own ALPN into the hello, except Go TLS and the
 			// randomized ones, which take it from the config or send none
-			if fp := tls.GetFingerprint(strings.ToLower(tlsSettings.Fingerprint)); fp != nil && fp.Client != utls.HelloGolang.Client &&
+			if fp := tls.GetFingerprint(ts.(*tls.Config).Fingerprint); fp != nil && fp.Client != utls.HelloGolang.Client &&
 				!strings.HasPrefix(fp.Client, utls.HelloRandomized.Client) {
 				errors.LogWarning(context.Background(), `XDRIVE: "alpn" ["http/1.1"] reaches the wire only inside ECH, without "echConfigList" the hello carries the ALPN of the fingerprint and the server may pick h2`)
 			}

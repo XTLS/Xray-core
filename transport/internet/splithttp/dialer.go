@@ -48,6 +48,9 @@ func getHTTPClient(ctx context.Context, dest net.Destination, streamSettings *in
 	realityConfig := reality.ConfigFromStreamSettings(streamSettings)
 
 	if browser_dialer.HasBrowserDialer() && realityConfig == nil {
+		if tls.ConfigFromStreamSettings(streamSettings) != nil {
+			browser_dialer.WarnTLSFingerprint(ctx)
+		}
 		return &BrowserDialerClient{transportConfig: streamSettings.ProtocolSettings.(*Config)}, nil
 	}
 

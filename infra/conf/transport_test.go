@@ -394,6 +394,8 @@ func TestXDriveHTTP1ALPNWarning(t *testing.T) {
 		{"xdrive", `{}`, false},
 		{"xdrive", `{"alpn": ["http/1.1"]}`, true},
 		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "Firefox"}`, true},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprintWeights": {"Firefox": 1}}`, true},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprintWeights": {"Firefox": 1}, "echConfigList": "udp://1.1.1.1"}`, false},
 		{"raw", `{"alpn": ["http/1.1"]}`, false},
 		{"xdrive", `{"alpn": ["h2", "http/1.1"]}`, false},
 		{"xdrive", `{"alpn": ["http/1.1"], "echConfigList": "udp://1.1.1.1"}`, false},
