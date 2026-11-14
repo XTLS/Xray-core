@@ -46,8 +46,10 @@ const (
 func NewSession(ctx context.Context, link *transport.Link) *Session {
 	outbounds := session.OutboundsFromContext(ctx)
 	target := outbounds[len(outbounds)-1].Target
-	s := &Session{input: link.Reader, output: link.Writer, target: target,
-		transferType: protocol.TransferTypeStream, globalID: xudp.GetGlobalID(ctx), first: true}
+	s := &Session{
+		input: link.Reader, output: link.Writer, target: target,
+		transferType: protocol.TransferTypeStream, globalID: xudp.GetGlobalID(ctx), first: true,
+	}
 	if target.Network == net.Network_UDP {
 		s.transferType = protocol.TransferTypePacket
 	}

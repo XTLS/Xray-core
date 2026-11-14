@@ -13,8 +13,10 @@ func (s *Session) encodeBatch(mb *buf.MultiBuffer) (frames buf.MultiBuffer, err 
 	for n := 0; n < 4; n++ {
 		frame := buf.NewWithSize(1024)
 		frames = append(frames, frame)
-		meta := FrameMetadata{SessionID: s.ID, Target: s.target, GlobalID: s.globalID,
-			Inbound: s.inbound, SessionStatus: SessionStatusKeep}
+		meta := FrameMetadata{
+			SessionID: s.ID, Target: s.target, GlobalID: s.globalID,
+			Inbound: s.inbound, SessionStatus: SessionStatusKeep,
+		}
 		if s.first {
 			s.first = false
 			meta.SessionStatus = SessionStatusNew

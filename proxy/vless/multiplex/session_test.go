@@ -2,13 +2,14 @@ package multiplex
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
-	"testing"
-	"time"
 )
 
 func TestCarrierAdmission(t *testing.T) {

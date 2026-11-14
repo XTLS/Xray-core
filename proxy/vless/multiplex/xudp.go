@@ -322,8 +322,10 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 			return nil
 		}
 	}
-	s := &Session{parent: w.carrier, ID: meta.SessionID, phase: outputStarting,
-		transferType: protocol.TransferTypePacket, flow: x}
+	s := &Session{
+		parent: w.carrier, ID: meta.SessionID, phase: outputStarting,
+		transferType: protocol.TransferTypePacket, flow: x,
+	}
 	if previous != nil {
 		previous.parent.Lock()
 		previous.closeLocked(x, true, true)

@@ -37,8 +37,10 @@ func newCarrier(parent context.Context, link transport.Link, idle time.Duration,
 		link.Writer = gate
 	}
 	ctx, cancel := context.WithCancelCause(parent)
-	c := &carrier{sessions: make(map[uint16]*Session, 16), link: link, ctx: ctx, cancel: cancel,
-		timer: time.NewTicker(idle), client: client, limit: limit, wake: make(chan struct{}, 1)}
+	c := &carrier{
+		sessions: make(map[uint16]*Session, 16), link: link, ctx: ctx, cancel: cancel,
+		timer: time.NewTicker(idle), client: client, limit: limit, wake: make(chan struct{}, 1),
+	}
 	c.ready = sync.NewCond(&c.tx)
 	context.AfterFunc(c.ctx, func() { common.Interrupt(c.link.Reader) })
 	go c.sendLoop()
