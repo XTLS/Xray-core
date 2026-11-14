@@ -114,7 +114,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 				SniffingRequest: request,
 			})
 		}
-		handler.reverse = reverse.NewIntranetEndpoint(rvsCtx, a.Reverse.Tag,
+		handler.reverse = reverse.NewIntranetEndpoint(rvsCtx,
 			v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 			func(ctx context.Context) (context.Context, *transport.Link, error) {
 				return handler.process(ctx, nil, dialer, protocol.RequestCommandRvs)
@@ -184,11 +184,6 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}()
 
-	var opening *time.Timer
-	if native {
-		opening = time.AfterFunc(h.policyManager.ForLevel(h.server.User.Level).Timeouts.Handshake, cancel)
-		defer opening.Stop()
-	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
@@ -353,7 +348,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 
 	requestWriter := buf.NewWriter(conn)
 	if native && requestAddons.Flow == "" {
-		requestWriter = multiplex.WrapWriter(ctx, cancel, requestWriter, timer)
+		requestWriter = multiplex.WrapWriter(ctx, requestWriter, timer)
 	}
 	bufferWriter := buf.NewBufferedWriter(requestWriter)
 	if err := encoding.EncodeRequestHeader(bufferWriter, request, requestAddons); err != nil {
@@ -412,12 +407,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 				return nil, nil, err
 			}
 		}
-		if !opening.Stop() || !stopOpening() {
-			if err := ctx.Err(); err != nil {
-				return nil, nil, err
-			}
-			return nil, nil, context.DeadlineExceeded
-		}
+		stopOpening()
 		directLink, openErr := multiplex.OpenLink(ctx, cancel, rawConn, serverWriter, timer, openResponse)
 		if openErr != nil {
 			return nil, nil, openErr

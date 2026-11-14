@@ -10,6 +10,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
 )
 
@@ -19,7 +20,11 @@ type ServerWorker struct {
 }
 
 func NewServerWorker(ctx context.Context, dispatch func(context.Context, net.Destination, *transport.Link) error, link *transport.Link) *ServerWorker {
-	w := &ServerWorker{carrier: newCarrier(*link, 60*time.Second, false), dispatch: dispatch}
+	limit := policy.BufferPolicyFromContext(ctx).PerConnection
+	if session.IsReverseMultiplexFromContext(ctx) {
+		limit = 2 * buf.Size
+	}
+	w := &ServerWorker{carrier: newCarrier(ctx, *link, 60*time.Second, false, limit), dispatch: dispatch}
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		inbound.CanSpliceCopy = 3
 	}
@@ -37,7 +42,10 @@ func (w *ServerWorker) dispatchFlow(ctx context.Context, dest net.Destination, f
 			}
 			XUDPManager.Unlock()
 		}
+		w.Lock()
 		w.cancel(err)
+		w.clearPending()
+		w.Unlock()
 		flow.Interrupt()
 		flow.expire()
 		errors.LogInfoInner(ctx, err, "failed to dispatch request to ", dest)
@@ -46,6 +54,12 @@ func (w *ServerWorker) dispatchFlow(ctx context.Context, dest net.Destination, f
 }
 
 func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
+	w.RLock()
+	previous := w.sessions[meta.SessionID]
+	w.RUnlock()
+	if previous != nil {
+		previous.abort()
+	}
 	ctx = session.SubContextFromMultiplexInbound(ctx)
 	if meta.Inbound != nil && meta.Inbound.Source.IsValid() && meta.Inbound.Local.IsValid() {
 		if inbound := session.InboundFromContext(ctx); inbound != nil {
@@ -80,20 +94,23 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 	}
 
 	s := &Session{
-		parent: w.sessionManager, sender: w.carrier,
+		parent: w.carrier, phase: outputOpen,
 		ID: meta.SessionID, transferType: protocol.TransferTypeStream,
 	}
 	if meta.Target.Network == net.Network_UDP {
 		s.transferType = protocol.TransferTypePacket
 	}
 	s.flow = newInboundFlow(ctx, [8]byte{})
-	s.flow.binding, s.flow.Status = s, Active
-	if !w.sessionManager.Add(s) {
+	s.flow.binding = s
+	w.Lock()
+	admitted := w.admitLocked(s)
+	w.Unlock()
+	if !admitted {
 		s.flow.Interrupt()
 		return errors.New("failed to add new session")
 	}
-	go s.flow.emit(s)
 	dest := meta.Target
+	go w.emitResponse(s, s.flow)
 	go w.dispatchFlow(ctx, dest, s.flow)
 	if !meta.Option.Has(OptionData) {
 		return nil

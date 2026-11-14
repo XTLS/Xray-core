@@ -192,16 +192,13 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		user = sessionInbound.User
 	}
 
-	reader := &buf.TimeoutWrapperReader{Reader: link.Reader}
-	link.Reader = reader
+	var uplinkCounter stats.Counter
 
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := statsManager.GetOrRegisterCounter(name); c != nil {
-				reader.Counter = c
-			}
+			uplinkCounter, _ = statsManager.GetOrRegisterCounter(name)
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
@@ -217,10 +214,12 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		}
 	}
 
-	if owner, ok := reader.Reader.(interface{ SetUplinkCounter(stats.Counter) }); ok {
-		counter := reader.Counter
-		reader.Counter = nil
-		owner.SetUplinkCounter(counter)
+	if owner, ok := link.Reader.(interface{ SetUplinkCounter(stats.Counter) }); ok {
+		owner.SetUplinkCounter(uplinkCounter)
+		uplinkCounter = nil
+	}
+	if _, ok := link.Reader.(buf.TimeoutReader); uplinkCounter != nil || !ok {
+		link.Reader = &buf.TimeoutWrapperReader{Reader: link.Reader, Counter: uplinkCounter}
 	}
 	return link
 }

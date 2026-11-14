@@ -1,4 +1,4 @@
-package multiplex_test
+package multiplex
 
 import (
 	"io"
@@ -11,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	. "github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport/pipe"
 )
 
@@ -34,31 +33,38 @@ func TestReaderWriter(t *testing.T) {
 	pReader, pWriter := pipe.New(pipe.WithSizeLimit(1024))
 
 	dest := net.TCPDestination(net.DomainAddress("example.com"), 80)
-	writer := NewWriter(1, dest, pWriter, protocol.TransferTypeStream, [8]byte{}, &session.Inbound{})
+	s1 := &Session{ID: 1, target: dest, transferType: protocol.TransferTypeStream, inbound: &session.Inbound{}, first: true}
 
 	dest2 := net.TCPDestination(net.LocalHostIP, 443)
-	writer2 := NewWriter(2, dest2, pWriter, protocol.TransferTypeStream, [8]byte{}, &session.Inbound{})
+	s2 := &Session{ID: 2, target: dest2, transferType: protocol.TransferTypeStream, inbound: &session.Inbound{}, first: true}
 
 	dest3 := net.TCPDestination(net.LocalHostIPv6, 18374)
-	writer3 := NewWriter(3, dest3, pWriter, protocol.TransferTypeStream, [8]byte{}, &session.Inbound{})
+	s3 := &Session{ID: 3, target: dest3, transferType: protocol.TransferTypeStream, inbound: &session.Inbound{}, first: true}
 
-	writePayload := func(writer *Writer, payload ...byte) error {
+	writePayload := func(s *Session, payload ...byte) error {
 		b := buf.New()
 		b.Write(payload)
-		return writer.WriteMultiBuffer(buf.MultiBuffer{b})
+		data := buf.MultiBuffer{b}
+		defer func() { buf.ReleaseMulti(data) }()
+		frames, err := s.encodeBatch(&data)
+		if err != nil {
+			buf.ReleaseMulti(frames)
+			return err
+		}
+		return pWriter.WriteMultiBuffer(frames)
 	}
 
-	common.Must(writePayload(writer, 'a', 'b', 'c', 'd'))
-	common.Must(writePayload(writer2))
+	common.Must(writePayload(s1, 'a', 'b', 'c', 'd'))
+	common.Must(writePayload(s2))
 
-	common.Must(writePayload(writer, 'e', 'f', 'g', 'h'))
-	common.Must(writePayload(writer3, 'x'))
+	common.Must(writePayload(s1, 'e', 'f', 'g', 'h'))
+	common.Must(writePayload(s3, 'x'))
 
-	writer.Close()
-	writer3.Close()
+	common.Must(pWriter.WriteMultiBuffer(endFrame(s1.ID, false)))
+	common.Must(pWriter.WriteMultiBuffer(endFrame(s3.ID, false)))
 
-	common.Must(writePayload(writer2, 'y'))
-	writer2.Close()
+	common.Must(writePayload(s2, 'y'))
+	common.Must(pWriter.WriteMultiBuffer(endFrame(s2.ID, false)))
 
 	bytesReader := &buf.BufferedReader{Reader: pReader}
 

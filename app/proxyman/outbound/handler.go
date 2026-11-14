@@ -169,13 +169,11 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		err := errors.New("failed to process outbound traffic").Base(err)
 		session.SubmitOutboundErrorToOriginator(ctx, err)
 		errors.LogInfo(ctx, err.Error())
+	}
+	if err != nil || goerrors.Is(errC, io.ErrClosedPipe) {
 		common.Interrupt(link.Writer)
 	} else {
-		if errC != nil && goerrors.Is(errC, io.ErrClosedPipe) {
-			common.Interrupt(link.Writer)
-		} else {
-			common.Close(link.Writer)
-		}
+		common.Close(link.Writer)
 	}
 	common.Interrupt(link.Reader)
 }

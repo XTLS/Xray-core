@@ -9,193 +9,202 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/common/xudp"
+	"github.com/xtls/xray-core/transport"
 )
 
-type SessionManager struct {
-	sync.RWMutex
-	sessions map[uint16]*Session
-	count    uint16
-	active   int
-	closed   bool
-}
-
-func NewSessionManager() *SessionManager {
-	return &SessionManager{
-		count:    0,
-		sessions: make(map[uint16]*Session, 16),
-	}
-}
-
-func (m *SessionManager) Size() int {
-	m.RLock()
-	defer m.RUnlock()
-
-	return m.active
-}
-
-func (m *SessionManager) Count() int {
-	m.RLock()
-	defer m.RUnlock()
-
-	return int(m.count)
-}
-
-func (m *SessionManager) allocate(strategy *ClientStrategy, input buf.Reader, output buf.Writer, transferType protocol.TransferType) *Session {
-	maxConnection := uint16(strategy.MaxConnection)
-	if m.closed ||
-		(strategy.MaxConcurrency > 0 && m.active >= int(strategy.MaxConcurrency)) ||
-		(maxConnection > 0 && m.count >= maxConnection) {
-		return nil
-	}
-
-	s := &Session{
-		transferType: transferType,
-		input:        input,
-		output:       output,
-		ID:           m.count + 1,
-		parent:       m,
-		done:         done.New(),
-	}
-	m.add(s)
-	return s
-}
-
-func (m *SessionManager) Add(s *Session) bool {
-	m.Lock()
-	defer m.Unlock()
-	return m.add(s)
-}
-
-func (m *SessionManager) add(s *Session) bool {
-	if m.closed || s.closed {
-		return false
-	}
-
-	if previous := m.sessions[s.ID]; previous != nil && !previous.closed {
-		m.active--
-	}
-	m.count++
-	m.active++
-	m.sessions[s.ID] = s
-	return true
-}
-
-func (m *SessionManager) Get(id uint16) (*Session, bool) {
-	m.RLock()
-	defer m.RUnlock()
-
-	if m.closed {
-		return nil, false
-	}
-
-	s, found := m.sessions[id]
-	return s, found
-}
-
-func (m *SessionManager) CloseIfNoSessionAndIdle(checkSize int, checkCount int) bool {
-	m.Lock()
-	defer m.Unlock()
-
-	if m.closed {
-		return true
-	}
-
-	if m.active != 0 || checkSize != 0 || checkCount != int(m.count) {
-		return false
-	}
-
-	m.closed = true
-
-	m.sessions = nil
-	return true
-}
-
-func (m *SessionManager) Close() error {
-	m.Lock()
-	if m.closed {
-		m.Unlock()
-		return nil
-	}
-	m.closed = true
-	sessions := m.sessions
-	m.sessions = nil
-	m.active = 0
-	m.Unlock()
-	for _, current := range sessions {
-		current.Close()
-	}
-	return nil
-}
-
-// Session represents a client connection in a multiplex connection.
+// Session has one physical owner. Parent guards phase and registry identity;
+// the retained raw route can outlive this wire ID.
 type Session struct {
 	input        buf.Reader
 	output       buf.Writer
-	parent       *SessionManager
+	parent       *carrier
 	ID           uint16
 	transferType protocol.TransferType
-	closed       bool
-	failed       bool // immutable winning close reason, guarded by parent
+	target       net.Destination
+	globalID     [8]byte
+	inbound      *session.Inbound
+	first        bool
+	endFailed    bool // immutable after the first local terminal transition
+	phase        byte
 	done         *done.Instance
 	flow         *inboundFlow
-	sender       *carrier
 }
 
-// writePayload transfers parser custody to the admitted native flow.
+const (
+	outputStarting = iota
+	outputOpen
+	outputClosing
+	outputAborted
+)
+
+// NewSession prepares initiating metadata before any physical admission lock.
+func NewSession(ctx context.Context, link *transport.Link) *Session {
+	outbounds := session.OutboundsFromContext(ctx)
+	target := outbounds[len(outbounds)-1].Target
+	s := &Session{input: link.Reader, output: link.Writer, target: target,
+		transferType: protocol.TransferTypeStream, globalID: xudp.GetGlobalID(ctx), first: true}
+	if target.Network == net.Network_UDP {
+		s.transferType = protocol.TransferTypePacket
+	}
+	if session.IsReverseMultiplexFromContext(ctx) {
+		s.inbound = session.InboundFromContext(ctx)
+	}
+	return s
+}
+
+// WriteMultiBuffer requires one serial producer; Close and abort may run concurrently.
+func (s *Session) WriteMultiBuffer(raw buf.MultiBuffer) error {
+	defer func() { buf.ReleaseMulti(raw) }()
+	for {
+		frames, err := s.encodeBatch(&raw)
+		if err != nil {
+			buf.ReleaseMulti(frames)
+			buf.ReleaseMulti(raw)
+			raw = nil
+			return err
+		}
+		if err := s.parent.appendEntry(s, frames, false); err != nil {
+			buf.ReleaseMulti(frames)
+			return err
+		}
+		if len(raw) == 0 {
+			return nil
+		}
+	}
+}
+
 func (s *Session) writePayload(data buf.MultiBuffer) error {
-	if s.flow == nil {
+	// The parser owns flow replacement; the flow validates server admission.
+	x := s.flow
+	if x == nil {
+		s.parent.RLock()
+		live := s.phase == outputOpen || s.phase == outputStarting
+		s.parent.RUnlock()
+		if !live {
+			buf.ReleaseMulti(data)
+			return io.ErrClosedPipe
+		}
 		return s.output.WriteMultiBuffer(data)
 	}
-	err := s.flow.accept(data, s)
+	err := x.accept(data, s)
 	if err != nil {
 		buf.ReleaseMulti(data)
 	}
 	return err
 }
 
-// Close closes all resources associated with this session.
-func (s *Session) Close() error { s.close(true); return nil }
+func (s *Session) Close() error                { s.close(true); return nil }
+func (s *Session) WaitClosed() <-chan struct{} { return s.done.Wait() }
 
-// close atomically chooses logical completion and its reason, then notifies the
-// response owner outside the registry lock. It never waits for physical output.
-func (s *Session) close(failed bool) { s.closeOwned(failed, nil) }
-
-func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
-	s.parent.Lock()
-	if s.closed || (owner != nil && s.flow != owner) {
-		s.parent.Unlock()
-		return
+// CloseWithError finalizes the single producer once after its DATA attempts,
+// even if another goroutine already closed logically. Foreign cleanup may wait for
+// physical output, so this owner's END admission precedes its cleanup.
+func (s *Session) CloseWithError(err error) error {
+	if s.seal(err != nil, true) {
+		defer s.cleanup()
 	}
-	x := s.flow
-	if x != nil {
-		if x.GlobalID != [8]byte{} {
-			XUDPManager.Lock()
+	c := s.parent
+	if !c.client {
+		if c.Closed() {
+			return io.ErrClosedPipe
 		}
-		x.access.Lock()
-		if owner != nil && x.Status == Initializing {
-			x.access.Unlock()
-			if x.GlobalID != [8]byte{} {
-				XUDPManager.Unlock()
+		return nil
+	}
+	c.RLock()
+	live := s.phase == outputClosing
+	failed := s.endFailed
+	c.RUnlock()
+	if !live {
+		return io.ErrClosedPipe
+	}
+	frames := endFrame(s.ID, failed)
+	if err := c.appendEntry(s, frames, true); err != nil {
+		buf.ReleaseMulti(frames)
+		return err
+	}
+	return nil
+}
+
+func (s *Session) close(failed bool) { s.terminate(failed, true) }
+func (s *Session) abort()            { s.terminate(false, false) }
+
+func (s *Session) cleanup() {
+	stop := context.AfterFunc(s.parent.ctx, func() {
+		common.Interrupt(s.output)
+		common.Interrupt(s.input)
+	})
+	defer stop()
+	common.Close(s.output)
+	common.Interrupt(s.input)
+}
+
+func (s *Session) terminate(failed, local bool) {
+	if s.seal(failed, local) {
+		s.cleanup()
+	}
+}
+
+// Snapshot without retaining the carrier while acquiring route locks. Starting
+// retries may replace flow, so recheck under flow -> carrier before close. The
+// first client owner receives foreign cleanup custody, outside these locks.
+func (s *Session) seal(failed, local bool) bool {
+	c := s.parent
+	for {
+		c.RLock()
+		x := s.flow
+		c.RUnlock()
+		if x != nil {
+			x.access.Lock()
+		}
+		c.Lock()
+		same := s.flow == x
+		var first bool
+		if same {
+			if x != nil {
+				failed = failed || x.responseErr == io.ErrClosedPipe
 			}
-			s.parent.Unlock()
-			return
+			first = s.closeLocked(x, failed, local)
 		}
-		failed = failed || x.responseErr == io.ErrClosedPipe
-	}
-	s.closed, s.failed = true, failed
-	if s.parent.sessions[s.ID] == s {
-		s.parent.active--
-		if x == nil {
-			delete(s.parent.sessions, s.ID)
+		c.Unlock()
+		if x != nil {
+			x.access.Unlock()
 		}
+		if !same {
+			continue
+		}
+		return first && x == nil
 	}
-	if s.done != nil {
-		s.done.Close()
+}
+
+// closeLocked seals the logical route under flow/carrier ownership. The role's
+// producer or binding emitter owns END; the first local failure flag is immutable.
+func (s *Session) closeLocked(x *inboundFlow, failed, local bool) (first bool) {
+	c := s.parent
+	first = s.phase == outputOpen || s.phase == outputStarting
+	// A borrowed peer pointer must not rewrite a client's first terminal state.
+	if !first && (local || c.client) {
+		return false
 	}
-	if x != nil {
-		if x.binding == s {
+	registered := c.sessions[s.ID] == s
+	if first && s.phase == outputOpen && registered {
+		c.active--
+	}
+	if local && registered && !c.Closed() {
+		s.phase = outputClosing
+		s.endFailed = failed
+	} else {
+		s.phase = outputAborted
+	}
+	if first {
+		if s.done != nil {
+			s.done.Close()
+		}
+		if x != nil && x.binding == s {
 			x.binding = nil
 			if x.GlobalID == [8]byte{} {
 				if x.requestErr == nil {
@@ -203,38 +212,22 @@ func (s *Session) closeOwned(failed bool, owner *inboundFlow) {
 				}
 				x.responseErr = io.ErrClosedPipe
 				x.response = buf.ReleaseMulti(x.response)
-			} else if x.Status == Active {
-				x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
+			} else {
+				x.Expire = time.Now().Add(time.Minute)
 			}
 			x.notify()
 		}
-		x.access.Unlock()
-		if x.GlobalID != [8]byte{} {
-			XUDPManager.Unlock()
-		}
 	}
-	s.parent.Unlock()
-	if x == nil {
-		common.Interrupt(s.input)
-		common.Close(s.output)
+	if registered && (s.phase == outputAborted || c.client && first) {
+		delete(c.sessions, s.ID)
 	}
+	if first && c.client {
+		c.tx.Lock()
+		c.ready.Broadcast()
+		c.tx.Unlock()
+	}
+	return
 }
-
-// endWritten releases only this ingress identity; the peer may already have
-// reused its ID after observing END but before the physical write returned.
-func (s *Session) endWritten() {
-	s.parent.Lock()
-	defer s.parent.Unlock()
-	if s.parent.sessions[s.ID] == s {
-		delete(s.parent.sessions, s.ID)
-	}
-}
-
-const (
-	Initializing = 0
-	Active       = 1
-	Expiring     = 2
-)
 
 var XUDPManager struct {
 	sync.Mutex
@@ -250,14 +243,16 @@ func init() {
 			var expired []*inboundFlow
 			XUDPManager.Lock()
 			for id, x := range XUDPManager.Map {
-				if x.Status == Expiring && now.After(x.Expire) {
+				x.access.Lock()
+				if x.binding == nil && !x.Expire.IsZero() && now.After(x.Expire) {
 					expired = append(expired, x)
 					delete(XUDPManager.Map, id)
-					errors.LogDebug(context.Background(), "XUDP del ", id)
 				}
+				x.access.Unlock()
 			}
 			XUDPManager.Unlock()
 			for _, x := range expired {
+				errors.LogDebug(context.Background(), "XUDP del ", x.GlobalID)
 				x.expire()
 			}
 		}

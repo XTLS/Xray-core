@@ -51,7 +51,7 @@ func TestRegressionOutboundLeak(t *testing.T) {
 	multiplexServerUplink, multiplexServerDownlink := newLinkPair()
 	multiplex.NewServerWorker(serverCtx, dispatch, multiplexServerUplink)
 
-	client := multiplex.NewClientWorker(*multiplexServerDownlink, multiplex.ClientStrategy{})
+	client := multiplex.NewClientWorker(context.Background(), *multiplexServerDownlink, multiplex.ClientStrategy{})
 
 	clientCtx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
 		Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80),
@@ -59,16 +59,21 @@ func TestRegressionOutboundLeak(t *testing.T) {
 
 	multiplexClientUplink, multiplexClientDownlink := newLinkPair()
 
-	err := multiplex.Dispatch(clientCtx, multiplexClientUplink, false, func(ctx context.Context, link *transport.Link) (*multiplex.Session, error) {
-		s := client.TryAdmit(ctx, link)
-		if s == nil {
-			return nil, fmt.Errorf("unable to admit test child")
+	dispatched := make(chan error, 1)
+	go func() {
+		dispatched <- multiplex.Dispatch(clientCtx, multiplexClientUplink, func(ctx context.Context, s *multiplex.Session) error {
+			if !client.TryAdmit(ctx, s) {
+				return fmt.Errorf("unable to admit test child")
+			}
+			return nil
+		})
+	}()
+	defer func() {
+		client.Close()
+		if err := <-dispatched; err != nil {
+			t.Error("failed to dispatch: ", err)
 		}
-		return s, nil
-	})
-	if err != nil {
-		t.Error("failed to dispatch")
-	}
+	}()
 
 	{
 		b := buf.FromBytes([]byte("hello"))

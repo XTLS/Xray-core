@@ -12,13 +12,12 @@ import (
 
 type activityWriter struct {
 	ctx      context.Context
-	cancel   context.CancelFunc
 	writer   buf.Writer
 	activity *signal.ActivityTimer
 }
 
-func WrapWriter(ctx context.Context, cancel context.CancelFunc, writer buf.Writer, activity *signal.ActivityTimer) buf.Writer {
-	return &activityWriter{ctx: ctx, cancel: cancel, writer: writer, activity: activity}
+func WrapWriter(ctx context.Context, writer buf.Writer, activity *signal.ActivityTimer) buf.Writer {
+	return &activityWriter{ctx: ctx, writer: writer, activity: activity}
 }
 
 func (w *activityWriter) WriteMultiBuffer(data buf.MultiBuffer) error {
@@ -29,11 +28,7 @@ func (w *activityWriter) WriteMultiBuffer(data buf.MultiBuffer) error {
 	if !data.IsEmpty() {
 		w.activity.Update()
 	}
-	err := w.writer.WriteMultiBuffer(data)
-	if err != nil {
-		w.cancel()
-	}
-	return err
+	return w.writer.WriteMultiBuffer(data)
 }
 
 type responseReader struct {
@@ -69,7 +64,7 @@ func (r *responseReader) Interrupt() { r.cancel() }
 func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connection, writer buf.Writer, activity *signal.ActivityTimer, openResponse func() (buf.Reader, error)) (*transport.Link, error) {
 	gate, ok := writer.(*buf.BufferedWriter)
 	if !ok {
-		gate = buf.NewBufferedWriter(WrapWriter(ctx, cancel, writer, activity))
+		gate = buf.NewBufferedWriter(WrapWriter(ctx, writer, activity))
 		gate.SetBuffered(false)
 	}
 	response := &responseReader{ctx: ctx, cancel: cancel, results: make(chan buf.MultiBuffer)}

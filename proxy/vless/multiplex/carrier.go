@@ -3,109 +3,170 @@ package multiplex
 import (
 	"context"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport"
 )
 
-// carrier owns the physical frame loop and child registry for either multiplex role.
-// Client and server roles differ only in initiating or accepting new children.
 type carrier struct {
-	sessionManager *SessionManager
-	link           transport.Link
-	pending        chan buf.MultiBuffer // client-only encoded write lead
-	ctx            context.Context
-	cancel         context.CancelCauseFunc
-	timer          *time.Ticker
+	sync.RWMutex
+	tx       sync.Mutex
+	sessions map[uint16]*Session
+	count    uint16
+	active   int
+	client   bool
+	link     transport.Link
+	ready    *sync.Cond
+	data     buf.MultiBuffer
+	limit    int32
+	wake     chan struct{}
+	ctx      context.Context
+	cancel   context.CancelCauseFunc
+	timer    *time.Ticker
 }
 
-func newCarrier(link transport.Link, idle time.Duration, queueWrites bool) *carrier {
-	// Reuse the prepared codec gate so physical cancellation sees its lock.
+func newCarrier(parent context.Context, link transport.Link, idle time.Duration, client bool, limit int32) *carrier {
 	if _, ok := link.Writer.(*buf.BufferedWriter); !ok {
-		writer := buf.NewBufferedWriter(link.Writer)
-		writer.SetBuffered(false)
-		link.Writer = writer
+		gate := buf.NewBufferedWriter(link.Writer)
+		gate.SetBuffered(false)
+		link.Writer = gate
 	}
-	ctx, cancel := context.WithCancelCause(context.Background())
-	c := &carrier{sessionManager: NewSessionManager(), link: link, ctx: ctx, cancel: cancel, timer: time.NewTicker(idle)}
-	if queueWrites {
-		c.pending = make(chan buf.MultiBuffer, 2)
-		go c.sendLoop()
-	}
+	ctx, cancel := context.WithCancelCause(parent)
+	c := &carrier{sessions: make(map[uint16]*Session, 16), link: link, ctx: ctx, cancel: cancel,
+		timer: time.NewTicker(idle), client: client, limit: limit, wake: make(chan struct{}, 1)}
+	c.ready = sync.NewCond(&c.tx)
+	context.AfterFunc(c.ctx, func() { common.Interrupt(c.link.Reader) })
+	go c.sendLoop()
 	go c.monitor()
 	return c
 }
 
-// WriteMultiBuffer takes native write custody and closes the carrier on failure.
-func (c *carrier) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	if c.Closed() {
-		buf.ReleaseMulti(mb)
-		return io.ErrClosedPipe
+func (c *carrier) admitLocked(s *Session) bool {
+	if c.Closed() || s.phase != outputOpen || c.sessions[s.ID] != nil {
+		return false
 	}
-	if c.pending != nil {
-		select {
-		case c.pending <- mb:
-			if c.Closed() {
-				c.discardPending()
+	c.count++
+	c.active++
+	c.sessions[s.ID] = s
+	return true
+}
+
+func (c *carrier) wakeSenderTXLocked() {
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
+}
+
+func (c *carrier) fullTXLocked() bool {
+	return c.limit >= 0 && c.data.Len() > c.limit
+}
+
+// TX owns admission and drain. An entered bounded DATA offer may cross close;
+// the next offer observes done. END has already passed the cold phase check.
+func (c *carrier) appendEntry(s *Session, frames buf.MultiBuffer, end bool) error {
+	c.tx.Lock()
+	defer c.tx.Unlock()
+	for !c.Closed() && (end || !s.done.Done()) {
+		if !c.fullTXLocked() {
+			c.data = append(c.data, frames...)
+			c.wakeSenderTXLocked()
+			return nil
+		}
+		c.ready.Wait()
+	}
+	return io.ErrClosedPipe
+}
+
+func (c *carrier) unknownEnd(id uint16) {
+	// The serial server parser already observed this ID missing and cannot
+	// insert another row until admission returns and its KEEP is drained.
+	c.tx.Lock()
+	defer c.tx.Unlock()
+	for !c.Closed() {
+		if !c.fullTXLocked() {
+			frames := endFrame(id, false)
+			c.data = buf.MergeBytes(c.data, frames[0].Bytes())
+			buf.ReleaseMulti(frames)
+			c.wakeSenderTXLocked()
+			return
+		}
+		c.ready.Wait()
+	}
+}
+
+// The gate precedes claim/revalidation, and no logical lock spans physical I/O.
+func (c *carrier) sendLoop() {
+	gate := c.link.Writer.(*buf.BufferedWriter)
+	for {
+		c.tx.Lock()
+		for !c.Closed() && len(c.data) == 0 {
+			c.tx.Unlock()
+			select {
+			case <-c.ctx.Done():
+				return
+			case <-c.wake:
 			}
-			return nil // the client carrier now owns accepted encoded bytes
-		case <-c.ctx.Done():
-			buf.ReleaseMulti(mb)
-			return io.ErrClosedPipe
+			c.tx.Lock()
+		}
+		if c.Closed() {
+			c.tx.Unlock()
+			return
+		}
+		c.tx.Unlock()
+		gate.Lock()
+		if c.writeAndUnlock(c.takePending(), nil) != nil {
+			return
 		}
 	}
-	err := c.link.Writer.WriteMultiBuffer(mb)
+}
+
+// The caller owns the writer gate and no logical lock. This prefix cut must
+// precede any own raw claim or known-END retirement under that gate.
+func (c *carrier) takePending() buf.MultiBuffer {
+	c.tx.Lock()
+	frames := c.data
+	c.data = nil
+	c.ready.Broadcast()
+	c.tx.Unlock()
+	return frames
+}
+
+// The caller owns this carrier's locked writer gate and no logical locks.
+// Frames transfer here; any unencoded raw remainder must already be released.
+func (c *carrier) writeAndUnlock(frames buf.MultiBuffer, err error) error {
+	gate := c.link.Writer.(*buf.BufferedWriter)
+	if err != nil || c.Closed() {
+		buf.ReleaseMulti(frames)
+	} else if len(frames) != 0 {
+		err = gate.WriteMultiBufferLocked(frames)
+	}
+	if err != nil {
+		c.Lock()
+		c.cancel(err)
+		c.clearPending()
+		c.Unlock()
+	}
+	gate.Unlock()
 	if err != nil {
 		c.closeCause(err)
 	}
 	return err
 }
 
-// sendLoop is the sole client physical writer; server writes remain direct.
-func (c *carrier) sendLoop() {
-	var err error
-	defer func() { c.closeCause(err) }()
-	for {
-		select {
-		case <-c.ctx.Done():
-			return
-		case data := <-c.pending:
-			select {
-			case next := <-c.pending:
-				data, _ = buf.MergeMulti(data, next)
-			default:
-			}
-			if c.Closed() {
-				buf.ReleaseMulti(data)
-				return
-			}
-			if err = c.link.Writer.WriteMultiBuffer(data); err != nil {
-				return
-			}
-		}
-	}
+func (c *carrier) ActiveConnections() uint32 {
+	c.RLock()
+	defer c.RUnlock()
+	return uint32(c.active)
 }
-
-// Drain only accepted queue ownership, before arbitrary foreign interruption.
-func (c *carrier) discardPending() {
-	for {
-		select {
-		case data := <-c.pending:
-			buf.ReleaseMulti(data)
-		default:
-			return
-		}
-	}
-}
-
-func (c *carrier) ActiveConnections() uint32   { return uint32(c.sessionManager.Size()) }
 func (c *carrier) Closed() bool                { return c.ctx.Err() != nil }
 func (c *carrier) WaitClosed() <-chan struct{} { return c.ctx.Done() }
+func (c *carrier) Context() context.Context    { return c.ctx }
 
 // Err reports the first close cause, excluding normal cancellation.
 func (c *carrier) Err() error {
@@ -120,26 +181,49 @@ func (c *carrier) Close() error {
 	return c.closeCause(nil)
 }
 
+func (c *carrier) clearPending() {
+	c.tx.Lock()
+	buf.ReleaseMulti(c.data)
+	c.data = nil
+	c.ready.Broadcast()
+	c.tx.Unlock()
+}
+
 func (c *carrier) closeCause(err error) error {
-	c.cancel(err)
-	c.discardPending()
-	common.Interrupt(c.link.Reader)
+	c.Lock()
+	c.cancel(err) // cancellation precedes the TX drain and every later admission
+	c.clearPending()
+	c.Unlock()
 	return nil
 }
 
 func (c *carrier) monitor() {
 	defer c.timer.Stop()
 	for {
-		c.sessionManager.RLock()
-		checkSize, checkCount := c.sessionManager.active, int(c.sessionManager.count)
-		c.sessionManager.RUnlock()
+		c.RLock()
+		checkSize, checkCount := c.active, c.count
+		c.RUnlock()
 		select {
 		case <-c.ctx.Done():
-			c.sessionManager.Close()
+			c.Lock()
+			c.clearPending()
+			sessions := c.sessions
+			c.sessions, c.active = nil, 0
+			c.Unlock()
+			for _, s := range sessions {
+				s.abort()
+			}
 			common.Interrupt(c.link.Writer)
 			return
 		case <-c.timer.C:
-			if c.sessionManager.CloseIfNoSessionAndIdle(checkSize, checkCount) {
+			c.Lock()
+			idle := c.active == 0 && checkSize == 0 && c.count == checkCount
+			if idle {
+				c.cancel(nil)
+				c.clearPending()
+			}
+			c.Unlock()
+			if idle {
 				common.Must(c.Close())
 			}
 		}
@@ -157,23 +241,24 @@ func (c *carrier) handleStatusKeep(meta *FrameMetadata, reader *buf.BufferedRead
 	if !meta.Option.Has(OptionData) {
 		return nil
 	}
-	s, found := c.sessionManager.Get(meta.SessionID)
-	if !found {
-		NewResponseWriter(meta.SessionID, c, protocol.TransferTypeStream).Close()
-	} else {
-		s.parent.RLock()
-		closed := s.closed
-		s.parent.RUnlock()
-		if closed {
-			s = nil
-		} // drain without a second END or a retained XUDP write
+	c.RLock()
+	s, found := c.sessions[meta.SessionID]
+	if found && s.phase != outputOpen {
+		s = nil
+	}
+	c.RUnlock()
+	if !found && !c.client {
+		c.unknownEnd(meta.SessionID)
 	}
 	return copyFramePayload(reader, s, meta.Target)
 }
 
 func (c *carrier) handleStatusEnd(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	if s, found := c.sessionManager.Get(meta.SessionID); found {
-		s.Close()
+	c.RLock()
+	s := c.sessions[meta.SessionID]
+	c.RUnlock()
+	if s != nil {
+		s.abort()
 	}
 	return discardFrame(meta, reader)
 }
@@ -182,7 +267,8 @@ func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMe
 	var err error
 	defer func() { c.closeCause(err) }()
 	reader := &buf.BufferedReader{Reader: c.link.Reader}
-	for ctx.Err() == nil {
+	defer func() { buf.ReleaseMulti(reader.Buffer) }()
+	for !c.Closed() {
 		var meta FrameMetadata
 		err = meta.Unmarshal(reader, session.IsReverseMultiplexFromContext(ctx))
 		if errors.Cause(err) == io.EOF {

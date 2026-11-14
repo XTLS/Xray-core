@@ -25,13 +25,12 @@ type IntranetEndpoint struct {
 	open        func(context.Context) (context.Context, *transport.Link, error)
 	access      sync.Mutex
 	dispatcher  routing.Dispatcher
-	tag         string
 	workers     []*IntranetWorker
 	monitorTask *task.Periodic
 }
 
-func NewIntranetEndpoint(ctx context.Context, tag string, dispatcher routing.Dispatcher, open func(context.Context) (context.Context, *transport.Link, error)) *IntranetEndpoint {
-	b := &IntranetEndpoint{tag: tag, dispatcher: dispatcher, open: open}
+func NewIntranetEndpoint(ctx context.Context, dispatcher routing.Dispatcher, open func(context.Context) (context.Context, *transport.Link, error)) *IntranetEndpoint {
+	b := &IntranetEndpoint{dispatcher: dispatcher, open: open}
 	b.ctx, b.cancel = context.WithCancel(ctx)
 	b.monitorTask = &task.Periodic{Execute: b.monitor, Interval: 2 * time.Second}
 	return b
@@ -72,7 +71,7 @@ func (b *IntranetEndpoint) newWorker() (*IntranetWorker, error) {
 	if err != nil {
 		return nil, err
 	}
-	w := &IntranetWorker{Tag: b.tag, dispatch: b.dispatcher.DispatchLink}
+	w := &IntranetWorker{dispatch: b.dispatcher.DispatchLink}
 	w.Worker = multiplex.NewServerWorker(session.ContextWithIsReverseMultiplex(ctx, true), w.handle, link)
 	return w, nil
 }
@@ -96,7 +95,6 @@ func (b *IntranetEndpoint) Close() error {
 }
 
 type IntranetWorker struct {
-	Tag      string
 	Worker   *multiplex.ServerWorker
 	dispatch func(context.Context, net.Destination, *transport.Link) error
 	State    atomic.Int32
@@ -106,10 +104,6 @@ func (w *IntranetWorker) IsActive() bool {
 	return w.State.Load() == int32(Control_ACTIVE) && !w.Worker.Closed()
 }
 
-func (w *IntranetWorker) Closed() bool {
-	return w.Worker.Closed()
-}
-
 func (w *IntranetWorker) Connections() uint32 {
 	return w.Worker.ActiveConnections()
 }
@@ -117,9 +111,6 @@ func (w *IntranetWorker) Connections() uint32 {
 // handle forwards user traffic or consumes the native Reverse control stream.
 func (w *IntranetWorker) handle(ctx context.Context, dest net.Destination, link *transport.Link) error {
 	if !isInternalDomain(dest) {
-		if session.InboundFromContext(ctx) == nil {
-			ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: w.Tag})
-		}
 		return w.dispatch(ctx, dest, link)
 	}
 	defer common.Close(link.Writer)

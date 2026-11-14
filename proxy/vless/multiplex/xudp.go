@@ -14,9 +14,9 @@ import (
 	"github.com/xtls/xray-core/features/stats"
 )
 
-// inboundFlow owns native route input and response custody. A nonzero GlobalID
-// retains that custody across replaceable wire identities. No physical
-// I/O or Session closure occurs under access. Nested locks: registry, map, flow.
+// inboundFlow owns native route input and persistent binding state. Its response
+// mailbox retains native bytes until the current binding emitter claims them.
+// Locks nest association map -> flow -> one carrier; I/O is outside them.
 type inboundFlow struct {
 	access                  sync.Mutex
 	requestWake             *sync.Cond
@@ -29,7 +29,6 @@ type inboundFlow struct {
 	limit                   int32
 	binding                 *Session
 	GlobalID                [8]byte
-	Status                  uint64
 	Expire                  time.Time
 }
 
@@ -59,14 +58,6 @@ func (x *inboundFlow) SetUplinkCounter(counter stats.Counter) {
 	if counter != nil && pending != 0 {
 		counter.Add(pending)
 	}
-}
-
-// publishBinding requires access and a persistent association. Start the response
-// drain before first-packet admission, which can wait for native request capacity.
-func (x *inboundFlow) publishBinding(s *Session) {
-	x.binding = s
-	go x.emit(s)
-	x.notify()
 }
 
 func (x *inboundFlow) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -122,8 +113,7 @@ func (x *inboundFlow) accept(data buf.MultiBuffer, binding *Session) error {
 	}
 	defer x.access.Unlock()
 	for {
-		if x.requestErr != nil || x.binding != binding ||
-			(x.Status == Initializing && x.GlobalID != [8]byte{} && x.responseErr != nil && len(x.response) == 0) {
+		if x.requestErr != nil || x.binding != binding || binding.parent.Closed() {
 			return io.ErrClosedPipe
 		}
 		if x.limit < 0 || x.request.Len() <= x.limit {
@@ -151,8 +141,8 @@ func (x *inboundFlow) Interrupt() {
 
 type flowOutput struct{ *inboundFlow }
 
-func (w *flowOutput) Interrupt()    { w.finish(true) }
-func (x *inboundFlow) Close() error { x.finish(false); return nil }
+func (w *flowOutput) Interrupt()   { w.finish(true) }
+func (w *flowOutput) Close() error { w.finish(false); return nil }
 func (x *inboundFlow) finish(abort bool) {
 	x.access.Lock()
 	if x.responseErr == nil {
@@ -160,7 +150,17 @@ func (x *inboundFlow) finish(abort bool) {
 	}
 	if abort && x.responseErr != io.ErrClosedPipe {
 		x.responseErr = io.ErrClosedPipe
+	}
+	if abort {
 		x.response = buf.ReleaseMulti(x.response)
+	}
+	if s := x.binding; abort && s != nil {
+		c := s.parent
+		c.Lock()
+		if s.flow == x && s.phase == outputOpen {
+			s.closeLocked(x, true, true)
+		}
+		c.Unlock()
 	}
 	x.notify()
 	x.access.Unlock()
@@ -175,9 +175,10 @@ func (x *inboundFlow) expire() {
 	x.finish(true)
 }
 
-// Native response admission is the append, not invocation of this method.
-// Close rejects/wakes a capacity-blocked writer while preserving accepted data.
-func (x *inboundFlow) WriteMultiBuffer(data buf.MultiBuffer) error {
+// WriteMultiBuffer admits the whole raw offer under the original soft policy.
+// Response-capacity waiters are separate from request readers.
+func (w *flowOutput) WriteMultiBuffer(data buf.MultiBuffer) error {
+	x := w.inboundFlow
 	x.access.Lock()
 	defer x.access.Unlock()
 	for x.responseErr == nil && x.limit >= 0 && x.response.Len() > x.limit {
@@ -187,99 +188,111 @@ func (x *inboundFlow) WriteMultiBuffer(data buf.MultiBuffer) error {
 		buf.ReleaseMulti(data)
 		return io.ErrClosedPipe
 	}
+	if data.IsEmpty() {
+		buf.ReleaseMulti(data)
+		return nil
+	}
 	if len(x.response) == 0 {
 		x.response = data
 	} else {
 		x.response, _ = buf.MergeMulti(x.response, data)
 	}
 	x.responseWake.Broadcast()
+
 	return nil
 }
 
-// lockedBufferedWriter borrows the existing gate synchronously; it owns no
-// mutex or buffer and may only be invoked while that gate is locked.
-type lockedBufferedWriter buf.BufferedWriter
-
-func (w *lockedBufferedWriter) WriteMultiBuffer(data buf.MultiBuffer) error {
-	return (*buf.BufferedWriter)(w).WriteMultiBufferLocked(data)
-}
-
-// The binding emitter owns DATA and END. It claims response payload only
-// after acquiring the physical gate, and never holds a flow lock during I/O.
-func (x *inboundFlow) emit(s *Session) {
-	c := s.sender
-	defer func() {
-		s.parent.RLock()
-		ownsEnd, failed := s.closed && s.flow == x, s.failed
-		s.parent.RUnlock()
-		if ownsEnd {
-			defer s.endWritten()
-			if !c.Closed() {
-				writer := NewResponseWriter(s.ID, c, s.transferType)
-				writer.hasError = failed
-				writer.Close()
-			}
-		}
-	}()
+// Each binding writes directly after the physical gate. The ordered control
+// prefix is detached before this owner's raw claim, never at completion.
+func (w *ServerWorker) emitResponse(s *Session, x *inboundFlow) {
+	c := s.parent
 	gate := c.link.Writer.(*buf.BufferedWriter)
 	for {
 		x.access.Lock()
-		for x.binding == s && len(x.response) == 0 && (x.responseErr == nil || x.Status == Initializing) {
+		for {
+			if c.Closed() {
+				x.access.Unlock()
+				return
+			}
+			if x.binding != s {
+				x.access.Unlock()
+				w.emitResponseEnd(s, x)
+				return
+			}
+			if s.phase == outputStarting && x.requestErr != nil {
+				x.responseWake.Wait()
+				continue
+			}
+			if len(x.response) != 0 {
+				break
+			}
+			if x.responseErr != nil && s.phase == outputOpen {
+				c.Lock()
+				s.closeLocked(x, x.responseErr == io.ErrClosedPipe, true)
+				c.Unlock()
+				x.access.Unlock()
+				w.emitResponseEnd(s, x)
+				return
+			}
 			x.responseWake.Wait()
-		}
-		if x.binding != s {
-			x.access.Unlock()
-			return
-		}
-		if len(x.response) == 0 {
-			failed := x.responseErr == io.ErrClosedPipe
-			x.access.Unlock()
-			s.closeOwned(failed, x)
-			continue
 		}
 		x.access.Unlock()
 
 		gate.Lock()
+		frames := c.takePending()
 		x.access.Lock()
-		if x.binding != s || c.Closed() {
-			x.access.Unlock()
-			gate.Unlock()
-			return
-		}
-		if x.responseErr == io.ErrClosedPipe {
-			x.access.Unlock()
-			gate.Unlock()
-			continue
-		}
 		var data buf.MultiBuffer
-		if s.transferType == protocol.TransferTypeStream {
-			for n := 0; n < 4 && !x.response.IsEmpty(); n++ {
-				var chunk buf.MultiBuffer
-				x.response, chunk = buf.SplitSize(x.response, 8*1024)
-				data = append(data, chunk...)
+		if !c.Closed() && x.binding == s &&
+			(s.phase == outputOpen || s.phase == outputStarting) &&
+			(s.phase != outputStarting || x.requestErr == nil) && len(x.response) != 0 {
+			if s.transferType == protocol.TransferTypeStream {
+				for n := 0; n < 4 && !x.response.IsEmpty(); n++ {
+					var chunk buf.MultiBuffer
+					x.response, chunk = buf.SplitSize(x.response, 8*1024)
+					data = append(data, chunk...)
+				}
+			} else {
+				n := min(4, len(x.response))
+				data, x.response = x.response[:n:n], x.response[n:]
 			}
-		} else {
-			n := min(4, len(x.response))
-			data = x.response[:n:n]
-			x.response = x.response[n:]
-		}
-		if len(x.response) == 0 {
-			x.response = nil
-		}
-		if x.Status == Initializing && x.responseErr != nil && len(x.response) == 0 {
-			x.notify()
-		} else {
+			if len(x.response) == 0 || s.transferType == protocol.TransferTypeStream && x.response.IsEmpty() {
+				x.response = buf.ReleaseMulti(x.response)
+				x.response = nil
+			}
 			x.responseWake.Broadcast()
 		}
 		x.access.Unlock()
-		writer := NewResponseWriter(s.ID, (*lockedBufferedWriter)(gate), s.transferType)
-		err := writer.WriteMultiBuffer(data)
-		gate.Unlock()
-		if err != nil {
-			c.closeCause(err)
+		var err error
+		if len(data) != 0 {
+			var own buf.MultiBuffer
+			own, err = s.encodeBatch(&data)
+			buf.ReleaseMulti(data)
+			frames = append(frames, own...)
+		}
+		if c.writeAndUnlock(frames, err) != nil {
 			return
 		}
 	}
+}
+
+// Gate -> prefix cut -> exact known-END retirement preserves every older
+// control before replacement output; stale own END still flushes its prefix.
+func (w *ServerWorker) emitResponseEnd(s *Session, x *inboundFlow) {
+	c := s.parent
+	gate := c.link.Writer.(*buf.BufferedWriter)
+	gate.Lock()
+	frames := c.takePending()
+	c.Lock()
+	live := !c.Closed() && s.flow == x && s.phase == outputClosing && c.sessions[s.ID] == s
+	failed := s.endFailed
+	if live {
+		delete(c.sessions, s.ID)
+	}
+	c.Unlock()
+	if live {
+		frames = append(frames, endFrame(s.ID, failed)...)
+	}
+	c.writeAndUnlock(frames, nil)
 }
 
 func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader) error {
@@ -287,6 +300,7 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 	if err != nil {
 		return err
 	}
+	ctx = session.ContextWithTimeoutOnly(ctx, true)
 	XUDPManager.Lock()
 	x := XUDPManager.Map[meta.GlobalID]
 	fresh := x == nil
@@ -294,38 +308,47 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 		x = newInboundFlow(ctx, meta.GlobalID)
 		XUDPManager.Map[meta.GlobalID] = x
 	}
-	if !fresh && x.Status == Initializing {
+	x.access.Lock()
+	previous := x.binding
+	if previous != nil {
+		previous.parent.RLock()
+		starting := previous.phase == outputStarting
+		previous.parent.RUnlock()
+		if starting {
+			x.access.Unlock()
+			XUDPManager.Unlock()
+			buf.ReleaseMulti(data)
+			errors.LogWarningInner(ctx, errors.New("conflict"), "XUDP hit ", meta.GlobalID)
+			return nil
+		}
+	}
+	s := &Session{parent: w.carrier, ID: meta.SessionID, phase: outputStarting,
+		transferType: protocol.TransferTypePacket, flow: x}
+	if previous != nil {
+		previous.parent.Lock()
+		previous.closeLocked(x, true, true)
+		previous.parent.Unlock()
+	}
+	w.Lock()
+	if w.Closed() || w.sessions[s.ID] != nil {
+		w.Unlock()
+		x.access.Unlock()
+		if fresh {
+			delete(XUDPManager.Map, meta.GlobalID)
+		}
 		XUDPManager.Unlock()
 		buf.ReleaseMulti(data)
-		errors.LogWarningInner(ctx, errors.New("conflict"), "XUDP hit ", meta.GlobalID)
-		return nil
+		return errors.New("failed to add new session")
 	}
-	x.access.Lock()
-	x.Status = Initializing
-	previous := x.binding
+	w.sessions[s.ID] = s // custody precedes first-packet admission, not activity
+	x.binding, x.Expire = s, time.Time{}
+	x.notify()
+	w.Unlock()
 	x.access.Unlock()
 	XUDPManager.Unlock()
-	if previous != nil {
-		previous.Close()
-	}
-	s := &Session{
-		parent: w.sessionManager, ID: meta.SessionID, transferType: protocol.TransferTypePacket,
-		flow: x, sender: w.carrier,
-	}
-	stopProvisional := context.AfterFunc(w.carrier.ctx, func() { s.Close() })
-	defer stopProvisional()
-	ctx = session.ContextWithTimeoutOnly(ctx, true)
+	go w.emitResponse(s, x)
 	dest := meta.Target
 	for {
-		w.sessionManager.Lock()
-		XUDPManager.Lock()
-		x.access.Lock()
-		if !s.closed && XUDPManager.Map[meta.GlobalID] == x {
-			x.publishBinding(s)
-		}
-		x.access.Unlock()
-		XUDPManager.Unlock()
-		w.sessionManager.Unlock()
 		if fresh {
 			go w.dispatchFlow(ctx, dest, x)
 		}
@@ -334,64 +357,66 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 			break
 		}
 
-		w.sessionManager.Lock()
-		if s.closed || w.Closed() {
-			XUDPManager.Lock()
-			x.access.Lock()
-			if XUDPManager.Map[meta.GlobalID] == x && x.Status == Initializing {
-				x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
-			}
-			x.notify()
-			x.access.Unlock()
-			XUDPManager.Unlock()
-			w.sessionManager.Unlock()
-			buf.ReleaseMulti(data)
-			s.Close()
-			return nil
-		}
 		replacement := newInboundFlow(ctx, meta.GlobalID)
+		replacement.binding = s
 		XUDPManager.Lock()
 		x.access.Lock()
-		if x.binding == s {
-			x.binding = nil
-			x.notify()
+		w.Lock()
+		live := !w.Closed() && s.phase == outputStarting && s.flow == x &&
+			w.sessions[s.ID] == s && x.binding == s
+		if !live {
+			if s.flow == x {
+				s.closeLocked(x, false, false)
+			}
+			w.Unlock()
+			x.access.Unlock()
+			XUDPManager.Unlock()
+			buf.ReleaseMulti(data)
+			s.abort()
+			return nil
 		}
+		x.binding, x.Expire = nil, time.Now().Add(time.Minute)
+		x.notify()
 		current := XUDPManager.Map[meta.GlobalID]
 		replaced := current == x || current == nil
 		if replaced {
-			if x.Status == Initializing {
-				x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
-			}
+			x.responseErr = io.ErrClosedPipe
 			XUDPManager.Map[meta.GlobalID] = replacement
-			s.flow = replacement
+			s.flow = replacement // same Starting identity, same offered packet
 		}
+		w.Unlock()
 		x.access.Unlock()
 		XUDPManager.Unlock()
-		w.sessionManager.Unlock()
 		x.expire()
 		if !replaced {
 			break
 		}
+		go w.emitResponse(s, replacement)
 		x, fresh = replacement, true
 	}
 	if err != nil {
 		buf.ReleaseMulti(data)
 	}
-	w.sessionManager.Lock()
 	XUDPManager.Lock()
 	x.access.Lock()
-	admitted := XUDPManager.Map[meta.GlobalID] == x && x.binding == s && w.sessionManager.add(s)
+	w.Lock()
+	admitted := !w.Closed() && XUDPManager.Map[meta.GlobalID] == x && x.binding == s &&
+		w.sessions[s.ID] == s && s.flow == x && s.phase == outputStarting
 	if admitted {
-		x.Status = Active
-	} else if XUDPManager.Map[meta.GlobalID] == x && x.Status == Initializing {
-		x.Expire, x.Status = time.Now().Add(time.Minute), Expiring
+		w.count++
+		if x.responseErr == nil || len(x.response) != 0 {
+			s.phase = outputOpen
+			w.active++
+		} else {
+			s.closeLocked(x, x.responseErr == io.ErrClosedPipe, true)
+		}
+		x.notify()
 	}
-	x.notify()
+	w.Unlock()
 	x.access.Unlock()
 	XUDPManager.Unlock()
-	w.sessionManager.Unlock()
 	if !admitted {
-		s.Close()
+		s.abort()
 		return errors.New("failed to add new session")
 	}
 	return nil

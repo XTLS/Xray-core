@@ -98,7 +98,6 @@ type ServerSession struct {
 	requestBodyIV   [16]byte
 	responseBodyKey [16]byte
 	responseBodyIV  [16]byte
-	responseWriter  io.Writer
 	responseHeader  byte
 }
 
@@ -311,37 +310,17 @@ func (s *ServerSession) DecodeRequestBody(request *protocol.RequestHeader, reade
 
 // EncodeResponseHeader writes encoded response header into the given writer.
 func (s *ServerSession) EncodeResponseHeader(header *protocol.ResponseHeader, writer io.Writer) {
-	var encryptionWriter io.Writer
 	BodyKey := sha256.Sum256(s.requestBodyKey[:])
 	copy(s.responseBodyKey[:], BodyKey[:16])
 	BodyIV := sha256.Sum256(s.requestBodyIV[:])
 	copy(s.responseBodyIV[:], BodyIV[:16])
-
-	aesStream := crypto.NewAesEncryptionStream(s.responseBodyKey[:], s.responseBodyIV[:])
-	encryptionWriter = crypto.NewCryptionWriter(aesStream, writer)
-	s.responseWriter = encryptionWriter
-
-	aeadEncryptedHeaderBuffer := bytes.NewBuffer(nil)
-	encryptionWriter = aeadEncryptedHeaderBuffer
-
-	common.Must2(encryptionWriter.Write([]byte{s.responseHeader, byte(header.Option)}))
-	err := MarshalCommand(header.Command, encryptionWriter)
-	if err != nil {
-		common.Must2(encryptionWriter.Write([]byte{0x00, 0x00}))
-	}
 
 	aeadResponseHeaderLengthEncryptionKey := vmessaead.KDF16(s.responseBodyKey[:], vmessaead.KDFSaltConstAEADRespHeaderLenKey)
 	aeadResponseHeaderLengthEncryptionIV := vmessaead.KDF(s.responseBodyIV[:], vmessaead.KDFSaltConstAEADRespHeaderLenIV)[:12]
 
 	aeadResponseHeaderLengthEncryptionAEAD := crypto.NewAesGcm(aeadResponseHeaderLengthEncryptionKey)
 
-	aeadResponseHeaderLengthEncryptionBuffer := bytes.NewBuffer(nil)
-
-	decryptedResponseHeaderLengthBinaryDeserializeBuffer := uint16(aeadEncryptedHeaderBuffer.Len())
-
-	common.Must(binary.Write(aeadResponseHeaderLengthEncryptionBuffer, binary.BigEndian, decryptedResponseHeaderLengthBinaryDeserializeBuffer))
-
-	AEADEncryptedLength := aeadResponseHeaderLengthEncryptionAEAD.Seal(nil, aeadResponseHeaderLengthEncryptionIV, aeadResponseHeaderLengthEncryptionBuffer.Bytes(), nil)
+	AEADEncryptedLength := aeadResponseHeaderLengthEncryptionAEAD.Seal(nil, aeadResponseHeaderLengthEncryptionIV, []byte{0, 4}, nil)
 	common.Must2(io.Copy(writer, bytes.NewReader(AEADEncryptedLength)))
 
 	aeadResponseHeaderPayloadEncryptionKey := vmessaead.KDF16(s.responseBodyKey[:], vmessaead.KDFSaltConstAEADRespHeaderPayloadKey)
@@ -349,7 +328,7 @@ func (s *ServerSession) EncodeResponseHeader(header *protocol.ResponseHeader, wr
 
 	aeadResponseHeaderPayloadEncryptionAEAD := crypto.NewAesGcm(aeadResponseHeaderPayloadEncryptionKey)
 
-	aeadEncryptedHeaderPayload := aeadResponseHeaderPayloadEncryptionAEAD.Seal(nil, aeadResponseHeaderPayloadEncryptionIV, aeadEncryptedHeaderBuffer.Bytes(), nil)
+	aeadEncryptedHeaderPayload := aeadResponseHeaderPayloadEncryptionAEAD.Seal(nil, aeadResponseHeaderPayloadEncryptionIV, []byte{s.responseHeader, byte(header.Option), 0, 0}, nil)
 	common.Must2(io.Copy(writer, bytes.NewReader(aeadEncryptedHeaderPayload)))
 }
 

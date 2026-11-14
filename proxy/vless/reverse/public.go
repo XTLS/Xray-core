@@ -5,7 +5,6 @@ import (
 	"io"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -15,7 +14,6 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/extension"
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
@@ -26,12 +24,13 @@ import (
 type PublicEndpoint struct {
 	observer features.Feature
 	tag      string
-	picker   *StaticPicker
+	closed   bool
+	access   sync.Mutex
+	workers  []*PublicWorker
 }
 
 func NewPublicEndpoint(tag string, observer features.Feature) *PublicEndpoint {
-	picker := NewStaticPicker()
-	return &PublicEndpoint{tag: tag, observer: observer, picker: picker}
+	return &PublicEndpoint{tag: tag, observer: observer}
 }
 
 func (p *PublicEndpoint) Tag() string                          { return p.tag }
@@ -46,27 +45,37 @@ func (p *PublicEndpoint) Dispatch(ctx context.Context, link *transport.Link) {
 }
 
 func (p *PublicEndpoint) Accept(ctx context.Context, link *transport.Link) error {
-	client := multiplex.NewClientWorker(*link, multiplex.ClientStrategy{})
-	stop := context.AfterFunc(ctx, func() { client.Close() })
-	defer stop()
-	worker, err := NewPublicWorker(client)
-	if err != nil {
+	client := multiplex.NewClientWorker(ctx, *link, multiplex.ClientStrategy{})
+	target := net.UDPDestination(net.DomainAddress(internalDomain), 0)
+	controlCtx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{Target: target}})
+	s := multiplex.NewSession(controlCtx, &transport.Link{Writer: buf.Discard})
+	if !client.TryAdmit(controlCtx, s) {
 		client.Close()
-		return errors.New("failed to create public worker").Base(err)
+		return errors.New("failed to admit reverse control session")
+	}
+	worker := &PublicWorker{
+		client: client,
+		timer:  signal.CancelAfterInactivity(context.Background(), func() { client.Close() }, 24*time.Hour),
 	}
 	defer func() {
-		p.picker.RemoveWorker(worker)
 		worker.Close()
+		p.access.Lock()
+		p.workers = slices.DeleteFunc(p.workers, func(current *PublicWorker) bool { return current == worker })
+		p.access.Unlock()
 	}()
-	p.picker.AddWorker(worker)
+	p.access.Lock()
+	if p.closed || ctx.Err() != nil || client.Closed() {
+		p.access.Unlock()
+		return client.Err()
+	}
+	p.workers = append(p.workers, worker)
+	p.access.Unlock()
 	if observer, ok := p.observer.(extension.BurstObservatory); ok {
 		go observer.Check([]string{p.tag})
 	}
-	select {
-	case <-ctx.Done():
-	case <-client.WaitClosed():
-	}
-	return nil
+	go p.heartbeat(worker, s)
+	<-client.WaitClosed()
+	return client.Err()
 }
 
 func (p *PublicEndpoint) Start() error {
@@ -74,7 +83,14 @@ func (p *PublicEndpoint) Start() error {
 }
 
 func (p *PublicEndpoint) Close() error {
-	p.picker.Close()
+	p.access.Lock()
+	p.closed = true
+	workers := p.workers
+	p.workers = nil
+	p.access.Unlock()
+	for _, worker := range workers {
+		worker.Close()
+	}
 	return nil
 }
 
@@ -92,120 +108,47 @@ func (p *PublicEndpoint) HandleConnection(ctx context.Context, link *transport.L
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
 
-	return multiplex.Dispatch(ctx, link, true, p.picker.Admit)
+	return multiplex.Dispatch(ctx, link, p.Admit)
 }
 
-type StaticPicker struct {
-	closed  bool
-	access  sync.Mutex
-	workers []*PublicWorker
-}
-
-func NewStaticPicker() *StaticPicker {
-	return &StaticPicker{}
-}
-
-func (p *StaticPicker) Admit(ctx context.Context, link *transport.Link) (*multiplex.Session, error) {
+func (p *PublicEndpoint) Admit(ctx context.Context, s *multiplex.Session) error {
 	p.access.Lock()
 	defer p.access.Unlock()
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return err
 	}
 	if p.closed || len(p.workers) == 0 {
-		return nil, errors.New("empty worker list")
+		return errors.New("empty worker list")
 	}
 
 	// Failed reservations move out of this admission's candidate prefix.
 	for remaining := len(p.workers); remaining > 0; {
-		best := 0
-		draining, active := p.workers[0].draining.Load(), p.workers[0].client.ActiveConnections()
-		for i := 1; i < remaining; i++ {
+		best, state := -1, Control_DRAIN
+		var active uint32
+		for i := 0; i < remaining; i++ {
 			w := p.workers[i]
-			d, a := w.draining.Load(), w.client.ActiveConnections()
-			if (draining && !d) || (draining == d && a < active) {
-				best, draining, active = i, d, a
+			a := w.client.ActiveConnections()
+			if best == -1 || w.state < state || (w.state == state && a < active) {
+				best, state, active = i, w.state, a
 			}
 		}
-		if s := p.workers[best].client.TryAdmit(ctx, link); s != nil {
-			return s, nil
+		if p.workers[best].client.TryAdmit(ctx, s) {
+			return nil
 		}
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return err
 		}
 		remaining--
 		p.workers[best], p.workers[remaining] = p.workers[remaining], p.workers[best]
 	}
 
-	return nil, errors.New("no multiplex client worker available")
-}
-
-func (p *StaticPicker) AddWorker(worker *PublicWorker) {
-	p.access.Lock()
-	if p.closed {
-		p.access.Unlock()
-		worker.Close()
-		return
-	}
-	p.workers = append(p.workers, worker)
-	p.access.Unlock()
-}
-
-func (p *StaticPicker) RemoveWorker(worker *PublicWorker) {
-	p.access.Lock()
-	defer p.access.Unlock()
-	p.workers = slices.DeleteFunc(p.workers, func(current *PublicWorker) bool { return current == worker })
-}
-
-func (p *StaticPicker) Close() {
-	p.access.Lock()
-	p.closed = true
-	workers := p.workers
-	p.workers = nil
-	p.access.Unlock()
-	for _, worker := range workers {
-		worker.Close()
-	}
+	return errors.New("no multiplex client worker available")
 }
 
 type PublicWorker struct {
-	client   *multiplex.ClientWorker
-	draining atomic.Bool
-	timer    *signal.ActivityTimer
-}
-
-func NewPublicWorker(client *multiplex.ClientWorker) (*PublicWorker, error) {
-	w := &PublicWorker{
-		client: client,
-		timer:  signal.CancelAfterInactivity(context.Background(), func() { client.Close() }, 24*time.Hour),
-	}
-	r := &controlReader{worker: w, ready: done.New(), stopped: done.New(), first: true}
-	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
-		Target: net.UDPDestination(net.DomainAddress(internalDomain), 0),
-	}})
-	err := multiplex.Dispatch(ctx, &transport.Link{Reader: r, Writer: buf.Discard}, false, func(ctx context.Context, link *transport.Link) (*multiplex.Session, error) {
-		if s := client.TryAdmit(ctx, link); s != nil {
-			return s, nil
-		}
-		return nil, errors.New("failed to admit reverse control session")
-	})
-	if err != nil {
-		w.Close()
-		return nil, err
-	}
-	select {
-	case <-r.ready.Wait():
-	case <-r.stopped.Wait():
-	case <-client.WaitClosed():
-	}
-	select {
-	case <-r.ready.Wait():
-		if !client.Closed() {
-			return w, nil
-		}
-	default:
-	}
-	w.Close()
-	return nil, errors.New("failed to initialize reverse control session")
+	client *multiplex.ClientWorker
+	state  Control_State // guarded by PublicEndpoint.access; zero is ACTIVE
+	timer  *signal.ActivityTimer
 }
 
 func (w *PublicWorker) Close() {
@@ -213,65 +156,59 @@ func (w *PublicWorker) Close() {
 	w.timer.SetTimeout(0)
 }
 
-type controlReader struct {
-	worker  *PublicWorker
-	ready   *done.Instance
-	stopped *done.Instance
-	first   bool
-	counter uint32
-}
-
-func (r *controlReader) Interrupt() { r.stopped.Close() }
-
-func (r *controlReader) ReadMultiBufferTimeout(time.Duration) (buf.MultiBuffer, error) {
-	return r.ReadMultiBuffer()
-}
-
-func (r *controlReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if !r.first {
-		// fetchInput enters here only after the preceding encoded write returns.
-		r.ready.Close()
+func (p *PublicEndpoint) heartbeat(w *PublicWorker, s *multiplex.Session) {
+	var err error
+	defer func() { s.CloseWithError(err) }()
+	err = w.writeControl(s, Control_ACTIVE)
+	if err != nil {
+		w.client.Close()
+		return
 	}
+	timer := time.NewTimer(2 * time.Second)
+	defer timer.Stop()
+	counter := uint32(1)
 	for {
-		if r.stopped.Done() || r.worker.Closed() {
-			return nil, io.ErrClosedPipe
+		select {
+		case <-timer.C:
+		case <-s.WaitClosed():
+			err = io.ErrClosedPipe
+			return
+		case <-w.client.WaitClosed():
+			err = io.ErrClosedPipe
+			return
 		}
-		if r.worker.draining.Load() {
-			return nil, io.EOF
+		select {
+		case <-s.WaitClosed():
+			err = io.ErrClosedPipe
+			return
+		default:
 		}
-		if !r.first {
-			timer := time.NewTimer(2 * time.Second)
-			select {
-			case <-timer.C:
-			case <-r.stopped.Wait():
-				timer.Stop()
-				return nil, io.ErrClosedPipe
-			case <-r.worker.client.WaitClosed():
-				timer.Stop()
-				return nil, io.ErrClosedPipe
+		if w.client.Closed() {
+			err = io.ErrClosedPipe
+			return
+		}
+		counter = (counter + 1) % 5
+		if w.client.TotalConnections() > 256 {
+			p.access.Lock()
+			w.state = Control_DRAIN
+			p.access.Unlock()
+			err = w.writeControl(s, Control_DRAIN)
+			return
+		}
+		if counter == 1 {
+			if err = w.writeControl(s, Control_ACTIVE); err != nil {
+				return
 			}
 		}
-		if r.stopped.Done() || r.worker.Closed() {
-			return nil, io.ErrClosedPipe
-		}
-		r.first = false
-		msg := &Control{}
-		msg.FillInRandom()
-		if r.worker.client.TotalConnections() > 256 {
-			r.worker.draining.Store(true)
-			msg.State = Control_DRAIN
-		}
-
-		r.counter = (r.counter + 1) % 5
-		if r.worker.draining.Load() || r.counter == 1 {
-			b, err := proto.Marshal(msg)
-			common.Must(err)
-			r.worker.timer.Update()
-			return buf.MergeBytes(nil, b), nil
-		}
+		timer.Reset(2 * time.Second)
 	}
 }
 
-func (w *PublicWorker) Closed() bool {
-	return w.client.Closed()
+func (w *PublicWorker) writeControl(s *multiplex.Session, state Control_State) error {
+	msg := &Control{State: state}
+	msg.FillInRandom()
+	b, err := proto.Marshal(msg)
+	common.Must(err)
+	w.timer.Update()
+	return s.WriteMultiBuffer(buf.MergeBytes(nil, b))
 }

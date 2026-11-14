@@ -11,14 +11,13 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/xudp"
+	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
 )
 
-// Client owns the VLESS stream pools. A nil configuration disables multiplexing.
+// Client owns the VLESS stream pools.
 type Client struct {
 	config *vless.Multiplex
 	tcp    *Pool
@@ -44,15 +43,6 @@ func NewClient(ctx context.Context, config *vless.Multiplex, network string, ope
 		c.udp = pool(config.XudpConcurrency)
 	}
 	return c
-}
-
-func (c *Client) Close() {
-	if c.tcp != nil {
-		c.tcp.Close()
-	}
-	if c.udp != nil {
-		c.udp.Close()
-	}
 }
 
 func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, error) {
@@ -81,26 +71,24 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 	if pool == nil {
 		return false, nil
 	}
-	return true, Dispatch(ctx, link, true, pool.Admit)
+	return true, Dispatch(ctx, link, pool.Admit)
 }
 
 // Dispatch starts the reserved child after pool or Reverse admission releases its lock.
-func Dispatch(ctx context.Context, link *transport.Link, wait bool, admit func(context.Context, *transport.Link) (*Session, error)) error {
-	s, err := admit(ctx, link)
-	if err != nil {
+func Dispatch(ctx context.Context, link *transport.Link, admit func(context.Context, *Session) error) error {
+	s := NewSession(ctx, link)
+	if err := admit(ctx, s); err != nil {
 		return err
 	}
-	go fetchInput(ctx, s, s.sender)
-	if wait {
-		callerDone := ctx.Done()
-		if session.TimeoutOnlyFromContext(ctx) {
-			callerDone = nil
-		}
-		select {
-		case <-callerDone:
-			s.Close()
-		case <-s.done.Wait():
-		}
+	go fetchInput(ctx, s)
+	callerDone := ctx.Done()
+	if session.TimeoutOnlyFromContext(ctx) {
+		callerDone = nil
+	}
+	select {
+	case <-callerDone:
+		s.Close()
+	case <-s.done.Wait():
 	}
 	return nil
 }
@@ -108,7 +96,6 @@ func Dispatch(ctx context.Context, link *transport.Link, wait bool, admit func(c
 // Pool serializes unpublished opening with cancelable admission.
 type Pool struct {
 	ctx      context.Context
-	cancel   context.CancelFunc
 	access   sync.Mutex
 	opening  chan struct{}
 	workers  []*ClientWorker
@@ -116,50 +103,44 @@ type Pool struct {
 	open     func(context.Context) (context.Context, *transport.Link, error)
 }
 
-// NewPool requires open to return a context derived from its input context.
+// NewPool borrows ctx; open must return a context derived from its input context.
 func NewPool(ctx context.Context, strategy ClientStrategy, open func(context.Context) (context.Context, *transport.Link, error)) *Pool {
-	ctx, cancel := context.WithCancel(ctx)
-	p := &Pool{ctx: ctx, cancel: cancel, opening: make(chan struct{}, 1), strategy: strategy, open: open}
+	p := &Pool{ctx: ctx, opening: make(chan struct{}, 1), strategy: strategy, open: open}
 	p.opening <- struct{}{}
 	return p
 }
 
-func (p *Pool) Close() error {
-	p.cancel()
-	return nil
-}
-
-func (p *Pool) tryAdmit(ctx context.Context, link *transport.Link) (*Session, error) {
+func (p *Pool) tryAdmit(ctx context.Context, s *Session) (bool, error) {
 	p.access.Lock()
 	defer p.access.Unlock()
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return false, err
 	}
 	if p.ctx.Err() != nil {
-		return nil, io.ErrClosedPipe
+		return false, io.ErrClosedPipe
 	}
 	for _, worker := range p.workers {
-		if s := worker.TryAdmit(ctx, link); s != nil {
-			return s, nil
+		if worker.TryAdmit(ctx, s) {
+			return true, nil
 		}
 	}
-	return nil, nil
+	return false, nil
 }
 
-func (p *Pool) Admit(ctx context.Context, link *transport.Link) (*Session, error) {
-	if s, err := p.tryAdmit(ctx, link); s != nil || err != nil {
-		return s, err
+func (p *Pool) Admit(ctx context.Context, s *Session) error {
+	if ok, err := p.tryAdmit(ctx, s); ok || err != nil {
+		return err
 	}
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return ctx.Err()
 	case <-p.ctx.Done():
-		return nil, io.ErrClosedPipe
+		return io.ErrClosedPipe
 	case <-p.opening:
 	}
 	defer func() { p.opening <- struct{}{} }()
-	if s, err := p.tryAdmit(ctx, link); s != nil || err != nil {
-		return s, err
+	if ok, err := p.tryAdmit(ctx, s); ok || err != nil {
+		return err
 	}
 	opening, cancel := context.WithCancel(p.ctx)
 	stopCaller := context.AfterFunc(ctx, cancel)
@@ -177,9 +158,9 @@ func (p *Pool) Admit(ctx context.Context, link *transport.Link) (*Session, error
 			common.Interrupt(physicalLink.Reader)
 			common.Interrupt(physicalLink.Writer)
 		}
-		return nil, err
+		return err
 	}
-	worker := NewClientWorker(*physicalLink, p.strategy)
+	worker := NewClientWorker(physicalCtx, *physicalLink, p.strategy)
 	p.access.Lock()
 	err = ctx.Err()
 	if !stopCaller() && err == nil {
@@ -188,10 +169,8 @@ func (p *Pool) Admit(ctx context.Context, link *transport.Link) (*Session, error
 	if p.ctx.Err() != nil {
 		err = io.ErrClosedPipe
 	}
-	var s *Session
 	if err == nil {
-		s = worker.TryAdmit(ctx, link)
-		if s == nil {
+		if !worker.TryAdmit(ctx, s) {
 			err = ctx.Err()
 			if err == nil {
 				err = errors.New("unable to admit multiplex child")
@@ -204,17 +183,15 @@ func (p *Pool) Admit(ctx context.Context, link *transport.Link) (*Session, error
 	if err != nil {
 		cancel()
 		worker.Close()
-		return nil, err
+		return err
 	}
-	stopPhysical := context.AfterFunc(physicalCtx, func() { worker.Close() })
 	context.AfterFunc(worker.ctx, func() {
-		stopPhysical()
 		cancel()
 		p.access.Lock()
 		p.workers = slices.DeleteFunc(p.workers, func(current *ClientWorker) bool { return current == worker })
 		p.access.Unlock()
 	})
-	return s, nil
+	return nil
 }
 
 type ClientStrategy struct {
@@ -227,63 +204,48 @@ type ClientWorker struct {
 	strategy ClientStrategy
 }
 
-func NewClientWorker(stream transport.Link, strategy ClientStrategy) *ClientWorker {
-	c := &ClientWorker{carrier: newCarrier(stream, 16*time.Second, true), strategy: strategy}
+func NewClientWorker(ctx context.Context, stream transport.Link, strategy ClientStrategy) *ClientWorker {
+	c := &ClientWorker{carrier: newCarrier(ctx, stream, 16*time.Second, true, 64*1024), strategy: strategy}
 	go c.run(context.Background(), nil)
 	return c
 }
 
-func (c *ClientWorker) TotalConnections() uint32 { return uint32(c.sessionManager.Count()) }
+func (c *ClientWorker) TotalConnections() uint32 {
+	c.RLock()
+	defer c.RUnlock()
+	return uint32(c.count)
+}
 
-func writeFirstPayload(reader buf.Reader, writer *Writer) error {
-	err := buf.CopyOnceTimeout(reader, writer, time.Millisecond*100)
+func writeFirstPayload(s *Session) error {
+	err := buf.CopyOnceTimeout(s.input, s, time.Millisecond*100)
 	if err == buf.ErrNotTimeoutReader || err == buf.ErrReadTimeout {
-		return writer.WriteMultiBuffer(buf.MultiBuffer{})
+		return s.WriteMultiBuffer(nil)
 	}
-
 	return err
 }
 
-func fetchInput(ctx context.Context, s *Session, output buf.Writer) {
-	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds)-1]
-	var inbound *session.Inbound
-	if session.IsReverseMultiplexFromContext(ctx) {
-		inbound = session.InboundFromContext(ctx)
-	}
-	writer := NewWriter(s.ID, ob.Target, output, s.transferType, xudp.GetGlobalID(ctx), inbound)
-	defer s.Close()
-	defer writer.Close()
-
-	errors.LogInfo(ctx, "dispatching request to ", ob.Target)
-	if err := writeFirstPayload(s.input, writer); err != nil {
+func fetchInput(ctx context.Context, s *Session) {
+	var err error
+	defer func() { s.CloseWithError(err) }()
+	errors.LogInfo(ctx, "dispatching request to ", s.target)
+	if err = writeFirstPayload(s); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to write first payload")
-		writer.hasError = true
 		return
 	}
-
-	if err := buf.Copy(s.input, writer); err != nil {
+	if err = buf.Copy(s.input, s); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to fetch all input")
-		writer.hasError = true
-		return
 	}
 }
 
-// TryAdmit reserves a child without starting input or invoking foreign cleanup.
-func (m *ClientWorker) TryAdmit(ctx context.Context, link *transport.Link) *Session {
-	m.sessionManager.Lock()
-	defer m.sessionManager.Unlock()
-	if ctx.Err() != nil || m.Closed() {
-		return nil
+// TryAdmit publishes this prepared child without input or foreign cleanup.
+func (m *ClientWorker) TryAdmit(ctx context.Context, s *Session) bool {
+	m.Lock()
+	defer m.Unlock()
+	if ctx.Err() != nil || m.Closed() || m.count == 65535 ||
+		(m.strategy.MaxConcurrency > 0 && m.active >= int(m.strategy.MaxConcurrency)) ||
+		(m.strategy.MaxConnection > 0 && uint32(m.count) >= m.strategy.MaxConnection) {
+		return false
 	}
-	transferType := protocol.TransferTypeStream
-	outbounds := session.OutboundsFromContext(ctx)
-	if outbounds[len(outbounds)-1].Target.Network == net.Network_UDP {
-		transferType = protocol.TransferTypePacket
-	}
-	s := m.sessionManager.allocate(&m.strategy, link.Reader, link.Writer, transferType)
-	if s != nil {
-		s.sender = m.carrier
-	}
-	return s
+	s.parent, s.ID, s.phase, s.done = m.carrier, m.count+1, outputOpen, done.New()
+	return m.admitLocked(s)
 }

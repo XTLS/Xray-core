@@ -17,6 +17,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
@@ -188,52 +189,60 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	return nil
 }
 
-// multiplexBody guards cancellation at the borrowed codec boundary.
-type multiplexBody struct {
-	ctx    context.Context
-	reader buf.Reader
-	writer buf.Writer
+// codecBody guards decoded input and owns raw interruption only when supplied.
+type codecBody struct {
+	ctx        context.Context
+	reader     buf.Reader
+	connection net.Conn
+	stopped    atomic.Bool
 }
 
-func (b *multiplexBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
+func (b *codecBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if err := b.ctx.Err(); err != nil {
 		return nil, err
+	}
+	if b.stopped.Load() {
+		return nil, io.ErrClosedPipe
 	}
 	mb, err := b.reader.ReadMultiBuffer()
 	if canceled := b.ctx.Err(); canceled != nil {
 		buf.ReleaseMulti(mb)
 		return nil, canceled
 	}
+	if b.stopped.Load() {
+		buf.ReleaseMulti(mb)
+		return nil, io.ErrClosedPipe
+	}
 	return mb, err
 }
 
-func (b *multiplexBody) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	if err := b.ctx.Err(); err != nil {
-		buf.ReleaseMulti(mb)
-		return err
+func (b *codecBody) Interrupt() {
+	b.stopped.Store(true)
+	if b.connection != nil {
+		common.Interrupt(b.connection)
 	}
-	return b.writer.WriteMultiBuffer(mb)
 }
 
-// ordinaryResponse owns response nonce serialization, finalization and the first
-// terminal error. Interrupt never waits for the writer's mutex.
+// ordinaryResponse serializes codec writes and owns checked finalization.
+// Interrupt never waits for its mutex.
 type ordinaryResponse struct {
-	ctx          context.Context
-	connection   net.Conn
-	body         buf.Writer
-	output       *buf.BufferedWriter
-	terminate    bool
-	mu           sync.Mutex
-	closed       bool
-	wrote        bool
-	interrupted  atomic.Bool
-	readTeardown atomic.Bool
-	err          atomic.Pointer[error]
+	sync.Mutex
+	ctx         context.Context
+	input       *codecBody
+	body        buf.Writer
+	output      *buf.BufferedWriter
+	terminate   bool
+	closed      bool
+	wrote       bool
+	interrupted atomic.Bool
+	err         atomic.Pointer[error]
+	done        *done.Instance
 }
 
 func (w *ordinaryResponse) remember(err error) error {
 	if err != nil {
 		w.err.CompareAndSwap(nil, &err)
+		w.done.Close()
 	}
 	return err
 }
@@ -246,8 +255,16 @@ func (w *ordinaryResponse) rememberIO(err error) error {
 }
 
 func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	if mb.IsEmpty() {
+		buf.ReleaseMulti(mb)
+		return nil
+	}
+	w.Lock()
+	defer w.Unlock()
+	if terminal := w.err.Load(); terminal != nil {
+		buf.ReleaseMulti(mb)
+		return *terminal
+	}
 	if err := w.ctx.Err(); err != nil {
 		buf.ReleaseMulti(mb)
 		return w.remember(err)
@@ -255,10 +272,6 @@ func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if w.closed || w.interrupted.Load() {
 		buf.ReleaseMulti(mb)
 		return io.ErrClosedPipe
-	}
-	if mb.IsEmpty() {
-		buf.ReleaseMulti(mb)
-		return nil
 	}
 	if err := w.body.WriteMultiBuffer(mb); err != nil {
 		return w.rememberIO(err)
@@ -271,15 +284,9 @@ func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 func (w *ordinaryResponse) Close() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.closed {
-		if terminal := w.err.Load(); terminal != nil {
-			return *terminal
-		}
-		return nil
-	}
-	w.closed = true
+	defer w.done.Close()
+	w.Lock()
+	defer w.Unlock()
 	if terminal := w.err.Load(); terminal != nil {
 		return *terminal
 	}
@@ -289,6 +296,10 @@ func (w *ordinaryResponse) Close() error {
 	if w.interrupted.Load() {
 		return io.ErrClosedPipe
 	}
+	if w.closed {
+		return nil
+	}
+	w.closed = true
 	// The native first-response EOF flushes only the header, without a marker.
 	if w.wrote && w.terminate {
 		if err := w.body.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
@@ -299,38 +310,9 @@ func (w *ordinaryResponse) Close() error {
 }
 
 func (w *ordinaryResponse) Interrupt() {
-	w.readTeardown.Store(true)
 	w.interrupted.Store(true)
-	common.Interrupt(w.connection)
-}
-
-type ordinaryReader struct {
-	reader   buf.Reader
-	response *ordinaryResponse
-}
-
-func (r *ordinaryReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if err := r.response.ctx.Err(); err != nil {
-		return nil, err
-	}
-	if r.response.readTeardown.Load() {
-		return nil, io.ErrClosedPipe
-	}
-	mb, err := r.reader.ReadMultiBuffer()
-	if canceled := r.response.ctx.Err(); canceled != nil {
-		buf.ReleaseMulti(mb)
-		return nil, canceled
-	}
-	if r.response.readTeardown.Load() {
-		buf.ReleaseMulti(mb)
-		return nil, io.ErrClosedPipe
-	}
-	return mb, err
-}
-
-func (r *ordinaryReader) Interrupt() {
-	r.response.readTeardown.Store(true)
-	common.Interrupt(r.response.connection)
+	w.done.Close()
+	w.input.Interrupt()
 }
 
 // Process implements proxy.Inbound.Process().
@@ -398,67 +380,63 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	// Derive response keys in memory; socket failures must remain ordinary errors.
 	header := buf.New()
 	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, header)
-	if request.Command == protocol.RequestCommandMultiplex {
-		bodyWriter, err := svrSession.EncodeResponseBody(request, connection)
-		if err != nil {
-			header.Release()
-			return errors.New("failed to start decoding response").Base(err)
-		}
-		body := &multiplexBody{ctx: ctx, reader: bodyReader, writer: bodyWriter}
-		writer := buf.NewBufferedWriter(body)
-		writer.SetBuffered(false)
-		// Start decoding before physical header I/O; body output must wait for it.
-		writer.Lock()
-		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: writer})
-		defer worker.Close()
-		err = buf.NewWriter(connection).WriteMultiBuffer(buf.MultiBuffer{header})
-		if err != nil {
-			if canceled := ctx.Err(); canceled != nil {
-				err = canceled
-			}
-			cancel()
-		}
-		writer.Unlock()
-		if err != nil {
-			return errors.New("failed to write response header").Base(err)
-		}
-		select {
-		case <-ctx.Done():
-			cancel()
-			return errors.New("connection ends").Base(ctx.Err())
-		case <-worker.WaitClosed():
-		}
-		if err := ctx.Err(); err != nil {
-			return errors.New("connection ends").Base(err)
-		}
-		if err := worker.Err(); err != nil {
-			return errors.New("connection ends").Base(err)
-		}
-		return nil
-	}
-	writer := buf.NewBufferedWriter(buf.NewWriter(connection))
-	bodyWriter, err := svrSession.EncodeResponseBody(request, writer)
+	wire := buf.NewBufferedWriter(buf.NewWriter(connection))
+	bodyWriter, err := svrSession.EncodeResponseBody(request, wire)
 	if err != nil {
 		header.Release()
 		return errors.New("failed to start decoding response").Base(err)
 	}
-	if err := writer.WriteMultiBuffer(buf.MultiBuffer{header}); err != nil {
+	if err := wire.WriteMultiBuffer(buf.MultiBuffer{header}); err != nil {
 		return errors.New("failed to prepare response header").Base(err)
 	}
-	account := request.User.Account.(*vmess.MemoryAccount)
-	response := &ordinaryResponse{
-		ctx: ctx, connection: iConn, body: bodyWriter, output: writer,
-		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
+	if request.Command == protocol.RequestCommandMultiplex {
+		body := &codecBody{ctx: ctx, reader: bodyReader}
+		// Start decoding before physical header I/O; wire orders header and body.
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: bodyWriter})
+		defer worker.Close()
+		stopWorker := context.AfterFunc(worker.Context(), func() {
+			if worker.Err() != nil {
+				cancel()
+			}
+		})
+		defer stopWorker()
+		if err := wire.SetBuffered(false); err != nil {
+			if canceled := ctx.Err(); canceled != nil {
+				if cause := worker.Err(); cause != nil {
+					err = cause
+				} else {
+					err = canceled
+				}
+			}
+			cancel()
+			return errors.New("failed to write response header").Base(err)
+		}
+		select {
+		case <-ctx.Done():
+		case <-worker.WaitClosed():
+		}
+		if err := worker.Err(); err != nil {
+			return errors.New("connection ends").Base(err)
+		}
+		if err := ctx.Err(); err != nil {
+			return errors.New("connection ends").Base(err)
+		}
+		return nil
 	}
-	input := &ordinaryReader{
-		reader:   bodyReader,
-		response: response,
+	account := request.User.Account.(*vmess.MemoryAccount)
+	input := &codecBody{ctx: ctx, reader: bodyReader, connection: iConn}
+	response := &ordinaryResponse{
+		ctx: ctx, input: input, body: bodyWriter, output: wire,
+		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
+		done:      done.New(),
 	}
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: input, Writer: response}); err != nil {
 		response.remember(err)
 		response.Interrupt()
-	} else if response.err.Load() == nil && ctx.Err() == nil {
-		response.Close()
+	}
+	select {
+	case <-response.done.Wait():
+	case <-ctx.Done():
 	}
 	if terminal := response.err.Load(); terminal != nil {
 		return errors.New("connection ends").Base(*terminal)
@@ -469,7 +447,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if response.interrupted.Load() {
 		return errors.New("connection ends").Base(io.ErrClosedPipe)
 	}
-
 	return nil
 }
 

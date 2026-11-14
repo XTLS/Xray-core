@@ -3,19 +3,11 @@ package encoding
 import (
 	"crypto/md5"
 	"encoding/binary"
-	"hash/fnv"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"golang.org/x/crypto/sha3"
 )
-
-// Authenticate authenticates a byte array using Fnv hash.
-func Authenticate(b []byte) uint32 {
-	fnv1hash := fnv.New32a()
-	common.Must2(fnv1hash.Write(b))
-	return fnv1hash.Sum32()
-}
 
 // GenerateChacha20Poly1305Key generates a 32-byte key from a given 16-byte array.
 func GenerateChacha20Poly1305Key(b []byte) []byte {
