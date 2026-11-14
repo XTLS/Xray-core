@@ -19,6 +19,7 @@ type VMessAccount struct {
 	ID          string `json:"id"`
 	Security    string `json:"security"`
 	Experiments string `json:"experiments"`
+	UserRoute   bool   `json:"userRoute"`
 }
 
 // Build implements Buildable
@@ -40,6 +41,7 @@ func (a *VMessAccount) Build() *vmess.Account {
 			Type: st,
 		},
 		TestsEnabled: a.Experiments,
+		UserRoute:    a.UserRoute,
 	}
 }
 
@@ -116,6 +118,7 @@ type VMessOutboundConfig struct {
 	ID          string                 `json:"id"`
 	Security    string                 `json:"security"`
 	Experiments string                 `json:"experiments"`
+	UserRoute   bool                   `json:"userRoute"`
 	Receivers   []*VMessOutboundTarget `json:"vnext"`
 }
 
@@ -162,6 +165,7 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 				account.ID = c.ID
 				account.Security = c.Security
 				account.Experiments = c.Experiments
+				account.UserRoute = c.UserRoute
 			} else {
 				if err := json.Unmarshal(rawUser, account); err != nil {
 					return nil, errors.New("invalid VMess user").Base(err)

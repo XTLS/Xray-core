@@ -1,6 +1,8 @@
 package conf_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/xtls/xray-core/common/net"
@@ -11,6 +13,53 @@ import (
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
 )
+
+func TestVMessUserRouteConfig(t *testing.T) {
+	const id = "317530a8-3c1d-1234-8d8e-7cb70aedf158"
+	for _, enabled := range []bool{false, true} {
+		for _, shape := range []string{"clients", "users", "flat", "vnext"} {
+			t.Run(fmt.Sprintf("%s/%t", shape, enabled), func(t *testing.T) {
+				user := fmt.Sprintf(`{"id":%q,"userRoute":%t}`, id, enabled)
+				var memory *protocol.MemoryUser
+				if shape == "clients" || shape == "users" {
+					var config VMessInboundConfig
+					if err := json.Unmarshal([]byte(fmt.Sprintf(`{%q:[%s]}`, shape, user)), &config); err != nil {
+						t.Fatal(err)
+					}
+					built, err := config.Build()
+					if err != nil {
+						t.Fatal(err)
+					}
+					memory, err = built.(*inbound.Config).User[0].ToMemoryUser()
+					if err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					input := fmt.Sprintf(`{"address":"127.0.0.1","port":443,"id":%q,"userRoute":%t}`, id, enabled)
+					if shape == "vnext" {
+						input = fmt.Sprintf(`{"vnext":[{"address":"127.0.0.1","port":443,"users":[%s]}]}`, user)
+					}
+					var config VMessOutboundConfig
+					if err := json.Unmarshal([]byte(input), &config); err != nil {
+						t.Fatal(err)
+					}
+					built, err := config.Build()
+					if err != nil {
+						t.Fatal(err)
+					}
+					memory, err = built.(*outbound.Config).Receiver.User.ToMemoryUser()
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+				account := memory.Account.(*vmess.MemoryAccount)
+				if account.UserRoute != enabled || account.ID.String() != id {
+					t.Fatal("account configuration not preserved")
+				}
+			})
+		}
+	}
+}
 
 func TestVMessOutbound(t *testing.T) {
 	creator := func() Buildable {
