@@ -475,6 +475,14 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 
 		dynamicHTTPClient := httpClient
 		dynamicXmuxClient := xmuxClient
+		postRetries := int(transportConfiguration.ScMaxPostRetries)
+		// the server tears the session down once it holds more than scMaxBufferedPosts
+		// packets past a missing seq, so seq N waits for seq N-len(posted) to be done
+		// and a packet that is being resent cannot fall that far behind
+		var posted []chan struct{}
+		if postRetries > 0 {
+			posted = make([]chan struct{}, max(1, transportConfiguration.GetNormalizedScMaxBufferedPosts()/2))
+		}
 		for {
 			// by offloading the uploads into a buffered pipe, multiple conn.Write
 			// calls get automatically batched together into larger POST requests.
@@ -514,14 +522,30 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 					dynamicHTTPClient, dynamicXmuxClient = getHTTPClient(ctx, dest, streamSettings)
 				}
 
+				var delivered chan struct{}
+				if posted != nil {
+					slot := seq % int64(len(posted))
+					if posted[slot] != nil {
+						<-posted[slot]
+					}
+					delivered = make(chan struct{})
+					posted[slot] = delivered
+				}
+
 				go func(hClient DialerClient) {
-					err := hClient.PostPacket(
-						ctx,
-						requestURL.String(),
-						sessionId,
-						seqStr,
-						chunk,
-					)
+					var err error
+					if delivered != nil {
+						err = postPacketWithRetries(ctx, hClient, requestURL.String(), sessionId, seqStr, chunk, postRetries)
+						close(delivered)
+					} else {
+						err = hClient.PostPacket(
+							context.WithoutCancel(ctx),
+							requestURL.String(),
+							sessionId,
+							seqStr,
+							chunk,
+						)
+					}
 					wroteRequest.Close()
 					if err != nil {
 						errors.LogInfoInner(ctx, err, "failed to send upload")
@@ -538,6 +562,71 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}()
 
 	return stat.Connection(&conn), nil
+}
+
+// postPacketWithRetries resends a packet that was not answered with 200, which
+// happens when a CDN in front of the server answers 502/504, and sends one more
+// copy when the last one was written but got no answer for a while. The server
+// must drop copies of a seq it has already read, hence scMaxPostRetries is 0 by default.
+func postPacketWithRetries(ctx context.Context, hClient DialerClient, url string, sessionId string, seqStr string, chunk buf.MultiBuffer, retries int) error {
+	const resendAfter, giveUpAfter = 2 * time.Second, 30 * time.Second
+
+	data := make([]byte, chunk.Len())
+	chunk.Copy(data)
+	buf.ReleaseMulti(chunk)
+
+	// copies are detached from the connection and the ones left are cancelled on return
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+	results := make(chan error, retries+1)
+	written := make(chan struct{}, 1)
+	tracedCtx := httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
+		WroteRequest: func(httptrace.WroteRequestInfo) {
+			select {
+			case written <- struct{}{}:
+			default:
+			}
+		},
+	})
+	send := func() {
+		results <- hClient.PostPacket(tracedCtx, url, sessionId, seqStr, buf.MergeBytes(nil, data))
+	}
+
+	go send()
+	sent := 1
+	resend := time.NewTimer(resendAfter)
+	resend.Stop()
+	defer resend.Stop()
+	giveUp := time.NewTimer(giveUpAfter)
+	defer giveUp.Stop()
+
+	var err error
+	for failed := 0; failed < sent; {
+		select {
+		case err = <-results:
+			if err == nil {
+				return nil
+			}
+			failed++
+			if sent > retries {
+				continue
+			}
+			errors.LogInfoInner(ctx, err, "resending upload seq ", seqStr)
+		case <-written:
+			resend.Reset(resendAfter)
+			continue
+		case <-resend.C:
+			if sent > retries {
+				continue
+			}
+			errors.LogInfo(ctx, "resending upload seq ", seqStr, " not answered in ", resendAfter)
+		case <-giveUp.C:
+			return errors.New("upload seq ", seqStr, " not answered in ", giveUpAfter)
+		}
+		sent++
+		go send()
+	}
+	return err
 }
 
 // A wrapper around pipe that ensures the size limit is exactly honored.

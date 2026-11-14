@@ -53,4 +53,5 @@ message Config {
   string sessionIDTable = 28;
   RangeConfig sessionIDLength = 29;
   bytes h2Params = 30;
+  int32 scMaxPostRetries = 31;
 }
