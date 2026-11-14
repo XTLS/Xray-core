@@ -2,9 +2,12 @@ package inbound
 
 import (
 	"context"
+	goerrors "errors"
 	"io"
+	gonet "net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -14,15 +17,15 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
+	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -185,42 +188,149 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	return nil
 }
 
-func transferResponse(timer signal.ActivityUpdater, session *encoding.ServerSession, request *protocol.RequestHeader, response *protocol.ResponseHeader, input buf.Reader, output *buf.BufferedWriter) error {
-	session.EncodeResponseHeader(response, output)
+// multiplexBody guards cancellation at the borrowed codec boundary.
+type multiplexBody struct {
+	ctx    context.Context
+	reader buf.Reader
+	writer buf.Writer
+}
 
-	bodyWriter, err := session.EncodeResponseBody(request, output)
+func (b *multiplexBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if err := b.ctx.Err(); err != nil {
+		return nil, err
+	}
+	mb, err := b.reader.ReadMultiBuffer()
+	if canceled := b.ctx.Err(); canceled != nil {
+		buf.ReleaseMulti(mb)
+		return nil, canceled
+	}
+	return mb, err
+}
+
+func (b *multiplexBody) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	if err := b.ctx.Err(); err != nil {
+		buf.ReleaseMulti(mb)
+		return err
+	}
+	return b.writer.WriteMultiBuffer(mb)
+}
+
+// ordinaryResponse owns response nonce serialization, finalization and the first
+// terminal error. Interrupt never waits for the writer's mutex.
+type ordinaryResponse struct {
+	ctx          context.Context
+	connection   net.Conn
+	body         buf.Writer
+	output       *buf.BufferedWriter
+	terminate    bool
+	mu           sync.Mutex
+	closed       bool
+	wrote        bool
+	interrupted  atomic.Bool
+	readTeardown atomic.Bool
+	err          atomic.Pointer[error]
+}
+
+func (w *ordinaryResponse) remember(err error) error {
 	if err != nil {
-		return errors.New("failed to start decoding response").Base(err)
+		w.err.CompareAndSwap(nil, &err)
 	}
-	{
-		// Optimize for small response packet
-		data, err := input.ReadMultiBuffer()
-		if err != nil {
-			return err
-		}
+	return err
+}
 
-		if err := bodyWriter.WriteMultiBuffer(data); err != nil {
-			return err
-		}
+func (w *ordinaryResponse) rememberIO(err error) error {
+	if canceled := w.ctx.Err(); canceled != nil && (goerrors.Is(err, gonet.ErrClosed) || goerrors.Is(err, io.ErrClosedPipe)) {
+		err = canceled
 	}
+	return w.remember(err)
+}
 
-	if err := output.SetBuffered(false); err != nil {
-		return err
+func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if err := w.ctx.Err(); err != nil {
+		buf.ReleaseMulti(mb)
+		return w.remember(err)
 	}
-
-	if err := buf.Copy(input, bodyWriter, buf.UpdateActivity(timer)); err != nil {
-		return err
+	if w.closed || w.interrupted.Load() {
+		buf.ReleaseMulti(mb)
+		return io.ErrClosedPipe
 	}
-
-	account := request.User.Account.(*vmess.MemoryAccount)
-
-	if request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal {
-		if err := bodyWriter.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
-			return err
-		}
+	if mb.IsEmpty() {
+		buf.ReleaseMulti(mb)
+		return nil
 	}
-
+	if err := w.body.WriteMultiBuffer(mb); err != nil {
+		return w.rememberIO(err)
+	}
+	if !w.wrote {
+		w.wrote = true
+		return w.rememberIO(w.output.SetBuffered(false))
+	}
 	return nil
+}
+
+func (w *ordinaryResponse) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		if terminal := w.err.Load(); terminal != nil {
+			return *terminal
+		}
+		return nil
+	}
+	w.closed = true
+	if terminal := w.err.Load(); terminal != nil {
+		return *terminal
+	}
+	if err := w.ctx.Err(); err != nil {
+		return w.remember(err)
+	}
+	if w.interrupted.Load() {
+		return io.ErrClosedPipe
+	}
+	// The native first-response EOF flushes only the header, without a marker.
+	if w.wrote && w.terminate {
+		if err := w.body.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
+			return w.rememberIO(err)
+		}
+	}
+	return w.rememberIO(w.output.Flush())
+}
+
+func (w *ordinaryResponse) Interrupt() {
+	w.readTeardown.Store(true)
+	w.interrupted.Store(true)
+	common.Interrupt(w.connection)
+}
+
+type ordinaryReader struct {
+	reader   buf.Reader
+	response *ordinaryResponse
+}
+
+func (r *ordinaryReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	if err := r.response.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if r.response.readTeardown.Load() {
+		return nil, io.ErrClosedPipe
+	}
+	mb, err := r.reader.ReadMultiBuffer()
+	if canceled := r.response.ctx.Err(); canceled != nil {
+		buf.ReleaseMulti(mb)
+		return nil, canceled
+	}
+	if r.response.readTeardown.Load() {
+		buf.ReleaseMulti(mb)
+		return nil, io.ErrClosedPipe
+	}
+	return mb, err
+}
+
+func (r *ordinaryReader) Interrupt() {
+	r.response.readTeardown.Store(true)
+	common.Interrupt(r.response.connection)
 }
 
 // Process implements proxy.Inbound.Process().
@@ -252,7 +362,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return err
 	}
 
-	if request.Command != protocol.RequestCommandMux {
+	if request.Command != protocol.RequestCommandMultiplex {
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 			From:   connection.RemoteAddr(),
 			To:     request.Destination(),
@@ -276,51 +386,90 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	defer cancel()
+	stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
+	defer stopClose()
 
 	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-	link, err := dispatcher.Dispatch(ctx, request.Destination())
+	bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 	if err != nil {
-		return errors.New("failed to dispatch request to ", request.Destination()).Base(err)
+		return errors.New("failed to start decoding").Base(err)
 	}
-
-	requestDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-
-		bodyReader, err := svrSession.DecodeRequestBody(request, reader)
+	// Derive response keys in memory; socket failures must remain ordinary errors.
+	header := buf.New()
+	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, header)
+	if request.Command == protocol.RequestCommandMultiplex {
+		bodyWriter, err := svrSession.EncodeResponseBody(request, connection)
 		if err != nil {
-			return errors.New("failed to start decoding").Base(err)
+			header.Release()
+			return errors.New("failed to start decoding response").Base(err)
 		}
-		if err := buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to transfer request").Base(err)
+		body := &multiplexBody{ctx: ctx, reader: bodyReader, writer: bodyWriter}
+		writer := buf.NewBufferedWriter(body)
+		writer.SetBuffered(false)
+		// Start decoding before physical header I/O; body output must wait for it.
+		writer.Lock()
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: writer})
+		defer worker.Close()
+		err = buf.NewWriter(connection).WriteMultiBuffer(buf.MultiBuffer{header})
+		if err != nil {
+			if canceled := ctx.Err(); canceled != nil {
+				err = canceled
+			}
+			cancel()
+		}
+		writer.Unlock()
+		if err != nil {
+			return errors.New("failed to write response header").Base(err)
+		}
+		select {
+		case <-ctx.Done():
+			cancel()
+			return errors.New("connection ends").Base(ctx.Err())
+		case <-worker.WaitClosed():
+		}
+		if err := ctx.Err(); err != nil {
+			return errors.New("connection ends").Base(err)
+		}
+		if err := worker.Err(); err != nil {
+			return errors.New("connection ends").Base(err)
 		}
 		return nil
 	}
-
-	responseDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-
-		writer := buf.NewBufferedWriter(buf.NewWriter(connection))
-		defer writer.Flush()
-
-		response := &protocol.ResponseHeader{
-			Command: h.generateCommand(ctx, request),
-		}
-		return transferResponse(timer, svrSession, request, response, link.Reader, writer)
+	writer := buf.NewBufferedWriter(buf.NewWriter(connection))
+	bodyWriter, err := svrSession.EncodeResponseBody(request, writer)
+	if err != nil {
+		header.Release()
+		return errors.New("failed to start decoding response").Base(err)
 	}
-
-	requestDonePost := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDonePost, responseDone); err != nil {
-		common.Interrupt(link.Reader)
-		common.Interrupt(link.Writer)
+	if err := writer.WriteMultiBuffer(buf.MultiBuffer{header}); err != nil {
+		return errors.New("failed to prepare response header").Base(err)
+	}
+	account := request.User.Account.(*vmess.MemoryAccount)
+	response := &ordinaryResponse{
+		ctx: ctx, connection: iConn, body: bodyWriter, output: writer,
+		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
+	}
+	input := &ordinaryReader{
+		reader:   bodyReader,
+		response: response,
+	}
+	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: input, Writer: response}); err != nil {
+		response.remember(err)
+		response.Interrupt()
+	} else if response.err.Load() == nil && ctx.Err() == nil {
+		response.Close()
+	}
+	if terminal := response.err.Load(); terminal != nil {
+		return errors.New("connection ends").Base(*terminal)
+	}
+	if err := ctx.Err(); err != nil {
 		return errors.New("connection ends").Base(err)
 	}
+	if response.interrupted.Load() {
+		return errors.New("connection ends").Base(io.ErrClosedPipe)
+	}
 
-	return nil
-}
-
-// Stub command generator
-func (h *Handler) generateCommand(ctx context.Context, request *protocol.RequestHeader) protocol.ResponseCommand {
 	return nil
 }
 

@@ -184,6 +184,66 @@ func (x *Account) GetTestseed() []uint32 {
 	return nil
 }
 
+type Multiplex struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Concurrency     int32                  `protobuf:"varint,1,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	XudpConcurrency int32                  `protobuf:"varint,2,opt,name=xudpConcurrency,proto3" json:"xudpConcurrency,omitempty"`
+	XudpProxyUDP443 string                 `protobuf:"bytes,3,opt,name=xudpProxyUDP443,proto3" json:"xudpProxyUDP443,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Multiplex) Reset() {
+	*x = Multiplex{}
+	mi := &file_proxy_vless_account_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Multiplex) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Multiplex) ProtoMessage() {}
+
+func (x *Multiplex) ProtoReflect() protoreflect.Message {
+	mi := &file_proxy_vless_account_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Multiplex.ProtoReflect.Descriptor instead.
+func (*Multiplex) Descriptor() ([]byte, []int) {
+	return file_proxy_vless_account_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Multiplex) GetConcurrency() int32 {
+	if x != nil {
+		return x.Concurrency
+	}
+	return 0
+}
+
+func (x *Multiplex) GetXudpConcurrency() int32 {
+	if x != nil {
+		return x.XudpConcurrency
+	}
+	return 0
+}
+
+func (x *Multiplex) GetXudpProxyUDP443() string {
+	if x != nil {
+		return x.XudpProxyUDP443
+	}
+	return ""
+}
+
 var File_proxy_vless_account_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_account_proto_rawDesc = "" +
@@ -203,7 +263,11 @@ const file_proxy_vless_account_proto_rawDesc = "" +
 	"\apadding\x18\x06 \x01(\tR\apadding\x123\n" +
 	"\areverse\x18\a \x01(\v2\x19.xray.proxy.vless.ReverseR\areverse\x12\x18\n" +
 	"\atestpre\x18\b \x01(\rR\atestpre\x12\x1a\n" +
-	"\btestseed\x18\t \x03(\rR\btestseedBR\n" +
+	"\btestseed\x18\t \x03(\rR\btestseed\"\x81\x01\n" +
+	"\tMultiplex\x12 \n" +
+	"\vconcurrency\x18\x01 \x01(\x05R\vconcurrency\x12(\n" +
+	"\x0fxudpConcurrency\x18\x02 \x01(\x05R\x0fxudpConcurrency\x12(\n" +
+	"\x0fxudpProxyUDP443\x18\x03 \x01(\tR\x0fxudpProxyUDP443BR\n" +
 	"\x14com.xray.proxy.vlessP\x01Z%github.com/xtls/xray-core/proxy/vless\xaa\x02\x10Xray.Proxy.Vlessb\x06proto3"
 
 var (
@@ -218,14 +282,15 @@ func file_proxy_vless_account_proto_rawDescGZIP() []byte {
 	return file_proxy_vless_account_proto_rawDescData
 }
 
-var file_proxy_vless_account_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proxy_vless_account_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_proxy_vless_account_proto_goTypes = []any{
 	(*Reverse)(nil),                 // 0: xray.proxy.vless.Reverse
 	(*Account)(nil),                 // 1: xray.proxy.vless.Account
-	(*proxyman.SniffingConfig)(nil), // 2: xray.app.proxyman.SniffingConfig
+	(*Multiplex)(nil),               // 2: xray.proxy.vless.Multiplex
+	(*proxyman.SniffingConfig)(nil), // 3: xray.app.proxyman.SniffingConfig
 }
 var file_proxy_vless_account_proto_depIdxs = []int32{
-	2, // 0: xray.proxy.vless.Reverse.sniffing:type_name -> xray.app.proxyman.SniffingConfig
+	3, // 0: xray.proxy.vless.Reverse.sniffing:type_name -> xray.app.proxyman.SniffingConfig
 	0, // 1: xray.proxy.vless.Account.reverse:type_name -> xray.proxy.vless.Reverse
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
@@ -245,7 +310,7 @@ func file_proxy_vless_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proxy_vless_account_proto_rawDesc), len(file_proxy_vless_account_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

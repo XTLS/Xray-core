@@ -6,12 +6,12 @@ import (
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet"
@@ -48,7 +48,7 @@ type AlwaysOnInboundHandler struct {
 	receiverConfig *proxyman.ReceiverConfig
 	proxy          proxy.Inbound
 	workers        []worker
-	mux            *mux.Server
+	dispatcher     routing.Dispatcher
 	tag            string
 }
 
@@ -86,7 +86,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		receiverConfig: receiverConfig,
 		proxyConfig:    proxyConfig,
 		proxy:          p,
-		mux:            mux.NewServer(ctx),
+		dispatcher:     core.MustFromContext(ctx).GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		tag:            tag,
 	}
 
@@ -117,7 +117,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 				proxy:           p,
 				stream:          mss,
 				tag:             tag,
-				dispatcher:      h.mux,
+				dispatcher:      h.dispatcher,
 				sniffingRequest: sniffingRequest,
 				uplinkCounter:   uplinkCounter,
 				downlinkCounter: downlinkCounter,
@@ -139,7 +139,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						stream:          mss,
 						recvOrigDest:    receiverConfig.ReceiveOriginalDestination,
 						tag:             tag,
-						dispatcher:      h.mux,
+						dispatcher:      h.dispatcher,
 						sniffingRequest: sniffingRequest,
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,
@@ -154,7 +154,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						proxy:           p,
 						address:         address,
 						port:            net.Port(port),
-						dispatcher:      h.mux,
+						dispatcher:      h.dispatcher,
 						sniffingRequest: sniffingRequest,
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,
@@ -192,7 +192,6 @@ func (h *AlwaysOnInboundHandler) Close() error {
 	for _, worker := range h.workers {
 		errs = append(errs, worker.Close())
 	}
-	errs = append(errs, h.mux.Close())
 	errs = append(errs, common.Close(h.proxy))
 	if err := errors.Combine(errs...); err != nil {
 		return errors.New("failed to close all resources").Base(err)

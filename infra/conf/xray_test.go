@@ -3,6 +3,7 @@ package conf_test
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -18,6 +19,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	. "github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/transport/internet"
@@ -225,32 +227,28 @@ func TestSniffingConfig_Build(t *testing.T) {
 	}
 }
 
-func TestMuxConfig_Build(t *testing.T) {
+func TestMultiplexConfig_Build(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields string
-		want   *proxyman.MultiplexingConfig
+		want   *vless.Multiplex
 	}{
-		{"default", `{"enabled": true, "concurrency": 16}`, &proxyman.MultiplexingConfig{
-			Enabled:         true,
+		{"default", `{"concurrency": 16}`, &vless.Multiplex{
 			Concurrency:     16,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
 		}},
-		{"empty def", `{}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
+		{"empty def", `{}`, &vless.Multiplex{
 			Concurrency:     0,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
 		}},
-		{"not enable", `{"enabled": false, "concurrency": 4}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
+		{"explicit small concurrency", `{"concurrency": 4}`, &vless.Multiplex{
 			Concurrency:     4,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
 		}},
-		{"forbidden", `{"enabled": false, "concurrency": -1}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
+		{"disabled native pool", `{"concurrency": -1}`, &vless.Multiplex{
 			Concurrency:     -1,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
@@ -258,16 +256,47 @@ func TestMuxConfig_Build(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &MuxConfig{}
+			m := &MultiplexConfig{}
 			common.Must(json.Unmarshal([]byte(tt.fields), m))
-			if got, _ := m.Build(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MuxConfig.Build() = %v, want %v", got, tt.want)
+			got, err := m.Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MultiplexConfig.Build() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		legacy  string
+		removed bool
+	}{
+		{`{"enabled": true, "concurrency": 16}`, true},
+		{`{"enabled": false, "concurrency": 4}`, false},
+		{`{"enabled": false, "concurrency": -1}`, false},
+		{`{}`, false},
+	} {
+		t.Run("legacy top-level mux "+tc.legacy, func(t *testing.T) {
+			var config OutboundDetourConfig
+			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":443,"users":[{"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d","encryption":"none"}]}]},"mux":`+tc.legacy+`}`), &config))
+			if config.LegacyMuxSettings == nil {
+				t.Fatal("legacy mux input was not recognized")
+			}
+			_, err := config.Build()
+			if tc.removed {
+				if err == nil || !strings.Contains(err.Error(), "VLESS settings.multiplex") {
+					t.Fatalf("legacy mux Build() error = %v, want multiplex migration error", err)
+				}
+			} else if err != nil {
+				t.Fatalf("disabled legacy mux Build() error = %v", err)
 			}
 		})
 	}
 }
 
 func TestConfig_Override(t *testing.T) {
+	legacyReverse := json.RawMessage(`{}`)
 	tests := []struct {
 		name string
 		orig *Config
@@ -285,7 +314,7 @@ func TestConfig_Override(t *testing.T) {
 				Policy:       &PolicyConfig{},
 				API:          &APIConfig{},
 				Stats:        &StatsConfig{},
-				Reverse:      &ReverseConfig{},
+				Reverse:      &legacyReverse,
 			},
 			"",
 			&Config{
@@ -295,7 +324,7 @@ func TestConfig_Override(t *testing.T) {
 				Policy:       &PolicyConfig{},
 				API:          &APIConfig{},
 				Stats:        &StatsConfig{},
-				Reverse:      &ReverseConfig{},
+				Reverse:      &legacyReverse,
 			},
 		},
 		{

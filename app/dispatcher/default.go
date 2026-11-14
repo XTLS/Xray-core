@@ -86,9 +86,7 @@ func (r *cachedReader) Interrupt() {
 		r.cache = buf.ReleaseMulti(r.cache)
 	}
 	r.Unlock()
-	if p, ok := r.reader.(*pipe.Reader); ok {
-		p.Interrupt()
-	}
+	common.Interrupt(r.reader)
 }
 
 // DefaultDispatcher is a default implementation of Dispatcher.
@@ -194,14 +192,15 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		user = sessionInbound.User
 	}
 
-	link.Reader = &buf.TimeoutWrapperReader{Reader: link.Reader}
+	reader := &buf.TimeoutWrapperReader{Reader: link.Reader}
+	link.Reader = reader
 
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
 			if c, _ := statsManager.GetOrRegisterCounter(name); c != nil {
-				link.Reader.(*buf.TimeoutWrapperReader).Counter = c
+				reader.Counter = c
 			}
 		}
 		if p.Stats.UserDownlink {
@@ -218,6 +217,11 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		}
 	}
 
+	if owner, ok := reader.Reader.(interface{ SetUplinkCounter(stats.Counter) }); ok {
+		counter := reader.Counter
+		reader.Counter = nil
+		owner.SetUplinkCounter(counter)
+	}
 	return link
 }
 

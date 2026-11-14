@@ -89,9 +89,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if target.Network == net.Network_UDP {
 		command = protocol.RequestCommandUDP
 	}
-	if target.Address.Family().IsDomain() && target.Address.Domain() == "v1.mux.cool" {
-		command = protocol.RequestCommandMux
-	}
 
 	user := rec.User
 	request := &protocol.RequestHeader{
@@ -144,8 +141,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 
 	if request.Command == protocol.RequestCommandUDP && h.cone && request.Port != 53 && request.Port != 443 {
-		request.Command = protocol.RequestCommandMux
-		request.Address = net.DomainAddress("v1.mux.cool")
+		request.Command = protocol.RequestCommandMultiplex
+		request.Address = net.DomainAddress("v1.multiplex.cool")
 		request.Port = net.Port(666)
 	}
 
@@ -162,7 +159,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to start encoding").Base(err)
 		}
 		bodyWriter2 := bodyWriter
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+		if request.Command == protocol.RequestCommandMultiplex && request.Port == 666 {
 			bodyWriter = xudp.NewPacketWriter(bodyWriter, target, xudp.GetGlobalID(ctx))
 		}
 		if err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
@@ -200,7 +197,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		if err != nil {
 			return errors.New("failed to start encoding response").Base(err)
 		}
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+		if request.Command == protocol.RequestCommandMultiplex && request.Port == 666 {
 			bodyReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: bodyReader})
 		}
 

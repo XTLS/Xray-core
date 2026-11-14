@@ -1,4 +1,4 @@
-package mux
+package multiplex
 
 import (
 	"github.com/xtls/xray-core/common"
@@ -68,39 +68,16 @@ func (w *Writer) writeMetaOnly() error {
 	return w.writer.WriteMultiBuffer(buf.MultiBuffer{b})
 }
 
-func writeMetaWithFrame(writer buf.Writer, meta FrameMetadata, data buf.MultiBuffer) error {
-	frame := buf.New()
-	if len(data) == 1 {
-		frame.UDP = data[0].UDP
-	}
-	if err := meta.WriteTo(frame); err != nil {
-		return err
-	}
-	if _, err := serial.WriteUint16(frame, uint16(data.Len())); err != nil {
-		return err
-	}
-
-	mb2 := make(buf.MultiBuffer, 0, len(data)+1)
-	mb2 = append(mb2, frame)
-	mb2 = append(mb2, data...)
-	return writer.WriteMultiBuffer(mb2)
-}
-
-func (w *Writer) writeData(mb buf.MultiBuffer) error {
-	meta := w.getNextFrameMeta()
-	meta.Option.Set(OptionData)
-
-	return writeMetaWithFrame(w.writer, meta, mb)
-}
-
-// WriteMultiBuffer implements buf.Writer.
+// WriteMultiBuffer submits at most four frames per carrier write.
+// Each frame keeps its wire boundary and per-packet destination.
 func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	defer buf.ReleaseMulti(mb)
-
 	if mb.IsEmpty() {
 		return w.writeMetaOnly()
 	}
-
+	var frames buf.MultiBuffer
+	framesInBatch := 0
+	defer func() { buf.ReleaseMulti(frames) }()
 	for !mb.IsEmpty() {
 		var chunk buf.MultiBuffer
 		if w.transferType == protocol.TransferTypeStream {
@@ -110,12 +87,36 @@ func (w *Writer) WriteMultiBuffer(mb buf.MultiBuffer) error {
 			mb = mb2
 			chunk = buf.MultiBuffer{b}
 		}
-		if err := w.writeData(chunk); err != nil {
+		frame := buf.New()
+		if len(chunk) == 1 {
+			frame.UDP = chunk[0].UDP
+		}
+		frames = append(frames, frame)
+		frames = append(frames, chunk...)
+		meta := w.getNextFrameMeta()
+		meta.Option.Set(OptionData)
+		if err := meta.WriteTo(frame); err != nil {
 			return err
 		}
+		if _, err := serial.WriteUint16(frame, uint16(chunk.Len())); err != nil {
+			return err
+		}
+		framesInBatch++
+		if framesInBatch == 4 {
+			output := frames
+			frames = nil
+			framesInBatch = 0
+			if err := w.writer.WriteMultiBuffer(output); err != nil {
+				return err
+			}
+		}
 	}
-
-	return nil
+	if len(frames) == 0 {
+		return nil
+	}
+	output := frames
+	frames = nil
+	return w.writer.WriteMultiBuffer(output)
 }
 
 // Close implements common.Closable.
@@ -131,6 +132,5 @@ func (w *Writer) Close() error {
 	frame := buf.New()
 	common.Must(meta.WriteTo(frame))
 
-	w.writer.WriteMultiBuffer(buf.MultiBuffer{frame})
-	return nil
+	return w.writer.WriteMultiBuffer(buf.MultiBuffer{frame})
 }

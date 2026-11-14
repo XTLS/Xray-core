@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -52,7 +53,16 @@ func (r *TimeoutWrapperReader) ReadMultiBuffer() (MultiBuffer, error) {
 	return r.mb, r.err
 }
 
+func (r *TimeoutWrapperReader) Interrupt() { common.Interrupt(r.Reader) }
+
 func (r *TimeoutWrapperReader) ReadMultiBufferTimeout(duration time.Duration) (MultiBuffer, error) {
+	if reader, ok := r.Reader.(TimeoutReader); ok {
+		mb, err := reader.ReadMultiBufferTimeout(duration)
+		if r.Counter != nil {
+			r.Counter.Add(int64(mb.Len()))
+		}
+		return mb, err
+	}
 	if r.done == nil {
 		r.done = make(chan struct{})
 		go func() {

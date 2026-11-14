@@ -15,6 +15,7 @@ var placeholderAddr = &net.TCPAddr{IP: net.IP{127, 0, 0, 1}, Port: 0}
 // Conn is a session in segments, walWriter and walReader, or in slots,
 // slotWriter and slotReader
 type Conn struct {
+	ctx     context.Context
 	cancel  context.CancelFunc
 	writer  io.WriteCloser
 	reader  chunkReader
@@ -40,6 +41,7 @@ type chunkReader interface {
 func newConn(ctx context.Context, storage Storage, writePrefix, readPrefix string, p params, onClose func()) *Conn {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Conn{
+		ctx:     ctx,
 		cancel:  cancel,
 		writer:  newWALWriter(ctx, storage, writePrefix, p),
 		reader:  newWALReader(ctx, storage, readPrefix, p),
@@ -50,6 +52,7 @@ func newConn(ctx context.Context, storage Storage, writePrefix, readPrefix strin
 func newSlotConn(ctx context.Context, store slotStore, write, read slotTable, p params, first []byte, onClose func()) *Conn {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Conn{
+		ctx:     ctx,
 		cancel:  cancel,
 		writer:  newSlotWriter(ctx, store, write, p),
 		reader:  newSlotReader(ctx, store, read, p, first),
@@ -117,6 +120,16 @@ func (c *Conn) Close() error {
 		}
 	})
 	return c.closeErr
+}
+
+// Interrupt wakes blocked writes before Close waits for pending uploads.
+func (c *Conn) Interrupt() {
+	c.cancel()
+	c.closeOnce.Do(func() {
+		if c.onClose != nil {
+			c.onClose()
+		}
+	})
 }
 
 func (c *Conn) LocalAddr() net.Addr {

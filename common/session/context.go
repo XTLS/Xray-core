@@ -17,12 +17,12 @@ const (
 	inboundSessionKey         ctx.SessionKey = 1
 	outboundSessionKey        ctx.SessionKey = 2
 	contentSessionKey         ctx.SessionKey = 3
-	isReverseMuxKey           ctx.SessionKey = 4  // is reverse mux
+	isReverseMultiplexKey     ctx.SessionKey = 4  // is reverse multiplex
 	sockoptSessionKey         ctx.SessionKey = 5  // used by dokodemo to only receive sockopt.Mark
 	trackedConnectionErrorKey ctx.SessionKey = 6  // used by observer to get outbound error
 	dispatcherKey             ctx.SessionKey = 7  // used by ss2022 inbounds to get dispatcher
-	timeoutOnlyKey            ctx.SessionKey = 8  // mux context's child contexts to only cancel when its own traffic times out
-	allowedNetworkKey         ctx.SessionKey = 9  // muxcool server control incoming request tcp/udp
+	timeoutOnlyKey            ctx.SessionKey = 8  // multiplex context's child contexts to only cancel when its own traffic times out
+	allowedNetworkKey         ctx.SessionKey = 9  // multiplex server controls incoming TCP/UDP requests
 	fullHandlerKey            ctx.SessionKey = 10 // outbound gets full handler
 	mitmAlpn11Key             ctx.SessionKey = 11 // used by TLS dialer
 	mitmServerNameKey         ctx.SessionKey = 12 // used by TLS dialer
@@ -45,7 +45,7 @@ func ContextWithOutbounds(ctx context.Context, outbounds []*Outbound) context.Co
 	return context.WithValue(ctx, outboundSessionKey, outbounds)
 }
 
-func SubContextFromMuxInbound(ctx context.Context) context.Context {
+func SubContextFromMultiplexInbound(ctx context.Context) context.Context {
 	newOutbounds := []*Outbound{{}}
 
 	content := ContentFromContext(ctx)
@@ -77,12 +77,12 @@ func ContentFromContext(ctx context.Context) *Content {
 	return nil
 }
 
-func ContextWithIsReverseMux(ctx context.Context, isReverseMux bool) context.Context {
-	return context.WithValue(ctx, isReverseMuxKey, isReverseMux)
+func ContextWithIsReverseMultiplex(ctx context.Context, isReverseMultiplex bool) context.Context {
+	return context.WithValue(ctx, isReverseMultiplexKey, isReverseMultiplex)
 }
 
-func IsReverseMuxFromContext(ctx context.Context) bool {
-	if val, ok := ctx.Value(isReverseMuxKey).(bool); ok {
+func IsReverseMultiplexFromContext(ctx context.Context) bool {
+	if val, ok := ctx.Value(isReverseMultiplexKey).(bool); ok {
 		return val
 	}
 	return false

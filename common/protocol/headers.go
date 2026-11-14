@@ -12,15 +12,15 @@ import (
 type RequestCommand byte
 
 const (
-	RequestCommandTCP = RequestCommand(0x01)
-	RequestCommandUDP = RequestCommand(0x02)
-	RequestCommandMux = RequestCommand(0x03)
-	RequestCommandRvs = RequestCommand(0x04)
+	RequestCommandTCP       = RequestCommand(0x01)
+	RequestCommandUDP       = RequestCommand(0x02)
+	RequestCommandMultiplex = RequestCommand(0x03)
+	RequestCommandRvs       = RequestCommand(0x04)
 )
 
 func (c RequestCommand) TransferType() TransferType {
 	switch c {
-	case RequestCommandTCP, RequestCommandMux, RequestCommandRvs:
+	case RequestCommandTCP, RequestCommandMultiplex, RequestCommandRvs:
 		return TransferTypeStream
 	case RequestCommandUDP:
 		return TransferTypePacket

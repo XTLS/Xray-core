@@ -13,7 +13,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
@@ -60,9 +59,6 @@ type Handler struct {
 	streamSettings  *internet.MemoryStreamConfig
 	proxyConfig     proto.Message
 	proxy           proxy.Outbound
-	mux             *mux.ClientManager
-	xudp            *mux.ClientManager
-	udp443          string
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 }
@@ -84,6 +80,9 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		}
 		switch s := senderSettings.(type) {
 		case *proxyman.SenderConfig:
+			if s.GetMultiplexSettings().GetEnabled() {
+				return nil, errors.New("use VLESS settings.multiplex instead of SenderConfig.multiplex_settings")
+			}
 			h.senderSettings = s
 			mss, err := internet.ToMemoryStreamConfig(s.StreamSettings)
 			if err != nil {
@@ -115,57 +114,6 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	proxyHandler, ok := rawProxyHandler.(proxy.Outbound)
 	if !ok {
 		return nil, errors.New("not an outbound handler")
-	}
-
-	if h.senderSettings != nil && h.senderSettings.MultiplexSettings != nil {
-		if config := h.senderSettings.MultiplexSettings; config.Enabled {
-			if config.Concurrency < 0 {
-				h.mux = &mux.ClientManager{Enabled: false}
-			}
-			if config.Concurrency == 0 {
-				config.Concurrency = 8 // same as before
-			}
-			if config.Concurrency > 0 && config.Concurrency < 128 && h.streamSettings != nil && h.streamSettings.ProtocolName == "xdrive" {
-				config.Concurrency = 128
-			}
-			if config.Concurrency > 0 {
-				h.mux = &mux.ClientManager{
-					Enabled: true,
-					Picker: &mux.IncrementalWorkerPicker{
-						Factory: &mux.DialingWorkerFactory{
-							Proxy:  proxyHandler,
-							Dialer: h,
-							Strategy: mux.ClientStrategy{
-								MaxConcurrency: uint32(config.Concurrency),
-								MaxConnection:  1024,
-							},
-						},
-					},
-				}
-			}
-			if config.XudpConcurrency < 0 {
-				h.xudp = &mux.ClientManager{Enabled: false}
-			}
-			if config.XudpConcurrency == 0 {
-				h.xudp = nil // same as before
-			}
-			if config.XudpConcurrency > 0 {
-				h.xudp = &mux.ClientManager{
-					Enabled: true,
-					Picker: &mux.IncrementalWorkerPicker{
-						Factory: &mux.DialingWorkerFactory{
-							Proxy:  proxyHandler,
-							Dialer: h,
-							Strategy: mux.ClientStrategy{
-								MaxConcurrency: uint32(config.XudpConcurrency),
-								MaxConnection:  1024,
-							},
-						},
-					},
-				}
-			}
-			h.udp443 = config.XudpProxyUDP443
-		}
 	}
 
 	h.proxy = proxyHandler
@@ -207,38 +155,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
-	if h.mux != nil {
-		test := func(err error) {
-			if err != nil {
-				err := errors.New("failed to process mux outbound traffic").Base(err)
-				session.SubmitOutboundErrorToOriginator(ctx, err)
-				errors.LogInfo(ctx, err.Error())
-				common.Interrupt(link.Writer)
-				common.Interrupt(link.Reader)
-			}
-		}
-		if ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 {
-			switch h.udp443 {
-			case "reject":
-				test(errors.New("XUDP rejected UDP/443 traffic"))
-				return
-			case "skip":
-				goto out
-			}
-		}
-		if h.xudp != nil && ob.Target.Network == net.Network_UDP {
-			if !h.xudp.Enabled {
-				goto out
-			}
-			test(h.xudp.Dispatch(ctx, link))
-			return
-		}
-		if h.mux.Enabled {
-			test(h.mux.Dispatch(ctx, link))
-			return
-		}
-	}
-out:
+
 	err := h.proxy.Process(ctx, link, h)
 	var errC error
 	if err != nil {
@@ -332,7 +249,6 @@ func (h *Handler) Start() error {
 
 // Close implements common.Closable.
 func (h *Handler) Close() error {
-	common.Close(h.mux)
 	common.Close(h.proxy)
 	return nil
 }

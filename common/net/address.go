@@ -122,7 +122,7 @@ func IPAddress(ip []byte) Address {
 
 // DomainAddress creates an Address with given domain.
 // This is an internal function that forcibly converts a string to domain.
-// It's mainly used in test files and mux.
+// It's mainly used in test files and multiplex.
 // Unless you have a specific reason, use net.ParseAddress instead,
 // as this function does not check whether the input is an IP address.
 // Otherwise, you will get strange results like domain: 1.1.1.1

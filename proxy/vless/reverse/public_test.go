@@ -1,16 +1,15 @@
 package reverse_test
 
 import (
+	"context"
 	"testing"
 
-	"github.com/xtls/xray-core/app/reverse"
-	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/proxy/vless/reverse"
 )
 
 func TestStaticPickerEmpty(t *testing.T) {
-	picker, err := reverse.NewStaticMuxPicker()
-	common.Must(err)
-	worker, err := picker.PickAvailable()
+	picker := reverse.NewStaticPicker()
+	worker, err := picker.Admit(context.Background(), nil)
 	if err == nil {
 		t.Error("expected error, but nil")
 	}
