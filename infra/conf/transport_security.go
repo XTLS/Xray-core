@@ -42,13 +42,16 @@ type REALITYConfig struct {
 	LimitFallbackUpload   LimitFallback `json:"limitFallbackUpload"`
 	LimitFallbackDownload LimitFallback `json:"limitFallbackDownload"`
 
-	Fingerprint   string `json:"fingerprint"`
-	ServerName    string `json:"serverName"`
-	Password      string `json:"password"`
-	PublicKey     string `json:"publicKey"`
-	ShortId       string `json:"shortId"`
-	Mldsa65Verify string `json:"mldsa65Verify"`
-	SpiderX       string `json:"spiderX"`
+	Fingerprint string `json:"fingerprint"`
+	// Client-only alternative to Fingerprint, resolved once per policy per
+	// process into the existing protobuf Fingerprint field during Build.
+	FingerprintWeights FingerprintWeights `json:"fingerprintWeights"`
+	ServerName         string             `json:"serverName"`
+	Password           string             `json:"password"`
+	PublicKey          string             `json:"publicKey"`
+	ShortId            string             `json:"shortId"`
+	Mldsa65Verify      string             `json:"mldsa65Verify"`
+	SpiderX            string             `json:"spiderX"`
 }
 
 func (c *REALITYConfig) Build() (proto.Message, error) {
@@ -60,6 +63,9 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		c.Dest = c.Target
 	}
 	if c.Dest != nil {
+		if c.FingerprintWeights != nil {
+			return nil, errors.New(`REALITY: "fingerprintWeights" is only supported in client configurations`)
+		}
 		var i uint16
 		var s string
 		if err = json.Unmarshal(c.Dest, &i); err == nil {
@@ -177,6 +183,14 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		config.LimitFallbackDownload.BytesPerSec = c.LimitFallbackDownload.BytesPerSec
 		config.LimitFallbackDownload.BurstBytesPerSec = c.LimitFallbackDownload.BurstBytesPerSec
 	} else {
+		if c.FingerprintWeights != nil {
+			if c.Fingerprint != "" {
+				return nil, errors.New(`REALITY: "fingerprint" and "fingerprintWeights" are mutually exclusive`)
+			}
+			if err := validateREALITYFingerprintWeights(c.FingerprintWeights); err != nil {
+				return nil, err
+			}
+		}
 		config.Fingerprint = strings.ToLower(c.Fingerprint)
 		if config.Fingerprint == "unsafe" || config.Fingerprint == "hellogolang" {
 			return nil, errors.New(`invalid "fingerprint": `, config.Fingerprint)
@@ -241,6 +255,15 @@ func (c *REALITYConfig) Build() (proto.Message, error) {
 		u.RawQuery = q.Encode()
 		config.SpiderX = u.String()
 		config.ServerName = c.ServerName
+		// Resolve only after all configuration checks succeed. The existing
+		// protobuf field carries the selected name to every REALITY transport.
+		if c.FingerprintWeights != nil {
+			config.Fingerprint, err = c.FingerprintWeights.Resolve()
+			if err != nil {
+				return nil, errors.New("REALITY").Base(err)
+			}
+			errors.LogDebug(context.Background(), "REALITY: fingerprintWeights selected ", config.Fingerprint)
+		}
 	}
 	return config, nil
 }
