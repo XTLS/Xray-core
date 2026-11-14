@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"runtime"
 	"strconv"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/proxy/tun"
 	"google.golang.org/protobuf/proto"
 )
@@ -20,6 +22,8 @@ type TunConfig struct {
 	UserLevel              uint32   `json:"userLevel"`
 	AutoSystemRoutingTable []string `json:"autoSystemRoutingTable"`
 	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
+	AutoSystemDnsToGateway bool     `json:"autoSystemDnsToGateway"`
+	AutoSystemWfpBlockLeak []string `json:"autoSystemWfpBlockLeak"`
 }
 
 func (v *TunConfig) Build() (proto.Message, error) {
@@ -31,6 +35,29 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		DNS:                    v.DNS,
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
+		AutoSystemDnsToGateway: v.AutoSystemDnsToGateway,
+	}
+	leaks, err := tun.ExpandWfpBlockLeak(v.AutoSystemWfpBlockLeak)
+	if err != nil {
+		return nil, err
+	}
+	config.AutoSystemWfpBlockLeak = leaks
+	// Each option needs other settings on the system it takes effect on: the
+	// filters go along with the routes of autoSystemRoutingTable, keeping the
+	// system's DNS inside the TUN needs DNS servers on it, and
+	// autoSystemDnsToGateway points the system DNS at the gateway.
+	switch runtime.GOOS {
+	case "windows":
+		if len(leaks) > 0 && len(v.AutoSystemRoutingTable) == 0 {
+			return nil, errors.New("autoSystemWfpBlockLeak needs autoSystemRoutingTable to be set")
+		}
+		if tun.BlocksSystemDNS(leaks) && len(v.DNS) == 0 {
+			return nil, errors.New(`autoSystemWfpBlockLeak "all", "allexceptlan", "dns", "windnsclient", or TCP or UDP port 53, needs dns to be set`)
+		}
+	case "linux", "freebsd":
+		if v.AutoSystemDnsToGateway && len(v.Gateway) == 0 {
+			return nil, errors.New("autoSystemDnsToGateway needs gateway to be set")
+		}
 	}
 	if v.AutoOutboundsInterface != nil {
 		config.AutoOutboundsInterface = *v.AutoOutboundsInterface

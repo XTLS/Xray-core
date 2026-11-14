@@ -11,7 +11,7 @@ func TestParseIPRules(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
 	rules := []string{
-		"geoip:us",
+		"geoip:ru",
 		"geoip:cn",
 		"!geoip:cn",
 		"!!geoip:cn",
@@ -20,9 +20,9 @@ func TestParseIPRules(t *testing.T) {
 		"!geoip:!cn",
 		"ext:geoip.dat:!cn",
 		"ext:geoip.dat:!!cn",
-		"ext:geoip.dat:ca",
+		"ext:geoip.dat:ir",
 		"ext-ip:geoip.dat:!cn",
-		"ext-ip:geoip.dat:!ca",
+		"ext-ip:geoip.dat:!ir",
 		"192.168.0.0/24",
 		"!192.168.0.0/24",
 		"!!192.168.0.0/24",

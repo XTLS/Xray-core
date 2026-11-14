@@ -28,7 +28,7 @@ func toNetIP(addrs []net.Address) ([]net.IP, error) {
 		if addr.Family().IsIP() {
 			ips = append(ips, addr.IP())
 		} else {
-			return nil, errors.New("Failed to convert address", addr, "to Net IP.").AtWarning()
+			return nil, errors.New("Failed to convert address", addr, "to Net IP.")
 		}
 	}
 	return ips, nil

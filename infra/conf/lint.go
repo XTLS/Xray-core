@@ -18,7 +18,7 @@ func RegisterConfigureFilePostProcessingStage(name string, stage ConfigureFilePo
 func PostProcessConfigureFile(conf *Config) error {
 	for k, v := range configureFilePostProcessingStages {
 		if err := v.Process(conf); err != nil {
-			return errors.New("Rejected by Postprocessing Stage ", k).AtError().Base(err)
+			return errors.New("Rejected by Postprocessing Stage ", k).Base(err)
 		}
 	}
 	return nil

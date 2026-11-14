@@ -117,7 +117,7 @@ func (f *FrameMetadata) Unmarshal(reader io.Reader, readSourceAndLocal bool) err
 		return err
 	}
 	if metaLen > 512 {
-		return errors.New("invalid metalen ", metaLen).AtError()
+		return errors.New("invalid metalen ", metaLen)
 	}
 
 	b := buf.New()

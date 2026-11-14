@@ -35,24 +35,7 @@ jobs:
         if: steps.check-assets.outputs.missing == 'true'
         run: sleep 90
 
-  check-proto:
-    runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
-    steps:
-      - name: Checkout codebase
-        uses: actions/checkout@v7
-      - name: Check Proto Version Header
-        run: |
-          head -n 4 core/config.pb.go > ref.txt
-          find . -name "*.pb.go" ! -name "*_grpc.pb.go" -print0 | while IFS= read -r -d '' file; do
-            if ! cmp -s ref.txt <(head -n 4 "$file"); then
-              echo "Error: Header mismatch in $file"
-              head -n 4 "$file"
-              exit 1
-            fi
-          done
-
-  check-format:
+  check-format-and-proto:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     permissions:
@@ -68,6 +51,8 @@ jobs:
           cache: false
       - name: Check Format
         run: go run ./infra/vformat/main.go -mode check -pwd ./
+      - name: Check Protobuf
+        run: go run ./infra/vprotogen/main.go -mode check -pwd ./
 
   test:
     needs: check-assets

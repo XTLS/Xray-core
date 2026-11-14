@@ -27,7 +27,7 @@ var strategy = [11][3]byte{
 
 func RegisterProtocolConfigCreator(name string, creator ConfigCreator) error {
 	if _, found := globalTransportConfigCreatorCache[name]; found {
-		return errors.New("protocol ", name, " is already registered").AtError()
+		return errors.New("protocol ", name, " is already registered")
 	}
 	globalTransportConfigCreatorCache[name] = creator
 	return nil

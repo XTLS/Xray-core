@@ -6,16 +6,14 @@ option go_package = "github.com/xtls/xray-core/transport/internet/finalmask/udph
 option java_package = "com.xray.transport.internet.finalmask.udphop";
 option java_multiple_files = true;
 
-import "transport/internet/config.proto";
-
 message Config {
-  xray.transport.internet.SocketConfig sockopt = 1;
+  reserved 1;
   bool local = 2;
   bool remote = 3;
   bool remote_once = 4;
   int64 interval_min = 5;
   int64 interval_max = 6;
-  repeated uint32 remote_ports = 7;
-  repeated string remoteIPs = 8;
+  repeated string remoteIPs = 7;
+  repeated uint32 remote_ports = 8;
 }
 

@@ -37,7 +37,6 @@ type record struct {
 }
 
 type xicmpConnServer struct {
-	conn    net.PacketConn
 	icmp4   *icmp.PacketConn
 	icmp6   *icmp.PacketConn
 	ips     map[netip.Addr]struct{}
@@ -48,7 +47,7 @@ type xicmpConnServer struct {
 	mu      sync.Mutex
 }
 
-func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
+func NewConnServer(c *Config) (net.PacketConn, error) {
 	icmp4, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
 	if err != nil {
 		return nil, err
@@ -64,7 +63,6 @@ func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 	}
 
 	conn := &xicmpConnServer{
-		conn:    raw,
 		icmp4:   icmp4,
 		icmp6:   icmp6,
 		ips:     ips,
@@ -115,12 +113,11 @@ func (c *xicmpConnServer) recv4() {
 
 	var b [finalmask.UDPSize]byte
 	for {
-		if c.closed() {
-			return
-		}
-
 		n, addr, err := c.icmp4.ReadFrom(b[:])
 		if err != nil {
+			if c.closed() {
+				return
+			}
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
 				select {
@@ -130,9 +127,10 @@ func (c *xicmpConnServer) recv4() {
 				case <-c.closeCh:
 					return
 				}
+				continue
 			}
-			errors.LogErrorInner(context.Background(), err, "recv4 err")
-			continue
+			errors.LogErrorInner(context.Background(), err, "recv err 4")
+			return
 		}
 
 		msg, err := icmp.ParseMessage(1, b[:n])
@@ -195,12 +193,11 @@ func (c *xicmpConnServer) recv6() {
 
 	var b [finalmask.UDPSize]byte
 	for {
-		if c.closed() {
-			return
-		}
-
 		n, addr, err := c.icmp6.ReadFrom(b[:])
 		if err != nil {
+			if c.closed() {
+				return
+			}
 			var netErr net.Error
 			if goerrors.As(err, &netErr) && netErr.Timeout() {
 				select {
@@ -210,9 +207,10 @@ func (c *xicmpConnServer) recv6() {
 				case <-c.closeCh:
 					return
 				}
+				continue
 			}
-			errors.LogErrorInner(context.Background(), err, "recv6 err")
-			continue
+			errors.LogErrorInner(context.Background(), err, "recv err 6")
+			return
 		}
 
 		msg, err := icmp.ParseMessage(58, b[:n])
@@ -330,21 +328,13 @@ func (c *xicmpConnServer) Close() error {
 	close(c.closeCh)
 	_ = c.icmp4.Close()
 	_ = c.icmp6.Close()
-	_ = c.conn.Close()
 	c.wg.Wait()
-	select {
-	case p := <-c.readCh:
-		if p.p != nil {
-			pool.Put(p.p)
-		}
-	default:
-	}
 	close(c.readCh)
 	return nil
 }
 
 func (c *xicmpConnServer) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
+	return &net.UDPAddr{IP: []byte{0, 0, 0, 0}}
 }
 
 func (c *xicmpConnServer) SetDeadline(t time.Time) error {

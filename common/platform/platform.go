@@ -72,7 +72,7 @@ func NormalizeEnvName(name string) string {
 	return strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(name)), ".", "_")
 }
 
-func getExecutableDir() string {
+func GetExecutableDir() string {
 	exec, err := os.Executable()
 	if err != nil {
 		return ""
@@ -81,7 +81,7 @@ func getExecutableDir() string {
 }
 
 func GetConfigurationPath() string {
-	configPath := NewEnvFlag(ConfigLocation).GetValue(getExecutableDir)
+	configPath := NewEnvFlag(ConfigLocation).GetValue(GetExecutableDir)
 	return filepath.Join(configPath, "config.json")
 }
 

@@ -56,7 +56,7 @@ func (l *Loopback) init(config *Config, dispatcherInstance routing.Dispatcher) e
 	if config.Sniffing.GetEnabled() {
 		request, err := proxyman.BuildSniffingRequest(config.Sniffing)
 		if err != nil {
-			return errors.New("failed to build loopback sniffing request").Base(err).AtError()
+			return errors.New("failed to build loopback sniffing request").Base(err)
 		}
 		l.sniffingRequest = request
 	}

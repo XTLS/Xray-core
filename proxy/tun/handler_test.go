@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/features/routing"
@@ -101,6 +102,53 @@ func (d *testDispatcher) DispatchLink(ctx context.Context, dest xnet.Destination
 	buf.ReleaseMulti(mb)
 
 	return link.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(d.writePayload)})
+}
+
+// closableConn is a connection that is its own writer, as the ones of the stack are
+type closableConn struct {
+	*testConn
+	closed int32
+}
+
+func (c *closableConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	buf.ReleaseMulti(mb)
+	return nil
+}
+
+func (c *closableConn) Close() error {
+	atomic.AddInt32(&c.closed, 1)
+	return nil
+}
+
+// closingDispatcher does what an outbound does when the other side has no more to send
+type closingDispatcher struct {
+	testDispatcher
+	conn   *closableConn
+	closed int32
+}
+
+func (d *closingDispatcher) DispatchLink(_ context.Context, _ xnet.Destination, link *transport.Link) error {
+	common.Close(link.Writer)
+	d.closed = atomic.LoadInt32(&d.conn.closed)
+	return nil
+}
+
+func TestHandlerClosesTunConnectionWhenBothSidesAreDone(t *testing.T) {
+	conn := &closableConn{testConn: newTestConn(nil)}
+	dispatcher := &closingDispatcher{conn: conn}
+	handler := &Handler{
+		ctx:        context.Background(),
+		config:     &Config{},
+		dispatcher: dispatcher,
+	}
+	handler.HandleConnection(conn, xnet.TCPDestination(xnet.LocalHostIP, 443))
+
+	if dispatcher.closed != 0 {
+		t.Fatal("the connection was closed with its writer, while the system may still be sending")
+	}
+	if got := atomic.LoadInt32(&conn.closed); got != 1 {
+		t.Fatalf("connection closed %d times, want 1", got)
+	}
 }
 
 func TestHandlerCountsTunConnectionTraffic(t *testing.T) {

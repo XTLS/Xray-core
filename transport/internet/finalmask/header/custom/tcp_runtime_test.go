@@ -37,7 +37,7 @@ func TestDSLTCPHandshakeReusesCapturedValue(t *testing.T) {
 	defer clientRaw.Close()
 	defer serverRaw.Close()
 
-	client, err := cfg.WrapConnClient(clientRaw)
+	client, err := cfg.WrapConnClient(clientRaw, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestDSLTCPClientRejectsMismatchedResponseSequence(t *testing.T) {
 	defer clientRaw.Close()
 	defer serverRaw.Close()
 
-	client, err := clientCfg.WrapConnClient(clientRaw)
+	client, err := clientCfg.WrapConnClient(clientRaw, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -55,7 +55,8 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 		}
 
 		auth := r.Header.Get(RequestHeaderAuth)
-		down, _ := strconv.ParseUint(r.Header.Get(CommonHeaderCCRX), 10, 64)
+		remote_rx, _ := strconv.ParseUint(r.Header.Get(CommonHeaderCCRX), 10, 64)
+		tx := h.quicParams.BrutalUp
 
 		var user *protocol.MemoryUser
 		var ok bool
@@ -76,10 +77,13 @@ func (h *httpHandler) AuthHTTP(w http.ResponseWriter, r *http.Request) bool {
 			case "bbr":
 				congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 			case "", "brutal":
-				if quicParams.BrutalUp == 0 || down == 0 {
+				if remote_rx == 0 {
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				} else {
-					congestion.UseBrutal(conn, min(quicParams.BrutalUp, down), quicParams.BrutalDisableLossCompensation)
+					if tx > 0 {
+						remote_rx = min(remote_rx, tx)
+					}
+					congestion.UseBrutal(conn, remote_rx, quicParams.BrutalDisableLossCompensation)
 				}
 			case "force-brutal":
 				congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)
@@ -134,6 +138,7 @@ func (h *httpHandler) StreamDispatcher(ft http3.FrameType, stream *quic.Stream, 
 			remote: h.conn.RemoteAddr(),
 
 			user: h.user,
+			lock: make(chan struct{}, 1),
 		})
 		return true, nil
 	default:
@@ -316,18 +321,15 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 		quicConfig.MaxIncomingStreams = 1024
 	}
 
-	pktConn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)}, streamSettings.SocketSettings)
+	var pktConn net.PacketConn
+	var err error
+	if streamSettings.FinalMask != nil {
+		pktConn, err = streamSettings.FinalMask.ListenPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)})
+	} else {
+		pktConn, err = internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: address.IP(), Port: int(port)}, streamSettings.SocketSettings)
+	}
 	if err != nil {
 		return nil, err
-	}
-
-	if streamSettings.UdpmaskManager != nil {
-		newConn, err := streamSettings.UdpmaskManager.WrapPacketConnServer(pktConn)
-		if err != nil {
-			pktConn.Close()
-			return nil, errors.New("mask err").Base(err)
-		}
-		pktConn = newConn
 	}
 
 	var k *quic.StatelessResetKey

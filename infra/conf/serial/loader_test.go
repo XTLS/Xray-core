@@ -18,7 +18,7 @@ func TestLoaderError(t *testing.T) {
 				"log": {
 					// abcd
 					0,
-					"loglevel": "info"
+					"logLevel": "info"
 				}
 		}`,
 			Output: "line 4 char 6",
@@ -27,7 +27,7 @@ func TestLoaderError(t *testing.T) {
 			Input: `{
 				"log": {
 					// abcd
-					"loglevel": "info",
+					"logLevel": "info",
 				}
 		}`,
 			Output: "line 5 char 5",

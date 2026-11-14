@@ -1,11 +1,11 @@
 package all
 
 import (
+	"crypto/mldsa"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	"github.com/xtls/xray-core/main/commands/base"
 )
 
@@ -39,8 +39,8 @@ func executeMLDSA65(cmd *base.Command, args []string) {
 	} else {
 		rand.Read(seed[:])
 	}
-	pub, _ := mldsa65.NewKeyFromSeed(&seed)
+	key, _ := mldsa.NewPrivateKey(mldsa.MLDSA65(), seed[:])
 	fmt.Printf("Seed: %v\nVerify: %v\n",
 		base64.RawURLEncoding.EncodeToString(seed[:]),
-		base64.RawURLEncoding.EncodeToString(pub.Bytes()))
+		base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes()))
 }

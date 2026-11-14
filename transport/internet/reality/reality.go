@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/ed25519"
+	"crypto/hkdf"
 	"crypto/hmac"
+	"crypto/mldsa"
 	"crypto/sha256"
 	"crypto/sha512"
 	gotls "crypto/tls"
@@ -18,10 +20,10 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
-	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
 	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/reality"
 	"github.com/xtls/xray-core/common/crypto"
@@ -30,12 +32,23 @@ import (
 	"github.com/xtls/xray-core/common/utils"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"golang.org/x/crypto/hkdf"
 	"golang.org/x/net/http2"
 )
 
 type Conn struct {
 	*reality.Conn
+	suppressCloseNotify atomic.Bool
+}
+
+func (c *Conn) SuppressCloseNotify() {
+	c.suppressCloseNotify.Store(true)
+}
+
+func (c *Conn) Close() error {
+	if c.suppressCloseNotify.Load() {
+		return c.Conn.NetConn().Close()
+	}
+	return c.Conn.Close()
 }
 
 func (c *Conn) HandshakeAddress() net.Address {
@@ -56,10 +69,22 @@ func Server(c net.Conn, config *reality.Config) (net.Conn, error) {
 
 type UConn struct {
 	*utls.UConn
-	Config     *Config
-	ServerName string
-	AuthKey    []byte
-	Verified   bool
+	Config              *Config
+	ServerName          string
+	AuthKey             []byte
+	Verified            bool
+	suppressCloseNotify atomic.Bool
+}
+
+func (c *UConn) SuppressCloseNotify() {
+	c.suppressCloseNotify.Store(true)
+}
+
+func (c *UConn) Close() error {
+	if c.suppressCloseNotify.Load() {
+		return c.NetConn().Close()
+	}
+	return c.UConn.Close()
 }
 
 func (c *UConn) HandshakeAddress() net.Address {
@@ -89,8 +114,8 @@ func (c *UConn) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x50
 				if len(certs[0].Extensions) > 0 {
 					h.Write(c.HandshakeState.Hello.Raw)
 					h.Write(c.HandshakeState.ServerHello.Raw)
-					verify, _ := mldsa65.Scheme().UnmarshalBinaryPublicKey(c.Config.Mldsa65Verify)
-					if mldsa65.Verify(verify.(*mldsa65.PublicKey), h.Sum(nil), nil, certs[0].Extensions[0].Value) {
+					verify, _ := mldsa.NewPublicKey(mldsa.MLDSA65(), c.Config.Mldsa65Verify)
+					if mldsa.Verify(verify, h.Sum(nil), certs[0].Extensions[0].Value, nil) == nil {
 						c.Verified = true
 						return nil
 					}
@@ -132,7 +157,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 	uConn.ServerName = utlsConfig.ServerName
 	fingerprint := tls.GetFingerprint(config.Fingerprint)
 	if fingerprint == nil {
-		return nil, errors.New("REALITY: failed to get fingerprint").AtError()
+		return nil, errors.New("REALITY: failed to get fingerprint")
 	}
 	uConn.UConn = utls.UClient(c, utlsConfig, *fingerprint)
 	{
@@ -151,7 +176,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		}
 		publicKey, err := ecdh.X25519().NewPublicKey(config.PublicKey)
 		if err != nil {
-			return nil, errors.New("REALITY: publicKey == nil")
+			return nil, errors.New("REALITY: nil publicKey").Base(err)
 		}
 		ecdhe := uConn.HandshakeState.State13.KeyShareKeys.Ecdhe
 		if ecdhe == nil {
@@ -160,12 +185,11 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		if ecdhe == nil {
 			return nil, errors.New("Current fingerprint ", uConn.ClientHelloID.Client, uConn.ClientHelloID.Version, " does not support TLS 1.3, REALITY handshake cannot establish.")
 		}
-		uConn.AuthKey, _ = ecdhe.ECDH(publicKey)
-		if uConn.AuthKey == nil {
-			return nil, errors.New("REALITY: SharedKey == nil")
+		if uConn.AuthKey, err = ecdhe.ECDH(publicKey); err != nil {
+			return nil, errors.New("REALITY: nil sharedKey").Base(err)
 		}
-		if _, err := hkdf.New(sha256.New, uConn.AuthKey, hello.Random[:20], []byte("REALITY")).Read(uConn.AuthKey); err != nil {
-			return nil, err
+		if uConn.AuthKey, err = hkdf.Key(sha256.New, uConn.AuthKey, hello.Random[:20], "REALITY", 32); err != nil {
+			return nil, errors.New("REALITY: nil authKey").Base(err)
 		}
 		aead := crypto.NewAesGcm(uConn.AuthKey)
 		if config.Show {
@@ -271,7 +295,7 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 			// Do not close the connection
 		}()
 		time.Sleep(time.Duration(crypto.RandBetween(config.SpiderY[8], config.SpiderY[9])) * time.Millisecond) // return
-		return nil, errors.New("REALITY: processed invalid connection").AtWarning()
+		return nil, errors.New("REALITY: processed invalid connection")
 	}
 	return uConn, nil
 }

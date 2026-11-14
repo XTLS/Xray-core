@@ -146,6 +146,10 @@ func SniffQUIC(b []byte) (*SniffHeader, error) {
 		}
 
 		restPayload := b[hdrLen+int(packetLen):]
+		// cachedReader can concatenate zero-padded UDP datagrams.
+		for len(restPayload) > 0 && restPayload[0] == 0 {
+			restPayload = restPayload[1:]
+		}
 		if !isQUICInitial { // Skip this packet if it's not initial packet
 			b = restPayload
 			continue

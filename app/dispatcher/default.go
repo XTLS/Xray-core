@@ -470,6 +470,9 @@ func (d *DefaultDispatcher) routedDispatch(ctx context.Context, link *transport.
 				return // DO NOT CHANGE: the traffic shouldn't be processed by default outbound if the specified outbound tag doesn't exist (yet), e.g., VLESS Reverse Proxy
 			}
 		} else {
+			if err != common.ErrNoClue {
+				errors.LogErrorInner(ctx, err, "failed to pick route for ", destination)
+			}
 			errors.LogInfo(ctx, "default route for ", destination)
 		}
 	}

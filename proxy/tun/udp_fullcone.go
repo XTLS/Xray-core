@@ -11,11 +11,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 )
 
-type packet struct {
-	data []byte
-	dest *net.Destination
-}
-
 // sub-handler specifically for udp connections under main handler
 type udpConnectionHandler struct {
 	sync.RWMutex
@@ -38,17 +33,15 @@ func newUdpConnectionHandler(handleConnection func(conn net.Conn, dest net.Desti
 
 // HandlePacket handles UDP packets coming from tun, to forward to the dispatcher
 // this custom handler support FullCone NAT of returning packets, binding connection only by the source addr:port
-func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destination, data []byte) {
+func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destination, data *buf.Buffer) {
+	data.UDP = &dst
+
 	u.RLock()
 	conn, found := u.udpConns[src]
 	if found {
-		select {
-		case conn.egress <- &packet{
-			data: data,
-			dest: &dst,
-		}:
-		default:
-			errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
+		if !conn.queue.push(data) {
+			errors.LogDebug(context.Background(), "drop udp with size ", data.Len(), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full")
+			data.Release()
 		}
 		u.RUnlock()
 		return
@@ -60,30 +53,25 @@ func (u *udpConnectionHandler) HandlePacket(src net.Destination, dst net.Destina
 
 	conn, found = u.udpConns[src]
 	if !found {
-		egress := make(chan *packet, 1024)
-		conn = &udpConn{handler: u, egress: egress, src: src, dst: dst}
+		conn = &udpConn{handler: u, queue: newPacketQueue(udpQueueLimit), src: src, dst: dst}
 		u.udpConns[src] = conn
 
 		go u.handleConnection(conn, dst)
 	}
 
-	// send packet data to the egress channel, if it has buffer, or discard
-	select {
-	case conn.egress <- &packet{
-		data: data,
-		dest: &dst,
-	}:
-	default:
-		errors.LogDebug(context.Background(), "drop udp with size ", len(data), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full 2")
+	// queue the packet for the reader of the connection, or discard it
+	if !conn.queue.push(data) {
+		errors.LogDebug(context.Background(), "drop udp with size ", data.Len(), " to ", dst.NetAddr(), " original ", conn.dst.NetAddr(), " > queue full 2")
+		data.Release()
 	}
 }
 
-func (u *udpConnectionHandler) connectionFinished(src net.Destination) {
+func (u *udpConnectionHandler) connectionFinished(conn *udpConn) {
 	u.Lock()
-	conn, found := u.udpConns[src]
-	if found {
-		delete(u.udpConns, src)
-		close(conn.egress)
+	// Close runs twice per flow; a newer conn may already own this src.
+	if u.udpConns[conn.src] == conn {
+		delete(u.udpConns, conn.src)
+		conn.queue.close()
 	}
 	u.Unlock()
 }
@@ -92,38 +80,28 @@ func (u *udpConnectionHandler) connectionFinished(src net.Destination) {
 type udpConn struct {
 	handler *udpConnectionHandler
 
-	egress chan *packet
-	src    net.Destination
-	dst    net.Destination
+	queue *packetQueue
+	src   net.Destination
+	dst   net.Destination
 }
 
 func (c *udpConn) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	for {
-		e, ok := <-c.egress
-		if !ok {
-			return nil, io.EOF
-		}
-
-		b := buf.New()
-		if _, err := b.Write(e.data); err != nil {
-			errors.LogErrorInner(context.Background(), err, "drop packet to ", e.dest, " with size ", len(e.data))
-			b.Release()
-			continue
-		}
-		b.UDP = e.dest
-
-		return buf.MultiBuffer{b}, nil
+	b, ok := c.queue.pop()
+	if !ok {
+		return nil, io.EOF
 	}
+	return buf.MultiBuffer{b}, nil
 }
 
 // Read packets from the connection
 func (c *udpConn) Read(p []byte) (int, error) {
-	e, ok := <-c.egress
+	b, ok := c.queue.pop()
 	if !ok {
 		return 0, io.EOF
 	}
-	n := copy(p, e.data)
-	if n != len(e.data) {
+	defer b.Release()
+	n := copy(p, b.Bytes())
+	if n != int(b.Len()) {
 		return 0, io.ErrShortBuffer
 	}
 	return n, nil
@@ -154,14 +132,14 @@ func (c *udpConn) Write(p []byte) (int, error) {
 	// sending packets back mean sending payload with source/destination reversed
 	err := c.handler.writePacket(p, c.dst, c.src)
 	if err != nil {
-		return 0, nil
+		return 0, err
 	}
 
 	return len(p), nil
 }
 
 func (c *udpConn) Close() error {
-	c.handler.connectionFinished(c.src)
+	c.handler.connectionFinished(c)
 
 	return nil
 }
@@ -184,4 +162,69 @@ func (c *udpConn) SetReadDeadline(t time.Time) error {
 
 func (c *udpConn) SetWriteDeadline(t time.Time) error {
 	return nil
+}
+
+// udpQueueLimit bounds the packets waiting for one UDP flow; more are dropped.
+const udpQueueLimit = 1024
+
+// packetQueue holds the packets waiting for one UDP flow. Unlike a buffered
+// channel of the same bound it only allocates for packets actually queued, so
+// the many idle flows kept until the idle timeout cost next to nothing.
+type packetQueue struct {
+	mu     sync.Mutex
+	items  []*buf.Buffer
+	limit  int
+	notify chan struct{}
+	closed bool
+}
+
+func newPacketQueue(limit int) *packetQueue {
+	return &packetQueue{limit: limit, notify: make(chan struct{}, 1)}
+}
+
+// push queues b and reports whether it was accepted.
+func (q *packetQueue) push(b *buf.Buffer) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed || len(q.items) >= q.limit {
+		return false
+	}
+	q.items = append(q.items, b)
+	select {
+	case q.notify <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+// pop blocks until a packet is queued or the queue is closed and drained.
+func (q *packetQueue) pop() (*buf.Buffer, bool) {
+	for {
+		q.mu.Lock()
+		if len(q.items) > 0 {
+			b := q.items[0]
+			q.items[0] = nil
+			q.items = q.items[1:]
+			if len(q.items) == 0 {
+				q.items = nil
+			}
+			q.mu.Unlock()
+			return b, true
+		}
+		if q.closed {
+			q.mu.Unlock()
+			return nil, false
+		}
+		q.mu.Unlock()
+		<-q.notify
+	}
+}
+
+func (q *packetQueue) close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if !q.closed {
+		q.closed = true
+		close(q.notify)
+	}
 }

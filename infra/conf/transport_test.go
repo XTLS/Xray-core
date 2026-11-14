@@ -5,9 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xtls/xray-core/common/log"
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/transport/internet"
 	finalmaskcustom "github.com/xtls/xray-core/transport/internet/finalmask/header/custom"
+	"github.com/xtls/xray-core/transport/internet/splithttp"
+	"github.com/xtls/xray-core/transport/internet/xdrive"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -289,5 +292,347 @@ func TestHeaderCustomUDPBuildRejectsExprWithoutArgs(t *testing.T) {
 	}`)
 	if err == nil || !strings.Contains(err.Error(), "transform args") {
 		t.Fatalf("expected transform arg rejection, got %v", err)
+	}
+}
+
+func TestXDriveStreamConfig(t *testing.T) {
+	config := new(StreamConfig)
+	if err := json.Unmarshal([]byte(`{
+		"method": "xdrive",
+		"xdriveSettings": {
+			"remoteFolder": "/tmp/xdrive",
+			"service": "local"
+		}
+	}`), config); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+
+	built, err := config.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if built.ProtocolName != "xdrive" {
+		t.Fatalf("ProtocolName is %q, want %q", built.ProtocolName, "xdrive")
+	}
+	if len(built.TransportSettings) != 1 || built.TransportSettings[0].ProtocolName != "xdrive" {
+		t.Fatalf("TransportSettings is %v, want a single xdrive entry", built.TransportSettings)
+	}
+}
+
+func TestXDriveRejectsUnknownService(t *testing.T) {
+	config := new(XDriveConfig)
+	if err := json.Unmarshal([]byte(`{"remoteFolder": "/tmp/xdrive", "service": "Dropbox"}`), config); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, err := config.Build(); err == nil || !strings.Contains(err.Error(), `use "google-drive", "template", "s3" or "local"`) {
+		t.Fatalf("expected an unknown service error, got %v", err)
+	}
+}
+
+func TestXDriveGoogleDriveName(t *testing.T) {
+	for _, service := range []string{"google-drive", "Google Drive"} {
+		config := &XDriveConfig{RemoteFolder: "folder-id", Service: service, Secrets: []string{"a", "b", "c"}}
+		built, err := config.Build()
+		if err != nil {
+			t.Fatalf("%s: %v", service, err)
+		}
+		if got := built.(*xdrive.Config).Service; got != "google-drive" {
+			t.Errorf("%s: service is %q, want google-drive", service, got)
+		}
+		config = &XDriveConfig{RemoteFolder: "folder-id", Service: service, Secrets: []string{"a", "b"}}
+		if _, err := config.Build(); err == nil {
+			t.Errorf("%s: accepted two secrets", service)
+		}
+	}
+}
+
+func TestXDriveTemplateStreamConfig(t *testing.T) {
+	config := new(StreamConfig)
+	if err := json.Unmarshal([]byte(`{
+		"method": "xdrive",
+		"xdriveSettings": {
+			"remoteFolder": "folder",
+			"service": "template",
+			"secrets": ["user", "pass"],
+			"template": {
+				"flatten": true,
+				"auth": {"type": "basic", "username": "{secret0}", "password": "{secret1}"},
+				"put": {"method": "PUT", "url": "https://dav.example/{folder}/{name}"},
+				"get": {"method": "GET", "url": "https://dav.example/{folder}/{name}"},
+				"delete": {"method": "DELETE", "url": "https://dav.example/{folder}/{name}"},
+				"list": {"method": "PROPFIND", "url": "https://dav.example/{folder}/", "namesRegex": "<d:href>/folder/([^<]+)</d:href>"}
+			}
+		}
+	}`), config); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	built, err := config.Build()
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if built.ProtocolName != "xdrive" {
+		t.Fatalf("ProtocolName is %q, want xdrive", built.ProtocolName)
+	}
+}
+
+type logLines []string
+
+func (l *logLines) Handle(msg log.Message) {
+	*l = append(*l, msg.String())
+}
+
+// "alpn" ["http/1.1"] is warned about where the hello does not carry it, which
+// is outside ECH with a fingerprint that has an ALPN of its own
+func TestXDriveHTTP1ALPNWarning(t *testing.T) {
+	var lines logLines
+	log.RegisterHandler(&lines)
+
+	for _, c := range []struct {
+		method, tlsSettings string
+		warn                bool
+	}{
+		{"xdrive", `{}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"]}`, true},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "Firefox"}`, true},
+		{"raw", `{"alpn": ["http/1.1"]}`, false},
+		{"xdrive", `{"alpn": ["h2", "http/1.1"]}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "echConfigList": "udp://1.1.1.1"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "unsafe"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "hellogolang"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "randomized"}`, false},
+		{"xdrive", `{"alpn": ["http/1.1"], "fingerprint": "hellorandomizednoalpn"}`, false},
+	} {
+		lines = nil
+		config := new(StreamConfig)
+		if err := json.Unmarshal([]byte(`{
+			"method": "`+c.method+`",
+			"security": "tls",
+			"tlsSettings": `+c.tlsSettings+`,
+			"xdriveSettings": {"remoteFolder": "/tmp/xdrive", "service": "local"}
+		}`), config); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if _, err := config.Build(); err != nil {
+			t.Fatalf("%s %s: %v", c.method, c.tlsSettings, err)
+		}
+		warned := false
+		for _, line := range lines {
+			warned = warned || strings.HasPrefix(line, "[Warning]") && strings.Contains(line, `"alpn"`)
+		}
+		if warned != c.warn {
+			t.Errorf("%s %s: warned %v, want %v", c.method, c.tlsSettings, warned, c.warn)
+		}
+	}
+}
+
+// over h3 Google Drive takes only the noise mask, and no service takes brutal
+func TestXDriveH3Checks(t *testing.T) {
+	const (
+		drive       = `"method": "xdrive", "xdriveSettings": {"remoteFolder": "f", "service": "google-drive", "secrets": ["a", "b", "c"]}`
+		local       = `"method": "xdrive", "xdriveSettings": {"remoteFolder": "/tmp/xdrive", "service": "local"}`
+		noise       = `{"type": "Noise", "settings": {"noise": [{"rand": "50-100"}]}}`
+		salamander  = `{"type": "salamander", "settings": {"password": "p"}}`
+		forceBrutal = `{"quicParams": {"congestion": "force-brutal", "brutalUp": "10 mbps"}}`
+	)
+	for _, c := range []struct {
+		alpn, transport, finalmask string
+		ok                         bool
+	}{
+		{`["h3"]`, drive, `{"udp": [` + noise + `]}`, true},
+		{`["h3"]`, drive, `{"udp": [` + salamander + `]}`, false},
+		{`["h3"]`, drive, `{"udp": [` + noise + `, ` + salamander + `]}`, false},
+		{`["h3"]`, local, `{"udp": [` + salamander + `]}`, true},
+		{`["h3"]`, `"method": "xdrive"`, `{"udp": [` + salamander + `]}`, true},
+		{`["h2"]`, drive, `{"udp": [` + salamander + `]}`, true},
+		{`null`, drive, `{"udp": [` + salamander + `]}`, true},
+		{`["h3"]`, drive, `null`, true},
+		{`["h3"]`, drive, `{"quicParams": {"congestion": "bbr"}}`, true},
+		{`["h3"]`, drive, `{"quicParams": {"congestion": "brutal"}}`, false},
+		{`["h3"]`, local, forceBrutal, false},
+		{`["h3", "h2"]`, drive, `{"quicParams": {"congestion": "brutal"}}`, true},
+		{`["h3"]`, `"method": "xhttp"`, forceBrutal, true},
+	} {
+		config := new(StreamConfig)
+		if err := json.Unmarshal([]byte(`{
+			`+c.transport+`,
+			"security": "tls",
+			"tlsSettings": {"alpn": `+c.alpn+`},
+			"finalmask": `+c.finalmask+`
+		}`), config); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		if _, err := config.Build(); (err == nil) != c.ok {
+			t.Errorf("alpn %s, %s, finalmask %s: %v", c.alpn, c.transport, c.finalmask, err)
+		}
+	}
+}
+
+// one h3 connection is not held back by a window like h2, so h3 takes one by default
+func TestXDriveH3Connections(t *testing.T) {
+	for _, c := range []struct {
+		alpn string
+		want int32
+	}{
+		{`["h3"]`, 1},
+		{`["h2"]`, 4},
+		{`null`, 4},
+	} {
+		config := new(StreamConfig)
+		if err := json.Unmarshal([]byte(`{
+			"method": "xdrive",
+			"xdriveSettings": {"remoteFolder": "f", "service": "google-drive", "secrets": ["a", "b", "c"]},
+			"security": "tls",
+			"tlsSettings": {"alpn": `+c.alpn+`}
+		}`), config); err != nil {
+			t.Fatalf("Unmarshal: %v", err)
+		}
+		built, err := config.Build()
+		if err != nil {
+			t.Fatalf("alpn %s: %v", c.alpn, err)
+		}
+		xs, err := built.TransportSettings[0].Settings.GetInstance()
+		if err != nil {
+			t.Fatalf("alpn %s: %v", c.alpn, err)
+		}
+		if got := xs.(*xdrive.Config).Xmux.MaxConnections; got.From != c.want || got.To != c.want {
+			t.Errorf("alpn %s: maxConnections is %d-%d, want %d", c.alpn, got.From, got.To, c.want)
+		}
+	}
+}
+
+func TestXDriveTemplateNeedsTemplate(t *testing.T) {
+	config := new(XDriveConfig)
+	if err := json.Unmarshal([]byte(`{"remoteFolder": "f", "service": "template"}`), config); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, err := config.Build(); err == nil {
+		t.Fatal("Build accepted a template service without a template")
+	}
+}
+
+const (
+	xdriveStream = `"streamSettings": {"network": "xdrive", "xdriveSettings": {"remoteFolder": "f", "service": "local"}}`
+	xdriveID     = `"id": "27848739-7e62-4138-9fd3-098a63964b6b"`
+	xdriveServer = `"address": "127.0.0.1", "port": 443, ` + xdriveID
+	xdriveEnc    = `"encryption": "mlkem768x25519plus.native.0rtt.XKbaq1BuzJKKKPxZbwgRpn-gYQbnhrYketgezASCL1I"`
+	xdriveDec    = `"decryption": "mlkem768x25519plus.native.600s.UKfUEMDdjlEnycTMBP0a08acky8vRRKSrM1MRnaYk3s"`
+)
+
+func TestXDriveOutboundConfig(t *testing.T) {
+	build := func(s string) error {
+		c := new(OutboundDetourConfig)
+		if err := json.Unmarshal([]byte(s), c); err != nil {
+			return err
+		}
+		_, err := c.Build()
+		return err
+	}
+
+	for _, input := range []string{
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`,
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": 0, "xudpConcurrency": 8, "xudpProxyUDP443": "allow"}}`,
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "reverse": {"tag": "r"}}, ` + xdriveStream + `}`,
+		`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `}]}]}, ` + xdriveStream + `, "mux": {"enabled": true}}`,
+	} {
+		if err := build(input); err != nil {
+			t.Errorf("%s: %v", input, err)
+		}
+	}
+	for _, c := range []struct{ input, err string }{
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, "encryption": "none"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"encryption"`},
+		{`{"protocol": "vless", "settings": {"address": "example.com", "port": 443, ` + xdriveID + `, "encryption": "none"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"encryption"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": false}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "xudpConcurrency": -1}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "xudpProxyUDP443": "skip"}}`, `"mux"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"flow"`},
+		{`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}]}]}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"flow"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "testpre": 1}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"testpre"`},
+		{`{"protocol": "vmess", "settings": {` + xdriveServer + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
+		{`{"protocol": "trojan", "settings": {"address": "example.com", "port": 443, "password": "p"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
+		{`{"protocol": "freedom", ` + xdriveStream + `}`, "VLESS"},
+	} {
+		if err := build(c.input); err == nil || !strings.Contains(err.Error(), "xdrive transport") || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("expected an xdrive error about %s for %s, got %v", c.err, c.input, err)
+		}
+	}
+}
+
+func TestXDriveInboundConfig(t *testing.T) {
+	build := func(s string) error {
+		c := new(InboundDetourConfig)
+		if err := json.Unmarshal([]byte(s), c); err != nil {
+			return err
+		}
+		_, err := c.Build()
+		return err
+	}
+
+	for _, input := range []string{
+		`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `}, ` + xdriveStream + `}`,
+		`{"protocol": "vless", "listen": "@xdrive", "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `}, ` + xdriveStream + `}`,
+	} {
+		if err := build(input); err != nil {
+			t.Errorf("%s: %v", input, err)
+		}
+	}
+	for _, c := range []struct{ input, err string }{
+		{`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `}], "decryption": "none"}, ` + xdriveStream + `}`, `"decryption"`},
+		{`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `, "flow": "xtls-rprx-vision"}, ` + xdriveStream + `}`, `"flow"`},
+		{`{"protocol": "vless", "port": 443, "settings": {"clients": [{` + xdriveID + `, "flow": "xtls-rprx-vision"}], ` + xdriveDec + `}, ` + xdriveStream + `}`, `"flow"`},
+		{`{"protocol": "vmess", "port": 443, "settings": {"clients": [{` + xdriveID + `}]}, ` + xdriveStream + `}`, "VLESS"},
+		{`{"protocol": "vless", "port": "10800-10803", "settings": {"clients": [{` + xdriveID + `}], ` + xdriveDec + `}, ` + xdriveStream + `}`, "one port"},
+	} {
+		if err := build(c.input); err == nil || !strings.Contains(err.Error(), "xdrive transport") || !strings.Contains(err.Error(), c.err) {
+			t.Errorf("expected an xdrive error about %s for %s, got %v", c.err, c.input, err)
+		}
+	}
+}
+
+func TestXDriveXmux(t *testing.T) {
+	defaults := func(connections int32) *splithttp.XmuxConfig {
+		return &splithttp.XmuxConfig{
+			MaxConcurrency:   &splithttp.RangeConfig{},
+			MaxConnections:   &splithttp.RangeConfig{From: connections, To: connections},
+			CMaxReuseTimes:   &splithttp.RangeConfig{},
+			HMaxRequestTimes: &splithttp.RangeConfig{},
+			HMaxReusableSecs: &splithttp.RangeConfig{From: 1800, To: 3000},
+		}
+	}
+	for _, c := range []struct {
+		input string
+		want  *splithttp.XmuxConfig
+	}{
+		{`{"service": "google-drive", "secrets": ["a", "b", "c"]}`, defaults(4)},
+		{`{"service": "template", "template": {}}`, defaults(1)},
+		{`{"service": "google-drive", "secrets": ["a", "b", "c"], "xmux": {"maxConcurrency": "1-2", "hMaxRequestTimes": 100, "hKeepAlivePeriod": -1}}`, &splithttp.XmuxConfig{
+			MaxConcurrency:   &splithttp.RangeConfig{From: 1, To: 2},
+			MaxConnections:   &splithttp.RangeConfig{},
+			CMaxReuseTimes:   &splithttp.RangeConfig{},
+			HMaxRequestTimes: &splithttp.RangeConfig{From: 100, To: 100},
+			HMaxReusableSecs: &splithttp.RangeConfig{},
+			HKeepAlivePeriod: -1,
+		}},
+	} {
+		config := new(XDriveConfig)
+		if err := json.Unmarshal([]byte(c.input), config); err != nil {
+			t.Fatalf("%s: Unmarshal: %v", c.input, err)
+		}
+		built, err := config.Build()
+		if err != nil {
+			t.Fatalf("%s: Build: %v", c.input, err)
+		}
+		if got := built.(*xdrive.Config).Xmux; !proto.Equal(got, c.want) {
+			t.Errorf("%s: xmux is %v, want %v", c.input, got, c.want)
+		}
+	}
+
+	config := new(XDriveConfig)
+	if err := json.Unmarshal([]byte(`{"service": "template", "template": {}, "xmux": {"maxConnections": 2, "maxConcurrency": 8}}`), config); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, err := config.Build(); err == nil {
+		t.Error("Build accepted maxConnections with maxConcurrency")
 	}
 }

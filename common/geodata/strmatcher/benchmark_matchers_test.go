@@ -1,6 +1,7 @@
 package strmatcher_test
 
 import (
+	"regexp"
 	"strconv"
 	"testing"
 
@@ -68,6 +69,64 @@ func BenchmarkSubstrMatcher(b *testing.B) {
 	b.Run("ACAutomationMatcherGroup", func(b *testing.B) {
 		benchmarkMatcherType(b, Substr, func() MatcherGroup {
 			return NewACAutomatonMatcherGroup()
+		})
+	})
+}
+
+func BenchmarkRegexMatcher(b *testing.B) {
+	patterns := []string{ // taken from geosite
+		`(^|\.)91porn\.(best|com|cool|fun|group|party|plus|site|tw|work)$`,
+		`(^|\.)91porn[0-9]{3}\.me$`,
+		`(^|\.)apiproxy-device-prod-nlb-.+\.amazonaws\.com$`,
+		`(^|\.)dualstack\.apiproxy-.+\.amazonaws\.com$`,
+		`(^|\.)aqdk[0-9]{3}\.com$`,
+		`(^|\.)bilibili3(0[1-9]|1[0-2])\.xyz$`,
+		`(^|\.)byyum([3589]|2[235689]|3[34]|4[1-9]|5[1-79]|6[0134679])?\.com$`,
+		`(^|\.)fiftymvapi\..+$`,
+		`(^|\.)gossipfuli[0-9]{3,4}\.xyz$`,
+		`(^|\.)kpkuang\.(bond|fun|info|one|us)$`,
+		`(^|\.)rule34\.(asia|us|world|xxx|xyz)$`,
+		`(^|\.)[a-z][1-9][0-9][a-z]\.com$`,
+		`.+\.awsdns-[0-9][0-9]\.(co\.uk|com|net|org)$`,
+		`.+\.dkr\.ecr\.[^\.]+\.amazonaws\.com$`,
+		`^(.+\.)*zh\.okaapps\.com$`,
+		`^cdn\d-epicgames-\d+\.file\.myqcloud\.com$`,
+		`^chatgpt-async-webps-prod-\S+-\d+\.webpubsub\.azure\.com$`,
+		`^r+[0-9]+(---|\.)sn-(2x3|ni5|j5o)\w{5}\.googlevideo\.com$`,
+		`^speed\.(coe|open)\.ad\.[a-z]{2,6}\.prod\.hosts\.ooklaserver\.net$`,
+		`javdb\d+\.com$`,
+	}
+	domains := []string{
+		"www.google.com", "rr3---sn-4g5edndy.googlevideo.com", "r1---sn-2x3abcde.googlevideo.com", "i.ytimg.com",
+		"graph.facebook.com", "api.twitter.com", "www.baidu.com", "github.com", "objects.githubusercontent.com",
+		"login.microsoftonline.com", "e1234.dscb.akamaiedge.net", "d1a2b3c4d5e6f7.cloudfront.net",
+		"s3.us-east-1.amazonaws.com", "123456789012.dkr.ecr.us-east-1.amazonaws.com", "www.wikipedia.org",
+		"discord.com", "telegram.org", "store.steampowered.com", "www.91porn.com", "ns-1234.awsdns-12.org",
+	}
+	bench := func(b *testing.B, ctor func(pattern string) func(string) bool) {
+		var matchers []func(string) bool
+		for _, p := range patterns {
+			matchers = append(matchers, ctor(p))
+		}
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			for _, d := range domains {
+				for _, match := range matchers {
+					_ = match(d)
+				}
+			}
+		}
+	}
+	b.Run("regexp", func(b *testing.B) {
+		bench(b, func(pattern string) func(string) bool {
+			return regexp.MustCompile(pattern).MatchString
+		})
+	})
+	b.Run("prefilter", func(b *testing.B) {
+		bench(b, func(pattern string) func(string) bool {
+			m, err := Regex.New(pattern)
+			common.Must(err)
+			return m.Match
 		})
 	})
 }

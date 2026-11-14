@@ -109,7 +109,7 @@ func (h *HealthPingRTTS) getStatistics() *HealthPingStats {
 		stats.Min = 0
 		return stats
 	}
-	stats.Average = time.Duration(int(sum) / cnt)
+	stats.Average = sum / time.Duration(cnt)
 	var std float64
 	if cnt < 2 {
 		// no enough data for standard deviation, we assume it's half of the average rtt

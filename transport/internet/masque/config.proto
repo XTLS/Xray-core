@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package xray.transport.internet.masque;
+option csharp_namespace = "Xray.Transport.Internet.Masque";
+option go_package = "github.com/xtls/xray-core/transport/internet/masque";
+option java_package = "com.xray.transport.internet.masque";
+option java_multiple_files = true;
+
+import "transport/internet/splithttp/config.proto";
+
+message Config {
+  string host = 1;
+  string path = 2;
+  map<string, string> headers = 3;
+  Warp warp = 4;
+  xray.transport.internet.splithttp.XmuxConfig xmux = 5;
+}
+
+message Warp {
+  bytes private_key = 1;
+  bytes public_key = 2;
+  repeated string address = 3;
+}

@@ -115,6 +115,9 @@ func TestDokodemoTCP(t *testing.T) {
 			defer CloseServer(server)
 			break
 		}
+		if server != nil {
+			CloseServer(server)
+		}
 		retry++
 		if retry > 5 {
 			t.Fatal("All attempts failed to start client")
@@ -208,6 +211,9 @@ func TestDokodemoUDP(t *testing.T) {
 		if server != nil && WaitConnAvailableWithTest(t, testUDPConn(net.Port(clientPort), 1024, time.Second*2)) {
 			defer CloseServer(server)
 			break
+		}
+		if server != nil {
+			CloseServer(server)
 		}
 		retry++
 		if retry > 5 {
