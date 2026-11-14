@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/netip"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/xtls/xray-core/common"
@@ -15,8 +16,10 @@ import (
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	routing_session "github.com/xtls/xray-core/features/routing/session"
 	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
@@ -35,6 +38,12 @@ type Handler struct {
 	sniffingRequest session.SniffingRequest
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
+
+	// instance, router and fakeDNS route the destinations of UDP sessions, see UDPRouteKey
+	instance  *core.Instance
+	routeOnce sync.Once
+	router    routing.Router
+	fakeDNS   dns.FakeDNSEngine
 }
 
 type tunUDPStatsWriter struct {
@@ -80,6 +89,58 @@ type ConnectionHandler interface {
 	HandleConnection(conn net.Conn, destination net.Destination)
 }
 
+// udpRouter is a ConnectionHandler that can tell the route of a UDP packet. The stack then keeps the destinations
+// of one source in one session only while they take the same route
+type udpRouter interface {
+	UDPRouteKey(src net.Destination, dst net.Destination) string
+}
+
+var _ udpRouter = (*Handler)(nil)
+
+// UDPRouteKey names the routing rule that a UDP packet from src to dst would match, as the dispatcher would see it
+// for a new connection: a fake IP stands for its domain, and no DNS query is made for the decision. Rules are told
+// apart by ruleTag, so a balancer that picks another outbound keeps its destinations together; a rule without a
+// tag is told by its outbound. No rule is the default route
+func (t *Handler) UDPRouteKey(src net.Destination, dst net.Destination) string {
+	t.routeOnce.Do(func() {
+		if t.instance == nil {
+			return
+		}
+		if r, ok := t.instance.GetFeature(routing.RouterType()).(routing.Router); ok {
+			t.router = r
+		}
+		if f, ok := t.instance.GetFeature((*dns.FakeDNSEngine)(nil)).(dns.FakeDNSEngine); ok {
+			t.fakeDNS = f
+		}
+	})
+	if t.router == nil {
+		return ""
+	}
+	target := dst
+	if t.fakeDNS != nil && dst.Address.Family().IsIP() {
+		if domain := t.fakeDNS.GetDomainFromFakeDNS(dst.Address); domain != "" {
+			target.Address = net.DomainAddress(domain)
+		}
+	}
+	route, err := t.router.PickRoute(&routing_session.Context{
+		Inbound: &session.Inbound{
+			Name:   "tun",
+			Tag:    t.tag,
+			Source: src,
+			User:   &protocol.MemoryUser{Level: t.config.UserLevel},
+		},
+		Outbound: &session.Outbound{OriginalTarget: dst, Target: target},
+		Content:  &session.Content{SkipDNSResolve: true},
+	})
+	if err != nil {
+		return ""
+	}
+	if tag := route.GetRuleTag(); tag != "" {
+		return "rule:" + tag
+	}
+	return "outbound:" + route.GetOutboundTag()
+}
+
 // Handler implements ConnectionHandler
 var _ ConnectionHandler = (*Handler)(nil)
 
@@ -97,6 +158,7 @@ func (t *Handler) Init(ctx context.Context, pm policy.Manager, dispatcher routin
 	}
 
 	t.ctx = core.ToBackgroundDetachedContext(ctx)
+	t.instance = core.FromContext(ctx)
 	t.policyManager = pm
 	t.dispatcher = dispatcher
 
