@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -598,4 +599,55 @@ func Test_ServerMaxHeaderBytes(t *testing.T) {
 	if resp.StatusCode != http.StatusRequestHeaderFieldsTooLarge {
 		t.Fatalf("oversized header status = %d, want 431", resp.StatusCode)
 	}
+}
+
+// quicTransports counts the running QUIC transports, each of which holds a UDP socket
+func quicTransports() int {
+	b := make([]byte, 1<<20)
+	return strings.Count(string(b[:runtime.Stack(b, true)]), "quic-go.(*Transport).listen(")
+}
+
+func Test_DialQUICFailureClosesSocket(t *testing.T) {
+	listenPort := udp.PickPort()
+	ct, _ := cert.MustGenerate(nil, cert.CommonName("localhost"))
+	serverCert := tls.ParseCertificate(ct)
+	serverCert.OneTimeLoading = true
+	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "shs"},
+		SecurityType:     "tls",
+		SecuritySettings: &tls.Config{
+			Certificate:  []*tls.Certificate{serverCert},
+			NextProtocol: []string{"h3"},
+		},
+	}, func(conn stat.Connection) { conn.Close() })
+	common.Must(err)
+	defer listen.Close()
+
+	time.Sleep(time.Second)
+	before := quicTransports()
+
+	// the client pins another certificate, so its QUIC handshake fails
+	conn, err := Dial(context.Background(), net.UDPDestination(net.DomainAddress("localhost"), listenPort), &internet.MemoryStreamConfig{
+		ProtocolName:     "splithttp",
+		ProtocolSettings: &Config{Path: "shs"},
+		SecurityType:     "tls",
+		SecuritySettings: &tls.Config{
+			PinnedPeerCertSha256: [][]byte{make([]byte, 32)},
+			NextProtocol:         []string{"h3"},
+		},
+	})
+	common.Must(err)
+	defer conn.Close()
+	if _, err := conn.Read(make([]byte, 1)); err == nil {
+		t.Fatal("the dial did not fail")
+	}
+
+	for range 20 {
+		if quicTransports() <= before {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Errorf("the failed dial left %d QUIC transport(s) and their UDP sockets open", quicTransports()-before)
 }

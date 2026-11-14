@@ -227,6 +227,9 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				conn, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 				if err != nil {
+					// pktConn first: tr.Close() waits for the read from it to return, which with dialerProxy has no deadline
+					pktConn.Close()
+					tr.Close()
 					return nil, err
 				}
 				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
