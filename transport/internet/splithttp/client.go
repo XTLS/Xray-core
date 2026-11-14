@@ -68,6 +68,15 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	}
 	c.transportConfig.FillStreamRequest(req, sessionId, "")
 
+	// stream-down and stream-one responses carry the downlink; ask the
+	// server to run packet-down in it. stream-up responses are discarded
+	// by this client, so they don't need packet-down.
+	downlinkMaybeFramed := false
+	if !uploadOnly && c.transportConfig.PacketDown != nil {
+		req.Header.Set(pdRequestHeader, "1")
+		downlinkMaybeFramed = true
+	}
+
 	wrc = &WaitReadCloser{wait: done.New()}
 	go func() {
 		resp, err := c.client.Do(req)
@@ -91,7 +100,13 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 			wrc.Close()
 			return
 		}
-		wrc.(*WaitReadCloser).Set(resp.Body)
+		if downlinkMaybeFramed && resp.Header.Get(pdResponseHeader) == "1" {
+			// the body is packet-down frames; strip them before the
+			// payload reaches the dispatcher
+			wrc.(*WaitReadCloser).Set(newPacketDownReader(resp.Body))
+		} else {
+			wrc.(*WaitReadCloser).Set(resp.Body)
+		}
 	}()
 
 	<-gotConn.Wait()
