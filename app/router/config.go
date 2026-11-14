@@ -11,11 +11,12 @@ import (
 )
 
 type Rule struct {
-	Tag       string
-	RuleTag   string
-	Balancer  *Balancer
-	Condition Condition
-	Webhook   *WebhookNotifier
+	Tag        string
+	RuleTag    string
+	Balancer   *Balancer
+	Condition  Condition
+	Webhook    *WebhookNotifier
+	userRoutes *userRouteRule
 }
 
 func (r *Rule) GetTag() (string, error) {
@@ -62,6 +63,11 @@ func (rr *RoutingRule) BuildCondition() (Condition, error) {
 	}
 
 	if rr.UserRouteList != nil {
+		for _, interval := range rr.UserRouteList.Range {
+			if interval == nil || interval.From > interval.To || interval.To > 65535 {
+				return nil, errors.New("invalid userRoute range")
+			}
+		}
 		conds.Add(NewPortMatcher(rr.UserRouteList, MatcherAsType_UserRoute))
 	} else if rr.VlessRouteList != nil {
 		conds.Add(NewPortMatcher(rr.VlessRouteList, MatcherAsType_VlessRoute))

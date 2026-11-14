@@ -20,7 +20,7 @@ import (
 // Router is an implementation of routing.Router.
 type Router struct {
 	domainStrategy Config_DomainStrategy
-	rules          atomic.Pointer[[]*Rule]
+	rules          atomic.Pointer[ruleSet]
 	script         *scriptEngine
 	balancers      atomic.Pointer[map[string]*Balancer]
 	dns            dns.Client
@@ -59,7 +59,7 @@ func (r *Router) Init(ctx context.Context, config *Config, d dns.Client, ohm out
 		r.script = script
 	}
 
-	r.rules.Store(new([]*Rule))
+	r.publishRules(nil)
 	r.balancers.Store(&map[string]*Balancer{})
 	return r.ReloadRules(config, false)
 }
@@ -101,7 +101,7 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	oldRules := *r.rules.Load()
+	oldRules := r.rules.Load().rules
 	oldBalancers := *r.balancers.Load()
 
 	var newRules []*Rule
@@ -133,9 +133,10 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 			return err
 		}
 		rr := &Rule{
-			Condition: cond,
-			Tag:       rule.GetTag(),
-			RuleTag:   rule.GetRuleTag(),
+			Condition:  cond,
+			userRoutes: compileUserRoutes(rule),
+			Tag:        rule.GetTag(),
+			RuleTag:    rule.GetRuleTag(),
 		}
 		if rr.RuleTag != "" && existTags[rr.RuleTag] {
 			return errors.New("duplicate ruleTag ", rr.RuleTag)
@@ -159,7 +160,7 @@ func (r *Router) ReloadRules(config *Config, shouldAppend bool) error {
 	}
 
 	r.balancers.Store(&newBalancers)
-	r.rules.Store(&newRules)
+	r.publishRules(newRules)
 	if !shouldAppend {
 		closeWebhooks(oldRules)
 	}
@@ -175,7 +176,7 @@ func (r *Router) RemoveRule(tag string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	oldRules := *r.rules.Load()
+	oldRules := r.rules.Load().rules
 	newRules := make([]*Rule, 0, len(oldRules))
 	var removed []*Rule
 	for _, rule := range oldRules {
@@ -185,14 +186,14 @@ func (r *Router) RemoveRule(tag string) error {
 			removed = append(removed, rule)
 		}
 	}
-	r.rules.Store(&newRules)
+	r.publishRules(newRules)
 	closeWebhooks(removed)
 	return nil
 }
 
 // ListRule implements routing.Router
 func (r *Router) ListRule() []routing.Route {
-	rules := *r.rules.Load()
+	rules := r.rules.Load().rules
 	ruleList := make([]routing.Route, 0, len(rules))
 	for _, rule := range rules {
 		ruleList = append(ruleList, &Route{
@@ -213,7 +214,7 @@ func (r *Router) pickRouteInternal(ctx routing.Context) (*Rule, routing.Context,
 		ctx = routing_dns.ContextWithDNSClient(ctx, r.dns)
 	}
 
-	rules := *r.rules.Load()
+	rules := r.rules.Load().rules
 
 	for _, rule := range rules {
 		if rule.Apply(ctx) {
@@ -263,7 +264,7 @@ func (r *Router) Close() error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	closeWebhooks(*r.rules.Load())
+	closeWebhooks(r.rules.Load().rules)
 	return nil
 }
 
