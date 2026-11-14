@@ -153,11 +153,8 @@ func cacheAssertInvariants(t *testing.T, c *onlineCache) {
 		}
 	}
 	partition := make(map[*cacheAccount]int)
-	for _, entry := range c.hot {
-		partition[entry.account]++
-		if !seen[entry.account] {
-			t.Fatal("snapshot includes a non-cached account")
-		}
+	for account := range seen {
+		partition[account]++
 	}
 	for _, account := range c.cold {
 		partition[account]++
@@ -173,6 +170,52 @@ func cacheAssertInvariants(t *testing.T, c *onlineCache) {
 			t.Fatal("account missing from or duplicated in search partitions")
 		}
 	}
+}
+
+func TestOnlineCacheReauthenticationSearchOrder(t *testing.T) {
+	accounts := []*cacheAccount{cacheTestAccount(0, 0, 2, 1), cacheTestAccount(1, 1, 2, 1)}
+	c := newOnlineCache(accounts, 4*routeKeyBytes, time.Minute, time.Now)
+	defer cacheTestAdmit(t, c, cacheTestMatch(t, c, 0, 1, false))()
+	defer cacheTestAdmit(t, c, cacheTestMatch(t, c, 1, 1, false))()
+	var searched []uint32
+	for e := c.recent.Front(); e != nil; e = e.Next() {
+		entry := e.Value.(*preparedAccount)
+		entry.keys = cacheSearchRecorder{entry.keys, &searched, entry.account.id}
+	}
+	defer cacheTestAdmit(t, c, cacheTestMatch(t, c, 0, 2, true))()
+	searched = nil
+	cacheTestMatch(t, c, 0, 1, true)
+	if len(searched) != 1 || searched[0] != 0 {
+		t.Fatal("most recently authenticated account was not searched first", searched)
+	}
+	cacheAssertInvariants(t, c)
+}
+
+type cacheSearchRecorder struct {
+	routeKeys
+	searched *[]uint32
+	id       uint32
+}
+
+func (r cacheSearchRecorder) match(query *[16]byte, now uint64) int {
+	*r.searched = append(*r.searched, r.id)
+	return r.routeKeys.match(query, now)
+}
+
+func TestOnlineCacheRejectedGrowthDoesNotEvictOtherUsers(t *testing.T) {
+	accounts := []*cacheAccount{cacheTestAccount(0, 0, 2, 1), cacheTestAccount(1, 1, 2, 1), cacheTestAccount(2, 2, 1, 1)}
+	c := newOnlineCache(accounts, 5*routeKeyBytes, time.Minute, time.Now)
+	for _, id := range []int{0, 2, 1} {
+		defer cacheTestAdmit(t, c, cacheTestMatch(t, c, id, 1, false))()
+	}
+	updated := cacheTestAccount(2, 2, 4, 2)
+	if !c.testUpdateRoutes(accounts[2], updated) {
+		t.Fatal("route update rejected")
+	}
+	cacheTestMatch(t, c, 0, 1, true)
+	cacheTestMatch(t, c, 1, 1, true)
+	cacheTestMatch(t, c, 2, 1, false)
+	cacheAssertInvariants(t, c)
 }
 
 func TestOnlineCacheRouteGrowthPreservesNewerEntry(t *testing.T) {

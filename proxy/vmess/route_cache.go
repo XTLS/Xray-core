@@ -81,7 +81,6 @@ type onlineCache struct {
 	accounts     map[uint32]*cacheAccount
 	states       map[uint32]*onlineState
 	recent       list.List
-	hot          []*preparedAccount
 	cold         []*cacheAccount
 	bytes        int
 	budget       int
@@ -104,17 +103,13 @@ func newOnlineCache(accounts []*cacheAccount, budget int, grace time.Duration, n
 }
 
 func (c *onlineCache) publishLocked() {
-	hot := make([]*preparedAccount, 0, c.recent.Len())
-	for e := c.recent.Front(); e != nil; e = e.Next() {
-		hot = append(hot, e.Value.(*preparedAccount))
-	}
-	cold := make([]*cacheAccount, 0, len(c.accounts)-len(hot))
+	cold := make([]*cacheAccount, 0, len(c.accounts)-c.recent.Len())
 	for id, account := range c.accounts {
 		if state := c.states[id]; state == nil || state.element == nil {
 			cold = append(cold, account)
 		}
 	}
-	c.hot, c.cold = hot, cold
+	c.cold = cold
 }
 
 func (c *onlineCache) detachPreparedLocked(state *onlineState) {
@@ -175,6 +170,18 @@ func (c *onlineCache) prepareLocked(state *onlineState) bool {
 		return false
 	}
 	needed := len(account.keys) * routeKeyBytes
+	available := c.budget - c.bytes
+	for e := c.recent.Back(); available < needed && e != nil; e = e.Prev() {
+		entry := e.Value.(*preparedAccount)
+		other := c.states[entry.account.id]
+		if (state.active > 0 && other.active == 0) ||
+			((state.active == 0) == (other.active == 0) && state.lastAuth >= other.lastAuth) {
+			available += entry.keys.size()
+		}
+	}
+	if available < needed {
+		return false
+	}
 	for c.bytes+needed > c.budget {
 		victim := c.recent.Back()
 		for e := c.recent.Back(); e != nil; e = e.Prev() {
@@ -216,13 +223,13 @@ func (c *onlineCache) match(query *[16]byte, now uint64) (cacheCandidate, bool) 
 		c.mu.RLock()
 	}
 	defer c.mu.RUnlock()
-	hot, cold := c.hot, c.cold
-	for _, entry := range hot {
+	for e := c.recent.Front(); e != nil; e = e.Next() {
+		entry := e.Value.(*preparedAccount)
 		if index := entry.keys.match(query, now); index >= 0 && c.accounts[entry.account.id] == entry.account {
 			return cacheCandidate{entry.account, index, true}, true
 		}
 	}
-	for _, account := range cold {
+	for _, account := range c.cold {
 		if index := scanRouteRaw(account.keys, query, now); index >= 0 && c.accounts[account.id] == account {
 			return cacheCandidate{account, index, false}, true
 		}
