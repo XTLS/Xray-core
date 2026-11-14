@@ -13,7 +13,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
+
+	"github.com/xtls/xray-core/common/log"
 )
 
 type memSlots struct {
@@ -757,33 +760,46 @@ func TestSlotBurstInlineWaves(t *testing.T) {
 
 type holdSlots struct {
 	*memSlots
-	target    string
-	hold      chan struct{}
-	watermark string
-	ack       chan struct{}
+	target string
+	hold   chan struct{}
+	err    error
 }
 
 func (s *holdSlots) setSlot(ctx context.Context, id, description string, body []byte) error {
-	if id == s.target {
+	if frame, ok := decodeSlot(description); id == s.target && ok && frame.seq == 0 && frame.mode == slotInline {
 		select {
 		case <-s.hold:
+			if s.err != nil {
+				return s.err
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
-	if err := s.memSlots.setSlot(ctx, id, description, body); err != nil {
-		return err
-	}
-	if id == s.watermark {
-		select {
-		case s.ack <- struct{}{}:
-		default:
-		}
-	}
-	return nil
+	return s.memSlots.setSlot(ctx, id, description, body)
 }
 
 func TestSlotFirstAnnouncement(t *testing.T) {
+	// The asynchronous logger waits on channels outside the synctest bubble.
+	log.ReplaceWithSeverityLogger(log.Severity_Unknown)
+	t.Cleanup(func() { log.RegisterHandler(log.NewLogger(log.CreateStdoutLogWriter())) })
+
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "slow upload"},
+		{name: "failed upload", err: io.ErrUnexpectedEOF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				testSlotFirstAnnouncement(t, tc.err)
+			})
+		})
+	}
+}
+
+func testSlotFirstAnnouncement(t *testing.T, uploadErr error) {
 	p := params{
 		concurrency:     2,
 		segmentBytes:    4096,
@@ -792,15 +808,14 @@ func TestSlotFirstAnnouncement(t *testing.T) {
 		maxPollInterval: 5 * time.Millisecond,
 		sessionTTL:      time.Minute,
 	}
-	store := &holdSlots{memSlots: newMemSlots(), hold: make(chan struct{}), ack: make(chan struct{}, 1)}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	store := &holdSlots{memSlots: newMemSlots(), hold: make(chan struct{}), err: uploadErr}
+	ctx, cancel := context.WithTimeout(t.Context(), 3*slotCloseGrace)
 	defer cancel()
 	r, err := makeRing(ctx, store, "first", p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	store.target = r.Up.Slots[0]
-	store.watermark = r.Up.Watermark
 	client := newSlotConn(ctx, store, r.Up, r.Down, p, nil, nil)
 	writer := client.writer.(*slotWriter)
 	writer.first = make(chan []byte, 1)
@@ -839,13 +854,9 @@ func TestSlotFirstAnnouncement(t *testing.T) {
 	}
 
 	// The reader acknowledged the inline segment while its slot upload is blocked.
-	select {
-	case <-store.ack:
-	case <-ctx.Done():
-		t.Fatal("the reader did not acknowledge the inline segment")
-	}
-	if ready, err := writer.drained(2); err != nil || ready {
-		t.Fatalf("reuse while seq 0 is still writing: ready=%t, err=%v", ready, err)
+	synctest.Wait()
+	if acked, err := readWatermark(ctx, store, r.Up.Watermark); acked < 0 || err != nil {
+		t.Fatalf("inline acknowledgement = %d, err = %v", acked, err)
 	}
 
 	errs := make(chan error, 1)
@@ -856,10 +867,30 @@ func TestSlotFirstAnnouncement(t *testing.T) {
 		}
 		errs <- err
 	}()
+	synctest.Wait()
+	if description, err := store.readDescription(ctx, store.target); description != "" || err != nil {
+		t.Fatalf("slot description before seq 0 finished: %d bytes, err = %v", len(description), err)
+	}
+	if uploadErr == nil {
+		// Acknowledged data must survive a local write that outlasts the reader stall grace.
+		time.Sleep(slotCloseGrace + 2*slotAckRetry)
+	}
+	released := time.Now()
 	close(store.hold)
-	readAll(t, server, payload[len(first):])
-	if err := <-errs; err != nil {
-		t.Fatal(err)
+	if err := <-errs; !errors.Is(err, uploadErr) {
+		t.Fatalf("close returned %v, want %v", err, uploadErr)
+	}
+	if uploadErr == nil {
+		readAll(t, server, payload[len(first):])
+		return
+	}
+	if time.Since(released) >= slotCloseGrace {
+		t.Fatal("close waited for the reader stall grace after the upload failed")
+	}
+	description, err := store.readDescription(ctx, store.target)
+	frame, ok := decodeSlot(description)
+	if err != nil || !ok || frame.seq != 0 || frame.mode != slotErr {
+		t.Fatalf("failed upload did not leave the error frame: %q, err = %v", description, err)
 	}
 }
 

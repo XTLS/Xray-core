@@ -214,6 +214,11 @@ func readWatermark(ctx context.Context, store slotStore, id string) (int64, erro
 	return strconv.ParseInt(d, 10, 64)
 }
 
+type slotWriteResult struct {
+	next int64 // sequence that can reuse this slot after the write
+	err  error
+}
+
 type slotWriter struct {
 	ctx   context.Context
 	store slotStore
@@ -222,10 +227,9 @@ type slotWriter struct {
 	// slots limits the total number of pending uploads.
 	slots chan struct{}
 	wg    sync.WaitGroup
-	// written holds the last successfully uploaded sequence plus one for each slot.
-	written []atomic.Int64
 
 	mu       sync.Mutex
+	writes   []slotWriteResult
 	buf      []byte
 	seq      int64
 	size     int
@@ -250,7 +254,7 @@ func newSlotWriter(ctx context.Context, store slotStore, table slotTable, p para
 		table:    table,
 		params:   p,
 		slots:    make(chan struct{}, min(len(table.Slots), slotWriteInflight)),
-		written:  make([]atomic.Int64, len(table.Slots)),
+		writes:   make([]slotWriteResult, len(table.Slots)),
 		size:     min(slotInlineLimit, p.segmentBytes),
 		acked:    -1,
 		progress: time.Now(),
@@ -391,13 +395,19 @@ func (w *slotWriter) upload(seq int64, chunk []byte) {
 	}
 	awaited := time.Since(began)
 	putAt := time.Now()
-	if err := w.write(seq, mode, chunk); err != nil {
+	err := w.write(seq, mode, chunk)
+	if err != nil {
 		w.fail(errors.New("failed to store segment ", seq).Base(err))
-		// the slot is free, the reader learns there what happened
+		// Leave an error frame for a reader still waiting for this sequence.
 		w.write(seq, slotErr, nil)
+	}
+	depth := int64(len(w.writes))
+	w.mu.Lock()
+	w.writes[seq%depth] = slotWriteResult{next: seq + depth, err: err}
+	w.mu.Unlock()
+	if err != nil {
 		return
 	}
-	w.written[seq%int64(len(w.written))].Store(seq + 1)
 	errors.LogDebug(w.ctx, "xdrive write ", slotTag(w.table.Watermark), " seq=", seq, " bytes=", len(chunk),
 		" mode=", mode, " await=", awaited, " put=", time.Since(putAt))
 }
@@ -411,23 +421,13 @@ func (w *slotWriter) write(seq int64, mode byte, data []byte) error {
 	return w.store.setSlot(w.ctx, w.slotID(seq), f.encode(), body)
 }
 
-// drained reports whether the previous upload to the slot finished and the
-// reader took its bytes. An inline announcement can be acknowledged before
-// its slot upload completes.
-func (w *slotWriter) drained(seq int64) (bool, error) {
-	depth := int64(len(w.written))
-	before := seq - depth
-	if before < 0 {
-		return true, nil
-	}
-	if w.written[seq%depth].Load() <= before {
-		return false, nil
-	}
-
+// acknowledged checks whether the reader took the bytes of seq. The watermark
+// is read again only after slotWatermarkTTL unless it already confirms seq.
+func (w *slotWriter) acknowledged(seq int64) (bool, error) {
 	w.ackMu.Lock()
 	defer w.ackMu.Unlock()
 
-	if w.acked >= before {
+	if w.acked >= seq {
 		return true, nil
 	}
 	if time.Since(w.ackedAt) < slotWatermarkTTL {
@@ -441,27 +441,38 @@ func (w *slotWriter) drained(seq int64) (bool, error) {
 	if acked > w.acked {
 		w.acked, w.progress = acked, w.ackedAt
 	}
-	return w.acked >= before, nil
+	return w.acked >= seq, nil
 }
 
-// await waits for drained, for slotStallTimeout at most, or slotCloseGrace
-// without progress once the writer is closed
+// await waits for both the previous write to this slot and its acknowledgement.
+// An inline announcement can be acknowledged before its slot upload completes,
+// so apply the reader stall timeout only while the acknowledgement is missing.
 func (w *slotWriter) await(seq int64) error {
+	depth := int64(len(w.writes))
+	previous := seq - depth
+	if previous < 0 {
+		return nil
+	}
+
 	start := time.Now()
 	wait := slotAckRetry
 	for {
-		ok, err := w.drained(seq)
-		if ok {
-			return nil
-		}
 		w.mu.Lock()
-		closed := w.closed
+		write, closed := w.writes[seq%depth], w.closed
 		w.mu.Unlock()
-		w.ackMu.Lock()
-		still := time.Since(w.progress)
-		w.ackMu.Unlock()
-		if min(time.Since(start), still) > slotStallTimeout || closed && still > slotCloseGrace {
-			return errors.New("the reader took nothing from slot ", w.slotID(seq), " for ", still).Base(err)
+		if write.err != nil {
+			return write.err
+		}
+		acked, err := w.acknowledged(previous)
+		if !acked {
+			w.ackMu.Lock()
+			still := time.Since(w.progress)
+			w.ackMu.Unlock()
+			if min(time.Since(start), still) > slotStallTimeout || closed && still > slotCloseGrace {
+				return errors.New("the reader took nothing from slot ", w.slotID(seq), " for ", still).Base(err)
+			}
+		} else if write.next == seq {
+			return nil
 		}
 
 		if err != nil {
