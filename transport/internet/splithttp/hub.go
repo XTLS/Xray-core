@@ -47,6 +47,9 @@ type requestHandler struct {
 
 type httpSession struct {
 	uploadQueue *uploadQueue
+	// downlink — исходящий буфер для режима packet-down (nil в остальных режимах).
+	// Создаётся лениво при первом GET-сегменте, см. ServeHTTP.
+	downlink *downlinkBuffer
 	// for as long as the GET request is not opened by the client, this will be
 	// open ("undone"), and the session may be expired within a certain TTL.
 	// after the client connects, this becomes "done" and the session lives as
