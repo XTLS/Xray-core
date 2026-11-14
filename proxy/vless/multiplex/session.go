@@ -53,7 +53,7 @@ func NewSession(ctx context.Context, link *transport.Link) *Session {
 	if target.Network == net.Network_UDP {
 		s.transferType = protocol.TransferTypePacket
 	}
-	if session.IsReverseMultiplexFromContext(ctx) {
+	if session.IsReverseMuxFromContext(ctx) {
 		s.inbound = session.InboundFromContext(ctx)
 	}
 	return s

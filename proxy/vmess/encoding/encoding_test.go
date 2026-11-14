@@ -110,7 +110,7 @@ func TestInvalidRequest(t *testing.T) {
 	}
 }
 
-func TestMultiplexRequest(t *testing.T) {
+func TestMuxRequest(t *testing.T) {
 	user := &protocol.MemoryUser{
 		Level: 0,
 		Email: "test@example.com",
@@ -124,9 +124,9 @@ func TestMultiplexRequest(t *testing.T) {
 	expectedRequest := &protocol.RequestHeader{
 		Version:  1,
 		User:     user,
-		Command:  protocol.RequestCommandMultiplex,
+		Command:  protocol.RequestCommandMux,
 		Security: protocol.SecurityType_AES128_GCM,
-		Address:  net.DomainAddress("v1.multiplex.cool"),
+		Address:  net.DomainAddress("v1.mux.cool"),
 	}
 
 	buffer := buf.New()

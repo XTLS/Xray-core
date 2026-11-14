@@ -92,7 +92,7 @@ func TestInvalidRequest(t *testing.T) {
 	}
 }
 
-func TestMultiplexRequest(t *testing.T) {
+func TestMuxRequest(t *testing.T) {
 	user := &protocol.MemoryUser{
 		Level: 0,
 		Email: "test@example.com",
@@ -106,8 +106,8 @@ func TestMultiplexRequest(t *testing.T) {
 	expectedRequest := &protocol.RequestHeader{
 		Version: Version,
 		User:    user,
-		Command: protocol.RequestCommandMultiplex,
-		Address: net.DomainAddress("v1.multiplex.cool"),
+		Command: protocol.RequestCommandMux,
+		Address: net.DomainAddress("v1.mux.cool"),
 	}
 	expectedAddons := &Addons{}
 

@@ -101,7 +101,7 @@ func (p *PublicEndpoint) HandleConnection(ctx context.Context, link *transport.L
 		return errors.New("outbound metadata not found")
 	}
 
-	ctx = session.ContextWithIsReverseMultiplex(ctx, true)
+	ctx = session.ContextWithIsReverseMux(ctx, true)
 
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
@@ -142,7 +142,7 @@ func (p *PublicEndpoint) Admit(ctx context.Context, s *multiplex.Session) error 
 		p.workers[best], p.workers[remaining] = p.workers[remaining], p.workers[best]
 	}
 
-	return errors.New("no multiplex client worker available")
+	return errors.New("no mux client worker available")
 }
 
 type PublicWorker struct {

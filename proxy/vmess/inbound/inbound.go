@@ -344,7 +344,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return err
 	}
 
-	if request.Command != protocol.RequestCommandMultiplex {
+	if request.Command != protocol.RequestCommandMux {
 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 			From:   connection.RemoteAddr(),
 			To:     request.Destination(),
@@ -389,7 +389,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err := wire.WriteMultiBuffer(buf.MultiBuffer{header}); err != nil {
 		return errors.New("failed to prepare response header").Base(err)
 	}
-	if request.Command == protocol.RequestCommandMultiplex {
+	if request.Command == protocol.RequestCommandMux {
 		body := &codecBody{ctx: ctx, reader: bodyReader}
 		// Start decoding before physical header I/O; wire orders header and body.
 		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: bodyWriter})

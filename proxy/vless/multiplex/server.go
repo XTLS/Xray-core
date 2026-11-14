@@ -21,7 +21,7 @@ type ServerWorker struct {
 
 func NewServerWorker(ctx context.Context, dispatch func(context.Context, net.Destination, *transport.Link) error, link *transport.Link) *ServerWorker {
 	limit := policy.BufferPolicyFromContext(ctx).PerConnection
-	if session.IsReverseMultiplexFromContext(ctx) {
+	if session.IsReverseMuxFromContext(ctx) {
 		limit = 2 * buf.Size
 	}
 	w := &ServerWorker{carrier: newCarrier(ctx, *link, 60*time.Second, false, limit), dispatch: dispatch}
@@ -60,7 +60,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 	if previous != nil {
 		previous.abort()
 	}
-	ctx = session.SubContextFromMultiplexInbound(ctx)
+	ctx = session.SubContextFromMuxInbound(ctx)
 	if meta.Inbound != nil && meta.Inbound.Source.IsValid() && meta.Inbound.Local.IsValid() {
 		if inbound := session.InboundFromContext(ctx); inbound != nil {
 			newInbound := *inbound

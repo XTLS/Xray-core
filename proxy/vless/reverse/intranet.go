@@ -72,7 +72,7 @@ func (b *IntranetEndpoint) newWorker() (*IntranetWorker, error) {
 		return nil, err
 	}
 	w := &IntranetWorker{dispatch: b.dispatcher.DispatchLink}
-	w.Worker = multiplex.NewServerWorker(session.ContextWithIsReverseMultiplex(ctx, true), w.handle, link)
+	w.Worker = multiplex.NewServerWorker(session.ContextWithIsReverseMux(ctx, true), w.handle, link)
 	return w, nil
 }
 

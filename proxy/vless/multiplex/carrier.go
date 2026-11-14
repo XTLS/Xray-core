@@ -272,7 +272,7 @@ func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMe
 	defer func() { buf.ReleaseMulti(reader.Buffer) }()
 	for !c.Closed() {
 		var meta FrameMetadata
-		err = meta.Unmarshal(reader, session.IsReverseMultiplexFromContext(ctx))
+		err = meta.Unmarshal(reader, session.IsReverseMuxFromContext(ctx))
 		if errors.Cause(err) == io.EOF {
 			err = nil // clean EOF before the next metadata prefix
 			return
@@ -289,7 +289,7 @@ func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMe
 				if accept == nil {
 					err = discardFrame(&meta, reader)
 				} else {
-					err = accept(session.ContextWithIsReverseMultiplex(ctx, false), &meta, reader)
+					err = accept(session.ContextWithIsReverseMux(ctx, false), &meta, reader)
 				}
 			default:
 				err = errors.New("unknown status: ", meta.SessionStatus)
