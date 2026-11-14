@@ -43,6 +43,7 @@ type RoutingContext struct {
 	LocalIPs          [][]byte               `protobuf:"bytes,13,rep,name=LocalIPs,proto3" json:"LocalIPs,omitempty"`
 	LocalPort         uint32                 `protobuf:"varint,14,opt,name=LocalPort,proto3" json:"LocalPort,omitempty"`
 	VlessRoute        uint32                 `protobuf:"varint,15,opt,name=VlessRoute,proto3" json:"VlessRoute,omitempty"`
+	UserRoute         *uint32                `protobuf:"varint,16,opt,name=UserRoute,proto3,oneof" json:"UserRoute,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -182,6 +183,13 @@ func (x *RoutingContext) GetVlessRoute() uint32 {
 	return 0
 }
 
+func (x *RoutingContext) GetUserRoute() uint32 {
+	if x != nil && x.UserRoute != nil {
+		return *x.UserRoute
+	}
+	return 0
+}
+
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if
 // opened by xray-core.
 // * FieldSelectors selects a subset of fields in routing statistics to return.
@@ -195,6 +203,7 @@ func (x *RoutingContext) GetVlessRoute() uint32 {
 //   - domain: Selects target domain.
 //   - protocol: Select connection's protocol.
 //   - user: Select connection's inbound user email.
+//   - route_user: Select the connection's user route value.
 //   - attributes: Select connection's additional attributes.
 //   - outbound: Equivalent as "outbound" and "outbound_group", select both
 //     outbound tag and outbound group tags.
@@ -967,7 +976,7 @@ var File_app_router_command_command_proto protoreflect.FileDescriptor
 
 const file_app_router_command_command_proto_rawDesc = "" +
 	"\n" +
-	" app/router/command/command.proto\x12\x17xray.app.router.command\x1a\x18common/net/network.proto\x1a!common/serial/typed_message.proto\"\xf6\x04\n" +
+	" app/router/command/command.proto\x12\x17xray.app.router.command\x1a\x18common/net/network.proto\x1a!common/serial/typed_message.proto\"\xa7\x05\n" +
 	"\x0eRoutingContext\x12\x1e\n" +
 	"\n" +
 	"InboundTag\x18\x01 \x01(\tR\n" +
@@ -994,10 +1003,13 @@ const file_app_router_command_command_proto_rawDesc = "" +
 	"\tLocalPort\x18\x0e \x01(\rR\tLocalPort\x12\x1e\n" +
 	"\n" +
 	"VlessRoute\x18\x0f \x01(\rR\n" +
-	"VlessRoute\x1a=\n" +
+	"VlessRoute\x12!\n" +
+	"\tUserRoute\x18\x10 \x01(\rH\x00R\tUserRoute\x88\x01\x01\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"F\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\f\n" +
+	"\n" +
+	"_UserRoute\"F\n" +
 	"\x1cSubscribeRoutingStatsRequest\x12&\n" +
 	"\x0eFieldSelectors\x18\x01 \x03(\tR\x0eFieldSelectors\"\xb1\x01\n" +
 	"\x10TestRouteRequest\x12O\n" +
@@ -1115,6 +1127,7 @@ func file_app_router_command_command_proto_init() {
 	if File_app_router_command_command_proto != nil {
 		return
 	}
+	file_app_router_command_command_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

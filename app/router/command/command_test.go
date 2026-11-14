@@ -21,6 +21,54 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
+func TestUserRouteRoutingContext(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ctx  *RoutingContext
+		want uint32
+	}{
+		{"legacy", &RoutingContext{VlessRoute: 4660}, 4660},
+		{"VMess", &RoutingContext{UserRoute: new(uint32(4660))}, 4660},
+		{"explicit zero", &RoutingContext{VlessRoute: 4660, UserRoute: new(uint32(0))}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			route := AsRoutingRoute(tc.ctx)
+			if got := AsProtobufMessage([]string{"route_user"})(route).GetUserRoute(); got != tc.want {
+				t.Fatalf("user route = %d, want %d", got, tc.want)
+			}
+			if got := AsProtobufMessage([]string{"user"})(route).UserRoute; got != nil {
+				t.Fatalf("user selector returned a user route: %d", *got)
+			}
+		})
+	}
+}
+
+func TestServiceUserRouteBounds(t *testing.T) {
+	r := new(router.Router)
+	if err := r.Init(context.Background(), &router.Config{Rule: []*router.RoutingRule{{
+		TargetTag:     &router.RoutingRule_Tag{Tag: "direct"},
+		UserRouteList: &net.PortList{Range: []*net.PortRange{{From: 0, To: 65535}}},
+	}}}, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { common.Must(r.Close()) })
+	srv := NewRoutingServer(r, nil)
+	for _, value := range []uint32{0, 65535, 65536, 0xffffffff} {
+		response, err := srv.TestRoute(context.Background(), &TestRouteRequest{
+			RoutingContext: &RoutingContext{UserRoute: &value},
+		})
+		if value > 65535 {
+			if err == nil || response != nil {
+				t.Errorf("out-of-range user route %d was accepted: %v", value, response)
+			}
+			continue
+		}
+		if err != nil || response.GetOutboundTag() != "direct" {
+			t.Errorf("valid user route %d failed: %v, %v", value, response, err)
+		}
+	}
+}
+
 func TestServiceSubscribeRoutingStats(t *testing.T) {
 	c := stats.NewChannel(&stats.ChannelConfig{
 		SubscriberLimit: 1,

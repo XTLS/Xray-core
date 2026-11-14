@@ -93,6 +93,9 @@ func (s *routingServer) TestRoute(ctx context.Context, request *TestRouteRequest
 	if request.RoutingContext == nil {
 		return nil, errors.New("Invalid routing request.")
 	}
+	if request.RoutingContext.GetUserRoute() > 65535 {
+		return nil, errors.New("user route must be between 0 and 65535")
+	}
 	route, err := s.router.PickRoute(AsRoutingContext(request.RoutingContext))
 	if err != nil {
 		return nil, err

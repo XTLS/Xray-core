@@ -28,6 +28,7 @@ message RoutingContext {
   repeated bytes LocalIPs = 13;
   uint32 LocalPort = 14;
   uint32 VlessRoute = 15;
+  optional uint32 UserRoute = 16;
 }
 
 // SubscribeRoutingStatsRequest subscribes to routing statistics channel if
@@ -43,6 +44,7 @@ message RoutingContext {
 //   - domain: Selects target domain.
 //   - protocol: Select connection's protocol.
 //   - user: Select connection's inbound user email.
+//   - route_user: Select the connection's user route value.
 //   - attributes: Select connection's additional attributes.
 //   - outbound: Equivalent as "outbound" and "outbound_group", select both
 //     outbound tag and outbound group tags.

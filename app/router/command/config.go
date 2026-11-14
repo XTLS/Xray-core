@@ -40,6 +40,13 @@ func (c routingContext) GetVlessRoute() net.Port {
 	return net.Port(c.RoutingContext.GetVlessRoute())
 }
 
+func (c routingContext) GetUserRoute() net.Port {
+	if c.RoutingContext != nil && c.UserRoute != nil {
+		return net.Port(c.RoutingContext.GetUserRoute())
+	}
+	return c.GetVlessRoute()
+}
+
 func (c routingContext) GetRuleTag() string {
 	return ""
 }
@@ -62,17 +69,22 @@ func AsRoutingRoute(r *RoutingContext) routing.Route {
 }
 
 var fieldMap = map[string]func(*RoutingContext, routing.Route){
-	"inbound":        func(s *RoutingContext, r routing.Route) { s.InboundTag = r.GetInboundTag() },
-	"network":        func(s *RoutingContext, r routing.Route) { s.Network = r.GetNetwork() },
-	"ip_source":      func(s *RoutingContext, r routing.Route) { s.SourceIPs = mapIPsToBytes(r.GetSourceIPs()) },
-	"ip_target":      func(s *RoutingContext, r routing.Route) { s.TargetIPs = mapIPsToBytes(r.GetTargetIPs()) },
-	"ip_local":       func(s *RoutingContext, r routing.Route) { s.LocalIPs = mapIPsToBytes(r.GetLocalIPs()) },
-	"port_source":    func(s *RoutingContext, r routing.Route) { s.SourcePort = uint32(r.GetSourcePort()) },
-	"port_target":    func(s *RoutingContext, r routing.Route) { s.TargetPort = uint32(r.GetTargetPort()) },
-	"port_local":     func(s *RoutingContext, r routing.Route) { s.LocalPort = uint32(r.GetLocalPort()) },
-	"domain":         func(s *RoutingContext, r routing.Route) { s.TargetDomain = r.GetTargetDomain() },
-	"protocol":       func(s *RoutingContext, r routing.Route) { s.Protocol = r.GetProtocol() },
-	"user":           func(s *RoutingContext, r routing.Route) { s.User = r.GetUser() },
+	"inbound":     func(s *RoutingContext, r routing.Route) { s.InboundTag = r.GetInboundTag() },
+	"network":     func(s *RoutingContext, r routing.Route) { s.Network = r.GetNetwork() },
+	"ip_source":   func(s *RoutingContext, r routing.Route) { s.SourceIPs = mapIPsToBytes(r.GetSourceIPs()) },
+	"ip_target":   func(s *RoutingContext, r routing.Route) { s.TargetIPs = mapIPsToBytes(r.GetTargetIPs()) },
+	"ip_local":    func(s *RoutingContext, r routing.Route) { s.LocalIPs = mapIPsToBytes(r.GetLocalIPs()) },
+	"port_source": func(s *RoutingContext, r routing.Route) { s.SourcePort = uint32(r.GetSourcePort()) },
+	"port_target": func(s *RoutingContext, r routing.Route) { s.TargetPort = uint32(r.GetTargetPort()) },
+	"port_local":  func(s *RoutingContext, r routing.Route) { s.LocalPort = uint32(r.GetLocalPort()) },
+	"domain":      func(s *RoutingContext, r routing.Route) { s.TargetDomain = r.GetTargetDomain() },
+	"protocol":    func(s *RoutingContext, r routing.Route) { s.Protocol = r.GetProtocol() },
+	"user":        func(s *RoutingContext, r routing.Route) { s.User = r.GetUser() },
+	"route_user": func(s *RoutingContext, r routing.Route) {
+		if value := routing.UserRoute(r); value != 0 {
+			s.UserRoute = new(uint32(value))
+		}
+	},
 	"attributes":     func(s *RoutingContext, r routing.Route) { s.Attributes = r.GetAttributes() },
 	"outbound_group": func(s *RoutingContext, r routing.Route) { s.OutboundGroupTags = r.GetOutboundGroupTags() },
 	"outbound":       func(s *RoutingContext, r routing.Route) { s.OutboundTag = r.GetOutboundTag() },

@@ -39,6 +39,42 @@
 
 [Project X Official Website](https://xtls.github.io)
 
+### User route matching
+
+Use `userRoute` in `routing.rules` to match a user route value. It accepts a number or a comma-separated list of numbers and ranges, for example `{"userRoute":"4660,5000-5010","outboundTag":"direct"}`.
+
+For VLESS, the route is the seventh and eighth bytes of the UUID sent by the client, interpreted as a big-endian integer. Hysteria also exposes its existing route value through `userRoute`. Connections without a route value use `0`.
+
+Existing `vlessRoute` rules keep their original behavior, including evaluating VMess as `0`. If both fields are present in a rule, `userRoute` takes precedence. In routing scripts, `ctx:GetUserRoute()` reads the shared value.
+
+#### Optional VMess UUID routing extension
+
+This fork supports selecting a VMess route by changing only the third UUID group on the client, while keeping the server account unchanged. **Both peers must run this extension and enable `userRoute: true` on the VMess account.** This is a fork-specific extension, not part of standard VMess. The account flag is separate from the numeric/string `routing.rules[].userRoute` matcher.
+
+Server inbound settings:
+
+```json
+{"clients":[{"id":"317530a8-3c1d-1234-8d8e-7cb70aedf158","userRoute":true}]}
+```
+
+Client outbound settings (or put the same account fields inside `vnext[].users[]`):
+
+```json
+{"address":"SERVER","port":443,"id":"317530a8-3c1d-0002-8d8e-7cb70aedf158","userRoute":true,"security":"auto"}
+```
+
+The example selects route `2`. Changing the third UUID group to `0001` selects route `1`, and `ffff` selects `65535`. All other UUID bytes must match the server account. Server routing rules can map these values to existing outbound tags:
+
+```json
+{"rules":[{"userRoute":1,"outboundTag":"route-one"},{"userRoute":2,"outboundTag":"route-two"}]}
+```
+
+With the account flag absent or `false`, the standard VMess wire format and full-UUID authentication remain unchanged; `userRoute` matches the registered UUID's route bytes. Older peers can use this default mode. Enabling the extension on only one peer fails authentication. Older cores do not implement the new configuration fields; upgrading is required to use them.
+
+In extension mode, bytes 7 and 8 are routing metadata, not secret identity bits. Accounts with the same remaining 14 bytes are the same identity and duplicate registrations are rejected. Users can choose any route; combine routing rules with `user` or `inboundTag` when access must be restricted. Existing connections, including a Mux connection, retain the route from their handshake; changing UUID requires a new connection.
+
+Wire format v1: zero UUID bytes 7 and 8 before deriving the usual VMess command key, then apply the existing VMess AEAD `KDF16` with path `"VMess User Route v1"`. This separates extension credentials from standard credentials. Set the request header's reserved byte (offset 36) to `1`; use the first two padding bytes for the big-endian route and choose total padding length in `2..15`. The normal header checksum, AEAD protection and replay checks still apply. Unknown extension versions and padding shorter than two bytes are rejected; no fallback to standard authentication is attempted.
+
 ## Telegram
 
 [Project X](https://t.me/projectXray)

@@ -49,13 +49,6 @@ func (v *userByEmail) addNoLock(u *protocol.MemoryUser) bool {
 	return true
 }
 
-func (v *userByEmail) Add(u *protocol.MemoryUser) bool {
-	v.Lock()
-	defer v.Unlock()
-
-	return v.addNoLock(u)
-}
-
 func (v *userByEmail) GetOrGenerate(email string) (*protocol.MemoryUser, bool) {
 	email = strings.ToLower(email)
 
@@ -85,19 +78,6 @@ func (v *userByEmail) Get(email string) *protocol.MemoryUser {
 	v.Lock()
 	defer v.Unlock()
 	return v.cache[email]
-}
-
-func (v *userByEmail) Remove(email string) bool {
-	email = strings.ToLower(email)
-
-	v.Lock()
-	defer v.Unlock()
-
-	if _, found := v.cache[email]; !found {
-		return false
-	}
-	delete(v.cache, email)
-	return true
 }
 
 // Handler is an inbound connection handler that handles messages in VMess protocol.
@@ -168,19 +148,31 @@ func (h *Handler) GetUsersCount(context.Context) int64 {
 }
 
 func (h *Handler) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
-	if len(user.Email) > 0 && !h.usersByEmail.Add(user) {
+	h.usersByEmail.Lock()
+	defer h.usersByEmail.Unlock()
+	if user.Email != "" && h.usersByEmail.cache[strings.ToLower(user.Email)] != nil {
 		return errors.New("User ", user.Email, " already exists.")
 	}
-	return h.clients.Add(user)
+	if err := h.clients.Add(user); err != nil {
+		return err
+	}
+	if user.Email != "" {
+		h.usersByEmail.addNoLock(user)
+	}
+	return nil
 }
 
 func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	if email == "" {
 		return errors.New("Email must not be empty.")
 	}
-	if !h.usersByEmail.Remove(email) {
+	h.usersByEmail.Lock()
+	defer h.usersByEmail.Unlock()
+	email = strings.ToLower(email)
+	if h.usersByEmail.cache[email] == nil {
 		return errors.New("User ", email, " not found.")
 	}
+	delete(h.usersByEmail.cache, email)
 	h.clients.Remove(email)
 	return nil
 }
@@ -272,6 +264,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.Name = "vmess"
 	inbound.CanSpliceCopy = 3
 	inbound.User = request.User
+	inbound.UserRoute = svrSession.UserRoute()
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 

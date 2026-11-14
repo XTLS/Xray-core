@@ -11,10 +11,59 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/session"
+	routingsession "github.com/xtls/xray-core/features/routing/session"
 	. "github.com/xtls/xray-core/infra/conf"
 
 	"google.golang.org/protobuf/proto"
 )
+
+func TestUserRouteConfig(t *testing.T) {
+	const route = 4660
+	vless := &session.Inbound{Name: "vless", VlessRoute: route}
+	vmess := &session.Inbound{Name: "vmess", UserRoute: route}
+	hysteria := &session.Inbound{Name: "hysteria", VlessRoute: route}
+	for _, tc := range []struct {
+		name    string
+		fields  string
+		inbound *session.Inbound
+		match   bool
+	}{
+		{"VLESS userRoute", `"userRoute": 4660`, vless, true},
+		{"VLESS legacy", `"vlessRoute": 4660`, vless, true},
+		{"VMess range", `"userRoute": "4600-4700,65535"`, vmess, true},
+		{"VMess legacy", `"vlessRoute": 4660`, vmess, false},
+		{"VMess legacy zero", `"vlessRoute": "0"`, vmess, true},
+		{"Hysteria userRoute", `"userRoute": 4660`, hysteria, true},
+		{"Hysteria legacy", `"vlessRoute": 4660`, hysteria, true},
+		{"userRoute wins", `"userRoute": 4661, "vlessRoute": 4660`, vless, false},
+		{"zero", `"userRoute": 0`, &session.Inbound{Name: "vmess"}, true},
+		{"invalid number", `"userRoute": 65536`, vmess, false},
+		{"invalid range", `"userRoute": "0-65536"`, vmess, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := (&RouterConfig{RuleList: []json.RawMessage{
+				json.RawMessage(`{"outboundTag":"direct",` + tc.fields + `}`),
+			}}).Build()
+			if strings.HasPrefix(tc.name, "invalid") {
+				if err == nil || !strings.Contains(err.Error(), "invalid userRoute") {
+					t.Fatalf("expected invalid userRoute error, got %v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			condition, err := config.Rule[0].BuildCondition()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := condition.Apply(&routingsession.Context{Inbound: tc.inbound}); got != tc.match {
+				t.Fatalf("condition matched = %t, want %t", got, tc.match)
+			}
+		})
+	}
+}
 
 func TestRouterConfig(t *testing.T) {
 	createParser := func() func(string) (proto.Message, error) {

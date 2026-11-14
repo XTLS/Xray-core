@@ -30,7 +30,9 @@ type Account struct {
 	// Security settings. Only applies to client side.
 	SecuritySettings *protocol.SecurityConfig `protobuf:"bytes,3,opt,name=security_settings,json=securitySettings,proto3" json:"security_settings,omitempty"`
 	// Define tests enabled for this account
-	TestsEnabled  string `protobuf:"bytes,4,opt,name=tests_enabled,json=testsEnabled,proto3" json:"tests_enabled,omitempty"`
+	TestsEnabled string `protobuf:"bytes,4,opt,name=tests_enabled,json=testsEnabled,proto3" json:"tests_enabled,omitempty"`
+	// Opt-in UUID route extension; requires support on both peers.
+	UserRoute     bool `protobuf:"varint,5,opt,name=user_route,json=userRoute,proto3" json:"user_route,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -86,15 +88,24 @@ func (x *Account) GetTestsEnabled() string {
 	return ""
 }
 
+func (x *Account) GetUserRoute() bool {
+	if x != nil {
+		return x.UserRoute
+	}
+	return false
+}
+
 var File_proxy_vmess_account_proto protoreflect.FileDescriptor
 
 const file_proxy_vmess_account_proto_rawDesc = "" +
 	"\n" +
-	"\x19proxy/vmess/account.proto\x12\x10xray.proxy.vmess\x1a\x1dcommon/protocol/headers.proto\"\x91\x01\n" +
+	"\x19proxy/vmess/account.proto\x12\x10xray.proxy.vmess\x1a\x1dcommon/protocol/headers.proto\"\xb0\x01\n" +
 	"\aAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12Q\n" +
 	"\x11security_settings\x18\x03 \x01(\v2$.xray.common.protocol.SecurityConfigR\x10securitySettings\x12#\n" +
-	"\rtests_enabled\x18\x04 \x01(\tR\ftestsEnabledBR\n" +
+	"\rtests_enabled\x18\x04 \x01(\tR\ftestsEnabled\x12\x1d\n" +
+	"\n" +
+	"user_route\x18\x05 \x01(\bR\tuserRouteBR\n" +
 	"\x14com.xray.proxy.vmessP\x01Z%github.com/xtls/xray-core/proxy/vmess\xaa\x02\x10Xray.Proxy.Vmessb\x06proto3"
 
 var (

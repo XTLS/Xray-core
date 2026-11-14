@@ -74,7 +74,7 @@ func registerLuaContext(L *lua.LState) {
 		}
 		return 1
 	}))
-	methods := L.CreateTable(0, 4)
+	methods := L.CreateTable(0, 5)
 	L.SetFuncs(methods, map[string]lua.LGFunction{
 		"GetSourceIPs": func(L *lua.LState) int {
 			pushIPs(L, checkLuaContext(L).GetSourceIPs())
@@ -86,6 +86,10 @@ func registerLuaContext(L *lua.LState) {
 		},
 		"GetLocalIPs": func(L *lua.LState) int {
 			pushIPs(L, checkLuaContext(L).GetLocalIPs())
+			return 1
+		},
+		"GetUserRoute": func(L *lua.LState) int {
+			L.Push(lua.LNumber(routing.UserRoute(checkLuaContext(L))))
 			return 1
 		},
 		"GetAttributes": func(L *lua.LState) int {

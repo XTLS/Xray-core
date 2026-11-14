@@ -16,4 +16,6 @@ message Account {
   xray.common.protocol.SecurityConfig security_settings = 3;
   // Define tests enabled for this account
   string tests_enabled = 4;
+  // Opt-in UUID route extension; requires support on both peers.
+  bool user_route = 5;
 }

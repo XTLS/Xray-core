@@ -100,6 +100,12 @@ type ServerSession struct {
 	responseBodyIV  [16]byte
 	responseWriter  io.Writer
 	responseHeader  byte
+	userRoute       net.Port
+}
+
+// UserRoute returns the route from the last successfully decoded request.
+func (s *ServerSession) UserRoute() net.Port {
+	return s.userRoute
 }
 
 // NewServerSession creates a new ServerSession, using the given UserValidator.
@@ -125,6 +131,7 @@ func parseSecurityType(b byte) protocol.SecurityType {
 
 // DecodeRequestHeader decodes and returns (if successful) a RequestHeader from an input stream.
 func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*protocol.RequestHeader, error) {
+	s.userRoute = 0
 	buffer := buf.New()
 
 	drainer, err := drain.NewBehaviorSeedLimitedDrainer(int64(s.userValidator.GetBehaviorSeed()), 16+38, 3266, 64)
@@ -161,7 +168,7 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 	case foundAEAD:
 		vmessAccount = user.Account.(*vmess.MemoryAccount)
 		var fixedSizeCmdKey [16]byte
-		copy(fixedSizeCmdKey[:], vmessAccount.ID.CmdKey())
+		copy(fixedSizeCmdKey[:], vmessAccount.CmdKey())
 		aeadData, shouldDrain, bytesRead, errorReason := vmessaead.OpenVMessAEADHeader(fixedSizeCmdKey, fixedSizeAuthID, reader)
 		if errorReason != nil {
 			if shouldDrain {
@@ -201,7 +208,9 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 	request.Option = bitmask.Byte(buffer.Byte(34)) // 1 byte
 	paddingLen := int(buffer.Byte(35) >> 4)
 	request.Security = parseSecurityType(buffer.Byte(35) & 0x0F)
-	// 1 bytes reserved
+	if vmessAccount.UserRoute && (request.Version != Version || buffer.Byte(36) != userRouteVersion || paddingLen < 2) {
+		return nil, errors.New("invalid VMess userRoute extension")
+	}
 	request.Command = protocol.RequestCommand(buffer.Byte(37))
 
 	switch request.Command {
@@ -216,6 +225,7 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 		}
 	}
 
+	paddingStart := buffer.Len()
 	if paddingLen > 0 {
 		if _, err := buffer.ReadFullFrom(decryptor, int32(paddingLen)); err != nil {
 			return nil, errors.New("failed to read padding").Base(err)
@@ -243,6 +253,10 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 		return nil, errors.New("unknown security type: ", request.Security)
 	}
 
+	s.userRoute = net.PortFromBytes(vmessAccount.ID.Bytes()[6:8])
+	if vmessAccount.UserRoute {
+		s.userRoute = net.PortFromBytes(buffer.BytesRange(paddingStart, paddingStart+2))
+	}
 	return request, nil
 }
 

@@ -17,6 +17,10 @@ type ResolvableContext struct {
 	hasError  bool
 }
 
+func (ctx *ResolvableContext) GetUserRoute() net.Port {
+	return routing.UserRoute(ctx.Context)
+}
+
 // GetTargetIPs overrides original routing.Context's implementation.
 func (ctx *ResolvableContext) GetTargetIPs() []net.IP {
 	if len(ctx.cacheIPs) > 0 {
