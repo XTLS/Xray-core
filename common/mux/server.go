@@ -93,9 +93,11 @@ type ServerWorker struct {
 }
 
 func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.Link) (*ServerWorker, error) {
+	writer := buf.NewBufferedWriter(link.Writer)
+	writer.SetBuffered(false)
 	worker := &ServerWorker{
 		dispatcher:     d,
-		link:           link,
+		link:           &transport.Link{Reader: link.Reader, Writer: writer},
 		sessionManager: NewSessionManager(),
 		done:           done.New(),
 		timer:          time.NewTicker(60 * time.Second),
@@ -351,7 +353,7 @@ func (w *ServerWorker) handleFrame(ctx context.Context, reader *buf.BufferedRead
 		err = w.handleStatusKeep(&meta, reader)
 	default:
 		status := meta.SessionStatus
-		return errors.New("unknown status: ", status).AtError()
+		return errors.New("unknown status: ", status)
 	}
 
 	if err != nil {

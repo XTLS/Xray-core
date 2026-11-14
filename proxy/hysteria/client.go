@@ -62,7 +62,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 
 	conn, err := dialer.Dial(hysteria.ContextWithDatagram(ctx, target.Network == net.Network_UDP), c.server.Destination)
 	if err != nil {
-		return errors.New("failed to find an available destination").AtWarning().Base(err)
+		return errors.New("failed to find an available destination").Base(err)
 	}
 	defer conn.Close()
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", target.Network, ":", c.server.Destination.NetAddr())
@@ -236,14 +236,14 @@ type UDPReader struct {
 
 func (r *UDPReader) ReadFrom(p []byte) (n int, addr *net.Destination, err error) {
 	for {
-		var buf [hysteria.MaxDatagramFrameSize]byte
+		var packet [1500]byte
 
-		n, err := r.reader.Read(buf[:])
+		n, err := r.reader.Read(packet[:])
 		if err != nil {
 			return 0, nil, err
 		}
 
-		msg, err := ParseUDPMessage(buf[:n])
+		msg, err := ParseUDPMessage(packet[:n])
 		if err != nil {
 			continue
 		}

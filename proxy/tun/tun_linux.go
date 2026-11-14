@@ -6,6 +6,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"os/exec"
 	"strconv"
 	"sync"
 
@@ -13,15 +14,13 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
 	"golang.org/x/sys/unix"
-	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 // LinuxTun is an object that handles tun network interface on linux
 // current version is heavily stripped to do nothing more,
-// then create a network interface, to be provided as file descriptor to gVisor ip stack
+// then create a network interface, whose packets are read and written through its file descriptor
 type LinuxTun struct {
-	tunFd   int
+	*fdTun
 	tunLink netlink.Link
 	options *Config
 	ownsTun bool
@@ -30,6 +29,169 @@ type LinuxTun struct {
 	systemRoutes       []netlink.Route
 	routeMonitorStop   chan struct{}
 	routeMonitorOnce   sync.Once
+
+	systemDNSSet   bool
+	systemDNSDirty bool
+}
+
+// resolvectlRunner runs a resolvectl command. Overridable for tests.
+var resolvectlRunner = func(name string, args ...string) ([]byte, error) {
+	return exec.Command(name, args...).CombinedOutput()
+}
+
+// systemDNSAddrs derives the addresses used for the system DNS takeover from the
+// first IPv4 gateway, or without one, the first IPv6 gateway: the gateway
+// address itself is what a query from this interface appears to come from, and
+// the next address is what the resolver is pointed at. The latter belongs to
+// the TUN and is answered inside Xray; handing the configured public resolvers
+// to resolvectl instead would leave the system querying them directly over the
+// physical link, defeating the point of the TUN.
+func systemDNSAddrs(gateway []string) (source, dns netip.Addr, ok bool) {
+	var first6 netip.Addr
+	for _, address := range gateway {
+		prefix, err := netip.ParsePrefix(address)
+		if err != nil {
+			continue
+		}
+		addr := prefix.Addr()
+		if addr.Is4() {
+			return addr, addr.Next(), true
+		}
+		if !first6.IsValid() {
+			first6 = addr
+		}
+	}
+	if first6.IsValid() {
+		return first6, first6.Next(), true
+	}
+	return netip.Addr{}, netip.Addr{}, false
+}
+
+func buildResolvectlArgs(action, iface string, extra ...string) []string {
+	args := make([]string, 0, 2+len(extra))
+	args = append(args, action, iface)
+	args = append(args, extra...)
+	return args
+}
+
+func runResolvectl(action, iface string, extra ...string) error {
+	args := buildResolvectlArgs(action, iface, extra...)
+	if _, err := resolvectlRunner("resolvectl", args...); err != nil {
+		return errors.New("resolvectl ", action, " failed").Base(err)
+	}
+	return nil
+}
+
+// ifaceName returns the TUN interface name, or empty when the link is not
+// available. Callers must treat empty as "nothing to configure".
+func (t *LinuxTun) ifaceName() string {
+	if t.tunLink == nil {
+		return ""
+	}
+	attrs := t.tunLink.Attrs()
+	if attrs == nil {
+		return ""
+	}
+	return attrs.Name
+}
+
+// ConfigureSystemDNS points systemd-resolved at this interface so name lookups
+// resolve through Xray instead of leaking to the physical link.
+//
+// It acts only when the config opts in, and it verifies the data path first:
+// unless a query to the advertised address would actually be handled, host-wide
+// resolution is left to the OS and an error returned. The caller does not start
+// the TUN on an error, as the system DNS would bypass it.
+func (t *LinuxTun) ConfigureSystemDNS(ctx context.Context, inboundTag string) error {
+	if !t.options.AutoSystemDnsToGateway {
+		return nil
+	}
+	if t.systemDNSSet {
+		return nil
+	}
+
+	// A previous revert may have failed. Retry before applying anything, so a
+	// dirty resolver does not silently outlive the attempt to clean it up.
+	if t.systemDNSDirty {
+		if err := t.revertSystemDNS(); err != nil {
+			return errors.New("previous system DNS revert still failing").Base(err)
+		}
+	}
+
+	source, address, ok := systemDNSAddrs(t.options.Gateway)
+	if !ok {
+		return errors.New("no gateway, cannot derive a system DNS address")
+	}
+
+	iface := t.ifaceName()
+	if iface == "" {
+		return errors.New("interface not available")
+	}
+
+	if err := verifyDNSRouting(ctx, inboundTag, source.String(), address.String()); err != nil {
+		return errors.New("no DNS path at ", address.String(), ":53").Base(err)
+	}
+
+	// Applied as a sequence with rollback: a half-configured resolver would be
+	// worse than none at all.
+	if err := runResolvectl("dns", iface, address.String()); err != nil {
+		return errors.New("resolvectl dns failed").Base(err)
+	}
+	if err := runResolvectl("domain", iface, "~."); err != nil {
+		return t.rollbackSystemDNS(iface, errors.New("resolvectl domain failed").Base(err))
+	}
+	if err := runResolvectl("default-route", iface, "true"); err != nil {
+		return t.rollbackSystemDNS(iface, errors.New("resolvectl default-route failed").Base(err))
+	}
+
+	t.systemDNSSet = true
+	errors.LogInfo(ctx, "[tun] system DNS set to ", address.String(), " on ", iface)
+	return nil
+}
+
+// rollbackSystemDNS undoes a partially applied takeover. A failed revert is
+// recorded so the next attempt retries it, and is reported rather than
+// swallowed.
+func (t *LinuxTun) rollbackSystemDNS(iface string, cause error) error {
+	if err := runResolvectl("revert", iface); err != nil {
+		t.systemDNSDirty = true
+		// Combine, because Base overwrites: reporting only the cause would hide
+		// the revert failure, and reporting only the revert failure would hide
+		// why the revert was attempted.
+		return errors.New("revert failed, per-link DNS settings may remain").Base(errors.Combine(err, cause))
+	}
+	return cause
+}
+
+// revertSystemDNS issues the revert and keeps the dirty flag in step with the
+// outcome.
+func (t *LinuxTun) revertSystemDNS() error {
+	err := runResolvectl("revert", t.ifaceName())
+	t.systemDNSDirty = err != nil
+	if err != nil {
+		return err
+	}
+	t.systemDNSSet = false
+	return nil
+}
+
+// unsetSystemDNS hands DNS back to the OS. Only meaningful when
+// ConfigureSystemDNS applied something, or a previous revert failed.
+func (t *LinuxTun) unsetSystemDNS() {
+	if !t.systemDNSSet && !t.systemDNSDirty {
+		return
+	}
+
+	if t.ifaceName() == "" {
+		// The link is gone, and its per-link settings went with it.
+		t.systemDNSSet = false
+		t.systemDNSDirty = false
+		return
+	}
+
+	if err := t.revertSystemDNS(); err != nil {
+		errors.LogInfoInner(context.Background(), err, "[tun] failed to revert system DNS; per-link settings may remain until revert succeeds")
+	}
 }
 
 // LinuxTun implements Tun
@@ -37,19 +199,30 @@ var _ Tun = (*LinuxTun)(nil)
 
 // NewTun builds new tun interface handler (linux specific)
 func NewTun(options *Config) (Tun, error) {
-	tunFd, tunLink, fdProvided, err := openFromEnv(options.Name)
+	tunFd, vnet, tunLink, fdProvided, err := openFromEnv(options.Name)
 	if err != nil {
 		return nil, err
 	}
 	if fdProvided {
 		return &LinuxTun{
-			tunFd:   tunFd,
+			fdTun:   newFdTun(tunFd, vnet),
 			tunLink: tunLink,
 			options: options,
 		}, nil
 	}
 
-	tunFd, err = open(options.Name)
+	// with a virtio_net_hdr on every packet the system leaves its TCP segments as large as they are,
+	// with their checksums not completed, and takes such segments. Without it where that is refused
+	vnet = vnetSize
+	tunFd, err = open(options.Name, unix.IFF_VNET_HDR)
+	if err == nil && unix.IoctlSetInt(tunFd, unix.TUNSETOFFLOAD, unix.TUN_F_CSUM|unix.TUN_F_TSO4|unix.TUN_F_TSO6) != nil {
+		_ = unix.Close(tunFd)
+		err = unix.EINVAL
+	}
+	if err != nil {
+		vnet = 0
+		tunFd, err = open(options.Name, 0)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +234,7 @@ func NewTun(options *Config) (Tun, error) {
 	}
 
 	linuxTun := &LinuxTun{
-		tunFd:   tunFd,
+		fdTun:   newFdTun(tunFd, vnet),
 		tunLink: tunLink,
 		options: options,
 		ownsTun: true,
@@ -70,55 +243,62 @@ func NewTun(options *Config) (Tun, error) {
 	return linuxTun, nil
 }
 
-func openFromEnv(expectedName string) (int, netlink.Link, bool, error) {
+// openFromEnv takes the tun that was given to the process, with the size of the virtio_net_hdr of its packets
+func openFromEnv(expectedName string) (int, int, netlink.Link, bool, error) {
 	fdStr := platform.NewEnvFlag(platform.TunFdKey).GetValue(func() string { return "" })
 	if fdStr == "" {
-		return -1, nil, false, nil
+		return -1, 0, nil, false, nil
 	}
 
 	fd, err := strconv.Atoi(fdStr)
 	if err != nil {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey).Base(err)
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey).Base(err)
 	}
 	if fd < 3 {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor must be >= 3")
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor must be >= 3")
 	}
 
 	ifr, err := unix.NewIfreq("")
 	if err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 	if err = unix.IoctlIfreq(fd, unix.TUNGETIFF, ifr); err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 
 	flags := ifr.Uint16()
 	if flags&unix.IFF_TUN == 0 {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor is not a TUN device")
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": file descriptor is not a TUN device")
 	}
 	if flags&unix.IFF_NO_PI == 0 {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device must use IFF_NO_PI")
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device must use IFF_NO_PI")
+	}
+	vnet := 0
+	if flags&unix.IFF_VNET_HDR != 0 {
+		if vnet, err = unix.IoctlGetInt(fd, unix.TUNGETVNETHDRSZ); err != nil || vnet < vnetSize || vnet > packetRoom {
+			return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": virtio_net_hdr of ", vnet, " bytes").Base(err)
+		}
 	}
 
 	actualName := ifr.Name()
 	if expectedName != "" && actualName != expectedName {
-		return -1, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device name ", actualName, " does not match configured name ", expectedName)
+		return -1, 0, nil, true, errors.New("invalid ", platform.TunFdKey, ": TUN device name ", actualName, " does not match configured name ", expectedName)
 	}
 
 	tunLink, err := netlink.LinkByName(actualName)
 	if err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 
 	if err = unix.SetNonblock(fd, true); err != nil {
-		return -1, nil, true, err
+		return -1, 0, nil, true, err
 	}
 
-	return fd, tunLink, true, nil
+	return fd, vnet, tunLink, true, nil
 }
 
 // open the file that implements tun interface in the OS
-func open(name string) (int, error) {
+func open(name string, features int) (int, error) {
 	fd, err := unix.Open("/dev/net/tun", unix.O_RDWR, 0)
 	if err != nil {
 		return -1, err
@@ -130,7 +310,7 @@ func open(name string) (int, error) {
 		return 0, err
 	}
 
-	flags := unix.IFF_TUN | unix.IFF_NO_PI
+	flags := unix.IFF_TUN | unix.IFF_NO_PI | features
 	ifr.SetUint16(uint16(flags))
 	err = unix.IoctlIfreq(fd, unix.TUNSETIFF, ifr)
 	if err != nil {
@@ -200,13 +380,14 @@ func (t *LinuxTun) Close() error {
 		}
 	})
 
+	t.unsetSystemDNS()
 	_ = t.unsetSystemRoutes()
 	_ = t.unsetInterfaceAddresses()
 
 	if t.ownsTun {
 		_ = netlink.LinkSetDown(t.tunLink)
 	}
-	_ = unix.Close(t.tunFd)
+	_ = t.closeFile()
 
 	return nil
 }
@@ -217,15 +398,6 @@ func (t *LinuxTun) Name() (string, error) {
 
 func (t *LinuxTun) Index() (int, error) {
 	return t.tunLink.Attrs().Index, nil
-}
-
-// newEndpoint builds new gVisor stack.LinkEndpoint from the tun interface file descriptor
-func (t *LinuxTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return fdbased.New(&fdbased.Options{
-		FDs:               []int{t.tunFd},
-		MTU:               t.options.MTU,
-		RXChecksumOffload: true,
-	})
 }
 
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {

@@ -415,7 +415,7 @@ func BenchmarkMphDomainMatcher(b *testing.B) {
 
 func BenchmarkMultiGeoIPMatcher(b *testing.B) {
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
-	rules, err := geodata.ParseIPRules([]string{"geoip:cn", "geoip:jp", "geoip:ca", "geoip:us"})
+	rules, err := geodata.ParseIPRules([]string{"geoip:cn", "geoip:ir", "geoip:ru"})
 	common.Must(err)
 
 	matcher, err := NewIPMatcher(rules, MatcherAsType_Target)

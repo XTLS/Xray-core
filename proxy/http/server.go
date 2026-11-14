@@ -115,11 +115,7 @@ Start:
 
 	request, err := http.ReadRequest(reader)
 	if err != nil {
-		trace := errors.New("failed to read http request").Base(err)
-		if errors.Cause(err) != io.EOF && !isTimeout(errors.Cause(err)) {
-			trace.AtWarning()
-		}
-		return trace
+		return errors.New("failed to read http request").Base(err)
 	}
 
 	if len(s.config.Accounts) > 0 {
@@ -147,7 +143,7 @@ Start:
 	}
 	dest, err := http_proto.ParseHost(host, defaultPort)
 	if err != nil {
-		return errors.New("malformed proxy host: ", host).AtWarning().Base(err)
+		return errors.New("malformed proxy host: ", host).Base(err)
 	}
 	ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 		From:   conn.RemoteAddr(),
@@ -262,7 +258,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 		requestWriter := buf.NewBufferedWriter(link.Writer)
 		common.Must(requestWriter.SetBuffered(false))
 		if err := request.Write(requestWriter); err != nil {
-			return errors.New("failed to write whole request").Base(err).AtWarning()
+			return errors.New("failed to write whole request").Base(err)
 		}
 		return nil
 	}
@@ -299,7 +295,7 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 			response.Header.Set("Proxy-Connection", "close")
 		}
 		if err := response.Write(writer); err != nil {
-			return errors.New("failed to write response").Base(err).AtWarning()
+			return errors.New("failed to write response").Base(err)
 		}
 		return nil
 	}
@@ -316,8 +312,9 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 // Sometimes, server might send 1xx response to client
 // it should not be processed by http proxy handler, just forward it to client
 func readResponseAndHandle100Continue(r *bufio.Reader, req *http.Request, writer io.Writer) (*http.Response, error) {
-	// have a little look of response
-	peekBytes, err := r.Peek(56)
+	// Wait for the HTTP/1.x status prefix before inspecting the buffered response.
+	r.Peek(12)
+	peekBytes, err := r.Peek(min(56, r.Buffered()))
 	if err == nil || err == bufio.ErrBufferFull {
 		str := string(peekBytes)
 		ResponseLine := strings.Split(str, "\r\n")[0]

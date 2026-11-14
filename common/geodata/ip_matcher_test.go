@@ -400,13 +400,13 @@ func TestIPMatcher4CN(t *testing.T) {
 	}
 }
 
-func TestIPMatcher6US(t *testing.T) {
+func TestIPMatcher6RU(t *testing.T) {
 	t.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher := buildIPMatcher("geoip:us")
+	matcher := buildIPMatcher("geoip:ru")
 
-	if !matcher.Match(xnet.ParseAddress("2001:4860:4860::8888").IP()) {
-		t.Error("expect US geoip contain 2001:4860:4860::8888, but actually not")
+	if !matcher.Match(xnet.ParseAddress("2a02:6b8::feed:0ff").IP()) {
+		t.Error("expect RU geoip contain 2a02:6b8::feed:0ff, but actually not")
 	}
 }
 
@@ -423,11 +423,11 @@ func BenchmarkIPMatcher4CN(b *testing.B) {
 	}
 }
 
-func BenchmarkIPMatcher6US(b *testing.B) {
+func BenchmarkIPMatcher6RU(b *testing.B) {
 	b.Setenv("xray.location.asset", filepath.Join("..", "..", "resources"))
 
-	matcher := buildIPMatcher("geoip:us")
-	ip := xnet.ParseAddress("2001:4860:4860::8888").IP()
+	matcher := buildIPMatcher("geoip:ru")
+	ip := xnet.ParseAddress("2a02:6b8::feed:0ff").IP()
 
 	b.ResetTimer()
 

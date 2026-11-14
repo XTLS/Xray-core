@@ -1,13 +1,15 @@
 package conf
 
 import (
-	"os"
+	"context"
+	"slices"
 	"strings"
 
+	utls "github.com/refraction-networking/utls"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
-	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
+	"github.com/xtls/xray-core/transport/internet/tls"
 )
 
 type TransportProtocol string
@@ -36,6 +38,10 @@ func (p TransportProtocol) Build() (string, error) {
 		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
 	case "hysteria":
 		return "hysteria", nil
+	case "masque":
+		return "masque", nil
+	case "xdrive":
+		return "xdrive", nil
 	default:
 		return "", errors.New("Config: unknown transport protocol: ", p)
 	}
@@ -59,6 +65,8 @@ type StreamConfig struct {
 	WSSettings          *WebSocketConfig   `json:"wsSettings"`
 	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
 	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
+	MASQUESettings      *MasqueConfig      `json:"masqueSettings"`
+	XDRIVESettings      *XDriveConfig      `json:"xdriveSettings"`
 	SocketSettings      *SocketConfig      `json:"sockopt"`
 }
 
@@ -82,6 +90,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		config.ProtocolName = protocol
 	}
 
+	var xdriveH3 bool
 	switch strings.ToLower(c.Security) {
 	case "", "none":
 	case "tls":
@@ -96,6 +105,15 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 		tm := serial.ToTypedMessage(ts)
 		config.SecuritySettings = append(config.SecuritySettings, tm)
 		config.SecurityType = tm.Type
+		xdriveH3 = config.ProtocolName == "xdrive" && tlsSettings.ALPN != nil && slices.Equal(*tlsSettings.ALPN, StringList{"h3"})
+		if config.ProtocolName == "xdrive" && tlsSettings.ALPN != nil && slices.Equal(*tlsSettings.ALPN, StringList{"http/1.1"}) && tlsSettings.ECHConfigList == "" {
+			// a fingerprint puts its own ALPN into the hello, except Go TLS and the
+			// randomized ones, which take it from the config or send none
+			if fp := tls.GetFingerprint(strings.ToLower(tlsSettings.Fingerprint)); fp != nil && fp.Client != utls.HelloGolang.Client &&
+				!strings.HasPrefix(fp.Client, utls.HelloRandomized.Client) {
+				errors.LogWarning(context.Background(), `XDRIVE: "alpn" ["http/1.1"] reaches the wire only inside ECH, without "echConfigList" the hello carries the ALPN of the fingerprint and the server may pick h2`)
+			}
+		}
 	case "reality":
 		if config.ProtocolName != "tcp" && config.ProtocolName != "splithttp" && config.ProtocolName != "grpc" {
 			return nil, errors.New("REALITY only supports RAW, XHTTP and gRPC for now.")
@@ -192,6 +210,27 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 			Settings:     serial.ToTypedMessage(hs),
 		})
 	}
+	if c.MASQUESettings != nil {
+		ms, err := c.MASQUESettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build MASQUE config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "masque",
+			Settings:     serial.ToTypedMessage(ms),
+		})
+	}
+	if c.XDRIVESettings != nil {
+		c.XDRIVESettings.h3 = xdriveH3
+		xs, err := c.XDRIVESettings.Build()
+		if err != nil {
+			return nil, errors.New("Failed to build XDRIVE config.").Base(err)
+		}
+		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+			ProtocolName: "xdrive",
+			Settings:     serial.ToTypedMessage(xs),
+		})
+	}
 	if c.SocketSettings != nil {
 		ss, err := c.SocketSettings.Build()
 		if err != nil {
@@ -202,102 +241,40 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
 
 	if c.FinalMask != nil {
 		for _, mask := range c.FinalMask.Tcp {
-			u, err := mask.Build(true)
+			proto, err := mask.Build(true)
 			if err != nil {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
-			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(u))
+			config.Tcpmasks = append(config.Tcpmasks, serial.ToTypedMessage(proto))
 		}
 		for _, mask := range c.FinalMask.Udp {
-			u, err := mask.Build(false)
+			proto, err := mask.Build(false)
 			if err != nil {
 				return nil, errors.New("failed to build mask with type ", mask.Type).Base(err)
 			}
-			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(u))
+			config.Udpmasks = append(config.Udpmasks, serial.ToTypedMessage(proto))
 		}
 		if c.FinalMask.QuicParams != nil {
-			profile := strings.ToLower(c.FinalMask.QuicParams.BbrProfile)
-			switch profile {
-			case "", string(bbr.ProfileConservative), string(bbr.ProfileStandard), string(bbr.ProfileAggressive):
-				if profile == "" {
-					profile = string(bbr.ProfileStandard)
-				}
-			default:
-				return nil, errors.New("unknown bbr profile")
-			}
-
-			up, err := c.FinalMask.QuicParams.BrutalUp.Bps()
+			proto, err := c.FinalMask.QuicParams.Build()
 			if err != nil {
 				return nil, err
 			}
-			down, err := c.FinalMask.QuicParams.BrutalDown.Bps()
-			if err != nil {
-				return nil, err
-			}
+			config.QuicParams = proto.(*internet.QuicParams)
+		}
+	}
 
-			if up > 0 && up < 65536 {
-				return nil, errors.New("BrutalUp must be at least 65536 bytes per second")
-			}
-			if down > 0 && down < 65536 {
-				return nil, errors.New("BrutalDown must be at least 65536 bytes per second")
-			}
-
-			c.FinalMask.QuicParams.Congestion = strings.ToLower(c.FinalMask.QuicParams.Congestion)
-			switch c.FinalMask.QuicParams.Congestion {
-			case "", "brutal", "reno", "bbr":
-			case "force-brutal":
-				if up == 0 {
-					return nil, errors.New("force-brutal requires up")
+	if xdriveH3 && c.FinalMask != nil {
+		if c.XDRIVESettings != nil && c.XDRIVESettings.Service == "google-drive" {
+			// noise only sends datagrams of its own ahead of the QUIC ones, the
+			// other masks change those or need a peer that undoes them
+			for _, mask := range c.FinalMask.Udp {
+				if strings.ToLower(mask.Type) != "noise" {
+					return nil, errors.New(`XDRIVE: over h3 to Google Drive the only "udp" mask that works is "noise", not "`, mask.Type, `"`)
 				}
-			default:
-				return nil, errors.New("unknown congestion control: ", c.FinalMask.QuicParams.Congestion, ", valid values: reno, bbr, brutal, force-brutal")
 			}
-
-			if c.FinalMask.QuicParams.InitStreamReceiveWindow > 0 && c.FinalMask.QuicParams.InitStreamReceiveWindow < 16384 {
-				return nil, errors.New("InitStreamReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.MaxStreamReceiveWindow > 0 && c.FinalMask.QuicParams.MaxStreamReceiveWindow < 16384 {
-				return nil, errors.New("MaxStreamReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.InitConnectionReceiveWindow > 0 && c.FinalMask.QuicParams.InitConnectionReceiveWindow < 16384 {
-				return nil, errors.New("InitConnectionReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.MaxConnectionReceiveWindow > 0 && c.FinalMask.QuicParams.MaxConnectionReceiveWindow < 16384 {
-				return nil, errors.New("MaxConnectionReceiveWindow must be at least 16384")
-			}
-			if c.FinalMask.QuicParams.MaxIdleTimeout != 0 && (c.FinalMask.QuicParams.MaxIdleTimeout < 4 || c.FinalMask.QuicParams.MaxIdleTimeout > 120) {
-				return nil, errors.New("MaxIdleTimeout must be between 4 and 120")
-			}
-			if c.FinalMask.QuicParams.KeepAlivePeriod != 0 && (c.FinalMask.QuicParams.KeepAlivePeriod < 2 || c.FinalMask.QuicParams.KeepAlivePeriod > 60) {
-				return nil, errors.New("KeepAlivePeriod must be between 2 and 60")
-			}
-			if c.FinalMask.QuicParams.MaxIncomingStreams != 0 && c.FinalMask.QuicParams.MaxIncomingStreams < 8 {
-				return nil, errors.New("MaxIncomingStreams must be at least 8")
-			}
-
-			if c.FinalMask.QuicParams.Debug {
-				os.Setenv("HYSTERIA_BBR_DEBUG", "true")
-				os.Setenv("HYSTERIA_BRUTAL_DEBUG", "true")
-			}
-
-			config.QuicParams = &internet.QuicParams{
-				Congestion:                    c.FinalMask.QuicParams.Congestion,
-				BbrProfile:                    profile,
-				BrutalUp:                      up,
-				BrutalDown:                    down,
-				BrutalDisableLossCompensation: c.FinalMask.QuicParams.BrutalDisableLossCompensation,
-				InitStreamReceiveWindow:       c.FinalMask.QuicParams.InitStreamReceiveWindow,
-				MaxStreamReceiveWindow:        c.FinalMask.QuicParams.MaxStreamReceiveWindow,
-				InitConnReceiveWindow:         c.FinalMask.QuicParams.InitConnectionReceiveWindow,
-				MaxConnReceiveWindow:          c.FinalMask.QuicParams.MaxConnectionReceiveWindow,
-				MaxIdleTimeout:                c.FinalMask.QuicParams.MaxIdleTimeout,
-				KeepAlivePeriod:               c.FinalMask.QuicParams.KeepAlivePeriod,
-				DisablePathMtuDiscovery:       c.FinalMask.QuicParams.DisablePathMTUDiscovery,
-				DisableChromeParrot:           c.FinalMask.QuicParams.DisableChromeParrot,
-				DisableGSO:                    c.FinalMask.QuicParams.DisableGSO,
-				MaxIncomingStreams:            c.FinalMask.QuicParams.MaxIncomingStreams,
-				DisableStatelessReset:         c.FinalMask.QuicParams.DisableStatelessReset,
-			}
+		}
+		if config.QuicParams != nil && (config.QuicParams.Congestion == "brutal" || config.QuicParams.Congestion == "force-brutal") {
+			return nil, errors.New(`XDRIVE: brutal is for Hysteria servers, over h3 "congestion" is "bbr" or "reno", not "`, config.QuicParams.Congestion, `"`)
 		}
 	}
 

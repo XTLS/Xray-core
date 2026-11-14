@@ -40,7 +40,7 @@ jobs:
           max_attempts: 60
           command: |
             [ -d 'resources' ] || mkdir resources
-            LIST=('Loyalsoldier v2ray-rules-dat geoip geoip' 'Loyalsoldier v2ray-rules-dat geosite geosite')
+            LIST=('XTLS Xray-rules-dat geoip/geoip-lite geoip' 'XTLS Xray-rules-dat geosite/geosite geosite')
             for i in "${LIST[@]}"
             do
               INFO=($(echo $i | awk 'BEGIN{FS=" ";OFS=" "} {print $1,$2,$3,$4}'))

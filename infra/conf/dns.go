@@ -17,6 +17,7 @@ import (
 )
 
 type NameServerConfig struct {
+	ID              string     `json:"id"`
 	Address         *Address   `json:"address"`
 	ClientIP        *Address   `json:"clientIp"`
 	Port            uint16     `json:"port"`
@@ -43,6 +44,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 	}
 
 	var advanced struct {
+		ID              string     `json:"id"`
 		Address         *Address   `json:"address"`
 		ClientIP        *Address   `json:"clientIp"`
 		Port            uint16     `json:"port"`
@@ -60,6 +62,7 @@ func (c *NameServerConfig) UnmarshalJSON(data []byte) error {
 		UnexpectedIPs   StringList `json:"unexpectedIPs"`
 	}
 	if err := json.Unmarshal(data, &advanced); err == nil {
+		c.ID = advanced.ID
 		c.Address = advanced.Address
 		c.ClientIP = advanced.ClientIP
 		c.Port = advanced.Port
@@ -134,6 +137,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 	}
 
 	return &dns.NameServer{
+		Id: c.ID,
 		Address: &net.Endpoint{
 			Network: net.Network_UDP,
 			Address: c.Address.Build(),
@@ -159,6 +163,7 @@ func (c *NameServerConfig) Build() (*dns.NameServer, error) {
 // DNSConfig is a JSON serializable object for dns.Config
 type DNSConfig struct {
 	Servers                []*NameServerConfig `json:"servers"`
+	Script                 string              `json:"script"`
 	Hosts                  *HostsWrapper       `json:"hosts"`
 	ClientIP               *Address            `json:"clientIp"`
 	Tag                    string              `json:"tag"`
@@ -267,6 +272,17 @@ func (m *HostsWrapper) Build() ([]*dns.Config_HostMapping, error) {
 
 // Build implements Buildable
 func (c *DNSConfig) Build() (*dns.Config, error) {
+	if c.Script != "" {
+		if c.DisableFallback || c.DisableFallbackIfMatch || c.EnableParallelQuery {
+			return nil, errors.New("DNS script cannot be used with disableFallback, disableFallbackIfMatch or enableParallelQuery")
+		}
+		for i, server := range c.Servers {
+			if len(server.Domains) > 0 || server.SkipFallback || server.FinalQuery {
+				return nil, errors.New("DNS script cannot be used with domains, skipFallback or finalQuery in server ", i)
+			}
+		}
+	}
+
 	config := &dns.Config{
 		Tag:                    c.Tag,
 		DisableCache:           c.DisableCache,
@@ -276,6 +292,7 @@ func (c *DNSConfig) Build() (*dns.Config, error) {
 		DisableFallbackIfMatch: c.DisableFallbackIfMatch,
 		EnableParallelQuery:    c.EnableParallelQuery,
 		QueryStrategy:          resolveQueryStrategy(c.QueryStrategy),
+		Script:                 c.Script,
 	}
 
 	if c.ClientIP != nil {

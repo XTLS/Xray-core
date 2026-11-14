@@ -89,6 +89,9 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 		lc.Control = getControlFunc(ctx, sockopt, dl.controllers)
 		// default disable keepalive
 		lc.KeepAlive = -1
+		// MPTCP is enabled by default golang listener
+		// due to CVE-2026-98432, MPTCP should be disabled by default
+		lc.SetMultipathTCP(false)
 		if sockopt != nil {
 			if sockopt.TcpKeepAliveIdle*sockopt.TcpKeepAliveInterval < 0 {
 				return nil, errors.New("invalid TcpKeepAliveIdle or TcpKeepAliveInterval value: ", sockopt.TcpKeepAliveIdle, " ", sockopt.TcpKeepAliveInterval)
@@ -107,9 +110,7 @@ func (dl *DefaultListener) Listen(ctx context.Context, addr net.Addr, sockopt *S
 				lc.KeepAliveConfig.Enable = true
 				lc.KeepAliveConfig.Interval = time.Duration(sockopt.TcpKeepAliveInterval) * time.Second
 			}
-			if sockopt.TcpMptcp {
-				lc.SetMultipathTCP(true)
-			}
+			lc.SetMultipathTCP(sockopt.TcpMptcp)
 		}
 	case *net.UnixAddr:
 		lc.Control = nil

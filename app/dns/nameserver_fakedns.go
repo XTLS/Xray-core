@@ -27,7 +27,7 @@ func (s *FakeDNSServer) IsDisableCache() bool {
 
 func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, opt dns.IPOption) ([]net.IP, uint32, error) {
 	if f.fakeDNSEngine == nil {
-		return nil, 0, errors.New("Unable to locate a fake DNS Engine").AtError()
+		return nil, 0, errors.New("Unable to locate a fake DNS Engine")
 	}
 
 	var ips []net.Address
@@ -39,7 +39,7 @@ func (f *FakeDNSServer) QueryIP(ctx context.Context, domain string, opt dns.IPOp
 
 	netIP, err := toNetIP(ips)
 	if err != nil {
-		return nil, 0, errors.New("Unable to convert IP to net ip").Base(err).AtError()
+		return nil, 0, errors.New("Unable to convert IP to net ip").Base(err)
 	}
 
 	errors.LogInfo(ctx, f.Name(), " got answer: ", domain, " -> ", ips)

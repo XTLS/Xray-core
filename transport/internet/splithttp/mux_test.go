@@ -90,3 +90,23 @@ func TestDefault(t *testing.T) {
 		t.Error("did not get 1 distinct clients, got ", len(xmuxClients))
 	}
 }
+
+func TestGetExistingXmuxClient(t *testing.T) {
+	xmuxConfig := XmuxConfig{
+		MaxConnections: &RangeConfig{From: 2, To: 2},
+	}
+
+	xmuxManager := NewXmuxManager(xmuxConfig, func() XmuxConn {
+		return &fakeRoundTripper{}
+	})
+
+	if xmuxManager.GetExistingXmuxClient(context.Background()) != nil {
+		t.Error("got a client without creating one")
+	}
+	xmuxClient := xmuxManager.GetXmuxClient(context.Background())
+	for i := 0; i < 4; i++ {
+		if xmuxManager.GetExistingXmuxClient(context.Background()) != xmuxClient {
+			t.Error("did not reuse the existing client")
+		}
+	}
+}

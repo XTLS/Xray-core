@@ -46,6 +46,12 @@ func (c *connection) Read(b []byte) (int, error) {
 	for {
 		reader, err := c.getReader()
 		if err != nil {
+			// A close frame with a normal status (1000) or no status (1005) ends
+			// the byte stream the same way a FIN does, so report io.EOF instead
+			// of an error. Other close codes keep their error semantics.
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived) {
+				return 0, io.EOF
+			}
 			return 0, err
 		}
 

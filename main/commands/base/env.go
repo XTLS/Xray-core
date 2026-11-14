@@ -4,6 +4,8 @@ package base
 type CommandEnvHolder struct {
 	// Executable name of current binary
 	Exec string
+	// Full name of the command being executed
+	CommandName string
 	// commands column width of current command
 	CommandsWidth int
 }

@@ -114,7 +114,7 @@ func testPacketStreamRoundTrip(t *testing.T, paddings []*Padding) {
 		t.Fatal(err)
 	}
 
-	client, err := config.WrapConnClient(rawClient)
+	client, err := config.WrapConnClient(rawClient, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

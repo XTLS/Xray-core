@@ -1,149 +1,87 @@
 package main
 
 import (
-	"errors"
+	"bytes"
+	"context"
 	"flag"
 	"fmt"
-	"go/build"
-	"io"
-	"net/http"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"runtime"
-	"strconv"
 	"strings"
+
+	"github.com/bufbuild/protocompile"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/pluginpb"
 )
 
-var directory = flag.String("pwd", "", "Working directory of Xray vprotogen.")
+var (
+	directory = flag.String("pwd", "", "Working directory of Xray vprotogen.")
+	mode      = flag.String("mode", "generate", "Execution mode. 'generate' (default) compiles and saves changes. 'check' reports out-of-date files and exits with non-zero.")
+)
 
-// envFile returns the name of the Go environment configuration file.
-// Copy from https://github.com/golang/go/blob/c4f2a9788a7be04daf931ac54382fbe2cb754938/src/cmd/go/internal/cfg/cfg.go#L150-L166
-func envFile() (string, error) {
-	if file := os.Getenv("GOENV"); file != "" {
-		if file == "off" {
-			return "", errors.New("GOENV=off")
+// topoSort sorts file descriptors so each dependency appears before files importing it.
+func topoSort(files []protoreflect.FileDescriptor) []*descriptorpb.FileDescriptorProto {
+	fileMap := make(map[string]protoreflect.FileDescriptor)
+	for _, f := range files {
+		fileMap[f.Path()] = f
+	}
+
+	visited := make(map[string]bool)
+	var sorted []*descriptorpb.FileDescriptorProto
+
+	var visit func(fd protoreflect.FileDescriptor)
+	visit = func(fd protoreflect.FileDescriptor) {
+		if visited[fd.Path()] {
+			return
 		}
-		return file, nil
-	}
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	if dir == "" {
-		return "", errors.New("missing user-config dir")
-	}
-	return filepath.Join(dir, "go", "env"), nil
-}
+		visited[fd.Path()] = true
 
-// GetRuntimeEnv returns the value of runtime environment variable,
-// that is set by running following command: `go env -w key=value`.
-func GetRuntimeEnv(key string) (string, error) {
-	file, err := envFile()
-	if err != nil {
-		return "", err
-	}
-	if file == "" {
-		return "", errors.New("missing runtime env file")
-	}
-	var data []byte
-	var runtimeEnv string
-	data, readErr := os.ReadFile(file)
-	if readErr != nil {
-		return "", readErr
-	}
-	envStrings := strings.Split(string(data), "\n")
-	for _, envItem := range envStrings {
-		envItem = strings.TrimSuffix(envItem, "\r")
-		envKeyValue := strings.Split(envItem, "=")
-		if strings.EqualFold(strings.TrimSpace(envKeyValue[0]), key) {
-			runtimeEnv = strings.TrimSpace(envKeyValue[1])
+		imports := fd.Imports()
+		for i := 0; i < imports.Len(); i++ {
+			if dep, ok := fileMap[imports.Get(i).Path()]; ok {
+				visit(dep)
+			}
 		}
+		sorted = append(sorted, protodesc.ToFileDescriptorProto(fd))
 	}
-	return runtimeEnv, nil
+
+	for _, f := range files {
+		visit(f)
+	}
+	return sorted
 }
 
-// GetGOBIN returns GOBIN environment variable as a string. It will NOT be empty.
-func GetGOBIN() string {
-	// The one set by user explicitly by `export GOBIN=/path` or `env GOBIN=/path command`
-	GOBIN := os.Getenv("GOBIN")
-	if GOBIN == "" {
-		var err error
-		// The one set by user by running `go env -w GOBIN=/path`
-		GOBIN, err = GetRuntimeEnv("GOBIN")
-		if err != nil {
-			// The default one that Golang uses
-			return filepath.Join(build.Default.GOPATH, "bin")
-		}
-		if GOBIN == "" {
-			return filepath.Join(build.Default.GOPATH, "bin")
-		}
-		return GOBIN
-	}
-	return GOBIN
-}
-
-func whichProtoc(suffix, targetedVersion string) (string, error) {
-	protoc := "protoc" + suffix
-
-	path, err := exec.LookPath(protoc)
+func runPlugin(pluginName, pwd string, req *pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorResponse, error) {
+	reqBytes, err := proto.Marshal(req)
 	if err != nil {
-		return "", fmt.Errorf(`
-Command "%s" not found.
-Make sure that %s is in your system path or current path.
-Download %s v%s or later from https://github.com/protocolbuffers/protobuf/releases
-`, protoc, protoc, protoc, targetedVersion)
+		return nil, err
 	}
-	return path, nil
-}
 
-func getProjectProtocVersion(url string) (string, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", errors.New("can not get the version of protobuf used in xray project")
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", errors.New("can not read from body")
-	}
-	versionRegexp := regexp.MustCompile(`\/\/\s*protoc\s*v\d+\.(\d+\.\d+)`)
-	matched := versionRegexp.FindStringSubmatch(string(body))
-	return matched[1], nil
-}
+	cmd := exec.Command("go", "tool", pluginName)
+	cmd.Dir = pwd
+	cmd.Stdin = bytes.NewReader(reqBytes)
+	cmd.Env = os.Environ()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-func getInstalledProtocVersion(protocPath string) (string, error) {
-	cmd := exec.Command(protocPath, "--version")
-	cmd.Env = append(cmd.Env, os.Environ()...)
-	output, cmdErr := cmd.CombinedOutput()
-	if cmdErr != nil {
-		return "", cmdErr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("%v: %s", err, stderr.String())
 	}
-	versionRegexp := regexp.MustCompile(`protoc\s*(\d+\.\d+)`)
-	matched := versionRegexp.FindStringSubmatch(string(output))
-	return matched[1], nil
-}
 
-func parseVersion(s string, width int) int64 {
-	strList := strings.Split(s, ".")
-	format := fmt.Sprintf("%%s%%0%ds", width)
-	v := ""
-	for _, value := range strList {
-		v = fmt.Sprintf(format, v, value)
+	var resp pluginpb.CodeGeneratorResponse
+	if err := proto.Unmarshal(stdout.Bytes(), &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
-	var result int64
-	var err error
-	if result, err = strconv.ParseInt(v, 10, 64); err != nil {
-		return 0
+	if resp.GetError() != "" {
+		return nil, fmt.Errorf("%s", resp.GetError())
 	}
-	return result
-}
-
-func needToUpdate(targetedVersion, installedVersion string) bool {
-	vt := parseVersion(targetedVersion, 4)
-	vi := parseVersion(installedVersion, 4)
-	return vt > vi
+	return &resp, nil
 }
 
 func main() {
@@ -154,106 +92,145 @@ func main() {
 	flag.Parse()
 
 	if !filepath.IsAbs(*directory) {
-		pwd, wdErr := os.Getwd()
-		if wdErr != nil {
+		pwd, err := os.Getwd()
+		if err != nil {
 			fmt.Println("Can not get current working directory.")
 			os.Exit(1)
 		}
 		*directory = filepath.Join(pwd, *directory)
 	}
-
 	pwd := *directory
-	GOBIN := GetGOBIN()
-	binPath := os.Getenv("PATH")
-	pathSlice := []string{pwd, GOBIN, binPath}
-	binPath = strings.Join(pathSlice, string(os.PathListSeparator))
-	os.Setenv("PATH", binPath)
 
-	suffix := ""
-	if runtime.GOOS == "windows" {
-		suffix = ".exe"
-	}
-
-	/*
-		targetedVersion, err := getProjectProtocVersion("https://raw.githubusercontent.com/XTLS/Xray-core/HEAD/core/config.pb.go")
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-	*/
-	targetedVersion := ""
-
-	protoc, err := whichProtoc(suffix, targetedVersion)
-	if err != nil {
-		fmt.Println(err)
+	isCheck := false
+	switch *mode {
+	case "generate", "":
+		isCheck = false
+	case "check":
+		isCheck = true
+	default:
+		fmt.Fprintf(os.Stderr, "Unrecognized 'mode': %s. Use 'generate' or 'check'.\n", *mode)
 		os.Exit(1)
 	}
 
-	installedVersion, err := getInstalledProtocVersion(protoc)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+	if isCheck {
+		fmt.Println("Checking for out-of-date Protobuf generated files...")
 	}
 
-	if needToUpdate(targetedVersion, installedVersion) {
-		fmt.Printf(`
-You are using an old protobuf version, please update to v%s or later.
-Download it from https://github.com/protocolbuffers/protobuf/releases
-
-    * Protobuf version used in xray project: v%s
-    * Protobuf version you have installed: v%s
-
-`, targetedVersion, targetedVersion, installedVersion)
-		os.Exit(1)
-	}
-
-	protoFilesMap := make(map[string][]string)
-	walkErr := filepath.Walk(pwd, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			fmt.Println(err)
+	var protoFiles []string
+	var existingPbFiles []string
+	err := filepath.WalkDir(pwd, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
 			return err
 		}
-
-		if info.IsDir() {
-			return nil
+		if strings.HasSuffix(d.Name(), ".proto") {
+			rel, _ := filepath.Rel(pwd, path)
+			protoFiles = append(protoFiles, filepath.ToSlash(rel))
 		}
-
-		dir := filepath.Dir(path)
-		filename := filepath.Base(path)
-		if strings.HasSuffix(filename, ".proto") {
-			path = path[len(pwd)+1:]
-			protoFilesMap[dir] = append(protoFilesMap[dir], path)
+		if strings.HasSuffix(d.Name(), ".pb.go") {
+			existingPbFiles = append(existingPbFiles, path)
 		}
-
 		return nil
 	})
-	if walkErr != nil {
-		fmt.Println(walkErr)
+	if err != nil {
+		fmt.Println("Walk error:", err)
 		os.Exit(1)
 	}
 
-	for _, files := range protoFilesMap {
-		for _, relProtoFile := range files {
-			args := []string{
-				"--go_out", pwd,
-				"--go_opt", "paths=source_relative",
-				"--go-grpc_out", pwd,
-				"--go-grpc_opt", "paths=source_relative",
-				"--plugin", "protoc-gen-go=" + filepath.Join(GOBIN, "protoc-gen-go"+suffix),
-				"--plugin", "protoc-gen-go-grpc=" + filepath.Join(GOBIN, "protoc-gen-go-grpc"+suffix),
+	compiler := protocompile.Compiler{
+		Resolver: protocompile.WithStandardImports(&protocompile.SourceResolver{
+			ImportPaths: []string{pwd},
+		}),
+		SourceInfoMode: protocompile.SourceInfoStandard,
+	}
+
+	linkedFiles, err := compiler.Compile(context.Background(), protoFiles...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Protobuf compilation failed:\n%v\n", err)
+		os.Exit(1)
+	}
+
+	var fdList []protoreflect.FileDescriptor
+	for _, f := range linkedFiles {
+		fdList = append(fdList, f)
+	}
+
+	req := &pluginpb.CodeGeneratorRequest{
+		FileToGenerate: protoFiles,
+		Parameter:      new("paths=source_relative"),
+		ProtoFile:      topoSort(fdList),
+	}
+
+	var diffCount int
+	generatedFiles := make(map[string]struct{})
+	for _, plugin := range []string{"protoc-gen-go", "protoc-gen-go-grpc"} {
+		resp, err := runPlugin(plugin, pwd, req)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%s failed: %v\n", plugin, err)
+			os.Exit(1)
+		}
+
+		for _, f := range resp.File {
+			targetPath := filepath.Join(pwd, filepath.FromSlash(f.GetName()))
+			generatedFiles[targetPath] = struct{}{}
+			content := []byte(f.GetContent())
+
+			hasDiff := false
+			existing, err := os.ReadFile(targetPath)
+			if err != nil {
+				hasDiff = true
+			} else {
+				oldNorm := bytes.ReplaceAll(existing, []byte("\r\n"), []byte("\n"))
+				newNorm := bytes.ReplaceAll(content, []byte("\r\n"), []byte("\n"))
+				if !bytes.Equal(oldNorm, newNorm) {
+					hasDiff = true
+				}
 			}
-			args = append(args, relProtoFile)
-			cmd := exec.Command(protoc, args...)
-			cmd.Env = append(cmd.Env, os.Environ()...)
-			cmd.Dir = pwd
-			output, cmdErr := cmd.CombinedOutput()
-			if len(output) > 0 {
-				fmt.Println(string(output))
-			}
-			if cmdErr != nil {
-				fmt.Println(cmdErr)
-				os.Exit(1)
+
+			if hasDiff {
+				diffCount++
+				fmt.Println(targetPath)
+
+				if isCheck {
+					continue
+				}
+
+				if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+					fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
+					os.Exit(1)
+				}
+				mode := os.FileMode(0o644)
+				if stat, err := os.Stat(targetPath); err == nil {
+					mode = stat.Mode().Perm()
+				}
+				if err := os.WriteFile(targetPath, content, mode); err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", targetPath, err)
+					os.Exit(1)
+				}
 			}
 		}
+	}
+
+	for _, path := range existingPbFiles {
+		if _, ok := generatedFiles[path]; !ok {
+			diffCount++
+			if isCheck {
+				fmt.Printf("Orphaned Protobuf file: %s\n", path)
+			} else {
+				fmt.Printf("Removing orphaned Protobuf file: %s\n", path)
+				if err := os.Remove(path); err != nil {
+					fmt.Fprintf(os.Stderr, "Error removing %s: %v\n", path, err)
+					os.Exit(1)
+				}
+			}
+		}
+	}
+
+	if isCheck {
+		if diffCount > 0 {
+			fmt.Println("Protobuf generated file problem(s) found.")
+			fmt.Println("Please run 'go run ./infra/vprotogen' to regenerate them.")
+			os.Exit(1)
+		}
+		fmt.Println("All Protobuf generated file check has been passed.")
 	}
 }

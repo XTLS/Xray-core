@@ -1,7 +1,10 @@
 package strmatcher_test
 
 import (
+	"math/rand"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
@@ -275,4 +278,143 @@ func TestEmptyMphMatcherGroup(t *testing.T) {
 	if len(r) != 0 {
 		t.Error("Expect [], but ", r)
 	}
+}
+
+func TestMphMatcherGroupRandom(t *testing.T) {
+	inputs := []string{""} // All strings over "ab." up to 7 bytes
+	for i := 0; len(inputs[i]) < 7; i++ {
+		for _, c := range []string{"a", "b", "."} {
+			inputs = append(inputs, inputs[i]+c)
+		}
+	}
+	for seed := int64(0); seed < 300; seed++ {
+		r := rand.New(rand.NewSource(seed))
+		g := NewMphMatcherGroup()
+		full, domain := map[string][]uint32{}, map[string][]uint32{} // Stored pattern -> values
+		for value := uint32(r.Intn(200)); value > 0; value-- {
+			pattern := make([]byte, r.Intn(8))
+			for i := range pattern {
+				pattern[i] = "ab."[r.Intn(3)]
+			}
+			if p := string(pattern); r.Intn(2) == 0 {
+				g.AddFullMatcher(FullMatcher(p), value)
+				full[p] = append(full[p], value)
+			} else {
+				g.AddDomainMatcher(DomainMatcher(p), value)
+				domain[p] = append(domain[p], value)
+				domain["."+p] = append(domain["."+p], value)
+			}
+		}
+		common.Must(g.Build())
+		for _, input := range inputs {
+			keys := []string{input} // Whole input first, then "." suffixes from longest to shortest
+			for i := range len(input) {
+				if input[i] == '.' {
+					keys = append(keys, input[i:])
+				}
+			}
+			var want []uint32
+			for _, k := range keys {
+				want = append(append(want, full[k]...), domain[k]...)
+			}
+			// Compared as sets: Match reports a value once per matching pattern, and orders them differently
+			// from want for patterns and inputs with a leading dot
+			m := g.Match(input)
+			if !slices.Equal(sortedSet(m), sortedSet(want)) {
+				t.Fatalf("seed %d: Match(%q) = %v, want %v", seed, input, m, want)
+			}
+			if m := g.MatchAny(input); m != (len(want) > 0) {
+				t.Fatalf("seed %d: MatchAny(%q) = %v", seed, input, m)
+			}
+		}
+	}
+}
+
+func TestMphMatcherGroupAppend(t *testing.T) {
+	g := NewMphMatcherGroup()
+	g.AddFullMatcher(FullMatcher("a.com"), 1)
+	g.AddFullMatcher(FullMatcher("b.com"), 2)
+	g.Build()
+	if m := append(g.Match("a.com"), 3); !slices.Equal(m, []uint32{1, 3}) {
+		t.Error("expect [1 3], but ", m)
+	}
+	if m := g.Match("b.com"); !slices.Equal(m, []uint32{2}) {
+		t.Error("expect [2], but ", m)
+	}
+}
+
+func sortedSet(v []uint32) []uint32 {
+	v = slices.Clone(v)
+	slices.Sort(v)
+	return slices.Compact(v)
+}
+
+func TestMphMatcherGroupLongPattern(t *testing.T) {
+	long := strings.Repeat("a", 300) + ".com"
+	for _, values := range [][4]uint32{{1, 2, 3, 4}, {7, 7, 7, 7}} {
+		g := NewMphMatcherGroup()
+		g.AddDomainMatcher(DomainMatcher(long), values[0])
+		g.AddFullMatcher(FullMatcher("x."+long), values[1])
+		g.AddFullMatcher(FullMatcher(long[:255]), values[2]) // the shortest pattern stored with a long length
+		g.AddFullMatcher(FullMatcher(long[:254]), values[3])
+		common.Must(g.Build())
+		cases := []struct {
+			input string
+			want  []uint32
+		}{
+			{long, []uint32{values[0]}},
+			{"www." + long, []uint32{values[0]}},
+			{"x." + long, []uint32{values[1], values[0]}},
+			{long[1:], nil},
+			{"a" + long, nil},
+			{long[:255], []uint32{values[2]}},
+			{long[:254], []uint32{values[3]}},
+			{long[:256], nil},
+			{long[:253], nil},
+		}
+		for _, c := range cases {
+			if m := g.Match(c.input); !slices.Equal(m, c.want) {
+				t.Errorf("Match(%d bytes) = %v, want %v", len(c.input), m, c.want)
+			}
+			if m := g.MatchAny(c.input); m != (c.want != nil) {
+				t.Errorf("MatchAny(%d bytes) = %v", len(c.input), m)
+			}
+		}
+	}
+
+	// A pattern longer than 65535 bytes builds and matches: a record's length is a uvarint,
+	// so the only cap was the build-time length field, now widened to uint32.
+	huge := strings.Repeat("a", 70000)
+	g := NewMphMatcherGroup()
+	g.AddFullMatcher(FullMatcher(strings.Repeat("a", 65535)), 1)
+	g.AddDomainMatcher(DomainMatcher(huge+".com"), 2)
+	g.AddFullMatcher(FullMatcher("a.com"), 3)
+	common.Must(g.Build())
+	if !g.MatchAny(strings.Repeat("a", 65535)) || g.MatchAny(strings.Repeat("a", 65534)) {
+		t.Error("wrong answer for a 65535-byte pattern")
+	}
+	if m := g.Match(huge + ".com"); !slices.Equal(m, []uint32{2}) {
+		t.Errorf("Match(%d-byte input) = %v, want [2]", len(huge)+4, m)
+	}
+	if m := g.Match("x." + huge + ".com"); !slices.Equal(m, []uint32{2}) {
+		t.Errorf("Match(subdomain of a %d-byte pattern) = %v, want [2]", len(huge)+4, m)
+	}
+	if g.MatchAny(huge) { // the 70000-byte label on its own is not a rule
+		t.Error("unexpected match for the bare 70000-byte label")
+	}
+}
+
+func TestMphMatcherGroupBuildOnce(t *testing.T) {
+	g := NewMphMatcherGroup()
+	g.AddFullMatcher(FullMatcher("a.com"), 1)
+	common.Must(g.Build())
+	if err := g.Build(); err == nil || !g.MatchAny("a.com") {
+		t.Errorf("second Build() = %v, MatchAny(a.com) = %v", err, g.MatchAny("a.com"))
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("Add after Build did not panic")
+		}
+	}()
+	g.AddDomainMatcher(DomainMatcher("b.com"), 2)
 }

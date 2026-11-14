@@ -3,7 +3,10 @@
 package tun
 
 import (
+	"context"
+	"net"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -229,5 +232,42 @@ func TestWaitKqueueReportsPersistentFailure(t *testing.T) {
 		if kq.wait(50 * time.Millisecond) {
 			t.Fatalf("wait() call %d returned true against a closed underlying fd -- should report failure, not spin", i)
 		}
+	}
+}
+
+// TestSetinterfaceSocketFamilies binds each kind of socket Xray's dialers
+// open to lo0, including the dual-stack one Go opens for UDP.
+func TestSetinterfaceSocketFamilies(t *testing.T) {
+	lo, err := net.InterfaceByName("lo0")
+	if err != nil {
+		t.Skip(err)
+	}
+	lc := net.ListenConfig{Control: func(network, address string, c syscall.RawConn) error {
+		var err error
+		if controlErr := c.Control(func(fd uintptr) {
+			err = setinterface(network, address, fd, lo)
+		}); controlErr != nil {
+			return controlErr
+		}
+		return err
+	}}
+	for _, s := range []struct{ network, address string }{
+		{"udp", "0.0.0.0:0"}, // dual-stack
+		{"udp4", "127.0.0.1:0"},
+		{"udp6", "[::1]:0"},
+		{"tcp4", "127.0.0.1:0"},
+		{"tcp6", "[::1]:0"},
+	} {
+		var closer interface{ Close() error }
+		if s.network[:3] == "udp" {
+			closer, err = lc.ListenPacket(context.Background(), s.network, s.address)
+		} else {
+			closer, err = lc.Listen(context.Background(), s.network, s.address)
+		}
+		if err != nil {
+			t.Errorf("%s %s: %v", s.network, s.address, err)
+			continue
+		}
+		closer.Close()
 	}
 }

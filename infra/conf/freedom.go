@@ -9,6 +9,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/geodata"
+	"github.com/xtls/xray-core/common/log"
 	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/proxy/freedom"
@@ -48,6 +49,8 @@ type FreedomFinalRuleConfig struct {
 	Network    *NetworkList `json:"network"`
 	Port       *PortList    `json:"port"`
 	IP         *StringList  `json:"ip"`
+	Delay      *Int32Range  `json:"delay"`
+	LogLevel   string       `json:"logLevel"`
 	BlockDelay *Int32Range  `json:"blockDelay"`
 }
 
@@ -91,6 +94,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Fragment != nil {
+		errors.PrintDeprecatedFeatureWarning(`"fragment" in Freedom`, `"fragment" in "streamSettings.finalmask.tcp"`)
 		config.Fragment = new(freedom.Fragment)
 
 		switch strings.ToLower(c.Fragment.Packets) {
@@ -147,6 +151,7 @@ func (c *FreedomConfig) Build() (proto.Message, error) {
 	}
 
 	if c.Noises != nil {
+		errors.PrintDeprecatedFeatureWarning(`"noises" in Freedom`, `"noise" in "streamSettings.finalmask.udp"`)
 		for _, n := range c.Noises {
 			NConfig, err := ParseNoise(n)
 			if err != nil {
@@ -278,10 +283,37 @@ func (c *FreedomFinalRuleConfig) Build() (*freedom.FinalRuleConfig, error) {
 	}
 
 	if c.BlockDelay != nil {
-		rule.BlockDelay = &freedom.Range{
-			Min: uint64(c.BlockDelay.From),
-			Max: uint64(c.BlockDelay.To),
+		errors.PrintDeprecatedFeatureWarning("finalRules.blockDelay", "finalRules.delay")
+		c.Delay = c.BlockDelay
+	}
+
+	if rule.Action != freedom.RuleAction_Block {
+		if c.Delay != nil || c.LogLevel != "" {
+			return nil, errors.New("delay and logLevel are only supported for block finalRules")
 		}
+		return rule, nil
+	}
+
+	if c.Delay != nil {
+		rule.Delay = &freedom.Range{
+			Min: uint64(c.Delay.From),
+			Max: uint64(c.Delay.To),
+		}
+	}
+
+	switch strings.ToLower(c.LogLevel) {
+	case "", "info":
+		rule.LogLevel = log.Severity_Info.Enum()
+	case "none":
+		rule.LogLevel = log.Severity_Unknown.Enum()
+	case "debug":
+		rule.LogLevel = log.Severity_Debug.Enum()
+	case "warning":
+		rule.LogLevel = log.Severity_Warning.Enum()
+	case "error":
+		rule.LogLevel = log.Severity_Error.Enum()
+	default:
+		return nil, errors.New("unknown finalRules.logLevel: ", c.LogLevel)
 	}
 
 	return rule, nil

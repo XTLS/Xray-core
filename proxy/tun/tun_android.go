@@ -10,12 +10,10 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/platform"
 	"golang.org/x/sys/unix"
-	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 type AndroidTun struct {
-	tunFd   int
+	*fdTun
 	options *Config
 }
 
@@ -33,8 +31,14 @@ func NewTun(options *Config) (Tun, error) {
 		return nil, err
 	}
 
+	// the descriptor stays with the application, Close ends the reading of a duplicate
+	fd, err = unix.FcntlInt(uintptr(fd), unix.F_DUPFD_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+
 	return &AndroidTun{
-		tunFd:   fd,
+		fdTun:   newFdTun(fd, 0),
 		options: options,
 	}, nil
 }
@@ -44,7 +48,7 @@ func (t *AndroidTun) Start() error {
 }
 
 func (t *AndroidTun) Close() error {
-	return nil
+	return t.closeFile()
 }
 
 func (t *AndroidTun) Name() (string, error) {
@@ -52,7 +56,7 @@ func (t *AndroidTun) Name() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err = unix.IoctlIfreq(t.tunFd, unix.TUNGETIFF, ifr); err != nil {
+	if err = unix.IoctlIfreq(t.fd, unix.TUNGETIFF, ifr); err != nil {
 		return "", err
 	}
 	return ifr.Name(), nil
@@ -68,14 +72,6 @@ func (t *AndroidTun) Index() (int, error) {
 		return 0, err
 	}
 	return iface.Index, nil
-}
-
-func (t *AndroidTun) newEndpoint() (stack.LinkEndpoint, error) {
-	return fdbased.New(&fdbased.Options{
-		FDs:               []int{t.tunFd},
-		MTU:               t.options.MTU,
-		RXChecksumOffload: true,
-	})
 }
 
 func setinterface(network, address string, fd uintptr, iface *net.Interface) error {

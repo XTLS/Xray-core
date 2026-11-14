@@ -16,8 +16,10 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
 	v2http "github.com/xtls/xray-core/proxy/http"
 	v2httptest "github.com/xtls/xray-core/testing/servers/http"
@@ -375,5 +377,90 @@ func TestHttpBasicAuth(t *testing.T) {
 				t.Fatal("body: ", string(content))
 			}
 		}
+	}
+}
+
+// Server-first protocols (SMTP, FTP, MySQL) send nothing from the client until the server's
+// greeting arrives, so the HTTP outbound must not wait for a first payload before dialing.
+func TestHTTPOutboundServerFirst(t *testing.T) {
+	tcpServer := tcp.Server{
+		MsgProcessor: xor,
+		SendFirst:    []byte("send first"),
+	}
+	dest, err := tcpServer.Start()
+	common.Must(err)
+	defer tcpServer.Close()
+
+	serverPort := tcp.PickPort()
+	serverConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&v2http.ServerConfig{}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{
+					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+				}),
+			},
+		},
+	}
+
+	clientPort := tcp.PickPort()
+	clientConfig := &core.Config{
+		Inbound: []*core.InboundHandlerConfig{
+			{
+				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
+					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
+					Listen:   net.NewIPOrDomain(net.LocalHostIP),
+				}),
+				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
+					RewriteAddress:  net.NewIPOrDomain(dest.Address),
+					RewritePort:     uint32(dest.Port),
+					AllowedNetworks: []net.Network{net.Network_TCP},
+				}),
+			},
+		},
+		Outbound: []*core.OutboundHandlerConfig{
+			{
+				ProxySettings: serial.ToTypedMessage(&v2http.ClientConfig{
+					Server: &protocol.ServerEndpoint{
+						Address: net.NewIPOrDomain(net.LocalHostIP),
+						Port:    uint32(serverPort),
+					},
+				}),
+			},
+		},
+	}
+
+	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
+	common.Must(err)
+	defer CloseAllServers(servers)
+
+	conn, err := net.DialTCP("tcp", nil, &net.TCPAddr{
+		IP:   []byte{127, 0, 0, 1},
+		Port: int(clientPort),
+	})
+	common.Must(err)
+	defer conn.Close()
+
+	common.Must(conn.SetReadDeadline(time.Now().Add(5 * time.Second)))
+	response := make([]byte, 1024)
+	nBytes, err := conn.Read(response)
+	if err != nil {
+		t.Fatal("no server greeting through HTTP outbound: ", err)
+	}
+	if string(response[:nBytes]) != "send first" {
+		t.Fatal("unexpected first response: ", string(response[:nBytes]))
+	}
+	common.Must(conn.SetReadDeadline(time.Time{}))
+
+	if err := testTCPConn2(conn, 1024, time.Second*5)(); err != nil {
+		t.Error(err)
 	}
 }

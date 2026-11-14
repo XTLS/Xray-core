@@ -40,11 +40,11 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	for _, user := range config.Users {
 		u, err := user.ToMemoryUser()
 		if err != nil {
-			return nil, errors.New("failed to get hysteria user").Base(err).AtError()
+			return nil, errors.New("failed to get hysteria user").Base(err)
 		}
 
 		if err := validator.Add(u); err != nil {
-			return nil, errors.New("failed to add user").Base(err).AtError()
+			return nil, errors.New("failed to add user").Base(err)
 		}
 	}
 

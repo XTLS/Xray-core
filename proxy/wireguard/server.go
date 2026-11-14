@@ -21,13 +21,13 @@ import (
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/features/stats"
+	xtun "github.com/xtls/xray-core/proxy/tun"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"golang.org/x/crypto/curve25519"
 	"golang.zx2c4.com/wireguard/device"
 	"golang.zx2c4.com/wireguard/tun"
-	"gvisor.dev/gvisor/pkg/tcpip/stack"
 )
 
 type Server struct {
@@ -43,10 +43,9 @@ type Server struct {
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
-	tun   tun.Device
-	stack *stack.Stack
-	dev   *device.Device
-	mu    sync.Mutex
+	tun tun.Device
+	dev *device.Device
+	mu  sync.Mutex
 
 	pub   [32]byte
 	users *sync.Map
@@ -95,11 +94,6 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		return nil, err
 	}
 
-	tun, _, stack, err := CreateNetTUN(localAddresses, nil, int(conf.Mtu), false)
-	if err != nil {
-		return nil, err
-	}
-
 	pri := common.Must2(ParseKey(conf.SecretKey))
 	var pub [32]byte
 	curve25519.ScalarBaseMult(&pub, pri)
@@ -113,7 +107,7 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		users.Store(user.Account.(*MemoryAccount).Pub, user)
 	}
 
-	return &Server{
+	s := &Server{
 		conf:          conf,
 		ctx:           core.ToBackgroundDetachedContext(ctx),
 		policyManager: p,
@@ -126,12 +120,16 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		uplinkCounter:   uplinkCounter,
 		downlinkCounter: downlinkCounter,
 
-		tun:   tun,
-		stack: stack,
-
 		pub:   pub,
 		users: users,
-	}, nil
+	}
+	// The stack hands its connections to s from the first packet on, which the device delivers after Start -> dev.Up.
+	tun, _, err := CreateNetTUN(localAddresses, nil, int(conf.Mtu), s)
+	if err != nil {
+		return nil, err
+	}
+	s.tun = tun
+	return s, nil
 }
 
 func (s *Server) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
@@ -257,18 +255,16 @@ func (s *Server) Start() error {
 	if s.src.Address.Family().IsDomain() {
 		return errors.New("address is domain")
 	}
-	listenFunc := func() (net.PacketConn, error) {
-		pktConn, err := internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)}, s.streamSettings.SocketSettings)
+	listenFunc := func(context.Context) (net.PacketConn, error) {
+		var pktConn net.PacketConn
+		var err error
+		if s.streamSettings.FinalMask != nil {
+			pktConn, err = s.streamSettings.FinalMask.ListenPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)})
+		} else {
+			pktConn, err = internet.ListenSystemPacket(context.Background(), &net.UDPAddr{IP: s.src.Address.IP(), Port: int(s.src.Port)}, s.streamSettings.SocketSettings)
+		}
 		if err != nil {
 			return nil, err
-		}
-		if s.streamSettings.UdpmaskManager != nil {
-			newConn, err := s.streamSettings.UdpmaskManager.WrapPacketConnServer(pktConn)
-			if err != nil {
-				pktConn.Close()
-				return nil, errors.New("mask err").Base(err)
-			}
-			pktConn = newConn
 		}
 		if s.uplinkCounter != nil || s.downlinkCounter != nil {
 			pktConn = &PacketCounterConnection{
@@ -322,7 +318,6 @@ func (s *Server) Start() error {
 		return err
 	}
 	s.dev = dev
-	createForwarder(s.stack, s.HandleConnection)
 	return nil
 }
 
@@ -378,9 +373,13 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	})
 	errors.LogInfo(ctx, "processing from ", source, " to ", dest)
 
+	writer := buf.NewWriter(conn)
+	if dest.Network == net.Network_TCP {
+		writer = &xtun.TCPWriter{Writer: writer}
+	}
 	link := &transport.Link{
 		Reader: &buf.TimeoutWrapperReader{Reader: buf.NewReader(conn)},
-		Writer: buf.NewWriter(conn),
+		Writer: writer,
 	}
 	if err := s.dispatcher.DispatchLink(ctx, dest, link); err != nil {
 		errors.LogError(ctx, errors.New("connection closed").Base(err))

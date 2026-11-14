@@ -29,6 +29,7 @@ type Server interface {
 
 // Client is the interface for DNS client.
 type Client struct {
+	id            string
 	server        Server
 	skipFallback  bool
 	expectedIPs   geodata.IPMatcher
@@ -84,7 +85,7 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
 	if dest.Network == net.Network_UDP { // UDP classic DNS mode
 		return NewClassicNameServer(dest, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP), nil
 	}
-	return nil, errors.New("No available name server could be created from ", dest).AtWarning()
+	return nil, errors.New("No available name server could be created from ", dest)
 }
 
 // NewClient creates a DNS client managing a name server with client IP, domain rules and expected IPs.
@@ -97,12 +98,12 @@ func NewClient(
 	ipOption dns.IPOption,
 	updateRules func(bool),
 ) (*Client, error) {
-	client := &Client{}
+	client := &Client{id: ns.Id}
 	err := core.RequireFeatures(ctx, func(dispatcher routing.Dispatcher) error {
 		// Create a new server for each client for now
 		server, err := NewServer(ctx, ns.Address.AsDestination(), dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
 		if err != nil {
-			return errors.New("failed to create nameserver").Base(err).AtWarning()
+			return errors.New("failed to create nameserver").Base(err)
 		}
 
 		_, isLocalDNS := server.(*LocalNameServer)
@@ -113,7 +114,7 @@ func NewClient(
 		if len(ns.ExpectedIp) > 0 {
 			expectedMatcher, err = geodata.IPReg.BuildIPMatcher(ns.ExpectedIp)
 			if err != nil {
-				return errors.New("failed to create expected ip matcher").Base(err).AtWarning()
+				return errors.New("failed to create expected ip matcher").Base(err)
 			}
 		}
 
@@ -122,7 +123,7 @@ func NewClient(
 		if len(ns.UnexpectedIp) > 0 {
 			unexpectedMatcher, err = geodata.IPReg.BuildIPMatcher(ns.UnexpectedIp)
 			if err != nil {
-				return errors.New("failed to create unexpected ip matcher").Base(err).AtWarning()
+				return errors.New("failed to create unexpected ip matcher").Base(err)
 			}
 		}
 

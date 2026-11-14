@@ -1,11 +1,14 @@
 package fragment
 
-import "net"
+import (
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/transport/internet/finalmask"
+)
 
-func (c *Config) WrapConnClient(raw net.Conn) (net.Conn, error) {
-	return NewConnClient(c, raw, false)
+func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
+	return NewConnClient(c, conn, false)
 }
 
-func (c *Config) WrapConnServer(raw net.Conn) (net.Conn, error) {
-	return NewConnServer(c, raw, true)
+func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
+	return NewConnServer(c, conn, true)
 }

@@ -18,17 +18,12 @@ type hasInnerError interface {
 	Unwrap() error
 }
 
-type hasSeverity interface {
-	Severity() log.Severity
-}
-
 // Error is an error object with underlying error.
 type Error struct {
-	prefix   []interface{}
-	message  []interface{}
-	caller   string
-	inner    error
-	severity log.Severity
+	prefix  []interface{}
+	message []interface{}
+	caller  string
+	inner   error
 }
 
 // Error implements error.Error().
@@ -69,46 +64,6 @@ func (err *Error) Base(e error) *Error {
 	return err
 }
 
-func (err *Error) atSeverity(s log.Severity) *Error {
-	err.severity = s
-	return err
-}
-
-func (err *Error) Severity() log.Severity {
-	if err.inner == nil {
-		return err.severity
-	}
-
-	if s, ok := err.inner.(hasSeverity); ok {
-		as := s.Severity()
-		if as < err.severity {
-			return as
-		}
-	}
-
-	return err.severity
-}
-
-// AtDebug sets the severity to debug.
-func (err *Error) AtDebug() *Error {
-	return err.atSeverity(log.Severity_Debug)
-}
-
-// AtInfo sets the severity to info.
-func (err *Error) AtInfo() *Error {
-	return err.atSeverity(log.Severity_Info)
-}
-
-// AtWarning sets the severity to warning.
-func (err *Error) AtWarning() *Error {
-	return err.atSeverity(log.Severity_Warning)
-}
-
-// AtError sets the severity to error.
-func (err *Error) AtError() *Error {
-	return err.atSeverity(log.Severity_Error)
-}
-
 // String returns the string representation of this error.
 func (err *Error) String() string {
 	return err.Error()
@@ -132,9 +87,8 @@ func New(msg ...interface{}) *Error {
 		details = details[:i]
 	}
 	return &Error{
-		message:  msg,
-		severity: log.Severity_Info,
-		caller:   details,
+		message: msg,
+		caller:  details,
 	}
 }
 
@@ -171,6 +125,9 @@ func LogErrorInner(ctx context.Context, inner error, msg ...interface{}) {
 }
 
 func doLog(ctx context.Context, inner error, severity log.Severity, msg ...interface{}) {
+	if log.GetSeverity() < severity {
+		return
+	}
 	pc, _, _, _ := runtime.Caller(2)
 	details := runtime.FuncForPC(pc).Name()
 	if len(details) >= trim {
@@ -181,10 +138,9 @@ func doLog(ctx context.Context, inner error, severity log.Severity, msg ...inter
 		details = details[:i]
 	}
 	err := &Error{
-		message:  msg,
-		severity: severity,
-		caller:   details,
-		inner:    inner,
+		message: msg,
+		caller:  details,
+		inner:   inner,
 	}
 	if ctx != nil && ctx != context.Background() {
 		id := uint32(c.IDFromContext(ctx))
@@ -193,7 +149,7 @@ func doLog(ctx context.Context, inner error, severity log.Severity, msg ...inter
 		}
 	}
 	log.Record(&log.GeneralMessage{
-		Severity: GetSeverity(err),
+		Severity: severity,
 		Content:  err,
 	})
 }
@@ -216,12 +172,4 @@ L:
 		}
 	}
 	return err
-}
-
-// GetSeverity returns the actual severity of the error, including inner errors.
-func GetSeverity(err error) log.Severity {
-	if s, ok := err.(hasSeverity); ok {
-		return s.Severity()
-	}
-	return log.Severity_Info
 }

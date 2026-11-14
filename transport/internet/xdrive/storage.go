@@ -1,0 +1,125 @@
+package xdrive
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+	"sync"
+	"sync/atomic"
+
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/transport/internet"
+)
+
+var errNotFound = errors.New("object not found")
+
+type Entry struct {
+	Name   string
+	Inline []byte
+}
+
+type Storage interface {
+	Put(ctx context.Context, name string, data []byte) error
+	Get(ctx context.Context, name string) ([]byte, error)
+	Delete(ctx context.Context, name string) error
+	List(ctx context.Context, prefix string) ([]Entry, error)
+	Close() error
+}
+
+// testStorageFactory lets tests substitute a backend for newStorage; nil in
+// production so behaviour is unchanged.
+var testStorageFactory atomic.Pointer[func(config *Config) (Storage, error)]
+
+func newStorage(streamSettings *internet.MemoryStreamConfig) (Storage, error) {
+	config, err := streamConfig(streamSettings)
+	if err != nil {
+		return nil, err
+	}
+	if f := testStorageFactory.Load(); f != nil {
+		return (*f)(config)
+	}
+
+	switch config.Service {
+	case "local":
+		return newLocalStorage(config.RemoteFolder)
+	case "google-drive", "Google Drive":
+		return sharedStorage(streamSettings, config, func() (Storage, error) {
+			return newDriveStorage(streamSettings, config)
+		})
+	case "template":
+		return sharedStorage(streamSettings, config, func() (Storage, error) {
+			return newTemplateStorage(streamSettings, config)
+		})
+	case "s3":
+		return sharedStorage(streamSettings, config, func() (Storage, error) {
+			return newS3Storage(streamSettings, config)
+		})
+	default:
+		return nil, errors.New("unsupported service: ", config.Service)
+	}
+}
+
+// sessionStorage returns the storage of one session, which takes connections
+// of XMUX until Close, with the token and cache of storage. Local storage has
+// no connections
+func sessionStorage(storage Storage) Storage {
+	switch s := storage.(type) {
+	case *driveStorage:
+		return s.session()
+	case *templateStorage:
+		return s.session()
+	case *s3Storage:
+		return s.session()
+	}
+	return storage
+}
+
+var (
+	sharedMu sync.Mutex
+	shared   = make(map[string]Storage)
+)
+
+func shareKey(streamSettings *internet.MemoryStreamConfig, config *Config) string {
+	parts := []string{config.Service, config.RemoteFolder}
+	if config.S3 != nil {
+		parts = append(parts, config.S3.Endpoint, s3Region(config.S3.Region), config.S3.Bucket)
+		if config.S3.PathStyle {
+			parts = append(parts, "path-style")
+		} else {
+			parts = append(parts, "virtual-hosted-style")
+		}
+	}
+	parts = append(parts, config.Secrets...)
+	if streamSettings != nil {
+		parts = append(parts, streamSettings.SecurityType)
+		if streamSettings.Destination != nil {
+			parts = append(parts, streamSettings.Destination.NetAddr())
+		}
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return hex.EncodeToString(sum[:])
+}
+
+func resetSharedStorage() {
+	sharedMu.Lock()
+	shared = make(map[string]Storage)
+	sharedMu.Unlock()
+}
+
+func sharedStorage(streamSettings *internet.MemoryStreamConfig, config *Config, build func() (Storage, error)) (Storage, error) {
+	key := shareKey(streamSettings, config)
+
+	sharedMu.Lock()
+	defer sharedMu.Unlock()
+
+	if storage, ok := shared[key]; ok {
+		return storage, nil
+	}
+	storage, err := build()
+	if err != nil {
+		return nil, err
+	}
+	shared[key] = storage
+	return storage, nil
+}
