@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,7 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	switch network {
 	case "tcp":
 		if net.ParseIP(srcIP).To4() != nil {
-			procFiles = []string{"/proc/net/tcp"}
+			procFiles = []string{"/proc/net/tcp", "/proc/net/tcp6"}
 		} else {
 			procFiles = []string{"/proc/net/tcp6"}
 		}
@@ -45,14 +46,18 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 		panic("Unsupported network type for process lookup.")
 	}
 
-	targetHexAddr := formatProcNetAddress(net.ParseIP(srcIP), Port(srcPort))
+	targetHexAddrs := []string{formatProcNetAddress(net.ParseIP(srcIP).To16(), Port(srcPort))}
+	if ipv4 := net.ParseIP(srcIP).To4(); ipv4 != nil {
+		// the one above is then the IPv4-mapped IPv6 address that an IPv6 socket has it as, in the IPv6 file
+		targetHexAddrs = append(targetHexAddrs, formatProcNetAddress(ipv4, Port(srcPort)))
+	}
 
 	portFallback := ""
 	if network == "udp" {
 		portFallback = fmt.Sprintf(":%04X", srcPort)
 	}
 
-	inode, err := findInodeInFiles(procFiles, targetHexAddr, portFallback)
+	inode, err := findInodeInFiles(procFiles, targetHexAddrs, portFallback)
 	if err != nil {
 		return 0, "", "", errors.New("could not search in ", strings.Join(procFiles, " and ")).Base(err)
 	}
@@ -84,13 +89,9 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	return pid, procName, absPath, nil
 }
 
+// formatProcNetAddress formats the 4 or 16 bytes of addr as they are: an IPv4-mapped IPv6 address stays one
 func formatProcNetAddress(addr net.IP, port Port) string {
-	var ipBytes []byte
-	if ipv4 := addr.To4(); ipv4 != nil {
-		ipBytes = ipv4
-	} else {
-		ipBytes = addr.To16()
-	}
+	ipBytes := []byte(addr)
 
 	var formatted strings.Builder
 	formatted.Grow(len(ipBytes)*2 + 5)
@@ -101,7 +102,7 @@ func formatProcNetAddress(addr net.IP, port Port) string {
 	return formatted.String()
 }
 
-func findInodeInFiles(filePaths []string, targetHexAddr, portFallback string) (string, error) {
+func findInodeInFiles(filePaths []string, targetHexAddrs []string, portFallback string) (string, error) {
 	onlyMatchedPort := ""
 
 	for i, filePath := range filePaths {
@@ -122,7 +123,7 @@ func findInodeInFiles(filePaths []string, targetHexAddr, portFallback string) (s
 			}
 
 			localAddress := fields[1]
-			if localAddress == targetHexAddr {
+			if slices.Contains(targetHexAddrs, localAddress) {
 				return fields[9], nil
 			}
 			if portFallback != "" && strings.HasSuffix(localAddress, portFallback) {
