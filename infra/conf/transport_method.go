@@ -329,14 +329,14 @@ func (c *SplitHTTPConfig) Build() (proto.Message, error) {
 	switch c.Mode {
 	case "":
 		c.Mode = "auto"
-	case "auto", "packet-up", "stream-up", "stream-one":
+	case "auto", "packet-up","packet-down", "stream-up", "stream-one":
 	default:
 		return nil, errors.New("unsupported mode: " + c.Mode)
 	}
 
 	// Priority (client): host > serverName > address
 	for k := range c.Headers {
-		if strings.ToLower(k) == "host" {
+		if strings.ToLower(k) == "host"{
 			return nil, errors.New(`"headers" can't contain "host"`)
 		}
 	}

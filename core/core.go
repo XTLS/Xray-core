@@ -26,7 +26,7 @@ var (
 var (
 	build    = "Custom"
 	codename = "Xray, Penetrates Everything."
-	intro    = "A unified platform for anti-censorship."
+	intro    = "PET-MEPHI-PROJECT: academic research project. Not for distribution."
 )
 
 func init() {

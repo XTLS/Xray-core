@@ -69,3 +69,7 @@ func (c *BrowserDialerClient) PostPacket(ctx context.Context, url string, sessio
 
 	return nil
 }
+
+func (c *BrowserDialerClient) GetSegment(ctx context.Context, url string, sessionId string, seqStr string) ([]byte, bool, error) {
+	return nil, false, errors.New("packet-down is not supported in browser dialer")
+}
