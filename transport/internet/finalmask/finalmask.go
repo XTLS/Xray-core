@@ -384,22 +384,3 @@ func (l *TCPListener) Accept() (net.Conn, error) {
 	}
 	return conn, nil
 }
-
-type TcpMaskConn interface {
-	TcpMaskConn()
-	RawConn() net.Conn
-	Splice() bool
-}
-
-func UnwrapTcpMask(conn net.Conn) net.Conn {
-	for {
-		if v, ok := conn.(TcpMaskConn); ok {
-			if !v.Splice() {
-				return conn
-			}
-			conn = v.RawConn()
-		} else {
-			return conn
-		}
-	}
-}
