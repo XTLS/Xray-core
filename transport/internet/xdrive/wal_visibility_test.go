@@ -36,8 +36,10 @@ func TestWALReaderRetriesVisibleEmptySegment(t *testing.T) {
 	}
 	store := &pendingSegmentStorage{Storage: base, name: first, pending: true}
 	p := paramsFromConfig(&Config{Concurrency: 2})
-	r := &walReader{ctx: ctx, storage: store, prefix: "up", params: p,
-		ch: make(chan []byte, 2), discards: make(chan string, 2)}
+	r := &walReader{
+		ctx: ctx, storage: store, prefix: "up", params: p,
+		ch: make(chan []byte, 2), discards: make(chan string, 2),
+	}
 
 	advanced, eof, err := r.poll()
 	if err != nil || advanced || eof || r.seq != 0 || len(r.ch) != 0 || len(r.discards) != 0 {
