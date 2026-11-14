@@ -25,6 +25,9 @@ type uploadQueue struct {
 	nextSeq       uint64
 	maxPackets    int
 	closed        *done.Instance
+	// the rest of packet nextSeq-1, kept out of the heap so that a resent copy
+	// of it is dropped instead of being read again from the start
+	partial []byte
 }
 
 func NewUploadQueue(maxPackets int) *uploadQueue {
@@ -69,6 +72,12 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 		return 0, io.EOF
 	}
 
+	if len(h.partial) > 0 {
+		n := copy(b, h.partial)
+		h.partial = h.partial[n:]
+		return n, nil
+	}
+
 	if len(h.heap) == 0 {
 		select {
 		case p := <-h.pushedPackets:
@@ -86,17 +95,9 @@ func (h *uploadQueue) Read(b []byte) (int, error) {
 		n := 0
 
 		if packet.Seq == h.nextSeq {
-			copy(b, packet.Payload)
-			n = min(len(b), len(packet.Payload))
-
-			if n < len(packet.Payload) {
-				// partial read
-				packet.Payload = packet.Payload[n:]
-				heap.Push(&h.heap, packet)
-			} else {
-				h.nextSeq = packet.Seq + 1
-			}
-
+			n = copy(b, packet.Payload)
+			h.partial = packet.Payload[n:]
+			h.nextSeq = packet.Seq + 1
 			return n, nil
 		}
 
