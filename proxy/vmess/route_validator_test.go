@@ -35,7 +35,7 @@ func queryFor(user, route int, now uint64) [16]byte {
 
 type testRouteRules []uint16
 
-func (r *testRouteRules) ForUser(string, string) []uint16 { return slices.Clone(*r) }
+func (r *testRouteRules) ForUser(string, string) []uint16 { return *r }
 
 type testRouteSource struct {
 	rules atomic.Pointer[testRouteRules]
@@ -118,13 +118,191 @@ func TestServerOnlyRouteLifecycle(t *testing.T) {
 		}
 	}
 	v.Remove("bob")
-	m, err := match(0, 300)
+	if _, err := match(0, 300); err == nil {
+		t.Fatal("ambiguous identity regained aliases after account removal")
+	}
+	m, err := match(0, 4660)
 	if err != nil {
 		t.Fatal(err)
 	}
 	v.Remove("alice")
 	if _, err := v.AdmitAEAD(m); err == nil {
 		t.Fatal("deleted user admitted")
+	}
+}
+
+func TestServerOnlyRemovedCollisionCannotBecomeAlias(t *testing.T) {
+	for _, rebuild := range []bool{false, true} {
+		v := NewTimedUserValidator()
+		defer v.Close()
+		alice := &protocol.MemoryUser{Email: "alice", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 4660))}}
+		bob := &protocol.MemoryUser{Email: "bob", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 27))}}
+		for _, user := range []*protocol.MemoryUser{alice, bob} {
+			if err := v.Add(user); err != nil {
+				t.Fatal(err)
+			}
+		}
+		source := new(testRouteSource)
+		source.set(27, 300)
+		if rebuild {
+			if err := v.SetRouteSource(source, "vm"); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if !v.Remove("bob") {
+			t.Fatal("account removal failed")
+		}
+		if err := v.SetRouteSource(source, "vm"); err != nil {
+			t.Fatal(err)
+		}
+		for _, route := range []int{27, 300} {
+			q := queryFor(0, route, uint64(time.Now().Unix()))
+			if _, err := v.MatchAEAD(q[:]); err == nil {
+				t.Fatalf("removed shared identity admitted as alias: rebuilt=%v route=%d", rebuild, route)
+			}
+		}
+		q := queryFor(0, 4660, uint64(time.Now().Unix()))
+		m, err := v.MatchAEAD(q[:])
+		if err != nil || m.User != alice {
+			t.Fatal("surviving exact credential changed", err)
+		}
+		v.Remove("alice")
+		if err := v.Add(alice); err != nil {
+			t.Fatal(err)
+		}
+		q = queryFor(0, 27, uint64(time.Now().Unix()))
+		if _, err := v.MatchAEAD(q[:]); err == nil {
+			t.Fatal("re-registration erased ambiguous identity history")
+		}
+	}
+}
+
+func TestServerOnlyImmutableRouteProvider(t *testing.T) {
+	v := NewTimedUserValidator()
+	defer v.Close()
+	source := new(testRouteSource)
+	source.set(300, 4660)
+	user := &protocol.MemoryUser{Email: "alice", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 4660))}}
+	if err := v.Add(user); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.SetRouteSource(source, "vm"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(*source.rules.Load(), []uint16{300, 4660}) {
+		t.Fatal("validator mutated the provider's immutable route declarations")
+	}
+	q := queryFor(0, 4660, uint64(time.Now().Unix()))
+	stale, err := v.MatchAEAD(q[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Remove("alice")
+	if err := v.Add(user); err != nil {
+		t.Fatal(err)
+	}
+	if release, err := v.AdmitAEAD(stale); err == nil {
+		release()
+		t.Fatal("previous registration admitted after re-adding the same user object")
+	}
+	q = queryFor(0, 300, uint64(time.Now().Unix()))
+	if _, err := v.MatchAEAD(q[:]); err != nil {
+		t.Fatal("re-registering the same exact credential lost its aliases", err)
+	}
+}
+
+func TestServerOnlyIdentityHistorySurvivesRemoval(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		v := NewTimedUserValidator()
+		defer v.Close()
+		old := &protocol.MemoryUser{Email: "old", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 4660)), UserRoute: legacy}}
+		if err := v.Add(old); err != nil {
+			t.Fatal(err)
+		}
+		v.Remove("old")
+		newRoute := 27
+		if legacy {
+			newRoute = 4660
+		}
+		current := &protocol.MemoryUser{Email: "current", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, newRoute))}}
+		if err := v.Add(current); err != nil {
+			t.Fatal(err)
+		}
+		source := new(testRouteSource)
+		source.set(300)
+		if err := v.SetRouteSource(source, "vm"); err != nil {
+			t.Fatal(err)
+		}
+		q := queryFor(0, 300, uint64(time.Now().Unix()))
+		if _, err := v.MatchAEAD(q[:]); err == nil {
+			t.Fatalf("former identity regained alias access: legacy=%v", legacy)
+		}
+		q = queryFor(0, newRoute, uint64(time.Now().Unix()))
+		m, err := v.MatchAEAD(q[:])
+		if err != nil || m.User != current {
+			t.Fatal("exact credential changed", err)
+		}
+	}
+}
+
+type hookedRouteSource struct {
+	testRouteSource
+	beforeRead func()
+}
+
+func (s *hookedRouteSource) UserRouteRules() routing.UserRouteRules {
+	if hook := s.beforeRead; hook != nil {
+		s.beforeRead = nil
+		hook()
+	}
+	return s.testRouteSource.UserRouteRules()
+}
+
+func TestServerOnlyConcurrentAddFencesAliasAdmission(t *testing.T) {
+	v := NewTimedUserValidator()
+	defer v.Close()
+	if err := v.Add(&protocol.MemoryUser{Email: "alice", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 4660))}}); err != nil {
+		t.Fatal(err)
+	}
+	source := new(hookedRouteSource)
+	source.set(300)
+	if err := v.SetRouteSource(source, "vm"); err != nil {
+		t.Fatal(err)
+	}
+	q := queryFor(0, 300, uint64(time.Now().Unix()))
+	match, err := v.MatchAEAD(q[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	added := make(chan error, 1)
+	timedOut := false
+	source.beforeRead = func() {
+		go func() {
+			added <- v.Add(&protocol.MemoryUser{Email: "bob", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 300))}})
+		}()
+		deadline := time.Now().Add(5 * time.Second)
+		// Queue Add's writer behind syncRoutes' reader, ahead of admission's next reader.
+		for v.TryRLock() {
+			v.RUnlock()
+			if time.Now().After(deadline) {
+				timedOut = true
+				break
+			}
+			runtime.Gosched()
+		}
+	}
+	release, err := v.AdmitAEAD(match)
+	if release != nil {
+		release()
+	}
+	if addErr := <-added; addErr != nil {
+		t.Fatal(addErr)
+	}
+	if timedOut {
+		t.Fatal("concurrent addition did not queue")
+	}
+	if err == nil {
+		t.Fatal("alias admitted after its UUID was registered to another exact user")
 	}
 }
 
@@ -146,6 +324,30 @@ func TestServerOnlyWithoutRouteSource(t *testing.T) {
 	release()
 	if len(v.routeAccounts) != 0 || len(v.routeCache.states) != 0 || v.routeCache.bytes != 0 {
 		t.Fatal("ordinary validator allocated route state without a source")
+	}
+}
+
+func TestServerOnlyClosedValidatorCannotRebuildCatalog(t *testing.T) {
+	v := NewTimedUserValidator()
+	if err := v.Add(&protocol.MemoryUser{Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 4660))}}); err != nil {
+		t.Fatal(err)
+	}
+	source := new(testRouteSource)
+	source.set(300)
+	if err := v.SetRouteSource(source, "vm"); err != nil {
+		t.Fatal(err)
+	}
+	v.Close()
+	source.set(301)
+	q := queryFor(0, 301, uint64(time.Now().Unix()))
+	if _, err := v.MatchAEAD(q[:]); err == nil {
+		t.Fatal("closed validator accepted a candidate")
+	}
+	if err := v.SetRouteSource(source, "vm"); err == nil {
+		t.Fatal("closed validator accepted a route source")
+	}
+	if len(v.routeAccounts) != 0 || len(v.routeCache.accounts) != 0 || v.routeAliasCount != 0 {
+		t.Fatal("closed validator rebuilt its key catalog")
 	}
 }
 

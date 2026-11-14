@@ -17,16 +17,23 @@ const (
 	routeCatalogKeyLimit = (128 << 20) / 16
 )
 
+type routeIdentity struct {
+	route     uint16
+	legacy    bool
+	ambiguous bool
+}
+
 // AEADMatch keeps the wire key separate from the original user's policy identity.
 // It is a candidate until the complete header has been checked and AdmitAEAD succeeds.
 type AEADMatch struct {
-	User       *protocol.MemoryUser
-	CmdKey     [16]byte
-	Route      net.Port
-	generation uint64
-	index      int
-	hot        bool
-	alias      bool
+	User         *protocol.MemoryUser
+	CmdKey       [16]byte
+	Route        net.Port
+	registration uint32
+	generation   uint64
+	index        int
+	hot          bool
+	alias        bool
 }
 
 func (v *TimedUserValidator) SetRouteSource(source routing.UserRouteProvider, tag string) error {
@@ -37,6 +44,9 @@ func (v *TimedUserValidator) SetRouteSource(source routing.UserRouteProvider, ta
 }
 
 func (v *TimedUserValidator) syncRoutesLocked() error {
+	if v.closed {
+		return errors.New("VMess validator closed")
+	}
 	var snapshot routing.UserRouteRules
 	if v.routeSource != nil {
 		snapshot = v.routeSource.UserRouteRules()
@@ -69,8 +79,8 @@ func (v *TimedUserValidator) syncRoutesLocked() error {
 		base := id
 		base[6], base[7] = 0, 0
 		var routes []uint16
-		if snapshot != nil && !a.UserRoute && groups[base] == 1 {
-			routes = snapshot.ForUser(v.inboundTag, user.Email)
+		if !a.UserRoute && groups[base] == 1 && !v.routeIdentities[base].ambiguous {
+			routes = slices.Clone(snapshot.ForUser(v.inboundTag, user.Email))
 		}
 		original := uint16(net.PortFromBytes(id[6:8]))
 		routes = slices.DeleteFunc(routes, func(route uint16) bool { return route == original })
@@ -143,7 +153,7 @@ func (v *TimedUserValidator) MatchAEAD(userHash []byte) (*AEADMatch, error) {
 	if err == nil {
 		u := user.(*protocol.MemoryUser)
 		a := u.Account.(*MemoryAccount)
-		match := &AEADMatch{User: u, Route: net.PortFromBytes(a.ID.Bytes()[6:8])}
+		match := &AEADMatch{User: u, Route: net.PortFromBytes(a.ID.Bytes()[6:8]), registration: v.routeIDs[u]}
 		copy(match.CmdKey[:], a.CmdKey())
 		return match, nil
 	}
@@ -170,7 +180,7 @@ func (v *TimedUserValidator) MatchAEAD(userHash []byte) (*AEADMatch, error) {
 	route := candidate.account.routes[candidate.index]
 	id := candidate.account.user.Account.(*MemoryAccount).ID.UUID()
 	id[6], id[7] = byte(route>>8), byte(route)
-	match := &AEADMatch{User: candidate.account.user, Route: net.Port(route), generation: candidate.account.generation, index: candidate.index, hot: candidate.hot, alias: true}
+	match := &AEADMatch{User: candidate.account.user, Route: net.Port(route), registration: candidate.account.id, generation: candidate.account.generation, index: candidate.index, hot: candidate.hot, alias: true}
 	copy(match.CmdKey[:], protocol.NewID(id).CmdKey())
 	// Always recheck a native candidate with the standard AuthID decoder.
 	_, _, _, plain := aead.NewAuthIDDecoder(match.CmdKey[:]).Decode(authID)
@@ -188,11 +198,11 @@ func (v *TimedUserValidator) AdmitAEAD(match *AEADMatch) (func(), error) {
 	v.syncRoutes()
 	v.RLock()
 	defer v.RUnlock()
-	if v.closed || match == nil || v.routeIDs[match.User] == 0 {
+	if v.closed || match == nil || match.registration == 0 || v.routeIDs[match.User] != match.registration {
 		return nil, aead.ErrNotFound
 	}
 	if match.alias {
-		if v.routeSource == nil || v.routeSource.UserRouteRules() != v.routeSnapshot {
+		if v.routesDirty || v.routeSource == nil || v.routeSource.UserRouteRules() != v.routeSnapshot {
 			return nil, aead.ErrNotFound
 		}
 		account := v.routeAccounts[match.User]
@@ -248,6 +258,7 @@ func (v *TimedUserValidator) Close() error {
 		close(v.cleanupStop)
 		v.routeCache.reconcile(nil)
 		v.routeAccounts = nil
+		v.routeIdentities = nil
 		v.routeAliasCount = 0
 	}
 	return nil

@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common/dice"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vmess/aead"
 )
@@ -26,6 +27,7 @@ type TimedUserValidator struct {
 	aeadDecoderHolder   *aead.AuthIDDecoderHolder
 	exactUsers          map[[16]byte]*protocol.MemoryUser
 	routeIDs            map[*protocol.MemoryUser]uint32
+	routeIdentities     map[uuid.UUID]routeIdentity
 	nextRouteID         uint32
 	nextRouteGeneration uint64
 	routeSource         routing.UserRouteProvider
@@ -49,6 +51,7 @@ func NewTimedUserValidator() *TimedUserValidator {
 		aeadDecoderHolder: aead.NewAuthIDDecoderHolder(),
 		exactUsers:        make(map[[16]byte]*protocol.MemoryUser),
 		routeIDs:          make(map[*protocol.MemoryUser]uint32),
+		routeIdentities:   make(map[uuid.UUID]routeIdentity),
 		routeCache:        newOnlineCache(nil, routeCacheBudget, 2*time.Minute, time.Now),
 		routeScans:        make(chan struct{}, 2),
 		cleanupStop:       make(chan struct{}),
@@ -72,6 +75,14 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 	if account.UserRoute && v.aeadDecoderHolder.HasUser(cmdkeyfl) {
 		return errors.New("duplicate VMess userRoute identity (UUID bytes 7 and 8 do not identify a user)")
 	}
+	id := account.ID.UUID()
+	identity := routeIdentity{route: uint16(id[6])<<8 | uint16(id[7]), legacy: account.UserRoute}
+	id[6], id[7] = 0, 0
+	if previous, found := v.routeIdentities[id]; found && previous != identity {
+		identity.ambiguous = true
+	}
+	// Keep identity history across API removal so deleted credentials cannot become aliases.
+	v.routeIdentities[id] = identity
 	if !v.behaviorFused {
 		hashkdf := hmac.New(sha256.New, []byte("VMESSBSKDF"))
 		hashkdf.Write(account.ID.Bytes())
@@ -117,7 +128,7 @@ func (v *TimedUserValidator) Remove(email string) bool {
 	email = strings.ToLower(email)
 	idx := -1
 	for i, u := range v.users {
-		if strings.EqualFold(u.Email, email) {
+		if strings.ToLower(u.Email) == email {
 			idx = i
 			var cmdkeyfl [16]byte
 			copy(cmdkeyfl[:], u.Account.(*MemoryAccount).CmdKey())
