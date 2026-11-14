@@ -162,6 +162,58 @@ func TestSocketConfig(t *testing.T) {
 	}
 }
 
+func TestSocketConfigHappyEyeballsSuccessDefinition(t *testing.T) {
+	parser := func(s string) (proto.Message, error) {
+		config := new(SocketConfig)
+		if err := json.Unmarshal([]byte(s), config); err != nil {
+			return nil, err
+		}
+		return config.Build()
+	}
+	happyEyeballs := func(successDefinition internet.HappyEyeballsConfig_SuccessDefinition) *internet.SocketConfig {
+		return &internet.SocketConfig{
+			HappyEyeballs: &internet.HappyEyeballsConfig{
+				Interleave:        1,
+				TryDelayMs:        250,
+				MaxConcurrentTry:  4,
+				SuccessDefinition: successDefinition,
+			},
+		}
+	}
+
+	runMultiTestCase(t, []TestCase{
+		{
+			Input:  `{"happyEyeballs": {"tryDelayMs": 250}}`,
+			Parser: parser,
+			Output: happyEyeballs(internet.HappyEyeballsConfig_TcpConnected),
+		},
+		{
+			Input:  `{"happyEyeballs": {"tryDelayMs": 250, "successDefinition": "tcpConnected"}}`,
+			Parser: parser,
+			Output: happyEyeballs(internet.HappyEyeballsConfig_TcpConnected),
+		},
+		{
+			Input:  `{"happyEyeballs": {"tryDelayMs": 250, "successDefinition": "tlsHandshakeComplete"}}`,
+			Parser: parser,
+			Output: happyEyeballs(internet.HappyEyeballsConfig_TlsHandshakeComplete),
+		},
+		{
+			Input:  `{"happyEyeballs": {"tryDelayMs": 250, "successDefinition": "TlsHandshakeComplete"}}`,
+			Parser: parser,
+			Output: happyEyeballs(internet.HappyEyeballsConfig_TlsHandshakeComplete),
+		},
+	})
+
+	for _, input := range []string{
+		`{"happyEyeballs": {"tryDelayMs": 250, "successDefinition": "tls"}}`,
+		`{"happyEyeballs": {"tryDelayMs": 250, "successDefinition": "serverHello"}}`,
+	} {
+		if _, err := parser(input); err == nil {
+			t.Fatalf("expected an error for %s", input)
+		}
+	}
+}
+
 func TestHeaderCustomUDPBuild(t *testing.T) {
 	parser := loadJSON(func() Buildable { return new(HeaderCustomUDP) })
 

@@ -19,18 +19,20 @@ type CustomSockoptConfig struct {
 }
 
 type HappyEyeballsConfig struct {
-	PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
-	TryDelayMs       uint64 `json:"tryDelayMs"`
-	Interleave       uint32 `json:"interleave"`
-	MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
+	PrioritizeIPv6    bool   `json:"prioritizeIPv6"`
+	TryDelayMs        uint64 `json:"tryDelayMs"`
+	Interleave        uint32 `json:"interleave"`
+	MaxConcurrentTry  uint32 `json:"maxConcurrentTry"`
+	SuccessDefinition string `json:"successDefinition"`
 }
 
 func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
 	innerHappyEyeballsConfig := struct {
-		PrioritizeIPv6   bool   `json:"prioritizeIPv6"`
-		TryDelayMs       uint64 `json:"tryDelayMs"`
-		Interleave       uint32 `json:"interleave"`
-		MaxConcurrentTry uint32 `json:"maxConcurrentTry"`
+		PrioritizeIPv6    bool   `json:"prioritizeIPv6"`
+		TryDelayMs        uint64 `json:"tryDelayMs"`
+		Interleave        uint32 `json:"interleave"`
+		MaxConcurrentTry  uint32 `json:"maxConcurrentTry"`
+		SuccessDefinition string `json:"successDefinition"`
 	}{PrioritizeIPv6: false, Interleave: 1, TryDelayMs: 0, MaxConcurrentTry: 4}
 	if err := json.Unmarshal(data, &innerHappyEyeballsConfig); err != nil {
 		return err
@@ -39,6 +41,7 @@ func (h *HappyEyeballsConfig) UnmarshalJSON(data []byte) error {
 	h.TryDelayMs = innerHappyEyeballsConfig.TryDelayMs
 	h.Interleave = innerHappyEyeballsConfig.Interleave
 	h.MaxConcurrentTry = innerHappyEyeballsConfig.MaxConcurrentTry
+	h.SuccessDefinition = innerHappyEyeballsConfig.SuccessDefinition
 	return nil
 }
 
@@ -160,6 +163,14 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
 		happyEyeballs.Interleave = c.HappyEyeballsSettings.Interleave
 		happyEyeballs.TryDelayMs = c.HappyEyeballsSettings.TryDelayMs
 		happyEyeballs.MaxConcurrentTry = c.HappyEyeballsSettings.MaxConcurrentTry
+		switch strings.ToLower(c.HappyEyeballsSettings.SuccessDefinition) {
+		case "tcpconnected", "":
+			happyEyeballs.SuccessDefinition = internet.HappyEyeballsConfig_TcpConnected
+		case "tlshandshakecomplete":
+			happyEyeballs.SuccessDefinition = internet.HappyEyeballsConfig_TlsHandshakeComplete
+		default:
+			return nil, errors.New("unsupported happy eyeballs success definition: ", c.HappyEyeballsSettings.SuccessDefinition)
+		}
 	}
 
 	return &internet.SocketConfig{

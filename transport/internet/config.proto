@@ -156,4 +156,17 @@ message HappyEyeballsConfig {
   uint32 interleave = 2;
   uint64 try_delayMs = 3;
   uint32 max_concurrent_try = 4;
+
+  // SuccessDefinition is the point at which a connection attempt wins the race.
+  // See success_definition in draft-kuehlewind-happy-qlog and section 6.1 of
+  // draft-ietf-happy-happyeyeballs-v3.
+  enum SuccessDefinition {
+    // The first established TCP connection wins.
+    TcpConnected = 0;
+    // The first connection that completes and verifies the TLS or REALITY
+    // handshake wins. Without TLS or REALITY it is the same as TcpConnected.
+    TlsHandshakeComplete = 1;
+  }
+
+  SuccessDefinition success_definition = 5;
 }
