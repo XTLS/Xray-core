@@ -431,6 +431,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		}
 		return stat.Connection(&conn), nil
 	} else if mode == "packet-down" {
+		conn.reader = reader
 		// download приходит серией коротких GET d0, d1, d2… вместо одного
 		// бесконечного GET. Горутина запрашивает сегменты по порядку и пишет их
 		// в reader-конец pipe, из которого ядро Xray читает нисходящий поток.
@@ -444,7 +445,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 				seqStr := "d" + strconv.FormatInt(seq, 10)
 				seq++
-				seg, err := dynClient.GetSegment(ctx, requestURL2.String(), sessionId, seqStr)
+				seg, eof, err := dynClient.GetSegment(ctx, requestURL2.String(), sessionId, seqStr)
 				if err != nil {
 					writer.Close()
 					return
@@ -453,6 +454,10 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 					if _, werr := writer.Write(seg); werr != nil {
 						return
 					}
+				}
+				if eof {
+					writer.Close()
+					return
 				}
 			}
 		}()

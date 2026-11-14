@@ -29,7 +29,7 @@ type DialerClient interface {
 	PostPacket(context.Context, string, string, string, buf.MultiBuffer) error
 
 	// ctx, url, sessionId, seqStr — один GET-сегмент режима packet-down
-	GetSegment(context.Context, string, string, string) ([]byte, error)
+	GetSegment(context.Context, string, string, string) ([]byte, bool, error)
 }
 
 // implements splithttp.DialerClient in terms of direct network connections
@@ -177,44 +177,40 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 
 		c.uploadRawPool.Put(uploadConn)
 	}
-
 	return nil
 }
 // packetDownMaxSegment — защита от слишком большого ответа сервера.
 const packetDownMaxSegment = 4 << 20 // 4 МБ
 
-// GetSegment — режим packet-down: один конечный GET за сегментом download.
-// Сервер отдаёт ответ ограниченной длины и закрывает его.
-func (c *DefaultDialerClient) GetSegment(ctx context.Context, url string, sessionId string, seqStr string) ([]byte, error) {
+func (c *DefaultDialerClient) GetSegment(ctx context.Context, url string, sessionId string, seqStr string) ([]byte, bool, error) {
 	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	// FillStreamRequest игнорирует seqStr, поэтому берём FillPacketRequest:
-	// она кладёт номер туда, куда велит seqPlacement (path/header/query/cookie).
-	// Данных вверх у сегмента нет, поэтому payload = nil.
 	c.transportConfig.FillPacketRequest(req, sessionId, seqStr, nil)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
 		c.closed.Store(true)
-		return nil, err
+		return nil, false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		io.Copy(io.Discard, resp.Body)
-		return nil, errors.New("packet-down: bad status code:", resp.Status)
+		return nil, false, errors.New("packet-down: bad status code:", resp.Status)
 	}
+
+	eof := resp.Header.Get("X-Pd-Eof") == "1"
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, packetDownMaxSegment+1))
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if len(data) > packetDownMaxSegment {
-		return nil, errors.New("packet-down: segment too large")
+		return nil, false, errors.New("packet-down: segment too large")
 	}
-	return data, nil
+	return data, eof, nil
 }
 // HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
 func (c *DefaultDialerClient) Close() error {
