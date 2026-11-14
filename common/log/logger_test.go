@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -36,4 +37,22 @@ func TestFileLogger(t *testing.T) {
 	if !strings.Contains(string(b), "Test Log") {
 		t.Fatal("Expect log text contains 'Test Log', but actually: ", string(b))
 	}
+}
+
+func TestClosedLoggerDoesNotOpenWriter(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		opened := false
+		handler := NewLogger(func() Writer {
+			opened = true
+			return nil
+		})
+		common.Must(common.Close(handler))
+		common.Must(common.Close(handler))
+
+		handler.Handle(&GeneralMessage{Content: "after close"})
+		synctest.Wait()
+		if opened {
+			t.Fatal("closed logger opened a writer")
+		}
+	})
 }
