@@ -30,6 +30,8 @@ type Stats struct {
 	UserDownlink bool
 	// Whether or not to enable online map for user.
 	UserOnline bool
+	// Maximum number of unique online IPs for user. Zero means unlimited.
+	MaxUserOnline uint32
 }
 
 // Buffer contains settings for internal buffer.

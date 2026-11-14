@@ -536,6 +536,20 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.VlessRoute = net.PortFromBytes(userSentID[6:8])
 
 	account := request.User.Account.(*vless.MemoryAccount)
+	userPolicy := h.policyManager.ForLevel(request.User.Level)
+	if userPolicy.Stats.UserOnline && userPolicy.Stats.MaxUserOnline > 0 {
+		name := "user>>>" + request.User.Email + ">>>online"
+		if onlineMap := h.stats.GetOnlineMap(name); onlineMap != nil {
+			online := false
+			onlineMap.ForEach(func(ip string, _ int64) bool {
+				online = ip == inbound.Source.Address.String()
+				return !online
+			})
+			if !online && uint32(onlineMap.Count()) >= userPolicy.Stats.MaxUserOnline {
+				return errors.New("user ", request.User.Email, " exceeded maximum online IP limit")
+			}
+		}
+	}
 
 	if account.Reverse != nil && request.Command != protocol.RequestCommandRvs {
 		return errors.New("for safety reasons, user " + account.ID.String() + " is not allowed to use forward proxy")
