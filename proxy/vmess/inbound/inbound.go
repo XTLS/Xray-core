@@ -392,7 +392,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if request.Command == protocol.RequestCommandMux {
 		body := &codecBody{ctx: ctx, reader: bodyReader}
 		// Start decoding before physical header I/O; wire orders header and body.
-		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: bodyWriter})
+		output := &multiplex.PhysicalWriter{Writer: bodyWriter}
+		output.Lock()
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: output})
 		defer worker.Close()
 		stopWorker := context.AfterFunc(worker.Context(), func() {
 			if worker.Err() != nil {
@@ -409,8 +411,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				}
 			}
 			cancel()
+			output.Unlock()
 			return errors.New("failed to write response header").Base(err)
 		}
+		output.Unlock()
 		select {
 		case <-ctx.Done():
 		case <-worker.WaitClosed():

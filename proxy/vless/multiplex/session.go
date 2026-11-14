@@ -136,13 +136,28 @@ func (s *Session) close(failed bool) { s.terminate(failed, true) }
 func (s *Session) abort()            { s.terminate(false, false) }
 
 func (s *Session) cleanup() {
+	input, output := s.input, s.output
+	for {
+		r, ok := input.(*buf.EndpointOverrideReader)
+		if !ok {
+			break
+		}
+		input = r.Reader
+	}
+	for {
+		w, ok := output.(*buf.EndpointOverrideWriter)
+		if !ok {
+			break
+		}
+		output = w.Writer
+	}
 	stop := context.AfterFunc(s.parent.ctx, func() {
-		common.Interrupt(s.output)
-		common.Interrupt(s.input)
+		common.Interrupt(output)
+		common.Interrupt(input)
 	})
 	defer stop()
-	common.Close(s.output)
-	common.Interrupt(s.input)
+	common.Close(output)
+	common.Interrupt(input)
 }
 
 func (s *Session) terminate(failed, local bool) {

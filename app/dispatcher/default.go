@@ -26,6 +26,13 @@ import (
 
 var errSniffingTimeout = errors.New("timeout on sniffing")
 
+// Native readers own attempted-input accounting, timeout and interruption.
+type nativeReader interface {
+	buf.TimeoutReader
+	common.Interruptible
+	SetUplinkCounter(stats.Counter)
+}
+
 type cachedReader struct {
 	sync.Mutex
 	reader buf.TimeoutReader // *pipe.Reader or *buf.TimeoutWrapperReader
@@ -86,7 +93,12 @@ func (r *cachedReader) Interrupt() {
 		r.cache = buf.ReleaseMulti(r.cache)
 	}
 	r.Unlock()
-	common.Interrupt(r.reader)
+	switch reader := r.reader.(type) {
+	case *pipe.Reader:
+		reader.Interrupt()
+	case nativeReader:
+		reader.Interrupt()
+	}
 }
 
 // DefaultDispatcher is a default implementation of Dispatcher.
@@ -214,11 +226,9 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		}
 	}
 
-	if owner, ok := link.Reader.(interface{ SetUplinkCounter(stats.Counter) }); ok {
-		owner.SetUplinkCounter(uplinkCounter)
-		uplinkCounter = nil
-	}
-	if _, ok := link.Reader.(buf.TimeoutReader); uplinkCounter != nil || !ok {
+	if reader, ok := link.Reader.(nativeReader); ok {
+		reader.SetUplinkCounter(uplinkCounter)
+	} else {
 		link.Reader = &buf.TimeoutWrapperReader{Reader: link.Reader, Counter: uplinkCounter}
 	}
 	return link

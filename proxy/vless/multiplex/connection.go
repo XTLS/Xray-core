@@ -2,6 +2,7 @@ package multiplex
 
 import (
 	"context"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -9,6 +10,15 @@ import (
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
+
+// PhysicalWriter owns native output serialization without buffering data.
+type PhysicalWriter struct {
+	sync.Mutex
+	buf.Writer
+}
+
+func (w *PhysicalWriter) Close() error { return common.Close(w.Writer) }
+func (w *PhysicalWriter) Interrupt()   { common.Interrupt(w.Writer) }
 
 type activityWriter struct {
 	ctx      context.Context
@@ -62,10 +72,12 @@ func (r *responseReader) Interrupt() { r.cancel() }
 
 // OpenLink installs one immutable owner after VLESS codec preparation.
 func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connection, writer buf.Writer, activity *signal.ActivityTimer, openResponse func() (buf.Reader, error)) (*transport.Link, error) {
-	gate, ok := writer.(*buf.BufferedWriter)
+	gate, ok := writer.(*PhysicalWriter)
 	if !ok {
-		gate = buf.NewBufferedWriter(WrapWriter(ctx, writer, activity))
-		gate.SetBuffered(false)
+		if _, buffered := writer.(*buf.BufferedWriter); !buffered {
+			writer = WrapWriter(ctx, writer, activity)
+		}
+		gate = &PhysicalWriter{Writer: writer}
 	}
 	response := &responseReader{ctx: ctx, cancel: cancel, results: make(chan buf.MultiBuffer)}
 	context.AfterFunc(ctx, func() {

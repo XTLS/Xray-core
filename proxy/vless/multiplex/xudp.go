@@ -206,7 +206,7 @@ func (w *flowOutput) WriteMultiBuffer(data buf.MultiBuffer) error {
 // prefix is detached before this owner's raw claim, never at completion.
 func (w *ServerWorker) emitResponse(s *Session, x *inboundFlow) {
 	c := s.parent
-	gate := c.link.Writer.(*buf.BufferedWriter)
+	gate := c.link.Writer.(*PhysicalWriter)
 	for {
 		x.access.Lock()
 		for {
@@ -279,7 +279,7 @@ func (w *ServerWorker) emitResponse(s *Session, x *inboundFlow) {
 // control before replacement output; stale own END still flushes its prefix.
 func (w *ServerWorker) emitResponseEnd(s *Session, x *inboundFlow) {
 	c := s.parent
-	gate := c.link.Writer.(*buf.BufferedWriter)
+	gate := c.link.Writer.(*PhysicalWriter)
 	gate.Lock()
 	frames := c.takePending()
 	c.Lock()

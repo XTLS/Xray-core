@@ -31,10 +31,8 @@ type carrier struct {
 }
 
 func newCarrier(parent context.Context, link transport.Link, idle time.Duration, client bool, limit int32) *carrier {
-	if _, ok := link.Writer.(*buf.BufferedWriter); !ok {
-		gate := buf.NewBufferedWriter(link.Writer)
-		gate.SetBuffered(false)
-		link.Writer = gate
+	if _, ok := link.Writer.(*PhysicalWriter); !ok {
+		link.Writer = &PhysicalWriter{Writer: link.Writer}
 	}
 	ctx, cancel := context.WithCancelCause(parent)
 	c := &carrier{
@@ -104,7 +102,7 @@ func (c *carrier) unknownEnd(id uint16) {
 
 // The gate precedes claim/revalidation, and no logical lock spans physical I/O.
 func (c *carrier) sendLoop() {
-	gate := c.link.Writer.(*buf.BufferedWriter)
+	gate := c.link.Writer.(*PhysicalWriter)
 	for {
 		c.tx.Lock()
 		for !c.Closed() && len(c.data) == 0 {
@@ -142,11 +140,11 @@ func (c *carrier) takePending() buf.MultiBuffer {
 // The caller owns this carrier's locked writer gate and no logical locks.
 // Frames transfer here; any unencoded raw remainder must already be released.
 func (c *carrier) writeAndUnlock(frames buf.MultiBuffer, err error) error {
-	gate := c.link.Writer.(*buf.BufferedWriter)
+	gate := c.link.Writer.(*PhysicalWriter)
 	if err != nil || c.Closed() {
 		buf.ReleaseMulti(frames)
 	} else if len(frames) != 0 {
-		err = gate.WriteMultiBufferLocked(frames)
+		err = gate.Writer.WriteMultiBuffer(frames)
 	}
 	if err != nil {
 		c.Lock()

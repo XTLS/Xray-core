@@ -151,6 +151,7 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			errors.LogInfo(ctx, "target: ", unchangedDomain, " resolved to: ", ob.Target.Address.String())
 		}
 	}
+	reader, writer := link.Reader, link.Writer
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
 		link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
@@ -169,13 +170,15 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		err := errors.New("failed to process outbound traffic").Base(err)
 		session.SubmitOutboundErrorToOriginator(ctx, err)
 		errors.LogInfo(ctx, err.Error())
-	}
-	if err != nil || goerrors.Is(errC, io.ErrClosedPipe) {
-		common.Interrupt(link.Writer)
+		common.Interrupt(writer)
 	} else {
-		common.Close(link.Writer)
+		if errC != nil && goerrors.Is(errC, io.ErrClosedPipe) {
+			common.Interrupt(writer)
+		} else {
+			common.Close(writer)
+		}
 	}
-	common.Interrupt(link.Reader)
+	common.Interrupt(reader)
 }
 
 func (h *Handler) DestIpAddress() net.IP {

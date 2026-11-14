@@ -37,10 +37,11 @@ func (p *PublicEndpoint) Tag() string                          { return p.tag }
 func (p *PublicEndpoint) SenderSettings() *serial.TypedMessage { return nil }
 func (p *PublicEndpoint) ProxySettings() *serial.TypedMessage  { return nil }
 func (p *PublicEndpoint) Dispatch(ctx context.Context, link *transport.Link) {
+	reader, writer := link.Reader, link.Writer
 	if err := p.HandleConnection(ctx, link); err != nil {
 		errors.LogInfoInner(ctx, err, "failed to process reverse connection")
-		common.Interrupt(link.Writer)
-		common.Interrupt(link.Reader)
+		common.Interrupt(writer)
+		common.Interrupt(reader)
 	}
 }
 

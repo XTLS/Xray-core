@@ -85,6 +85,7 @@ type BufferedWriter struct {
 func NewBufferedWriter(writer Writer) *BufferedWriter {
 	return &BufferedWriter{
 		writer:   writer,
+		buffer:   New(),
 		buffered: true,
 	}
 }
@@ -141,15 +142,6 @@ func (w *BufferedWriter) WriteMultiBuffer(b MultiBuffer) error {
 
 	w.Lock()
 	defer w.Unlock()
-	return w.WriteMultiBufferLocked(b)
-}
-
-// WriteMultiBufferLocked transfers ownership while the caller holds this writer's mutex.
-func (w *BufferedWriter) WriteMultiBufferLocked(b MultiBuffer) error {
-	if b.IsEmpty() {
-		ReleaseMulti(b)
-		return nil
-	}
 
 	if !w.buffered {
 		return w.writer.WriteMultiBuffer(b)
