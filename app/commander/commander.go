@@ -63,14 +63,15 @@ func (c *Commander) Type() interface{} {
 // Start implements common.Runnable.
 func (c *Commander) Start() error {
 	c.Lock()
-	c.server = grpc.NewServer()
+	server := grpc.NewServer()
+	c.server = server
 	for _, service := range c.services {
-		service.Register(c.server)
+		service.Register(server)
 	}
 	c.Unlock()
 
 	listen := func(listener net.Listener) {
-		if err := c.server.Serve(listener); err != nil {
+		if err := server.Serve(listener); err != nil && err != grpc.ErrServerStopped {
 			errors.LogErrorInner(context.Background(), err, "failed to start grpc server")
 		}
 	}
