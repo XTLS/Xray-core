@@ -757,8 +757,10 @@ func TestSlotBurstInlineWaves(t *testing.T) {
 
 type holdSlots struct {
 	*memSlots
-	target string
-	hold   chan struct{}
+	target    string
+	hold      chan struct{}
+	watermark string
+	ack       chan struct{}
 }
 
 func (s *holdSlots) setSlot(ctx context.Context, id, description string, body []byte) error {
@@ -769,7 +771,16 @@ func (s *holdSlots) setSlot(ctx context.Context, id, description string, body []
 			return ctx.Err()
 		}
 	}
-	return s.memSlots.setSlot(ctx, id, description, body)
+	if err := s.memSlots.setSlot(ctx, id, description, body); err != nil {
+		return err
+	}
+	if id == s.watermark {
+		select {
+		case s.ack <- struct{}{}:
+		default:
+		}
+	}
+	return nil
 }
 
 func TestSlotFirstAnnouncement(t *testing.T) {
@@ -781,31 +792,28 @@ func TestSlotFirstAnnouncement(t *testing.T) {
 		maxPollInterval: 5 * time.Millisecond,
 		sessionTTL:      time.Minute,
 	}
-	store := &holdSlots{memSlots: newMemSlots(), hold: make(chan struct{})}
-	ctx := context.Background()
+	store := &holdSlots{memSlots: newMemSlots(), hold: make(chan struct{}), ack: make(chan struct{}, 1)}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
 	r, err := makeRing(ctx, store, "first", p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	store.target = r.Up.Slots[0]
+	store.watermark = r.Up.Watermark
 	client := newSlotConn(ctx, store, r.Up, r.Down, p, nil, nil)
-	defer client.Close()
 	writer := client.writer.(*slotWriter)
 	writer.first = make(chan []byte, 1)
 
 	payload := randomPayload(10000)
-	errs := make(chan error, 1)
-	go func() {
-		_, err := client.Write(payload)
-		if err == nil {
-			err = client.Close()
-		}
-		errs <- err
-	}()
+	firstLap := 2 * p.segmentBytes
+	if _, err := client.Write(payload[:firstLap]); err != nil {
+		t.Fatal(err)
+	}
 	var first []byte
 	select {
 	case first = <-writer.first:
-	case <-time.After(5 * time.Second):
+	case <-ctx.Done():
 		t.Fatal("the writer never flushed seq 0")
 	}
 	announced := r
@@ -822,25 +830,34 @@ func TestSlotFirstAnnouncement(t *testing.T) {
 		t.Fatal("the announcement with First did not decode")
 	}
 	server := newSlotConn(ctx, store, decoded.Down, decoded.Up, p, decoded.First, nil)
-	defer server.Close()
-	if err := server.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
 	gotFirst := make([]byte, len(first))
 	if _, err := io.ReadFull(server, gotFirst); err != nil {
 		t.Fatalf("the first bytes did not arrive before the ring write: %v", err)
 	}
-	if !bytes.Equal(gotFirst, first) {
+	if !bytes.Equal(gotFirst, payload[:len(first)]) {
 		t.Fatal("the primed first bytes changed")
 	}
+
+	// The reader acknowledged the inline segment while its slot upload is blocked.
+	select {
+	case <-store.ack:
+	case <-ctx.Done():
+		t.Fatal("the reader did not acknowledge the inline segment")
+	}
+	if ready, err := writer.drained(2); err != nil || ready {
+		t.Fatalf("reuse while seq 0 is still writing: ready=%t, err=%v", ready, err)
+	}
+
+	errs := make(chan error, 1)
+	go func() {
+		_, err := client.Write(payload[firstLap:])
+		if err == nil {
+			err = client.Close()
+		}
+		errs <- err
+	}()
 	close(store.hold)
-	rest := make([]byte, len(payload)-len(first))
-	if _, err := io.ReadFull(server, rest); err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(append(gotFirst, rest...), payload) {
-		t.Fatal("the stream was duplicated or changed")
-	}
+	readAll(t, server, payload[len(first):])
 	if err := <-errs; err != nil {
 		t.Fatal(err)
 	}

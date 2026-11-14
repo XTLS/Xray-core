@@ -219,9 +219,11 @@ type slotWriter struct {
 	store slotStore
 	table slotTable
 	params
-	// slots has a token for each segment on its way, at most one for each slot
+	// slots limits the total number of pending uploads.
 	slots chan struct{}
 	wg    sync.WaitGroup
+	// written holds the last successfully uploaded sequence plus one for each slot.
+	written []atomic.Int64
 
 	mu       sync.Mutex
 	buf      []byte
@@ -248,6 +250,7 @@ func newSlotWriter(ctx context.Context, store slotStore, table slotTable, p para
 		table:    table,
 		params:   p,
 		slots:    make(chan struct{}, min(len(table.Slots), slotWriteInflight)),
+		written:  make([]atomic.Int64, len(table.Slots)),
 		size:     min(slotInlineLimit, p.segmentBytes),
 		acked:    -1,
 		progress: time.Now(),
@@ -394,6 +397,7 @@ func (w *slotWriter) upload(seq int64, chunk []byte) {
 		w.write(seq, slotErr, nil)
 		return
 	}
+	w.written[seq%int64(len(w.written))].Store(seq + 1)
 	errors.LogDebug(w.ctx, "xdrive write ", slotTag(w.table.Watermark), " seq=", seq, " bytes=", len(chunk),
 		" mode=", mode, " await=", awaited, " put=", time.Since(putAt))
 }
@@ -407,14 +411,22 @@ func (w *slotWriter) write(seq int64, mode byte, data []byte) error {
 	return w.store.setSlot(w.ctx, w.slotID(seq), f.encode(), body)
 }
 
-// drained reports whether the reader took what the slot of seq held a lap
-// before. The watermark is read again only after slotWatermarkTTL, as one
-// that is old costs a wait but never what is in a slot
+// drained reports whether the previous upload to the slot finished and the
+// reader took its bytes. An inline announcement can be acknowledged before
+// its slot upload completes.
 func (w *slotWriter) drained(seq int64) (bool, error) {
+	depth := int64(len(w.written))
+	before := seq - depth
+	if before < 0 {
+		return true, nil
+	}
+	if w.written[seq%depth].Load() <= before {
+		return false, nil
+	}
+
 	w.ackMu.Lock()
 	defer w.ackMu.Unlock()
 
-	before := seq - int64(len(w.table.Slots))
 	if w.acked >= before {
 		return true, nil
 	}
