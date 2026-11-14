@@ -187,8 +187,10 @@ func (c *DefaultDialerClient) GetSegment(ctx context.Context, url string, sessio
 	if err != nil {
 		return nil, err
 	}
-	// номер сегмента кладём туда же, куда конфиг кладёт seq (path/header/query/cookie)
-	c.transportConfig.FillStreamRequest(req, sessionId, seqStr)
+	// FillStreamRequest игнорирует seqStr, поэтому берём FillPacketRequest:
+	// она кладёт номер туда, куда велит seqPlacement (path/header/query/cookie).
+	// Данных вверх у сегмента нет, поэтому payload = nil.
+	c.transportConfig.FillPacketRequest(req, sessionId, seqStr, nil)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
