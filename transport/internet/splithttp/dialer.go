@@ -419,7 +419,7 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		},
 	}
 
-	var err error
+		var err error
 	if mode == "stream-one" {
 		requestURL.Path = transportConfiguration.GetNormalizedPath()
 		if xmuxClient != nil {
@@ -430,6 +430,32 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 			return nil, err
 		}
 		return stat.Connection(&conn), nil
+	} else if mode == "packet-down" {
+		// download приходит серией коротких GET d0, d1, d2… вместо одного
+		// бесконечного GET. Горутина запрашивает сегменты по порядку и пишет их
+		// в reader-конец pipe, из которого ядро Xray читает нисходящий поток.
+		go func() {
+			var seq int64
+			dynClient := httpClient2
+			dynXmux := xmuxClient2
+			for {
+				if dynXmux != nil && dynXmux.LeftRequests.Add(-1) <= 0 {
+					dynClient, dynXmux = getHTTPClient(ctx, dest, streamSettings)
+				}
+				seqStr := "d" + strconv.FormatInt(seq, 10)
+				seq++
+				seg, err := dynClient.GetSegment(ctx, requestURL2.String(), sessionId, seqStr)
+				if err != nil {
+					writer.Close()
+					return
+				}
+				if len(seg) > 0 {
+					if _, werr := writer.Write(seg); werr != nil {
+						return
+					}
+				}
+			}
+		}()
 	} else { // stream-down
 		if xmuxClient2 != nil {
 			xmuxClient2.LeftRequests.Add(-1)
