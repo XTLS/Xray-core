@@ -6,8 +6,7 @@ import (
 )
 
 const (
-	Version          = byte(1)
-	userRouteVersion = byte(1)
+	Version = byte(1)
 )
 
 var addrParser = protocol.NewAddressParser(

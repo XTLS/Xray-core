@@ -71,12 +71,9 @@ func (v *TimedUserValidator) Add(u *protocol.MemoryUser) error {
 		return errors.New("account type is incorrect")
 	}
 	var cmdkeyfl [16]byte
-	copy(cmdkeyfl[:], account.CmdKey())
-	if account.UserRoute && v.aeadDecoderHolder.HasUser(cmdkeyfl) {
-		return errors.New("duplicate VMess userRoute identity (UUID bytes 7 and 8 do not identify a user)")
-	}
+	copy(cmdkeyfl[:], account.ID.CmdKey())
 	id := account.ID.UUID()
-	identity := routeIdentity{route: uint16(id[6])<<8 | uint16(id[7]), legacy: account.UserRoute}
+	identity := routeIdentity{route: uint16(id[6])<<8 | uint16(id[7])}
 	id[6], id[7] = 0, 0
 	if previous, found := v.routeIdentities[id]; found && previous != identity {
 		identity.ambiguous = true
@@ -131,7 +128,7 @@ func (v *TimedUserValidator) Remove(email string) bool {
 		if strings.ToLower(u.Email) == email {
 			idx = i
 			var cmdkeyfl [16]byte
-			copy(cmdkeyfl[:], u.Account.(*MemoryAccount).CmdKey())
+			copy(cmdkeyfl[:], u.Account.(*MemoryAccount).ID.CmdKey())
 			v.aeadDecoderHolder.RemoveUser(cmdkeyfl)
 			delete(v.exactUsers, cmdkeyfl)
 			v.routeCache.remove(v.routeIDs[u])

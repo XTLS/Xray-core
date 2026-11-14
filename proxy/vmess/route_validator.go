@@ -19,7 +19,6 @@ const (
 
 type routeIdentity struct {
 	route     uint16
-	legacy    bool
 	ambiguous bool
 }
 
@@ -65,11 +64,9 @@ func (v *TimedUserValidator) syncRoutesLocked() error {
 	groups := make(map[uuid.UUID]int)
 	for _, user := range v.users {
 		a := user.Account.(*MemoryAccount)
-		if !a.UserRoute {
-			id := a.ID.UUID()
-			id[6], id[7] = 0, 0
-			groups[id]++
-		}
+		id := a.ID.UUID()
+		id[6], id[7] = 0, 0
+		groups[id]++
 	}
 	var accounts []*cacheAccount
 	count := 0
@@ -79,7 +76,7 @@ func (v *TimedUserValidator) syncRoutesLocked() error {
 		base := id
 		base[6], base[7] = 0, 0
 		var routes []uint16
-		if !a.UserRoute && groups[base] == 1 && !v.routeIdentities[base].ambiguous {
+		if groups[base] == 1 && !v.routeIdentities[base].ambiguous {
 			routes = slices.Clone(snapshot.ForUser(v.inboundTag, user.Email))
 		}
 		original := uint16(net.PortFromBytes(id[6:8]))
@@ -154,7 +151,7 @@ func (v *TimedUserValidator) MatchAEAD(userHash []byte) (*AEADMatch, error) {
 		u := user.(*protocol.MemoryUser)
 		a := u.Account.(*MemoryAccount)
 		match := &AEADMatch{User: u, Route: net.PortFromBytes(a.ID.Bytes()[6:8]), registration: v.routeIDs[u]}
-		copy(match.CmdKey[:], a.CmdKey())
+		copy(match.CmdKey[:], a.ID.CmdKey())
 		return match, nil
 	}
 	if err != aead.ErrNotFound {

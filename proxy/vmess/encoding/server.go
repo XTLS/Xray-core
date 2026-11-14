@@ -223,9 +223,6 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 	request.Option = bitmask.Byte(buffer.Byte(34)) // 1 byte
 	paddingLen := int(buffer.Byte(35) >> 4)
 	request.Security = parseSecurityType(buffer.Byte(35) & 0x0F)
-	if vmessAccount.UserRoute && (request.Version != Version || buffer.Byte(36) != userRouteVersion || paddingLen < 2) {
-		return nil, errors.New("invalid VMess userRoute extension")
-	}
 	request.Command = protocol.RequestCommand(buffer.Byte(37))
 
 	switch request.Command {
@@ -240,7 +237,6 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 		}
 	}
 
-	paddingStart := buffer.Len()
 	if paddingLen > 0 {
 		if _, err := buffer.ReadFullFrom(decryptor, int32(paddingLen)); err != nil {
 			return nil, errors.New("failed to read padding").Base(err)
@@ -274,9 +270,6 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 	}
 	s.releaseRoute = release
 	s.userRoute = match.Route
-	if vmessAccount.UserRoute {
-		s.userRoute = net.PortFromBytes(buffer.BytesRange(paddingStart, paddingStart+2))
-	}
 	return request, nil
 }
 

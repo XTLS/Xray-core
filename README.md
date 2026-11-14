@@ -39,40 +39,6 @@
 
 [Project X Official Website](https://xtls.github.io)
 
-### User route matching
-
-Use `userRoute` in `routing.rules` to match a user route value. It accepts a number or a comma-separated list of numbers and ranges, for example `{"userRoute":"4660,5000-5010","outboundTag":"direct"}`.
-
-For VLESS, the route is the seventh and eighth bytes of the UUID sent by the client, interpreted as a big-endian integer. Hysteria also exposes its existing route value through `userRoute`. Connections without a route value use `0`.
-
-Existing `vlessRoute` rules keep their original behavior, including evaluating VMess as `0`. If both fields are present in a rule, `userRoute` takes precedence. In routing scripts, `ctx:GetUserRoute()` reads the shared value.
-
-#### VMess routing with an unchanged client
-
-Update the server to this fork. Standard VMess clients select a declared route by changing the third UUID group; no account flag or new wire field is needed. The remaining 14 UUID bytes must match the original server account.
-
-Server inbound settings:
-
-```json
-{"clients":[{"id":"317530a8-3c1d-1234-8d8e-7cb70aedf158","email":"alice@example.com"}]}
-```
-
-Server routing rules (the outbound tags must exist):
-
-```json
-{"rules":[{"userRoute":1,"outboundTag":"route-one"},{"userRoute":2,"outboundTag":"route-two"}]}
-```
-
-The client UUID `317530a8-3c1d-0002-8d8e-7cb70aedf158` selects route 2. The full original UUID remains valid even when its route is absent from the rules. Additional UUID variants are accepted only for explicit `userRoute` values in rules applicable to that inbound and user; `user` filters, including regular expressions, and `inboundTag` filters constrain the catalog. Other rule conditions still govern outbound selection. Lua-only routing does not declare aliases.
-
-Aliases retain the original account's email, level, API identity, statistics and session replay history. Existing connections, including Mux carriers, retain their handshake route; UUID changes require a new connection. Accounts sharing the same remaining 14 UUID bytes retain exact-UUID authentication, but receive no generated aliases, so their identities cannot be merged by cache order.
-
-Only successfully authenticated online/recent accounts receive prepared search keys. The cache uses no IP or source-address hints. Entries expire two minutes after the final connection closes; idle entries are evicted first, then the least recently authenticated active entries if necessary. Eviction only removes acceleration data. Rule edits preserve live leases without renewing recency or promoting evicted entries. Removed users and stale route generations cannot create new connections.
-
-Per inbound, prepared keys have a 64 MiB payload budget, raw alias keys have a 128 MiB catalog limit, and at most two alias scans run concurrently. An exhausted scan budget rejects that new alias handshake; exact configured credentials remain on the ordinary path. Oversized catalogs fail startup; if introduced by a live rule/user update, aliases fail closed until the catalog fits again, while exact configured credentials remain usable. These are payload limits, not a total process RSS guarantee. Cached searches still scan the cached population, and cold misses can scan every declared alias; this is not a constant-time VLESS lookup. See [implementation notes](docs/vmess-user-route.md).
-
-The earlier experimental account option `userRoute: true` remains compatible with that fork's opt-in wire format, but is not needed for this server-only design. Accounts using it continue to require both peers to support that earlier extension. Leave it absent when using ordinary clients.
-
 ## Telegram
 
 [Project X](https://t.me/projectXray)

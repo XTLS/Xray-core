@@ -212,36 +212,30 @@ func TestServerOnlyImmutableRouteProvider(t *testing.T) {
 }
 
 func TestServerOnlyIdentityHistorySurvivesRemoval(t *testing.T) {
-	for _, legacy := range []bool{false, true} {
-		v := NewTimedUserValidator()
-		defer v.Close()
-		old := &protocol.MemoryUser{Email: "old", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 4660)), UserRoute: legacy}}
-		if err := v.Add(old); err != nil {
-			t.Fatal(err)
-		}
-		v.Remove("old")
-		newRoute := 27
-		if legacy {
-			newRoute = 4660
-		}
-		current := &protocol.MemoryUser{Email: "current", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, newRoute))}}
-		if err := v.Add(current); err != nil {
-			t.Fatal(err)
-		}
-		source := new(testRouteSource)
-		source.set(300)
-		if err := v.SetRouteSource(source, "vm"); err != nil {
-			t.Fatal(err)
-		}
-		q := queryFor(0, 300, uint64(time.Now().Unix()))
-		if _, err := v.MatchAEAD(q[:]); err == nil {
-			t.Fatalf("former identity regained alias access: legacy=%v", legacy)
-		}
-		q = queryFor(0, newRoute, uint64(time.Now().Unix()))
-		m, err := v.MatchAEAD(q[:])
-		if err != nil || m.User != current {
-			t.Fatal("exact credential changed", err)
-		}
+	v := NewTimedUserValidator()
+	defer v.Close()
+	old := &protocol.MemoryUser{Email: "old", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 4660))}}
+	if err := v.Add(old); err != nil {
+		t.Fatal(err)
+	}
+	v.Remove("old")
+	current := &protocol.MemoryUser{Email: "current", Account: &MemoryAccount{ID: protocol.NewID(accountID(0, 27))}}
+	if err := v.Add(current); err != nil {
+		t.Fatal(err)
+	}
+	source := new(testRouteSource)
+	source.set(300)
+	if err := v.SetRouteSource(source, "vm"); err != nil {
+		t.Fatal(err)
+	}
+	q := queryFor(0, 300, uint64(time.Now().Unix()))
+	if _, err := v.MatchAEAD(q[:]); err == nil {
+		t.Fatal("former identity regained alias access")
+	}
+	q = queryFor(0, 27, uint64(time.Now().Unix()))
+	m, err := v.MatchAEAD(q[:])
+	if err != nil || m.User != current {
+		t.Fatal("exact credential changed", err)
 	}
 }
 

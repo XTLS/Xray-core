@@ -73,13 +73,8 @@ func (c *ClientSession) EncodeRequestHeader(header *protocol.RequestHeader, writ
 	common.Must(buffer.WriteByte(byte(header.Option)))
 
 	paddingLen := dice.Roll(16)
-	reserved := byte(0)
-	if account.UserRoute {
-		paddingLen = 2 + dice.Roll(14)
-		reserved = userRouteVersion
-	}
 	security := byte(paddingLen<<4) | byte(header.Security)
-	common.Must2(buffer.Write([]byte{security, reserved, byte(header.Command)}))
+	common.Must2(buffer.Write([]byte{security, byte(0), byte(header.Command)}))
 
 	if header.Command != protocol.RequestCommandMux {
 		if err := addrParser.WriteAddressPort(buffer, header.Address, header.Port); err != nil {
@@ -87,10 +82,6 @@ func (c *ClientSession) EncodeRequestHeader(header *protocol.RequestHeader, writ
 		}
 	}
 
-	if account.UserRoute {
-		common.Must2(buffer.Write(account.ID.Bytes()[6:8]))
-		paddingLen -= 2
-	}
 	if paddingLen > 0 {
 		common.Must2(buffer.ReadFullFrom(rand.Reader, int32(paddingLen)))
 	}
@@ -103,7 +94,7 @@ func (c *ClientSession) EncodeRequestHeader(header *protocol.RequestHeader, writ
 	}
 
 	var fixedLengthCmdKey [16]byte
-	copy(fixedLengthCmdKey[:], account.CmdKey())
+	copy(fixedLengthCmdKey[:], account.ID.CmdKey())
 	vmessout := vmessaead.SealVMessAEADHeader(fixedLengthCmdKey, buffer.Bytes())
 	common.Must2(io.Copy(writer, bytes.NewReader(vmessout)))
 
