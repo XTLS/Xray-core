@@ -41,7 +41,7 @@ type Context interface {
 	// GetUser returns the user email from the connection content, if exists.
 	GetUser() string
 
-	// GetVlessRoute returns the user-sent VLESS UUID's 7th<<8 | 8th bytes, if exists.
+	// GetVlessRoute returns the route value used by legacy routing rules.
 	GetVlessRoute() net.Port
 
 	// GetAttributes returns extra attributes from the conneciont content.
@@ -49,4 +49,12 @@ type Context interface {
 
 	// GetSkipDNSResolve returns a flag switch for weather skip dns resolve during route pick.
 	GetSkipDNSResolve() bool
+}
+
+// UserRoute returns the user route, falling back to the legacy value for older contexts.
+func UserRoute(ctx Context) net.Port {
+	if ctx, ok := ctx.(interface{ GetUserRoute() net.Port }); ok {
+		return ctx.GetUserRoute()
+	}
+	return ctx.GetVlessRoute()
 }

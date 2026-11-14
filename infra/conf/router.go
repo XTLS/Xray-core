@@ -148,6 +148,7 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		Source     *StringList        `json:"source"`
 		SourcePort *PortList          `json:"sourcePort"`
 		User       *StringList        `json:"user"`
+		UserRoute  *json.RawMessage   `json:"userRoute"`
 		VlessRoute *PortList          `json:"vlessRoute"`
 		InboundTag *StringList        `json:"inboundTag"`
 		Protocols  *StringList        `json:"protocol"`
@@ -245,7 +246,22 @@ func parseFieldRule(msg json.RawMessage) (*router.RoutingRule, error) {
 		}
 	}
 
-	if rawFieldRule.VlessRoute != nil {
+	if rawFieldRule.UserRoute != nil {
+		data := *rawFieldRule.UserRoute
+		var list PortList
+		if data[0] == '"' {
+			if err := json.Unmarshal(data, &list); err != nil {
+				return nil, errors.New("invalid userRoute").Base(err)
+			}
+		} else {
+			value, err := parseIntPort(data)
+			if err != nil {
+				return nil, errors.New("invalid userRoute").Base(err)
+			}
+			list.Range = []PortRange{{From: uint32(value), To: uint32(value)}}
+		}
+		rule.UserRouteList = list.Build()
+	} else if rawFieldRule.VlessRoute != nil {
 		rule.VlessRouteList = rawFieldRule.VlessRoute.Build()
 	}
 

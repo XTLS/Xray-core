@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/uuid"
 	core "github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/proxy/blackhole"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
 	"github.com/xtls/xray-core/proxy/vmess"
@@ -33,7 +36,16 @@ func TestVMessGCM(t *testing.T) {
 	common.Must(err)
 	defer tcpServer.Close()
 
-	userID := protocol.NewID(uuid.New())
+	id := uuid.New()
+	id[6], id[7] = 0x12, 0x34
+	userID := protocol.NewID(id)
+	routingConfig, err := (&conf.RouterConfig{RuleList: []json.RawMessage{
+		json.RawMessage(`{"vlessRoute": "4600-4700", "outboundTag": "block"}`),
+		json.RawMessage(`{"userRoute": "4600-4700", "outboundTag": "direct"}`),
+	}, DomainStrategy: new("IPOnDemand")}).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
 	serverPort := tcp.PickPort()
 	serverConfig := &core.Config{
 		App: []*serial.TypedMessage{
@@ -41,6 +53,7 @@ func TestVMessGCM(t *testing.T) {
 				ErrorLogLevel: clog.Severity_Debug,
 				ErrorLogType:  log.LogType_Console,
 			}),
+			serial.ToTypedMessage(routingConfig),
 		},
 		Inbound: []*core.InboundHandlerConfig{
 			{
@@ -61,6 +74,11 @@ func TestVMessGCM(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
+				Tag:           "block",
+				ProxySettings: serial.ToTypedMessage(&blackhole.Config{}),
+			},
+			{
+				Tag: "direct",
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
 					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
 				}),

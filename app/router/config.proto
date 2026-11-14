@@ -59,6 +59,8 @@ message RoutingRule {
 
   // List of operating systems for matching the one Xray itself is running on.
   repeated string local_os = 23;
+
+  xray.common.net.PortList user_route_list = 24;
 }
 
 message WebhookConfig {

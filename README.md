@@ -39,6 +39,14 @@
 
 [Project X Official Website](https://xtls.github.io)
 
+### User route matching
+
+Use `userRoute` in `routing.rules` to match a user route value. It accepts a number or a comma-separated list of numbers and ranges, for example `{"userRoute":"4660,5000-5010","outboundTag":"direct"}`.
+
+For VMess, the route is the seventh and eighth bytes of the authenticated account UUID as a big-endian integer. For example, `1234` in the third UUID group gives route `4660`. The client and server must use the same full VMess UUID. For VLESS, the route still comes from those bytes of the UUID sent by the client. Hysteria also exposes its existing route value through `userRoute`. Connections without a route value use `0`.
+
+Existing `vlessRoute` rules keep their original behavior, including evaluating VMess as `0`. If both fields are present in a rule, `userRoute` takes precedence. In routing scripts, `ctx:GetUserRoute()` reads the shared value.
+
 ## Telegram
 
 [Project X](https://t.me/projectXray)

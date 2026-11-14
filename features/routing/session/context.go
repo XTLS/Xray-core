@@ -135,6 +135,13 @@ func (ctx *Context) GetVlessRoute() net.Port {
 	return ctx.Inbound.VlessRoute
 }
 
+func (ctx *Context) GetUserRoute() net.Port {
+	if ctx.Inbound != nil && ctx.Inbound.UserRoute != 0 {
+		return ctx.Inbound.UserRoute
+	}
+	return ctx.GetVlessRoute()
+}
+
 // GetAttributes implements routing.Context.
 func (ctx *Context) GetAttributes() map[string]string {
 	if ctx.Content == nil {

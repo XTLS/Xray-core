@@ -21,6 +21,28 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
+func TestUserRouteRoutingContext(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ctx  *RoutingContext
+		want uint32
+	}{
+		{"legacy", &RoutingContext{VlessRoute: 4660}, 4660},
+		{"VMess", &RoutingContext{UserRoute: new(uint32(4660))}, 4660},
+		{"explicit zero", &RoutingContext{VlessRoute: 4660, UserRoute: new(uint32(0))}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			route := AsRoutingRoute(tc.ctx)
+			if got := AsProtobufMessage([]string{"route_user"})(route).GetUserRoute(); got != tc.want {
+				t.Fatalf("user route = %d, want %d", got, tc.want)
+			}
+			if got := AsProtobufMessage([]string{"user"})(route).UserRoute; got != nil {
+				t.Fatalf("user selector returned a user route: %d", *got)
+			}
+		})
+	}
+}
+
 func TestServiceSubscribeRoutingStats(t *testing.T) {
 	c := stats.NewChannel(&stats.ChannelConfig{
 		SubscriberLimit: 1,

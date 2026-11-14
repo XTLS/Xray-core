@@ -272,6 +272,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.Name = "vmess"
 	inbound.CanSpliceCopy = 3
 	inbound.User = request.User
+	id := request.User.Account.(*vmess.MemoryAccount).ID.Bytes()
+	inbound.UserRoute = net.PortFromBytes(id[6:8])
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 
