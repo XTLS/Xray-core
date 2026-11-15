@@ -77,6 +77,11 @@ func ContentFromContext(ctx context.Context) *Content {
 	return nil
 }
 
+func SkipDNSResolveFromContext(ctx context.Context) bool {
+	content := ContentFromContext(ctx)
+	return content != nil && content.SkipDNSResolve
+}
+
 func ContextWithIsReverseMux(ctx context.Context, isReverseMux bool) context.Context {
 	return context.WithValue(ctx, isReverseMuxKey, isReverseMux)
 }

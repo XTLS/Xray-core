@@ -44,9 +44,8 @@ func (c routingContext) GetRuleTag() string {
 	return ""
 }
 
-// GetSkipDNSResolve is a mock implementation here to match the interface,
-// SkipDNSResolve is set from dns module, no use if coming from a protobuf object?
-// TODO: please confirm @Vigilans
+// GetSkipDNSResolve implements routing.Context.
+// The protobuf RoutingContext has no skip flag, so API contexts use false.
 func (c routingContext) GetSkipDNSResolve() bool {
 	return false
 }

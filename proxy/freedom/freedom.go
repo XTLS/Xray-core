@@ -278,12 +278,6 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 
 // Process implements proxy.Outbound.
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	if content := session.ContentFromContext(ctx); content != nil && content.SkipDNSResolve {
-		// Keep DNS connections from resolving their server through the built-in DNS.
-		handler := *h
-		handler.resolveStrategy = internet.DomainStrategy_AS_IS
-		h = &handler
-	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
@@ -291,6 +285,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
+
+	if session.SkipDNSResolveFromContext(ctx) {
+		handler := *h
+		handler.resolveStrategy = internet.DomainStrategy_AS_IS
+		h = &handler
+	}
+
 	inbound := session.InboundFromContext(ctx)
 	var defaultRule *FinalRule
 	if !h.usesDialerProxy { // freedom is not the final outbound, final rules do not apply (and the domain is not resolved)
