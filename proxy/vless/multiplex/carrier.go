@@ -80,6 +80,7 @@ func (c *carrier) queueReadyLocked(s *Session) {
 	c.readyTail = s
 	c.wakeControlLocked()
 }
+
 func (c *carrier) unlinkReadyLocked(s *Session) {
 	if !s.listed {
 		return
@@ -96,6 +97,7 @@ func (c *carrier) unlinkReadyLocked(s *Session) {
 	}
 	s.prev, s.next, s.listed = nil, nil, false
 }
+
 func (c *carrier) scheduleLocked(s *Session) {
 	x := s.flow
 	if !c.Closed() && c.sessions[s.ID] == s &&
@@ -105,6 +107,7 @@ func (c *carrier) scheduleLocked(s *Session) {
 		c.queueReadyLocked(s)
 	}
 }
+
 func (c *carrier) invalidateUnknownLocked(id uint16) {
 	if _, ok := c.pendingUnknown[id]; ok {
 		delete(c.pendingUnknown, id)
@@ -136,6 +139,7 @@ func (c *carrier) unknownEnd(id uint16) {
 	}
 	c.Unlock()
 }
+
 func (c *carrier) controlLoop() {
 	gate := c.link.Writer.(*PhysicalWriter)
 	for {
