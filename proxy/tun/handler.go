@@ -223,8 +223,8 @@ func (t *Handler) HandleConnection(conn net.Conn, destination net.Destination) {
 
 	inbound := session.Inbound{
 		Name:          "tun",
-		Tag:           t.tag,
 		CanSpliceCopy: 3,
+		Tag:           t.tag,
 		Source:        source,
 		User: &protocol.MemoryUser{
 			Level: t.config.UserLevel,

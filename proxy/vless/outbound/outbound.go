@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"sync/atomic"
 	"bytes"
 	"context"
 	gotls "crypto/tls"
@@ -57,6 +58,7 @@ type Handler struct {
 	testpre  uint32
 	initpre  sync.Once
 	preConns chan *ConnExpire
+	preDone  chan struct{}
 }
 
 type ConnExpire struct {
@@ -133,6 +135,9 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
+	if h.preDone != nil {
+		close(h.preDone)
+	}
 	if h.preConns != nil {
 		close(h.preConns)
 	}
@@ -157,18 +162,41 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if h.testpre > 0 && h.reverse == nil {
 		h.initpre.Do(func() {
 			h.preConns = make(chan *ConnExpire)
+			h.preDone = make(chan struct{})
 			for range h.testpre { // TODO: randomize
 				go func() {
 					defer func() { recover() }()
 					ctx := xctx.ContextWithID(context.Background(), session.NewID())
+					backoff := time.Millisecond * 200
 					for {
 						conn, err := dialer.Dial(ctx, rec.Destination)
 						if err != nil {
 							errors.LogWarningInner(ctx, err, "pre-connect failed")
+							// Back off so a fast-failing dial does not become a hot loop,
+							// and exit promptly once the handler is closed.
+							select {
+							case <-h.preDone:
+								return
+							case <-time.After(backoff):
+							}
+							backoff *= 2
+							if backoff > time.Second*30 {
+								backoff = time.Second * 30
+							}
 							continue
 						}
-						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
-						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
+						backoff = time.Millisecond * 200
+						select {
+						case h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)}: // TODO: customize & randomize
+						case <-h.preDone:
+							conn.Close()
+							return
+						}
+						select {
+						case <-h.preDone:
+							return
+						case <-time.After(time.Millisecond * 200): // TODO: customize & randomize
+						}
 					}
 				}()
 			}
@@ -250,7 +278,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		requestAddons.Flow = requestAddons.Flow[:16]
 		fallthrough
 	case vless.XRV:
-		ob.CanSpliceCopy = 2
+		atomic.StoreInt32(&ob.CanSpliceCopy, 2)
 		switch request.Command {
 		case protocol.RequestCommandUDP:
 			if !allowUDP443 && request.Port == 443 {
@@ -262,7 +290,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			var target net.Conn
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
 				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
-					ob.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
+					atomic.StoreInt32(&ob.CanSpliceCopy, 3) // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
 				}
 				target = commonConn
 			} else if tlsConn, ok := iConn.(*tls.Conn); ok {
@@ -279,7 +307,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			panic("unknown VLESS request command")
 		}
 	default:
-		ob.CanSpliceCopy = 3
+		atomic.StoreInt32(&ob.CanSpliceCopy, 3)
 	}
 
 	var newCtx context.Context

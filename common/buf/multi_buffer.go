@@ -12,6 +12,9 @@ import (
 func ReadAllToBytes(reader io.Reader) ([]byte, error) {
 	mb, err := ReadFrom(reader)
 	if err != nil {
+		// ReadFrom may return acquired buffers together with an error;
+		// release them so they go back to the pool instead of leaking.
+		ReleaseMulti(mb)
 		return nil, err
 	}
 	if mb.Len() == 0 {

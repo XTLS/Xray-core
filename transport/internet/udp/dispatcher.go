@@ -210,7 +210,11 @@ s:
 		}
 	case packet = <-c.cache:
 	}
-	return copy(p, packet.Payload.Bytes()), &net.UDPAddr{
+	n := copy(p, packet.Payload.Bytes())
+	// The payload is a pooled buffer; release it so it goes back to the pool
+	// instead of leaking one buffer per received packet.
+	packet.Payload.Release()
+	return n, &net.UDPAddr{
 		IP:   packet.Source.Address.IP(),
 		Port: int(packet.Source.Port),
 	}, nil

@@ -1,6 +1,7 @@
 package hysteria
 
 import (
+	"sync/atomic"
 	"context"
 	"time"
 
@@ -86,7 +87,7 @@ func (s *Server) Network() []net.Network {
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "hysteria"
-	inbound.CanSpliceCopy = 3
+	atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 	inbound.User = &protocol.MemoryUser{}
 
 	iConn := stat.TryUnwrapStatsConn(conn)

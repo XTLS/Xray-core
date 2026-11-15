@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -248,7 +249,7 @@ func Test_ListenXHAndDial_QUIC(t *testing.T) {
 		},
 	}
 
-	serverClosed := false
+	var serverClosed atomic.Bool
 	listen, err := ListenXH(context.Background(), net.LocalHostIP, listenPort, streamSettings, func(conn stat.Connection) {
 		go func() {
 			defer conn.Close()
@@ -264,7 +265,7 @@ func Test_ListenXHAndDial_QUIC(t *testing.T) {
 				common.Must2(conn.Write(b.Bytes()))
 			}
 
-			serverClosed = true
+			serverClosed.Store(true)
 		}()
 	})
 	common.Must(err)
@@ -298,7 +299,7 @@ func Test_ListenXHAndDial_QUIC(t *testing.T) {
 
 	conn.Close()
 	time.Sleep(100 * time.Millisecond)
-	if !serverClosed {
+	if !serverClosed.Load() {
 		t.Error("server did not get closed")
 	}
 

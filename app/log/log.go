@@ -200,6 +200,9 @@ func ParseMaskAddress(c string) (int, int, error) {
 	if m4%8 != 0 || m4 > 32 || m4 < 0 {
 		return 32, 128, errors.New("Log Mask: ipv4 mask must be divisible by 8 and between 0-32")
 	}
+	if m6%8 != 0 || m6 > 128 || m6 < 0 {
+		return 32, 128, errors.New("Log Mask: ipv6 mask must be divisible by 8 and between 0-128")
+	}
 
 	return m4, m6, nil
 }

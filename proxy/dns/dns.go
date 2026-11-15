@@ -473,10 +473,11 @@ func (c *outboundConn) Write(b []byte) (int, error) {
 			return 0, err
 		}
 	}
-
+	// Capture the conn under the lock so it cannot race with dial()/Close().
+	conn := c.conn
 	c.access.Unlock()
 
-	return c.conn.Write(b)
+	return conn.Write(b)
 }
 
 func (c *outboundConn) Read(b []byte) (int, error) {
@@ -492,10 +493,17 @@ func (c *outboundConn) Read(b []byte) (int, error) {
 		if !open {
 			return 0, io.EOF
 		}
-		return c.conn.Read(b)
+		c.access.Lock()
+		conn := c.conn
+		c.access.Unlock()
+		if conn == nil {
+			return 0, io.EOF
+		}
+		return conn.Read(b)
 	}
+	conn := c.conn
 	c.access.Unlock()
-	return c.conn.Read(b)
+	return conn.Read(b)
 }
 
 func (c *outboundConn) Close() error {

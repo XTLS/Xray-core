@@ -181,24 +181,26 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 		"passthrough:///"+net.JoinHostPort(grpcDestHost, dest.Port.String()),
 		dialOptions...,
 	)
-	if err == nil {
-		userAgent := grpcSettings.UserAgent
-		// It's NOT recommended to set the UA of gRPC connections to that of real browsers, as they are fundamentally incapable of initiating real gRPC connections.
-		switch userAgent {
-		case "chrome", "":
-			userAgent = utils.ChromeUA
-		case "firefox":
-			userAgent = utils.FirefoxUA
-		case "edge":
-			userAgent = utils.MSEdgeUA
-		case "golang":
-			userAgent = ""
-		}
-		setUserAgent(conn, userAgent)
-		conn.Connect()
+	if err != nil {
+		// Do not cache a nil conn: the next lookup would panic on it.
+		return nil, err
 	}
+	userAgent := grpcSettings.UserAgent
+	// It's NOT recommended to set the UA of gRPC connections to that of real browsers, as they are fundamentally incapable of initiating real gRPC connections.
+	switch userAgent {
+	case "chrome", "":
+		userAgent = utils.ChromeUA
+	case "firefox":
+		userAgent = utils.FirefoxUA
+	case "edge":
+		userAgent = utils.MSEdgeUA
+	case "golang":
+		userAgent = ""
+	}
+	setUserAgent(conn, userAgent)
+	conn.Connect()
 	globalDialerMap[dialerConf{dest, streamSettings}] = conn
-	return conn, err
+	return conn, nil
 }
 
 // setUserAgent overrides the user-agent on a ClientConn to remove the

@@ -239,12 +239,43 @@ func (c *UDPCodec) DecodePacket(data []byte) (DecodedUDPPacket, error) {
 	sessionID := binary.BigEndian.Uint64(rawHeader[:8])
 	packetID := binary.BigEndian.Uint64(rawHeader[8:16])
 
-	sessionItem := c.sessions.GetOrCreate(sessionID)
+	// The AES header itself is not authentication: only the AEAD body is.
+	// Verify the packet before creating any session state, so random garbage
+	// cannot allocate unbounded sessions (OOM DoS).
+	sessionItem, ok := c.sessions.Load(sessionID)
+	if !ok {
+		if err := authenticateAESPayload(c.method, c.psk, sessionID, packetID, rawHeader[:], data[16:]); err != nil {
+			return DecodedUDPPacket{}, err
+		}
+		sessionItem = c.sessions.GetOrCreate(sessionID)
+	}
 	if !sessionItem.CheckPacketID(packetID) {
 		return DecodedUDPPacket{}, ErrPacketIdNotUnique
 	}
 
 	return sessionItem.DecryptAESPayload(c.method, c.psk, sessionID, packetID, rawHeader[:], data[16:])
+}
+
+// authenticateAESPayload verifies an AES-mode packet without touching any
+// session state. It performs the same AEAD open and sanity checks as
+// ServerUDPSession.DecryptAESPayload, but allocates no session.
+func authenticateAESPayload(method *CipherMethod, psk []byte, sessionID, packetID uint64, rawHeader, bodyCipher []byte) error {
+	bodyAead, err := method.NewAEAD(DeriveSessionSubKey(psk, rawHeader[:8], method.KeySaltLength))
+	if err != nil {
+		return err
+	}
+	bodyPlain, err := bodyAead.Open(nil, rawHeader[4:16], bodyCipher, nil)
+	if err != nil {
+		return errors.New("failed to decrypt aes udp body").Base(err)
+	}
+	decoded, err := parsePlainUDPPacket(sessionID, packetID, bodyPlain)
+	if err != nil {
+		return err
+	}
+	if decoded.HeaderType != HeaderTypeClient {
+		return ErrBadHeaderType
+	}
+	return nil
 }
 
 func (s *ServerUDPSession) DecryptAESPayload(method *CipherMethod, psk []byte, sessionID, packetID uint64, rawHeader, bodyCipher []byte) (DecodedUDPPacket, error) {

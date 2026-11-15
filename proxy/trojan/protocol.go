@@ -129,6 +129,11 @@ func (w *PacketWriter) writePacket(payload []byte, dest net.Destination) (int, e
 	length := len(payload)
 	lengthBuf := [2]byte{}
 	binary.BigEndian.PutUint16(lengthBuf[:], uint16(length))
+	// Reserve room for the worst-case address (255-byte domain), the 2-byte
+	// length and CRLF, so the payload write below cannot fail midway.
+	if int32(length)+263 > buffer.Available() {
+		return 0, errors.New("UDP payload too large: ", length)
+	}
 	if err := addrParser.WriteAddressPort(&buffer, dest.Address, dest.Port); err != nil {
 		return 0, err
 	}

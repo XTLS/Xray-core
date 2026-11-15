@@ -1,6 +1,7 @@
 package shadowsocks_2022
 
 import (
+	"sync/atomic"
 	"context"
 	"crypto/cipher"
 	"encoding/binary"
@@ -117,7 +118,7 @@ func (i *RelayInbound) Network() []net.Network {
 func (i *RelayInbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks-2022-relay"
-	inbound.CanSpliceCopy = 3
+	atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 
 	if network == net.Network_TCP {
 		return i.processTCP(ctx, connection, dispatcher)

@@ -156,6 +156,20 @@ func (b *Buffer) Extend(n int32) []byte {
 	return ext
 }
 
+// ExtendNoZero is like Extend but does not zero the extended part. The caller
+// must fully overwrite the returned slice before the buffer leaves the process,
+// otherwise stale pool data may leak. Use it only on hot paths where the
+// extension is guaranteed to be written over completely.
+func (b *Buffer) ExtendNoZero(n int32) []byte {
+	end := b.end + n
+	if end > int32(len(b.v)) {
+		panic("extending out of bound")
+	}
+	ext := b.v[b.end:end]
+	b.end = end
+	return ext
+}
+
 // BytesRange returns a slice of this buffer with given from and to boundary.
 func (b *Buffer) BytesRange(from, to int32) []byte {
 	if from < 0 {

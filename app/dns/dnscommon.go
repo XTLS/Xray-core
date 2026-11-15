@@ -190,6 +190,12 @@ func parseResponse(payload []byte) (*IPRecord, error) {
 	if err != nil {
 		return nil, errors.New("failed to parse DNS response").Base(err)
 	}
+	// Remember the question type: a non-conformant server may mix in answers
+	// of a different family, which would corrupt the record.
+	var reqType dnsmessage.Type
+	if q, err := parser.Question(); err == nil {
+		reqType = q.Type
+	}
 	if err := parser.SkipAllQuestions(); err != nil {
 		return nil, errors.New("failed to skip questions in DNS response").Base(err)
 	}
@@ -233,7 +239,9 @@ L:
 				errors.LogInfoInner(context.Background(), err, "failed to parse A record for domain: ", ah.Name)
 				break L
 			}
-			ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.A[:]).IP())
+			if reqType == 0 || reqType == dnsmessage.TypeA {
+				ipRecord.IP = append(ipRecord.IP, net.IPAddress(ans.A[:]).IP())
+			}
 		case dnsmessage.TypeAAAA:
 			ans, err := parser.AAAAResource()
 			if err != nil {
@@ -241,7 +249,7 @@ L:
 				break L
 			}
 			newIP := net.IPAddress(ans.AAAA[:]).IP()
-			if len(newIP) == net.IPv6len {
+			if (reqType == 0 || reqType == dnsmessage.TypeAAAA) && len(newIP) == net.IPv6len {
 				ipRecord.IP = append(ipRecord.IP, newIP)
 			}
 		default:

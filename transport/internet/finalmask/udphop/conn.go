@@ -51,6 +51,9 @@ type udpHopConn struct {
 	closeCh chan struct{}
 	wg      sync.WaitGroup
 	mu      sync.RWMutex
+	// deadErr is set when recv on the current socket exits with a fatal
+	// (non-timeout, non-closed) error, so ReadFrom stops blocking forever.
+	deadErr error
 }
 
 func NewUDPHopConn(c *Config, dest *net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
@@ -178,6 +181,21 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 				continue
 			}
 			errors.LogErrorInner(context.Background(), err, "recv err")
+			// A fatal error on the current socket means the conn is unusable:
+			// surface it to the reader instead of leaving it blocked forever.
+			// Errors on the pre-hop socket are stale; logging is enough.
+			c.mu.Lock()
+			isCur := c.cur == conn
+			if isCur && c.deadErr == nil {
+				c.deadErr = err
+			}
+			c.mu.Unlock()
+			if isCur {
+				select {
+				case c.readCh <- packet{err: err}:
+				case <-c.closeCh:
+				}
+			}
 			return
 		}
 		select {
@@ -190,6 +208,12 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 }
 
 func (c *udpHopConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	c.mu.RLock()
+	deadErr := c.deadErr
+	c.mu.RUnlock()
+	if deadErr != nil {
+		return 0, nil, deadErr
+	}
 	packet, ok := <-c.readCh
 	if ok {
 		if packet.p != nil {

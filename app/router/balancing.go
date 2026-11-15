@@ -50,17 +50,17 @@ func (s *RoundRobinStrategy) PickOutbound(tags []string) string {
 			aliveTags := make([]string, 0)
 			if result, ok := observeReport.(*observatory.ObservationResult); ok {
 				status := result.Status
-				statusMap := make(map[string]*observatory.OutboundStatus)
-				for _, outboundStatus := range status {
-					statusMap[outboundStatus.OutboundTag] = outboundStatus
-				}
+				// Linear scan instead of building a map per request: both
+				// lists are small, so this avoids an allocation per pick.
 				for _, candidate := range tags {
-					if outboundStatus, found := statusMap[candidate]; found {
-						if outboundStatus.Alive {
-							aliveTags = append(aliveTags, candidate)
+					alive := true // unfound candidate is considered alive
+					for _, outboundStatus := range status {
+						if outboundStatus.OutboundTag == candidate {
+							alive = outboundStatus.Alive
+							break
 						}
-					} else {
-						// unfound candidate is considered alive
+					}
+					if alive {
 						aliveTags = append(aliveTags, candidate)
 					}
 				}

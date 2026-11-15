@@ -60,6 +60,8 @@ func (l *lru) GetKeyFromValue(value interface{}) (key interface{}, ok bool) {
 }
 
 func (l *lru) PeekKeyFromValue(value interface{}) (key interface{}, ok bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if k, ok := l.valueToElement.Load(value); ok {
 		element := k.(*list.Element)
 		return element.Value.(*lruElement).key, true
@@ -72,8 +74,10 @@ func (l *lru) Put(key, value interface{}) {
 	e := &lruElement{key, value}
 	if v, ok := l.keyToElement.Load(key); ok {
 		element := v.(*list.Element)
+		l.valueToElement.Delete(element.Value.(*lruElement).value)
 		element.Value = e
 		l.doubleLinkedlist.MoveToFront(element)
+		l.valueToElement.Store(value, element)
 	} else {
 		element := l.doubleLinkedlist.PushFront(e)
 		l.keyToElement.Store(key, element)

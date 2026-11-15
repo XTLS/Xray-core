@@ -311,10 +311,12 @@ func (s *Server) Start() error {
 	})
 	err := dev.IpcSet(cfg.String())
 	if err != nil {
+		dev.Close()
 		return err
 	}
 	err = dev.Up()
 	if err != nil {
+		dev.Close()
 		return err
 	}
 	s.dev = dev
@@ -353,8 +355,8 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	source := net.DestinationFromAddr(remote)
 	inbound := session.Inbound{
 		Name:          "wireguard",
-		Tag:           s.tag,
 		CanSpliceCopy: 3,
+		Tag:           s.tag,
 		Source:        source,
 		User:          user,
 	}

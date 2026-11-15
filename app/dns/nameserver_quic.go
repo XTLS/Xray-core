@@ -224,9 +224,8 @@ func isActive(s *quic.Conn) bool {
 }
 
 func (s *QUICNameServer) getConnection() (*quic.Conn, error) {
-	var conn *quic.Conn
 	s.RLock()
-	conn = s.connection
+	conn := s.connection
 	if conn != nil && isActive(conn) {
 		s.RUnlock()
 		return conn, nil
@@ -237,9 +236,8 @@ func (s *QUICNameServer) getConnection() (*quic.Conn, error) {
 	}
 	s.RUnlock()
 
-	s.Lock()
-	defer s.Unlock()
-
+	// Dial without holding the write lock, so concurrent queries are not
+	// serialized behind a full QUIC handshake.
 	var err error
 	conn, err = s.openConnection()
 	if err != nil {
@@ -253,8 +251,28 @@ func (s *QUICNameServer) getConnection() (*quic.Conn, error) {
 			return nil, err
 		}
 	}
+
+	s.Lock()
+	if cur := s.connection; cur != nil && isActive(cur) {
+		// Another goroutine reconnected first; use its connection.
+		s.Unlock()
+		conn.CloseWithError(0, "")
+		return cur, nil
+	}
 	s.connection = conn
+	s.Unlock()
 	return conn, nil
+}
+
+// Close releases the underlying QUIC connection, if any.
+func (s *QUICNameServer) Close() error {
+	s.Lock()
+	defer s.Unlock()
+	if s.connection != nil {
+		s.connection.CloseWithError(0, "")
+		s.connection = nil
+	}
+	return nil
 }
 
 func (s *QUICNameServer) openConnection() (*quic.Conn, error) {

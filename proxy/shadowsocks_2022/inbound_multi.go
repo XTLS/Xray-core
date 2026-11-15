@@ -188,7 +188,7 @@ func (i *MultiUserInbound) Network() []net.Network {
 func (i *MultiUserInbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks-2022-multi"
-	inbound.CanSpliceCopy = 3
+	atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 
 	if network == net.Network_TCP {
 		return i.processTCP(ctx, connection, dispatcher)
@@ -296,7 +296,23 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 			sessionID := binary.BigEndian.Uint64(rawHeader[:8])
 			packetID := binary.BigEndian.Uint64(rawHeader[8:16])
 
-			sessionItem := i.udpSessions.GetOrCreate(sessionID)
+			// The AES header is not authentication. For unknown sessions, verify
+			// the packet (EIH lookup + AEAD open) BEFORE creating any session
+			// state, so random garbage cannot grow the session map unboundedly (OOM).
+			sessionItem, ok := i.udpSessions.Load(sessionID)
+			if !ok {
+				decryptedHash := DecryptUDPEIH(i.udpMasterCipher, rawHeader[:], packetBytes[16:32])
+				user, userOk := i.usersByHash.Load(decryptedHash)
+				if !userOk {
+					b.Release()
+					continue
+				}
+				if err := authenticateAESPayload(i.method, user.Account.(*MemoryAccount).Key, sessionID, packetID, rawHeader[:], packetBytes[32:]); err != nil {
+					b.Release()
+					continue
+				}
+				sessionItem = i.udpSessions.GetOrCreate(sessionID)
+			}
 
 			if !sessionItem.CheckPacketID(packetID) {
 				b.Release()

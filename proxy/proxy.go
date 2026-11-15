@@ -6,6 +6,7 @@
 package proxy
 
 import (
+	"sync/atomic"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -276,8 +277,8 @@ func (w *VisionReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 			// if w.isUplink && inbound.CanSpliceCopy == 2 { // TODO: enable uplink splice
 			// 	inbound.CanSpliceCopy = 1
 			// }
-			if !w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 { // ob need to be passed in due to context can have more than one ob
-				w.ob.CanSpliceCopy = 1
+			if !w.isUplink && w.ob != nil && atomic.LoadInt32(&w.ob.CanSpliceCopy) == 2 { // ob need to be passed in due to context can have more than one ob
+				atomic.StoreInt32(&w.ob.CanSpliceCopy, 1)
 			}
 		}
 		SuppressOuterCloseNotify(w.conn)
@@ -337,7 +338,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 
 	if *switchToDirectCopy {
 		if inbound := session.InboundFromContext(w.ctx); inbound != nil {
-			if !w.isUplink && inbound.CanSpliceCopy == 2 {
+			if !w.isUplink && atomic.LoadInt32(&inbound.CanSpliceCopy) == 2 {
 				spliceReadyInbound = inbound
 			}
 			// if w.isUplink && w.ob != nil && w.ob.CanSpliceCopy == 2 { // TODO: enable uplink splice
@@ -400,10 +401,10 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if err := w.Writer.WriteMultiBuffer(mb); err != nil {
 		return err
 	}
-	if spliceReadyInbound != nil && spliceReadyInbound.CanSpliceCopy == 2 {
+	if spliceReadyInbound != nil && atomic.LoadInt32(&spliceReadyInbound.CanSpliceCopy) == 2 {
 		// Enable splice only after this write has completed to avoid racing
 		// concurrent direct writes to the same TCP connection.
-		spliceReadyInbound.CanSpliceCopy = 1
+		atomic.StoreInt32(&spliceReadyInbound.CanSpliceCopy, 1)
 	}
 	return nil
 }
@@ -635,8 +636,12 @@ func XtlsFilterTls(buffer buf.MultiBuffer, trafficState *TrafficState, ctx conte
 				trafficState.IsTLS = true
 				if b.Len() >= 79 && trafficState.RemainingServerHello >= 79 {
 					sessionIdLen := int32(b.Byte(43))
-					cipherSuite := b.BytesRange(43+sessionIdLen+1, 43+sessionIdLen+3)
-					trafficState.Cipher = uint16(cipherSuite[0])<<8 | uint16(cipherSuite[1])
+					if b.Len() >= 46+sessionIdLen {
+						cipherSuite := b.BytesRange(43+sessionIdLen+1, 43+sessionIdLen+3)
+						trafficState.Cipher = uint16(cipherSuite[0])<<8 | uint16(cipherSuite[1])
+					} else {
+						errors.LogDebug(ctx, "XtlsFilterTls short server hello, cipher suite not in this buffer ", b.Len())
+					}
 				} else {
 					errors.LogDebug(ctx, "XtlsFilterTls short server hello, tls 1.2 or older? ", b.Len(), " ", trafficState.RemainingServerHello)
 				}
@@ -745,7 +750,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 		return readV(ctx, reader, writer, timer, readCounter)
 	}
 	inbound := session.InboundFromContext(ctx)
-	if inbound == nil || inbound.CanSpliceCopy == 3 {
+	if inbound == nil || atomic.LoadInt32(&inbound.CanSpliceCopy) == 3 {
 		return readV(ctx, reader, writer, timer, readCounter)
 	}
 	outbounds := session.OutboundsFromContext(ctx)
@@ -753,7 +758,7 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 		return readV(ctx, reader, writer, timer, readCounter)
 	}
 	for _, ob := range outbounds {
-		if ob.CanSpliceCopy == 3 {
+		if atomic.LoadInt32(&ob.CanSpliceCopy) == 3 {
 			return readV(ctx, reader, writer, timer, readCounter)
 		}
 	}
@@ -761,9 +766,9 @@ func CopyRawConnIfExist(ctx context.Context, readerConn net.Conn, writerConn net
 	for {
 		inbound := session.InboundFromContext(ctx)
 		outbounds := session.OutboundsFromContext(ctx)
-		splice := inbound.CanSpliceCopy == 1
+		splice := atomic.LoadInt32(&inbound.CanSpliceCopy) == 1
 		for _, ob := range outbounds {
-			if ob.CanSpliceCopy != 1 {
+			if atomic.LoadInt32(&ob.CanSpliceCopy) != 1 {
 				splice = false
 			}
 		}

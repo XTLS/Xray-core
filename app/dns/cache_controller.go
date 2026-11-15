@@ -22,6 +22,11 @@ const (
 	shrinkAbsoluteThreshold = 10240
 	shrinkRatioThreshold    = 0.65
 	migrationBatchSize      = 4096
+	// maxServeStaleAge bounds how long entries may stay in the cache when
+	// serveStale is enabled without serveExpiredTTL. Stale serving itself is
+	// unbounded in that mode, but memory must not grow forever; domains that
+	// are queried again get refreshed long before this limit.
+	maxServeStaleAge = 24 * time.Hour
 )
 
 type CacheController struct {
@@ -86,6 +91,8 @@ func (c *CacheController) collectExpiredKeys() ([]string, error) {
 	now := time.Now()
 	if c.serveStale && c.serveExpiredTTL != 0 {
 		now = now.Add(time.Duration(c.serveExpiredTTL) * time.Second)
+	} else if c.serveStale {
+		now = now.Add(-maxServeStaleAge)
 	}
 
 	expiredKeys := make([]string, 0, len(c.ips)/4) // pre-allocate
@@ -117,6 +124,8 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 	now := time.Now()
 	if c.serveStale && c.serveExpiredTTL != 0 {
 		now = now.Add(time.Duration(c.serveExpiredTTL) * time.Second)
+	} else if c.serveStale {
+		now = now.Add(-maxServeStaleAge)
 	}
 
 	for _, domain := range expiredKeys {
@@ -303,9 +312,10 @@ func (c *CacheController) updateRecord(req *dnsRequest, rep *IPRecord) {
 
 	errors.LogInfo(context.Background(), c.name, " got answer: ", req.domain, " ", req.reqType, " -> ", rep.IP, ", rtt: ", rtt, ", lock: ", lockWait)
 
-	if !c.serveStale || c.serveExpiredTTL != 0 {
-		common.Must(c.cacheCleanup.Start())
-	}
+	// Always run the periodic cleanup. With serveStale and no serveExpiredTTL
+	// it deletes only entries stale for longer than maxServeStaleAge, so the
+	// cache stays bounded while active domains keep being served stale.
+	common.Must(c.cacheCleanup.Start())
 }
 
 func (c *CacheController) findRecords(domain string) *record {

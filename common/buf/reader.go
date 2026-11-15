@@ -43,6 +43,9 @@ type BufferedReader struct {
 	Buffer MultiBuffer
 	// Splitter is a function to read bytes from MultiBuffer
 	Splitter func(MultiBuffer, []byte) (MultiBuffer, int)
+	// pendingErr holds an error returned by the underlying reader together
+	// with data, so the data is delivered first and the error afterwards.
+	pendingErr error
 }
 
 // BufferedBytes returns the number of bytes that is cached in this reader.
@@ -73,8 +76,14 @@ func (r *BufferedReader) Read(b []byte) (int, error) {
 		return nBytes, nil
 	}
 
+	if r.pendingErr != nil {
+		err := r.pendingErr
+		r.pendingErr = nil
+		return 0, err
+	}
+
 	mb, err := r.Reader.ReadMultiBuffer()
-	if err != nil {
+	if mb.IsEmpty() {
 		return 0, err
 	}
 
@@ -82,6 +91,9 @@ func (r *BufferedReader) Read(b []byte) (int, error) {
 	if !mb.IsEmpty() {
 		r.Buffer = mb
 	}
+	// The underlying reader may return data and error together; deliver the
+	// data now and the error on the next call (io.Reader contract).
+	r.pendingErr = err
 	return nBytes, nil
 }
 

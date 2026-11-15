@@ -11,6 +11,7 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/geodata"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
@@ -323,7 +324,12 @@ func (s *DNS) sortClients(domain string) []*Client {
 			info := s.matcherInfos[match]
 			client := s.clients[info.clientIdx]
 			domainRule := info.domainRule
-			domainRules = append(domainRules, fmt.Sprintf("%s(DNS idx:%d)", domainRule, info.clientIdx))
+			// Skip the per-match formatting unless debug logging is enabled.
+			if log.GetSeverity() >= log.Severity_Debug {
+				domainRules = append(domainRules, fmt.Sprintf("%s(DNS idx:%d)", domainRule, info.clientIdx))
+			} else {
+				domainRules = append(domainRules, domainRule)
+			}
 			if clientUsed[info.clientIdx] {
 				continue
 			}

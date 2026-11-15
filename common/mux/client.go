@@ -58,7 +58,10 @@ func (p *IncrementalWorkerPicker) cleanupFunc() error {
 	defer p.access.Unlock()
 
 	if len(p.workers) == 0 {
-		return errors.New("no worker")
+		// Nothing to clean. Returning an error here would make the periodic
+		// task stop permanently (checkedExecute treats errors as fatal), so
+		// closed workers would never be purged afterwards.
+		return nil
 	}
 
 	p.cleanup()

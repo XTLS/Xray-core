@@ -376,9 +376,6 @@ func (d *DefaultDispatcher) DispatchLink(ctx context.Context, destination net.De
 }
 
 func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, network net.Network) (SniffResult, error) {
-	payload := buf.NewWithSize(32767)
-	defer payload.Release()
-
 	sniffer := NewSniffer(ctx)
 
 	metaresult, metadataErr := sniffer.SniffMetadata(ctx)
@@ -386,6 +383,10 @@ func sniffer(ctx context.Context, cReader *cachedReader, metadataOnly bool, netw
 	if metadataOnly {
 		return metaresult, metadataErr
 	}
+
+	// Allocate the (pooled) 32 KB payload only when content sniffing is needed.
+	payload := buf.NewWithSize(32767)
+	defer payload.Release()
 
 	contentResult, contentErr := func() (SniffResult, error) {
 		cacheDeadline := 200 * time.Millisecond

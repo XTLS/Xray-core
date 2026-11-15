@@ -1,6 +1,7 @@
 package mux
 
 import (
+	"sync/atomic"
 	"context"
 	"io"
 	"time"
@@ -103,7 +104,7 @@ func NewServerWorker(ctx context.Context, d routing.Dispatcher, link *transport.
 		timer:          time.NewTicker(60 * time.Second),
 	}
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
-		inbound.CanSpliceCopy = 3
+		atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 	}
 	go worker.run(ctx)
 	go worker.monitor()
@@ -254,7 +255,11 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 			transferType: protocol.TransferTypePacket,
 			XUDP:         x,
 		}
+		// Every other reader/writer of x.Status holds XUDPManager.Lock
+		// (Session.Close and the cleanup goroutine); join them.
+		XUDPManager.Lock()
 		x.Status = Active
+		XUDPManager.Unlock()
 		if !w.sessionManager.Add(x.Mux) {
 			x.Mux.Close(false)
 			return errors.New("failed to add new session")

@@ -2,6 +2,7 @@ package reverse
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -102,8 +103,10 @@ type BridgeWorker struct {
 	Tag        string
 	Worker     *mux.ServerWorker
 	Dispatcher routing.Dispatcher
-	State      Control_State
-	Timer      *signal.ActivityTimer
+	// State is written by the internal-conn reader goroutine and read by the
+	// monitor task, so it must be accessed atomically.
+	State atomic.Int32
+	Timer *signal.ActivityTimer
 }
 
 func NewBridgeWorker(domain string, tag string, d routing.Dispatcher) (*BridgeWorker, error) {
@@ -151,7 +154,7 @@ func (w *BridgeWorker) Close() error {
 }
 
 func (w *BridgeWorker) IsActive() bool {
-	return w.State == Control_ACTIVE && !w.Worker.Closed()
+	return Control_State(w.State.Load()) == Control_ACTIVE && !w.Worker.Closed()
 }
 
 func (w *BridgeWorker) Closed() bool {
@@ -188,8 +191,8 @@ func (w *BridgeWorker) handleInternalConn(link *transport.Link) {
 				}
 				return
 			}
-			if ctl.State != w.State {
-				w.State = ctl.State
+			if ctl.State != Control_State(w.State.Load()) {
+				w.State.Store(int32(ctl.State))
 			}
 		}
 	}

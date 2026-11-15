@@ -55,7 +55,9 @@ type Inbound struct {
 	Timer *signal.ActivityTimer
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
-	CanSpliceCopy int
+	// Access it only via atomic.StoreInt32/LoadInt32: it is written and read
+	// from concurrent uplink/downlink tasks.
+	CanSpliceCopy int32
 }
 
 // Outbound is the metadata of an outbound connection.
@@ -72,7 +74,9 @@ type Outbound struct {
 	Name string
 	// CanSpliceCopy is a property for this connection
 	// 1 = can, 2 = after processing protocol info should be able to, 3 = cannot
-	CanSpliceCopy int
+	// Access it only via atomic.StoreInt32/LoadInt32: it is written and read
+	// from concurrent uplink/downlink tasks.
+	CanSpliceCopy int32
 }
 
 // SniffingRequest controls the behavior of content sniffing. They are from inbound config. Read-only

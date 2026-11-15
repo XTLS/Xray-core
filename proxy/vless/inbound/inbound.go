@@ -1,6 +1,7 @@
 package inbound
 
 import (
+	"sync/atomic"
 	"bytes"
 	"context"
 	gotls "crypto/tls"
@@ -201,8 +202,11 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	if r == nil {
 		picker, _ := reverse.NewStaticMuxPicker()
 		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
-		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
+		for i := 0; i < 10 && len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0; i++ {
 			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
+		}
+		if len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
+			return nil, errors.New("reverse: no other outbound handlers available after 10s")
 		}
 		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
 			return nil, err
@@ -550,18 +554,18 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	switch requestAddons.Flow {
 	case vless.XRV:
 		if account.Flow == requestAddons.Flow {
-			inbound.CanSpliceCopy = 2
+			atomic.StoreInt32(&inbound.CanSpliceCopy, 2)
 			switch request.Command {
 			case protocol.RequestCommandUDP:
 				return errors.New(requestAddons.Flow + " doesn't support UDP")
 			case protocol.RequestCommandMux, protocol.RequestCommandRvs:
-				inbound.CanSpliceCopy = 3
+				atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 				fallthrough // we will break Mux connections that contain TCP requests
 			case protocol.RequestCommandTCP:
 				var target net.Conn
 				if commonConn, ok := connection.(*encryption.CommonConn); ok {
 					if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
-						inbound.CanSpliceCopy = 3 // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
+						atomic.StoreInt32(&inbound.CanSpliceCopy, 3) // full-random xorConn / non-RAW transport / another securityConn should not be penetrated
 					}
 					target = commonConn
 				} else if tlsConn, ok := iConn.(*tls.Conn); ok {
@@ -580,7 +584,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			return errors.New("account " + account.ID.String() + " is not able to use the flow " + requestAddons.Flow)
 		}
 	case "":
-		inbound.CanSpliceCopy = 3
+		atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 		if account.Flow == vless.XRV && (request.Command == protocol.RequestCommandTCP || isMuxAndNotXUDP(request, first)) {
 			return errors.New("account " + account.ID.String() + " is rejected since the client flow is empty. Note that the pure TLS proxy has certain TLS in TLS characters.")
 		}

@@ -448,6 +448,13 @@ func (w *udpWorker) Close() error {
 		}
 	}
 
+	// Close all active UDP sessions so their Process goroutines (blocked on the
+	// pipe reader) are released instead of leaking on Instance close.
+	for _, conn := range w.activeConn {
+		conn.Close()
+	}
+	w.activeConn = make(map[connID]*udpConn, 16)
+
 	if err := common.Close(w.proxy); err != nil {
 		errs = append(errs, err)
 	}

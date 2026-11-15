@@ -1,6 +1,7 @@
 package socks
 
 import (
+	"sync/atomic"
 	"context"
 	"time"
 
@@ -53,7 +54,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("target not specified.")
 	}
 	ob.Name = "socks"
-	ob.CanSpliceCopy = 2
+	atomic.StoreInt32(&ob.CanSpliceCopy, 2)
 	// Destination of the inner request.
 	destination := ob.Target
 
@@ -139,7 +140,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			return buf.Copy(link.Reader, buf.NewWriter(conn), buf.UpdateActivity(timer))
 		}
 		responseFunc = func() error {
-			ob.CanSpliceCopy = 1
+			atomic.StoreInt32(&ob.CanSpliceCopy, 1)
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
 			return buf.Copy(buf.NewReader(conn), link.Writer, buf.UpdateActivity(timer))
 		}
@@ -155,7 +156,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 			return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
 		}
 		responseFunc = func() error {
-			ob.CanSpliceCopy = 1
+			atomic.StoreInt32(&ob.CanSpliceCopy, 1)
 			defer timer.SetTimeout(p.Timeouts.UplinkOnly)
 			reader := &UDPReader{Reader: udpConn}
 			return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))

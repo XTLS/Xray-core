@@ -46,9 +46,18 @@ func (c *Config) loadSelfCertPool() (*x509.CertPool, error) {
 	return root, nil
 }
 
+// certificateBundle holds the certificates served by TLS handshakes together
+// with the lock guarding them: the OCSP/hot-reload tickers replace entries
+// while concurrent handshakes read them.
+type certificateBundle struct {
+	access sync.RWMutex
+	certs  []*tls.Certificate
+}
+
 // BuildCertificates builds a list of TLS certificates from proto definition.
-func (c *Config) BuildCertificates() []*tls.Certificate {
-	certs := make([]*tls.Certificate, 0, len(c.Certificate))
+func (c *Config) BuildCertificates() *certificateBundle {
+	bundle := &certificateBundle{certs: make([]*tls.Certificate, 0, len(c.Certificate))}
+	certs := bundle.certs
 	for _, entry := range c.Certificate {
 		if entry.Usage != Certificate_ENCIPHERMENT {
 			continue
@@ -74,9 +83,11 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 		index := len(certs) - 1
 		setupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {
 			cert := certs[index]
+			changed := false
 			if isReloaded {
 				if newKeyPair := getX509KeyPair(); newKeyPair != nil {
 					cert = newKeyPair
+					changed = true
 				} else {
 					return
 				}
@@ -85,13 +96,24 @@ func (c *Config) BuildCertificates() []*tls.Certificate {
 				if newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {
 					errors.LogWarningInner(context.Background(), err, "ignoring invalid OCSP")
 				} else if string(newOCSPData) != string(cert.OCSPStaple) {
-					cert.OCSPStaple = newOCSPData
+					// Replace the whole certificate value instead of mutating it
+					// in place: handshakes may still be reading the old one.
+					newCert := *cert
+					newCert.OCSPStaple = newOCSPData
+					cert = &newCert
+					changed = true
 				}
 			}
+			if !changed {
+				return
+			}
+			bundle.access.Lock()
 			certs[index] = cert
+			bundle.access.Unlock()
 		})
 	}
-	return certs
+	bundle.certs = certs
+	return bundle
 }
 
 func setupOcspTicker(entry *Certificate, callback func(isReloaded, isOcspstapling bool)) {
@@ -132,14 +154,17 @@ func setupOcspTicker(entry *Certificate, callback func(isReloaded, isOcspstaplin
 }
 
 func isCertificateExpired(c *tls.Certificate) bool {
-	if c.Leaf == nil && len(c.Certificate) > 0 {
+	// Do not cache the parsed leaf on c: multiple handshakes may call this
+	// concurrently on the same certificate, and a write to c.Leaf would race.
+	leaf := c.Leaf
+	if leaf == nil && len(c.Certificate) > 0 {
 		if pc, err := x509.ParseCertificate(c.Certificate[0]); err == nil {
-			c.Leaf = pc
+			leaf = pc
 		}
 	}
 
 	// If leaf is not there, the certificate is probably not used yet. We trust user to provide a valid certificate.
-	return c.Leaf != nil && c.Leaf.NotAfter.Before(time.Now().Add(time.Minute*2))
+	return leaf != nil && leaf.NotAfter.Before(time.Now().Add(time.Minute*2))
 }
 
 func issueCertificate(rawCA *Certificate, domain string) (*tls.Certificate, error) {
@@ -244,8 +269,14 @@ func getGetCertificateFunc(c *tls.Config, ca []*Certificate) func(hello *tls.Cli
 	}
 }
 
-func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+func getNewGetCertificateFunc(bundle *certificateBundle, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	return func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		// The OCSP/hot-reload tickers replace entries concurrently; read the
+		// certificates under the bundle lock.
+		bundle.access.RLock()
+		defer bundle.access.RUnlock()
+
+		certs := bundle.certs
 		if len(certs) == 0 {
 			return nil, errNoCertificates
 		}

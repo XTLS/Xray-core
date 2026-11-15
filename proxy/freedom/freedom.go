@@ -284,7 +284,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return errors.New("target not specified.")
 	}
 	ob.Name = "freedom"
-	ob.CanSpliceCopy = 1
+	atomic.StoreInt32(&ob.CanSpliceCopy, 1)
 	inbound := session.InboundFromContext(ctx)
 	var defaultRule *FinalRule
 	if !h.usesDialerProxy { // freedom is not the final outbound, final rules do not apply (and the domain is not resolved)

@@ -227,13 +227,15 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 
 				conn, err := tr.DialEarly(ctx, udpAddr, tlsCfg, cfg)
 				if err != nil {
+					tr.Close()
+					pktConn.Close()
 					return nil, err
 				}
 				context.AfterFunc(conn.Context(), func() { tr.Close(); pktConn.Close() })
 
 				switch quicParams.Congestion {
 				case "reno":
-				case "", "bbr":
+				case "", "bbr", "brutal":
 					congestion.UseBBR(conn, bbr.Profile(quicParams.BbrProfile))
 				case "force-brutal":
 					congestion.UseBrutal(conn, quicParams.BrutalUp, quicParams.BrutalDisableLossCompensation)

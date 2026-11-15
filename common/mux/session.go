@@ -19,8 +19,10 @@ import (
 type SessionManager struct {
 	sync.RWMutex
 	sessions map[uint16]*Session
-	count    uint16
-	closed   bool
+	// count is a lifetime counter of allocated sessions; it is never
+	// decremented by Remove. Keep it wider than the wire's uint16 session ID.
+	count uint32
+	closed bool
 }
 
 func NewSessionManager() *SessionManager {
@@ -58,15 +60,26 @@ func (m *SessionManager) Allocate(Strategy *ClientStrategy, input buf.Reader, ou
 	MaxConcurrency := int(Strategy.MaxConcurrency)
 	MaxConnection := uint16(Strategy.MaxConnection)
 
-	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) || (MaxConnection > 0 && m.count >= MaxConnection) {
+	if m.closed || (MaxConcurrency > 0 && len(m.sessions) >= MaxConcurrency) || (MaxConnection > 0 && m.count >= uint32(MaxConnection)) {
 		return nil
 	}
 
 	m.count++
+	id := uint16(m.count)
+	if id == 0 {
+		// keep ID 0 unused even after the counter wraps
+		m.count++
+		id = uint16(m.count)
+	}
+	if _, exists := m.sessions[id]; exists {
+		// The counter wrapped past uint16 while the old session with this ID
+		// is still live; refuse instead of hijacking another session's frames.
+		return nil
+	}
 	s := &Session{
 		input:  input,
 		output: output,
-		ID:     m.count,
+		ID:     id,
 		parent: m,
 		done:   done.New(),
 	}
@@ -186,11 +199,14 @@ func (s *Session) Close(locked bool) error {
 		common.Close(s.output)
 	} else {
 		// Stop existing handle(), then trigger writer.Close().
-		// Note that s.output may be dispatcher.SizeStatWriter.
-		s.input.(*pipe.Reader).ReturnAnError(io.EOF)
-		runtime.Gosched()
-		// If the error set by ReturnAnError still exists, clear it.
-		s.input.(*pipe.Reader).Recover()
+		// Note that s.output may be dispatcher.SizeStatWriter, and s.input
+		// may be a decorated reader; only the raw pipe supports these calls.
+		if pr, ok := s.input.(*pipe.Reader); ok {
+			pr.ReturnAnError(io.EOF)
+			runtime.Gosched()
+			// If the error set by ReturnAnError still exists, clear it.
+			pr.Recover()
+		}
 		XUDPManager.Lock()
 		if s.XUDP.Status == Active {
 			s.XUDP.Expire = time.Now().Add(time.Minute)

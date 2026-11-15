@@ -185,6 +185,9 @@ func checkAddressPortStrategy(ctx context.Context, dest net.Destination, sockopt
 		if err != nil {
 			return nil, errors.New("failed to lookup SRV record").Base(err)
 		}
+		if len(srvRecords) == 0 {
+			return nil, errors.New("no SRV record found for ", dest.Address.String())
+		}
 		errors.LogDebug(ctx, "SRV record: "+fmt.Sprintf("addr=%s, port=%d, priority=%d, weight=%d", srvRecords[0].Target, srvRecords[0].Port, srvRecords[0].Priority, srvRecords[0].Weight))
 		if OverridePort {
 			newDest.Port = net.Port(srvRecords[0].Port)

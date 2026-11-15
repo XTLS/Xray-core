@@ -199,7 +199,12 @@ func dialTask(task task) (*websocket.Conn, error) {
 
 	var conn *websocket.Conn
 	for {
-		conn = <-conns
+		select {
+		case conn = <-conns:
+		case <-time.After(time.Second * 16):
+			// Without a browser connection this would block forever, wedging the dial.
+			return nil, errors.New("failed to get a browser connection in time")
+		}
 		if conn.WriteMessage(websocket.TextMessage, data) != nil {
 			conn.Close()
 		} else {

@@ -218,7 +218,11 @@ func EncodeUDPPacket(request *protocol.RequestHeader, payload []byte) (*buf.Buff
 		return nil, errors.New("failed to write address").Base(err)
 	}
 
-	buffer.Write(payload)
+	if _, err := buffer.Write(payload); err != nil {
+		// Without this check the payload would be silently truncated and the
+		// corrupted datagram still sent out.
+		return nil, errors.New("failed to write UDP payload, packet too large").Base(err)
+	}
 
 	if err := account.Cipher.EncodePacket(account.Key, buffer); err != nil {
 		return nil, errors.New("failed to encrypt UDP payload").Base(err)
@@ -230,7 +234,18 @@ func EncodeUDPPacket(request *protocol.RequestHeader, payload []byte) (*buf.Buff
 func DecodeUDPPacket(validator *Validator, payload *buf.Buffer) (*protocol.RequestHeader, *buf.Buffer, error) {
 	rawPayload := payload.Bytes()
 	user, _, d, _, err := validator.Get(rawPayload, protocol.RequestCommandUDP)
+	return decodeUDPPacketWithUser(user, d, err, payload)
+}
 
+// DecodeUDPPacketSingleUser decodes a UDP packet for a single fixed user
+// without allocating a per-datagram Validator.
+func DecodeUDPPacketSingleUser(user *protocol.MemoryUser, payload *buf.Buffer) (*protocol.RequestHeader, *buf.Buffer, error) {
+	rawPayload := payload.Bytes()
+	user, d, err := GetSingleUser(user, rawPayload, protocol.RequestCommandUDP)
+	return decodeUDPPacketWithUser(user, d, err, payload)
+}
+
+func decodeUDPPacketWithUser(user *protocol.MemoryUser, d []byte, err error, payload *buf.Buffer) (*protocol.RequestHeader, *buf.Buffer, error) {
 	if goerrors.Is(err, ErrIVNotUnique) {
 		return nil, nil, errors.New("failed iv check").Base(err)
 	}
@@ -291,10 +306,7 @@ func (v *UDPReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 		buffer.Release()
 		return nil, err
 	}
-	validator := new(Validator)
-	validator.Add(v.User)
-
-	u, payload, err := DecodeUDPPacket(validator, buffer)
+	u, payload, err := DecodeUDPPacketSingleUser(v.User, buffer)
 	if err != nil {
 		buffer.Release()
 		return nil, err

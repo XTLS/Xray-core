@@ -348,7 +348,12 @@ func (h *Handler) ProxySettings() *serial.TypedMessage {
 }
 
 func ParseRandomIP(addr net.Address, prefix string) net.Address {
-	_, ipnet, _ := net.ParseCIDR(addr.IP().String() + "/" + prefix)
+	_, ipnet, err := net.ParseCIDR(addr.IP().String() + "/" + prefix)
+	if err != nil || ipnet == nil {
+		// Invalid CIDR: fall back to the original address instead of
+		// dereferencing a nil mask and crashing the dial path.
+		return addr
+	}
 
 	ones, bits := ipnet.Mask.Size()
 	subnetSize := new(big.Int).Lsh(big.NewInt(1), uint(bits-ones))

@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"sync/atomic"
 	"context"
 	_ "embed"
 	"encoding/base64"
@@ -159,7 +160,7 @@ func dialWebSocket(ctx context.Context, dest net.Destination, streamSettings *in
 
 type delayDialConn struct {
 	net.Conn
-	closed         bool
+	closed         atomic.Bool
 	dialed         chan bool
 	cancel         context.CancelFunc
 	ctx            context.Context
@@ -187,7 +188,7 @@ func (d *delayDialConn) RemoteAddr() net.Addr {
 }
 
 func (d *delayDialConn) Write(b []byte) (int, error) {
-	if d.closed {
+	if d.closed.Load() {
 		return 0, io.ErrClosedPipe
 	}
 	if d.Conn == nil {
@@ -209,7 +210,7 @@ func (d *delayDialConn) Write(b []byte) (int, error) {
 }
 
 func (d *delayDialConn) Read(b []byte) (int, error) {
-	if d.closed {
+	if d.closed.Load() {
 		return 0, io.ErrClosedPipe
 	}
 	if d.Conn == nil {
@@ -223,7 +224,7 @@ func (d *delayDialConn) Read(b []byte) (int, error) {
 }
 
 func (d *delayDialConn) Close() error {
-	d.closed = true
+	d.closed.Store(true)
 	d.cancel()
 	if d.Conn == nil {
 		return nil

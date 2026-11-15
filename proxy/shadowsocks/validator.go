@@ -152,6 +152,45 @@ func (v *Validator) Get(bs []byte, command protocol.RequestCommand) (u *protocol
 	return nil, nil, nil, 0, ErrNotFound
 }
 
+// GetSingleUser validates the payload against exactly one user. It replicates
+// the single-user path of Validator.Get without building a one-user Validator
+// (mutex + slice allocation) on every UDP datagram.
+func GetSingleUser(user *protocol.MemoryUser, bs []byte, command protocol.RequestCommand) (*protocol.MemoryUser, []byte, error) {
+	account := user.Account.(*MemoryAccount)
+	if account.Cipher.IsAEAD() {
+		// AEAD payload decoding requires the payload to be over 32 bytes
+		if len(bs) < 32 {
+			return nil, nil, ErrNotFound
+		}
+
+		aeadCipher := account.Cipher.(*AEADCipher)
+		ivLen := aeadCipher.IVSize()
+		iv := bs[:ivLen]
+		subkey := make([]byte, 32)
+		subkey = subkey[:aeadCipher.KeyBytes]
+		hkdfSHA1(account.Key, iv, subkey)
+		aead := aeadCipher.AEADAuthCreator(subkey)
+
+		var matchErr error
+		var ret []byte
+		switch command {
+		case protocol.RequestCommandTCP:
+			data := make([]byte, 4+aead.NonceSize())
+			ret, matchErr = aead.Open(data[:0], data[4:], bs[ivLen:ivLen+18], nil)
+		case protocol.RequestCommandUDP:
+			data := make([]byte, 8192)
+			ret, matchErr = aead.Open(data[:0], data[8192-aead.NonceSize():8192], bs[ivLen:], nil)
+		}
+		if matchErr != nil {
+			return nil, nil, ErrNotFound
+		}
+		return user, ret, nil
+	}
+
+	// Non-AEAD ciphers: like Validator.Get, the caller decrypts the payload itself.
+	return user, nil, nil
+}
+
 func (v *Validator) GetBehaviorSeed() uint64 {
 	v.Lock()
 	defer v.Unlock()

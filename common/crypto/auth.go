@@ -260,8 +260,9 @@ func (w *AuthenticationWriter) seal(b []byte) (*buf.Buffer, error) {
 	}
 
 	eb := buf.New()
-	w.sizeParser.Encode(uint16(encryptedSize+paddingSize), eb.Extend(sizeBytes))
-	if _, err := w.auth.Seal(eb.Extend(encryptedSize)[:0], b); err != nil {
+	// The extended regions are fully overwritten below, so skip zeroing.
+	w.sizeParser.Encode(uint16(encryptedSize+paddingSize), eb.ExtendNoZero(sizeBytes))
+	if _, err := w.auth.Seal(eb.ExtendNoZero(encryptedSize)[:0], b); err != nil {
 		eb.Release()
 		return nil, err
 	}
@@ -289,7 +290,9 @@ func (w *AuthenticationWriter) writeStream(mb buf.MultiBuffer) error {
 	temp := buf.New()
 	defer temp.Release()
 
-	rawBytes := temp.Extend(payloadSize)
+	// Only rawBytes[:nBytes] is sealed below; temp itself is never sent,
+	// so skipping the zeroing is safe here.
+	rawBytes := temp.ExtendNoZero(payloadSize)
 
 	for {
 		nb, nBytes := buf.SplitBytes(mb, rawBytes)
@@ -321,7 +324,10 @@ func (w *AuthenticationWriter) writePacket(mb buf.MultiBuffer) error {
 
 		eb, err := w.seal(b.Bytes())
 		if err != nil {
-			continue
+			// Failing to seal means the packet cannot be sent at all;
+			// report it instead of silently dropping the packet.
+			buf.ReleaseMulti(mb2Write)
+			return err
 		}
 
 		mb2Write = append(mb2Write, eb)

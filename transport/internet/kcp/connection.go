@@ -179,8 +179,8 @@ type ConnMetadata struct {
 type Connection struct {
 	meta       ConnMetadata
 	closer     io.Closer
-	rd         time.Time
-	wd         time.Time // write deadline
+	rd         atomic.Int64 // read deadline, nanoseconds; 0 = none
+	wd         atomic.Int64 // write deadline, nanoseconds; 0 = none
 	since      int64
 	dataInput  *signal.Notifier
 	dataOutput *signal.Notifier
@@ -291,8 +291,8 @@ func (c *Connection) waitForDataInput() error {
 	}
 
 	duration := time.Second * 16
-	if !c.rd.IsZero() {
-		duration = time.Until(c.rd)
+	if rd := c.rd.Load(); rd != 0 {
+		duration = time.Until(time.Unix(0, rd))
 		if duration < 0 {
 			return ErrIOTimeout
 		}
@@ -304,7 +304,7 @@ func (c *Connection) waitForDataInput() error {
 	select {
 	case <-c.dataInput.Wait():
 	case <-timeout.C:
-		if !c.rd.IsZero() && c.rd.Before(time.Now()) {
+		if rd := c.rd.Load(); rd != 0 && time.Unix(0, rd).Before(time.Now()) {
 			return ErrIOTimeout
 		}
 	}
@@ -345,8 +345,8 @@ func (c *Connection) waitForDataOutput() error {
 	}
 
 	duration := time.Second * 16
-	if !c.wd.IsZero() {
-		duration = time.Until(c.wd)
+	if wd := c.wd.Load(); wd != 0 {
+		duration = time.Until(time.Unix(0, wd))
 		if duration < 0 {
 			return ErrIOTimeout
 		}
@@ -358,7 +358,7 @@ func (c *Connection) waitForDataOutput() error {
 	select {
 	case <-c.dataOutput.Wait():
 	case <-timeout.C:
-		if !c.wd.IsZero() && c.wd.Before(time.Now()) {
+		if wd := c.wd.Load(); wd != 0 && time.Unix(0, wd).Before(time.Now()) {
 			return ErrIOTimeout
 		}
 	}
@@ -510,7 +510,7 @@ func (c *Connection) SetReadDeadline(t time.Time) error {
 	if c == nil || c.State() != StateActive {
 		return ErrClosedConnection
 	}
-	c.rd = t
+	c.rd.Store(deadlineNano(t))
 	return nil
 }
 
@@ -519,8 +519,16 @@ func (c *Connection) SetWriteDeadline(t time.Time) error {
 	if c == nil || c.State() != StateActive {
 		return ErrClosedConnection
 	}
-	c.wd = t
+	c.wd.Store(deadlineNano(t))
 	return nil
+}
+
+// deadlineNano converts a deadline to nanoseconds since epoch; a zero time becomes 0 (no deadline).
+func deadlineNano(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixNano()
 }
 
 // kcp update, input loop

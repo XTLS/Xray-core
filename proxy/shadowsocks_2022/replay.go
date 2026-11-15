@@ -128,6 +128,10 @@ func NewUDPSessionManager(timeout time.Duration) *UDPSessionManager {
 	}
 }
 
+func (m *UDPSessionManager) Load(sessionID uint64) (*ServerUDPSession, bool) {
+	return m.sessions.Load(sessionID)
+}
+
 func (m *UDPSessionManager) GetOrCreate(sessionID uint64) *ServerUDPSession {
 	now := time.Now().Unix()
 	if s, ok := m.sessions.Load(sessionID); ok {

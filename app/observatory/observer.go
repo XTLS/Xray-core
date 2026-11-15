@@ -39,7 +39,14 @@ type Observer struct {
 }
 
 func (o *Observer) GetObservation(ctx context.Context) (proto.Message, error) {
-	return &ObservationResult{Status: o.status}, nil
+	o.statusLock.Lock()
+	defer o.statusLock.Unlock()
+	// Return a snapshot so callers never observe in-place mutations of shared status.
+	status := make([]*OutboundStatus, len(o.status))
+	for i, s := range o.status {
+		status[i] = proto.Clone(s).(*OutboundStatus)
+	}
+	return &ObservationResult{Status: status}, nil
 }
 
 func (o *Observer) Type() interface{} {
@@ -140,6 +147,9 @@ func (o *Observer) probe(outbound string) ProbeResult {
 		Proxy: func(*http.Request) (*url.URL, error) {
 			return nil, nil
 		},
+		// Probes are one-shot requests; without this, every probe leaves an
+		// idle keep-alive connection (plus its read goroutine) parked for 90s.
+		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
 			var connection net.Conn
 			taskErr := task.Run(ctx, func() error {

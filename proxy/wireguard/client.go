@@ -212,7 +212,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return errors.New("target not specified")
 	}
 	ob.Name = "wireguard"
-	ob.CanSpliceCopy = 3
+	atomic.StoreInt32(&ob.CanSpliceCopy, 3)
 	dialer.SetOutboundGateway(ctx, ob)
 
 	if err := h.up(ctx); err != nil {
@@ -264,9 +264,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to create UDP connection").Base(err)
 		}
 		defer conn.Close()
+		packetConn, ok := conn.(*net.PacketConnWrapper)
+		udpAddr, okAddr := conn.RemoteAddr().(*net.UDPAddr)
+		if !ok || !okAddr {
+			conn.Close()
+			return errors.New("unexpected UDP connection type: ", conn.RemoteAddr().Network())
+		}
 		c := &UDPConnClient{
-			PacketConn: conn.(*net.PacketConnWrapper).PacketConn,
-			Dest:       conn.RemoteAddr().(*net.UDPAddr),
+			PacketConn: packetConn.PacketConn,
+			Dest:       udpAddr,
 		}
 		reader = c
 		writer = c

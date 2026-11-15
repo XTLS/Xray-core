@@ -1,6 +1,7 @@
 package shadowsocks
 
 import (
+	"sync/atomic"
 	"context"
 	"time"
 
@@ -89,7 +90,7 @@ func (s *Server) Network() []net.Network {
 func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks"
-	inbound.CanSpliceCopy = 3
+	atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 
 	switch network {
 	case net.Network_TCP:
@@ -145,9 +146,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			var err error
 
 			if inbound.User != nil {
-				validator := new(Validator)
-				validator.Add(inbound.User)
-				request, data, err = DecodeUDPPacket(validator, payload)
+				request, data, err = DecodeUDPPacketSingleUser(inbound.User, payload)
 			} else {
 				request, data, err = DecodeUDPPacket(s.validator, payload)
 				if err == nil {

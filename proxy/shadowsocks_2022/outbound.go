@@ -1,6 +1,7 @@
 package shadowsocks_2022
 
 import (
+	"sync/atomic"
 	"context"
 	"crypto/rand"
 	"io"
@@ -77,7 +78,7 @@ func (o *Outbound) Process(ctx context.Context, link *transport.Link, dialer int
 		return errors.New("target not specified")
 	}
 	ob.Name = "shadowsocks-2022"
-	ob.CanSpliceCopy = 3
+	atomic.StoreInt32(&ob.CanSpliceCopy, 3)
 	destination := ob.Target
 	network := destination.Network
 

@@ -1,6 +1,7 @@
 package hysteria
 
 import (
+	"sync/atomic"
 	"context"
 	go_errors "errors"
 	"io"
@@ -57,7 +58,7 @@ func (c *Client) Process(ctx context.Context, link *transport.Link, dialer inter
 		return errors.New("target not specified")
 	}
 	ob.Name = "hysteria"
-	ob.CanSpliceCopy = 3
+	atomic.StoreInt32(&ob.CanSpliceCopy, 3)
 	target := ob.Target
 
 	conn, err := dialer.Dial(hysteria.ContextWithDatagram(ctx, target.Network == net.Network_UDP), c.server.Destination)
@@ -183,7 +184,9 @@ type UDPWriter struct {
 func (w *UDPWriter) SendMessage(msg *UDPMessage) error {
 	msgN := msg.Serialize(w.buf[:])
 	if msgN < 0 {
-		return nil
+		// Failing to serialize means the message does not fit the buffer;
+		// report it instead of silently dropping the packet.
+		return errors.New("UDP message too large to serialize")
 	}
 	_, err := w.writer.Write(w.buf[:msgN])
 	return err

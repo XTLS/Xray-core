@@ -45,6 +45,10 @@ type WebhookNotifier struct {
 	done          chan struct{}
 	wg            sync.WaitGroup
 	closeOnce     sync.Once
+	// mu guards wg.Add against Close's wg.Wait: a positive Add that starts
+	// while the counter is zero and Wait is running is not allowed.
+	mu     sync.Mutex
+	closed bool
 }
 
 func NewWebhookNotifier(cfg *WebhookConfig) (*WebhookNotifier, error) {
@@ -93,13 +97,13 @@ func (h *WebhookNotifier) Fire(ctx routing.Context, outboundTag string) {
 		return
 	}
 
-	h.wg.Add(1)
-	select {
-	case <-h.done:
-		h.wg.Done()
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
 		return
-	default:
 	}
+	h.wg.Add(1)
+	h.mu.Unlock()
 	go func() {
 		defer h.wg.Done()
 		h.post(ev)
@@ -227,7 +231,12 @@ func (h *WebhookNotifier) maybeSweep(now time.Time, ttl time.Duration) {
 // Only need to call if the Notifier is really used, otherwise GC can clean it
 func (h *WebhookNotifier) Close() error {
 	h.closeOnce.Do(func() {
+		// Take mu before closing done, so no Fire can wg.Add after this
+		// point and race with wg.Wait below.
+		h.mu.Lock()
+		h.closed = true
 		close(h.done)
+		h.mu.Unlock()
 	})
 	h.wg.Wait()
 	h.client.CloseIdleConnections()

@@ -1,6 +1,7 @@
 package masque
 
 import (
+	"sync/atomic"
 	"context"
 	go_errors "errors"
 	"io"
@@ -267,7 +268,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "masque"
-	inbound.CanSpliceCopy = 3
+	atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 
 	name, pass, _ := sconn.Request().BasicAuth()
 	user := s.validator.get(name, pass)
@@ -516,8 +517,8 @@ func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	ctx = c.ContextWithID(ctx, session.NewID())
 	inbound := session.Inbound{
 		Name:          "masque",
-		Tag:           s.tag,
 		CanSpliceCopy: 3,
+		Tag:           s.tag,
 		Source:        source,
 		User:          t.user,
 	}

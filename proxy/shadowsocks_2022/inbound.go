@@ -1,6 +1,7 @@
 package shadowsocks_2022
 
 import (
+	"sync/atomic"
 	"context"
 	"time"
 
@@ -80,7 +81,7 @@ func (i *Inbound) Network() []net.Network {
 func (i *Inbound) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "shadowsocks-2022"
-	inbound.CanSpliceCopy = 3
+	atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 	inbound.User = i.user
 
 	if network == net.Network_TCP {

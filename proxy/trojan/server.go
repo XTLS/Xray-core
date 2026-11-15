@@ -1,6 +1,7 @@
 package trojan
 
 import (
+	"sync/atomic"
 	"context"
 	"io"
 	"strconv"
@@ -224,7 +225,7 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 
 	inbound := session.InboundFromContext(ctx)
 	inbound.Name = "trojan"
-	inbound.CanSpliceCopy = 3
+	atomic.StoreInt32(&inbound.CanSpliceCopy, 3)
 	inbound.User = user
 	sessionPolicy = s.policyManager.ForLevel(user.Level)
 

@@ -29,6 +29,14 @@ type DialerClient interface {
 	PostPacket(context.Context, string, string, string, buf.MultiBuffer) error
 }
 
+// requestBuffPool recycles the scratch buffer used to stringify each HTTP/1.1
+// upload request, avoiding a fresh allocation per POST in packet-up mode.
+var requestBuffPool = sync.Pool{
+	New: func() any {
+		return new(bytes.Buffer)
+	},
+}
+
 // implements splithttp.DialerClient in terms of direct network connections
 type DefaultDialerClient struct {
 	transportConfig *Config
@@ -36,7 +44,11 @@ type DefaultDialerClient struct {
 	closed          atomic.Bool
 	httpVersion     string
 	// pool of net.Conn, created using dialUploadConn
-	uploadRawPool  *sync.Pool
+	uploadRawPool *sync.Pool
+	// registry of every pooled H1 conn, so Close() can release the ones still
+	// open — raw TCP/TLS conns in the pool do not close themselves
+	poolMu    sync.Mutex
+	poolConns []*H1Conn
 	dialUploadConn func(ctxInner context.Context) (net.Conn, error)
 }
 
@@ -124,8 +136,10 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 		// safely retried. if instead req.Write is called multiple
 		// times, the body is already drained after the first
 		// request
-		requestBuff := new(bytes.Buffer)
+		requestBuff := requestBuffPool.Get().(*bytes.Buffer)
+		requestBuff.Reset()
 		requestBuff.Grow(512 + int(req.ContentLength))
+		defer requestBuffPool.Put(requestBuff)
 		common.Must(req.Write(requestBuff))
 
 		var uploadConn any
@@ -140,6 +154,9 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 					return err
 				}
 				h1UploadConn = NewH1Conn(newConn)
+				c.poolMu.Lock()
+				c.poolConns = append(c.poolConns, h1UploadConn)
+				c.poolMu.Unlock()
 				uploadConn = h1UploadConn
 			} else {
 				h1UploadConn = uploadConn.(*H1Conn)
@@ -149,12 +166,14 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 				if h1UploadConn.UnreadedResponsesCount > 0 {
 					resp, err := http.ReadResponse(h1UploadConn.RespBufReader, req)
 					if err != nil {
+						h1UploadConn.Close()
 						c.closed.Store(true)
 						return fmt.Errorf("error while reading response: %s", err.Error())
 					}
 					io.Copy(io.Discard, resp.Body)
 					defer resp.Body.Close()
 					if resp.StatusCode != 200 {
+						h1UploadConn.Close()
 						return fmt.Errorf("got non-200 error response code: %d", resp.StatusCode)
 					}
 				}
@@ -169,6 +188,9 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 				break
 			} else if newConnection {
 				return err
+			} else {
+				// the pooled connection is dead; close it so it does not leak
+				h1UploadConn.Close()
 			}
 		}
 
@@ -178,11 +200,19 @@ func (c *DefaultDialerClient) PostPacket(ctx context.Context, url string, sessio
 	return nil
 }
 
-// HTTP/1.1 and HTTP/2 will close itself, we only handle HTTP/3 here
+// HTTP/2 will close itself; HTTP/3 and the raw HTTP/1.1 upload connections
+// are closed here explicitly.
 func (c *DefaultDialerClient) Close() error {
 	transport := c.client.Transport
 	if h3Transport, ok := transport.(*http3.Transport); ok {
 		h3Transport.Close()
+	}
+	c.poolMu.Lock()
+	poolConns := c.poolConns
+	c.poolConns = nil
+	c.poolMu.Unlock()
+	for _, conn := range poolConns {
+		conn.Close()
 	}
 	return nil
 }

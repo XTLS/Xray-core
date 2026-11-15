@@ -3,6 +3,7 @@ package reverse
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -183,7 +184,7 @@ func (p *StaticMuxPicker) PickAvailable() (*mux.ClientWorker, error) {
 	var minIdx int = -1
 	var minConn uint32 = 9999
 	for i, w := range p.workers {
-		if w.draining {
+		if w.draining.Load() {
 			continue
 		}
 		if w.IsFull() {
@@ -226,7 +227,9 @@ type PortalWorker struct {
 	control  *task.Periodic
 	writer   buf.Writer
 	reader   buf.Reader
-	draining bool
+	// draining is written by the heartbeat task and read by the mux picker,
+	// so it must be accessed atomically.
+	draining atomic.Bool
 	counter  uint32
 	timer    *signal.ActivityTimer
 }
@@ -270,7 +273,7 @@ func (w *PortalWorker) heartbeat() error {
 		return errors.New("client worker stopped")
 	}
 
-	if w.draining || w.writer == nil {
+	if w.draining.Load() || w.writer == nil {
 		return errors.New("already disposed")
 	}
 
@@ -278,7 +281,7 @@ func (w *PortalWorker) heartbeat() error {
 	msg.FillInRandom()
 
 	if w.client.TotalConnections() > 256 {
-		w.draining = true
+		w.draining.Store(true)
 		msg.State = Control_DRAIN
 
 		defer func() {
@@ -289,7 +292,7 @@ func (w *PortalWorker) heartbeat() error {
 	}
 
 	w.counter = (w.counter + 1) % 5
-	if w.draining || w.counter == 1 {
+	if w.draining.Load() || w.counter == 1 {
 		b, err := proto.Marshal(msg)
 		common.Must(err)
 		mb := buf.MergeBytes(nil, b)
