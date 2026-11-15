@@ -2,6 +2,8 @@ package xmc
 
 import (
 	"bytes"
+	"errors"
+	"net"
 	"testing"
 	"time"
 )
@@ -58,7 +60,7 @@ func TestWritePaddingTurnFramesIsMinecraftTraffic(t *testing.T) {
 	}
 	for i, turn := range turns {
 		var buffer bytes.Buffer
-		written, err := writePaddingTurnFrames(&buffer, turn, 0, func(time.Duration) {}, configurationServerboundCustomPayload)
+		written, err := writePaddingTurnFrames(&buffer, turn, 0, noPaddingPause, configurationServerboundCustomPayload)
 		if err != nil {
 			t.Fatalf("turn %d: %v", i, err)
 		}
@@ -103,7 +105,7 @@ func TestRunPaddingScheduleLeavesPeerTurnsAlone(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runPaddingSchedule(&out, true, 2, schedule); err != nil {
+	if err := runPaddingSchedule(&out, true, 2, schedule, noPaddingPause); err != nil {
 		t.Fatal(err)
 	}
 
@@ -131,7 +133,63 @@ func TestRunPaddingScheduleRejectsInvalidSchedule(t *testing.T) {
 	schedule := []paddingTurn{
 		{direction: paddingServerToClient, minLength: 10, maxLength: 10},
 	}
-	if err := runPaddingSchedule(&bytes.Buffer{}, true, 2, schedule); err == nil {
+	if err := runPaddingSchedule(&bytes.Buffer{}, true, 2, schedule, noPaddingPause); err == nil {
 		t.Fatal("expected an error for a prefixed server-to-client first turn")
+	}
+}
+
+func noPaddingPause(time.Duration) error { return nil }
+
+func TestRunPaddingScheduleWithoutTurns(t *testing.T) {
+	var out bytes.Buffer
+	if err := runPaddingSchedule(&out, true, 2, nil, noPaddingPause); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("disabled padding wrote %d bytes", out.Len())
+	}
+}
+
+func TestRunPaddingScheduleStopsWhenClosed(t *testing.T) {
+	schedule := []paddingTurn{
+		{direction: paddingClientToServer, minLength: 44, maxLength: 44, delay: millisecondRange(1000, 1000)},
+		{direction: paddingClientToServer, minLength: 44, maxLength: 44},
+	}
+
+	var out bytes.Buffer
+	pauses := 0
+	sleep := func(d time.Duration) error {
+		if d <= 0 {
+			return nil
+		}
+		pauses++
+		return net.ErrClosed
+	}
+	err := runPaddingSchedule(&out, true, 2, schedule, sleep)
+	if !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("expected net.ErrClosed, got %v", err)
+	}
+	if pauses != 1 {
+		t.Fatalf("pauses = %d, want 1", pauses)
+	}
+	// Only turn 0 was written, the pause after it ended the schedule.
+	reader := bytes.NewReader(out.Bytes())
+	if _, err := readPacket(reader); err != nil {
+		t.Fatal(err)
+	}
+	if reader.Len() != 0 {
+		t.Fatalf("schedule kept writing after a cancelled pause: %d bytes", reader.Len())
+	}
+}
+
+func TestPaddingPauseReturnsOnClose(t *testing.T) {
+	done := make(chan struct{})
+	close(done)
+	started := time.Now()
+	if err := pausePadding(done, time.Hour); !errors.Is(err, net.ErrClosed) {
+		t.Fatalf("expected net.ErrClosed, got %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatal("pausePadding did not return on close")
 	}
 }
