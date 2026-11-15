@@ -34,6 +34,8 @@ import (
 	"golang.org/x/net/http2"
 )
 
+const tlsHandshakeTimeout = 10 * time.Second
+
 type dialerConf struct {
 	net.Destination
 	*internet.MemoryStreamConfig
@@ -127,22 +129,29 @@ func createHTTPClient(dest net.Destination, streamSettings *internet.MemoryStrea
 			return nil, err
 		}
 
+		if realityConfig == nil && gotlsConfig == nil {
+			return conn, nil
+		}
+
+		// The HTTP requests intentionally outlive their caller. Bound only the
+		// handshake, since HTTP/2 requests can wait on the same pending dial.
+		handshakeCtx, cancel := context.WithTimeout(ctxInner, tlsHandshakeTimeout)
+		defer cancel()
 		if realityConfig != nil {
-			return reality.UClient(conn, realityConfig, ctxInner, dest)
+			return reality.UClient(conn, realityConfig, handshakeCtx, dest)
 		}
 
-		if gotlsConfig != nil {
-			if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-				conn = tls.UClient(conn, gotlsConfig, fingerprint)
-				if err := conn.(*tls.UConn).HandshakeContext(ctxInner); err != nil {
-					return nil, err
-				}
-			} else {
-				conn = tls.Client(conn, gotlsConfig)
-			}
+		var secureConn tls.Interface
+		if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
+			secureConn = tls.UClient(conn, gotlsConfig, fingerprint).(*tls.UConn)
+		} else {
+			secureConn = tls.Client(conn, gotlsConfig).(*tls.Conn)
 		}
-
-		return conn, nil
+		if err := secureConn.HandshakeContext(handshakeCtx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		return secureConn, nil
 	}
 
 	var keepAlivePeriod time.Duration
