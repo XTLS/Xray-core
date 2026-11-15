@@ -195,6 +195,22 @@ func (c *clientConn) handshake() error {
 	if err != nil {
 		return fmt.Errorf("read login finished: %w", err)
 	}
+	// Set Compression is not compressed itself and must be handled before the
+	// packet that follows it, which already uses the compressed framing.
+	if pkt.packetID == 0x03 {
+		var threshold Varint
+		if thresholdErr := pkt.readFields(&threshold); thresholdErr != nil {
+			return fmt.Errorf("read login compression threshold: %w", thresholdErr)
+		}
+		if threshold >= 0 {
+			c.reader = newCompressionReader(c.reader)
+			c.writer = newCompressionWriter(c.writer, int32(threshold))
+		}
+		pkt, err = readPacket(c.reader)
+		if err != nil {
+			return fmt.Errorf("read login finished: %w", err)
+		}
+	}
 	if pkt.packetID == 0x00 {
 		var reason String
 		if readErr := pkt.readFields(&reason); readErr != nil {
