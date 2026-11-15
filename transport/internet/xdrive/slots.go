@@ -263,7 +263,7 @@ func (w *slotWriter) Write(p []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
 	}
-	if w.closed {
+	if w.closed || w.ctx.Err() != nil {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -326,6 +326,10 @@ func (w *slotWriter) flushLocked() error {
 		return w.ctx.Err()
 	}
 	w.mu.Lock()
+	if err := w.ctx.Err(); err != nil {
+		<-w.slots
+		return err
+	}
 	if w.err != nil || len(w.buf) == 0 {
 		<-w.slots
 		return w.err
@@ -399,6 +403,9 @@ func (w *slotWriter) upload(seq int64, chunk []byte) {
 }
 
 func (w *slotWriter) write(seq int64, mode byte, data []byte) error {
+	if err := w.ctx.Err(); err != nil {
+		return err
+	}
 	f := newSlotFrame(seq, mode, data)
 	var body []byte
 	if mode == slotMedia {
@@ -481,9 +488,8 @@ func (w *slotWriter) Close() error {
 	}
 	w.closed = true
 	for len(w.buf) > 0 && w.err == nil {
-		if err := w.flushLocked(); err != nil {
-			w.mu.Unlock()
-			return err
+		if w.flushLocked() != nil {
+			break
 		}
 	}
 	seq := w.seq
@@ -499,6 +505,9 @@ func (w *slotWriter) Close() error {
 	err := w.err
 	w.mu.Unlock()
 	if err != nil {
+		return err
+	}
+	if err := w.ctx.Err(); err != nil {
 		return err
 	}
 	if err := w.await(seq); err != nil {
