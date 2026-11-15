@@ -248,7 +248,10 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		dest = *newDest
 	}
 
-	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() {
+	content := session.ContentFromContext(ctx)
+	// Only Freedom's target resolution is skipped; proxy server resolution still follows sockopt.
+	skipDNSResolve := outboundName == "freedom" && content != nil && content.SkipDNSResolve
+	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() && !skipDNSResolve {
 		finalStrategy := sockopt.DomainStrategy
 		if outboundName == "freedom" && dest.Network == net.Network_UDP && origTargetAddr != nil && src == nil {
 			finalStrategy = finalStrategy.GetDynamicStrategy(origTargetAddr.Family())

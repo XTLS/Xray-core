@@ -278,6 +278,12 @@ func isValidAddress(addr *net.IPOrDomain) bool {
 
 // Process implements proxy.Outbound.
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
+	if content := session.ContentFromContext(ctx); content != nil && content.SkipDNSResolve {
+		// Keep DNS connections from resolving their server through the built-in DNS.
+		handler := *h
+		handler.resolveStrategy = internet.DomainStrategy_AS_IS
+		h = &handler
+	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
