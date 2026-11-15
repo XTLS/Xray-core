@@ -34,7 +34,7 @@ type paddingTurn struct {
 	direction           paddingDirection
 	minLength           int
 	maxLength           int
-	delay               paddingDelayRange // pause between this turn and the next one
+	delay               paddingDelayRange // pause after this turn, including the last one
 	variants            []paddingVariant
 	startDelay          paddingDelayRange
 	chunkDelay          paddingDelayRange
@@ -60,15 +60,11 @@ func runPaddingScheduleWithSleep(reader io.Reader, writer io.Writer, isClient bo
 		if i == 0 {
 			prefixLength = firstTurnPrefixLength
 		}
-		hasNextTurn := i+1 < len(schedule)
 
 		localSends := isClient == (turn.direction == paddingClientToServer)
 		if localSends {
 			if err := writePaddingTurnWithBuffer(writer, turn, prefixLength, sleep, &writeBuffer); err != nil {
 				return fmt.Errorf("write padding turn %d: %w", i, err)
-			}
-			if !hasNextTurn {
-				continue
 			}
 			delay, err := randomPaddingDelay(turn.delay)
 			if err != nil {
@@ -82,9 +78,10 @@ func runPaddingScheduleWithSleep(reader io.Reader, writer io.Writer, isClient bo
 		if err := readPaddingTurn(reader, turn, prefixLength); err != nil {
 			return fmt.Errorf("read padding turn %d: %w", i, err)
 		}
-		// The receiver starts waiting for the next turn only after the
-		// configured minimum, so both endpoints apply the same pause.
-		if hasNextTurn && turn.delay.min > 0 {
+		// The receiver waits at least the configured minimum after every
+		// turn, so both endpoints apply the same pause, including after the
+		// last turn before the proxy stream starts.
+		if turn.delay.min > 0 {
 			sleep(turn.delay.min)
 		}
 	}

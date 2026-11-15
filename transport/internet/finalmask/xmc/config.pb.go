@@ -183,10 +183,9 @@ type Padding struct {
 	LengthMax int64                  `protobuf:"varint,2,opt,name=length_max,json=lengthMax,proto3" json:"length_max,omitempty"`
 	// 1 = client to server, 2 = server to client
 	Direction int32 `protobuf:"varint,3,opt,name=direction,proto3" json:"direction,omitempty"`
-	// Millisecond delay between this turn and the next one. The sender waits
-	// for a uniformly selected value in [delay_min, delay_max]; the receiver
-	// waits at least delay_min before reading the next turn. Zero means no
-	// delay. The delay is ignored after the last turn.
+	// Millisecond pause after this turn, including the last one. The sender
+	// waits for a uniformly selected value in [delay_min, delay_max]; the
+	// receiver waits at least delay_min. Zero means no delay.
 	DelayMin      int64 `protobuf:"varint,4,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
 	DelayMax      int64 `protobuf:"varint,5,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
