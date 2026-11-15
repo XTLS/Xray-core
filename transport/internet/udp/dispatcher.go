@@ -144,9 +144,7 @@ func handleInput(ctx context.Context, conn *connEntry, dest net.Destination, cal
 
 		mb, err := input.ReadMultiBuffer()
 		if err != nil {
-			if conn.closed.Load() && goerrors.Is(err, io.ErrClosedPipe) {
-				// Local termination interrupts the reader after cancelling its
-				// context, which may happen while ReadMultiBuffer is blocked.
+			if conn.closed.Load() {
 				errors.LogDebugInner(ctx, err, "UDP input closed locally")
 			} else if !goerrors.Is(err, io.EOF) {
 				errors.LogInfoInner(ctx, err, "failed to handle UDP input")
