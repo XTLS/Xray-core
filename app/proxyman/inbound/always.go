@@ -48,7 +48,6 @@ type AlwaysOnInboundHandler struct {
 	receiverConfig *proxyman.ReceiverConfig
 	proxy          proxy.Inbound
 	workers        []worker
-	dispatcher     routing.Dispatcher
 	tag            string
 }
 
@@ -82,11 +81,11 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		return nil, errors.New("not an inbound proxy.")
 	}
 
+	dispatcher := core.MustFromContext(ctx).GetFeature(routing.DispatcherType()).(routing.Dispatcher)
 	h := &AlwaysOnInboundHandler{
 		receiverConfig: receiverConfig,
 		proxyConfig:    proxyConfig,
 		proxy:          p,
-		dispatcher:     core.MustFromContext(ctx).GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		tag:            tag,
 	}
 
@@ -117,7 +116,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 				proxy:           p,
 				stream:          mss,
 				tag:             tag,
-				dispatcher:      h.dispatcher,
+				dispatcher:      dispatcher,
 				sniffingRequest: sniffingRequest,
 				uplinkCounter:   uplinkCounter,
 				downlinkCounter: downlinkCounter,
@@ -139,7 +138,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						stream:          mss,
 						recvOrigDest:    receiverConfig.ReceiveOriginalDestination,
 						tag:             tag,
-						dispatcher:      h.dispatcher,
+						dispatcher:      dispatcher,
 						sniffingRequest: sniffingRequest,
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,
@@ -154,7 +153,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						proxy:           p,
 						address:         address,
 						port:            net.Port(port),
-						dispatcher:      h.dispatcher,
+						dispatcher:      dispatcher,
 						sniffingRequest: sniffingRequest,
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,

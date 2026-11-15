@@ -10,7 +10,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/transport"
 )
 
@@ -20,11 +19,7 @@ type ServerWorker struct {
 }
 
 func NewServerWorker(ctx context.Context, dispatch func(context.Context, net.Destination, *transport.Link) error, link *transport.Link) *ServerWorker {
-	limit := policy.BufferPolicyFromContext(ctx).PerConnection
-	if session.IsReverseMuxFromContext(ctx) {
-		limit = 2 * buf.Size
-	}
-	w := &ServerWorker{carrier: newCarrier(ctx, *link, 60*time.Second, false, limit), dispatch: dispatch}
+	w := &ServerWorker{carrier: newCarrier(ctx, *link, 60*time.Second, false), dispatch: dispatch}
 	if inbound := session.InboundFromContext(ctx); inbound != nil {
 		inbound.CanSpliceCopy = 3
 	}
@@ -33,8 +28,8 @@ func NewServerWorker(ctx context.Context, dispatch func(context.Context, net.Des
 }
 
 // A non-nil dispatch return rejects admission; accepted backend failures use the link.
-func (w *ServerWorker) dispatchFlow(ctx context.Context, dest net.Destination, flow *inboundFlow) {
-	if err := w.dispatch(ctx, dest, &transport.Link{Reader: flow, Writer: &flowOutput{flow}}); err != nil {
+func (w *ServerWorker) dispatchFlow(ctx context.Context, dest net.Destination, flow *inboundFlow, output buf.Writer) {
+	if err := w.dispatch(ctx, dest, &transport.Link{Reader: flow, Writer: output}); err != nil {
 		if flow.GlobalID != [8]byte{} {
 			XUDPManager.Lock()
 			if XUDPManager.Map[flow.GlobalID] == flow {
@@ -44,12 +39,10 @@ func (w *ServerWorker) dispatchFlow(ctx context.Context, dest net.Destination, f
 		}
 		w.Lock()
 		w.cancel(err)
-		w.clearPending()
 		w.Unlock()
 		flow.Interrupt()
 		flow.expire()
 		errors.LogInfoInner(ctx, err, "failed to dispatch request to ", dest)
-		w.closeCause(err)
 	}
 }
 
@@ -110,8 +103,11 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		return errors.New("failed to add new session")
 	}
 	dest := meta.Target
-	go w.emitResponse(s, s.flow)
-	go w.dispatchFlow(ctx, dest, s.flow)
+	var output buf.Writer = s
+	if s.transferType == protocol.TransferTypePacket {
+		output = &flowOutput{s.flow}
+	}
+	go w.dispatchFlow(ctx, dest, s.flow, output)
 	if !meta.Option.Has(OptionData) {
 		return nil
 	}

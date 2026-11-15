@@ -543,7 +543,7 @@ func TestXDriveOutboundConfig(t *testing.T) {
 		{`{"protocol": "vless", "settings": {"address": "example.com", "port": 443, ` + xdriveID + `, "encryption": "none", "multiplex": {}}, ` + xdriveStream + `}`, `"encryption"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `}`, `"multiplex"`},
 		// Disabled legacy mux maps to absent native multiplex settings.
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `}`, `"multiplex"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, "mux": {"enabled": false}, ` + xdriveStream + `}`, `"multiplex"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": -1}}, ` + xdriveStream + `}`, `"multiplex"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"xudpConcurrency": -1}}, ` + xdriveStream + `}`, `"multiplex"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"xudpProxyUDP443": "skip"}}, ` + xdriveStream + `}`, `"multiplex"`},

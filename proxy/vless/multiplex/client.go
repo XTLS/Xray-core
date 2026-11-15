@@ -205,7 +205,7 @@ type ClientWorker struct {
 }
 
 func NewClientWorker(ctx context.Context, stream transport.Link, strategy ClientStrategy) *ClientWorker {
-	c := &ClientWorker{carrier: newCarrier(ctx, stream, 16*time.Second, true, 64*1024), strategy: strategy}
+	c := &ClientWorker{carrier: newCarrier(ctx, stream, 16*time.Second, true), strategy: strategy}
 	go c.run(context.Background(), nil)
 	return c
 }

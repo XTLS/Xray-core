@@ -13,35 +13,37 @@ import (
 	"github.com/xtls/xray-core/transport"
 )
 
+// Control intents carry no encoded DATA or caller payload.
 type carrier struct {
 	sync.RWMutex
-	tx       sync.Mutex
-	sessions map[uint16]*Session
-	count    uint16
-	active   int
-	client   bool
-	link     transport.Link
-	ready    *sync.Cond
-	data     buf.MultiBuffer
-	limit    int32
-	wake     chan struct{}
-	ctx      context.Context
-	cancel   context.CancelCauseFunc
-	timer    *time.Ticker
+	sessions             map[uint16]*Session
+	readyHead, readyTail *Session
+	count                uint16
+	active               int
+	client               bool
+	link                 transport.Link
+	wake                 chan struct{}
+	unknownSlots         chan struct{}
+	pendingUnknown       map[uint16]struct{}
+	ctx                  context.Context
+	cancel               context.CancelCauseFunc
+	timer                *time.Ticker
 }
 
-func newCarrier(parent context.Context, link transport.Link, idle time.Duration, client bool, limit int32) *carrier {
+func newCarrier(parent context.Context, link transport.Link, idle time.Duration, client bool) *carrier {
 	if _, ok := link.Writer.(*PhysicalWriter); !ok {
 		link.Writer = &PhysicalWriter{Writer: link.Writer}
 	}
 	ctx, cancel := context.WithCancelCause(parent)
 	c := &carrier{
 		sessions: make(map[uint16]*Session, 16), link: link, ctx: ctx, cancel: cancel,
-		timer: time.NewTicker(idle), client: client, limit: limit, wake: make(chan struct{}, 1),
+		timer: time.NewTicker(idle), client: client,
 	}
-	c.ready = sync.NewCond(&c.tx)
+	c.unknownSlots = make(chan struct{}, 16)
+	c.pendingUnknown = make(map[uint16]struct{})
+	c.wake = make(chan struct{}, 1)
 	context.AfterFunc(c.ctx, func() { common.Interrupt(c.link.Reader) })
-	go c.sendLoop()
+	go c.controlLoop()
 	go c.monitor()
 	return c
 }
@@ -52,93 +54,133 @@ func (c *carrier) admitLocked(s *Session) bool {
 	}
 	c.count++
 	c.active++
+	c.invalidateUnknownLocked(s.ID)
 	c.sessions[s.ID] = s
 	return true
 }
 
-func (c *carrier) wakeSenderTXLocked() {
+func (c *carrier) wakeControlLocked() {
 	select {
 	case c.wake <- struct{}{}:
 	default:
 	}
 }
 
-func (c *carrier) fullTXLocked() bool {
-	return c.limit >= 0 && c.data.Len() > c.limit
-}
-
-// TX owns admission and drain. An entered bounded DATA offer may cross close;
-// the next offer observes done. END has already passed the cold phase check.
-func (c *carrier) appendEntry(s *Session, frames buf.MultiBuffer, end bool) error {
-	c.tx.Lock()
-	defer c.tx.Unlock()
-	for !c.Closed() && (end || !s.done.Done()) {
-		if !c.fullTXLocked() {
-			c.data = append(c.data, frames...)
-			c.wakeSenderTXLocked()
-			return nil
-		}
-		c.ready.Wait()
+// These are only cold control/retained-route notifications, never DATA staging.
+func (c *carrier) queueReadyLocked(s *Session) {
+	if s.listed {
+		return
 	}
-	return io.ErrClosedPipe
+	s.prev, s.next, s.listed = c.readyTail, nil, true
+	if c.readyTail != nil {
+		c.readyTail.next = s
+	} else {
+		c.readyHead = s
+	}
+	c.readyTail = s
+	c.wakeControlLocked()
+}
+func (c *carrier) unlinkReadyLocked(s *Session) {
+	if !s.listed {
+		return
+	}
+	if s.prev != nil {
+		s.prev.next = s.next
+	} else {
+		c.readyHead = s.next
+	}
+	if s.next != nil {
+		s.next.prev = s.prev
+	} else {
+		c.readyTail = s.prev
+	}
+	s.prev, s.next, s.listed = nil, nil, false
+}
+func (c *carrier) scheduleLocked(s *Session) {
+	x := s.flow
+	if !c.Closed() && c.sessions[s.ID] == s &&
+		(s.phase == outputClosing || x.binding == s &&
+			(s.phase == outputOpen && (len(x.response) != 0 || x.responseErr != nil) ||
+				s.phase == outputStarting && x.requestErr == nil && len(x.response) != 0)) {
+		c.queueReadyLocked(s)
+	}
+}
+func (c *carrier) invalidateUnknownLocked(id uint16) {
+	if _, ok := c.pendingUnknown[id]; ok {
+		delete(c.pendingUnknown, id)
+		<-c.unknownSlots
+	}
 }
 
+// The parser budgets live intents. Same-ID admission releases withdrawn work;
+// there is no queue of obsolete generations that can pin control capacity.
 func (c *carrier) unknownEnd(id uint16) {
-	// The serial server parser already observed this ID missing and cannot
-	// insert another row until admission returns and its KEEP is drained.
-	c.tx.Lock()
-	defer c.tx.Unlock()
-	for !c.Closed() {
-		if !c.fullTXLocked() {
-			frames := endFrame(id, false)
-			c.data = buf.MergeBytes(c.data, frames[0].Bytes())
-			buf.ReleaseMulti(frames)
-			c.wakeSenderTXLocked()
-			return
-		}
-		c.ready.Wait()
+	c.Lock()
+	_, duplicate := c.pendingUnknown[id]
+	closed := c.Closed()
+	c.Unlock()
+	if closed || duplicate {
+		return
 	}
+	select {
+	case c.unknownSlots <- struct{}{}:
+	case <-c.ctx.Done():
+		return
+	}
+	c.Lock()
+	if c.Closed() {
+		<-c.unknownSlots
+	} else {
+		c.pendingUnknown[id] = struct{}{}
+		c.wakeControlLocked()
+	}
+	c.Unlock()
 }
-
-// The gate precedes claim/revalidation, and no logical lock spans physical I/O.
-func (c *carrier) sendLoop() {
+func (c *carrier) controlLoop() {
 	gate := c.link.Writer.(*PhysicalWriter)
 	for {
-		c.tx.Lock()
-		for !c.Closed() && len(c.data) == 0 {
-			c.tx.Unlock()
+		c.RLock()
+		selected, haveUnknown := c.readyHead, len(c.pendingUnknown) != 0
+		c.RUnlock()
+		if selected == nil && !haveUnknown {
 			select {
 			case <-c.ctx.Done():
 				return
 			case <-c.wake:
+				continue
 			}
-			c.tx.Lock()
 		}
-		if c.Closed() {
-			c.tx.Unlock()
-			return
-		}
-		c.tx.Unlock()
 		gate.Lock()
-		if c.writeAndUnlock(c.takePending(), nil) != nil {
+		var frames buf.MultiBuffer
+		var err error
+		c.Lock()
+		if !c.Closed() {
+			for id := range c.pendingUnknown {
+				c.invalidateUnknownLocked(id)
+				frames = endFrame(id, false)
+				break
+			}
+		}
+		c.Unlock()
+		// Give both live controls and retained output one bounded service turn.
+		if selected != nil {
+			raw, terminal := c.responseTurn(selected)
+			if terminal {
+				frames = append(frames, endFrame(selected.ID, selected.endFailed)...)
+			} else if len(raw) != 0 {
+				var own buf.MultiBuffer
+				own, err = selected.encodeBatch(&raw)
+				frames = append(frames, own...)
+				buf.ReleaseMulti(raw)
+			}
+		}
+		if c.writeAndUnlock(frames, err) != nil {
 			return
 		}
 	}
 }
 
-// The caller owns the writer gate and no logical lock. This prefix cut must
-// precede any own raw claim or known-END retirement under that gate.
-func (c *carrier) takePending() buf.MultiBuffer {
-	c.tx.Lock()
-	frames := c.data
-	c.data = nil
-	c.ready.Broadcast()
-	c.tx.Unlock()
-	return frames
-}
-
-// The caller owns this carrier's locked writer gate and no logical locks.
-// Frames transfer here; any unencoded raw remainder must already be released.
+// No logical lock spans physical I/O or a codec/address callback.
 func (c *carrier) writeAndUnlock(frames buf.MultiBuffer, err error) error {
 	gate := c.link.Writer.(*PhysicalWriter)
 	if err != nil || c.Closed() {
@@ -147,15 +189,9 @@ func (c *carrier) writeAndUnlock(frames buf.MultiBuffer, err error) error {
 		err = gate.Writer.WriteMultiBuffer(frames)
 	}
 	if err != nil {
-		c.Lock()
 		c.cancel(err)
-		c.clearPending()
-		c.Unlock()
 	}
 	gate.Unlock()
-	if err != nil {
-		c.closeCause(err)
-	}
 	return err
 }
 
@@ -181,19 +217,8 @@ func (c *carrier) Close() error {
 	return c.closeCause(nil)
 }
 
-func (c *carrier) clearPending() {
-	c.tx.Lock()
-	buf.ReleaseMulti(c.data)
-	c.data = nil
-	c.ready.Broadcast()
-	c.tx.Unlock()
-}
-
 func (c *carrier) closeCause(err error) error {
-	c.Lock()
-	c.cancel(err) // cancellation precedes the TX drain and every later admission
-	c.clearPending()
-	c.Unlock()
+	c.cancel(err)
 	return nil
 }
 
@@ -206,12 +231,23 @@ func (c *carrier) monitor() {
 		select {
 		case <-c.ctx.Done():
 			c.Lock()
-			c.clearPending()
+			for c.readyHead != nil {
+				c.unlinkReadyLocked(c.readyHead)
+			}
+			for id := range c.pendingUnknown {
+				c.invalidateUnknownLocked(id)
+			}
 			sessions := c.sessions
 			c.sessions, c.active = nil, 0
 			c.Unlock()
+			var cleanup []*Session
 			for _, s := range sessions {
-				s.abort()
+				if s.seal(false, false) {
+					cleanup = append(cleanup, s)
+				}
+			}
+			for _, s := range cleanup {
+				s.cleanup()
 			}
 			common.Interrupt(c.link.Writer)
 			return
@@ -220,12 +256,8 @@ func (c *carrier) monitor() {
 			idle := c.active == 0 && checkSize == 0 && c.count == checkCount
 			if idle {
 				c.cancel(nil)
-				c.clearPending()
 			}
 			c.Unlock()
-			if idle {
-				common.Must(c.Close())
-			}
 		}
 	}
 }

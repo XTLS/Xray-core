@@ -198,16 +198,16 @@ type codecBody struct {
 }
 
 func (b *codecBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if err := b.ctx.Err(); err != nil {
-		return nil, err
+	if b.ctx.Err() != nil {
+		return nil, context.Cause(b.ctx)
 	}
 	if b.stopped.Load() {
 		return nil, io.ErrClosedPipe
 	}
 	mb, err := b.reader.ReadMultiBuffer()
-	if canceled := b.ctx.Err(); canceled != nil {
+	if b.ctx.Err() != nil {
 		buf.ReleaseMulti(mb)
-		return nil, canceled
+		return nil, context.Cause(b.ctx)
 	}
 	if b.stopped.Load() {
 		buf.ReleaseMulti(mb)
@@ -223,26 +223,23 @@ func (b *codecBody) Interrupt() {
 	}
 }
 
-// ordinaryResponse serializes codec writes and owns checked finalization.
-// Interrupt never waits for its mutex.
+// ordinaryResponse serializes codec state and checks finalization. The existing
+// operation context owns failures; done denotes successful output completion.
 type ordinaryResponse struct {
 	sync.Mutex
-	ctx         context.Context
-	input       *codecBody
-	body        buf.Writer
-	output      *buf.BufferedWriter
-	terminate   bool
-	closed      bool
-	wrote       bool
-	interrupted atomic.Bool
-	err         atomic.Pointer[error]
-	done        *done.Instance
+	ctx       context.Context
+	cancel    context.CancelCauseFunc
+	body      buf.Writer
+	output    *buf.BufferedWriter
+	terminate bool
+	closed    bool
+	wrote     bool
+	done      *done.Instance
 }
 
 func (w *ordinaryResponse) remember(err error) error {
 	if err != nil {
-		w.err.CompareAndSwap(nil, &err)
-		w.done.Close()
+		w.cancel(err)
 	}
 	return err
 }
@@ -261,15 +258,11 @@ func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	}
 	w.Lock()
 	defer w.Unlock()
-	if terminal := w.err.Load(); terminal != nil {
+	if w.ctx.Err() != nil {
 		buf.ReleaseMulti(mb)
-		return *terminal
+		return context.Cause(w.ctx)
 	}
-	if err := w.ctx.Err(); err != nil {
-		buf.ReleaseMulti(mb)
-		return w.remember(err)
-	}
-	if w.closed || w.interrupted.Load() {
+	if w.closed {
 		buf.ReleaseMulti(mb)
 		return io.ErrClosedPipe
 	}
@@ -287,20 +280,13 @@ func (w *ordinaryResponse) Close() error {
 	defer w.done.Close()
 	w.Lock()
 	defer w.Unlock()
-	if terminal := w.err.Load(); terminal != nil {
-		return *terminal
-	}
-	if err := w.ctx.Err(); err != nil {
-		return w.remember(err)
-	}
-	if w.interrupted.Load() {
-		return io.ErrClosedPipe
+	if w.ctx.Err() != nil {
+		return context.Cause(w.ctx)
 	}
 	if w.closed {
 		return nil
 	}
 	w.closed = true
-	// The native first-response EOF flushes only the header, without a marker.
 	if w.wrote && w.terminate {
 		if err := w.body.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
 			return w.rememberIO(err)
@@ -309,11 +295,8 @@ func (w *ordinaryResponse) Close() error {
 	return w.rememberIO(w.output.Flush())
 }
 
-func (w *ordinaryResponse) Interrupt() {
-	w.interrupted.Store(true)
-	w.done.Close()
-	w.input.Interrupt()
-}
+// Cancellation publishes failure without joining foreign connection cleanup.
+func (w *ordinaryResponse) Interrupt() { w.cancel(io.ErrClosedPipe) }
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
@@ -367,8 +350,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 
 	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
 	defer stopClose()
 
@@ -398,7 +381,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		defer worker.Close()
 		stopWorker := context.AfterFunc(worker.Context(), func() {
 			if worker.Err() != nil {
-				cancel()
+				cancel(worker.Err())
 			}
 		})
 		defer stopWorker()
@@ -410,7 +393,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 					err = canceled
 				}
 			}
-			cancel()
+			cancel(nil)
 			output.Unlock()
 			return errors.New("failed to write response header").Base(err)
 		}
@@ -430,7 +413,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	account := request.User.Account.(*vmess.MemoryAccount)
 	input := &codecBody{ctx: ctx, reader: bodyReader, connection: iConn}
 	response := &ordinaryResponse{
-		ctx: ctx, input: input, body: bodyWriter, output: wire,
+		ctx: ctx, cancel: cancel, body: bodyWriter, output: wire,
 		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
 		done:      done.New(),
 	}
@@ -442,14 +425,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	case <-response.done.Wait():
 	case <-ctx.Done():
 	}
-	if terminal := response.err.Load(); terminal != nil {
-		return errors.New("connection ends").Base(*terminal)
-	}
-	if err := ctx.Err(); err != nil {
-		return errors.New("connection ends").Base(err)
-	}
-	if response.interrupted.Load() {
-		return errors.New("connection ends").Base(io.ErrClosedPipe)
+	if ctx.Err() != nil {
+		return errors.New("connection ends").Base(context.Cause(ctx))
 	}
 	return nil
 }

@@ -18,7 +18,7 @@ import (
 )
 
 // Session has one physical owner. Parent guards phase and registry identity;
-// the retained raw route can outlive this wire ID.
+// Flow is immutable after publication; its retained route can outlive this ID.
 type Session struct {
 	input        buf.Reader
 	output       buf.Writer
@@ -33,6 +33,9 @@ type Session struct {
 	phase        byte
 	done         *done.Instance
 	flow         *inboundFlow
+	producer     sync.Mutex
+	prev, next   *Session
+	listed       bool // carrier owns cold control/retained readiness
 }
 
 const (
@@ -59,29 +62,47 @@ func NewSession(ctx context.Context, link *transport.Link) *Session {
 	return s
 }
 
-// WriteMultiBuffer requires one serial producer; Close and abort may run concurrently.
+// Initiating input is serial; native server callbacks are serialized per offer.
+// Existing producers own DATA through direct physical admission.
 func (s *Session) WriteMultiBuffer(raw buf.MultiBuffer) error {
+	c := s.parent
+	c.RLock()
+	live := !c.Closed() && s.phase == outputOpen && c.sessions[s.ID] == s
+	c.RUnlock()
+	if !live {
+		buf.ReleaseMulti(raw)
+		return io.ErrClosedPipe
+	}
+	if !c.client {
+		s.producer.Lock()
+		defer s.producer.Unlock()
+	}
 	defer func() { buf.ReleaseMulti(raw) }()
+	gate := c.link.Writer.(*PhysicalWriter)
 	for {
-		frames, err := s.encodeBatch(&raw)
-		if err != nil {
-			buf.ReleaseMulti(frames)
-			buf.ReleaseMulti(raw)
-			raw = nil
+		gate.Lock()
+		c.RLock()
+		live := !c.Closed() && s.phase == outputOpen && c.sessions[s.ID] == s
+		c.RUnlock()
+		var frames buf.MultiBuffer
+		var err error
+		if live && (s.first || !raw.IsEmpty() || s.transferType == protocol.TransferTypePacket && len(raw) != 0) {
+			frames, err = s.encodeBatch(&raw)
+		}
+		if err = c.writeAndUnlock(frames, err); err != nil {
 			return err
 		}
-		if err := s.parent.appendEntry(s, frames, false); err != nil {
-			buf.ReleaseMulti(frames)
-			return err
+		if !live || c.Closed() {
+			return io.ErrClosedPipe
 		}
-		if len(raw) == 0 {
+		if len(raw) == 0 || s.transferType == protocol.TransferTypeStream && raw.IsEmpty() {
 			return nil
 		}
 	}
 }
 
 func (s *Session) writePayload(data buf.MultiBuffer) error {
-	// The parser owns flow replacement; the flow validates server admission.
+	// The flow validates server admission for this immutable binding.
 	x := s.flow
 	if x == nil {
 		s.parent.RLock()
@@ -100,34 +121,30 @@ func (s *Session) writePayload(data buf.MultiBuffer) error {
 	return err
 }
 
-func (s *Session) Close() error                { s.close(true); return nil }
+func (s *Session) Close() error {
+	if s.parent.client {
+		s.close(true)
+		return nil
+	}
+	s.producer.Lock()
+	defer s.producer.Unlock()
+	s.close(false)
+	return nil
+}
+func (s *Session) Interrupt()                  { s.close(true) }
 func (s *Session) WaitClosed() <-chan struct{} { return s.done.Wait() }
 
-// CloseWithError finalizes the single producer once after its DATA attempts,
-// even if another goroutine already closed logically. Foreign cleanup may wait for
-// physical output, so this owner's END admission precedes its cleanup.
+// The initiating producer seals after its DATA attempts. END already belongs
+// to the cold owner before foreign cleanup can block.
 func (s *Session) CloseWithError(err error) error {
 	if s.seal(err != nil, true) {
 		defer s.cleanup()
 	}
-	c := s.parent
-	if !c.client {
-		if c.Closed() {
-			return io.ErrClosedPipe
-		}
-		return nil
-	}
-	c.RLock()
+	s.parent.RLock()
 	live := s.phase == outputClosing
-	failed := s.endFailed
-	c.RUnlock()
+	s.parent.RUnlock()
 	if !live {
 		return io.ErrClosedPipe
-	}
-	frames := endFrame(s.ID, failed)
-	if err := c.appendEntry(s, frames, true); err != nil {
-		buf.ReleaseMulti(frames)
-		return err
 	}
 	return nil
 }
@@ -166,40 +183,23 @@ func (s *Session) terminate(failed, local bool) {
 	}
 }
 
-// Snapshot without retaining the carrier while acquiring route locks. Starting
-// retries may replace flow, so recheck under flow -> carrier before close. The
-// first client owner receives foreign cleanup custody, outside these locks.
+// The immutable flow precedes carrier ownership. The first client owner
+// receives foreign cleanup custody, outside these locks.
 func (s *Session) seal(failed, local bool) bool {
-	c := s.parent
-	for {
-		c.RLock()
-		x := s.flow
-		c.RUnlock()
-		if x != nil {
-			x.access.Lock()
-		}
-		c.Lock()
-		same := s.flow == x
-		var first bool
-		if same {
-			if x != nil {
-				failed = failed || x.responseErr == io.ErrClosedPipe
-			}
-			first = s.closeLocked(x, failed, local)
-		}
-		c.Unlock()
-		if x != nil {
-			x.access.Unlock()
-		}
-		if !same {
-			continue
-		}
-		return first && x == nil
+	c, x := s.parent, s.flow
+	if x != nil {
+		x.access.Lock()
+		defer x.access.Unlock()
+		failed = failed || x.responseErr == io.ErrClosedPipe
 	}
+	c.Lock()
+	first := s.closeLocked(x, failed, local)
+	c.Unlock()
+	return first && x == nil
 }
 
 // closeLocked seals the logical route under flow/carrier ownership. The role's
-// producer or binding emitter owns END; the first local failure flag is immutable.
+// producer or carrier sender owns END; the first local failure flag is immutable.
 func (s *Session) closeLocked(x *inboundFlow, failed, local bool) (first bool) {
 	c := s.parent
 	first = s.phase == outputOpen || s.phase == outputStarting
@@ -216,6 +216,10 @@ func (s *Session) closeLocked(x *inboundFlow, failed, local bool) (first bool) {
 		s.endFailed = failed
 	} else {
 		s.phase = outputAborted
+	}
+	c.unlinkReadyLocked(s)
+	if registered && s.phase == outputClosing && !c.Closed() {
+		c.queueReadyLocked(s)
 	}
 	if first {
 		if s.done != nil {
@@ -235,13 +239,8 @@ func (s *Session) closeLocked(x *inboundFlow, failed, local bool) (first bool) {
 			x.notify()
 		}
 	}
-	if registered && (s.phase == outputAborted || c.client && first) {
+	if registered && s.phase == outputAborted {
 		delete(c.sessions, s.ID)
-	}
-	if first && c.client {
-		c.tx.Lock()
-		c.ready.Broadcast()
-		c.tx.Unlock()
 	}
 	return
 }
