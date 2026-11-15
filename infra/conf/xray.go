@@ -200,15 +200,22 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	}, nil
 }
 
+type MuxConfig struct {
+	Enabled         bool   `json:"enabled"`
+	Concurrency     int16  `json:"concurrency"`
+	XudpConcurrency int16  `json:"xudpConcurrency"`
+	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
+}
+
 type OutboundDetourConfig struct {
-	Protocol          string           `json:"protocol"`
-	SendThrough       *string          `json:"sendThrough"`
-	Tag               string           `json:"tag"`
-	Settings          *json.RawMessage `json:"settings"`
-	StreamSetting     *StreamConfig    `json:"streamSettings"`
-	ProxySettings     *json.RawMessage `json:"proxySettings"`
-	LegacyMuxSettings *json.RawMessage `json:"mux"` // Legacy top-level input; enabled settings are rejected.
-	TargetStrategy    string           `json:"targetStrategy"`
+	Protocol       string           `json:"protocol"`
+	SendThrough    *string          `json:"sendThrough"`
+	Tag            string           `json:"tag"`
+	Settings       *json.RawMessage `json:"settings"`
+	StreamSetting  *StreamConfig    `json:"streamSettings"`
+	ProxySettings  *json.RawMessage `json:"proxySettings"`
+	MuxSettings    *MuxConfig       `json:"mux"`
+	TargetStrategy string           `json:"targetStrategy"`
 }
 
 func requiresTransportSecurity(address *Address) bool {
@@ -361,13 +368,20 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
-	if c.LegacyMuxSettings != nil {
-		var legacy MultiplexConfig
-		if err := json.Unmarshal(*c.LegacyMuxSettings, &legacy); err != nil {
-			return nil, errors.New("failed to parse mux settings").Base(err)
-		}
-		if legacy.Enabled != nil && *legacy.Enabled {
-			return nil, errors.PrintRemovedFeatureError(`"mux"`, `"VLESS settings.multiplex"`)
+	if c.MuxSettings != nil && c.MuxSettings.Enabled {
+		if vlessConfig, ok := rawConfig.(*VLessOutboundConfig); ok {
+			if vlessConfig.Multiplex == nil {
+				vlessConfig.Multiplex = &MultiplexConfig{
+					Concurrency:     c.MuxSettings.Concurrency,
+					XudpConcurrency: c.MuxSettings.XudpConcurrency,
+					XudpProxyUDP443: c.MuxSettings.XudpProxyUDP443,
+				}
+				errors.LogWarning(context.Background(), `The outbound "mux" setting is deprecated and has been migrated to "VLESS settings.multiplex". Please update your config.`)
+			} else {
+				errors.LogWarning(context.Background(), `The outbound "mux" setting is deprecated and is ignored because "VLESS settings.multiplex" is present.`)
+			}
+		} else {
+			errors.LogWarning(context.Background(), `The outbound "mux" setting is deprecated and is ignored for this protocol; ordinary outbound connections will be used.`)
 		}
 	}
 	ts, err := rawConfig.(Buildable).Build()

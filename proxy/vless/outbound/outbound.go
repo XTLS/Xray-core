@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
@@ -73,6 +74,27 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	server, err := protocol.NewServerSpecFromPB(config.Vnext)
 	if err != nil {
 		return nil, errors.New("failed to get server spec").Base(err)
+	}
+
+	if config.Multiplex == nil {
+		if fullHandler := session.FullHandlerFromContext(ctx); fullHandler != nil {
+			if settings := fullHandler.SenderSettings(); settings != nil && settings.Type == serial.GetMessageType(&proxymanConfig.SenderConfig{}) {
+				sender, err := settings.GetInstance()
+				if err != nil {
+					return nil, errors.New("failed to parse SenderConfig for VLESS multiplex").Base(err)
+				}
+				if legacy := sender.(*proxymanConfig.SenderConfig).GetMultiplexSettings(); legacy.GetEnabled() {
+					if _, ok := fullHandler.(internet.Dialer); !ok {
+						return nil, errors.New("VLESS multiplex migration requires an outbound dialer")
+					}
+					udp443 := legacy.XudpProxyUDP443
+					if udp443 == "" {
+						udp443 = "allow"
+					}
+					config.Multiplex = &vless.Multiplex{Concurrency: legacy.Concurrency, XudpConcurrency: legacy.XudpConcurrency, XudpProxyUDP443: udp443}
+				}
+			}
+		}
 	}
 
 	v := core.MustFromContext(ctx)
