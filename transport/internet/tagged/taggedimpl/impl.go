@@ -17,7 +17,7 @@ func DialTaggedOutbound(ctx context.Context, dispatcher routing.Dispatcher, dest
 		return nil, errors.New("Instance context variable is not in context, dial denied. ")
 	}
 	content := new(session.Content)
-	content.SkipDNSResolve = true
+	content.SkipDNSResolve = tag != ""
 
 	ctx = session.ContextWithContent(ctx, content)
 	ctx = session.SetForcedOutboundTagToContext(ctx, tag)

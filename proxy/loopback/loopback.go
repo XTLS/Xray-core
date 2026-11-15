@@ -30,7 +30,7 @@ func (l *Loopback) Process(ctx context.Context, link *transport.Link, _ internet
 
 	errors.LogInfo(ctx, "opening connection to ", destination)
 	content := new(session.Content)
-	content.SkipDNSResolve = true
+	content.SkipDNSResolve = session.SkipDNSResolveFromContext(ctx)
 	content.SniffingRequest = l.sniffingRequest
 
 	ctx = session.ContextWithContent(ctx, content)
