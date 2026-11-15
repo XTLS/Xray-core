@@ -80,9 +80,6 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		}
 		switch s := senderSettings.(type) {
 		case *proxyman.SenderConfig:
-			if s.GetMultiplexSettings().GetEnabled() {
-				errors.LogWarning(ctx, "SenderConfig.multiplex_settings is deprecated; VLESS uses native multiplex when native settings are absent, and other outbounds ignore it and use ordinary connections.")
-			}
 			h.senderSettings = s
 			mss, err := internet.ToMemoryStreamConfig(s.StreamSettings)
 			if err != nil {
@@ -117,6 +114,9 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 	}
 
 	if h.senderSettings.GetMultiplexSettings().GetEnabled() {
+		if config.ProxySettings.Type != "xray.proxy.vless.outbound.Config" {
+			errors.LogWarning(ctx, "Mux is no longer supported by this outbound protocol; ordinary outbound connections will be used.")
+		}
 		h.senderSettings.MultiplexSettings.Enabled = false
 	}
 	h.proxy = proxyHandler

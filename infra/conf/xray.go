@@ -376,12 +376,9 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 					XudpConcurrency: c.MuxSettings.XudpConcurrency,
 					XudpProxyUDP443: c.MuxSettings.XudpProxyUDP443,
 				}
-				errors.LogWarning(context.Background(), `The outbound "mux" setting is deprecated and has been migrated to "VLESS settings.multiplex". Please update your config.`)
-			} else {
-				errors.LogWarning(context.Background(), `The outbound "mux" setting is deprecated and is ignored because "VLESS settings.multiplex" is present.`)
 			}
 		} else {
-			errors.LogWarning(context.Background(), `The outbound "mux" setting is deprecated and is ignored for this protocol; ordinary outbound connections will be used.`)
+			errors.LogWarning(context.Background(), "Mux is no longer supported by this outbound protocol; ordinary outbound connections will be used.")
 		}
 	}
 	ts, err := rawConfig.(Buildable).Build()
