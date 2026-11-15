@@ -92,3 +92,23 @@ func TestXMCBuildRejectsPadding(t *testing.T) {
 		})
 	}
 }
+
+func TestXMCBuildRejectsLongPassword(t *testing.T) {
+	profile := XMCProfile{
+		Username: "TestUser", UUID: "00112233-4455-6677-8899-aabbccddeeff",
+		TexturesValue: "textures-value", TexturesSignature: "textures-signature",
+	}
+
+	// The verify token and the password share one RSA-1024 PKCS#1 v1.5 block,
+	// so the password cannot exceed xmc.MaxLegacyPasswordLength bytes.
+	valid := strings.Repeat("p", xmc.MaxLegacyPasswordLength)
+	if _, err := (&XMC{Password: valid, Profiles: []XMCProfile{profile}}).Build(); err != nil {
+		t.Fatalf("password of %d bytes was rejected: %v", len(valid), err)
+	}
+
+	tooLong := valid + "p"
+	_, err := (&XMC{Password: tooLong, Profiles: []XMCProfile{profile}}).Build()
+	if err == nil || !strings.Contains(err.Error(), "longer than") {
+		t.Fatalf("expected a password length error, got %v", err)
+	}
+}

@@ -985,6 +985,9 @@ func (c *XMC) Build() (proto.Message, error) {
 	if c.Password == "" {
 		return nil, fmt.Errorf("empty password")
 	}
+	if len(c.Password) > xmc.MaxLegacyPasswordLength {
+		return nil, fmt.Errorf("minecraft password is longer than %d bytes", xmc.MaxLegacyPasswordLength)
+	}
 	config := &xmc.Config{Password: c.Password, Hostname: c.Hostname}
 	for i, turn := range c.Paddings {
 		minimum, maximum, err := ParseRangeString(turn.Length)

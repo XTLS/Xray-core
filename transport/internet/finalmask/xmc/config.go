@@ -13,6 +13,11 @@ import (
 // time.Duration on every platform.
 const maxPaddingDelayMilliseconds = int64(math.MaxInt64 / int64(time.Millisecond))
 
+// MaxLegacyPasswordLength is the longest pre-shared password the login can
+// carry. The verify token (4 random bytes) and the password travel together in
+// one RSA-1024 PKCS#1 v1.5 block, which holds at most 128-11 bytes.
+const MaxLegacyPasswordLength = 128 - 11 - 4
+
 func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	profiles, err := profilesFromConfig(c.Profiles)
 	if err != nil {

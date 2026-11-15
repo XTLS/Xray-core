@@ -48,6 +48,9 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 	if len(profiles) == 0 {
 		return nil, fmt.Errorf("empty profiles")
 	}
+	if len(password) > MaxLegacyPasswordLength {
+		return nil, fmt.Errorf("password is longer than %d bytes", MaxLegacyPasswordLength)
+	}
 	paddingSchedule, err := newPaddingSchedule(padding, true)
 	if err != nil {
 		return nil, fmt.Errorf("select padding profile: %w", err)
