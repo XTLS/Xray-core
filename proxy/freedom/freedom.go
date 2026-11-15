@@ -286,12 +286,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
 
-	if session.SkipDNSResolveFromContext(ctx) {
-		handler := *h
-		handler.resolveStrategy = internet.DomainStrategy_AS_IS
-		h = &handler
-	}
-
 	inbound := session.InboundFromContext(ctx)
 	var defaultRule *FinalRule
 	if !h.usesDialerProxy { // freedom is not the final outbound, final rules do not apply (and the domain is not resolved)
@@ -316,6 +310,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			destination.Port = net.Port(server.Port)
 			UDPOverride.Port = destination.Port
 		}
+	}
+
+	if h.resolveStrategy.HasStrategy() && session.SkipDNSResolveFromContext(ctx) {
+		errors.LogInfo(ctx, "using AsIs instead of sockopt.domainStrategy ", h.resolveStrategy, " for connection to ", destination, " (including UDP packet targets)")
+		handler := *h
+		handler.resolveStrategy = internet.DomainStrategy_AS_IS
+		h = &handler
 	}
 
 	input := link.Reader
