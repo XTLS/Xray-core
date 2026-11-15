@@ -64,10 +64,10 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 	return s
 }
 
-// NewUDPLocalNameServer creates a UDP DNS client for local resolving.
-func NewUDPLocalNameServer(url *url.URL, dispatcher routing.Dispatcher, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*ClassicNameServer, error) {
+// NewUDPNameServer creates a UDP DNS client from a URL.
+func NewUDPNameServer(url *url.URL, dispatcher routing.Dispatcher, local bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*ClassicNameServer, error) {
 	if url.Hostname() == "" {
-		return nil, errors.New("missing UDP local nameserver host")
+		return nil, errors.New("missing UDP nameserver host")
 	}
 	port := net.Port(53)
 	if url.Port() != "" {
@@ -76,8 +76,13 @@ func NewUDPLocalNameServer(url *url.URL, dispatcher routing.Dispatcher, disableC
 			return nil, err
 		}
 	}
-	s := NewClassicNameServer(net.UDPDestination(net.ParseAddress(url.Hostname()), port), &localUDPDispatcher{dispatcher}, disableCache, serveStale, serveExpiredTTL, clientIP)
-	s.cacheController.name = "UDPL//" + s.address.NetAddr()
+	if local {
+		dispatcher = &localUDPDispatcher{dispatcher}
+	}
+	s := NewClassicNameServer(net.UDPDestination(net.ParseAddress(url.Hostname()), port), dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
+	if local {
+		s.cacheController.name = "UDPL//" + s.address.NetAddr()
+	}
 	return s, nil
 }
 
