@@ -601,3 +601,17 @@ func TestYggdrasilPropertyConversion(t *testing.T) {
 		t.Fatalf("textures property not found: %+v", profile)
 	}
 }
+
+func TestYggdrasilVerifierCache(t *testing.T) {
+	first, err := yggdrasilVerifierFor("https://skin.example.com/api/yggdrasil")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := yggdrasilVerifierFor("https://skin.example.com/api/yggdrasil/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Fatal("the verifier was not reused for the same API root")
+	}
+}

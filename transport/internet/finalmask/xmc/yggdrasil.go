@@ -675,6 +675,34 @@ func newYggdrasilVerifier(api string) (*yggdrasilVerifier, error) {
 	}, nil
 }
 
+var (
+	yggdrasilVerifierMu sync.Mutex
+	yggdrasilVerifiers  = make(map[string]*yggdrasilVerifier)
+)
+
+// yggdrasilVerifierFor returns the process-wide verifier of one API root, so
+// every connection reuses its HTTP client and its keep-alive connections
+// instead of dialing the API again for each login.
+func yggdrasilVerifierFor(api string) (*yggdrasilVerifier, error) {
+	config, err := newYggdrasilConfig(api, "", "", "")
+	if err != nil {
+		return nil, err
+	}
+	key := config.baseURL.String()
+
+	yggdrasilVerifierMu.Lock()
+	defer yggdrasilVerifierMu.Unlock()
+	if verifier, found := yggdrasilVerifiers[key]; found {
+		return verifier, nil
+	}
+	verifier := &yggdrasilVerifier{
+		config: config,
+		client: newYggdrasilHTTPClient(),
+	}
+	yggdrasilVerifiers[key] = verifier
+	return verifier, nil
+}
+
 // hasJoined returns the signed profile of the player that joined the session,
 // or nil when the player has not joined this server ID.
 func (v *yggdrasilVerifier) hasJoined(ctx context.Context, username, serverID string) (*yggdrasilAccountProfile, error) {

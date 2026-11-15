@@ -18,7 +18,12 @@ import (
 
 const (
 	yggdrasilVerifyTimeout = 10 * time.Second
-	yggdrasilVerifyPoll    = 200 * time.Millisecond
+	// The client sends its join request right after the encryption response,
+	// so the session is usually registered within a few milliseconds. Poll
+	// quickly at first and back off to yggdrasilVerifyMaxPoll while it is
+	// still missing, instead of making every login wait a fixed interval.
+	yggdrasilVerifyFirstPoll = 10 * time.Millisecond
+	yggdrasilVerifyMaxPoll   = 200 * time.Millisecond
 )
 
 var errYggdrasilNotJoined = errors.New("player did not join the minecraft session")
@@ -300,6 +305,7 @@ func (c *serverConn) verifyYggdrasilLogin(username string, uuid UUID, serverID s
 	ctx, cancel := context.WithTimeout(context.Background(), yggdrasilVerifyTimeout)
 	defer cancel()
 
+	poll := yggdrasilVerifyFirstPoll
 	for {
 		account, err := c.yggdrasil.hasJoined(ctx, username, serverID)
 		if err != nil {
@@ -323,14 +329,18 @@ func (c *serverConn) verifyYggdrasilLogin(username string, uuid UUID, serverID s
 			}, nil
 		}
 
-		// The client sends its join request right after the encryption
-		// response, so the session may not be registered yet.
-		timer := time.NewTimer(yggdrasilVerifyPoll)
+		timer := time.NewTimer(poll)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			return loginProfile{}, fmt.Errorf("%w: %q", errYggdrasilNotJoined, username)
 		case <-timer.C:
+		}
+		if poll < yggdrasilVerifyMaxPoll {
+			poll *= 2
+			if poll > yggdrasilVerifyMaxPoll {
+				poll = yggdrasilVerifyMaxPoll
+			}
 		}
 	}
 }

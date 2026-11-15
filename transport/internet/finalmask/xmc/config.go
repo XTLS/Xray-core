@@ -68,7 +68,7 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 
 	var verifier *yggdrasilVerifier
 	if c.Yggdrasil != nil {
-		verifier, err = newYggdrasilVerifier(c.Yggdrasil.Api)
+		verifier, err = yggdrasilVerifierFor(c.Yggdrasil.Api)
 		if err != nil {
 			return nil, fmt.Errorf("minecraft finalmask: %w", err)
 		}
