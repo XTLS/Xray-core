@@ -50,7 +50,7 @@ func initWin32API() error {
 	return nil
 }
 
-func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (PID int, Name string, AbsolutePath string, err error) {
+func findProcess(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (PID int, Name string, AbsolutePath string, err error) {
 	once.Do(func() {
 		initErr = initWin32API()
 	})

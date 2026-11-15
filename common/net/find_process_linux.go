@@ -14,7 +14,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 )
 
-func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (PID int, Name string, AbsolutePath string, err error) {
+func findProcess(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (PID int, Name string, AbsolutePath string, err error) {
 	isLocal, err := IsLocal(net.ParseIP(srcIP))
 	if err != nil {
 		return 0, "", "", errors.New("failed to determine if address is local: ", err)
