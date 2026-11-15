@@ -217,7 +217,7 @@ func (c *clientConn) handshake() error {
 	if err != nil {
 		return fmt.Errorf("write login acknowledged: %w", err)
 	}
-	if err = runPaddingSchedule(c.reader, c.writer, true, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule); err != nil {
 		return fmt.Errorf("run startup padding: %w", err)
 	}
 

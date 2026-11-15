@@ -8,7 +8,11 @@ import (
 )
 
 const (
-	maxPacketDataLength = 32 * 1024
+	// Clientbound custom payloads are allowed up to 1 MiB by vanilla, and a
+	// vanilla configuration state can send large registry data packets. This is
+	// only an upper bound for decoding; the XMC payload stream keeps its own,
+	// much smaller, chunk size.
+	maxPacketDataLength = 1024 * 1024
 	maxPacketBodyLength = maxPacketDataLength + 5
 )
 
