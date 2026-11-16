@@ -103,6 +103,13 @@ func (c *UConn) Close() error {
 	return c.Conn.Close()
 }
 
+func (c *UConn) HandshakeContext(ctx context.Context) error {
+	// Chrome の default handshake timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	return c.UConn.HandshakeContext(ctx)
+}
+
 func (c *UConn) HandshakeContextServerName(ctx context.Context) string {
 	if err := c.HandshakeContext(ctx); err != nil {
 		return ""
