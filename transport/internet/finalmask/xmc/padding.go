@@ -73,10 +73,9 @@ func runPaddingScheduleWithSleep(writer io.Writer, isClient bool, firstTurnPrefi
 		}
 
 		if isClient != (turn.direction == paddingClientToServer) {
-			// Padding is ordinary Minecraft traffic, so the peer's turns are
-			// never consumed here: they stay in the stream and are dropped as
-			// unknown packets by whoever reads it next. Both endpoints still
-			// apply the same minimum pause, including after the last turn.
+			// The startup reader drains peer padding independently so writes
+			// cannot fill both connection buffers. Both endpoints still apply
+			// the same minimum pause, including after the last turn.
 			if turn.delay.min > 0 {
 				sleep(turn.delay.min)
 			}
