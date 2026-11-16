@@ -204,7 +204,9 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("read login finished: %w", err)
 	}
 	// Set Compression is not compressed itself and must be handled before the
-	// packet that follows it, which already uses the compressed framing.
+	// packet that follows it, which already uses the compressed framing. The
+	// threshold only decides whether the framing applies: this writer never
+	// compresses, so a server-side threshold does not shrink padding turns.
 	if pkt.packetID == 0x03 {
 		var threshold Varint
 		if thresholdErr := pkt.readFields(&threshold); thresholdErr != nil {
@@ -212,7 +214,7 @@ func (c *clientConn) handshake() error {
 		}
 		if threshold >= 0 {
 			c.reader = newCompressionReader(c.reader)
-			c.writer = newCompressionWriter(c.writer, int32(threshold))
+			c.writer = newCompressionWriter(c.writer)
 		}
 		pkt, err = readPacket(c.reader)
 		if err != nil {
