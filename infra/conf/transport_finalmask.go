@@ -944,7 +944,10 @@ type XMC struct {
 type XMCPaddingTurn struct {
 	Length    string `json:"length"`
 	Direction string `json:"direction"`
-	// Delay is an optional millisecond value or inclusive min-max range.
+	// Delay is an optional millisecond value or inclusive min-max range: the
+	// pause that leads into this turn, written on the turn that follows the gap
+	// it reproduces. The sending side samples the range, the peer spends its
+	// minimum, and nothing pauses after the last turn.
 	Delay string `json:"delay,omitempty"`
 }
 

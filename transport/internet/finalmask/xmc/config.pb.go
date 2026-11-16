@@ -194,11 +194,14 @@ type Padding struct {
 	LengthMax int64                  `protobuf:"varint,2,opt,name=length_max,json=lengthMax,proto3" json:"length_max,omitempty"`
 	// 1 = client to server, 2 = server to client
 	Direction int32 `protobuf:"varint,3,opt,name=direction,proto3" json:"direction,omitempty"`
-	// Millisecond pause after this turn, including the last one. The side that
-	// sends the turn waits for a uniformly selected value in
-	// [delay_min, delay_max]; the peer only knows delay_min and waits that
-	// long before its next own turn, so a range jitters the wire timing from
-	// the sender's side. Zero means no delay.
+	// Millisecond pause that leads into this turn: it sits between the previous
+	// padding turn (or Login Acknowledged, for the first turn) and this turn's
+	// bytes, so a captured gap is written on the turn that follows it. The side
+	// that sends the turn waits for a uniformly selected value in
+	// [delay_min, delay_max]; the peer spends exactly delay_min at the same
+	// place, so only the sending side jitters: use delay_min == delay_max to
+	// reproduce a captured gap. Nothing pauses after the last turn. Zero means
+	// no pause.
 	DelayMin      int64 `protobuf:"varint,4,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
 	DelayMax      int64 `protobuf:"varint,5,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
 	unknownFields protoimpl.UnknownFields

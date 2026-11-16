@@ -54,10 +54,12 @@ type paddingDelayRange struct {
 }
 
 type paddingTurn struct {
-	direction           paddingDirection
-	minLength           int
-	maxLength           int
-	delay               paddingDelayRange // pause after this turn, including the last one
+	direction paddingDirection
+	minLength int
+	maxLength int
+	// delay leads into this turn: the side that sends it samples the range, the
+	// peer spends its minimum, and no pause follows the last turn.
+	delay               paddingDelayRange
 	variants            []paddingVariant
 	startDelay          paddingDelayRange
 	chunkDelay          paddingDelayRange
@@ -86,8 +88,10 @@ func pausePadding(done <-chan struct{}, d time.Duration) error {
 }
 
 // runPaddingSchedule sends the local turns of the schedule and applies the
-// configured pauses, including after the last turn. An empty schedule means
-// padding is disabled and nothing is written or waited for.
+// configured pauses. A turn's pause leads into the turn, so the bytes of a turn
+// always follow the pause that was configured next to it, and nothing pauses
+// after the last turn: the proxy stream follows it directly. An empty schedule
+// means padding is disabled and nothing is written or waited for.
 //
 // Nothing here checks when a peer's turn arrives: the turns are ordinary
 // Minecraft packets that carry nothing to compare an early arrival against, and
@@ -109,15 +113,13 @@ func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength i
 
 		if isClient != (turn.direction == paddingClientToServer) {
 			// The startup reader drains peer padding independently so writes
-			// cannot fill both connection buffers. Both endpoints still apply
-			// the same minimum pause, including after the last turn.
+			// cannot fill both connection buffers. The peer still spends the
+			// same pause at the same place in the schedule, which keeps both
+			// timelines in phase; it only knows the minimum.
 			if err := sleep(turn.delay.min); err != nil {
 				return err
 			}
 			continue
-		}
-		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(isClient)); err != nil {
-			return fmt.Errorf("write padding turn %d: %w", i, err)
 		}
 		delay, err := randomPaddingDelay(turn.delay)
 		if err != nil {
@@ -125,6 +127,9 @@ func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength i
 		}
 		if err := sleep(delay); err != nil {
 			return err
+		}
+		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(isClient)); err != nil {
+			return fmt.Errorf("write padding turn %d: %w", i, err)
 		}
 	}
 	return nil
