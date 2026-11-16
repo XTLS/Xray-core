@@ -23,8 +23,9 @@ message Config {
     bytes rsa_public_key = 9;
     string hostname = 10;
     repeated Profile profiles = 11;
-    // Startup padding turns. Empty uses the built-in preset, unless
-    // no_padding is set.
+    // Padding turns. Empty uses the built-in preset, unless no_padding is set.
+    // A configured list is the complete schedule and replaces the preset
+    // entirely: the preset's Play-state join tail runs only with the preset.
     repeated Padding paddings = 12;
     // Disables startup padding. The configuration sets this for an explicit
     // empty "paddings" array, which an unset repeated field cannot express.

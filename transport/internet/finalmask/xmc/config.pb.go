@@ -99,8 +99,9 @@ type Config struct {
 	RsaPublicKey  []byte                 `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
 	Hostname      string                 `protobuf:"bytes,10,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Profiles      []*Profile             `protobuf:"bytes,11,rep,name=profiles,proto3" json:"profiles,omitempty"`
-	// Startup padding turns. Empty uses the built-in preset, unless
-	// no_padding is set.
+	// Padding turns. Empty uses the built-in preset, unless no_padding is set.
+	// A configured list is the complete schedule and replaces the preset
+	// entirely: the preset's Play-state join tail runs only with the preset.
 	Paddings []*Padding `protobuf:"bytes,12,rep,name=paddings,proto3" json:"paddings,omitempty"`
 	// Disables startup padding. The configuration sets this for an explicit
 	// empty "paddings" array, which an unset repeated field cannot express.

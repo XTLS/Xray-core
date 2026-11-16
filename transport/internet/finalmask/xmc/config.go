@@ -65,9 +65,14 @@ func (c *Config) ValidatePadding() error {
 	return err
 }
 
-// paddingSchedule selects the startup turns for one connection. An explicit
+// paddingSchedule selects the padding turns for one connection. An explicit
 // empty configuration disables padding; an absent one keeps the built-in
 // preset.
+//
+// A configured list is the complete schedule, not a replacement for its startup
+// part: the built-in preset also carries a Play-state join tail, and that tail
+// runs only with the preset. A user who captured their own login decides the
+// whole shape, including whether it has a tail.
 func (c *Config) paddingSchedule(isClient bool) ([]paddingTurn, error) {
 	if c.NoPadding {
 		if len(c.Paddings) != 0 {
@@ -84,6 +89,8 @@ func (c *Config) paddingSchedule(isClient bool) ([]paddingTurn, error) {
 	return newServerPaddingSchedule2612()
 }
 
+// paddingScheduleFromConfig builds the complete schedule from a configured list.
+// The list replaces the preset entirely, including its Play-state join tail.
 func paddingScheduleFromConfig(paddings []*Padding) ([]paddingTurn, error) {
 	if len(paddings) == 0 {
 		return nil, nil

@@ -89,6 +89,43 @@ func TestPaddingDisabled(t *testing.T) {
 	}
 }
 
+// TestConfiguredPaddingsReplaceTheWholePreset pins the documented policy: a
+// configured list is the complete schedule, so the preset's Play-state join tail
+// does not run behind it on either end.
+func TestConfiguredPaddingsReplaceTheWholePreset(t *testing.T) {
+	config := &Config{Paddings: []*Padding{
+		{LengthMin: 44, LengthMax: 44, Direction: 1},
+		{LengthMin: 64, LengthMax: 64, Direction: 2},
+	}}
+	for _, isClient := range []bool{true, false} {
+		schedule, err := config.paddingSchedule(isClient)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(schedule) != len(config.Paddings) {
+			t.Fatalf("isClient=%v: schedule has %d turns, want the %d configured turns", isClient, len(schedule), len(config.Paddings))
+		}
+		for i, turn := range schedule {
+			want := paddingClientToServer
+			if config.Paddings[i].Direction == 2 {
+				want = paddingServerToClient
+			}
+			if turn.direction != want || turn.minLength != int(config.Paddings[i].LengthMin) {
+				t.Fatalf("isClient=%v: turn %d = %+v, want the configured %+v", isClient, i, turn, config.Paddings[i])
+			}
+		}
+	}
+
+	// The preset, in contrast, carries the join tail behind the startup turns.
+	preset, err := (&Config{}).paddingSchedule(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(preset) <= len(startupPaddingSchedule2612) {
+		t.Fatalf("preset has %d turns, want the startup turns plus the join tail", len(preset))
+	}
+}
+
 func TestCloseCancelsPaddingPause(t *testing.T) {
 	client, server := net.Pipe()
 	defer server.Close()

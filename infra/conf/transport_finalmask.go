@@ -936,8 +936,10 @@ type XMC struct {
 	Profiles []XMCProfile     `json:"profiles"`
 	Password string           `json:"password"`
 	Paddings []XMCPaddingTurn `json:"paddings,omitempty"`
-	// NoPadding disables the startup padding. An explicit empty "paddings"
-	// array means the same; an absent one keeps the built-in preset.
+	// A configured list is the complete padding schedule and replaces the
+	// built-in preset entirely, including the preset's Play-state join tail.
+	// NoPadding disables padding. An explicit empty "paddings" array means the
+	// same; an absent one keeps the built-in preset.
 	NoPadding bool `json:"noPadding,omitempty"`
 }
 
