@@ -48,6 +48,9 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 	if len(profiles) == 0 {
 		return nil, fmt.Errorf("empty profiles")
 	}
+	if len(password) > MaxLegacyPasswordLength {
+		return nil, fmt.Errorf("password is longer than %d bytes", MaxLegacyPasswordLength)
+	}
 	paddingSchedule, err := newPaddingSchedule(padding, true)
 	if err != nil {
 		return nil, fmt.Errorf("select padding profile: %w", err)
@@ -195,6 +198,22 @@ func (c *clientConn) handshake() error {
 	if err != nil {
 		return fmt.Errorf("read login finished: %w", err)
 	}
+	// Set Compression is not compressed itself and must be handled before the
+	// packet that follows it, which already uses the compressed framing.
+	if pkt.packetID == 0x03 {
+		var threshold Varint
+		if thresholdErr := pkt.readFields(&threshold); thresholdErr != nil {
+			return fmt.Errorf("read login compression threshold: %w", thresholdErr)
+		}
+		if threshold >= 0 {
+			c.reader = newCompressionReader(c.reader)
+			c.writer = newCompressionWriter(c.writer, int32(threshold))
+		}
+		pkt, err = readPacket(c.reader)
+		if err != nil {
+			return fmt.Errorf("read login finished: %w", err)
+		}
+	}
 	if pkt.packetID == 0x00 {
 		var reason String
 		if readErr := pkt.readFields(&reason); readErr != nil {
@@ -217,7 +236,7 @@ func (c *clientConn) handshake() error {
 	if err != nil {
 		return fmt.Errorf("write login acknowledged: %w", err)
 	}
-	if err = runPaddingSchedule(c.reader, c.writer, true, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule); err != nil {
 		return fmt.Errorf("run startup padding: %w", err)
 	}
 
