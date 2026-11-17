@@ -245,7 +245,9 @@ func (c *serverConn) handshake() error {
 		if err = validateLoginAcknowledgedPacket(pkt); err != nil {
 			return err
 		}
+		c.reader = newPaddingReader(c.reader, false)
 		if err = runPaddingSchedule(c.writer, false, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+			_ = c.Close() // Unblock the startup reader if writing failed.
 			return fmt.Errorf("run startup padding: %w", err)
 		}
 

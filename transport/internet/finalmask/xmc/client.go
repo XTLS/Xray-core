@@ -236,7 +236,9 @@ func (c *clientConn) handshake() error {
 	if err != nil {
 		return fmt.Errorf("write login acknowledged: %w", err)
 	}
+	c.reader = newPaddingReader(c.reader, true)
 	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+		_ = c.Close() // Unblock the startup reader if writing failed.
 		return fmt.Errorf("run startup padding: %w", err)
 	}
 
