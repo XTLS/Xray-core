@@ -2,10 +2,10 @@ package fakedns
 
 import (
 	"context"
-	"math"
-	"math/big"
+	"crypto/rand"
+	"math/bits"
+	"net/netip"
 	"sync"
-	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/cache"
@@ -17,6 +17,7 @@ import (
 type Holder struct {
 	domainToIP cache.Lru
 	ipRange    *net.IPNet
+	nextIP     netip.Addr
 	mu         sync.Mutex
 
 	config *FakeDnsPool
@@ -76,18 +77,24 @@ func (fkdns *Holder) initializeFromConfig() error {
 }
 
 func (fkdns *Holder) initialize(ipPoolCidr string, lruSize int) error {
-	var ipRange *net.IPNet
-	var err error
-
-	if _, ipRange, err = net.ParseCIDR(ipPoolCidr); err != nil {
+	_, ipRange, err := net.ParseCIDR(ipPoolCidr)
+	if err != nil {
 		return errors.New("Unable to parse CIDR for Fake DNS IP assignment").Base(err)
 	}
 
-	ones, bits := ipRange.Mask.Size()
-	rooms := bits - ones
-	if math.Log2(float64(lruSize)) >= float64(rooms) {
-		return errors.New("LRU size is bigger than subnet size")
+	prefixBits, addressBits := ipRange.Mask.Size()
+	if lruSize <= 0 || bits.Len(uint(lruSize)) > addressBits-prefixBits {
+		return errors.New("Fake DNS LRU size must be positive and smaller than the subnet size")
 	}
+
+	// Vary the initial address across restarts while clients may still have
+	// cached FakeDNS answers from a previous run.
+	start := make([]byte, len(ipRange.IP))
+	rand.Read(start)
+	for i, mask := range ipRange.Mask {
+		start[i] = ipRange.IP[i] | (start[i] &^ mask)
+	}
+	fkdns.nextIP, _ = netip.AddrFromSlice(start)
 	fkdns.domainToIP = cache.NewLru(lruSize)
 	fkdns.ipRange = ipRange
 	return nil
@@ -100,30 +107,22 @@ func (fkdns *Holder) GetFakeIPForDomain(domain string) []net.Address {
 	if v, ok := fkdns.domainToIP.Get(domain); ok {
 		return []net.Address{v.(net.Address)}
 	}
-	currentTimeMillis := uint64(time.Now().UnixMilli())
-	ones, bits := fkdns.ipRange.Mask.Size()
-	rooms := bits - ones
-	if rooms < 64 {
-		currentTimeMillis %= (uint64(1) << rooms)
-	}
-	bigIntIP := big.NewInt(0).SetBytes(fkdns.ipRange.IP)
-	bigIntIP = bigIntIP.Add(bigIntIP, new(big.Int).SetUint64(currentTimeMillis))
-	var ip net.Address
+
+	// Continue from the previous allocation to avoid rescanning the same
+	// occupied range for every cache miss in a burst.
 	for {
-		ip = net.IPAddress(bigIntIP.Bytes())
-
-		// if we run for a long time, we may go back to beginning and start seeing the IP in use
-		if _, ok := fkdns.domainToIP.PeekKeyFromValue(ip); !ok {
-			break
+		candidate := fkdns.nextIP.AsSlice()
+		if !fkdns.ipRange.Contains(candidate) {
+			candidate = fkdns.ipRange.IP
+			fkdns.nextIP, _ = netip.AddrFromSlice(candidate)
 		}
-
-		bigIntIP = bigIntIP.Add(bigIntIP, big.NewInt(1))
-		if !fkdns.ipRange.Contains(bigIntIP.Bytes()) {
-			bigIntIP = big.NewInt(0).SetBytes(fkdns.ipRange.IP)
+		fkdns.nextIP = fkdns.nextIP.Next()
+		ip := net.IPAddress(candidate)
+		if _, occupied := fkdns.domainToIP.PeekKeyFromValue(ip); !occupied {
+			fkdns.domainToIP.Put(domain, ip)
+			return []net.Address{ip}
 		}
 	}
-	fkdns.domainToIP.Put(domain, ip)
-	return []net.Address{ip}
 }
 
 // GetDomainFromFakeDNS checks if an IP is a fake IP and have corresponding domain name
