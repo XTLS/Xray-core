@@ -248,7 +248,7 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		dest = *newDest
 	}
 
-	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() && !(outboundName == "freedom" && session.SkipDNSResolveFromContext(ctx)) {
+	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() {
 		finalStrategy := sockopt.DomainStrategy
 		if outboundName == "freedom" && dest.Network == net.Network_UDP && origTargetAddr != nil && src == nil {
 			finalStrategy = finalStrategy.GetDynamicStrategy(origTargetAddr.Family())

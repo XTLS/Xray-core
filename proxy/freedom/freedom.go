@@ -313,10 +313,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	if h.resolveStrategy.HasStrategy() && session.SkipDNSResolveFromContext(ctx) {
-		errors.LogInfo(ctx, "using AsIs instead of sockopt.domainStrategy ", h.resolveStrategy, " for connection to ", destination, " (including UDP packet targets)")
-		handler := *h
-		handler.resolveStrategy = internet.DomainStrategy_AS_IS
-		h = &handler
+		errors.LogInfo(ctx, "DNS-origin connection to ", destination, " may recursively resolve with sockopt.domainStrategy ", h.resolveStrategy)
 	}
 
 	input := link.Reader
