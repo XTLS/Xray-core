@@ -49,11 +49,15 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 	// and we can unblock the Dial function and print correct net addresses in
 	// logs
 	gotConn := done.New()
+	var firstConn sync.Once
 	ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{
 		GotConn: func(connInfo httptrace.GotConnInfo) {
-			remoteAddr = connInfo.Conn.RemoteAddr()
-			localAddr = connInfo.Conn.LocalAddr()
-			gotConn.Close()
+			// A retry after GOAWAY may select another connection after Dial returns.
+			firstConn.Do(func() {
+				remoteAddr = connInfo.Conn.RemoteAddr()
+				localAddr = connInfo.Conn.LocalAddr()
+				gotConn.Close()
+			})
 		},
 	})
 
@@ -76,7 +80,7 @@ func (c *DefaultDialerClient) OpenStream(ctx context.Context, url string, sessio
 				c.closed.Store(true)
 				errors.LogInfoInner(ctx, err, "failed to "+method+" "+url)
 			}
-			gotConn.Close()
+			firstConn.Do(func() { gotConn.Close() })
 			common.Close(body)
 			wrc.Close()
 			return

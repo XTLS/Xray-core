@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apernet/quic-go"
@@ -95,6 +96,10 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 }
 
 func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	h.serveHTTP(writer, request, nil)
+}
+
+func (h *requestHandler) serveHTTP(writer http.ResponseWriter, request *http.Request, holdStream func() func()) {
 	if len(h.host) > 0 && !internet.IsValidHTTPHost(request.Host, h.host) {
 		errors.LogInfo(context.Background(), "failed to validate host, request:", request.Host, ", config:", h.host)
 		writer.WriteHeader(http.StatusNotFound)
@@ -216,6 +221,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				errors.LogInfoInner(context.Background(), err, "failed to upload (PushReader)")
 				writer.WriteHeader(http.StatusConflict)
 			} else {
+				if holdStream != nil {
+					defer holdStream()()
+				}
 				writer.Header().Set("X-Accel-Buffering", "no")
 				writer.Header().Set("Cache-Control", "no-store")
 				writer.WriteHeader(http.StatusOK)
@@ -350,6 +358,9 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 
 		writer.WriteHeader(http.StatusOK)
 	} else if request.Method == "GET" || sessionId == "" { // stream-down, stream-one
+		if holdStream != nil {
+			defer holdStream()()
+		}
 		if sessionId != "" {
 			// after GET is done, the connection is finished. disable automatic
 			// session reaping, and handle it in defer
@@ -435,7 +446,7 @@ func (c *httpServerConn) Close() error {
 type Listener struct {
 	sync.Mutex
 	server     http.Server
-	h3server   *http3.Server
+	closeH3    func()
 	listener   net.Listener
 	h3listener http3.QUICListener
 	config     *Config
@@ -515,15 +526,29 @@ func ListenXH(ctx context.Context, address net.Address, port net.Port, streamSet
 
 		handler.localAddr = l.h3listener.Addr()
 
-		l.h3server = &http3.Server{
-			Handler: handler,
+		serveCtx, stop := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		l.closeH3 = func() {
+			stop()
+			<-done
 		}
 		go func() {
-			if err := l.h3server.ServeListener(l.h3listener); err != nil {
-				errors.LogErrorInner(ctx, err, "failed to serve HTTP/3 for XHTTP/3")
+			var serving sync.WaitGroup
+			for {
+				conn, err := l.h3listener.Accept(serveCtx)
+				if err != nil {
+					if serveCtx.Err() == nil {
+						errors.LogErrorInner(ctx, err, "failed to accept XHTTP/3 connection")
+					}
+					break
+				}
+				serving.Go(func() { handler.serveH3Conn(serveCtx, conn) })
 			}
+			stop()
+			serving.Wait()
 			_ = tr.Close()
 			_ = pktConn.Close()
+			close(done)
 		}()
 	} else {
 		var addr net.Addr
@@ -598,12 +623,39 @@ func (ln *Listener) Addr() net.Addr {
 
 // Close implements net.Listener.Close().
 func (ln *Listener) Close() error {
-	if ln.h3server != nil {
-		return ln.h3server.Close()
+	if ln.closeH3 != nil {
+		ln.closeH3()
+		return nil
 	} else if ln.listener != nil {
 		return ln.listener.Close()
 	}
 	return errors.New("listener does not have an HTTP/3 server or a net.listener")
+}
+
+func (h *requestHandler) serveH3Conn(ctx context.Context, conn *quic.Conn) {
+	closeConn := func() { _ = conn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "") }
+	stop := context.AfterFunc(ctx, closeConn)
+	defer stop()
+	defer closeConn()
+
+	server := &http3.Server{Handler: h}
+	if h.config.Mode == "" || h.config.Mode == "auto" || h.config.Mode == "packet-up" {
+		limit := conn.Config().MaxIncomingStreams
+		var held atomic.Int64
+		drain := sync.OnceFunc(func() { go server.Shutdown(conn.Context()) })
+		holdStream := func() func() {
+			// When every stream is long-lived, packet uploads need a new connection.
+			// GOAWAY keeps accepted requests alive and lets the peer move new requests.
+			if held.Add(1) == limit {
+				drain()
+			}
+			return func() { held.Add(-1) }
+		}
+		server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h.serveHTTP(w, r, holdStream)
+		})
+	}
+	_ = server.ServeQUICConn(conn)
 }
 
 func getTLSConfig(streamSettings *internet.MemoryStreamConfig) *gotls.Config {
