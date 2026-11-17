@@ -151,6 +151,8 @@
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
+- macOS arm64 & Windows & Linux & Android
+  - [BLACKWALL](https://github.com/ANODs/blackwall)
 - iOS & macOS arm64 & tvOS
   - [Anywhere](https://github.com/NodePassProject/Anywhere)
   - [Shadowrocket](https://apps.apple.com/app/shadowrocket/id932747118)
