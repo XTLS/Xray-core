@@ -159,9 +159,9 @@ To submit a project to the [README](https://github.com/XTLS/Xray-core#readme), o
 
 ## Contributing
 
-[Code of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
+For code contributions, please read [CONTRIBUTING.md](CONTRIBUTING.md) and [Code of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md) before opening a pull request.
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/XTLS/Xray-core)
+[Ask DeepWiki](https://deepwiki.com/XTLS/Xray-core) might be helpful.
 
 ## Credits
 
