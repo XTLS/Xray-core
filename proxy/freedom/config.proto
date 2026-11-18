@@ -47,21 +47,27 @@ enum RuleAction {
   Block = 1;
 }
 
-message FinalRuleConfig {
+message Reply {
+  string type = 1;
+  bytes custom_response_data = 2;
+}
+
+message FirewallConfig {
   RuleAction action = 1;
   repeated xray.common.net.Network networks = 2;
   xray.common.net.PortList port_list = 3;
   repeated xray.common.geodata.IPRule ip = 4;
   Range delay = 5;
   optional xray.common.log.Severity log_level = 6;
+  Reply reply = 7;
 }
 
 message Config {
+  reserved 6;
   xray.transport.internet.DomainStrategy domain_strategy = 1;
   DestinationOverride destination_override = 3;
   uint32 user_level = 4;
   Fragment fragment = 5;
-  uint32 proxy_protocol = 6;
   repeated Noise noises = 7;
-  repeated FinalRuleConfig final_rules = 8;
+  repeated FirewallConfig firewall = 8;
 }
