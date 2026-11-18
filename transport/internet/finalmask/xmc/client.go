@@ -32,6 +32,9 @@ type clientConn struct {
 	paddingSchedule []paddingTurn
 	packet          *packetStream
 	deadlines       *connectionDeadlines
+
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 type clientState int
@@ -41,7 +44,7 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, padding []*Padding) (*clientConn, error) {
+func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, paddingSchedule []paddingTurn) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
@@ -50,10 +53,6 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 	}
 	if len(password) > MaxLegacyPasswordLength {
 		return nil, fmt.Errorf("password is longer than %d bytes", MaxLegacyPasswordLength)
-	}
-	paddingSchedule, err := newPaddingSchedule(padding, true)
-	if err != nil {
-		return nil, fmt.Errorf("select padding profile: %w", err)
 	}
 	return &clientConn{
 		reader:          bufio.NewReader(c),
@@ -67,7 +66,13 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 		hostname:        hostname,
 		paddingSchedule: paddingSchedule,
 		deadlines:       newConnectionDeadlines(c),
+		done:            make(chan struct{}),
 	}, nil
+}
+
+// paddingPause applies one padding pause, stopping early on Close.
+func (c *clientConn) paddingPause(d time.Duration) error {
+	return pausePadding(c.done, d)
 }
 
 func (c *clientConn) handshake() error {
@@ -199,7 +204,9 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("read login finished: %w", err)
 	}
 	// Set Compression is not compressed itself and must be handled before the
-	// packet that follows it, which already uses the compressed framing.
+	// packet that follows it, which already uses the compressed framing. The
+	// threshold only decides whether the framing applies: this writer never
+	// compresses, so a server-side threshold does not shrink padding turns.
 	if pkt.packetID == 0x03 {
 		var threshold Varint
 		if thresholdErr := pkt.readFields(&threshold); thresholdErr != nil {
@@ -207,7 +214,7 @@ func (c *clientConn) handshake() error {
 		}
 		if threshold >= 0 {
 			c.reader = newCompressionReader(c.reader)
-			c.writer = newCompressionWriter(c.writer, int32(threshold))
+			c.writer = newCompressionWriter(c.writer)
 		}
 		pkt, err = readPacket(c.reader)
 		if err != nil {
@@ -237,7 +244,7 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("write login acknowledged: %w", err)
 	}
 	c.reader = newPaddingReader(c.reader, true)
-	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause); err != nil {
 		_ = c.Close() // Unblock the startup reader if writing failed.
 		return fmt.Errorf("run startup padding: %w", err)
 	}
@@ -281,6 +288,7 @@ func (c *clientConn) Close() error {
 	c.closed = true
 	packet := c.packet
 	c.lifecycleMu.Unlock()
+	c.closeOnce.Do(func() { close(c.done) })
 	if packet != nil {
 		packet.Stop()
 	}

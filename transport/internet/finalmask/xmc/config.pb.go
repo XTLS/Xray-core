@@ -99,8 +99,13 @@ type Config struct {
 	RsaPublicKey  []byte                 `protobuf:"bytes,9,opt,name=rsa_public_key,json=rsaPublicKey,proto3" json:"rsa_public_key,omitempty"`
 	Hostname      string                 `protobuf:"bytes,10,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Profiles      []*Profile             `protobuf:"bytes,11,rep,name=profiles,proto3" json:"profiles,omitempty"`
-	// Startup padding turns. Empty uses the built-in preset.
-	Paddings      []*Padding `protobuf:"bytes,12,rep,name=paddings,proto3" json:"paddings,omitempty"`
+	// Padding turns. Empty uses the built-in preset, unless no_padding is set.
+	// A configured list is the complete schedule and replaces the preset
+	// entirely: the preset's Play-state join tail runs only with the preset.
+	Paddings []*Padding `protobuf:"bytes,12,rep,name=paddings,proto3" json:"paddings,omitempty"`
+	// Disables startup padding. The configuration sets this for an explicit
+	// empty "paddings" array, which an unset repeated field cannot express.
+	NoPadding     bool `protobuf:"varint,14,opt,name=no_padding,json=noPadding,proto3" json:"no_padding,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -177,15 +182,27 @@ func (x *Config) GetPaddings() []*Padding {
 	return nil
 }
 
+func (x *Config) GetNoPadding() bool {
+	if x != nil {
+		return x.NoPadding
+	}
+	return false
+}
+
 type Padding struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	LengthMin int64                  `protobuf:"varint,1,opt,name=length_min,json=lengthMin,proto3" json:"length_min,omitempty"`
 	LengthMax int64                  `protobuf:"varint,2,opt,name=length_max,json=lengthMax,proto3" json:"length_max,omitempty"`
 	// 1 = client to server, 2 = server to client
 	Direction int32 `protobuf:"varint,3,opt,name=direction,proto3" json:"direction,omitempty"`
-	// Millisecond pause after this turn, including the last one. The sender
-	// waits for a uniformly selected value in [delay_min, delay_max]; the
-	// receiver waits at least delay_min. Zero means no delay.
+	// Millisecond pause that leads into this turn: it sits between the previous
+	// padding turn (or Login Acknowledged, for the first turn) and this turn's
+	// bytes, so a captured gap is written on the turn that follows it. The side
+	// that sends the turn waits for a uniformly selected value in
+	// [delay_min, delay_max]; the peer spends exactly delay_min at the same
+	// place, so only the sending side jitters: use delay_min == delay_max to
+	// reproduce a captured gap. Nothing pauses after the last turn. Zero means
+	// no pause.
 	DelayMin      int64 `protobuf:"varint,4,opt,name=delay_min,json=delayMin,proto3" json:"delay_min,omitempty"`
 	DelayMax      int64 `protobuf:"varint,5,opt,name=delay_max,json=delayMax,proto3" json:"delay_max,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -266,7 +283,7 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x12\n" +
 	"\x04uuid\x18\x02 \x01(\fR\x04uuid\x12%\n" +
 	"\x0etextures_value\x18\x03 \x01(\tR\rtexturesValue\x12-\n" +
-	"\x12textures_signature\x18\x04 \x01(\tR\x11texturesSignature\"\xac\x02\n" +
+	"\x12textures_signature\x18\x04 \x01(\tR\x11texturesSignature\"\xcb\x02\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12&\n" +
 	"\x0frsa_private_key\x18\b \x01(\fR\rrsaPrivateKey\x12$\n" +
@@ -274,7 +291,9 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\bhostname\x18\n" +
 	" \x01(\tR\bhostname\x12J\n" +
 	"\bprofiles\x18\v \x03(\v2..xray.transport.internet.finalmask.xmc.ProfileR\bprofiles\x12J\n" +
-	"\bpaddings\x18\f \x03(\v2..xray.transport.internet.finalmask.xmc.PaddingR\bpaddingsJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
+	"\bpaddings\x18\f \x03(\v2..xray.transport.internet.finalmask.xmc.PaddingR\bpaddings\x12\x1d\n" +
+	"\n" +
+	"no_padding\x18\x0e \x01(\bR\tnoPaddingJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
 	"\aPadding\x12\x1d\n" +
 	"\n" +
 	"length_min\x18\x01 \x01(\x03R\tlengthMin\x12\x1d\n" +

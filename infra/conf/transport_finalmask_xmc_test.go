@@ -112,3 +112,42 @@ func TestXMCBuildRejectsLongPassword(t *testing.T) {
 		t.Fatalf("expected a password length error, got %v", err)
 	}
 }
+
+func TestXMCBuildDisablesPadding(t *testing.T) {
+	profile := XMCProfile{
+		Username: "TestUser", UUID: "00112233-4455-6677-8899-aabbccddeeff",
+		TexturesValue: "textures-value", TexturesSignature: "textures-signature",
+	}
+
+	for name, settings := range map[string]string{
+		"explicit_empty_array": `{"paddings": []}`,
+		"no_padding_switch":    `{"noPadding": true}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var config XMC
+			if err := json.Unmarshal([]byte(settings), &config); err != nil {
+				t.Fatal(err)
+			}
+			config.Password = "test-password"
+			config.Profiles = []XMCProfile{profile}
+			built, err := config.Build()
+			if err != nil {
+				t.Fatalf("build XMC config: %v", err)
+			}
+			builtConfig := built.(*xmc.Config)
+			if !builtConfig.NoPadding || len(builtConfig.Paddings) != 0 {
+				t.Fatalf("padding was not disabled: %+v", builtConfig)
+			}
+		})
+	}
+
+	var config XMC
+	if err := json.Unmarshal([]byte(`{"noPadding": true, "paddings": [{"length": "3", "direction": "c2s"}]}`), &config); err != nil {
+		t.Fatal(err)
+	}
+	config.Password = "test-password"
+	config.Profiles = []XMCProfile{profile}
+	if _, err := config.Build(); err == nil || !strings.Contains(err.Error(), "exclusive") {
+		t.Fatalf("expected an exclusive padding error, got %v", err)
+	}
+}

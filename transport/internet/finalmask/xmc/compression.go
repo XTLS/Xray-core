@@ -1,4 +1,6 @@
 // Minecraft compression framing, negotiated by the login Set Compression packet.
+// The reader decodes whatever the peer sends, including deflated bodies; the
+// writer always sends the uncompressed variant.
 package xmc
 
 import (
@@ -99,14 +101,21 @@ func (c *compressionReader) readFrame() error {
 // compressionWriter converts a plain frame (VarInt body length, body) into the
 // post-Set Compression framing. Frames are buffered until complete, because a
 // caller may split one frame across several Write calls.
+//
+// It never compresses, whatever the negotiated threshold is. What XMC writes is
+// padding and proxied bytes: the padding exists for its size on the wire, so
+// deflating it would shrink a padded turn from tens of kilobytes to a hundred
+// bytes and erase the shape it is there for, and proxied bytes are already
+// encrypted or compressed by whoever produced them. Vanilla accepts an
+// uncompressed body of any size when Data Length is zero, so the framing alone
+// is enough to stay inside the protocol.
 type compressionWriter struct {
-	w         io.Writer
-	threshold int32
-	pending   []byte
+	w       io.Writer
+	pending []byte
 }
 
-func newCompressionWriter(w io.Writer, threshold int32) io.Writer {
-	return &compressionWriter{w: w, threshold: threshold}
+func newCompressionWriter(w io.Writer) io.Writer {
+	return &compressionWriter{w: w}
 }
 
 func (c *compressionWriter) Write(p []byte) (int, error) {
@@ -156,36 +165,13 @@ func (c *compressionWriter) nextFrame() ([]byte, bool, error) {
 }
 
 func (c *compressionWriter) writeFrame(body []byte) error {
-	if len(body) >= int(c.threshold) {
-		var compressed bytes.Buffer
-		zw := zlib.NewWriter(&compressed)
-		if _, err := zw.Write(body); err != nil {
-			_ = zw.Close()
-			return fmt.Errorf("compress packet: %w", err)
-		}
-		if err := zw.Close(); err != nil {
-			return fmt.Errorf("close compressor: %w", err)
-		}
-
-		var frame bytes.Buffer
-		packetLength := varintSize(Varint(len(body))) + compressed.Len()
-		frame.Grow(varintSize(Varint(packetLength)) + packetLength)
-		packetLengthVarint := Varint(packetLength)
-		if err := packetLengthVarint.writeTo(&frame); err != nil {
-			return err
-		}
-		bodyLength := Varint(len(body))
-		if err := bodyLength.writeTo(&frame); err != nil {
-			return err
-		}
-		frame.Write(compressed.Bytes())
-		return writeFull(c.w, frame.Bytes())
-	}
-
+	// Packet Length covers the Data Length varint and the body; a zero Data
+	// Length is the uncompressed variant.
+	packetLength := 1 + len(body)
 	var frame bytes.Buffer
-	frame.Grow(varintSize(Varint(1+len(body))) + 1 + len(body))
-	frameLength := Varint(1 + len(body))
-	if err := frameLength.writeTo(&frame); err != nil {
+	frame.Grow(varintSize(Varint(packetLength)) + packetLength)
+	packetLengthVarint := Varint(packetLength)
+	if err := packetLengthVarint.writeTo(&frame); err != nil {
 		return err
 	}
 	frame.WriteByte(0)
