@@ -41,9 +41,9 @@
 
 ## Telegram
 
-[Project X](https://t.me/projectXray)
-
 [Project X Channel](https://t.me/projectXtls)
+
+[Project X](https://t.me/projectXray) (中文 / English)
 
 [Project VLESS](https://t.me/projectVless) (Русский)
 
@@ -53,7 +53,7 @@
 
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install) (**Official**)
-  - [tempest](https://github.com/team-cloudchaser/tempest) (supports [`systemd`](https://systemd.io) and [OpenRC](https://github.com/OpenRC/openrc); Linux-only)
+  - [tempest](https://github.com/team-cloudchaser/tempest) (supports [systemd](https://systemd.io) and [OpenRC](https://github.com/OpenRC/openrc); Linux-only)
 - Docker
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
