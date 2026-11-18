@@ -2,8 +2,6 @@
 
 [Project X](https://github.com/XTLS) originates from XTLS protocol, providing a set of network tools such as [Xray-core](https://github.com/XTLS/Xray-core) and [REALITY](https://github.com/XTLS/REALITY).
 
-[README](https://github.com/XTLS/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/XTLS/Xray-core/pulls).
-
 ## Sponsors
 
 [![Remnawave](https://github.com/user-attachments/assets/a22d34ae-01ee-441c-843a-85356748ed1e)](https://docs.rw)
@@ -147,6 +145,17 @@
   - [Amnezia VPN](https://github.com/amnezia-vpn)
   - [mihomo](https://github.com/MetaCubeX/mihomo)
   - [sing-box](https://github.com/SagerNet/sing-box)
+
+<details>
+<summary>Project listing criteria</summary>
+
+To submit a project to the [README](https://github.com/XTLS/Xray-core#readme), open a [pull request](https://github.com/XTLS/Xray-core/pulls). Projects are listed under these rules:
+
+- Projects must be based on Xray-core, have been maintained for at least one month, and have at least 30 stars.
+- Projects with no activity for three months will be removed.
+- **Closed-source iOS clients must be submitted by their developers.**
+
+</details>
 
 ## Contributing
 
