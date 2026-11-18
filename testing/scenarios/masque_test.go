@@ -81,7 +81,7 @@ func (masqueEcho) HandleConnection(conn net.Conn, dest net.Destination) {
 }
 
 func startMasqueServer(t *testing.T, h2 bool) (net.Port, [32]byte) {
-	dev, _, err := wireguard.CreateNetTUN([]netip.Addr{masqueServerV4, masqueServerV6}, nil, transmasque.MinPacketSize, masqueEcho{})
+	dev, _, err := wireguard.CreateNetTUN(wireguard.NetTUNOptions{Addresses: []netip.Addr{masqueServerV4, masqueServerV6}, MTU: transmasque.MinPacketSize, Handler: masqueEcho{}})
 	common.Must(err)
 	t.Cleanup(func() { dev.Close() })
 

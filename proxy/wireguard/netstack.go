@@ -43,17 +43,28 @@ type netTun struct {
 	mtu       int
 }
 
+// NetTUNOptions specify a few common options in the creation of a TCP/IP stack
+type NetTUNOptions struct {
+	// Addresses are what the stack opens connections from
+	Addresses, DNS []netip.Addr
+	MTU            int
+	// Handler takes every connection that comes from the device, for any address. Without one the stack takes none
+	Handler xtun.ConnectionHandler
+	// IP is the xtun.StackOptions.IP of the stack
+	IP xtun.IPHandler
+}
+
 // CreateNetTUN returns a device with a TCP/IP stack on it, and what opens connections through that from
-// localAddresses. With a handler the stack takes every connection that comes from the device, for any address.
-// Without one it takes none
-func CreateNetTUN(localAddresses, dnsServers []netip.Addr, mtu int, handler xtun.ConnectionHandler) (tun.Device, *Net, error) {
+// the addresses of the options
+func CreateNetTUN(o NetTUNOptions) (tun.Device, *Net, error) {
+	mtu := o.MTU
 	dev := &netTun{
 		events:  make(chan tun.Event, 10),
 		packets: make(chan *buf.Buffer, netTunQueue),
 		closed:  make(chan struct{}),
 		mtu:     mtu,
 	}
-	stack, err := xtun.NewStack(context.Background(), xtun.StackOptions{Tun: dev, MTU: uint32(mtu), Addresses: localAddresses, Remote: true}, handler)
+	stack, err := xtun.NewStack(context.Background(), xtun.StackOptions{Tun: dev, MTU: uint32(mtu), Addresses: o.Addresses, Remote: true, IP: o.IP}, o.Handler)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -62,9 +73,9 @@ func CreateNetTUN(localAddresses, dnsServers []netip.Addr, mtu int, handler xtun
 	tnet := &Net{
 		DialContextTCPAddrPort: stack.DialTCP,
 		DialUDPAddrPort:        dev.DialUDPAddrPort,
-		dnsServers:             dnsServers,
+		dnsServers:             o.DNS,
 	}
-	for _, ip := range localAddresses {
+	for _, ip := range o.Addresses {
 		if ip.Is4() {
 			tnet.hasV4 = true
 		} else if ip.Is6() {

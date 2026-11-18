@@ -109,6 +109,7 @@ type DeviceConfig struct {
 	IsClient      bool                   `protobuf:"varint,8,opt,name=is_client,json=isClient,proto3" json:"is_client,omitempty"`
 	NoKernelTun   bool                   `protobuf:"varint,9,opt,name=no_kernel_tun,json=noKernelTun,proto3" json:"no_kernel_tun,omitempty"`
 	DNS           []string               `protobuf:"bytes,10,rep,name=DNS,proto3" json:"DNS,omitempty"`
+	Icmp          string                 `protobuf:"bytes,11,opt,name=icmp,proto3" json:"icmp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -206,6 +207,13 @@ func (x *DeviceConfig) GetDNS() []string {
 	return nil
 }
 
+func (x *DeviceConfig) GetIcmp() string {
+	if x != nil {
+		return x.Icmp
+	}
+	return ""
+}
+
 var File_proxy_wireguard_config_proto protoreflect.FileDescriptor
 
 const file_proxy_wireguard_config_proto_rawDesc = "" +
@@ -220,7 +228,7 @@ const file_proxy_wireguard_config_proto_rawDesc = "" +
 	"\n" +
 	"keep_alive\x18\x04 \x01(\tR\tkeepAlive\x12\x1f\n" +
 	"\vallowed_ips\x18\x05 \x03(\tR\n" +
-	"allowedIps\"\xb4\x02\n" +
+	"allowedIps\"\xc8\x02\n" +
 	"\fDeviceConfig\x12\x1d\n" +
 	"\n" +
 	"secret_key\x18\x01 \x01(\tR\tsecretKey\x12\x1a\n" +
@@ -232,7 +240,8 @@ const file_proxy_wireguard_config_proto_rawDesc = "" +
 	"\tis_client\x18\b \x01(\bR\bisClient\x12\"\n" +
 	"\rno_kernel_tun\x18\t \x01(\bR\vnoKernelTun\x12\x10\n" +
 	"\x03DNS\x18\n" +
-	" \x03(\tR\x03DNSB^\n" +
+	" \x03(\tR\x03DNS\x12\x12\n" +
+	"\x04icmp\x18\v \x01(\tR\x04icmpB^\n" +
 	"\x18com.xray.proxy.wireguardP\x01Z)github.com/xtls/xray-core/proxy/wireguard\xaa\x02\x14Xray.Proxy.WireGuardb\x06proto3"
 
 var (

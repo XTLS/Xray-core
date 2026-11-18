@@ -50,7 +50,7 @@ func TestNetTUNEchoReply(t *testing.T) {
 		{"10.66.0.2", "1.1.1.1", 8, 0},
 		{"fd00::2", "2606:4700:4700::1111", 128, 129},
 	} {
-		dev, _, err := CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.66.0.1"), netip.MustParseAddr("fd00::1")}, nil, 1420, closeHandler{})
+		dev, _, err := CreateNetTUN(NetTUNOptions{Addresses: []netip.Addr{netip.MustParseAddr("10.66.0.1"), netip.MustParseAddr("fd00::1")}, MTU: 1420, Handler: closeHandler{}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,11 +184,11 @@ func (testServer) HandleConnection(conn net.Conn, dest net.Destination) {
 // A client and a server, each with a stack on its device and the two devices joined as a tunnel joins them:
 // names are resolved, and TCP and UDP go through, as the outbound and the inbound use them.
 func TestNetTUNClientAndServer(t *testing.T) {
-	server, _, err := CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.66.0.1")}, nil, 1420, testServer{})
+	server, _, err := CreateNetTUN(NetTUNOptions{Addresses: []netip.Addr{netip.MustParseAddr("10.66.0.1")}, MTU: 1420, Handler: testServer{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, tnet, err := CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.66.0.2")}, []netip.Addr{netip.MustParseAddr("10.66.0.53")}, 1420, nil)
+	client, tnet, err := CreateNetTUN(NetTUNOptions{Addresses: []netip.Addr{netip.MustParseAddr("10.66.0.2")}, DNS: []netip.Addr{netip.MustParseAddr("10.66.0.53")}, MTU: 1420})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -267,7 +267,7 @@ func TestNetTUNClientAndServer(t *testing.T) {
 // A packet of the stack is in its hands only until WritePacket returns, Read gets it as it was then.
 // A device that is closed is not waited for, also not by a stack that has something to send when it is closed.
 func TestNetTUNWritePacket(t *testing.T) {
-	dev, tnet, err := CreateNetTUN([]netip.Addr{netip.MustParseAddr("10.66.0.2")}, nil, 1420, nil)
+	dev, tnet, err := CreateNetTUN(NetTUNOptions{Addresses: []netip.Addr{netip.MustParseAddr("10.66.0.2")}, MTU: 1420})
 	if err != nil {
 		t.Fatal(err)
 	}

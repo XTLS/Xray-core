@@ -43,6 +43,32 @@ type StackOptions struct {
 	// has come a long way, so its checksums are looked at, nothing but that way limits the windows, and the
 	// segments of TCP carry the times of both sides if the other side has them
 	Remote bool
+	// IP is given the packets of the protocols that the stack makes no connections of. Without it echo requests
+	// are answered as their destination would
+	IP IPHandler
+}
+
+// IPHandler is given the packets that the stack makes no connections of: ICMP, other than the word on a packet of
+// a connection, and any protocol but TCP and UDP. Whatever is answered is given to reply, as many times as it is, from
+// any goroutine and after HandleIP has returned: it is sent to src as the payload of a packet of the same protocol from
+// the address that is given, with its checksum in it. payload is only there until HandleIP returns
+type IPHandler interface {
+	HandleIP(src, dst netip.Addr, proto byte, payload []byte, reply func(from netip.Addr, payload []byte))
+}
+
+// ICMPDrop is the `icmp` setting that leaves ICMP echo requests unanswered
+const ICMPDrop = "drop"
+
+type dropIP struct{}
+
+func (dropIP) HandleIP(netip.Addr, netip.Addr, byte, []byte, func(netip.Addr, []byte)) {}
+
+// ICMPHandler is the IPHandler of an `icmp` setting, nil for the stack's own
+func ICMPHandler(setting string) IPHandler {
+	if setting == ICMPDrop {
+		return dropIP{}
+	}
+	return nil
 }
 
 // flow is what the packets of one connection have in common, src is the side of the system
@@ -62,6 +88,8 @@ type stack struct {
 	segmenter segmenter
 	// window is the window of every connection
 	window int32
+	// ip is what the packets that are no connections are given to, the stack itself if nil
+	ip IPHandler
 	// verify is set if the checksums of what comes are looked at
 	verify bool
 	// stamps is set if connections carry the times of RFC 7323 when the other side does
@@ -99,6 +127,7 @@ func NewStack(ctx context.Context, options StackOptions, handler ConnectionHandl
 		mtu:       int(options.MTU),
 		window:    tcpWindow,
 		addresses: options.Addresses,
+		ip:        options.IP,
 		verify:    options.Remote,
 		stamps:    options.Remote,
 		conns:     make(map[flow]*tcpConn),
@@ -241,6 +270,8 @@ func (s *stack) input(b []byte, rest int) {
 		s.handleUDP(p)
 	case protoICMPv4, protoICMPv6:
 		s.handleICMP(p)
+	default:
+		s.handleIP(p)
 	}
 }
 
@@ -551,14 +582,10 @@ func (u *udpSocket) SetWriteDeadline(time.Time) error {
 	return nil
 }
 
-// handleICMP answers an echo request as its destination would, and takes the word that a packet of a connection
+// handleICMP takes the word that a packet of a connection
 // was too large for a link on its way or found no way at all
 func (s *stack) handleICMP(p packet) {
 	m := p.payload
-	request, reply := byte(8), byte(0)
-	if p.proto == protoICMPv6 {
-		request, reply = 128, 129
-	}
 	if len(m) < 8 {
 		return
 	}
@@ -573,20 +600,42 @@ func (s *stack) handleICMP(p packet) {
 		s.undelivered(m[8:], 0)
 		return
 	}
-	if m[0] != request || m[1] != 0 || s.handle == nil && !slices.Contains(s.addresses, p.dst) {
+	s.handleIP(p)
+}
+
+// handleIP sends what the IPHandler answers
+func (s *stack) handleIP(p packet) {
+	h := s.ip
+	if h == nil {
+		h = s
+	}
+	h.HandleIP(p.src, p.dst, p.proto, p.payload, func(from netip.Addr, m []byte) {
+		var b [ipv6HeaderSize]byte
+		n := putIPHeader(b[:], p.proto, from, p.src)
+		_ = s.write(b[:n], m)
+	})
+}
+
+// HandleIP answers an echo request as its destination would
+func (s *stack) HandleIP(src, dst netip.Addr, proto byte, m []byte, reply func(netip.Addr, []byte)) {
+	request, pong := byte(8), byte(0)
+	if proto == protoICMPv6 {
+		request, pong = 128, 129
+	}
+	if proto != protoICMPv4 && proto != protoICMPv6 || m[0] != request || m[1] != 0 || s.handle == nil && !slices.Contains(s.addresses, dst) {
 		// a stack that takes no connections is one host, not all of them
 		return
 	}
-	var b [ipv6HeaderSize]byte
-	n := putIPHeader(b[:], p.proto, p.dst, p.src)
 	// the reply is the request with another type
-	m[0], m[2], m[3] = reply, 0, 0
-	if p.proto == protoICMPv6 {
+	m[0], m[2], m[3] = pong, 0, 0
+	if proto == protoICMPv6 {
+		var b [ipv6HeaderSize]byte
+		n := putIPHeader(b[:], proto, dst, src)
 		binary.BigEndian.PutUint16(m[2:], transportChecksum(b[:n], protoICMPv6, m, nil))
 	} else {
 		binary.BigEndian.PutUint16(m[2:], checksum(sum(m, 0)))
 	}
-	_ = s.write(b[:n], m)
+	reply(dst, m)
 }
 
 // undelivered takes the start of a packet that was sent from here and did not get to where it goes. If it did not fit

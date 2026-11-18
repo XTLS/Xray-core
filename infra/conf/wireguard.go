@@ -66,6 +66,7 @@ type WireGuardConfig struct {
 	MTU         int32                  `json:"mtu"`
 	Reserved    []byte                 `json:"reserved"`
 	DNS         []string               `json:"remoteDNS"`
+	ICMP        string                 `json:"icmp"`
 }
 
 func (c *WireGuardConfig) Build() (proto.Message, error) {
@@ -75,6 +76,10 @@ func (c *WireGuardConfig) Build() (proto.Message, error) {
 	config.SecretKey, err = ParseWireGuardKey(c.SecretKey)
 	if err != nil {
 		return nil, errors.New("invalid WireGuard secret key: %w", err)
+	}
+
+	if config.Icmp, err = buildICMP(c.ICMP); err != nil {
+		return nil, err
 	}
 
 	if c.Address == nil {

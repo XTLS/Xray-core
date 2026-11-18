@@ -1236,6 +1236,15 @@ func TestUDPAndICMP(t *testing.T) {
 	}
 }
 
+// A stack that drops ICMP leaves echo requests unanswered.
+func TestDropICMP(t *testing.T) {
+	p, l := newPeer(t, "10.0.0.1:1234", "10.0.0.2:53")
+	s := newTestStack(t, l, accept(make(chan accepted, 1)))
+	s.ip = ICMPHandler(ICMPDrop)
+	l.in <- ping(p.src.Addr(), p.dst.Addr())
+	p.silent(50 * time.Millisecond)
+}
+
 // newDialStack is a stack that opens connections from its addresses and takes none
 func newDialStack(t *testing.T, l *link, addresses ...string) *stack {
 	s := newTestStack(t, l, nil)

@@ -22,4 +22,5 @@ message ServerConfig {
   repeated xray.common.protocol.User users = 1;
   repeated string address = 2;
   uint32 mtu = 3;
+  string icmp = 4;
 }
