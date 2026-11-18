@@ -1,11 +1,11 @@
 package xmc
 
 import (
-	"bytes"
 	"crypto/rand"
 	"fmt"
 	"io"
 	"math/big"
+	"net"
 	"time"
 )
 
@@ -18,7 +18,30 @@ const (
 	paddingBufferLength   = 16 * 1024
 	maxPaddingChunkLength = 48 * 1024
 	maxPaddingTurnLength  = 8 * 1024 * 1024
+
+	// A configured schedule is bounded so that one handshake cannot be told to
+	// send an arbitrary amount of padding: maxPaddingTurns limits the number of
+	// turns and maxPaddingTotalLength the worst-case sum of their lengths.
+	maxPaddingTurns       = 256
+	maxPaddingTotalLength = 64 << 20
+	// maxPaddingScheduleDelay keeps the configured pauses inside the handshake
+	// deadline. A schedule that cannot finish before the deadline would fail
+	// every connection, so it is rejected when the configuration is built.
+	maxPaddingScheduleDelay = handshakeTimeout - 10*time.Second
+
+	// Frame padding carries the startup padding in ordinary Minecraft custom
+	// payload packets so that a vanilla server can parse the whole connection
+	// without taking the pipeline over. The channel is deliberately different
+	// from the packet stream channel: both ends drop unknown payloads.
+	paddingFrameChannel = "xmc:pad"
+	// Serverbound custom payload data is capped at 32767 bytes by
+	// ServerboundCustomPayloadPacket; keep the same budget in both directions.
+	maxPaddingFrameDataLength = 32767
+	// Length varint, packet id, channel length varint and the channel itself.
+	paddingFrameOverhead = 1 + 1 + 1 + len(paddingFrameChannel)
 )
+
+var maxPaddingFrameLength = paddingFrameLength(maxPaddingFrameDataLength)
 
 type paddingVariant struct {
 	chunks []int
@@ -31,9 +54,12 @@ type paddingDelayRange struct {
 }
 
 type paddingTurn struct {
-	direction           paddingDirection
-	minLength           int
-	maxLength           int
+	direction paddingDirection
+	minLength int
+	maxLength int
+	// delay leads into this turn: the side that sends it samples the range, the
+	// peer spends its minimum, and no pause follows the last turn.
+	delay               paddingDelayRange
 	variants            []paddingVariant
 	startDelay          paddingDelayRange
 	chunkDelay          paddingDelayRange
@@ -44,27 +70,66 @@ type paddingTurn struct {
 	sendVariants        []int
 }
 
-func runPaddingSchedule(reader io.Reader, writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn) error {
+// pausePadding waits for one padding pause. It returns as soon as the
+// connection is closed so that a handshake cannot keep sleeping after its
+// connection is gone.
+func pausePadding(done <-chan struct{}, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-done:
+		return net.ErrClosed
+	}
+}
+
+// runPaddingSchedule sends the local turns of the schedule and applies the
+// configured pauses. A turn's pause leads into the turn, so the bytes of a turn
+// always follow the pause that was configured next to it, and nothing pauses
+// after the last turn: the proxy stream follows it directly. An empty schedule
+// means padding is disabled and nothing is written or waited for.
+//
+// Nothing here checks when a peer's turn arrives: the turns are ordinary
+// Minecraft packets that carry nothing to compare an early arrival against, and
+// the startup reader drains them on its own while this schedule writes. A peer
+// that stalls is bounded by maxPaddingScheduleDelay instead.
+func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration) error) error {
+	if len(schedule) == 0 {
+		return nil
+	}
 	if err := validatePaddingSchedule(schedule, firstTurnPrefixLength); err != nil {
 		return err
 	}
 
-	var writeBuffer []byte
 	for i, turn := range schedule {
 		prefixLength := 0
 		if i == 0 {
 			prefixLength = firstTurnPrefixLength
 		}
 
-		localSends := isClient == (turn.direction == paddingClientToServer)
-		if localSends {
-			if err := writePaddingTurnWithBuffer(writer, turn, prefixLength, time.Sleep, &writeBuffer); err != nil {
-				return fmt.Errorf("write padding turn %d: %w", i, err)
+		if isClient != (turn.direction == paddingClientToServer) {
+			// The startup reader drains peer padding independently so writes
+			// cannot fill both connection buffers. The peer still spends the
+			// same pause at the same place in the schedule, which keeps both
+			// timelines in phase; it only knows the minimum.
+			if err := sleep(turn.delay.min); err != nil {
+				return err
 			}
 			continue
 		}
-		if err := readPaddingTurn(reader, turn, prefixLength); err != nil {
-			return fmt.Errorf("read padding turn %d: %w", i, err)
+		delay, err := randomPaddingDelay(turn.delay)
+		if err != nil {
+			return fmt.Errorf("select padding turn %d delay: %w", i, err)
+		}
+		if err := sleep(delay); err != nil {
+			return err
+		}
+		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(isClient)); err != nil {
+			return fmt.Errorf("write padding turn %d: %w", i, err)
 		}
 	}
 	return nil
@@ -90,6 +155,9 @@ func validatePaddingSchedule(schedule []paddingTurn, firstTurnPrefixLength int) 
 		}
 		if err := validatePaddingDelayRange(turn.chunkDelay); err != nil {
 			return fmt.Errorf("padding turn %d has an invalid chunk delay: %w", i, err)
+		}
+		if err := validatePaddingDelayRange(turn.delay); err != nil {
+			return fmt.Errorf("padding turn %d has an invalid inter-turn delay: %w", i, err)
 		}
 		if turn.writeChunkMinLength < 0 || turn.writeChunkLength < turn.writeChunkMinLength || turn.writeChunkLength > maxPaddingChunkLength {
 			return fmt.Errorf("padding turn %d has an invalid write chunk range: %d-%d", i, turn.writeChunkMinLength, turn.writeChunkLength)
@@ -121,43 +189,39 @@ func validatePaddingSchedule(schedule []paddingTurn, firstTurnPrefixLength int) 
 				}
 			}
 		}
-		if i > 0 && turn.direction == schedule[i-1].direction {
-			return fmt.Errorf("padding turns %d and %d have the same direction", i-1, i)
-		}
 	}
 	return nil
 }
 
-func writePaddingTurn(w io.Writer, turn paddingTurn, prefixLength int) error {
-	return writePaddingTurnWithSleep(w, turn, prefixLength, time.Sleep)
+// paddingFramePacketID returns the configuration-state custom payload packet id
+// used by the side that sends the padding bytes; both values come from the
+// vanilla configuration protocol, so no proxy-specific id ever reaches the wire.
+func paddingFramePacketID(isClient bool) int {
+	if isClient {
+		return configurationServerboundCustomPayload
+	}
+	return configurationClientboundCustomPayload
 }
 
-func writePaddingTurnWithSleep(w io.Writer, turn paddingTurn, prefixLength int, sleep func(time.Duration)) error {
-	return writePaddingTurnWithBuffer(w, turn, prefixLength, sleep, nil)
-}
-
-func writePaddingTurnWithBuffer(w io.Writer, turn paddingTurn, prefixLength int, sleep func(time.Duration), reusableBuffer *[]byte) error {
+// writePaddingTurnFrames writes one padding turn as a sequence of valid
+// Minecraft custom payload frames. Only the framing is native: payload bodies
+// stay zero-filled, so the captured traffic shape is kept.
+func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sleep func(time.Duration) error, packetID int) (int, error) {
 	startDelay, err := randomPaddingDelay(turn.startDelay)
 	if err != nil {
-		return fmt.Errorf("select padding start delay: %w", err)
+		return 0, fmt.Errorf("select padding start delay: %w", err)
 	}
-	if startDelay > 0 {
-		sleep(startDelay)
+	if err := sleep(startDelay); err != nil {
+		return 0, err
 	}
 
 	targetLength, chunks, delays, err := selectPaddingVariant(turn, prefixLength)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	recordLength := targetLength - prefixLength
-	if recordLength < 1 {
-		return fmt.Errorf("target length %d leaves an invalid record length %d", targetLength, recordLength)
-	}
-
-	encodedLength := Varint(recordLength)
-	var header bytes.Buffer
-	if err = encodedLength.writeTo(&header); err != nil {
-		return fmt.Errorf("write padding header: %w", err)
+	payloadLength := targetLength - prefixLength
+	if payloadLength < 1 {
+		return 0, fmt.Errorf("target length %d leaves an invalid padding payload of %d bytes", targetLength, payloadLength)
 	}
 	if len(chunks) == 0 {
 		writeChunkLength := turn.writeChunkLength
@@ -166,89 +230,103 @@ func writePaddingTurnWithBuffer(w io.Writer, turn paddingTurn, prefixLength int,
 		} else if turn.writeChunkMinLength > 0 {
 			writeChunkLength, err = randomPaddingTarget(turn.writeChunkMinLength, writeChunkLength)
 			if err != nil {
-				return fmt.Errorf("select padding write chunk length: %w", err)
+				return 0, fmt.Errorf("select padding write chunk length: %w", err)
 			}
 		}
-		chunks = defaultPaddingChunks(recordLength, writeChunkLength)
+		chunks = defaultPaddingChunks(payloadLength, writeChunkLength)
 		delays = make([]paddingDelayRange, len(chunks))
 		for i := 1; i < len(delays); i++ {
 			delays[i] = turn.chunkDelay
 		}
 	}
-	if chunks[0] < header.Len() {
-		return fmt.Errorf("first padding chunk %d is shorter than header %d", chunks[0], header.Len())
-	}
 
-	maxChunkLength := 0
-	for _, chunkLength := range chunks {
-		if chunkLength < 1 || chunkLength > maxPaddingChunkLength {
-			return fmt.Errorf("invalid padding chunk length: %d", chunkLength)
-		}
-		maxChunkLength = max(maxChunkLength, chunkLength)
-	}
-	var buffer []byte
-	if reusableBuffer == nil {
-		buffer = make([]byte, maxChunkLength)
-	} else {
-		if cap(*reusableBuffer) < maxChunkLength {
-			*reusableBuffer = make([]byte, maxChunkLength)
-		}
-		buffer = (*reusableBuffer)[:maxChunkLength]
-		clear(buffer)
-	}
-	copy(buffer, header.Bytes())
+	zeros := make([]byte, maxPaddingFrameDataLength)
+	channel := String(paddingFrameChannel)
 	written := 0
 	for i, chunkLength := range chunks {
 		if i < len(delays) {
 			delay, delayErr := randomPaddingDelay(delays[i])
 			if delayErr != nil {
-				return fmt.Errorf("select padding chunk %d delay: %w", i, delayErr)
+				return written, fmt.Errorf("select padding chunk %d delay: %w", i, delayErr)
 			}
-			if delay > 0 {
-				sleep(delay)
+			if delayErr = sleep(delay); delayErr != nil {
+				return written, delayErr
 			}
 		}
-		if err = writeFull(w, buffer[:chunkLength]); err != nil {
-			return fmt.Errorf("write padding chunk %d: %w", i, err)
+		frameLengths, planErr := paddingFramePlan(chunkLength)
+		if planErr != nil {
+			return written, planErr
 		}
-		written += chunkLength
-		if i == 0 {
-			clear(buffer[:header.Len()])
+		for _, frameLength := range frameLengths {
+			dataLength, ok := paddingFrameDataLength(frameLength)
+			if !ok {
+				return written, fmt.Errorf("unframed padding length %d", frameLength)
+			}
+			payload := RestBytes(zeros[:dataLength])
+			if err = writePacket(w, packetID, &channel, &payload); err != nil {
+				return written, fmt.Errorf("write padding frame: %w", err)
+			}
+			written += frameLength
 		}
 	}
-	if written != recordLength {
-		return fmt.Errorf("padding chunks total %d, want %d", written, recordLength)
-	}
-	return nil
+	return written, nil
 }
 
-func readPaddingTurn(r io.Reader, turn paddingTurn, prefixLength int) error {
-	encodedLength, headerLength, err := readVarintWithLength(r)
-	if err != nil {
-		return fmt.Errorf("read padding header: %w", err)
-	}
-	recordLength := int(encodedLength)
-	if recordLength < headerLength || recordLength > maxPaddingTurnLength {
-		return fmt.Errorf("invalid padding record length: %d", recordLength)
-	}
-	totalLength := prefixLength + recordLength
-	if !paddingTurnAcceptsLength(turn, totalLength) {
-		if len(turn.variants) > 0 {
-			return fmt.Errorf("padding turn length %d is not an allowed variant", totalLength)
-		}
-		return fmt.Errorf("padding turn length %d is outside %d-%d", totalLength, turn.minLength, turn.maxLength)
-	}
+// paddingFrameLength is the wire size of a custom payload frame whose payload
+// body is dataLength bytes long.
+func paddingFrameLength(dataLength int) int {
+	bodyLength := 1 + 1 + len(paddingFrameChannel) + dataLength
+	return varintSize(Varint(bodyLength)) + bodyLength
+}
 
-	var buffer [paddingBufferLength]byte
-	remaining := recordLength - headerLength
-	for remaining > 0 {
-		chunkLength := min(remaining, len(buffer))
-		if _, err := io.ReadFull(r, buffer[:chunkLength]); err != nil {
-			return fmt.Errorf("read padding body: %w", err)
+// paddingFrameDataLength is the payload body that makes a frame exactly
+// frameLength bytes long. Some lengths are unreachable because the length
+// varint grows in steps.
+func paddingFrameDataLength(frameLength int) (int, bool) {
+	for overhead := paddingFrameOverhead; overhead <= paddingFrameOverhead+2; overhead++ {
+		dataLength := frameLength - overhead
+		if dataLength < 0 || dataLength > maxPaddingFrameDataLength {
+			continue
 		}
-		remaining -= chunkLength
+		if paddingFrameLength(dataLength) == frameLength {
+			return dataLength, true
+		}
 	}
-	return nil
+	return 0, false
+}
+
+// paddingFramePlan splits length bytes into reachable frame sizes. The result is
+// exact whenever a partition exists; a length below the smallest frame (the
+// captured 2-byte turns) is rounded up to that frame.
+func paddingFramePlan(length int) ([]int, error) {
+	if length <= 0 {
+		return nil, nil
+	}
+	if length < paddingFrameOverhead {
+		return []int{paddingFrameOverhead}, nil
+	}
+	frameLengths := make([]int, 0, length/paddingBufferLength+1)
+	for remaining := length; remaining > 0; {
+		candidate := min(remaining, maxPaddingFrameLength)
+		picked := 0
+		for ; candidate >= paddingFrameOverhead; candidate-- {
+			if _, ok := paddingFrameDataLength(candidate); !ok {
+				continue
+			}
+			rest := remaining - candidate
+			if rest > 0 && rest < paddingFrameOverhead {
+				continue
+			}
+			picked = candidate
+			break
+		}
+		if picked == 0 {
+			return nil, fmt.Errorf("cannot frame %d padding bytes", length)
+		}
+		frameLengths = append(frameLengths, picked)
+		remaining -= picked
+	}
+	return frameLengths, nil
 }
 
 func selectPaddingVariant(turn paddingTurn, prefixLength int) (int, []int, []paddingDelayRange, error) {

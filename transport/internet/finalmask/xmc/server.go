@@ -41,6 +41,9 @@ type serverConn struct {
 	paddingSchedule []paddingTurn
 	packet          *packetStream
 	deadlines       *connectionDeadlines
+
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 func (c *serverConn) handshake() error {
@@ -245,7 +248,9 @@ func (c *serverConn) handshake() error {
 		if err = validateLoginAcknowledgedPacket(pkt); err != nil {
 			return err
 		}
-		if err = runPaddingSchedule(c.reader, c.writer, false, loginAcknowledgedLength, c.paddingSchedule); err != nil {
+		c.reader = newPaddingReader(c.reader, false)
+		if err = runPaddingSchedule(c.writer, false, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause); err != nil {
+			_ = c.Close() // Unblock the startup reader if writing failed.
 			return fmt.Errorf("run startup padding: %w", err)
 		}
 
@@ -302,10 +307,16 @@ func (c *serverConn) Close() error {
 	c.closed = true
 	packet := c.packet
 	c.lifecycleMu.Unlock()
+	c.closeOnce.Do(func() { close(c.done) })
 	if packet != nil {
 		packet.Stop()
 	}
 	return c.c.Close()
+}
+
+// paddingPause applies one padding pause, stopping early on Close.
+func (c *serverConn) paddingPause(d time.Duration) error {
+	return pausePadding(c.done, d)
 }
 
 func (c *serverConn) LocalAddr() net.Addr {
@@ -328,7 +339,7 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.deadlines.setWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte) (*serverConn, error) {
+func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, paddingSchedule []paddingTurn) (*serverConn, error) {
 	if len(profiles) == 0 {
 		return nil, fmt.Errorf("empty profiles")
 	}
@@ -342,10 +353,6 @@ func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPri
 	if err != nil {
 		return nil, fmt.Errorf("parse rsa private key: %w", err)
 	}
-	paddingSchedule, err := newServerPaddingSchedule2612()
-	if err != nil {
-		return nil, fmt.Errorf("select padding profile: %w", err)
-	}
 
 	s := &serverConn{
 		reader:          bufio.NewReader(c),
@@ -358,6 +365,7 @@ func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPri
 		rsaPublicKey:    rsaPublicKey,
 		paddingSchedule: paddingSchedule,
 		deadlines:       newConnectionDeadlines(c),
+		done:            make(chan struct{}),
 	}
 
 	return s, nil

@@ -62,7 +62,7 @@ func TestVMessGCM(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -162,7 +162,7 @@ func TestVMessGCMReadv(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -265,7 +265,7 @@ func TestVMessGCMUDP(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -362,7 +362,7 @@ func TestVMessChacha20(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -463,7 +463,7 @@ func TestVMessKCP(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -568,7 +568,7 @@ func TestVMessKCPLarge(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -674,7 +674,7 @@ func TestVMessGCMMux(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -787,7 +787,7 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -910,7 +910,7 @@ func TestVMessGCMLengthAuth(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -1012,7 +1012,7 @@ func TestVMessGCMLengthAuthPlusNoTerminationSignal(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},

@@ -71,7 +71,7 @@ func TestCommanderListenConfigurationItem(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				Tag:           "default-outbound",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 		},
 	}
@@ -166,7 +166,7 @@ func TestCommanderRemoveHandler(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				Tag:           "default-outbound",
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
+				ProxySettings: serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 		},
 	}
@@ -262,7 +262,7 @@ func TestCommanderListHandlers(t *testing.T) {
 			{
 				Tag:            "default-outbound",
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{}),
-				ProxySettings:  serial.ToTypedMessage(&freedom.Config{FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}}}),
+				ProxySettings:  serial.ToTypedMessage(&freedom.Config{Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}}}),
 			},
 		},
 	}
@@ -390,7 +390,7 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -579,7 +579,7 @@ func TestCommanderStats(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},

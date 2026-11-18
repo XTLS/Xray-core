@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/filter"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
@@ -26,6 +27,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
+	"github.com/xtls/xray-core/transport/internet/finalmask/proxyprotocol"
 	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
@@ -76,11 +78,12 @@ var (
 	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"filter":        func() interface{} { return new(Filter) },
-		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
-		"fragment":      func() interface{} { return new(FragmentMask) },
-		"sudoku":        func() interface{} { return new(Sudoku) },
-		"xmc":           func() interface{} { return new(XMC) },
+		"filter":         func() interface{} { return new(Filter) },
+		"header-custom":  func() interface{} { return new(HeaderCustomTCP) },
+		"proxy-protocol": func() interface{} { return new(ProxyProtocol) },
+		"fragment":       func() interface{} { return new(FragmentMask) },
+		"sudoku":         func() interface{} { return new(Sudoku) },
+		"xmc":            func() interface{} { return new(XMC) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -96,6 +99,32 @@ var (
 		"udphop":        func() interface{} { return new(UDPHop) },
 	}, "type", "settings")
 )
+
+type ProxyProtocol struct {
+	Version uint32 `json:"version"`
+}
+
+func (c *ProxyProtocol) Build() (proto.Message, error) {
+	version := c.Version
+	if version == 0 {
+		version = 2
+	}
+	if version != 1 && version != 2 {
+		return nil, errors.New("PROXY protocol version must be 1 or 2")
+	}
+	return &proxyprotocol.Config{Version: version}, nil
+}
+
+func addProxyProtocolMask(config *internet.StreamConfig, version uint32) {
+	mask := serial.ToTypedMessage(&proxyprotocol.Config{Version: version})
+	for _, existing := range config.Tcpmasks {
+		if existing.Type == mask.Type {
+			return
+		}
+	}
+	// Put the header directly on the socket, before the other masks.
+	config.Tcpmasks = append(config.Tcpmasks, mask)
+}
 
 type Filter struct {
 	BlockedSourceIPs []string `json:"blockedSourceIPs"`
@@ -932,9 +961,25 @@ func (c *XDNS) Build() (proto.Message, error) {
 }
 
 type XMC struct {
-	Hostname string       `json:"hostname"`
-	Profiles []XMCProfile `json:"profiles"`
-	Password string       `json:"password"`
+	Hostname string           `json:"hostname"`
+	Profiles []XMCProfile     `json:"profiles"`
+	Password string           `json:"password"`
+	Paddings []XMCPaddingTurn `json:"paddings,omitempty"`
+	// A configured list is the complete padding schedule and replaces the
+	// built-in preset entirely, including the preset's Play-state join tail.
+	// NoPadding disables padding. An explicit empty "paddings" array means the
+	// same; an absent one keeps the built-in preset.
+	NoPadding bool `json:"noPadding,omitempty"`
+}
+
+type XMCPaddingTurn struct {
+	Length    string `json:"length"`
+	Direction string `json:"direction"`
+	// Delay is an optional millisecond value or inclusive min-max range: the
+	// pause that leads into this turn, written on the turn that follows the gap
+	// it reproduces. The sending side samples the range, the peer spends its
+	// minimum, and nothing pauses after the last turn.
+	Delay string `json:"delay,omitempty"`
 }
 
 type XMCProfile struct {
@@ -977,6 +1022,48 @@ func (c *XMC) Build() (proto.Message, error) {
 	if c.Password == "" {
 		return nil, fmt.Errorf("empty password")
 	}
+	if len(c.Password) > xmc.MaxLegacyPasswordLength {
+		return nil, fmt.Errorf("minecraft password is longer than %d bytes", xmc.MaxLegacyPasswordLength)
+	}
+	// An explicit empty array is different from an absent field: json leaves
+	// Paddings nil when it is absent, so the user can turn padding off without
+	// a second switch.
+	noPadding := c.NoPadding || (c.Paddings != nil && len(c.Paddings) == 0)
+	if noPadding && len(c.Paddings) > 0 {
+		return nil, fmt.Errorf("minecraft padding: noPadding and paddings are exclusive")
+	}
+	config := &xmc.Config{Password: c.Password, Hostname: c.Hostname, NoPadding: noPadding}
+	for i, turn := range c.Paddings {
+		minimum, maximum, err := ParseRangeString(turn.Length)
+		if err != nil {
+			return nil, fmt.Errorf("minecraft padding turn %d length: %w", i, err)
+		}
+		delayMinimum, delayMaximum, err := ParseRangeString(turn.Delay)
+		if err != nil {
+			return nil, fmt.Errorf("minecraft padding turn %d delay: %w", i, err)
+		}
+
+		var direction int32
+		switch turn.Direction {
+		case "c2s", "client-to-server":
+			direction = 1
+		case "s2c", "server-to-client":
+			direction = 2
+		default:
+			return nil, fmt.Errorf("minecraft padding turn %d: invalid direction %q (must be \"c2s\" or \"s2c\")", i, turn.Direction)
+		}
+
+		config.Paddings = append(config.Paddings, &xmc.Padding{
+			LengthMin: int64(minimum),
+			LengthMax: int64(maximum),
+			Direction: direction,
+			DelayMin:  int64(delayMinimum),
+			DelayMax:  int64(delayMaximum),
+		})
+	}
+	if err := config.ValidatePadding(); err != nil {
+		return nil, fmt.Errorf("minecraft padding: %w", err)
+	}
 
 	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
 	if err != nil {
@@ -997,13 +1084,10 @@ func (c *XMC) Build() (proto.Message, error) {
 		profiles = append(profiles, profile)
 	}
 
-	return &xmc.Config{
-		Password:      c.Password,
-		Hostname:      c.Hostname,
-		RsaPrivateKey: x509.MarshalPKCS1PrivateKey(rsaPrivateKey),
-		RsaPublicKey:  rsaPublicKey,
-		Profiles:      profiles,
-	}, nil
+	config.RsaPrivateKey = x509.MarshalPKCS1PrivateKey(rsaPrivateKey)
+	config.RsaPublicKey = rsaPublicKey
+	config.Profiles = profiles
+	return config, nil
 }
 
 type Xicmp struct {
