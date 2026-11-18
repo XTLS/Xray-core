@@ -120,11 +120,11 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 	}
 
 	for _, domain := range expiredKeys {
-		current := c.ips[domain]
-		if current == nil {
+		rec := c.ips[domain]
+		if rec == nil {
 			continue
 		}
-		a, aaaa := current.A, current.AAAA
+		a, aaaa := rec.A, rec.AAAA
 		if a != nil && a.Expire.Before(now) {
 			a = nil
 		}
@@ -133,7 +133,7 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 		}
 		if a == nil && aaaa == nil {
 			delete(c.ips, domain)
-		} else if a != current.A || aaaa != current.AAAA {
+		} else if a != rec.A || aaaa != rec.AAAA {
 			c.ips[domain] = &record{A: a, AAAA: aaaa}
 		}
 	}
