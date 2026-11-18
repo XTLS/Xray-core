@@ -124,19 +124,17 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 		if current == nil {
 			continue
 		}
-		// Lookups keep record pointers after releasing the cache lock.
-		// Replace the record instead of modifying a published one.
-		rec := &record{A: current.A, AAAA: current.AAAA}
-		if rec.A != nil && rec.A.Expire.Before(now) {
-			rec.A = nil
+		a, aaaa := current.A, current.AAAA
+		if a != nil && a.Expire.Before(now) {
+			a = nil
 		}
-		if rec.AAAA != nil && rec.AAAA.Expire.Before(now) {
-			rec.AAAA = nil
+		if aaaa != nil && aaaa.Expire.Before(now) {
+			aaaa = nil
 		}
-		if rec.A == nil && rec.AAAA == nil {
+		if a == nil && aaaa == nil {
 			delete(c.ips, domain)
-		} else {
-			c.ips[domain] = rec
+		} else if a != current.A || aaaa != current.AAAA {
+			c.ips[domain] = &record{A: a, AAAA: aaaa}
 		}
 	}
 
