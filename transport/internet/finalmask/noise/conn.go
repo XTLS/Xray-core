@@ -1,7 +1,6 @@
 package noise
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"net"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/errors"
 )
 
 const asciiLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -19,27 +17,17 @@ const asciiLetters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 type noiseConn struct {
 	net.PacketConn
 	config  *Config
-	script  *scriptEngine
-	noise   []scriptPacket
 	m       map[string]time.Time
 	mu      sync.Mutex
 	counter atomic.Uint32
 }
 
 func NewConnClient(c *Config, raw net.PacketConn) (net.PacketConn, error) {
-	conn := &noiseConn{
+	return &noiseConn{
 		PacketConn: raw,
 		config:     c,
 		m:          make(map[string]time.Time),
-	}
-	if c.Script != "" {
-		engine, err := c.engine()
-		if err != nil {
-			return nil, errors.New("failed to initialize the noise script ", c.Script).Base(err)
-		}
-		conn.script = engine
-	}
-	return conn, nil
+	}, nil
 }
 
 func NewConnServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
@@ -118,19 +106,6 @@ func (c *noiseConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 }
 
 func (c *noiseConn) sendNoise(addr net.Addr) {
-	if c.script != nil {
-		packets, err := c.script.packets(addr.String(), c.noise[:0])
-		if err != nil {
-			errors.LogWarningInner(context.Background(), err, "the noise script produced no packets")
-			return
-		}
-		c.noise = packets
-		for _, packet := range packets {
-			c.PacketConn.WriteTo(packet.packet, addr)
-			time.Sleep(packet.delay)
-		}
-		return
-	}
 	for _, item := range c.config.Items {
 		c.PacketConn.WriteTo(c.buildPacket(item), addr)
 		time.Sleep(time.Duration(crypto.RandBetween(item.DelayMin, item.DelayMax)) * time.Millisecond)
