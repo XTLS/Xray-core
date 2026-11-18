@@ -35,6 +35,10 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
+	paddingSchedule, err := c.paddingSchedule(true)
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
 
 	auth, err := c.wrapClientAuth()
 	if err != nil {
@@ -52,7 +56,7 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 		rsaPublicKey = c.RsaPublicKey
 	}
 
-	cc, err := newClientConn(conn, profiles, c.Password, rsaPublicKey, c.Hostname, c.Paddings, auth)
+	cc, err := newClientConn(conn, profiles, c.Password, rsaPublicKey, c.Hostname, paddingSchedule, auth)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -62,6 +66,10 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 
 func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	profiles, err := profilesFromConfig(c.Profiles)
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
+	paddingSchedule, err := c.paddingSchedule(false)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -77,7 +85,7 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 		return nil, fmt.Errorf("minecraft finalmask: empty profiles")
 	}
 
-	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, c.Paddings, verifier)
+	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, paddingSchedule, verifier)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -85,16 +93,53 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	return cc, nil
 }
 
-// ValidatePadding checks custom startup turns without selecting a built-in preset.
+// ValidatePadding checks the configured startup turns (including their bounds)
+// without selecting a built-in preset.
 func (c *Config) ValidatePadding() error {
+	if c.NoPadding {
+		if len(c.Paddings) != 0 {
+			return fmt.Errorf("padding is disabled and configured at the same time")
+		}
+		return nil
+	}
 	_, err := paddingScheduleFromConfig(c.Paddings)
 	return err
 }
 
+// paddingSchedule selects the padding turns for one connection. An explicit
+// empty configuration disables padding; an absent one keeps the built-in
+// preset.
+//
+// A configured list is the complete schedule, not a replacement for its startup
+// part: the built-in preset also carries a Play-state join tail, and that tail
+// runs only with the preset. A user who captured their own login decides the
+// whole shape, including whether it has a tail.
+func (c *Config) paddingSchedule(isClient bool) ([]paddingTurn, error) {
+	if c.NoPadding {
+		if len(c.Paddings) != 0 {
+			return nil, fmt.Errorf("padding is disabled and configured at the same time")
+		}
+		return nil, nil
+	}
+	if len(c.Paddings) > 0 {
+		return paddingScheduleFromConfig(c.Paddings)
+	}
+	if isClient {
+		return newClientPaddingSchedule2612()
+	}
+	return newServerPaddingSchedule2612()
+}
+
+// paddingScheduleFromConfig builds the complete schedule from a configured list.
+// The list replaces the preset entirely, including its Play-state join tail.
 func paddingScheduleFromConfig(paddings []*Padding) ([]paddingTurn, error) {
 	if len(paddings) == 0 {
 		return nil, nil
 	}
+	if len(paddings) > maxPaddingTurns {
+		return nil, fmt.Errorf("too many padding turns: %d (at most %d)", len(paddings), maxPaddingTurns)
+	}
+	var totalLength, totalDelayMilliseconds int64
 	schedule := make([]paddingTurn, len(paddings))
 	for i, turn := range paddings {
 		if turn == nil || turn.LengthMin < 1 || turn.LengthMax < turn.LengthMin || turn.LengthMax > maxPaddingTurnLength {
@@ -105,6 +150,14 @@ func paddingScheduleFromConfig(paddings []*Padding) ([]paddingTurn, error) {
 		}
 		if turn.DelayMax > maxPaddingDelayMilliseconds {
 			return nil, fmt.Errorf("padding delay range %d-%d at turn %d is too large", turn.DelayMin, turn.DelayMax, i)
+		}
+		totalLength += turn.LengthMax
+		if totalLength > maxPaddingTotalLength {
+			return nil, fmt.Errorf("padding turns are longer than %d bytes in total", maxPaddingTotalLength)
+		}
+		totalDelayMilliseconds += turn.DelayMax
+		if totalDelayMilliseconds > int64(maxPaddingScheduleDelay/time.Millisecond) {
+			return nil, fmt.Errorf("padding pauses are longer than %s in total", maxPaddingScheduleDelay)
 		}
 		var direction paddingDirection
 		switch turn.Direction {
@@ -130,15 +183,4 @@ func paddingScheduleFromConfig(paddings []*Padding) ([]paddingTurn, error) {
 		return nil, err
 	}
 	return schedule, nil
-}
-
-func newPaddingSchedule(paddings []*Padding, isClient bool) ([]paddingTurn, error) {
-	schedule, err := paddingScheduleFromConfig(paddings)
-	if err != nil || schedule != nil {
-		return schedule, err
-	}
-	if isClient {
-		return newClientPaddingSchedule2612()
-	}
-	return newServerPaddingSchedule2612()
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/xtls/xray-core/common/geodata"
 	xlua "github.com/xtls/xray-core/common/lua"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/finalmask/filter"
 	"github.com/xtls/xray-core/transport/internet/finalmask/fragment"
@@ -28,6 +29,7 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/header"
 	"github.com/xtls/xray-core/transport/internet/finalmask/mkcp/original"
 	"github.com/xtls/xray-core/transport/internet/finalmask/noise"
+	"github.com/xtls/xray-core/transport/internet/finalmask/proxyprotocol"
 	"github.com/xtls/xray-core/transport/internet/finalmask/realm"
 	"github.com/xtls/xray-core/transport/internet/finalmask/salamander"
 	"github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
@@ -78,11 +80,12 @@ var (
 	customVarNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 	tcpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
-		"filter":        func() interface{} { return new(Filter) },
-		"header-custom": func() interface{} { return new(HeaderCustomTCP) },
-		"fragment":      func() interface{} { return new(FragmentMask) },
-		"sudoku":        func() interface{} { return new(Sudoku) },
-		"xmc":           func() interface{} { return new(XMC) },
+		"filter":         func() interface{} { return new(Filter) },
+		"header-custom":  func() interface{} { return new(HeaderCustomTCP) },
+		"proxy-protocol": func() interface{} { return new(ProxyProtocol) },
+		"fragment":       func() interface{} { return new(FragmentMask) },
+		"sudoku":         func() interface{} { return new(Sudoku) },
+		"xmc":            func() interface{} { return new(XMC) },
 	}, "type", "settings")
 
 	udpmaskLoader = NewJSONConfigLoader(ConfigCreatorCache{
@@ -98,6 +101,32 @@ var (
 		"udphop":        func() interface{} { return new(UDPHop) },
 	}, "type", "settings")
 )
+
+type ProxyProtocol struct {
+	Version uint32 `json:"version"`
+}
+
+func (c *ProxyProtocol) Build() (proto.Message, error) {
+	version := c.Version
+	if version == 0 {
+		version = 2
+	}
+	if version != 1 && version != 2 {
+		return nil, errors.New("PROXY protocol version must be 1 or 2")
+	}
+	return &proxyprotocol.Config{Version: version}, nil
+}
+
+func addProxyProtocolMask(config *internet.StreamConfig, version uint32) {
+	mask := serial.ToTypedMessage(&proxyprotocol.Config{Version: version})
+	for _, existing := range config.Tcpmasks {
+		if existing.Type == mask.Type {
+			return
+		}
+	}
+	// Put the header directly on the socket, before the other masks.
+	config.Tcpmasks = append(config.Tcpmasks, mask)
+}
 
 type Filter struct {
 	BlockedSourceIPs []string `json:"blockedSourceIPs"`
@@ -939,12 +968,20 @@ type XMC struct {
 	Password  string           `json:"password"`
 	Paddings  []XMCPaddingTurn `json:"paddings,omitempty"`
 	Yggdrasil *XMCYggdrasil    `json:"yggdrasil,omitempty"`
+	// A configured list is the complete padding schedule and replaces the
+	// built-in preset entirely, including the preset's Play-state join tail.
+	// NoPadding disables padding. An explicit empty "paddings" array means the
+	// same; an absent one keeps the built-in preset.
+	NoPadding bool `json:"noPadding,omitempty"`
 }
 
 type XMCPaddingTurn struct {
 	Length    string `json:"length"`
 	Direction string `json:"direction"`
-	// Delay is an optional millisecond value or inclusive min-max range.
+	// Delay is an optional millisecond value or inclusive min-max range: the
+	// pause that leads into this turn, written on the turn that follows the gap
+	// it reproduces. The sending side samples the range, the peer spends its
+	// minimum, and nothing pauses after the last turn.
 	Delay string `json:"delay,omitempty"`
 }
 
@@ -994,7 +1031,14 @@ func (c *XMCProfile) Build() (*xmc.Profile, error) {
 }
 
 func (c *XMC) Build() (proto.Message, error) {
-	config := &xmc.Config{Hostname: c.Hostname}
+	// An explicit empty array is different from an absent field: json leaves
+	// Paddings nil when it is absent, so the user can turn padding off without
+	// a second switch.
+	noPadding := c.NoPadding || (c.Paddings != nil && len(c.Paddings) == 0)
+	if noPadding && len(c.Paddings) > 0 {
+		return nil, fmt.Errorf("minecraft padding: noPadding and paddings are exclusive")
+	}
+	config := &xmc.Config{Hostname: c.Hostname, NoPadding: noPadding}
 	for i, turn := range c.Paddings {
 		minimum, maximum, err := ParseRangeString(turn.Length)
 		if err != nil {

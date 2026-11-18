@@ -50,7 +50,7 @@ func TestHttpConformance(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -113,7 +113,7 @@ func TestHttpError(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -163,7 +163,7 @@ func TestHTTPConnectMethod(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -245,7 +245,7 @@ func TestHttpPost(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -317,7 +317,7 @@ func TestHttpBasicAuth(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},
@@ -405,7 +405,7 @@ func TestHTTPOutboundServerFirst(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					FinalRules: []*freedom.FinalRuleConfig{{Action: freedom.RuleAction_Allow}},
+					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
 				}),
 			},
 		},

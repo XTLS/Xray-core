@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net"
 	"time"
 )
 
@@ -17,6 +18,16 @@ const (
 	paddingBufferLength   = 16 * 1024
 	maxPaddingChunkLength = 48 * 1024
 	maxPaddingTurnLength  = 8 * 1024 * 1024
+
+	// A configured schedule is bounded so that one handshake cannot be told to
+	// send an arbitrary amount of padding: maxPaddingTurns limits the number of
+	// turns and maxPaddingTotalLength the worst-case sum of their lengths.
+	maxPaddingTurns       = 256
+	maxPaddingTotalLength = 64 << 20
+	// maxPaddingScheduleDelay keeps the configured pauses inside the handshake
+	// deadline. A schedule that cannot finish before the deadline would fail
+	// every connection, so it is rejected when the configuration is built.
+	maxPaddingScheduleDelay = handshakeTimeout - 10*time.Second
 
 	// Frame padding carries the startup padding in ordinary Minecraft custom
 	// payload packets so that a vanilla server can parse the whole connection
@@ -43,10 +54,12 @@ type paddingDelayRange struct {
 }
 
 type paddingTurn struct {
-	direction           paddingDirection
-	minLength           int
-	maxLength           int
-	delay               paddingDelayRange // pause after this turn, including the last one
+	direction paddingDirection
+	minLength int
+	maxLength int
+	// delay leads into this turn: the side that sends it samples the range, the
+	// peer spends its minimum, and no pause follows the last turn.
+	delay               paddingDelayRange
 	variants            []paddingVariant
 	startDelay          paddingDelayRange
 	chunkDelay          paddingDelayRange
@@ -57,11 +70,37 @@ type paddingTurn struct {
 	sendVariants        []int
 }
 
-func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn) error {
-	return runPaddingScheduleWithSleep(writer, isClient, firstTurnPrefixLength, schedule, time.Sleep)
+// pausePadding waits for one padding pause. It returns as soon as the
+// connection is closed so that a handshake cannot keep sleeping after its
+// connection is gone.
+func pausePadding(done <-chan struct{}, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-done:
+		return net.ErrClosed
+	}
 }
 
-func runPaddingScheduleWithSleep(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration)) error {
+// runPaddingSchedule sends the local turns of the schedule and applies the
+// configured pauses. A turn's pause leads into the turn, so the bytes of a turn
+// always follow the pause that was configured next to it, and nothing pauses
+// after the last turn: the proxy stream follows it directly. An empty schedule
+// means padding is disabled and nothing is written or waited for.
+//
+// Nothing here checks when a peer's turn arrives: the turns are ordinary
+// Minecraft packets that carry nothing to compare an early arrival against, and
+// the startup reader drains them on its own while this schedule writes. A peer
+// that stalls is bounded by maxPaddingScheduleDelay instead.
+func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration) error) error {
+	if len(schedule) == 0 {
+		return nil
+	}
 	if err := validatePaddingSchedule(schedule, firstTurnPrefixLength); err != nil {
 		return err
 	}
@@ -74,22 +113,23 @@ func runPaddingScheduleWithSleep(writer io.Writer, isClient bool, firstTurnPrefi
 
 		if isClient != (turn.direction == paddingClientToServer) {
 			// The startup reader drains peer padding independently so writes
-			// cannot fill both connection buffers. Both endpoints still apply
-			// the same minimum pause, including after the last turn.
-			if turn.delay.min > 0 {
-				sleep(turn.delay.min)
+			// cannot fill both connection buffers. The peer still spends the
+			// same pause at the same place in the schedule, which keeps both
+			// timelines in phase; it only knows the minimum.
+			if err := sleep(turn.delay.min); err != nil {
+				return err
 			}
 			continue
-		}
-		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(isClient)); err != nil {
-			return fmt.Errorf("write padding turn %d: %w", i, err)
 		}
 		delay, err := randomPaddingDelay(turn.delay)
 		if err != nil {
 			return fmt.Errorf("select padding turn %d delay: %w", i, err)
 		}
-		if delay > 0 {
-			sleep(delay)
+		if err := sleep(delay); err != nil {
+			return err
+		}
+		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(isClient)); err != nil {
+			return fmt.Errorf("write padding turn %d: %w", i, err)
 		}
 	}
 	return nil
@@ -166,13 +206,13 @@ func paddingFramePacketID(isClient bool) int {
 // writePaddingTurnFrames writes one padding turn as a sequence of valid
 // Minecraft custom payload frames. Only the framing is native: payload bodies
 // stay zero-filled, so the captured traffic shape is kept.
-func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sleep func(time.Duration), packetID int) (int, error) {
+func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sleep func(time.Duration) error, packetID int) (int, error) {
 	startDelay, err := randomPaddingDelay(turn.startDelay)
 	if err != nil {
 		return 0, fmt.Errorf("select padding start delay: %w", err)
 	}
-	if startDelay > 0 {
-		sleep(startDelay)
+	if err := sleep(startDelay); err != nil {
+		return 0, err
 	}
 
 	targetLength, chunks, delays, err := selectPaddingVariant(turn, prefixLength)
@@ -209,8 +249,8 @@ func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sle
 			if delayErr != nil {
 				return written, fmt.Errorf("select padding chunk %d delay: %w", i, delayErr)
 			}
-			if delay > 0 {
-				sleep(delay)
+			if delayErr = sleep(delay); delayErr != nil {
+				return written, delayErr
 			}
 		}
 		frameLengths, planErr := paddingFramePlan(chunkLength)

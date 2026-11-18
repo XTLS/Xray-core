@@ -2,6 +2,7 @@ package xmc
 
 import (
 	"bytes"
+	"compress/zlib"
 	"crypto/rand"
 	"errors"
 	"io"
@@ -49,39 +50,39 @@ func randomBody(t *testing.T, size int) []byte {
 	return body
 }
 
-func TestCompressionWriterThreshold(t *testing.T) {
-	for _, threshold := range []int32{0, 1, 256, 65536} {
-		for _, size := range []int{1, 10, 255, 256, 257, 65535, 65536} {
-			body := bytes.Repeat([]byte{0}, size)
+// TestCompressionWriterNeverCompresses pins the write policy: whatever the
+// negotiated threshold is, XMC sends the uncompressed framing so that a padding
+// turn keeps its wire size. A padded turn of zeros would otherwise deflate from
+// tens of kilobytes to a hundred bytes and the shape would be gone.
+func TestCompressionWriterNeverCompresses(t *testing.T) {
+	for _, size := range []int{1, 10, 255, 256, 257, 32768, 65535, 65536} {
+		for _, body := range [][]byte{bytes.Repeat([]byte{0}, size), randomBody(t, size)} {
 			var wire bytes.Buffer
-			w := newCompressionWriter(&wire, threshold)
+			w := newCompressionWriter(&wire)
 			if _, err := w.Write(plainFrame(body)); err != nil {
-				t.Fatalf("threshold %d size %d: write: %v", threshold, size, err)
+				t.Fatalf("size %d: write: %v", size, err)
 			}
 
 			frame := readWireFrame(t, bytes.NewReader(wire.Bytes()))
-			wantCompressed := int32(size) >= threshold
-			if wantCompressed && frame.dataLength != size {
-				t.Fatalf("threshold %d size %d: want compressed data length %d, got %d", threshold, size, size, frame.dataLength)
+			if frame.dataLength != 0 {
+				t.Fatalf("size %d: writer compressed the body (data length %d)", size, frame.dataLength)
 			}
-			if !wantCompressed {
-				if frame.dataLength != 0 {
-					t.Fatalf("threshold %d size %d: want uncompressed frame, got data length %d", threshold, size, frame.dataLength)
-				}
-				if !bytes.Equal(frame.payload, body) {
-					t.Fatalf("threshold %d size %d: uncompressed payload mismatch", threshold, size)
-				}
-				if frame.packetLength != 1+size {
-					t.Fatalf("threshold %d size %d: packet length %d", threshold, size, frame.packetLength)
-				}
+			if !bytes.Equal(frame.payload, body) {
+				t.Fatalf("size %d: payload mismatch", size)
+			}
+			if frame.packetLength != 1+size {
+				t.Fatalf("size %d: packet length %d, want %d", size, frame.packetLength, 1+size)
+			}
+			if wire.Len() != varintSize(Varint(1+size))+1+size {
+				t.Fatalf("size %d: frame is %d bytes on the wire, want %d", size, wire.Len(), varintSize(Varint(1+size))+1+size)
 			}
 
 			decoded, _, err := readFrame(newCompressionReader(bytes.NewReader(wire.Bytes())), maxUncompressedFrameBody)
 			if err != nil {
-				t.Fatalf("threshold %d size %d: decode: %v", threshold, size, err)
+				t.Fatalf("size %d: decode: %v", size, err)
 			}
 			if !bytes.Equal(decoded, body) {
-				t.Fatalf("threshold %d size %d: round trip mismatch", threshold, size)
+				t.Fatalf("size %d: round trip mismatch", size)
 			}
 		}
 	}
@@ -96,37 +97,35 @@ func TestCompressionRoundTripChunked(t *testing.T) {
 		bytes.Repeat([]byte("xmc"), 8*1024),
 	}
 
-	for _, threshold := range []int32{0, 256, 65536} {
-		var wire bytes.Buffer
-		w := newCompressionWriter(&wire, threshold)
-		// One Write per frame, split into awkward chunk sizes.
-		for _, body := range cases {
-			frame := plainFrame(body)
-			for len(frame) > 0 {
-				n := 7
-				if n > len(frame) {
-					n = len(frame)
-				}
-				if _, err := w.Write(frame[:n]); err != nil {
-					t.Fatalf("threshold %d: chunked write: %v", threshold, err)
-				}
-				frame = frame[n:]
+	var wire bytes.Buffer
+	w := newCompressionWriter(&wire)
+	// One Write per frame, split into awkward chunk sizes.
+	for _, body := range cases {
+		frame := plainFrame(body)
+		for len(frame) > 0 {
+			n := 7
+			if n > len(frame) {
+				n = len(frame)
 			}
+			if _, err := w.Write(frame[:n]); err != nil {
+				t.Fatalf("chunked write: %v", err)
+			}
+			frame = frame[n:]
 		}
+	}
 
-		r := newCompressionReader(bytes.NewReader(wire.Bytes()))
-		for i, want := range cases {
-			got, _, err := readFrame(r, maxUncompressedFrameBody)
-			if err != nil {
-				t.Fatalf("threshold %d frame %d: decode: %v", threshold, i, err)
-			}
-			if !bytes.Equal(got, want) {
-				t.Fatalf("threshold %d frame %d: mismatch (%d vs %d bytes)", threshold, i, len(got), len(want))
-			}
+	r := newCompressionReader(bytes.NewReader(wire.Bytes()))
+	for i, want := range cases {
+		got, _, err := readFrame(r, maxUncompressedFrameBody)
+		if err != nil {
+			t.Fatalf("frame %d: decode: %v", i, err)
 		}
-		if _, _, err := readFrame(r, maxUncompressedFrameBody); !errors.Is(err, io.EOF) {
-			t.Fatalf("threshold %d: expected EOF after the last frame, got %v", threshold, err)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("frame %d: mismatch (%d vs %d bytes)", i, len(got), len(want))
 		}
+	}
+	if _, _, err := readFrame(r, maxUncompressedFrameBody); !errors.Is(err, io.EOF) {
+		t.Fatalf("expected EOF after the last frame, got %v", err)
 	}
 }
 
@@ -138,7 +137,7 @@ func TestCompressionMultipleFramesOneWrite(t *testing.T) {
 	}
 
 	var wire bytes.Buffer
-	w := newCompressionWriter(&wire, 256)
+	w := newCompressionWriter(&wire)
 	if _, err := w.Write(plain); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -166,6 +165,40 @@ func TestCompressionReaderUncompressedOverThreshold(t *testing.T) {
 	}
 	wire.WriteByte(0)
 	wire.Write(body)
+
+	got, _, err := readFrame(newCompressionReader(bytes.NewReader(wire.Bytes())), maxUncompressedFrameBody)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !bytes.Equal(got, body) {
+		t.Fatal("payload mismatch")
+	}
+}
+
+// The writer stopped compressing, but a real server still does, so the reader
+// must keep decoding deflated bodies.
+func TestCompressionReaderDecodesCompressedBody(t *testing.T) {
+	body := append(bytes.Repeat([]byte("xmc"), 4096), 0, 1, 2, 3)
+
+	var compressed bytes.Buffer
+	zw := zlib.NewWriter(&compressed)
+	if _, err := zw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var wire bytes.Buffer
+	packetLength := Varint(varintSize(Varint(len(body))) + compressed.Len())
+	if err := packetLength.writeTo(&wire); err != nil {
+		t.Fatal(err)
+	}
+	dataLength := Varint(len(body))
+	if err := dataLength.writeTo(&wire); err != nil {
+		t.Fatal(err)
+	}
+	wire.Write(compressed.Bytes())
 
 	got, _, err := readFrame(newCompressionReader(bytes.NewReader(wire.Bytes())), maxUncompressedFrameBody)
 	if err != nil {
@@ -213,7 +246,7 @@ func TestCompressionReaderErrors(t *testing.T) {
 
 func TestCompressionWriterInvalidFrameLength(t *testing.T) {
 	var wire bytes.Buffer
-	w := newCompressionWriter(&wire, 256)
+	w := newCompressionWriter(&wire)
 	if _, err := w.Write([]byte{0xff, 0xff, 0xff, 0xff, 0xff}); err == nil {
 		t.Fatal("expected an error for an invalid frame length prefix")
 	}
