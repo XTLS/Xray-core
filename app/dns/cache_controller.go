@@ -120,10 +120,13 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 	}
 
 	for _, domain := range expiredKeys {
-		rec := c.ips[domain]
-		if rec == nil {
+		current := c.ips[domain]
+		if current == nil {
 			continue
 		}
+		// Lookups keep record pointers after releasing the cache lock.
+		// Replace the record instead of modifying a published one.
+		rec := &record{A: current.A, AAAA: current.AAAA}
 		if rec.A != nil && rec.A.Expire.Before(now) {
 			rec.A = nil
 		}
@@ -132,6 +135,8 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 		}
 		if rec.A == nil && rec.AAAA == nil {
 			delete(c.ips, domain)
+		} else {
+			c.ips[domain] = rec
 		}
 	}
 
