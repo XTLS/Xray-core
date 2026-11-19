@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	utls "github.com/refraction-networking/utls"
 	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
@@ -342,11 +341,24 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 
+	if requestAddons.Flow == vless.XRV {
+		if outerTLS, ok := iConn.(interface {
+			tls.Interface
+			ConnectionState() gotls.ConnectionState
+		}); ok {
+			if err := outerTLS.HandshakeContext(ctx); err != nil {
+				return nil, nil, errors.New("failed outer TLS handshake for Vision").Base(err)
+			}
+			if version := outerTLS.ConnectionState().Version; version != gotls.VersionTLS13 {
+				return nil, nil, errors.New("failed to use "+requestAddons.Flow+", found outer tls version ", version)
+			}
+		}
+	}
+
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
-	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (request.Port != 53 && request.Port != 443)) {
+	singleXUDP := request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || request.Port != 53 && request.Port != 443)
+	if singleXUDP {
 		request.Command = protocol.RequestCommandMux
-		request.Address = net.DomainAddress("v1.mux.cool")
-		request.Port = net.Port(666)
 	}
 
 	requestWriter := buf.NewWriter(conn)
@@ -360,20 +372,8 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 
 	// default: serverWriter := bufferWriter
 	serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
-	if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+	if singleXUDP {
 		serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
-	}
-
-	if requestAddons.Flow == vless.XRV {
-		if tlsConn, ok := iConn.(*tls.Conn); ok {
-			if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
-				return nil, nil, errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version)
-			}
-		} else if utlsConn, ok := iConn.(*tls.UConn); ok {
-			if utlsConn.ConnectionState().Version != utls.VersionTLS13 {
-				return nil, nil, errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version)
-			}
-		}
 	}
 
 	openResponse := func() (buf.Reader, error) {
@@ -387,7 +387,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		if requestAddons.Flow == vless.XRV {
 			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx, conn, input, rawInput, ob)
 		}
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+		if singleXUDP {
 			if requestAddons.Flow == vless.XRV {
 				serverReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: serverReader})
 			} else {

@@ -22,8 +22,7 @@ type carrier struct {
 	active               int
 	client               bool
 	link                 transport.Link
-	wake                 chan struct{}
-	unknownSlots         chan struct{}
+	control              *sync.Cond
 	pendingUnknown       map[uint16]struct{}
 	ctx                  context.Context
 	cancel               context.CancelCauseFunc
@@ -39,9 +38,8 @@ func newCarrier(parent context.Context, link transport.Link, idle time.Duration,
 		sessions: make(map[uint16]*Session, 16), link: link, ctx: ctx, cancel: cancel,
 		timer: time.NewTicker(idle), client: client,
 	}
-	c.unknownSlots = make(chan struct{}, 16)
+	c.control = sync.NewCond(&c.RWMutex)
 	c.pendingUnknown = make(map[uint16]struct{})
-	c.wake = make(chan struct{}, 1)
 	context.AfterFunc(c.ctx, func() { common.Interrupt(c.link.Reader) })
 	go c.controlLoop()
 	go c.monitor()
@@ -59,13 +57,6 @@ func (c *carrier) admitLocked(s *Session) bool {
 	return true
 }
 
-func (c *carrier) wakeControlLocked() {
-	select {
-	case c.wake <- struct{}{}:
-	default:
-	}
-}
-
 // These are only cold control/retained-route notifications, never DATA staging.
 func (c *carrier) queueReadyLocked(s *Session) {
 	if s.listed {
@@ -78,7 +69,7 @@ func (c *carrier) queueReadyLocked(s *Session) {
 		c.readyHead = s
 	}
 	c.readyTail = s
-	c.wakeControlLocked()
+	c.control.Broadcast()
 }
 
 func (c *carrier) unlinkReadyLocked(s *Session) {
@@ -111,7 +102,7 @@ func (c *carrier) scheduleLocked(s *Session) {
 func (c *carrier) invalidateUnknownLocked(id uint16) {
 	if _, ok := c.pendingUnknown[id]; ok {
 		delete(c.pendingUnknown, id)
-		<-c.unknownSlots
+		c.control.Broadcast()
 	}
 }
 
@@ -119,40 +110,31 @@ func (c *carrier) invalidateUnknownLocked(id uint16) {
 // there is no queue of obsolete generations that can pin control capacity.
 func (c *carrier) unknownEnd(id uint16) {
 	c.Lock()
-	_, duplicate := c.pendingUnknown[id]
-	closed := c.Closed()
-	c.Unlock()
-	if closed || duplicate {
-		return
+	defer c.Unlock()
+	for !c.Closed() {
+		if _, duplicate := c.pendingUnknown[id]; duplicate {
+			return
+		}
+		if len(c.pendingUnknown) < 16 {
+			c.pendingUnknown[id] = struct{}{}
+			c.control.Broadcast()
+			return
+		}
+		c.control.Wait()
 	}
-	select {
-	case c.unknownSlots <- struct{}{}:
-	case <-c.ctx.Done():
-		return
-	}
-	c.Lock()
-	if c.Closed() {
-		<-c.unknownSlots
-	} else {
-		c.pendingUnknown[id] = struct{}{}
-		c.wakeControlLocked()
-	}
-	c.Unlock()
 }
 
 func (c *carrier) controlLoop() {
 	gate := c.link.Writer.(*PhysicalWriter)
 	for {
-		c.RLock()
-		selected, haveUnknown := c.readyHead, len(c.pendingUnknown) != 0
-		c.RUnlock()
-		if selected == nil && !haveUnknown {
-			select {
-			case <-c.ctx.Done():
-				return
-			case <-c.wake:
-				continue
-			}
+		c.Lock()
+		for !c.Closed() && c.readyHead == nil && len(c.pendingUnknown) == 0 {
+			c.control.Wait()
+		}
+		selected, closed := c.readyHead, c.Closed()
+		c.Unlock()
+		if closed {
+			return
 		}
 		gate.Lock()
 		var frames buf.MultiBuffer
@@ -234,9 +216,8 @@ func (c *carrier) monitor() {
 			for c.readyHead != nil {
 				c.unlinkReadyLocked(c.readyHead)
 			}
-			for id := range c.pendingUnknown {
-				c.invalidateUnknownLocked(id)
-			}
+			c.pendingUnknown = nil
+			c.control.Broadcast()
 			sessions := c.sessions
 			c.sessions, c.active = nil, 0
 			c.Unlock()

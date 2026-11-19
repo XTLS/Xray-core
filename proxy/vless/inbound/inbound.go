@@ -614,27 +614,23 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
 	bufferWriter.SetFlushNext()
+	link := &transport.Link{Reader: clientReader, Writer: clientWriter}
 
 	if request.Command == protocol.RequestCommandRvs {
 		r, err := h.GetReverse(account)
 		if err != nil {
 			return err
 		}
-		return r.Accept(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}))
+		return r.Accept(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, link))
 	}
 
 	if request.Command == protocol.RequestCommandMux {
-		worker := multiplex.NewServerWorker(ctx, dispatch.DispatchLink, &transport.Link{Reader: clientReader, Writer: clientWriter})
+		worker := multiplex.NewServerWorker(ctx, dispatch.DispatchLink, link)
 		<-worker.WaitClosed()
 		return nil
 	}
 
-	if err := dispatch.DispatchLink(
-		ctx, request.Destination(), &transport.Link{
-			Reader: clientReader,
-			Writer: clientWriter,
-		},
-	); err != nil {
+	if err := dispatch.DispatchLink(ctx, request.Destination(), link); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
 	return nil
