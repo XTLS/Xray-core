@@ -6,6 +6,7 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/session"
 )
 
 type result struct {
@@ -14,7 +15,16 @@ type result struct {
 	index int
 }
 
+// raceAttempt makes one connection attempt of a racing dial to the given IP.
+type raceAttempt func(ctx context.Context, ip net.IP) (net.Conn, error)
+
 func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Port, sockopt *SocketConfig, domain string) (net.Conn, error) {
+	return raceDial(ctx, ips, sockopt, domain, func(ctx context.Context, ip net.IP) (net.Conn, error) {
+		return effectiveSystemDialer.Dial(ctx, src, net.Destination{Address: net.IPAddress(ip), Network: net.Network_TCP, Port: port}, sockopt)
+	})
+}
+
+func raceDial(ctx context.Context, ips []net.IP, sockopt *SocketConfig, domain string, attempt raceAttempt) (net.Conn, error) {
 	if len(ips) < 2 {
 		panic("at least 2 ips is required to race dial")
 	}
@@ -84,7 +94,7 @@ func TcpRaceDial(ctx context.Context, src net.Address, ips []net.IP, port net.Po
 			if nextTryIndex == len(ips) || activeNum == maxConcurrentTry {
 				panic("impossible situation")
 			}
-			go tcpTryDial(newCtx, src, sockopt, ips[nextTryIndex], port, nextTryIndex, resultCh)
+			go tryDial(newCtx, attempt, ips[nextTryIndex], nextTryIndex, resultCh)
 			activeNum++
 			nextTryIndex++
 			if nextTryIndex == len(ips) || activeNum == maxConcurrentTry {
@@ -156,8 +166,8 @@ func sortIPs(ips []net.IP, prioritizeIPv6 bool, interleave uint32) []net.IP {
 	return newIPs
 }
 
-func tcpTryDial(ctx context.Context, src net.Address, sockopt *SocketConfig, ip net.IP, port net.Port, index int, resultCh chan<- *result) {
-	conn, err := effectiveSystemDialer.Dial(ctx, src, net.Destination{Address: net.IPAddress(ip), Network: net.Network_TCP, Port: port}, sockopt)
+func tryDial(ctx context.Context, attempt raceAttempt, ip net.IP, index int, resultCh chan<- *result) {
+	conn, err := attempt(ctx, ip)
 	select {
 	case <-ctx.Done():
 		if conn != nil {
@@ -173,4 +183,118 @@ func tcpTryDial(ctx context.Context, src net.Address, sockopt *SocketConfig, ip 
 		resultCh <- &result{conn: conn, index: index}
 		return
 	}
+}
+
+// DialTCPWithHandshake dials a TCP connection to dest through FinalMask (if any)
+// and the system dialer, and then passes it to handshake, which wraps it with
+// TLS or REALITY and returns the connection ready for the transport. handshake
+// is nil when the transport uses neither TLS nor REALITY.
+//
+// When happyEyeballs.successDefinition is tlsHandshakeComplete and dest is a
+// domain resolving to several IPs, each IP is tried through the TCP dial,
+// FinalMask and handshake, and the first connection that completes the
+// handshake wins, as recommended in section 6.1 of
+// https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/.
+// handshake is called once per attempt and must build TLS or REALITY from dest
+// rather than from the address of the connection it is given.
+func DialTCPWithHandshake(ctx context.Context, dest net.Destination, streamSettings *MemoryStreamConfig, handshake func(context.Context, net.Conn) (net.Conn, error)) (net.Conn, error) {
+	dialTCP := func(ctx context.Context, dest net.Destination) (net.Conn, error) {
+		if streamSettings.FinalMask != nil {
+			return streamSettings.FinalMask.DialTCP(ctx, dest)
+		}
+		return DialSystem(ctx, dest, streamSettings.SocketSettings)
+	}
+
+	if handshake == nil {
+		// Without TLS or REALITY, DialSystem races TCP connections as usual.
+		conn, err := dialTCP(ctx, dest)
+		if err != nil {
+			return nil, errors.New("failed to dial to dest").Base(err)
+		}
+		return conn, nil
+	}
+
+	if ips, port := handshakeRaceIPs(ctx, dest, streamSettings.SocketSettings); ips != nil {
+		return raceDial(ctx, ips, streamSettings.SocketSettings, dest.Address.String(), func(ctx context.Context, ip net.IP) (net.Conn, error) {
+			return handshakeTryDial(ctx, net.TCPDestination(net.IPAddress(ip), port), dialTCP, handshake)
+		})
+	}
+
+	conn, err := dialTCP(ctx, dest)
+	if err != nil {
+		return nil, errors.New("failed to dial to dest").Base(err)
+	}
+	return handshake(ctx, conn)
+}
+
+// handshakeRaceIPs returns the IPs to race TLS handshakes over, or nil if dest
+// should be dialed as usual. It mirrors the conditions under which DialSystem
+// races TCP connections.
+func handshakeRaceIPs(ctx context.Context, dest net.Destination, sockopt *SocketConfig) ([]net.IP, net.Port) {
+	if sockopt == nil || sockopt.HappyEyeballs == nil || sockopt.HappyEyeballs.SuccessDefinition != HappyEyeballsConfig_TlsHandshakeComplete ||
+		sockopt.HappyEyeballs.TryDelayMs == 0 || sockopt.HappyEyeballs.MaxConcurrentTry == 0 ||
+		len(sockopt.DialerProxy) > 0 || dest.Network != net.Network_TCP || !sockopt.DomainStrategy.HasStrategy() {
+		return nil, 0
+	}
+	if newDest, err := checkAddressPortStrategy(ctx, dest, sockopt); err == nil && newDest != nil {
+		dest = *newDest
+	}
+	if !dest.Address.Family().IsDomain() {
+		return nil, 0
+	}
+	var src net.Address
+	if outbounds := session.OutboundsFromContext(ctx); len(outbounds) > 0 {
+		src = outbounds[len(outbounds)-1].Gateway
+	}
+	ips, err := LookupForIP(dest.Address.Domain(), sockopt.DomainStrategy, src)
+	if err != nil || len(ips) < 2 {
+		// DialSystem resolves dest again and handles the error or the single IP.
+		return nil, 0
+	}
+	return ips, dest.Port
+}
+
+// handshakeTryDial makes one attempt of a TLS handshake race to dest, which
+// holds the IP being tried.
+func handshakeTryDial(ctx context.Context, dest net.Destination, dialTCP func(context.Context, net.Destination) (net.Conn, error), handshake func(context.Context, net.Conn) (net.Conn, error)) (net.Conn, error) {
+	rawConn, err := dialTCP(ctx, dest)
+	if err != nil {
+		err = errors.New("failed to dial TCP to ", dest.Address).Base(err)
+		errors.LogDebugInner(ctx, err, "happy eyeballs attempt failed")
+		return nil, err
+	}
+
+	// An attempt that loses the race is stopped by closing its connection,
+	// which ends whatever stage it is in, including FinalMask wrappers, which
+	// take no context.
+	stop := context.AfterFunc(ctx, func() { rawConn.Close() })
+	conn, err := handshake(ctx, rawConn)
+	if err == nil {
+		// Some transports leave the handshake to the first write; the race has
+		// to finish it here.
+		if c, ok := conn.(interface{ HandshakeContext(context.Context) error }); ok {
+			if err = c.HandshakeContext(ctx); err != nil {
+				conn.Close()
+			}
+		}
+	}
+	if !stop() {
+		// Another attempt has won or the dial was canceled, and the connection
+		// has been closed.
+		if err == nil {
+			err = errors.New("completed handshake with ", dest.Address, " after the race ended").Base(ctx.Err())
+		} else {
+			err = errors.New("handshake with ", dest.Address, " did not complete before the race ended").Base(ctx.Err())
+		}
+		errors.LogDebugInner(ctx, err, "happy eyeballs attempt failed")
+		return nil, err
+	}
+	if err != nil {
+		// The connection is left to handshake as it would be without the race,
+		// e.g. REALITY keeps using it after a failed verification.
+		err = errors.New("failed to complete handshake with ", dest.Address).Base(err)
+		errors.LogDebugInner(ctx, err, "happy eyeballs attempt failed")
+		return nil, err
+	}
+	return conn, nil
 }

@@ -209,6 +209,58 @@ func (SocketConfig_TProxyMode) EnumDescriptor() ([]byte, []int) {
 	return file_transport_internet_config_proto_rawDescGZIP(), []int{4, 0}
 }
 
+// SuccessDefinition is the point at which a connection attempt wins the race.
+// See success_definition in draft-kuehlewind-happy-qlog and section 6.1 of
+// draft-ietf-happy-happyeyeballs-v3.
+type HappyEyeballsConfig_SuccessDefinition int32
+
+const (
+	// The first established TCP connection wins.
+	HappyEyeballsConfig_TcpConnected HappyEyeballsConfig_SuccessDefinition = 0
+	// The first connection that completes and verifies the TLS or REALITY
+	// handshake wins. Without TLS or REALITY it is the same as TcpConnected.
+	HappyEyeballsConfig_TlsHandshakeComplete HappyEyeballsConfig_SuccessDefinition = 1
+)
+
+// Enum value maps for HappyEyeballsConfig_SuccessDefinition.
+var (
+	HappyEyeballsConfig_SuccessDefinition_name = map[int32]string{
+		0: "TcpConnected",
+		1: "TlsHandshakeComplete",
+	}
+	HappyEyeballsConfig_SuccessDefinition_value = map[string]int32{
+		"TcpConnected":         0,
+		"TlsHandshakeComplete": 1,
+	}
+)
+
+func (x HappyEyeballsConfig_SuccessDefinition) Enum() *HappyEyeballsConfig_SuccessDefinition {
+	p := new(HappyEyeballsConfig_SuccessDefinition)
+	*p = x
+	return p
+}
+
+func (x HappyEyeballsConfig_SuccessDefinition) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HappyEyeballsConfig_SuccessDefinition) Descriptor() protoreflect.EnumDescriptor {
+	return file_transport_internet_config_proto_enumTypes[3].Descriptor()
+}
+
+func (HappyEyeballsConfig_SuccessDefinition) Type() protoreflect.EnumType {
+	return &file_transport_internet_config_proto_enumTypes[3]
+}
+
+func (x HappyEyeballsConfig_SuccessDefinition) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HappyEyeballsConfig_SuccessDefinition.Descriptor instead.
+func (HappyEyeballsConfig_SuccessDefinition) EnumDescriptor() ([]byte, []int) {
+	return file_transport_internet_config_proto_rawDescGZIP(), []int{5, 0}
+}
+
 type TransportConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Transport protocol name.
@@ -841,13 +893,14 @@ func (x *SocketConfig) GetTrustedXForwardedFor() []string {
 }
 
 type HappyEyeballsConfig struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	PrioritizeIpv6   bool                   `protobuf:"varint,1,opt,name=prioritize_ipv6,json=prioritizeIpv6,proto3" json:"prioritize_ipv6,omitempty"`
-	Interleave       uint32                 `protobuf:"varint,2,opt,name=interleave,proto3" json:"interleave,omitempty"`
-	TryDelayMs       uint64                 `protobuf:"varint,3,opt,name=try_delayMs,json=tryDelayMs,proto3" json:"try_delayMs,omitempty"`
-	MaxConcurrentTry uint32                 `protobuf:"varint,4,opt,name=max_concurrent_try,json=maxConcurrentTry,proto3" json:"max_concurrent_try,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state             protoimpl.MessageState                `protogen:"open.v1"`
+	PrioritizeIpv6    bool                                  `protobuf:"varint,1,opt,name=prioritize_ipv6,json=prioritizeIpv6,proto3" json:"prioritize_ipv6,omitempty"`
+	Interleave        uint32                                `protobuf:"varint,2,opt,name=interleave,proto3" json:"interleave,omitempty"`
+	TryDelayMs        uint64                                `protobuf:"varint,3,opt,name=try_delayMs,json=tryDelayMs,proto3" json:"try_delayMs,omitempty"`
+	MaxConcurrentTry  uint32                                `protobuf:"varint,4,opt,name=max_concurrent_try,json=maxConcurrentTry,proto3" json:"max_concurrent_try,omitempty"`
+	SuccessDefinition HappyEyeballsConfig_SuccessDefinition `protobuf:"varint,5,opt,name=success_definition,json=successDefinition,proto3,enum=xray.transport.internet.HappyEyeballsConfig_SuccessDefinition" json:"success_definition,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *HappyEyeballsConfig) Reset() {
@@ -906,6 +959,13 @@ func (x *HappyEyeballsConfig) GetMaxConcurrentTry() uint32 {
 		return x.MaxConcurrentTry
 	}
 	return 0
+}
+
+func (x *HappyEyeballsConfig) GetSuccessDefinition() HappyEyeballsConfig_SuccessDefinition {
+	if x != nil {
+		return x.SuccessDefinition
+	}
+	return HappyEyeballsConfig_TcpConnected
 }
 
 var File_transport_internet_config_proto protoreflect.FileDescriptor
@@ -989,7 +1049,7 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"\x03Off\x10\x00\x12\n" +
 	"\n" +
 	"\x06TProxy\x10\x01\x12\f\n" +
-	"\bRedirect\x10\x02\"\xad\x01\n" +
+	"\bRedirect\x10\x02\"\xdd\x02\n" +
 	"\x13HappyEyeballsConfig\x12'\n" +
 	"\x0fprioritize_ipv6\x18\x01 \x01(\bR\x0eprioritizeIpv6\x12\x1e\n" +
 	"\n" +
@@ -997,7 +1057,11 @@ const file_transport_internet_config_proto_rawDesc = "" +
 	"interleave\x12\x1f\n" +
 	"\vtry_delayMs\x18\x03 \x01(\x04R\n" +
 	"tryDelayMs\x12,\n" +
-	"\x12max_concurrent_try\x18\x04 \x01(\rR\x10maxConcurrentTry*\xa9\x01\n" +
+	"\x12max_concurrent_try\x18\x04 \x01(\rR\x10maxConcurrentTry\x12m\n" +
+	"\x12success_definition\x18\x05 \x01(\x0e2>.xray.transport.internet.HappyEyeballsConfig.SuccessDefinitionR\x11successDefinition\"?\n" +
+	"\x11SuccessDefinition\x12\x10\n" +
+	"\fTcpConnected\x10\x00\x12\x18\n" +
+	"\x14TlsHandshakeComplete\x10\x01*\xa9\x01\n" +
 	"\x0eDomainStrategy\x12\t\n" +
 	"\x05AS_IS\x10\x00\x12\n" +
 	"\n" +
@@ -1036,40 +1100,42 @@ func file_transport_internet_config_proto_rawDescGZIP() []byte {
 	return file_transport_internet_config_proto_rawDescData
 }
 
-var file_transport_internet_config_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_transport_internet_config_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_transport_internet_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_transport_internet_config_proto_goTypes = []any{
-	(DomainStrategy)(0),          // 0: xray.transport.internet.DomainStrategy
-	(AddressPortStrategy)(0),     // 1: xray.transport.internet.AddressPortStrategy
-	(SocketConfig_TProxyMode)(0), // 2: xray.transport.internet.SocketConfig.TProxyMode
-	(*TransportConfig)(nil),      // 3: xray.transport.internet.TransportConfig
-	(*StreamConfig)(nil),         // 4: xray.transport.internet.StreamConfig
-	(*QuicParams)(nil),           // 5: xray.transport.internet.QuicParams
-	(*CustomSockopt)(nil),        // 6: xray.transport.internet.CustomSockopt
-	(*SocketConfig)(nil),         // 7: xray.transport.internet.SocketConfig
-	(*HappyEyeballsConfig)(nil),  // 8: xray.transport.internet.HappyEyeballsConfig
-	(*serial.TypedMessage)(nil),  // 9: xray.common.serial.TypedMessage
-	(*net.IPOrDomain)(nil),       // 10: xray.common.net.IPOrDomain
+	(DomainStrategy)(0),                        // 0: xray.transport.internet.DomainStrategy
+	(AddressPortStrategy)(0),                   // 1: xray.transport.internet.AddressPortStrategy
+	(SocketConfig_TProxyMode)(0),               // 2: xray.transport.internet.SocketConfig.TProxyMode
+	(HappyEyeballsConfig_SuccessDefinition)(0), // 3: xray.transport.internet.HappyEyeballsConfig.SuccessDefinition
+	(*TransportConfig)(nil),                    // 4: xray.transport.internet.TransportConfig
+	(*StreamConfig)(nil),                       // 5: xray.transport.internet.StreamConfig
+	(*QuicParams)(nil),                         // 6: xray.transport.internet.QuicParams
+	(*CustomSockopt)(nil),                      // 7: xray.transport.internet.CustomSockopt
+	(*SocketConfig)(nil),                       // 8: xray.transport.internet.SocketConfig
+	(*HappyEyeballsConfig)(nil),                // 9: xray.transport.internet.HappyEyeballsConfig
+	(*serial.TypedMessage)(nil),                // 10: xray.common.serial.TypedMessage
+	(*net.IPOrDomain)(nil),                     // 11: xray.common.net.IPOrDomain
 }
 var file_transport_internet_config_proto_depIdxs = []int32{
-	9,  // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
-	10, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
-	3,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
-	9,  // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
-	9,  // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
-	9,  // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
-	5,  // 6: xray.transport.internet.StreamConfig.quic_params:type_name -> xray.transport.internet.QuicParams
-	7,  // 7: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
+	10, // 0: xray.transport.internet.TransportConfig.settings:type_name -> xray.common.serial.TypedMessage
+	11, // 1: xray.transport.internet.StreamConfig.address:type_name -> xray.common.net.IPOrDomain
+	4,  // 2: xray.transport.internet.StreamConfig.transport_settings:type_name -> xray.transport.internet.TransportConfig
+	10, // 3: xray.transport.internet.StreamConfig.security_settings:type_name -> xray.common.serial.TypedMessage
+	10, // 4: xray.transport.internet.StreamConfig.udpmasks:type_name -> xray.common.serial.TypedMessage
+	10, // 5: xray.transport.internet.StreamConfig.tcpmasks:type_name -> xray.common.serial.TypedMessage
+	6,  // 6: xray.transport.internet.StreamConfig.quic_params:type_name -> xray.transport.internet.QuicParams
+	8,  // 7: xray.transport.internet.StreamConfig.socket_settings:type_name -> xray.transport.internet.SocketConfig
 	2,  // 8: xray.transport.internet.SocketConfig.tproxy:type_name -> xray.transport.internet.SocketConfig.TProxyMode
 	0,  // 9: xray.transport.internet.SocketConfig.domain_strategy:type_name -> xray.transport.internet.DomainStrategy
-	6,  // 10: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
+	7,  // 10: xray.transport.internet.SocketConfig.customSockopt:type_name -> xray.transport.internet.CustomSockopt
 	1,  // 11: xray.transport.internet.SocketConfig.address_port_strategy:type_name -> xray.transport.internet.AddressPortStrategy
-	8,  // 12: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	9,  // 12: xray.transport.internet.SocketConfig.happy_eyeballs:type_name -> xray.transport.internet.HappyEyeballsConfig
+	3,  // 13: xray.transport.internet.HappyEyeballsConfig.success_definition:type_name -> xray.transport.internet.HappyEyeballsConfig.SuccessDefinition
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_config_proto_init() }
@@ -1082,7 +1148,7 @@ func file_transport_internet_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_config_proto_rawDesc), len(file_transport_internet_config_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
