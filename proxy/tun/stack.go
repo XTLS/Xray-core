@@ -148,6 +148,11 @@ func (s *stack) Close() error {
 	for _, u := range sockets {
 		u.queue.close()
 	}
+	// the UDP flows the other side opened are in neither conns nor sockets; end them too, or their
+	// dispatches and what they hold survive the instance
+	if s.udp != nil {
+		s.udp.closeAll()
+	}
 	return nil
 }
 
