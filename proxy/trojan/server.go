@@ -38,7 +38,6 @@ type Server struct {
 	policyManager policy.Manager
 	validator     *Validator
 	fallbacks     map[string]map[string]map[string]*Fallback // or nil
-	cone          bool
 }
 
 // NewServer creates a new trojan inbound handler.
@@ -59,7 +58,6 @@ func NewServer(ctx context.Context, config *ServerConfig) (*Server, error) {
 	server := &Server{
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 		validator:     validator,
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	if config.Fallbacks != nil {
@@ -302,7 +300,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Sess
 				}
 				errors.LogInfo(ctx, "tunnelling request to ", destination)
 
-				if !s.cone || dest == nil {
+				if dest == nil {
 					dest = &destination
 				}
 

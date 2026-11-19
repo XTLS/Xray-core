@@ -50,7 +50,6 @@ func init() {
 type Handler struct {
 	server        *protocol.ServerSpec
 	policyManager policy.Manager
-	cone          bool
 	encryption    *encryption.ClientInstance
 	reverse       *Reverse
 
@@ -78,7 +77,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	handler := &Handler{
 		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	a := handler.server.User.Account.(*vless.MemoryAccount)
@@ -300,7 +298,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	clientReader := link.Reader // .(*pipe.Reader)
 	clientWriter := link.Writer // .(*pipe.Writer)
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
-	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
+	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)
