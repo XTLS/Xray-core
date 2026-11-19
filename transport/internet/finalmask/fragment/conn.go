@@ -30,19 +30,6 @@ func NewConnServer(c *Config, raw net.Conn, server bool) (net.Conn, error) {
 	return NewConnClient(c, raw, server)
 }
 
-func (c *fragmentConn) TcpMaskConn() {}
-
-func (c *fragmentConn) RawConn() net.Conn {
-	return c.Conn
-}
-
-func (c *fragmentConn) Splice() bool {
-	if c.server {
-		return false
-	}
-	return true
-}
-
 // lengthForSegment returns the length range (min, max) for the given segment index (0-based).
 // Clamps to the last entry when the index exceeds the list length.
 func (c *fragmentConn) lengthForSegment(segIdx int) (int64, int64) {

@@ -5,13 +5,9 @@ import (
 	"io"
 	"net"
 	"sync"
-
-	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
 const ioBufferSize = 32 * 1024
-
-var _ finalmask.TcpMaskConn = (*wrappedConn)(nil)
 
 type streamDecoder interface {
 	decodeChunk(in []byte, pending []byte) ([]byte, error)
@@ -123,17 +119,6 @@ func (c *wrappedConn) Read(p []byte) (int, error) {
 
 func (c *wrappedConn) Write(p []byte) (int, error) {
 	return c.writer.Write(p)
-}
-
-func (c *wrappedConn) TcpMaskConn() {}
-
-func (c *wrappedConn) RawConn() net.Conn {
-	return c.Conn
-}
-
-func (c *wrappedConn) Splice() bool {
-	// Sudoku transforms the entire stream; bypassing it would disable masking.
-	return false
 }
 
 func (c *wrappedConn) CloseWrite() error {
