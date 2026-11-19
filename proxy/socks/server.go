@@ -149,6 +149,7 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 				To:     dest,
 				Status: log.AccessAccepted,
 				Reason: "",
+				Email:  inbound.User.Email,
 			})
 		}
 		if inbound.CanSpliceCopy == 2 {
@@ -270,6 +271,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 					To:     destination,
 					Status: log.AccessAccepted,
 					Reason: "",
+					Email:  inbound.User.Email,
 				})
 			}
 
