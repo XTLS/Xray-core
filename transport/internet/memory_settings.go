@@ -2,7 +2,10 @@ package internet
 
 import (
 	"context"
+	stderrors "errors"
+	"io"
 	"reflect"
+	"sync"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/net"
@@ -12,6 +15,12 @@ import (
 
 // MemoryStreamConfig is a parsed form of StreamConfig. It is used to reduce the number of Protobuf parses.
 type MemoryStreamConfig struct {
+	// A MemoryStreamConfig with registered resources must not be copied.
+	closeMu    sync.Mutex
+	closeDone  chan struct{}
+	closeHooks []func() error
+	closeErr   error
+
 	Destination      *net.Destination
 	ProtocolName     string
 	ProtocolSettings interface{}
@@ -103,4 +112,46 @@ func ToMemoryStreamConfig(s *StreamConfig) (*MemoryStreamConfig, error) {
 	}
 
 	return mss, nil
+}
+
+// OnClose registers cleanup for a transport resource owned by these settings.
+// On failure the caller retains ownership and must release the resource.
+// Hooks must not call Close on these same settings.
+func (s *MemoryStreamConfig) OnClose(close func() error) error {
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
+	if s.closeDone != nil {
+		return io.ErrClosedPipe
+	}
+	s.closeHooks = append(s.closeHooks, close)
+	return nil
+}
+
+// IsClosed reports whether cleanup has started, including while it is pending.
+func (s *MemoryStreamConfig) IsClosed() bool {
+	s.closeMu.Lock()
+	defer s.closeMu.Unlock()
+	return s.closeDone != nil
+}
+
+// Close prevents new registrations and waits for all registered cleanup.
+// Direct transport callers own this lifetime; proxyman closes it with its handler.
+func (s *MemoryStreamConfig) Close() error {
+	s.closeMu.Lock()
+	if done := s.closeDone; done != nil {
+		s.closeMu.Unlock()
+		<-done
+		return s.closeErr
+	}
+	s.closeDone = make(chan struct{})
+	hooks := s.closeHooks
+	s.closeHooks = nil
+	s.closeMu.Unlock()
+	var errs []error
+	for _, close := range hooks {
+		errs = append(errs, close())
+	}
+	s.closeErr = stderrors.Join(errs...)
+	close(s.closeDone)
+	return s.closeErr
 }
