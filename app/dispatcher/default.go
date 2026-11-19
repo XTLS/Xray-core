@@ -93,12 +93,7 @@ func (r *cachedReader) Interrupt() {
 		r.cache = buf.ReleaseMulti(r.cache)
 	}
 	r.Unlock()
-	switch reader := r.reader.(type) {
-	case *pipe.Reader:
-		reader.Interrupt()
-	case nativeReader:
-		reader.Interrupt()
-	}
+	common.Interrupt(r.reader)
 }
 
 // DefaultDispatcher is a default implementation of Dispatcher.

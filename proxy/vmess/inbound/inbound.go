@@ -355,17 +355,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err != nil {
 		return errors.New("failed to start decoding").Base(err)
 	}
-	// Derive response keys in memory; socket failures must remain ordinary errors.
-	header := buf.New()
-	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, header)
 	wire := buf.NewBufferedWriter(buf.NewWriter(connection))
+	// The empty response header fits in wire's initial buffer. Socket I/O is
+	// deferred to the checked first flush.
+	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, wire)
 	bodyWriter, err := svrSession.EncodeResponseBody(request, wire)
 	if err != nil {
-		header.Release()
 		return errors.New("failed to start decoding response").Base(err)
-	}
-	if err := wire.WriteMultiBuffer(buf.MultiBuffer{header}); err != nil {
-		return errors.New("failed to prepare response header").Base(err)
 	}
 	if request.Command == protocol.RequestCommandMux {
 		body := &codecBody{ctx: ctx, reader: bodyReader}
@@ -373,14 +369,13 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		output := &multiplex.PhysicalWriter{Writer: bodyWriter}
 		output.Lock()
 		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: output})
-		defer worker.Close()
 		stopWorker := context.AfterFunc(worker.Context(), func() {
-			if worker.Err() != nil {
-				cancel(worker.Err())
+			if err := worker.Err(); err != nil {
+				cancel(err)
 			}
 		})
 		defer stopWorker()
-		if err := wire.SetBuffered(false); err != nil {
+		if err = wire.SetBuffered(false); err != nil {
 			if canceled := ctx.Err(); canceled != nil {
 				if cause := worker.Err(); cause != nil {
 					err = cause
@@ -389,14 +384,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 				}
 			}
 			cancel(nil)
-			output.Unlock()
-			return errors.New("failed to write response header").Base(err)
 		}
 		output.Unlock()
-		select {
-		case <-ctx.Done():
-		case <-worker.WaitClosed():
+		if err != nil {
+			return errors.New("failed to write response header").Base(err)
 		}
+		<-worker.WaitClosed()
 		if err := worker.Err(); err != nil {
 			return errors.New("connection ends").Base(err)
 		}

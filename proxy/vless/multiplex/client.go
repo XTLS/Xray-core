@@ -182,7 +182,6 @@ func (p *Pool) Admit(ctx context.Context, s *Session) error {
 	p.access.Unlock()
 	if err != nil {
 		cancel()
-		worker.Close()
 		return err
 	}
 	context.AfterFunc(worker.ctx, func() {

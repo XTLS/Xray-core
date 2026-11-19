@@ -107,6 +107,13 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 	}, nil
 }
 
+type MuxConfig struct {
+	Enabled         bool   `json:"enabled"`
+	Concurrency     int16  `json:"concurrency"`
+	XudpConcurrency int16  `json:"xudpConcurrency"`
+	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
+}
+
 type InboundDetourConfig struct {
 	Protocol       string           `json:"protocol"`
 	PortList       *PortList        `json:"port"`
@@ -198,13 +205,6 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 		ReceiverSettings: serial.ToTypedMessage(receiverSettings),
 		ProxySettings:    serial.ToTypedMessage(ts),
 	}, nil
-}
-
-type MuxConfig struct {
-	Enabled         bool   `json:"enabled"`
-	Concurrency     int16  `json:"concurrency"`
-	XudpConcurrency int16  `json:"xudpConcurrency"`
-	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
 }
 
 type OutboundDetourConfig struct {

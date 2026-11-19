@@ -218,11 +218,7 @@ func (c *carrier) Err() error {
 }
 
 func (c *carrier) Close() error {
-	return c.closeCause(nil)
-}
-
-func (c *carrier) closeCause(err error) error {
-	c.cancel(err)
+	c.cancel(nil)
 	return nil
 }
 
@@ -301,7 +297,7 @@ func (c *carrier) handleStatusEnd(meta *FrameMetadata, reader *buf.BufferedReade
 
 func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMetadata, *buf.BufferedReader) error) {
 	var err error
-	defer func() { c.closeCause(err) }()
+	defer func() { c.cancel(err) }()
 	reader := &buf.BufferedReader{Reader: c.link.Reader}
 	defer func() { buf.ReleaseMulti(reader.Buffer) }()
 	for !c.Closed() {
