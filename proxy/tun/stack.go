@@ -117,6 +117,9 @@ func NewStack(ctx context.Context, options StackOptions, handler ConnectionHandl
 	if handler != nil {
 		s.handle = handler.HandleConnection
 		s.udp = newUdpConnectionHandler(s.handle, s.writeUDP)
+		if r, ok := handler.(udpRouter); ok {
+			s.udp.routeKey = r.UDPRouteKey
+		}
 	}
 	return s, nil
 }
