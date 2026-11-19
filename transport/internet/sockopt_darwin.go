@@ -84,7 +84,7 @@ func OriginalDst(la, ra net.Addr) (net.IP, int, error) {
 	nl.sxport[0], nl.sxport[1] = byte(raPort>>8), byte(raPort)
 	nl.dxport[0], nl.dxport[1] = byte(laPort>>8), byte(laPort)
 	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {
-		return net.IP{}, -1, os.NewSyscallError("ioctl", err)
+		return net.IP{}, -1, os.NewSyscallError("ioctl", errno)
 	}
 
 	odPort := nl.rdxport
