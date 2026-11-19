@@ -216,15 +216,12 @@ func (b *codecBody) Interrupt() {
 	b.stopped.Store(true)
 }
 
-// responseWriter serializes the encoder and finishes the protocol response once.
+// responseWriter serializes concurrent writes before they reach the VMess codec.
 type responseWriter struct {
 	sync.Mutex
+	buf.Writer
 	ctx    context.Context
 	cancel context.CancelCauseFunc
-	buf.Writer
-	header    *buf.BufferedWriter
-	done      chan struct{}
-	terminate bool
 }
 
 func (w *responseWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -234,47 +231,15 @@ func (w *responseWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	}
 	w.Lock()
 	defer w.Unlock()
-	if w.ctx.Err() != nil {
-		buf.ReleaseMulti(mb)
-		return context.Cause(w.ctx)
-	}
-	if w.done == nil {
-		buf.ReleaseMulti(mb)
-		return io.ErrClosedPipe
-	}
-	err := w.Writer.WriteMultiBuffer(mb)
-	if err == nil && w.header != nil {
-		err = w.header.SetBuffered(false)
-		w.header = nil
-	}
-	return w.fail(err)
-}
-
-func (w *responseWriter) Close() error {
-	w.Lock()
-	defer w.Unlock()
 	if err := context.Cause(w.ctx); err != nil {
+		buf.ReleaseMulti(mb)
 		return err
 	}
-	if w.done == nil {
-		return nil
-	}
-	defer close(w.done)
-	w.done = nil
-	if w.header != nil {
-		return w.fail(w.header.Flush())
-	}
-	if w.terminate {
-		return w.fail(w.Writer.WriteMultiBuffer(nil))
+	if err := w.Writer.WriteMultiBuffer(mb); err != nil {
+		w.cancel(err)
+		return err
 	}
 	return nil
-}
-
-func (w *responseWriter) fail(err error) error {
-	if err != nil {
-		w.cancel(err)
-	}
-	return err
 }
 
 func (w *responseWriter) Interrupt() { w.cancel(io.ErrClosedPipe) }
@@ -348,42 +313,18 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("failed to start decoding response").Base(err)
 	}
 	body := &codecBody{ctx: ctx, reader: bodyReader}
+	wire.SetFlushNext()
 	if request.Command == protocol.RequestCommandMux {
-		// Start decoding before physical header I/O; wire orders header and body.
-		output := &multiplex.PhysicalWriter{Writer: bodyWriter}
-		output.Lock()
-		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: output})
-		stopWorker := context.AfterFunc(worker.Context(), func() {
-			if err := worker.Err(); err != nil {
-				cancel(err)
-			}
-		})
-		defer stopWorker()
-		if err := wire.SetBuffered(false); err != nil {
-			cancel(err)
-		}
-		output.Unlock()
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: bodyWriter})
 		<-worker.WaitClosed()
 		if err := worker.Err(); err != nil {
-			cancel(err)
-		}
-		if err := context.Cause(ctx); err != nil {
 			return errors.New("connection ends").Base(err)
 		}
 		return nil
 	}
-	completed := make(chan struct{})
-	account := request.User.Account.(*vmess.MemoryAccount)
-	output := &responseWriter{
-		ctx: ctx, cancel: cancel, Writer: bodyWriter, header: wire, done: completed,
-		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
-	}
+	output := &responseWriter{Writer: bodyWriter, ctx: ctx, cancel: cancel}
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: body, Writer: output}); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
-	}
-	select {
-	case <-completed:
-	case <-ctx.Done():
 	}
 	if err := context.Cause(ctx); err != nil {
 		return errors.New("connection ends").Base(err)

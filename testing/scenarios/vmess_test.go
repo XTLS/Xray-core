@@ -637,7 +637,7 @@ func TestVMessKCPLarge(t *testing.T) {
 	}()
 }
 
-func TestVMessGCMConcurrentTCP(t *testing.T) {
+func TestVMessGCMMux(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -703,6 +703,12 @@ func TestVMessGCMConcurrentTCP(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
+					MultiplexSettings: &proxyman.MultiplexingConfig{
+						Enabled:     true,
+						Concurrency: 4,
+					},
+				}),
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
@@ -737,7 +743,7 @@ func TestVMessGCMConcurrentTCP(t *testing.T) {
 	}
 }
 
-func TestVMessGCMConcurrentUDP(t *testing.T) {
+func TestVMessGCMMuxUDP(t *testing.T) {
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -822,6 +828,12 @@ func TestVMessGCMConcurrentUDP(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
+				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
+					MultiplexSettings: &proxyman.MultiplexingConfig{
+						Enabled:     true,
+						Concurrency: 4,
+					},
+				}),
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
