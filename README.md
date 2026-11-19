@@ -146,6 +146,8 @@
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
+- Magisk/KernelSU
+  - [Passwall-Android](https://github.com/Incognito-Coder/passwall-android)
 - HarmonyOS
   - [Hey](https://github.com/popsiclelmlm/Hey)
 
