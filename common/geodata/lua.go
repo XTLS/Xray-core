@@ -23,7 +23,7 @@ func RegisterLua(L *lua.LState) {
 				return 0
 			}
 			xlua.PushWithDirectMethods(L, matcher, map[string]xlua.DirectMethod{
-				"Match":    newLuaDomainMatch(xlua.NewSlicePusher[uint32](L)),
+				"Match":    newLuaDomainMatch(xlua.NewReadOnlySlicePusher[uint32](L)),
 				"MatchAny": luaDomainMatchAny,
 			})
 			return 1

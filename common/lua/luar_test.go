@@ -9,53 +9,20 @@ import (
 	luar "layeh.com/gopher-luar"
 )
 
-func TestSlicePusher(t *testing.T) {
+func TestReadOnlySlicePusher(t *testing.T) {
 	L := glua.NewState()
 	defer L.Close()
-	push := NewSlicePusher[int](L)
+	push := NewReadOnlySlicePusher[int](L)
 	values := []int{3, 5}
 	L.SetGlobal("getValues", L.NewFunction(func(L *glua.LState) int {
 		push(L, values)
 		return 1
 	}))
 	if err := L.DoString(`
-local values = getValues()
-assert(#values == 2 and values[1] == 3 and values[2] == 5)
-values[2] = 7
-local co = coroutine.create(function()
-    local values = getValues()
-    assert(#values == 2 and values[1] == 3 and values[2] == 7)
-    return true
-end)
+local co = coroutine.create(function() return getValues() end)
 local ok, result = coroutine.resume(co)
-assert(ok and result == true)
-`); err != nil {
-		t.Fatal(err)
-	}
-	if values[1] != 7 {
-		t.Fatal("slice storage was copied")
-	}
-	push(L, nil)
-	if L.Get(-1) != glua.LNil {
-		t.Fatal("nil slice must push Lua nil")
-	}
-	L.Pop(1)
-	push(L, []int{})
-	L.SetGlobal("empty", L.Get(-1))
-	L.Pop(1)
-	if err := L.DoString(`assert(type(empty) == "userdata" and #empty == 0)`); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestReadOnlySlicePusher(t *testing.T) {
-	L := glua.NewState()
-	defer L.Close()
-	values := []int{3, 5}
-	NewReadOnlySlicePusher[int](L)(L, values)
-	L.SetGlobal("values", L.Get(-1))
-	L.Pop(1)
-	if err := L.DoString(`
+assert(ok, result)
+values = result
 assert(#values == 2 and values[1] == 3 and values[2] == 5)
 assert(not pcall(function() values[1] = 7 end))
 assert(not pcall(function() return values + 7 end))
@@ -68,6 +35,17 @@ assert(sum == 8)
 	got := L.GetGlobal("values").(*glua.LUserData).Value.([]int)
 	if &got[0] != &values[0] || values[0] != 3 || values[1] != 5 {
 		t.Fatal("read-only binding copied or modified the slice")
+	}
+	push(L, nil)
+	if L.Get(-1) != glua.LNil {
+		t.Fatal("nil slice must push Lua nil")
+	}
+	L.Pop(1)
+	push(L, []int{})
+	L.SetGlobal("empty", L.Get(-1))
+	L.Pop(1)
+	if err := L.DoString(`assert(type(empty) == "userdata" and #empty == 0)`); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -230,23 +208,23 @@ assert(not pcall(function() return nested + nested end))
 	}
 }
 
-func TestSlicePusherMetatablePerState(t *testing.T) {
+func TestReadOnlySlicePusherMetatablePerState(t *testing.T) {
 	first := glua.NewState()
 	defer first.Close()
 	second := glua.NewState()
 	defer second.Close()
-	NewSlicePusher[int](first)(first, []int{1})
-	NewSlicePusher[int](second)(second, []int{1})
+	NewReadOnlySlicePusher[int](first)(first, []int{1})
+	NewReadOnlySlicePusher[int](second)(second, []int{1})
 	if first.Get(-1).(*glua.LUserData).Metatable == second.Get(-1).(*glua.LUserData).Metatable {
 		t.Fatal("independent states share a slice metatable")
 	}
 }
 
-func BenchmarkSlicePusher(b *testing.B) {
+func BenchmarkReadOnlySlicePusher(b *testing.B) {
 	L := glua.NewState()
 	defer L.Close()
 	ips := []net.IP{net.ParseIP("127.0.0.1")}
-	pushIPs := NewSlicePusher[net.IP](L)
+	pushIPs := NewReadOnlySlicePusher[net.IP](L)
 	for _, benchmark := range []struct {
 		name string
 		push func(*glua.LState, []net.IP)

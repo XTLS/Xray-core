@@ -104,7 +104,9 @@ for _, value in ipairs({matcher, domain}) do
     assert(not pcall(function() return value ^ {} end))
 end
 assert(domain:matchAny("example.com"))
-assert(#domain:Match("example.com") == 1)
+local indices = domain:Match("example.com")
+assert(#indices == 1)
+assert(not pcall(function() indices[1] = 7 end))
 assert(domain:match("example.com")[1] == 0)
 assert(not pcall(function() matcher:AnyMatch() end))
 assert(not pcall(function() matcher:AnyMatch(matched, true) end))

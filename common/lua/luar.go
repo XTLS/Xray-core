@@ -8,10 +8,10 @@ import (
 	luar "layeh.com/gopher-luar"
 )
 
-// NewSlicePusher captures luar's slice metatable during state initialization.
+// newSlicePusher captures luar's slice metatable during state initialization.
 // The returned function wraps slices without reflection or metatable lookup,
 // and pushes nil for nil slices. Use it with this state or its coroutines.
-func NewSlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
+func newSlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
 	metatable := luar.MT(L, []T(nil)).LTable
 	return func(L *glua.LState, values []T) {
 		if values == nil {
@@ -38,7 +38,7 @@ func NewReadOnlySlicePusher[T any](L *glua.LState) func(*glua.LState, []T) {
 		})
 		setSliceReadOnly[[]T](L, readOnly)
 	}
-	return NewSlicePusher[T](L)
+	return newSlicePusher[T](L)
 }
 
 func setSliceReadOnly[S ~[]E, E any](L *glua.LState, readOnly *glua.LFunction) {
