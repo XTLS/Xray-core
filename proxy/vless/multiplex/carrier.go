@@ -240,13 +240,12 @@ func (c *carrier) monitor() {
 			sessions := c.sessions
 			c.sessions, c.active = nil, 0
 			c.Unlock()
-			var cleanup []*Session
-			for _, s := range sessions {
-				if s.seal(false, false) {
-					cleanup = append(cleanup, s)
+			for id, s := range sessions {
+				if !s.seal(false, false) {
+					delete(sessions, id)
 				}
 			}
-			for _, s := range cleanup {
+			for _, s := range sessions {
 				s.cleanup()
 			}
 			common.Interrupt(c.link.Writer)

@@ -12,7 +12,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
 )
@@ -88,7 +87,7 @@ func Dispatch(ctx context.Context, link *transport.Link, admit func(context.Cont
 	select {
 	case <-callerDone:
 		s.Close()
-	case <-s.done.Wait():
+	case <-s.WaitClosed():
 	}
 	return nil
 }
@@ -245,6 +244,6 @@ func (m *ClientWorker) TryAdmit(ctx context.Context, s *Session) bool {
 		(m.strategy.MaxConnection > 0 && uint32(m.count) >= m.strategy.MaxConnection) {
 		return false
 	}
-	s.parent, s.ID, s.phase, s.done = m.carrier, m.count+1, outputOpen, done.New()
+	s.parent, s.ID, s.phase, s.done = m.carrier, m.count+1, outputOpen, make(chan struct{})
 	return m.admitLocked(s)
 }

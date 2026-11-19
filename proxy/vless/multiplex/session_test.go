@@ -7,7 +7,6 @@ import (
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -28,7 +27,7 @@ func TestCarrierAdmission(t *testing.T) {
 	}
 	// Preserve the original explicit-ID publication assertion, with a fully
 	// initialized real physical owner instead of a standalone manager facade.
-	s := &Session{ID: 4, parent: worker.carrier, output: buf.Discard, done: done.New(), phase: outputOpen, transferType: protocol.TransferTypeStream}
+	s := &Session{ID: 4, parent: worker.carrier, output: buf.Discard, done: make(chan struct{}), phase: outputOpen, transferType: protocol.TransferTypeStream}
 	worker.Lock()
 	admitted := worker.admitLocked(s)
 	indexed := worker.sessions[4] == s

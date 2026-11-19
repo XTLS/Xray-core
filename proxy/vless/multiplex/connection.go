@@ -8,7 +8,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/transport"
-	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
 // PhysicalWriter owns native output serialization without buffering data.
@@ -70,27 +69,17 @@ func (r *responseReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 func (r *responseReader) Interrupt() { r.cancel() }
 
-// OpenLink installs one immutable owner after VLESS codec preparation.
-func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connection, writer buf.Writer, activity *signal.ActivityTimer, openResponse func() (buf.Reader, error)) (*transport.Link, error) {
-	gate, ok := writer.(*PhysicalWriter)
-	if !ok {
-		if _, buffered := writer.(*buf.BufferedWriter); !buffered {
-			writer = WrapWriter(ctx, writer, activity)
-		}
-		gate = &PhysicalWriter{Writer: writer}
+// OpenLink retains decoded read-ahead; the carrier owns output serialization.
+func OpenLink(ctx context.Context, cancel context.CancelFunc, writer buf.Writer, activity *signal.ActivityTimer, openResponse func() (buf.Reader, error)) (*transport.Link, error) {
+	if _, buffered := writer.(*buf.BufferedWriter); !buffered {
+		writer = WrapWriter(ctx, writer, activity)
 	}
-	response := &responseReader{ctx: ctx, cancel: cancel, results: make(chan buf.MultiBuffer)}
-	context.AfterFunc(ctx, func() {
+	response := &responseReader{ctx: ctx, cancel: func() {
+		cancel()
 		activity.SetTimeout(0)
-		if gate.TryLock() {
-			gate.Unlock()
-			conn.Close()
-		} else {
-			common.Interrupt(stat.TryUnwrapStatsConn(conn))
-		}
-	})
+	}, results: make(chan buf.MultiBuffer)}
 	if err := ctx.Err(); err != nil {
-		activity.SetTimeout(0)
+		response.Interrupt()
 		return nil, err
 	}
 	go func() {
@@ -123,5 +112,5 @@ func OpenLink(ctx context.Context, cancel context.CancelFunc, conn stat.Connecti
 			}
 		}
 	}()
-	return &transport.Link{Reader: response, Writer: gate}, nil
+	return &transport.Link{Reader: response, Writer: writer}, nil
 }

@@ -2,7 +2,6 @@ package reverse
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -11,105 +10,68 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/transport"
 	"google.golang.org/protobuf/proto"
 )
 
-// IntranetEndpoint relays Reverse connections from PublicEndpoint to local destinations.
-type IntranetEndpoint struct {
-	ctx         context.Context
-	cancel      context.CancelFunc
-	open        func(context.Context) (context.Context, *transport.Link, error)
-	access      sync.Mutex
-	dispatcher  routing.Dispatcher
-	workers     []*IntranetWorker
-	monitorTask *task.Periodic
-}
-
-func NewIntranetEndpoint(ctx context.Context, dispatcher routing.Dispatcher, open func(context.Context) (context.Context, *transport.Link, error)) *IntranetEndpoint {
-	b := &IntranetEndpoint{dispatcher: dispatcher, open: open}
-	b.ctx, b.cancel = context.WithCancel(ctx)
-	b.monitorTask = &task.Periodic{Execute: b.monitor, Interval: 2 * time.Second}
-	return b
-}
-
-func (b *IntranetEndpoint) monitor() error {
-	b.access.Lock()
-	defer b.access.Unlock()
-	if err := b.ctx.Err(); err != nil {
-		return err
-	}
-	var numConnections uint32
-	active := b.workers[:0]
-	for _, w := range b.workers {
-		if w.IsActive() {
-			active = append(active, w)
-			numConnections += w.Connections()
+// StartIntranet maintains the Reverse carriers and returns their shutdown function.
+// The opener derives each physical connection's context from the supplied context.
+func StartIntranet(ctx context.Context, dispatch func(context.Context, net.Destination, *transport.Link) error, open func(context.Context) (context.Context, *transport.Link, error)) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		const interval = 2 * time.Second
+		timer := time.NewTimer(interval)
+		defer timer.Stop()
+		var workers []*intranetWorker
+		for ; ; timer.Reset(interval) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+			}
+			if ctx.Err() != nil {
+				return
+			}
+			var connections uint32
+			active := workers[:0]
+			for _, w := range workers {
+				if w.state.Load() == int32(Control_ACTIVE) && !w.worker.Closed() {
+					active = append(active, w)
+					connections += w.worker.ActiveConnections()
+				}
+			}
+			clear(workers[len(active):])
+			workers = active
+			if len(workers) != 0 && connections/uint32(len(workers)) <= 16 {
+				continue
+			}
+			physical, link, err := open(ctx)
+			if err != nil {
+				errors.LogWarningInner(ctx, err, "failed to create intranet worker")
+				continue
+			}
+			w := &intranetWorker{dispatch: dispatch}
+			w.worker = multiplex.NewServerWorker(session.ContextWithIsReverseMux(physical, true), w.handle, link)
+			workers = append(workers, w)
 		}
+	}()
+	return func() {
+		cancel()
+		<-done
 	}
-	clear(b.workers[len(active):])
-	b.workers = active
-	numWorker := uint32(len(b.workers))
-
-	if numWorker == 0 || numConnections/numWorker > 16 {
-		worker, err := b.newWorker()
-		if err != nil {
-			errors.LogWarningInner(context.Background(), err, "failed to create intranet worker")
-			return nil
-		}
-		b.workers = append(b.workers, worker)
-	}
-
-	return nil
 }
 
-func (b *IntranetEndpoint) newWorker() (*IntranetWorker, error) {
-	ctx, link, err := b.open(b.ctx)
-	if err != nil {
-		return nil, err
-	}
-	w := &IntranetWorker{dispatch: b.dispatcher.DispatchLink}
-	w.Worker = multiplex.NewServerWorker(session.ContextWithIsReverseMux(ctx, true), w.handle, link)
-	return w, nil
-}
-
-func (b *IntranetEndpoint) Start() error {
-	if err := b.ctx.Err(); err != nil {
-		return err
-	}
-	return b.monitorTask.Start()
-}
-
-func (b *IntranetEndpoint) Close() error {
-	b.cancel()
-	err := b.monitorTask.Close()
-	b.access.Lock()
-	defer b.access.Unlock()
-	for _, w := range b.workers {
-		w.Worker.Close()
-	}
-	return err
-}
-
-type IntranetWorker struct {
-	Worker   *multiplex.ServerWorker
+type intranetWorker struct {
+	worker   *multiplex.ServerWorker
 	dispatch func(context.Context, net.Destination, *transport.Link) error
-	State    atomic.Int32
-}
-
-func (w *IntranetWorker) IsActive() bool {
-	return w.State.Load() == int32(Control_ACTIVE) && !w.Worker.Closed()
-}
-
-func (w *IntranetWorker) Connections() uint32 {
-	return w.Worker.ActiveConnections()
+	state    atomic.Int32
 }
 
 // handle forwards user traffic or consumes the native Reverse control stream.
-func (w *IntranetWorker) handle(ctx context.Context, dest net.Destination, link *transport.Link) error {
+func (w *intranetWorker) handle(ctx context.Context, dest net.Destination, link *transport.Link) error {
 	if !isInternalDomain(dest) {
 		return w.dispatch(ctx, dest, link)
 	}
@@ -124,7 +86,7 @@ func (w *IntranetWorker) handle(ctx context.Context, dest net.Destination, link 
 				errors.LogInfoInner(ctx, err, "failed to parse proto message")
 				return nil
 			}
-			w.State.Store(int32(ctl.State))
+			w.state.Store(int32(ctl.State))
 		}
 		buf.ReleaseMulti(mb)
 		if readErr != nil {

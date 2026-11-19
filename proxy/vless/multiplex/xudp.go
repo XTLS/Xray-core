@@ -209,26 +209,18 @@ func (w *flowOutput) WriteMultiBuffer(data buf.MultiBuffer) error {
 // One gated actor claims packet data or retires one exact terminal identity.
 // It returns custody only; the sender encodes after both logical locks release.
 func (c *carrier) responseTurn(s *Session) (buf.MultiBuffer, bool) {
-	if s.flow == nil {
-		c.Lock()
-		defer c.Unlock()
-		c.unlinkReadyLocked(s)
-		if !c.Closed() && c.sessions[s.ID] == s && s.phase == outputClosing {
-			delete(c.sessions, s.ID)
-			return nil, true
-		}
-		return nil, false
-	}
 	x := s.flow // immutable after publication
-	x.access.Lock()
-	defer x.access.Unlock()
+	if x != nil {
+		x.access.Lock()
+		defer x.access.Unlock()
+	}
 	c.Lock()
 	defer c.Unlock()
 	c.unlinkReadyLocked(s)
 	if c.Closed() || c.sessions[s.ID] != s {
 		return nil, false
 	}
-	if s.phase == outputOpen && x.binding == s && len(x.response) == 0 && x.responseErr != nil {
+	if x != nil && s.phase == outputOpen && x.binding == s && len(x.response) == 0 && x.responseErr != nil {
 		s.closeLocked(x, x.responseErr == io.ErrClosedPipe, true)
 	}
 	if s.phase == outputClosing {
@@ -236,7 +228,7 @@ func (c *carrier) responseTurn(s *Session) (buf.MultiBuffer, bool) {
 		delete(c.sessions, s.ID)
 		return nil, true
 	}
-	if x.binding != s || (s.phase != outputOpen && s.phase != outputStarting) ||
+	if x == nil || x.binding != s || (s.phase != outputOpen && s.phase != outputStarting) ||
 		s.phase == outputStarting && x.requestErr != nil || len(x.response) == 0 {
 		return nil, false
 	}

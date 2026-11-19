@@ -51,7 +51,7 @@ type Handler struct {
 	policyManager policy.Manager
 	cone          bool
 	encryption    *encryption.ClientInstance
-	reverse       *reverse.IntranetEndpoint
+	closeReverse  func()
 	ctx           context.Context
 	stop          context.CancelFunc
 	multiplex     *multiplex.Client
@@ -120,7 +120,9 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}
 	}
 
-	if a.Reverse != nil {
+	if a.Reverse == nil {
+		handler.testpre = a.Testpre
+	} else {
 		dialer := session.FullHandlerFromContext(ctx).(internet.Dialer)
 		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
 			Tag:  a.Reverse.Tag,
@@ -136,18 +138,11 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 				SniffingRequest: request,
 			})
 		}
-		handler.reverse = reverse.NewIntranetEndpoint(rvsCtx,
-			v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
+		handler.closeReverse = reverse.StartIntranet(rvsCtx,
+			v.GetFeature(routing.DispatcherType()).(routing.Dispatcher).DispatchLink,
 			func(ctx context.Context) (context.Context, *transport.Link, error) {
 				return handler.process(ctx, nil, dialer, protocol.RequestCommandRvs)
 			})
-		go func() {
-			select {
-			case <-handler.ctx.Done():
-			case <-time.After(2 * time.Second):
-				handler.reverse.Start()
-			}
-		}()
 	}
 
 	if config.Multiplex != nil {
@@ -162,16 +157,14 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 			})
 	}
 
-	handler.testpre = a.Testpre
-
 	return handler, nil
 }
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
 	h.stop()
-	if h.reverse != nil {
-		return h.reverse.Close()
+	if h.closeReverse != nil {
+		h.closeReverse()
 	}
 	return nil
 }
@@ -192,7 +185,6 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	var rawConn stat.Connection
-	var stopOpening func() bool
 	var timer *signal.ActivityTimer
 	defer func() {
 		if !native || err != nil {
@@ -216,7 +208,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	rec := h.server
 	var conn stat.Connection
 
-	if h.testpre > 0 && h.reverse == nil {
+	if h.testpre > 0 {
 		h.initpre.Do(func() {
 			h.preConns = make(chan *ConnExpire)
 			for range h.testpre { // TODO: randomize
@@ -270,7 +262,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	rawConn = conn
 	if native {
-		stopOpening = context.AfterFunc(ctx, func() { common.Interrupt(stat.TryUnwrapStatsConn(rawConn)) })
+		context.AfterFunc(ctx, func() { common.Interrupt(stat.TryUnwrapStatsConn(rawConn)) })
 	}
 
 	iConn := stat.TryUnwrapStatsConn(conn)
@@ -429,8 +421,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 				return nil, nil, err
 			}
 		}
-		stopOpening()
-		directLink, openErr := multiplex.OpenLink(ctx, cancel, rawConn, serverWriter, timer, openResponse)
+		directLink, openErr := multiplex.OpenLink(ctx, cancel, serverWriter, timer, openResponse)
 		if openErr != nil {
 			return nil, nil, openErr
 		}

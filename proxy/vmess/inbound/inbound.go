@@ -2,9 +2,7 @@ package inbound
 
 import (
 	"context"
-	goerrors "errors"
 	"io"
-	gonet "net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -188,12 +186,11 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	return nil
 }
 
-// codecBody guards decoded input and owns raw interruption only when supplied.
+// codecBody discards decoded input when the connection or reader has stopped.
 type codecBody struct {
-	ctx        context.Context
-	reader     buf.Reader
-	connection net.Conn
-	stopped    atomic.Bool
+	ctx     context.Context
+	reader  buf.Reader
+	stopped atomic.Bool
 }
 
 func (b *codecBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
@@ -217,35 +214,20 @@ func (b *codecBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 func (b *codecBody) Interrupt() {
 	b.stopped.Store(true)
-	if b.connection != nil {
-		common.Interrupt(b.connection)
-	}
 }
 
-// ordinaryResponse serializes codec state and checks finalization. The existing
-// operation context owns failures; done denotes successful output completion.
-type ordinaryResponse struct {
+// responseWriter serializes the encoder and finishes the protocol response once.
+type responseWriter struct {
 	sync.Mutex
-	ctx       context.Context
-	cancel    context.CancelCauseFunc
-	body      buf.Writer
-	output    *buf.BufferedWriter
-	terminate bool
-	wrote     bool
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	buf.Writer
+	header    *buf.BufferedWriter
 	done      chan struct{}
+	terminate bool
 }
 
-func (w *ordinaryResponse) rememberIO(err error) error {
-	if canceled := w.ctx.Err(); canceled != nil && (goerrors.Is(err, gonet.ErrClosed) || goerrors.Is(err, io.ErrClosedPipe)) {
-		err = canceled
-	}
-	if err != nil {
-		w.cancel(err)
-	}
-	return err
-}
-
-func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
+func (w *responseWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	if mb.IsEmpty() {
 		buf.ReleaseMulti(mb)
 		return nil
@@ -260,38 +242,42 @@ func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		buf.ReleaseMulti(mb)
 		return io.ErrClosedPipe
 	}
-	if err := w.body.WriteMultiBuffer(mb); err != nil {
-		return w.rememberIO(err)
+	err := w.Writer.WriteMultiBuffer(mb)
+	if err == nil && w.header != nil {
+		err = w.header.SetBuffered(false)
+		w.header = nil
 	}
-	if !w.wrote {
-		w.wrote = true
-		return w.rememberIO(w.output.SetBuffered(false))
-	}
-	return nil
+	return w.fail(err)
 }
 
-func (w *ordinaryResponse) Close() error {
+func (w *responseWriter) Close() error {
 	w.Lock()
 	defer w.Unlock()
-	if w.ctx.Err() != nil {
-		return context.Cause(w.ctx)
+	if err := context.Cause(w.ctx); err != nil {
+		return err
 	}
 	if w.done == nil {
 		return nil
 	}
-	completed := w.done
+	defer close(w.done)
 	w.done = nil
-	defer close(completed)
-	if w.wrote && w.terminate {
-		if err := w.body.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
-			return w.rememberIO(err)
-		}
+	if w.header != nil {
+		return w.fail(w.header.Flush())
 	}
-	return w.rememberIO(w.output.Flush())
+	if w.terminate {
+		return w.fail(w.Writer.WriteMultiBuffer(nil))
+	}
+	return nil
 }
 
-// Cancellation publishes failure without joining foreign connection cleanup.
-func (w *ordinaryResponse) Interrupt() { w.cancel(io.ErrClosedPipe) }
+func (w *responseWriter) fail(err error) error {
+	if err != nil {
+		w.cancel(err)
+	}
+	return err
+}
+
+func (w *responseWriter) Interrupt() { w.cancel(io.ErrClosedPipe) }
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
@@ -343,14 +329,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.CanSpliceCopy = 3
 	inbound.User = request.User
 
-	sessionPolicy = h.policyManager.ForLevel(request.User.Level)
-
+	ctx = policy.ContextWithBufferPolicy(ctx, h.policyManager.ForLevel(request.User.Level).Buffer)
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
 	defer stopClose()
 
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
 	bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 	if err != nil {
 		return errors.New("failed to start decoding").Base(err)
@@ -363,8 +347,8 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err != nil {
 		return errors.New("failed to start decoding response").Base(err)
 	}
+	body := &codecBody{ctx: ctx, reader: bodyReader}
 	if request.Command == protocol.RequestCommandMux {
-		body := &codecBody{ctx: ctx, reader: bodyReader}
 		// Start decoding before physical header I/O; wire orders header and body.
 		output := &multiplex.PhysicalWriter{Writer: bodyWriter}
 		output.Lock()
@@ -375,46 +359,34 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 			}
 		})
 		defer stopWorker()
-		if err = wire.SetBuffered(false); err != nil {
-			if canceled := ctx.Err(); canceled != nil {
-				if cause := worker.Err(); cause != nil {
-					err = cause
-				} else {
-					err = canceled
-				}
-			}
-			cancel(nil)
+		if err := wire.SetBuffered(false); err != nil {
+			cancel(err)
 		}
 		output.Unlock()
-		if err != nil {
-			return errors.New("failed to write response header").Base(err)
-		}
 		<-worker.WaitClosed()
 		if err := worker.Err(); err != nil {
-			return errors.New("connection ends").Base(err)
+			cancel(err)
 		}
-		if err := ctx.Err(); err != nil {
+		if err := context.Cause(ctx); err != nil {
 			return errors.New("connection ends").Base(err)
 		}
 		return nil
 	}
-	account := request.User.Account.(*vmess.MemoryAccount)
-	input := &codecBody{ctx: ctx, reader: bodyReader, connection: iConn}
 	completed := make(chan struct{})
-	response := &ordinaryResponse{
-		ctx: ctx, cancel: cancel, body: bodyWriter, output: wire,
+	account := request.User.Account.(*vmess.MemoryAccount)
+	output := &responseWriter{
+		ctx: ctx, cancel: cancel, Writer: bodyWriter, header: wire, done: completed,
 		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
-		done:      completed,
 	}
-	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: input, Writer: response}); err != nil {
-		cancel(err)
+	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: body, Writer: output}); err != nil {
+		return errors.New("failed to dispatch request").Base(err)
 	}
 	select {
 	case <-completed:
 	case <-ctx.Done():
 	}
-	if ctx.Err() != nil {
-		return errors.New("connection ends").Base(context.Cause(ctx))
+	if err := context.Cause(ctx); err != nil {
+		return errors.New("connection ends").Base(err)
 	}
 	return nil
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/xudp"
 	"github.com/xtls/xray-core/transport"
 )
@@ -31,7 +30,7 @@ type Session struct {
 	first        bool
 	endFailed    bool // immutable after the first local terminal transition
 	phase        byte
-	done         *done.Instance
+	done         chan struct{}
 	flow         *inboundFlow
 	producer     sync.Mutex
 	prev, next   *Session
@@ -132,22 +131,11 @@ func (s *Session) Close() error {
 	return nil
 }
 func (s *Session) Interrupt()                  { s.close(true) }
-func (s *Session) WaitClosed() <-chan struct{} { return s.done.Wait() }
+func (s *Session) WaitClosed() <-chan struct{} { return s.done }
 
 // The initiating producer seals after its DATA attempts. END already belongs
 // to the cold owner before foreign cleanup can block.
-func (s *Session) CloseWithError(err error) error {
-	if s.seal(err != nil, true) {
-		defer s.cleanup()
-	}
-	s.parent.RLock()
-	live := s.phase == outputClosing
-	s.parent.RUnlock()
-	if !live {
-		return io.ErrClosedPipe
-	}
-	return nil
-}
+func (s *Session) CloseWithError(err error) { s.close(err != nil) }
 
 func (s *Session) close(failed bool) { s.terminate(failed, true) }
 func (s *Session) abort()            { s.terminate(false, false) }
@@ -223,7 +211,7 @@ func (s *Session) closeLocked(x *inboundFlow, failed, local bool) (first bool) {
 	}
 	if first {
 		if s.done != nil {
-			s.done.Close()
+			close(s.done)
 		}
 		if x != nil && x.binding == s {
 			x.binding = nil
