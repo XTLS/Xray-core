@@ -242,9 +242,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 		})
 		writer := conn.writer.(*slotWriter)
 		writer.first = make(chan []byte, 1)
-		go func() {
+		// Keep storage open through publication on Close and cancel it on Interrupt.
+		writer.wg.Go(func() {
 			var first []byte
 			select {
+			case <-writer.ctx.Done():
+				return
 			case first = <-writer.first:
 			case <-time.After(25 * time.Millisecond):
 			}
@@ -257,12 +260,12 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				}
 			}
 			// An announce failure surfaces as a connection error on the next Write/Read.
-			if err := storage.Put(context.Background(), announceName(session, time.Now()), announce); err != nil {
+			if err := storage.Put(writer.ctx, announceName(session, time.Now()), announce); err != nil && writer.ctx.Err() == nil {
 				err = errors.New("failed to announce session ", session).Base(err)
 				writer.fail(err)
 				conn.reader.(*slotReader).setErr(err)
 			}
-		}()
+		})
 		return conn, nil
 	}
 
