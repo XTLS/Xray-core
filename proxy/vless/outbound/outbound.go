@@ -18,7 +18,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
@@ -49,7 +48,6 @@ func init() {
 type Handler struct {
 	server        *protocol.ServerSpec
 	policyManager policy.Manager
-	cone          bool
 	encryption    *encryption.ClientInstance
 	closeReverse  func()
 	ctx           context.Context
@@ -77,23 +75,15 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	}
 
 	if config.Multiplex == nil {
-		if fullHandler := session.FullHandlerFromContext(ctx); fullHandler != nil {
-			if settings := fullHandler.SenderSettings(); settings != nil && settings.Type == serial.GetMessageType(&proxymanConfig.SenderConfig{}) {
-				sender, err := settings.GetInstance()
-				if err != nil {
-					return nil, errors.New("failed to parse SenderConfig for VLESS multiplex").Base(err)
-				}
-				if legacy := sender.(*proxymanConfig.SenderConfig).GetMultiplexSettings(); legacy.GetEnabled() {
-					if _, ok := fullHandler.(internet.Dialer); !ok {
-						return nil, errors.New("VLESS multiplex migration requires an outbound dialer")
-					}
-					udp443 := legacy.XudpProxyUDP443
-					if udp443 == "" {
-						udp443 = "allow"
-					}
-					config.Multiplex = &vless.Multiplex{Concurrency: legacy.Concurrency, XudpConcurrency: legacy.XudpConcurrency, XudpProxyUDP443: udp443}
-				}
+		legacy, err := multiplex.LegacyConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if legacy != nil {
+			if _, ok := session.FullHandlerFromContext(ctx).(internet.Dialer); !ok {
+				return nil, errors.New("VLESS multiplex migration requires an outbound dialer")
 			}
+			config.Multiplex = legacy
 		}
 	}
 
@@ -101,7 +91,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	handler := &Handler{
 		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
-		cone:          ctx.Value("cone").(bool),
 	}
 
 	handler.ctx, handler.stop = context.WithCancel(context.Background())
@@ -354,7 +343,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
-	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (h.cone && request.Port != 53 && request.Port != 443)) {
+	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (request.Port != 53 && request.Port != 443)) {
 		request.Command = protocol.RequestCommandMux
 		request.Address = net.DomainAddress("v1.mux.cool")
 		request.Port = net.Port(666)

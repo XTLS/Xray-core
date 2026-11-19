@@ -270,18 +270,12 @@ var PresetFingerprints = map[string]*utls.ClientHelloID{
 
 var ModernFingerprints = map[string]*utls.ClientHelloID{
 	// One of these will be chosen as `random` at startup
-	"hellofirefox_120": &utls.HelloFirefox_120,
+	// All of them must have X25519MLKEM768 before optional X25519, otherwise REALITY servers (since v26.9.9) will reject them
 	"hellofirefox_148": &utls.HelloFirefox_148,
-	"hellochrome_120":  &utls.HelloChrome_120,
 	"hellochrome_131":  &utls.HelloChrome_131,
 	"hellochrome_133":  &utls.HelloChrome_133,
 	"hellochrome_155":  &utls.HelloChrome_155,
-	"helloios_13":      &utls.HelloIOS_13,
-	"helloios_14":      &utls.HelloIOS_14,
-	"helloedge_106":    &utls.HelloEdge_106,
 	"hellosafari_26_3": &utls.HelloSafari_26_3,
-	"hello360_11_0":    &utls.Hello360_11_0,
-	"helloqq_11_1":     &utls.HelloQQ_11_1,
 }
 
 var OtherFingerprints = map[string]*utls.ClientHelloID{
@@ -298,6 +292,7 @@ var OtherFingerprints = map[string]*utls.ClientHelloID{
 	"hellofirefox_99":         &utls.HelloFirefox_99,
 	"hellofirefox_102":        &utls.HelloFirefox_102,
 	"hellofirefox_105":        &utls.HelloFirefox_105,
+	"hellofirefox_120":        &utls.HelloFirefox_120,
 	"hellochrome_auto":        &utls.HelloChrome_Auto,
 	"hellochrome_58":          &utls.HelloChrome_58,
 	"hellochrome_62":          &utls.HelloChrome_62,
@@ -309,17 +304,23 @@ var OtherFingerprints = map[string]*utls.ClientHelloID{
 	"hellochrome_100":         &utls.HelloChrome_100,
 	"hellochrome_102":         &utls.HelloChrome_102,
 	"hellochrome_106_shuffle": &utls.HelloChrome_106_Shuffle,
+	"hellochrome_120":         &utls.HelloChrome_120,
 	"helloios_auto":           &utls.HelloIOS_Auto,
 	"helloios_11_1":           &utls.HelloIOS_11_1,
 	"helloios_12_1":           &utls.HelloIOS_12_1,
+	"helloios_13":             &utls.HelloIOS_13,
+	"helloios_14":             &utls.HelloIOS_14,
 	"helloandroid_11_okhttp":  &utls.HelloAndroid_11_OkHttp,
 	"helloedge_85":            &utls.HelloEdge_85,
+	"helloedge_106":           &utls.HelloEdge_106,
 	"helloedge_auto":          &utls.HelloEdge_Auto,
 	"hellosafari_16_0":        &utls.HelloSafari_16_0,
 	"hellosafari_auto":        &utls.HelloSafari_Auto,
 	"hello360_auto":           &utls.Hello360_Auto,
 	"hello360_7_5":            &utls.Hello360_7_5,
+	"hello360_11_0":           &utls.Hello360_11_0,
 	"helloqq_auto":            &utls.HelloQQ_Auto,
+	"helloqq_11_1":            &utls.HelloQQ_11_1,
 
 	// Chrome betas
 	"hellochrome_100_psk":              &utls.HelloChrome_100_PSK,

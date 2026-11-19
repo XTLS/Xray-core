@@ -150,6 +150,7 @@ Start:
 		To:     request.URL,
 		Status: log.AccessAccepted,
 		Reason: "",
+		Email:  inbound.User.Email,
 	})
 
 	if strings.EqualFold(request.Method, "CONNECT") {

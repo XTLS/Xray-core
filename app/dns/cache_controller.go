@@ -124,14 +124,17 @@ func (c *CacheController) writeAndShrink(expiredKeys []string) {
 		if rec == nil {
 			continue
 		}
-		if rec.A != nil && rec.A.Expire.Before(now) {
-			rec.A = nil
+		a, aaaa := rec.A, rec.AAAA
+		if a != nil && a.Expire.Before(now) {
+			a = nil
 		}
-		if rec.AAAA != nil && rec.AAAA.Expire.Before(now) {
-			rec.AAAA = nil
+		if aaaa != nil && aaaa.Expire.Before(now) {
+			aaaa = nil
 		}
-		if rec.A == nil && rec.AAAA == nil {
+		if a == nil && aaaa == nil {
 			delete(c.ips, domain)
+		} else if a != rec.A || aaaa != rec.AAAA {
+			c.ips[domain] = &record{A: a, AAAA: aaaa}
 		}
 	}
 

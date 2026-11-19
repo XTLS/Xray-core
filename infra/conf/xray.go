@@ -369,15 +369,25 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
 	if c.MuxSettings != nil && c.MuxSettings.Enabled {
-		if vlessConfig, ok := rawConfig.(*VLessOutboundConfig); ok {
-			if vlessConfig.Multiplex == nil {
-				vlessConfig.Multiplex = &MultiplexConfig{
-					Concurrency:     c.MuxSettings.Concurrency,
-					XudpConcurrency: c.MuxSettings.XudpConcurrency,
-					XudpProxyUDP443: c.MuxSettings.XudpProxyUDP443,
-				}
+		legacy := MultiplexConfig{
+			Concurrency: c.MuxSettings.Concurrency, XudpConcurrency: c.MuxSettings.XudpConcurrency,
+			XudpProxyUDP443: c.MuxSettings.XudpProxyUDP443,
+		}
+		switch config := rawConfig.(type) {
+		case *VLessOutboundConfig:
+			if config.Multiplex == nil {
+				config.Multiplex = &legacy
 			}
-		} else {
+		case *VMessOutboundConfig:
+			mux, err := legacy.Build()
+			if err != nil {
+				return nil, err
+			}
+			senderSettings.MultiplexSettings = &proxyman.MultiplexingConfig{
+				Enabled: true, Concurrency: mux.Concurrency,
+				XudpConcurrency: mux.XudpConcurrency, XudpProxyUDP443: mux.XudpProxyUDP443,
+			}
+		default:
 			errors.LogWarning(context.Background(), "Mux is no longer supported by this outbound protocol; ordinary outbound connections will be used.")
 		}
 	}

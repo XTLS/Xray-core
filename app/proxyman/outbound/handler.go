@@ -113,7 +113,8 @@ func NewHandler(ctx context.Context, config *core.OutboundHandlerConfig) (outbou
 		return nil, errors.New("not an outbound handler")
 	}
 
-	if h.senderSettings.GetMultiplexSettings().GetEnabled() {
+	// VMess keeps legacy mux settings in SenderSettings for API round trips.
+	if h.senderSettings.GetMultiplexSettings().GetEnabled() && config.ProxySettings.Type != "xray.proxy.vmess.outbound.Config" {
 		if config.ProxySettings.Type != "xray.proxy.vless.outbound.Config" {
 			errors.LogWarning(ctx, "Mux is no longer supported by this outbound protocol; ordinary outbound connections will be used.")
 		}

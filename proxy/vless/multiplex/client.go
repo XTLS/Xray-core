@@ -7,16 +7,43 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
 )
 
-// Client owns the VLESS stream pools.
+// LegacyConfig reads the old outbound mux setting used by VLESS and VMess.
+func LegacyConfig(ctx context.Context) (*vless.Multiplex, error) {
+	full := session.FullHandlerFromContext(ctx)
+	if full == nil {
+		return nil, nil
+	}
+	settings := full.SenderSettings()
+	if settings == nil || settings.Type != serial.GetMessageType(&proxyman.SenderConfig{}) {
+		return nil, nil
+	}
+	sender, err := settings.GetInstance()
+	if err != nil {
+		return nil, errors.New("failed to read outbound mux settings").Base(err)
+	}
+	legacy := sender.(*proxyman.SenderConfig).GetMultiplexSettings()
+	if !legacy.GetEnabled() {
+		return nil, nil
+	}
+	udp443 := legacy.XudpProxyUDP443
+	if udp443 == "" {
+		udp443 = "allow"
+	}
+	return &vless.Multiplex{Concurrency: legacy.Concurrency, XudpConcurrency: legacy.XudpConcurrency, XudpProxyUDP443: udp443}, nil
+}
+
+// Client owns the logical stream pools.
 type Client struct {
 	config *vless.Multiplex
 	tcp    *Pool
