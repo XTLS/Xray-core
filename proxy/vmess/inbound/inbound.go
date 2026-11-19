@@ -17,7 +17,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal/done"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
@@ -232,23 +231,18 @@ type ordinaryResponse struct {
 	body      buf.Writer
 	output    *buf.BufferedWriter
 	terminate bool
-	closed    bool
 	wrote     bool
-	done      *done.Instance
-}
-
-func (w *ordinaryResponse) remember(err error) error {
-	if err != nil {
-		w.cancel(err)
-	}
-	return err
+	done      chan struct{}
 }
 
 func (w *ordinaryResponse) rememberIO(err error) error {
 	if canceled := w.ctx.Err(); canceled != nil && (goerrors.Is(err, gonet.ErrClosed) || goerrors.Is(err, io.ErrClosedPipe)) {
 		err = canceled
 	}
-	return w.remember(err)
+	if err != nil {
+		w.cancel(err)
+	}
+	return err
 }
 
 func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
@@ -262,7 +256,7 @@ func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		buf.ReleaseMulti(mb)
 		return context.Cause(w.ctx)
 	}
-	if w.closed {
+	if w.done == nil {
 		buf.ReleaseMulti(mb)
 		return io.ErrClosedPipe
 	}
@@ -277,16 +271,17 @@ func (w *ordinaryResponse) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 func (w *ordinaryResponse) Close() error {
-	defer w.done.Close()
 	w.Lock()
 	defer w.Unlock()
 	if w.ctx.Err() != nil {
 		return context.Cause(w.ctx)
 	}
-	if w.closed {
+	if w.done == nil {
 		return nil
 	}
-	w.closed = true
+	completed := w.done
+	w.done = nil
+	defer close(completed)
 	if w.wrote && w.terminate {
 		if err := w.body.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
 			return w.rememberIO(err)
@@ -412,17 +407,17 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 	account := request.User.Account.(*vmess.MemoryAccount)
 	input := &codecBody{ctx: ctx, reader: bodyReader, connection: iConn}
+	completed := make(chan struct{})
 	response := &ordinaryResponse{
 		ctx: ctx, cancel: cancel, body: bodyWriter, output: wire,
 		terminate: request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal,
-		done:      done.New(),
+		done:      completed,
 	}
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: input, Writer: response}); err != nil {
-		response.remember(err)
-		response.Interrupt()
+		cancel(err)
 	}
 	select {
-	case <-response.done.Wait():
+	case <-completed:
 	case <-ctx.Done():
 	}
 	if ctx.Err() != nil {

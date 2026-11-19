@@ -28,6 +28,7 @@ type ClientSession struct {
 	requestBodyIV   [16]byte
 	responseBodyKey [16]byte
 	responseBodyIV  [16]byte
+	responseReader  io.Reader
 	responseHeader  byte
 
 	readDrainer drain.Drainer
@@ -198,33 +199,42 @@ func (c *ClientSession) DecodeResponseHeader(reader io.Reader) (*protocol.Respon
 		c.readDrainer.AcknowledgeReceive(n)
 	}
 
-	var responseReader *bytes.Reader
 	if decryptedResponseHeaderBuffer, err := aeadResponseHeaderPayloadEncryptionAEAD.Open(nil, aeadResponseHeaderPayloadEncryptionIV, encryptedResponseHeaderBuffer, nil); err != nil {
 		return nil, drain.WithError(c.readDrainer, reader, errors.New("Failed To Decrypt Payload").Base(err))
 	} else { // nolint: golint
-		responseReader = bytes.NewReader(decryptedResponseHeaderBuffer)
+		c.responseReader = bytes.NewReader(decryptedResponseHeaderBuffer)
 	}
 
-	var response [4]byte
-	if _, err := io.ReadFull(responseReader, response[:]); err != nil {
+	buffer := buf.StackNew()
+	defer buffer.Release()
+
+	if _, err := buffer.ReadFullFrom(c.responseReader, 4); err != nil {
 		return nil, errors.New("failed to read response header").Base(err)
 	}
 
-	if response[0] != c.responseHeader {
-		return nil, errors.New("unexpected response header. Expecting ", int(c.responseHeader), " but actually ", int(response[0]))
+	if buffer.Byte(0) != c.responseHeader {
+		return nil, errors.New("unexpected response header. Expecting ", int(c.responseHeader), " but actually ", int(buffer.Byte(0)))
 	}
 
 	header := &protocol.ResponseHeader{
-		Option: bitmask.Byte(response[1]),
+		Option: bitmask.Byte(buffer.Byte(1)),
 	}
 
-	if response[2] != 0 && int(response[3]) > responseReader.Len() {
-		err := io.ErrUnexpectedEOF
-		if responseReader.Len() == 0 {
-			err = io.EOF
+	if buffer.Byte(2) != 0 {
+		cmdID := buffer.Byte(2)
+		dataLen := int32(buffer.Byte(3))
+
+		buffer.Clear()
+		if _, err := buffer.ReadFullFrom(c.responseReader, dataLen); err != nil {
+			return nil, errors.New("failed to read response command").Base(err)
 		}
-		return nil, errors.New("failed to read response command").Base(err)
+		command, err := UnmarshalCommand(cmdID, buffer.Bytes())
+		if err == nil {
+			header.Command = command
+		}
 	}
+	aesStream := crypto.NewAesDecryptionStream(c.responseBodyKey[:], c.responseBodyIV[:])
+	c.responseReader = crypto.NewCryptionReader(aesStream, reader)
 	return header, nil
 }
 
