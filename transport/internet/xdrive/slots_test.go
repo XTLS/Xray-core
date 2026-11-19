@@ -13,7 +13,10 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
+
+	"github.com/xtls/xray-core/common/log"
 )
 
 type memSlots struct {
@@ -759,12 +762,16 @@ type holdSlots struct {
 	*memSlots
 	target string
 	hold   chan struct{}
+	err    error
 }
 
 func (s *holdSlots) setSlot(ctx context.Context, id, description string, body []byte) error {
-	if id == s.target {
+	if frame, ok := decodeSlot(description); id == s.target && ok && frame.seq == 0 && frame.mode == slotInline {
 		select {
 		case <-s.hold:
+			if s.err != nil {
+				return s.err
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -773,6 +780,26 @@ func (s *holdSlots) setSlot(ctx context.Context, id, description string, body []
 }
 
 func TestSlotFirstAnnouncement(t *testing.T) {
+	// The asynchronous logger waits on channels outside the synctest bubble.
+	log.ReplaceWithSeverityLogger(log.Severity_Unknown)
+	t.Cleanup(func() { log.RegisterHandler(log.NewLogger(log.CreateStdoutLogWriter())) })
+
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "slow upload"},
+		{name: "failed upload", err: io.ErrUnexpectedEOF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				testSlotFirstAnnouncement(t, tc.err)
+			})
+		})
+	}
+}
+
+func testSlotFirstAnnouncement(t *testing.T, uploadErr error) {
 	p := params{
 		concurrency:     2,
 		segmentBytes:    4096,
@@ -781,31 +808,27 @@ func TestSlotFirstAnnouncement(t *testing.T) {
 		maxPollInterval: 5 * time.Millisecond,
 		sessionTTL:      time.Minute,
 	}
-	store := &holdSlots{memSlots: newMemSlots(), hold: make(chan struct{})}
-	ctx := context.Background()
+	store := &holdSlots{memSlots: newMemSlots(), hold: make(chan struct{}), err: uploadErr}
+	ctx, cancel := context.WithTimeout(t.Context(), 3*slotCloseGrace)
+	defer cancel()
 	r, err := makeRing(ctx, store, "first", p)
 	if err != nil {
 		t.Fatal(err)
 	}
 	store.target = r.Up.Slots[0]
 	client := newSlotConn(ctx, store, r.Up, r.Down, p, nil, nil)
-	defer client.Close()
 	writer := client.writer.(*slotWriter)
 	writer.first = make(chan []byte, 1)
 
 	payload := randomPayload(10000)
-	errs := make(chan error, 1)
-	go func() {
-		_, err := client.Write(payload)
-		if err == nil {
-			err = client.Close()
-		}
-		errs <- err
-	}()
+	firstLap := 2 * p.segmentBytes
+	if _, err := client.Write(payload[:firstLap]); err != nil {
+		t.Fatal(err)
+	}
 	var first []byte
 	select {
 	case first = <-writer.first:
-	case <-time.After(5 * time.Second):
+	case <-ctx.Done():
 		t.Fatal("the writer never flushed seq 0")
 	}
 	announced := r
@@ -822,27 +845,52 @@ func TestSlotFirstAnnouncement(t *testing.T) {
 		t.Fatal("the announcement with First did not decode")
 	}
 	server := newSlotConn(ctx, store, decoded.Down, decoded.Up, p, decoded.First, nil)
-	defer server.Close()
-	if err := server.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatal(err)
-	}
 	gotFirst := make([]byte, len(first))
 	if _, err := io.ReadFull(server, gotFirst); err != nil {
 		t.Fatalf("the first bytes did not arrive before the ring write: %v", err)
 	}
-	if !bytes.Equal(gotFirst, first) {
+	if !bytes.Equal(gotFirst, payload[:len(first)]) {
 		t.Fatal("the primed first bytes changed")
 	}
+
+	// The reader acknowledged the inline segment while its slot upload is blocked.
+	synctest.Wait()
+	if acked, err := readWatermark(ctx, store, r.Up.Watermark); acked < 0 || err != nil {
+		t.Fatalf("inline acknowledgement = %d, err = %v", acked, err)
+	}
+
+	errs := make(chan error, 1)
+	go func() {
+		_, err := client.Write(payload[firstLap:])
+		if err == nil {
+			err = client.Close()
+		}
+		errs <- err
+	}()
+	synctest.Wait()
+	if description, err := store.readDescription(ctx, store.target); description != "" || err != nil {
+		t.Fatalf("slot description before seq 0 finished: %d bytes, err = %v", len(description), err)
+	}
+	if uploadErr == nil {
+		// Acknowledged data must survive a local write that outlasts the reader stall grace.
+		time.Sleep(slotCloseGrace + 2*slotAckRetry)
+	}
+	released := time.Now()
 	close(store.hold)
-	rest := make([]byte, len(payload)-len(first))
-	if _, err := io.ReadFull(server, rest); err != nil {
-		t.Fatal(err)
+	if err := <-errs; !errors.Is(err, uploadErr) {
+		t.Fatalf("close returned %v, want %v", err, uploadErr)
 	}
-	if !bytes.Equal(append(gotFirst, rest...), payload) {
-		t.Fatal("the stream was duplicated or changed")
+	if uploadErr == nil {
+		readAll(t, server, payload[len(first):])
+		return
 	}
-	if err := <-errs; err != nil {
-		t.Fatal(err)
+	if time.Since(released) >= slotCloseGrace {
+		t.Fatal("close waited for the reader stall grace after the upload failed")
+	}
+	description, err := store.readDescription(ctx, store.target)
+	frame, ok := decodeSlot(description)
+	if err != nil || !ok || frame.seq != 0 || frame.mode != slotErr {
+		t.Fatalf("failed upload did not leave the error frame: %q, err = %v", description, err)
 	}
 }
 
