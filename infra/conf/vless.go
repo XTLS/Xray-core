@@ -236,6 +236,27 @@ func (c *VLessReverseConfig) Build() (*vless.Reverse, error) {
 	return r, nil
 }
 
+type MultiplexConfig struct {
+	Enabled         *bool  `json:"enabled,omitempty"`
+	Concurrency     int16  `json:"concurrency"`
+	XudpConcurrency int16  `json:"xudpConcurrency"`
+	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
+}
+
+func (c *MultiplexConfig) Build() (*vless.Multiplex, error) {
+	if c.Enabled != nil && !*c.Enabled {
+		return nil, nil
+	}
+	switch c.XudpProxyUDP443 {
+	case "":
+		c.XudpProxyUDP443 = "reject"
+	case "reject", "allow", "skip":
+	default:
+		return nil, errors.New(`unknown "xudpProxyUDP443": `, c.XudpProxyUDP443)
+	}
+	return &vless.Multiplex{Concurrency: int32(c.Concurrency), XudpConcurrency: int32(c.XudpConcurrency), XudpProxyUDP443: c.XudpProxyUDP443}, nil
+}
+
 type VLessOutboundVnext struct {
 	Address *Address          `json:"address"`
 	Port    uint16            `json:"port"`
@@ -251,6 +272,7 @@ type VLessOutboundConfig struct {
 	Flow       string                `json:"flow"`
 	Seed       string                `json:"seed"`
 	Encryption string                `json:"encryption"`
+	Multiplex  *MultiplexConfig      `json:"multiplex"`
 	Reverse    *VLessReverseConfig   `json:"reverse"`
 	Testpre    uint32                `json:"testpre"`
 	Testseed   []uint32              `json:"testseed"`
@@ -260,6 +282,14 @@ type VLessOutboundConfig struct {
 // Build implements Buildable
 func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 	config := new(outbound.Config)
+	if c.Multiplex != nil {
+		configMultiplex, err := c.Multiplex.Build()
+		if err != nil {
+			return nil, err
+		}
+		config.Multiplex = configMultiplex
+	}
+
 	if c.Address != nil {
 		c.Vnext = []*VLessOutboundVnext{
 			{

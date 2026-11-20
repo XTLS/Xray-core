@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package xray.app.reverse;
+option csharp_namespace = "Xray.Proxy.Reverse";
+option go_package = "github.com/xtls/xray-core/proxy/vless/reverse";
+option java_package = "com.xray.proxy.reverse";
+option java_multiple_files = true;
+
+message Control {
+  enum State {
+    ACTIVE = 0;
+    DRAIN = 1;
+  }
+
+  State state = 1;
+  bytes random = 99;
+}

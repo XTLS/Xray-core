@@ -16,107 +16,33 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
-	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
-type userByEmail struct {
-	sync.Mutex
-	cache        map[string]*protocol.MemoryUser
-	defaultLevel uint32
-}
-
-func newUserByEmail(config *DefaultConfig) *userByEmail {
-	return &userByEmail{
-		cache:        make(map[string]*protocol.MemoryUser),
-		defaultLevel: config.Level,
-	}
-}
-
-func (v *userByEmail) addNoLock(u *protocol.MemoryUser) bool {
-	email := strings.ToLower(u.Email)
-	_, found := v.cache[email]
-	if found {
-		return false
-	}
-	v.cache[email] = u
-	return true
-}
-
-func (v *userByEmail) Add(u *protocol.MemoryUser) bool {
-	v.Lock()
-	defer v.Unlock()
-
-	return v.addNoLock(u)
-}
-
-func (v *userByEmail) GetOrGenerate(email string) (*protocol.MemoryUser, bool) {
-	email = strings.ToLower(email)
-
-	v.Lock()
-	defer v.Unlock()
-
-	user, found := v.cache[email]
-	if !found {
-		id := uuid.New()
-		rawAccount := &vmess.Account{
-			Id: id.String(),
-		}
-		account, err := rawAccount.AsAccount()
-		common.Must(err)
-		user = &protocol.MemoryUser{
-			Level:   v.defaultLevel,
-			Email:   email,
-			Account: account,
-		}
-		v.cache[email] = user
-	}
-	return user, found
-}
-
-func (v *userByEmail) Get(email string) *protocol.MemoryUser {
-	email = strings.ToLower(email)
-	v.Lock()
-	defer v.Unlock()
-	return v.cache[email]
-}
-
-func (v *userByEmail) Remove(email string) bool {
-	email = strings.ToLower(email)
-
-	v.Lock()
-	defer v.Unlock()
-
-	if _, found := v.cache[email]; !found {
-		return false
-	}
-	delete(v.cache, email)
-	return true
-}
-
 // Handler is an inbound connection handler that handles messages in VMess protocol.
 type Handler struct {
-	policyManager         policy.Manager
-	inboundHandlerManager feature_inbound.Manager
-	clients               *vmess.TimedUserValidator
-	usersByEmail          *userByEmail
-	sessionHistory        *encoding.SessionHistory
+	policyManager  policy.Manager
+	clients        *vmess.TimedUserValidator
+	usersByEmail   *sync.Map // normalized email -> *protocol.MemoryUser
+	defaultLevel   uint32
+	sessionHistory *encoding.SessionHistory
 }
 
 // New creates a new VMess inbound handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
-		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
-		clients:               vmess.NewTimedUserValidator(),
-		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
-		sessionHistory:        encoding.NewSessionHistory(),
+		policyManager:  v.GetFeature(policy.ManagerType()).(policy.Manager),
+		clients:        vmess.NewTimedUserValidator(),
+		usersByEmail:   new(sync.Map),
+		defaultLevel:   config.GetDefault().GetLevel(),
+		sessionHistory: encoding.NewSessionHistory(),
 	}
 
 	for _, user := range config.User {
@@ -135,10 +61,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Close implements common.Closable.
 func (h *Handler) Close() error {
-	return errors.Combine(
-		h.sessionHistory.Close(),
-		common.Close(h.usersByEmail),
-	)
+	return h.sessionHistory.Close()
 }
 
 // Network implements proxy.Inbound.Network().
@@ -147,15 +70,26 @@ func (*Handler) Network() []net.Network {
 }
 
 func (h *Handler) GetOrGenerateUser(email string) *protocol.MemoryUser {
-	user, existing := h.usersByEmail.GetOrGenerate(email)
-	if !existing {
+	email = strings.ToLower(email)
+	if existing, ok := h.usersByEmail.Load(email); ok {
+		return existing.(*protocol.MemoryUser)
+	}
+	id := uuid.New()
+	raw := &vmess.Account{Id: id.String()}
+	account, err := raw.AsAccount()
+	common.Must(err)
+	user := &protocol.MemoryUser{Level: h.defaultLevel, Email: email, Account: account}
+	actual, exists := h.usersByEmail.LoadOrStore(email, user)
+	if !exists {
 		h.clients.Add(user)
 	}
-	return user
+	return actual.(*protocol.MemoryUser)
 }
 
 func (h *Handler) GetUser(ctx context.Context, email string) *protocol.MemoryUser {
-	return h.usersByEmail.Get(email)
+	user, _ := h.usersByEmail.Load(strings.ToLower(email))
+	result, _ := user.(*protocol.MemoryUser)
+	return result
 }
 
 func (h *Handler) GetUsers(ctx context.Context) []*protocol.MemoryUser {
@@ -167,8 +101,10 @@ func (h *Handler) GetUsersCount(context.Context) int64 {
 }
 
 func (h *Handler) AddUser(ctx context.Context, user *protocol.MemoryUser) error {
-	if len(user.Email) > 0 && !h.usersByEmail.Add(user) {
-		return errors.New("User ", user.Email, " already exists.")
+	if user.Email != "" {
+		if _, exists := h.usersByEmail.LoadOrStore(strings.ToLower(user.Email), user); exists {
+			return errors.New("User ", user.Email, " already exists.")
+		}
 	}
 	return h.clients.Add(user)
 }
@@ -177,7 +113,7 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	if email == "" {
 		return errors.New("Email must not be empty.")
 	}
-	if !h.usersByEmail.Remove(email) {
+	if _, found := h.usersByEmail.LoadAndDelete(strings.ToLower(email)); !found {
 		return errors.New("User ", email, " not found.")
 	}
 	h.clients.Remove(email)
@@ -234,34 +170,29 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.CanSpliceCopy = 3
 	inbound.User = request.User
 
+	ctx = policy.ContextWithBufferPolicy(ctx, h.policyManager.ForLevel(request.User.Level).Buffer)
+
 	bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 	if err != nil {
 		return errors.New("failed to start decoding").Base(err)
 	}
-
 	writer := buf.NewBufferedWriter(buf.NewWriter(connection))
-	response := &protocol.ResponseHeader{
-		Command: h.generateCommand(ctx, request),
-	}
-	svrSession.EncodeResponseHeader(response, writer)
+	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, writer)
 	bodyWriter, err := svrSession.EncodeResponseBody(request, writer)
 	if err != nil {
 		return errors.New("failed to start decoding response").Base(err)
 	}
 	writer.SetFlushNext()
+	link := &transport.Link{Reader: bodyReader, Writer: bodyWriter}
 
-	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
-		Reader: bodyReader,
-		Writer: bodyWriter,
-	},
-	); err != nil {
+	if request.Command == protocol.RequestCommandMux {
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, link)
+		<-worker.WaitClosed()
+		return worker.Err()
+	}
+	if err := dispatcher.DispatchLink(ctx, request.Destination(), link); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
-	return nil
-}
-
-// Stub command generator
-func (h *Handler) generateCommand(ctx context.Context, request *protocol.RequestHeader) protocol.ResponseCommand {
 	return nil
 }
 

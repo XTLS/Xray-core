@@ -680,6 +680,7 @@ func TestVMessGCMMux(t *testing.T) {
 		},
 	}
 
+	carrierPort, carriers := countTCPCarriers(t, serverPort)
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
 		App: []*serial.TypedMessage{
@@ -712,7 +713,7 @@ func TestVMessGCMMux(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
-						Port:    uint32(serverPort),
+						Port:    uint32(carrierPort),
 						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
@@ -731,7 +732,10 @@ func TestVMessGCMMux(t *testing.T) {
 	common.Must(err)
 	defer CloseAllServers(servers)
 
-	for range "abcd" {
+	if err := testTCPConn(clientPort, 10240, 10*time.Second)(); err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
 		var errg errgroup.Group
 		for range 3 {
 			errg.Go(testTCPConn(clientPort, 10240, time.Second*20))
@@ -739,7 +743,9 @@ func TestVMessGCMMux(t *testing.T) {
 		if err := errg.Wait(); err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(time.Second)
+	}
+	if got := carriers.Load(); got != 1 {
+		t.Errorf("connections used %d physical carriers, want 1", got)
 	}
 }
 

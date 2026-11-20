@@ -1,4 +1,4 @@
-package mux
+package multiplex
 
 import (
 	"encoding/binary"
@@ -85,16 +85,13 @@ func (f FrameMetadata) WriteTo(b *buf.Buffer) error {
 			return err
 		}
 		if f.Inbound != nil {
-			if f.Inbound.Source.Network == net.Network_TCP || f.Inbound.Source.Network == net.Network_UDP {
-				common.Must(b.WriteByte(byte(f.Inbound.Source.Network - 1)))
-				if err := addrParser.WriteAddressPort(b, f.Inbound.Source.Address, f.Inbound.Source.Port); err != nil {
-					return err
+			for _, dst := range [...]net.Destination{f.Inbound.Source, f.Inbound.Local} {
+				if dst.Network != net.Network_TCP && dst.Network != net.Network_UDP {
+					break
 				}
-				if f.Inbound.Local.Network == net.Network_TCP || f.Inbound.Local.Network == net.Network_UDP {
-					common.Must(b.WriteByte(byte(f.Inbound.Local.Network - 1)))
-					if err := addrParser.WriteAddressPort(b, f.Inbound.Local.Address, f.Inbound.Local.Port); err != nil {
-						return err
-					}
+				common.Must(b.WriteByte(byte(dst.Network - 1)))
+				if err := addrParser.WriteAddressPort(b, dst.Address, dst.Port); err != nil {
+					return err
 				}
 			}
 		} else if b.UDP != nil { // make sure it's user's proxy request
@@ -124,9 +121,9 @@ func (f *FrameMetadata) Unmarshal(reader io.Reader, readSourceAndLocal bool) err
 	defer b.Release()
 
 	if _, err := b.ReadFullFrom(reader, int32(metaLen)); err != nil {
-		return err
+		return frameReadError(err)
 	}
-	return f.UnmarshalFromBuffer(b, readSourceAndLocal)
+	return frameReadError(f.UnmarshalFromBuffer(b, readSourceAndLocal))
 }
 
 // UnmarshalFromBuffer reads a FrameMetadata from the given buffer.
@@ -146,69 +143,26 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer, readSourceAndLocal bo
 		if b.Len() < 8 {
 			return errors.New("insufficient buffer: ", b.Len())
 		}
-		network := TargetNetwork(b.Byte(4))
-		b.Advance(5)
-
-		addr, port, err := addrParser.ReadAddressPort(nil, b)
+		b.Advance(4)
+		target, err := readDestination(b, "")
 		if err != nil {
-			return errors.New("failed to parse address and port").Base(err)
+			return err
 		}
-
-		switch network {
-		case TargetNetworkTCP:
-			f.Target = net.TCPDestination(addr, port)
-		case TargetNetworkUDP:
-			f.Target = net.UDPDestination(addr, port)
-		default:
-			return errors.New("unknown network type: ", network)
-		}
+		f.Target = target
 	}
 
 	if f.SessionStatus == SessionStatusNew && readSourceAndLocal {
 		f.Inbound = &session.Inbound{}
-
-		if b.Len() == 0 {
-			return nil // for heartbeat, etc.
+		for i, dst := range [...]*net.Destination{&f.Inbound.Source, &f.Inbound.Local} {
+			if b.Len() == 0 || b.Byte(0) == 0 { // heartbeat, absent endpoint, or padding
+				break
+			}
+			parsed, err := readDestination(b, [...]string{"reading source: ", "reading local: "}[i])
+			if err != nil {
+				return err
+			}
+			*dst = parsed
 		}
-		network := TargetNetwork(b.Byte(0))
-		if network == 0 {
-			return nil // may be padding
-		}
-		b.Advance(1)
-		addr, port, err := addrParser.ReadAddressPort(nil, b)
-		if err != nil {
-			return errors.New("reading source: failed to parse address and port").Base(err)
-		}
-		switch network {
-		case TargetNetworkTCP:
-			f.Inbound.Source = net.TCPDestination(addr, port)
-		case TargetNetworkUDP:
-			f.Inbound.Source = net.UDPDestination(addr, port)
-		default:
-			return errors.New("reading source: unknown network type: ", network)
-		}
-
-		if b.Len() == 0 {
-			return nil
-		}
-		network = TargetNetwork(b.Byte(0))
-		if network == 0 {
-			return nil
-		}
-		b.Advance(1)
-		addr, port, err = addrParser.ReadAddressPort(nil, b)
-		if err != nil {
-			return errors.New("reading local: failed to parse address and port").Base(err)
-		}
-		switch network {
-		case TargetNetworkTCP:
-			f.Inbound.Local = net.TCPDestination(addr, port)
-		case TargetNetworkUDP:
-			f.Inbound.Local = net.UDPDestination(addr, port)
-		default:
-			return errors.New("reading local: unknown network type: ", network)
-		}
-
 		return nil
 	}
 
@@ -219,4 +173,21 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer, readSourceAndLocal bo
 	}
 
 	return nil
+}
+
+func readDestination(b *buf.Buffer, prefix string) (net.Destination, error) {
+	network := TargetNetwork(b.Byte(0))
+	b.Advance(1)
+	addr, port, err := addrParser.ReadAddressPort(nil, b)
+	if err != nil {
+		return net.Destination{}, errors.New(prefix, "failed to parse address and port").Base(err)
+	}
+	switch network {
+	case TargetNetworkTCP:
+		return net.TCPDestination(addr, port), nil
+	case TargetNetworkUDP:
+		return net.UDPDestination(addr, port), nil
+	default:
+		return net.Destination{}, errors.New(prefix, "unknown network type: ", network)
+	}
 }

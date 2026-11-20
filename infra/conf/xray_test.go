@@ -18,6 +18,8 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	. "github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/proxy/vless"
+	vlessoutbound "github.com/xtls/xray-core/proxy/vless/outbound"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/transport/internet"
@@ -225,32 +227,28 @@ func TestSniffingConfig_Build(t *testing.T) {
 	}
 }
 
-func TestMuxConfig_Build(t *testing.T) {
+func TestMultiplexConfig_Build(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields string
-		want   *proxyman.MultiplexingConfig
+		want   *vless.Multiplex
 	}{
-		{"default", `{"enabled": true, "concurrency": 16}`, &proxyman.MultiplexingConfig{
-			Enabled:         true,
+		{"default", `{"concurrency": 16}`, &vless.Multiplex{
 			Concurrency:     16,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
 		}},
-		{"empty def", `{}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
+		{"empty def", `{}`, &vless.Multiplex{
 			Concurrency:     0,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
 		}},
-		{"not enable", `{"enabled": false, "concurrency": 4}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
+		{"explicit small concurrency", `{"concurrency": 4}`, &vless.Multiplex{
 			Concurrency:     4,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
 		}},
-		{"forbidden", `{"enabled": false, "concurrency": -1}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
+		{"disabled native pool", `{"concurrency": -1}`, &vless.Multiplex{
 			Concurrency:     -1,
 			XudpConcurrency: 0,
 			XudpProxyUDP443: "reject",
@@ -258,16 +256,53 @@ func TestMuxConfig_Build(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &MuxConfig{}
+			m := &MultiplexConfig{}
 			common.Must(json.Unmarshal([]byte(tt.fields), m))
-			if got, _ := m.Build(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MuxConfig.Build() = %v, want %v", got, tt.want)
+			got, err := m.Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MultiplexConfig.Build() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		legacy string
+		native string
+		want   *vless.Multiplex
+	}{
+		{`{"enabled": true, "concurrency": 16}`, "", &vless.Multiplex{Concurrency: 16, XudpProxyUDP443: "reject"}},
+		{`{"enabled": false, "concurrency": 4}`, "", nil},
+		{`{"enabled": false, "concurrency": -1}`, "", nil},
+		{`{}`, "", nil},
+		{`{"enabled": true, "concurrency": 16}`, `, "multiplex": {"concurrency": 4}`, &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
+		{`{"enabled": true, "concurrency": 16}`, `, "multiplex": {"enabled": false}`, nil},
+	} {
+		t.Run("legacy top-level mux "+tc.legacy+tc.native, func(t *testing.T) {
+			var config OutboundDetourConfig
+			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":443,"users":[{"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d","encryption":"none"}]}]`+tc.native+`},"mux":`+tc.legacy+`}`), &config))
+			if config.MuxSettings == nil {
+				t.Fatal("legacy mux input was not recognized")
+			}
+			built, err := config.Build()
+			if err != nil {
+				t.Fatal(err)
+			}
+			proxyConfig, err := built.ProxySettings.GetInstance()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := proxyConfig.(*vlessoutbound.Config).Multiplex; !proto.Equal(got, tc.want) {
+				t.Errorf("legacy mux Build() multiplex = %v, want %v", got, tc.want)
 			}
 		})
 	}
 }
 
 func TestConfig_Override(t *testing.T) {
+	legacyReverse := json.RawMessage(`{}`)
 	tests := []struct {
 		name string
 		orig *Config
@@ -285,7 +320,7 @@ func TestConfig_Override(t *testing.T) {
 				Policy:       &PolicyConfig{},
 				API:          &APIConfig{},
 				Stats:        &StatsConfig{},
-				Reverse:      &ReverseConfig{},
+				Reverse:      &legacyReverse,
 			},
 			"",
 			&Config{
@@ -295,7 +330,7 @@ func TestConfig_Override(t *testing.T) {
 				Policy:       &PolicyConfig{},
 				API:          &APIConfig{},
 				Stats:        &StatsConfig{},
-				Reverse:      &ReverseConfig{},
+				Reverse:      &legacyReverse,
 			},
 		},
 		{
