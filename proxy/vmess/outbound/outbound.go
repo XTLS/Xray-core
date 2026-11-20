@@ -78,7 +78,7 @@ func (h *Handler) Close() error {
 
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	if handled, err := h.multiplex.Dispatch(ctx, link); handled || err != nil {
+	if handled, err := h.multiplex.Dispatch(ctx, link); handled {
 		return err
 	}
 	_, _, err := h.process(ctx, link, dialer)
@@ -120,22 +120,20 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
-	command := protocol.RequestCommandTCP
-	address, port := target.Address, target.Port
-	if native {
-		command, address, port = protocol.RequestCommandMux, nil, 0
-	} else if target.Network == net.Network_UDP {
-		command = protocol.RequestCommandUDP
-	}
-
-	user := rec.User
+	singleXUDP := !native && target.Network == net.Network_UDP && target.Port != 53 && target.Port != 443
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
-		User:    user,
-		Command: command,
-		Address: address,
-		Port:    port,
+		User:    rec.User,
+		Command: protocol.RequestCommandTCP,
+		Address: target.Address,
+		Port:    target.Port,
 		Option:  protocol.RequestOptionChunkStream,
+	}
+	switch {
+	case native || singleXUDP:
+		request.Command = protocol.RequestCommandMux
+	case target.Network == net.Network_UDP:
+		request.Command = protocol.RequestCommandUDP
 	}
 
 	account := request.User.Account.(*vmess.MemoryAccount)
@@ -169,13 +167,6 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 			timer.SetTimeout(0)
 		}
 	}()
-
-	singleXUDP := command == protocol.RequestCommandUDP && port != 53 && port != 443
-	if singleXUDP {
-		request.Command = protocol.RequestCommandMux
-		request.Address = net.DomainAddress("v1.mux.cool")
-		request.Port = net.Port(666)
-	}
 
 	writer := buf.NewBufferedWriter(buf.NewWriter(conn))
 	if err := clientSession.EncodeRequestHeader(request, writer); err != nil {

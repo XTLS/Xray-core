@@ -1,7 +1,6 @@
 package scenarios
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -26,106 +25,17 @@ import (
 )
 
 func TestVMessGCM(t *testing.T) {
-	tcpServer := tcp.Server{
-		MsgProcessor: xor,
-	}
-	dest, err := tcpServer.Start()
-	common.Must(err)
-	defer tcpServer.Close()
-
-	userID := protocol.NewID(uuid.New())
-	serverPort := tcp.PickPort()
-	serverConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&log.Config{
-				ErrorLogLevel: clog.Severity_Debug,
-				ErrorLogType:  log.LogType_Console,
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&inbound.Config{
-					User: []*protocol.User{
-						{
-							Account: serial.ToTypedMessage(&vmess.Account{
-								Id: userID.String(),
-							}),
-						},
-					},
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&freedom.Config{
-					Firewall: []*freedom.FirewallConfig{{Action: freedom.RuleAction_Allow}},
-				}),
-			},
-		},
-	}
-
-	clientPort := tcp.PickPort()
-	clientConfig := &core.Config{
-		App: []*serial.TypedMessage{
-			serial.ToTypedMessage(&log.Config{
-				ErrorLogLevel: clog.Severity_Debug,
-				ErrorLogType:  log.LogType_Console,
-			}),
-		},
-		Inbound: []*core.InboundHandlerConfig{
-			{
-				ReceiverSettings: serial.ToTypedMessage(&proxyman.ReceiverConfig{
-					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(clientPort)}},
-					Listen:   net.NewIPOrDomain(net.LocalHostIP),
-				}),
-				ProxySettings: serial.ToTypedMessage(&dokodemo.Config{
-					RewriteAddress:  net.NewIPOrDomain(dest.Address),
-					RewritePort:     uint32(dest.Port),
-					AllowedNetworks: []net.Network{net.Network_TCP},
-				}),
-			},
-		},
-		Outbound: []*core.OutboundHandlerConfig{
-			{
-				ProxySettings: serial.ToTypedMessage(&outbound.Config{
-					Receiver: &protocol.ServerEndpoint{
-						Address: net.NewIPOrDomain(net.LocalHostIP),
-						Port:    uint32(serverPort),
-						User: &protocol.User{
-							Account: serial.ToTypedMessage(&vmess.Account{
-								Id: userID.String(),
-								SecuritySettings: &protocol.SecurityConfig{
-									Type: protocol.SecurityType_AES128_GCM,
-								},
-							}),
-						},
-					},
-				}),
-			},
-		},
-	}
-
-	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
-	if err != nil {
-		t.Fatal("Failed to initialize all servers: ", err.Error())
-	}
-	defer CloseAllServers(servers)
-
-	var errg errgroup.Group
-	for range 3 {
-		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*40))
-	}
-
-	if err := errg.Wait(); err != nil {
-		t.Error(err)
-	}
+	t.Setenv("XRAY_BUF_READV", "disable")
+	testVMessGCMTCP(t)
 }
 
 func TestVMessGCMReadv(t *testing.T) {
+	t.Setenv("XRAY_BUF_READV", "enable")
+	testVMessGCMTCP(t)
+}
+
+func testVMessGCMTCP(t *testing.T) {
+	t.Helper()
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -209,10 +119,6 @@ func TestVMessGCMReadv(t *testing.T) {
 		},
 	}
 
-	const envName = "XRAY_BUF_READV"
-	common.Must(os.Setenv(envName, "enable"))
-	defer os.Unsetenv(envName)
-
 	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
 	if err != nil {
 		t.Fatal("Failed to initialize all servers: ", err.Error())
@@ -223,6 +129,7 @@ func TestVMessGCMReadv(t *testing.T) {
 	for range 3 {
 		errg.Go(testTCPConn(clientPort, 10240*1024, time.Second*40))
 	}
+
 	if err := errg.Wait(); err != nil {
 		t.Error(err)
 	}
@@ -622,6 +529,7 @@ func TestVMessKCPLarge(t *testing.T) {
 
 	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
 	common.Must(err)
+	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
 	for range 3 {
@@ -630,11 +538,6 @@ func TestVMessKCPLarge(t *testing.T) {
 	if err := errg.Wait(); err != nil {
 		t.Error(err)
 	}
-
-	defer func() {
-		<-time.After(5 * time.Second)
-		CloseAllServers(servers)
-	}()
 }
 
 func TestVMessGCMMux(t *testing.T) {
@@ -680,6 +583,7 @@ func TestVMessGCMMux(t *testing.T) {
 		},
 	}
 
+	carrierPort, carriers := countTCPCarriers(t, serverPort)
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
 		App: []*serial.TypedMessage{
@@ -712,7 +616,7 @@ func TestVMessGCMMux(t *testing.T) {
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
-						Port:    uint32(serverPort),
+						Port:    uint32(carrierPort),
 						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
@@ -731,7 +635,10 @@ func TestVMessGCMMux(t *testing.T) {
 	common.Must(err)
 	defer CloseAllServers(servers)
 
-	for range "abcd" {
+	if err := testTCPConn(clientPort, 10240, 10*time.Second)(); err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
 		var errg errgroup.Group
 		for range 3 {
 			errg.Go(testTCPConn(clientPort, 10240, time.Second*20))
@@ -739,7 +646,9 @@ func TestVMessGCMMux(t *testing.T) {
 		if err := errg.Wait(); err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(time.Second)
+	}
+	if got := carriers.Load(); got != 1 {
+		t.Errorf("connections used %d physical carriers, want 1", got)
 	}
 }
 
@@ -854,8 +763,9 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 
 	servers, err := InitializeServerConfigs(serverConfig, clientConfig)
 	common.Must(err)
+	defer CloseAllServers(servers)
 
-	for range "ab" {
+	for range 2 {
 		var errg errgroup.Group
 		for range 3 {
 			errg.Go(testTCPConn(clientPort, 1024, time.Second*10))
@@ -864,13 +774,7 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 		if err := errg.Wait(); err != nil {
 			t.Error(err)
 		}
-		time.Sleep(time.Second)
 	}
-
-	defer func() {
-		<-time.After(5 * time.Second)
-		CloseAllServers(servers)
-	}()
 }
 
 func TestVMessGCMLengthAuth(t *testing.T) {

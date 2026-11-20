@@ -22,25 +22,6 @@ func TestOpenVMessAEADHeader(t *testing.T) {
 
 	io.ReadFull(AEADR, authid[:])
 
-	out, _, _, err := OpenVMessAEADHeader(keyw, authid, AEADR)
-
-	fmt.Println(string(out))
-	fmt.Println(err)
-}
-
-func TestOpenVMessAEADHeader2(t *testing.T) {
-	TestHeader := []byte("Test Header")
-	key := KDF16([]byte("Demo Key for Auth ID Test"), "Demo Path for Auth ID Test")
-	var keyw [16]byte
-	copy(keyw[:], key)
-	sealed := SealVMessAEADHeader(keyw, TestHeader)
-
-	AEADR := bytes.NewReader(sealed)
-
-	var authid [16]byte
-
-	io.ReadFull(AEADR, authid[:])
-
 	out, _, readen, err := OpenVMessAEADHeader(keyw, authid, AEADR)
 	assert.Equal(t, len(sealed)-16-AEADR.Len(), readen)
 	assert.Equal(t, string(TestHeader), string(out))

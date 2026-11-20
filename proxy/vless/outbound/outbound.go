@@ -157,7 +157,7 @@ func (h *Handler) Close() error {
 
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
-	if handled, err := h.multiplex.Dispatch(ctx, link); handled || err != nil {
+	if handled, err := h.multiplex.Dispatch(ctx, link); handled {
 		return err
 	}
 	_, _, err := h.process(ctx, link, dialer, 0)
@@ -262,19 +262,16 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		}
 	}
 
-	if !native {
-		command = protocol.RequestCommandTCP
-		if target.Network == net.Network_UDP {
-			command = protocol.RequestCommandUDP
-		}
-	}
-
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
 		User:    rec.User,
 		Command: command,
 	}
 	if !native {
+		request.Command = protocol.RequestCommandTCP
+		if target.Network == net.Network_UDP {
+			request.Command = protocol.RequestCommandUDP
+		}
 		request.Address, request.Port = target.Address, target.Port
 	}
 
@@ -299,9 +296,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 			if !allowUDP443 && request.Port == 443 {
 				return nil, nil, errors.New("XTLS rejected UDP/443 traffic")
 			}
-		case protocol.RequestCommandMux:
-			fallthrough // let server break Mux connections that contain TCP requests
-		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
+		case protocol.RequestCommandTCP, protocol.RequestCommandMux, protocol.RequestCommandRvs:
 			var target net.Conn
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
 				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {

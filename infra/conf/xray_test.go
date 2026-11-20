@@ -270,16 +270,19 @@ func TestMultiplexConfig_Build(t *testing.T) {
 
 	for _, tc := range []struct {
 		legacy string
+		native string
 		want   *vless.Multiplex
 	}{
-		{`{"enabled": true, "concurrency": 16}`, &vless.Multiplex{Concurrency: 16, XudpProxyUDP443: "reject"}},
-		{`{"enabled": false, "concurrency": 4}`, nil},
-		{`{"enabled": false, "concurrency": -1}`, nil},
-		{`{}`, nil},
+		{`{"enabled": true, "concurrency": 16}`, "", &vless.Multiplex{Concurrency: 16, XudpProxyUDP443: "reject"}},
+		{`{"enabled": false, "concurrency": 4}`, "", nil},
+		{`{"enabled": false, "concurrency": -1}`, "", nil},
+		{`{}`, "", nil},
+		{`{"enabled": true, "concurrency": 16}`, `, "multiplex": {"concurrency": 4}`, &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
+		{`{"enabled": true, "concurrency": 16}`, `, "multiplex": {"enabled": false}`, nil},
 	} {
-		t.Run("legacy top-level mux "+tc.legacy, func(t *testing.T) {
+		t.Run("legacy top-level mux "+tc.legacy+tc.native, func(t *testing.T) {
 			var config OutboundDetourConfig
-			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":443,"users":[{"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d","encryption":"none"}]}]},"mux":`+tc.legacy+`}`), &config))
+			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":443,"users":[{"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d","encryption":"none"}]}]`+tc.native+`},"mux":`+tc.legacy+`}`), &config))
 			if config.MuxSettings == nil {
 				t.Fatal("legacy mux input was not recognized")
 			}

@@ -25,7 +25,6 @@ import (
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/extension"
-	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -71,14 +70,12 @@ func init() {
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.
 type Handler struct {
-	inboundHandlerManager  feature_inbound.Manager
 	policyManager          policy.Manager
 	stats                  stats.Manager
 	validator              vless.Validator
 	decryption             *encryption.ServerInstance
 	outboundHandlerManager outbound.Manager
 	observer               features.Feature
-	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -88,13 +85,11 @@ type Handler struct {
 func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Validator) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		inboundHandlerManager:  v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		policyManager:          v.GetFeature(policy.ManagerType()).(policy.Manager),
 		stats:                  v.GetFeature(stats.ManagerType()).(stats.Manager),
 		validator:              validator,
 		outboundHandlerManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
 		observer:               v.GetFeature(extension.ObservatoryType()),
-		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
 	}
 
@@ -543,10 +538,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("for safety reasons, user " + account.ID.String() + " is not allowed to use forward proxy")
 	}
 
-	responseAddons := &encoding.Addons{
-		// Flow: requestAddons.Flow,
-	}
-
 	var input *bytes.Reader
 	var rawInput **bytes.Buffer
 	switch requestAddons.Flow {
@@ -609,7 +600,7 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
-	if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {
+	if err := encoding.EncodeResponseHeader(bufferWriter, request, &encoding.Addons{}); err != nil {
 		return errors.New("failed to encode response header").Base(err)
 	}
 	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)

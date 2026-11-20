@@ -3,8 +3,6 @@ package scenarios
 import (
 	"context"
 	"fmt"
-	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -448,11 +446,13 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 	common.Must(err)
 	defer CloseAllServers(servers)
 
-	if err := testTCPConn(clientPort, 1024, time.Second*5)(); err != io.EOF &&
-		/*We might wish to drain the connection*/
-		(err != nil && !strings.HasSuffix(err.Error(), "i/o timeout")) {
-		t.Fatal("expected error: ", err)
+	expectRejected := func() {
+		t.Helper()
+		if err := testTCPConn(clientPort, 1024, time.Second*5)(); err == nil {
+			t.Fatal("VMess traffic from an unregistered user was accepted")
+		}
 	}
+	expectRejected()
 
 	cmdConn, err := grpc.Dial(fmt.Sprintf("127.0.0.1:%d", cmdPort), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	common.Must(err)
@@ -489,6 +489,7 @@ func TestCommanderAddRemoveUser(t *testing.T) {
 	if resp == nil {
 		t.Fatal("nil response")
 	}
+	expectRejected()
 }
 
 func TestCommanderStats(t *testing.T) {

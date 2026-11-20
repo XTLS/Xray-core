@@ -9,28 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateAuthID(t *testing.T) {
-	key := KDF16([]byte("Demo Key for Auth ID Test"), "Demo Path for Auth ID Test")
-	authid := CreateAuthID(key, time.Now().Unix())
-
-	fmt.Println(key)
-	fmt.Println(authid)
-}
-
 func TestCreateAuthIDAndDecode(t *testing.T) {
 	key := KDF16([]byte("Demo Key for Auth ID Test"), "Demo Path for Auth ID Test")
 	authid := CreateAuthID(key, time.Now().Unix())
-
-	fmt.Println(key)
-	fmt.Println(authid)
 
 	AuthDecoder := NewAuthIDDecoderHolder()
 	var keyw [16]byte
 	copy(keyw[:], key)
 	AuthDecoder.AddUser(keyw, "Demo User")
 	res, err := AuthDecoder.Match(authid)
-	fmt.Println(res)
-	fmt.Println(err)
 	assert.Equal(t, "Demo User", res)
 	assert.Nil(t, err)
 }
@@ -39,16 +26,11 @@ func TestCreateAuthIDAndDecode2(t *testing.T) {
 	key := KDF16([]byte("Demo Key for Auth ID Test"), "Demo Path for Auth ID Test")
 	authid := CreateAuthID(key, time.Now().Unix())
 
-	fmt.Println(key)
-	fmt.Println(authid)
-
 	AuthDecoder := NewAuthIDDecoderHolder()
 	var keyw [16]byte
 	copy(keyw[:], key)
 	AuthDecoder.AddUser(keyw, "Demo User")
 	res, err := AuthDecoder.Match(authid)
-	fmt.Println(res)
-	fmt.Println(err)
 	assert.Equal(t, "Demo User", res)
 	assert.Nil(t, err)
 
@@ -64,16 +46,11 @@ func TestCreateAuthIDAndDecodeMassive(t *testing.T) {
 	key := KDF16([]byte("Demo Key for Auth ID Test"), "Demo Path for Auth ID Test")
 	authid := CreateAuthID(key, time.Now().Unix())
 
-	fmt.Println(key)
-	fmt.Println(authid)
-
 	AuthDecoder := NewAuthIDDecoderHolder()
 	var keyw [16]byte
 	copy(keyw[:], key)
 	AuthDecoder.AddUser(keyw, "Demo User")
 	res, err := AuthDecoder.Match(authid)
-	fmt.Println(res)
-	fmt.Println(err)
 	assert.Equal(t, "Demo User", res)
 	assert.Nil(t, err)
 
@@ -95,16 +72,11 @@ func TestCreateAuthIDAndDecodeSuperMassive(t *testing.T) {
 	key := KDF16([]byte("Demo Key for Auth ID Test"), "Demo Path for Auth ID Test")
 	authid := CreateAuthID(key, time.Now().Unix())
 
-	fmt.Println(key)
-	fmt.Println(authid)
-
 	AuthDecoder := NewAuthIDDecoderHolder()
 	var keyw [16]byte
 	copy(keyw[:], key)
 	AuthDecoder.AddUser(keyw, "Demo User")
 	res, err := AuthDecoder.Match(authid)
-	fmt.Println(res)
-	fmt.Println(err)
 	assert.Equal(t, "Demo User", res)
 	assert.Nil(t, err)
 

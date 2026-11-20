@@ -11,9 +11,26 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
+
+func TestClientUDP443Policy(t *testing.T) {
+	ctx := session.ContextWithOutbounds(t.Context(), []*session.Outbound{{
+		Target: net.UDPDestination(net.LocalHostIP, 443),
+	}})
+	for _, policy := range []string{"reject", "skip"} {
+		t.Run(policy, func(t *testing.T) {
+			client := NewClient(ctx, &vless.Multiplex{Concurrency: -1, XudpProxyUDP443: policy}, "", nil)
+			handled, err := client.Dispatch(ctx, nil)
+			wantRejected := policy == "reject"
+			if handled != wantRejected || (err != nil) != wantRejected {
+				t.Fatalf("Dispatch() = (%t, %v), want rejected = %t", handled, err, wantRejected)
+			}
+		})
+	}
+}
 
 func TestPoolFailure(t *testing.T) {
 	calls := 0
@@ -91,9 +108,18 @@ func TestClientWorkerUDPSource(t *testing.T) {
 	downR, downW := pipe.New(pipe.WithoutSizeLimit())
 	upR, upW := pipe.New(pipe.WithoutSizeLimit())
 	worker := NewClientWorker(context.Background(), transport.Link{Reader: downR, Writer: upW}, ClientStrategy{})
+	t.Cleanup(func() {
+		worker.Close()
+		downW.Close()
+		upR.Interrupt()
+	})
 
 	inR, inW := pipe.New(pipe.WithoutSizeLimit())
 	outR, outW := pipe.New(pipe.WithoutSizeLimit())
+	t.Cleanup(func() {
+		inW.Close()
+		outR.Interrupt()
+	})
 	ctx := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{
 		Target: net.UDPDestination(net.ParseAddress("8.8.8.8"), 53),
 	}})
@@ -101,7 +127,6 @@ func TestClientWorkerUDPSource(t *testing.T) {
 	if !worker.TryAdmit(ctx, child) {
 		t.Fatal("failed to dispatch")
 	}
-	defer worker.Close()
 	go fetchInput(ctx, child)
 	b := buf.New()
 	b.WriteString("query")
@@ -117,6 +142,7 @@ func TestClientWorkerUDPSource(t *testing.T) {
 	}
 	response := &Session{ID: 1, transferType: protocol.TransferTypePacket}
 	var got buf.MultiBuffer
+	defer func() { buf.ReleaseMulti(got) }()
 	for i := range srcs {
 		b := buf.New()
 		b.WriteString("reply")
@@ -134,7 +160,13 @@ func TestClientWorkerUDPSource(t *testing.T) {
 		common.Must(err)
 		got = append(got, mb...)
 	}
+	if len(got) != len(srcs) {
+		t.Fatalf("received %d replies, want %d", len(got), len(srcs))
+	}
 	for i, b := range got {
+		if string(b.Bytes()) != "reply" {
+			t.Errorf("reply %d: payload = %q", i, b.Bytes())
+		}
 		if b.UDP == nil || *b.UDP != srcs[i] {
 			t.Errorf("reply %d: source = %v, want %v", i, b.UDP, srcs[i])
 		}
