@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -121,63 +120,20 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	return nil
 }
 
-// codecBody discards decoded input when the connection or reader has stopped.
-type codecBody struct {
-	ctx     context.Context
-	reader  buf.Reader
-	stopped atomic.Bool
+// cancelReader discards a batch when cancellation overtakes decoding.
+type cancelReader struct {
+	ctx context.Context
+	buf.Reader
 }
 
-func (b *codecBody) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	if b.ctx.Err() != nil {
-		return nil, context.Cause(b.ctx)
+func (r cancelReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
+	data, err := r.Reader.ReadMultiBuffer()
+	if cause := context.Cause(r.ctx); cause != nil {
+		buf.ReleaseMulti(data)
+		return nil, cause
 	}
-	if b.stopped.Load() {
-		return nil, io.ErrClosedPipe
-	}
-	mb, err := b.reader.ReadMultiBuffer()
-	if b.ctx.Err() != nil {
-		buf.ReleaseMulti(mb)
-		return nil, context.Cause(b.ctx)
-	}
-	if b.stopped.Load() {
-		buf.ReleaseMulti(mb)
-		return nil, io.ErrClosedPipe
-	}
-	return mb, err
+	return data, err
 }
-
-func (b *codecBody) Interrupt() {
-	b.stopped.Store(true)
-}
-
-// responseWriter serializes concurrent writes before they reach the VMess codec.
-type responseWriter struct {
-	sync.Mutex
-	buf.Writer
-	ctx    context.Context
-	cancel context.CancelCauseFunc
-}
-
-func (w *responseWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
-	if mb.IsEmpty() {
-		buf.ReleaseMulti(mb)
-		return nil
-	}
-	w.Lock()
-	defer w.Unlock()
-	if err := context.Cause(w.ctx); err != nil {
-		buf.ReleaseMulti(mb)
-		return err
-	}
-	if err := w.Writer.WriteMultiBuffer(mb); err != nil {
-		w.cancel(err)
-		return err
-	}
-	return nil
-}
-
-func (w *responseWriter) Interrupt() { w.cancel(io.ErrClosedPipe) }
 
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
@@ -230,39 +186,28 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.User = request.User
 
 	ctx = policy.ContextWithBufferPolicy(ctx, h.policyManager.ForLevel(request.User.Level).Buffer)
-	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-	stopClose := context.AfterFunc(ctx, func() { common.Interrupt(iConn) })
-	defer stopClose()
 
 	bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 	if err != nil {
 		return errors.New("failed to start decoding").Base(err)
 	}
-	wire := buf.NewBufferedWriter(buf.NewWriter(connection))
-	// The empty response header fits in wire's initial buffer. Socket I/O is
-	// deferred to the checked first flush.
-	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, wire)
-	bodyWriter, err := svrSession.EncodeResponseBody(request, wire)
+	writer := buf.NewBufferedWriter(buf.NewWriter(connection))
+	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, writer)
+	bodyWriter, err := svrSession.EncodeResponseBody(request, writer)
 	if err != nil {
 		return errors.New("failed to start decoding response").Base(err)
 	}
-	body := &codecBody{ctx: ctx, reader: bodyReader}
-	wire.SetFlushNext()
+	writer.SetFlushNext()
+	link := &transport.Link{Reader: bodyReader, Writer: bodyWriter}
+
 	if request.Command == protocol.RequestCommandMux {
-		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, &transport.Link{Reader: body, Writer: bodyWriter})
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, link)
 		<-worker.WaitClosed()
-		if err := worker.Err(); err != nil {
-			return errors.New("connection ends").Base(err)
-		}
-		return nil
+		return worker.Err()
 	}
-	output := &responseWriter{Writer: bodyWriter, ctx: ctx, cancel: cancel}
-	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{Reader: body, Writer: output}); err != nil {
+	link.Reader = cancelReader{ctx: ctx, Reader: bodyReader}
+	if err := dispatcher.DispatchLink(ctx, request.Destination(), link); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
-	}
-	if err := context.Cause(ctx); err != nil {
-		return errors.New("connection ends").Base(err)
 	}
 	return nil
 }

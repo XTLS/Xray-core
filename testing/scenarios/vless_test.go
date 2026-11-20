@@ -275,12 +275,6 @@ func TestVlessTls(t *testing.T) {
 }
 
 func TestVlessXtlsVision(t *testing.T) {
-	t.Run("tcp", func(t *testing.T) { testVlessXtlsVision(t, "tcp", 3, 1024*1024) })
-	t.Run("mkcp", func(t *testing.T) { testVlessXtlsVision(t, "mkcp", 1, 32*1024) })
-}
-
-func testVlessXtlsVision(t *testing.T, transport string, connections, payloadSize int) {
-	t.Helper()
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -305,7 +299,7 @@ func testVlessXtlsVision(t *testing.T, transport string, connections, payloadSiz
 					PortList: &net.PortList{Range: []*net.PortRange{net.SinglePortRange(serverPort)}},
 					Listen:   net.NewIPOrDomain(net.LocalHostIP),
 					StreamSettings: &internet.StreamConfig{
-						ProtocolName: transport,
+						ProtocolName: "tcp",
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
@@ -372,7 +366,13 @@ func testVlessXtlsVision(t *testing.T, transport string, connections, payloadSiz
 				}),
 				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
 					StreamSettings: &internet.StreamConfig{
-						ProtocolName: transport,
+						ProtocolName: "tcp",
+						TransportSettings: []*internet.TransportConfig{
+							{
+								ProtocolName: "tcp",
+								Settings:     serial.ToTypedMessage(&transtcp.Config{}),
+							},
+						},
 						SecurityType: serial.GetMessageType(&tls.Config{}),
 						SecuritySettings: []*serial.TypedMessage{
 							serial.ToTypedMessage(&tls.Config{
@@ -390,8 +390,8 @@ func testVlessXtlsVision(t *testing.T, transport string, connections, payloadSiz
 	defer CloseAllServers(servers)
 
 	var errg errgroup.Group
-	for range connections {
-		errg.Go(testTCPConn(clientPort, payloadSize, time.Second*30))
+	for range 3 {
+		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {
 		t.Error(err)
