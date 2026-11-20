@@ -62,7 +62,7 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		poolCtx, stop := context.WithCancel(context.Background())
 		handler.stopMultiplex = stop
 		handler.multiplex = multiplex.NewClient(poolCtx, legacy, "", func(ctx context.Context) (context.Context, *transport.Link, error) {
-			return handler.process(ctx, nil, dialer)
+			return handler.process(ctx, nil, dialer, protocol.RequestCommandMux)
 		})
 	}
 
@@ -81,12 +81,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if handled, err := h.multiplex.Dispatch(ctx, link); handled {
 		return err
 	}
-	_, _, err := h.process(ctx, link, dialer)
+	_, _, err := h.process(ctx, link, dialer, 0)
 	return err
 }
 
-func (h *Handler) process(ctx context.Context, link *transport.Link, dialer internet.Dialer) (_ context.Context, _ *transport.Link, err error) {
-	native := link == nil
+func (h *Handler) process(ctx context.Context, link *transport.Link, dialer internet.Dialer, command protocol.RequestCommand) (_ context.Context, _ *transport.Link, err error) {
+	native := command == protocol.RequestCommandMux
 	if native {
 		ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{Target: h.server.Destination}})
 	}
@@ -120,7 +120,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
-	singleXUDP := !native && target.Network == net.Network_UDP && target.Port != 53 && target.Port != 443
+	singleXUDP := target.Network == net.Network_UDP && target.Port != 53 && target.Port != 443
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
 		User:    rec.User,
@@ -154,7 +154,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 
 	clientSession := encoding.NewClientSession(ctx, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
-	if !native && session.TimeoutOnlyFromContext(ctx) {
+	if session.TimeoutOnlyFromContext(ctx) {
 		ctx = context.Background()
 	}
 	ctx, cancel := context.WithCancel(ctx)
@@ -182,11 +182,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		if _, err := clientSession.DecodeResponseHeader(reader); err != nil {
 			return nil, errors.New("failed to read header").Base(err)
 		}
-		bodyReader, err := clientSession.DecodeResponseBody(request, reader)
-		if err != nil {
-			return nil, errors.New("failed to start encoding response").Base(err)
-		}
-		return bodyReader, nil
+		return clientSession.DecodeResponseBody(request, reader)
 	}
 
 	if native {
@@ -212,15 +208,11 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 			return err
 		}
 
-		if err := buf.Copy(link.Reader, stream, buf.UpdateActivity(timer)); err != nil {
+		err := buf.Copy(link.Reader, stream, buf.UpdateActivity(timer))
+		if err != nil || account.NoTerminationSignal {
 			return err
 		}
-
-		if !account.NoTerminationSignal {
-			return bodyWriter.WriteMultiBuffer(buf.MultiBuffer{})
-		}
-
-		return nil
+		return bodyWriter.WriteMultiBuffer(buf.MultiBuffer{})
 	}
 
 	responseDone := func() error {
