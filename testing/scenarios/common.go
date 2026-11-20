@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -34,40 +33,6 @@ func xor(b []byte) []byte {
 		r[i] = v ^ 'c'
 	}
 	return r
-}
-
-func countTCPCarriers(t *testing.T, target net.Port) (net.Port, *atomic.Int32) {
-	t.Helper()
-	addr := &net.TCPAddr{IP: net.LocalHostIP.IP()}
-	listener, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { listener.Close() })
-	count := new(atomic.Int32)
-	go func() {
-		for {
-			conn, err := listener.AcceptTCP()
-			if err != nil {
-				return
-			}
-			count.Add(1)
-			go func() {
-				defer conn.Close()
-				server, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: addr.IP, Port: int(target)})
-				if err != nil {
-					return
-				}
-				defer server.Close()
-				go func() {
-					io.Copy(server, conn)
-					server.CloseWrite()
-				}()
-				io.Copy(conn, server)
-			}()
-		}
-	}()
-	return net.Port(listener.Addr().(*net.TCPAddr).Port), count
 }
 
 func readFrom(conn net.Conn, timeout time.Duration, length int) []byte {

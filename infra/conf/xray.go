@@ -274,7 +274,7 @@ func validateXDrive(ts proto.Message, ss *internet.StreamConfig, pl *net.PortLis
 		// Reverse opens its own multiplexed connection.
 		ms := c.Multiplex
 		if account.Reverse == nil && (ms == nil || ms.Concurrency < 0 || ms.XudpConcurrency < 0 || ms.XudpProxyUDP443 == "skip") {
-			return errors.New(`the xdrive transport needs "multiplex" enabled, with no negative "concurrency" or "xudpConcurrency" and no "xudpProxyUDP443":"skip"`)
+			return errors.New(`the xdrive transport needs "multiplex" (legacy "mux") enabled, with no negative "concurrency" or "xudpConcurrency" and no "xudpProxyUDP443":"skip"`)
 		}
 		if account.Testpre != 0 {
 			return errors.New(`the xdrive transport doesn't support VLESS "testpre"`)
