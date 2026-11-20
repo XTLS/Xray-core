@@ -1,17 +1,12 @@
 package encoding
 
 import (
-	"crypto/cipher"
 	"crypto/md5"
 	"encoding/binary"
 	"hash/fnv"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
-	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/protocol"
-	vmessaead "github.com/xtls/xray-core/proxy/vmess/aead"
-	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -80,54 +75,4 @@ type AEADSizeParser struct {
 
 func NewAEADSizeParser(auth *crypto.AEADAuthenticator) *AEADSizeParser {
 	return &AEADSizeParser{crypto.AEADChunkSizeParser{Auth: auth}}
-}
-
-type bodySizeParser interface {
-	crypto.ChunkSizeEncoder
-	crypto.ChunkSizeDecoder
-}
-
-func newBodyCodec(request *protocol.RequestHeader, bodyKey, bodyIV, requestKey, requestIV []byte) (*crypto.AEADAuthenticator, bodySizeParser, crypto.PaddingLengthGenerator, error) {
-	var sizes bodySizeParser = crypto.PlainChunkSizeParser{}
-	if request.Option.Has(protocol.RequestOptionChunkMasking) {
-		sizes = NewShakeSizeParser(bodyIV)
-	}
-	var padding crypto.PaddingLengthGenerator
-	if request.Option.Has(protocol.RequestOptionGlobalPadding) {
-		var ok bool
-		padding, ok = sizes.(crypto.PaddingLengthGenerator)
-		if !ok {
-			return nil, nil, nil, errors.New("invalid option: RequestOptionGlobalPadding")
-		}
-	}
-
-	var newAEAD func([]byte) cipher.AEAD
-	switch request.Security {
-	case protocol.SecurityType_AES128_GCM:
-		newAEAD = crypto.NewAesGcm
-	case protocol.SecurityType_CHACHA20_POLY1305:
-		newAEAD = func(key []byte) cipher.AEAD {
-			aead, err := chacha20poly1305.New(GenerateChacha20Poly1305Key(key))
-			common.Must(err)
-			return aead
-		}
-	default:
-		return nil, nil, nil, errors.New("invalid option: Security")
-	}
-
-	auth := newBodyAuthenticator(newAEAD(bodyKey), bodyIV)
-	if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
-		// Both directions authenticate lengths with the request key and IV.
-		lengthKey := vmessaead.KDF16(requestKey, "auth_len")
-		sizes = NewAEADSizeParser(newBodyAuthenticator(newAEAD(lengthKey), requestIV))
-	}
-	return auth, sizes, padding, nil
-}
-
-func newBodyAuthenticator(aead cipher.AEAD, iv []byte) *crypto.AEADAuthenticator {
-	return &crypto.AEADAuthenticator{
-		AEAD:                    aead,
-		NonceGenerator:          GenerateChunkNonce(iv, uint32(aead.NonceSize())),
-		AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-	}
 }
