@@ -20,7 +20,6 @@ import (
 	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/proxy/vmess"
 	vmessaead "github.com/xtls/xray-core/proxy/vmess/aead"
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 type sessionID struct {
@@ -248,65 +247,11 @@ func (s *ServerSession) DecodeRequestHeader(reader io.Reader, isDrain bool) (*pr
 
 // DecodeRequestBody returns Reader from which caller can fetch decrypted body.
 func (s *ServerSession) DecodeRequestBody(request *protocol.RequestHeader, reader io.Reader) (buf.Reader, error) {
-	var sizeParser crypto.ChunkSizeDecoder = crypto.PlainChunkSizeParser{}
-	if request.Option.Has(protocol.RequestOptionChunkMasking) {
-		sizeParser = NewShakeSizeParser(s.requestBodyIV[:])
+	auth, sizes, padding, err := newBodyCodec(request, s.requestBodyKey[:], s.requestBodyIV[:], s.requestBodyKey[:], s.requestBodyIV[:])
+	if err != nil {
+		return nil, err
 	}
-	var padding crypto.PaddingLengthGenerator
-	if request.Option.Has(protocol.RequestOptionGlobalPadding) {
-		var ok bool
-		padding, ok = sizeParser.(crypto.PaddingLengthGenerator)
-		if !ok {
-			return nil, errors.New("invalid option: RequestOptionGlobalPadding")
-		}
-	}
-
-	switch request.Security {
-	case protocol.SecurityType_AES128_GCM:
-		aead := crypto.NewAesGcm(s.requestBodyKey[:])
-		auth := &crypto.AEADAuthenticator{
-			AEAD:                    aead,
-			NonceGenerator:          GenerateChunkNonce(s.requestBodyIV[:], uint32(aead.NonceSize())),
-			AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-		}
-		if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
-			AuthenticatedLengthKey := vmessaead.KDF16(s.requestBodyKey[:], "auth_len")
-			AuthenticatedLengthKeyAEAD := crypto.NewAesGcm(AuthenticatedLengthKey)
-
-			lengthAuth := &crypto.AEADAuthenticator{
-				AEAD:                    AuthenticatedLengthKeyAEAD,
-				NonceGenerator:          GenerateChunkNonce(s.requestBodyIV[:], uint32(aead.NonceSize())),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			sizeParser = NewAEADSizeParser(lengthAuth)
-		}
-		return crypto.NewAuthenticationReader(auth, sizeParser, reader, request.Command.TransferType(), padding), nil
-
-	case protocol.SecurityType_CHACHA20_POLY1305:
-		aead, _ := chacha20poly1305.New(GenerateChacha20Poly1305Key(s.requestBodyKey[:]))
-
-		auth := &crypto.AEADAuthenticator{
-			AEAD:                    aead,
-			NonceGenerator:          GenerateChunkNonce(s.requestBodyIV[:], uint32(aead.NonceSize())),
-			AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-		}
-		if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
-			AuthenticatedLengthKey := vmessaead.KDF16(s.requestBodyKey[:], "auth_len")
-			AuthenticatedLengthKeyAEAD, err := chacha20poly1305.New(GenerateChacha20Poly1305Key(AuthenticatedLengthKey))
-			common.Must(err)
-
-			lengthAuth := &crypto.AEADAuthenticator{
-				AEAD:                    AuthenticatedLengthKeyAEAD,
-				NonceGenerator:          GenerateChunkNonce(s.requestBodyIV[:], uint32(aead.NonceSize())),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			sizeParser = NewAEADSizeParser(lengthAuth)
-		}
-		return crypto.NewAuthenticationReader(auth, sizeParser, reader, request.Command.TransferType(), padding), nil
-
-	default:
-		return nil, errors.New("invalid option: Security")
-	}
+	return crypto.NewAuthenticationReader(auth, sizes, reader, request.Command.TransferType(), padding), nil
 }
 
 // EncodeResponseHeader writes encoded response header into the given writer.
@@ -355,63 +300,9 @@ func (s *ServerSession) EncodeResponseHeader(header *protocol.ResponseHeader, wr
 
 // EncodeResponseBody returns a Writer that auto-encrypt content written by caller.
 func (s *ServerSession) EncodeResponseBody(request *protocol.RequestHeader, writer io.Writer) (buf.Writer, error) {
-	var sizeParser crypto.ChunkSizeEncoder = crypto.PlainChunkSizeParser{}
-	if request.Option.Has(protocol.RequestOptionChunkMasking) {
-		sizeParser = NewShakeSizeParser(s.responseBodyIV[:])
+	auth, sizes, padding, err := newBodyCodec(request, s.responseBodyKey[:], s.responseBodyIV[:], s.requestBodyKey[:], s.requestBodyIV[:])
+	if err != nil {
+		return nil, err
 	}
-	var padding crypto.PaddingLengthGenerator
-	if request.Option.Has(protocol.RequestOptionGlobalPadding) {
-		var ok bool
-		padding, ok = sizeParser.(crypto.PaddingLengthGenerator)
-		if !ok {
-			return nil, errors.New("invalid option: RequestOptionGlobalPadding")
-		}
-	}
-
-	switch request.Security {
-	case protocol.SecurityType_AES128_GCM:
-		aead := crypto.NewAesGcm(s.responseBodyKey[:])
-		auth := &crypto.AEADAuthenticator{
-			AEAD:                    aead,
-			NonceGenerator:          GenerateChunkNonce(s.responseBodyIV[:], uint32(aead.NonceSize())),
-			AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-		}
-		if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
-			AuthenticatedLengthKey := vmessaead.KDF16(s.requestBodyKey[:], "auth_len")
-			AuthenticatedLengthKeyAEAD := crypto.NewAesGcm(AuthenticatedLengthKey)
-
-			lengthAuth := &crypto.AEADAuthenticator{
-				AEAD:                    AuthenticatedLengthKeyAEAD,
-				NonceGenerator:          GenerateChunkNonce(s.requestBodyIV[:], uint32(aead.NonceSize())),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			sizeParser = NewAEADSizeParser(lengthAuth)
-		}
-		return crypto.NewAuthenticationWriter(auth, sizeParser, writer, request.Command.TransferType(), padding), nil
-
-	case protocol.SecurityType_CHACHA20_POLY1305:
-		aead, _ := chacha20poly1305.New(GenerateChacha20Poly1305Key(s.responseBodyKey[:]))
-
-		auth := &crypto.AEADAuthenticator{
-			AEAD:                    aead,
-			NonceGenerator:          GenerateChunkNonce(s.responseBodyIV[:], uint32(aead.NonceSize())),
-			AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-		}
-		if request.Option.Has(protocol.RequestOptionAuthenticatedLength) {
-			AuthenticatedLengthKey := vmessaead.KDF16(s.requestBodyKey[:], "auth_len")
-			AuthenticatedLengthKeyAEAD, err := chacha20poly1305.New(GenerateChacha20Poly1305Key(AuthenticatedLengthKey))
-			common.Must(err)
-
-			lengthAuth := &crypto.AEADAuthenticator{
-				AEAD:                    AuthenticatedLengthKeyAEAD,
-				NonceGenerator:          GenerateChunkNonce(s.requestBodyIV[:], uint32(aead.NonceSize())),
-				AdditionalDataGenerator: crypto.GenerateEmptyBytes(),
-			}
-			sizeParser = NewAEADSizeParser(lengthAuth)
-		}
-		return crypto.NewAuthenticationWriter(auth, sizeParser, writer, request.Command.TransferType(), padding), nil
-
-	default:
-		return nil, errors.New("invalid option: Security")
-	}
+	return crypto.NewAuthenticationWriter(auth, sizes, writer, request.Command.TransferType(), padding), nil
 }

@@ -20,9 +20,6 @@ type ServerWorker struct {
 
 func NewServerWorker(ctx context.Context, dispatch func(context.Context, net.Destination, *transport.Link) error, link *transport.Link) *ServerWorker {
 	w := &ServerWorker{carrier: newCarrier(ctx, *link, 60*time.Second, false), dispatch: dispatch}
-	if inbound := session.InboundFromContext(ctx); inbound != nil {
-		inbound.CanSpliceCopy = 3
-	}
 	go w.run(ctx, w.handleStatusNew)
 	return w
 }

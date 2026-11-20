@@ -36,7 +36,11 @@ func TestClientWorkerEOF(t *testing.T) {
 
 	worker := NewClientWorker(context.Background(), transport.Link{Reader: reader, Writer: writer}, ClientStrategy{})
 
-	time.Sleep(time.Millisecond * 500)
+	select {
+	case <-worker.WaitClosed():
+	case <-time.After(3 * time.Second):
+		t.Fatal("worker did not close after EOF")
+	}
 
 	ctx := testOutboundContext()
 	f := worker.TryAdmit(ctx, NewSession(ctx, &transport.Link{Writer: buf.Discard}))
@@ -69,9 +73,10 @@ func TestClientWorkerClose(t *testing.T) {
 	go fetchInput(ctx1, child1)
 	defer tw1.Close()
 	common.Must(w1.Close())
-	time.Sleep(time.Millisecond * 500)
-	if !worker1.parent.Closed() {
-		t.Error("worker1 is not finished")
+	select {
+	case <-worker1.parent.WaitClosed():
+	case <-time.After(3 * time.Second):
+		t.Fatal("first worker did not close")
 	}
 	tr2, tw2 := pipe.New(pipe.WithoutSizeLimit())
 	ctx2 := session.ContextWithOutbounds(context.Background(), []*session.Outbound{{Target: net.TCPDestination(net.DomainAddress("www.example.com"), 80)}})

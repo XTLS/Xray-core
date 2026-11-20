@@ -73,17 +73,17 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
-	if config.Multiplex == nil {
-		legacy, err := multiplex.LegacyConfig(ctx)
+	muxConfig := config.Multiplex
+	if muxConfig == nil {
+		muxConfig, err = multiplex.LegacyConfig(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if legacy != nil {
-			if _, ok := session.FullHandlerFromContext(ctx).(internet.Dialer); !ok {
-				return nil, errors.New("VLESS multiplex migration requires an outbound dialer")
-			}
-			config.Multiplex = legacy
-		}
+	}
+	a := server.User.Account.(*vless.MemoryAccount)
+	dialer, _ := session.FullHandlerFromContext(ctx).(internet.Dialer)
+	if dialer == nil && (a.Reverse != nil || muxConfig != nil) {
+		return nil, errors.New("VLESS Reverse or multiplex requires an outbound dialer")
 	}
 
 	v := core.MustFromContext(ctx)
@@ -94,7 +94,6 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 	handler.ctx, handler.stop = context.WithCancel(context.Background())
 
-	a := handler.server.User.Account.(*vless.MemoryAccount)
 	if a.Encryption != "" && a.Encryption != "none" {
 		s := strings.Split(a.Encryption, ".")
 		var nfsPKeysBytes [][]byte
@@ -111,11 +110,11 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 	if a.Reverse == nil {
 		handler.testpre = a.Testpre
 	} else {
-		dialer := session.FullHandlerFromContext(ctx).(internet.Dialer)
 		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
-			Tag:  a.Reverse.Tag,
-			Name: "vless-reverse",
-			User: handler.server.User, // TODO: email
+			Tag:           a.Reverse.Tag,
+			Name:          "vless-reverse",
+			User:          handler.server.User, // TODO: email
+			CanSpliceCopy: 3,
 		})
 		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
 			request, err := proxymanConfig.BuildSniffingRequest(sc)
@@ -133,13 +132,12 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 			})
 	}
 
-	if config.Multiplex != nil {
-		dialer := session.FullHandlerFromContext(ctx).(internet.Dialer)
+	if muxConfig != nil {
 		network := ""
 		if settings, ok := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig); ok {
 			network = settings.ProtocolName
 		}
-		handler.multiplex = multiplex.NewClient(handler.ctx, config.Multiplex, network,
+		handler.multiplex = multiplex.NewClient(handler.ctx, muxConfig, network,
 			func(ctx context.Context) (context.Context, *transport.Link, error) {
 				return handler.process(ctx, nil, dialer, protocol.RequestCommandMux)
 			})

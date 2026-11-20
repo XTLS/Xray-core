@@ -2,22 +2,11 @@ package multiplex
 
 import (
 	"context"
-	"sync"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/transport"
 )
-
-// PhysicalWriter owns native output serialization without buffering data.
-type PhysicalWriter struct {
-	sync.Mutex
-	buf.Writer
-}
-
-func (w *PhysicalWriter) Close() error { return common.Close(w.Writer) }
-func (w *PhysicalWriter) Interrupt()   { common.Interrupt(w.Writer) }
 
 type activityWriter struct {
 	ctx      context.Context

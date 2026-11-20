@@ -5,14 +5,12 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"hash/crc64"
-	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
@@ -144,11 +142,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	request.Security = account.Security
 
 	if request.Security == protocol.SecurityType_AES128_GCM || request.Security == protocol.SecurityType_CHACHA20_POLY1305 {
-		request.Option.Set(protocol.RequestOptionChunkMasking)
-	}
-
-	if shouldEnablePadding(request.Security) && request.Option.Has(protocol.RequestOptionChunkMasking) {
-		request.Option.Set(protocol.RequestOptionGlobalPadding)
+		request.Option.Set(protocol.RequestOptionChunkMasking | protocol.RequestOptionGlobalPadding)
 	}
 
 	if account.AuthenticatedLengthExperiment {
@@ -160,22 +154,13 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 
 	behaviorSeed := crc64.Checksum(hashkdf.Sum(nil), crc64.MakeTable(crc64.ISO))
 
-	var newCtx context.Context
-	var newCancel context.CancelFunc
-	if !native && session.TimeoutOnlyFromContext(ctx) {
-		newCtx, newCancel = context.WithCancel(context.Background())
-	}
-
-	session := encoding.NewClientSession(ctx, int64(behaviorSeed))
+	clientSession := encoding.NewClientSession(ctx, int64(behaviorSeed))
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
-
+	if !native && session.TimeoutOnlyFromContext(ctx) {
+		ctx = context.Background()
+	}
 	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, func() {
-		cancel()
-		if newCancel != nil {
-			newCancel()
-		}
-	}, sessionPolicy.Timeouts.ConnectionIdle)
+	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
 	if native {
 		context.AfterFunc(ctx, func() { common.Interrupt(stat.TryUnwrapStatsConn(conn)) })
 	}
@@ -193,22 +178,20 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	writer := buf.NewBufferedWriter(buf.NewWriter(conn))
-	if err := session.EncodeRequestHeader(request, writer); err != nil {
+	if err := clientSession.EncodeRequestHeader(request, writer); err != nil {
 		return nil, nil, errors.New("failed to encode request").Base(err)
 	}
 
-	bodyWriter, err := session.EncodeRequestBody(request, writer)
+	bodyWriter, err := clientSession.EncodeRequestBody(request, writer)
 	if err != nil {
 		return nil, nil, errors.New("failed to start encoding").Base(err)
 	}
 	openResponse := func() (buf.Reader, error) {
 		reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
-		header, err := session.DecodeResponseHeader(reader)
-		if err != nil {
+		if _, err := clientSession.DecodeResponseHeader(reader); err != nil {
 			return nil, errors.New("failed to read header").Base(err)
 		}
-		h.handleCommand(rec.Destination, header.Command)
-		bodyReader, err := session.DecodeResponseBody(request, reader)
+		bodyReader, err := clientSession.DecodeResponseBody(request, reader)
 		if err != nil {
 			return nil, errors.New("failed to start encoding response").Base(err)
 		}
@@ -263,10 +246,6 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		return buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer))
 	}
 
-	if newCtx != nil {
-		ctx = newCtx
-	}
-
 	responseDonePost := task.OnSuccess(responseDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDone, responseDonePost); err != nil {
 		return nil, nil, errors.New("connection ends").Base(err)
@@ -275,23 +254,8 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	return nil, nil, nil
 }
 
-var enablePadding atomic.Bool
-
-func shouldEnablePadding(s protocol.SecurityType) bool {
-	return enablePadding.Load() || s == protocol.SecurityType_AES128_GCM || s == protocol.SecurityType_CHACHA20_POLY1305 || s == protocol.SecurityType_AUTO
-}
-
-func reloadEnvSettings() error {
-	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
-	paddingValue := platform.NewEnvFlag(platform.UseVmessPadding).GetValue(func() string { return defaultFlagValue })
-	enablePadding.Store(paddingValue != defaultFlagValue)
-	return nil
-}
-
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return New(ctx, config.(*Config))
 	}))
-
-	platform.RegisterEnvReload(reloadEnvSettings)
 }

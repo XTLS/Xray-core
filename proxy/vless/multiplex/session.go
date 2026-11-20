@@ -77,9 +77,8 @@ func (s *Session) WriteMultiBuffer(raw buf.MultiBuffer) error {
 		defer s.producer.Unlock()
 	}
 	defer func() { buf.ReleaseMulti(raw) }()
-	gate := c.link.Writer.(*PhysicalWriter)
 	for {
-		gate.Lock()
+		c.writeMutex.Lock()
 		c.RLock()
 		live := !c.Closed() && s.phase == outputOpen && c.sessions[s.ID] == s
 		c.RUnlock()

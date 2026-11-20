@@ -22,6 +22,7 @@ type carrier struct {
 	active               int
 	client               bool
 	link                 transport.Link
+	writeMutex           sync.Mutex
 	control              *sync.Cond
 	pendingUnknown       map[uint16]struct{}
 	ctx                  context.Context
@@ -30,9 +31,6 @@ type carrier struct {
 }
 
 func newCarrier(parent context.Context, link transport.Link, idle time.Duration, client bool) *carrier {
-	if _, ok := link.Writer.(*PhysicalWriter); !ok {
-		link.Writer = &PhysicalWriter{Writer: link.Writer}
-	}
 	ctx, cancel := context.WithCancelCause(parent)
 	c := &carrier{
 		sessions: make(map[uint16]*Session, 16), link: link, ctx: ctx, cancel: cancel,
@@ -125,7 +123,6 @@ func (c *carrier) unknownEnd(id uint16) {
 }
 
 func (c *carrier) controlLoop() {
-	gate := c.link.Writer.(*PhysicalWriter)
 	for {
 		c.Lock()
 		for !c.Closed() && c.readyHead == nil && len(c.pendingUnknown) == 0 {
@@ -136,7 +133,7 @@ func (c *carrier) controlLoop() {
 		if closed {
 			return
 		}
-		gate.Lock()
+		c.writeMutex.Lock()
 		var frames buf.MultiBuffer
 		var err error
 		c.Lock()
@@ -168,16 +165,15 @@ func (c *carrier) controlLoop() {
 
 // No logical lock spans physical I/O or a codec/address callback.
 func (c *carrier) writeAndUnlock(frames buf.MultiBuffer, err error) error {
-	gate := c.link.Writer.(*PhysicalWriter)
 	if err != nil || c.Closed() {
 		buf.ReleaseMulti(frames)
 	} else if len(frames) != 0 {
-		err = gate.Writer.WriteMultiBuffer(frames)
+		err = c.link.Writer.WriteMultiBuffer(frames)
 	}
 	if err != nil {
 		c.cancel(err)
 	}
-	gate.Unlock()
+	c.writeMutex.Unlock()
 	return err
 }
 
