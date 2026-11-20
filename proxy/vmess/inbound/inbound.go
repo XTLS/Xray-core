@@ -120,21 +120,6 @@ func (h *Handler) RemoveUser(ctx context.Context, email string) error {
 	return nil
 }
 
-// cancelReader discards a batch when cancellation overtakes decoding.
-type cancelReader struct {
-	ctx context.Context
-	buf.Reader
-}
-
-func (r cancelReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
-	data, err := r.Reader.ReadMultiBuffer()
-	if cause := context.Cause(r.ctx); cause != nil {
-		buf.ReleaseMulti(data)
-		return nil, cause
-	}
-	return data, err
-}
-
 // Process implements proxy.Inbound.Process().
 func (h *Handler) Process(ctx context.Context, network net.Network, connection stat.Connection, dispatcher routing.Dispatcher) error {
 	sessionPolicy := h.policyManager.ForLevel(0)
@@ -205,7 +190,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		<-worker.WaitClosed()
 		return worker.Err()
 	}
-	link.Reader = cancelReader{ctx: ctx, Reader: bodyReader}
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), link); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
