@@ -15,13 +15,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// StartIntranet maintains the Reverse carriers and returns their shutdown function.
+// StartIntranet maintains Reverse carriers until the returned cancellation function is called.
 // The opener derives each physical connection's context from the supplied context.
 func StartIntranet(ctx context.Context, dispatch func(context.Context, net.Destination, *transport.Link) error, open func(context.Context) (context.Context, *transport.Link, error)) func() {
 	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
 	go func() {
-		defer close(done)
 		const interval = 2 * time.Second
 		timer := time.NewTimer(interval)
 		defer timer.Stop()
@@ -58,10 +56,7 @@ func StartIntranet(ctx context.Context, dispatch func(context.Context, net.Desti
 			workers = append(workers, w)
 		}
 	}()
-	return func() {
-		cancel()
-		<-done
-	}
+	return cancel
 }
 
 type intranetWorker struct {

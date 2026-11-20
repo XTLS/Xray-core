@@ -236,7 +236,6 @@ func (c *carrier) responseTurn(s *Session) (buf.MultiBuffer, bool) {
 	data := x.response[:n:n]
 	x.response = x.response[n:]
 	if len(x.response) == 0 {
-		x.response = buf.ReleaseMulti(x.response)
 		x.response = nil
 	}
 	x.responseWake.Broadcast()
@@ -327,7 +326,6 @@ func (w *ServerWorker) bindXUDP(ctx context.Context, meta *FrameMetadata, reader
 			x.access.Unlock()
 			XUDPManager.Unlock()
 			buf.ReleaseMulti(data)
-			s.abort()
 			return nil
 		}
 		current := XUDPManager.Map[meta.GlobalID]

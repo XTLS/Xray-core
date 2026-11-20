@@ -22,11 +22,15 @@ func TestClientUDP443Policy(t *testing.T) {
 	}})
 	for _, policy := range []string{"reject", "skip"} {
 		t.Run(policy, func(t *testing.T) {
-			client := NewClient(ctx, &vless.Multiplex{Concurrency: -1, XudpProxyUDP443: policy}, "", nil)
-			handled, err := client.Dispatch(ctx, nil)
+			opened := false
+			client := NewClient(ctx, &vless.Multiplex{Concurrency: 1, XudpProxyUDP443: policy}, "", func(context.Context) (context.Context, *transport.Link, error) {
+				opened = true
+				return nil, nil, context.Canceled
+			})
+			handled, err := client.Dispatch(ctx, &transport.Link{})
 			wantRejected := policy == "reject"
-			if handled != wantRejected || (err != nil) != wantRejected {
-				t.Fatalf("Dispatch() = (%t, %v), want rejected = %t", handled, err, wantRejected)
+			if opened || handled != wantRejected || (err != nil) != wantRejected {
+				t.Fatalf("Dispatch() = (%t, %v), opened carrier = %t, want rejected = %t without opening a carrier", handled, err, opened, wantRejected)
 			}
 		})
 	}
