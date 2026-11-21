@@ -399,6 +399,11 @@ func (r *walReader) fetch(batch []Entry) ([][]byte, error) {
 		if failures[i] != nil {
 			return nil, failures[i]
 		}
+		// A remote store can list a segment before its PUT has finished. A WAL
+		// writer never emits an empty segment, so retry without advancing seq.
+		if len(chunks[i]) == 0 {
+			return nil, errNotFound
+		}
 	}
 	return chunks, nil
 }
