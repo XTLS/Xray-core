@@ -179,3 +179,37 @@ func TestHandlerCountsTunConnectionTraffic(t *testing.T) {
 		t.Fatalf("connection write mismatch: got %q, want %q", got, "downlink")
 	}
 }
+
+// a dispatcher that only returns when its context ends
+type blockingDispatcher struct {
+	testDispatcher
+	entered chan struct{}
+}
+
+func (d *blockingDispatcher) DispatchLink(ctx context.Context, dest xnet.Destination, link *transport.Link) error {
+	close(d.entered)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// Closing the handler must end a dispatch that is not reading its connection: the handler's context
+// is detached from the instance's, so Close is what cancels it
+func TestHandlerCloseCancelsDispatches(t *testing.T) {
+	dispatcher := &blockingDispatcher{entered: make(chan struct{})}
+	handler := &Handler{config: &Config{}, dispatcher: dispatcher}
+	handler.ctx, handler.cancel = context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		handler.HandleConnection(newTestConn(nil), xnet.TCPDestination(xnet.LocalHostIP, 443))
+		close(done)
+	}()
+	<-dispatcher.entered
+	if err := handler.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("dispatch still running after Close")
+	}
+}
