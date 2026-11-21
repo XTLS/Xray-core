@@ -18,6 +18,18 @@ const maxPaddingDelayMilliseconds = int64(math.MaxInt64 / int64(time.Millisecond
 // one RSA-1024 PKCS#1 v1.5 block, which holds at most 128-11 bytes.
 const MaxLegacyPasswordLength = 128 - 11 - 4
 
+func (c *Config) wrapClientAuth() (*yggdrasilAuth, error) {
+	if c.Yggdrasil == nil {
+		return nil, nil
+	}
+	return yggdrasilAuthFor(
+		c.Yggdrasil.Api,
+		c.Yggdrasil.Username,
+		c.Yggdrasil.Password,
+		c.Yggdrasil.Player,
+	)
+}
+
 func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	profiles, err := profilesFromConfig(c.Profiles)
 	if err != nil {
@@ -27,7 +39,24 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
-	cc, err := newClientConn(conn, profiles, c.Password, c.RsaPublicKey, c.Hostname, paddingSchedule)
+
+	auth, err := c.wrapClientAuth()
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
+	if auth == nil && len(profiles) == 0 {
+		return nil, fmt.Errorf("minecraft finalmask: empty profiles")
+	}
+
+	// In Yggdrasil mode the server key is authenticated by the session hash
+	// handshake, so the client accepts the key sent in Encryption Request
+	// instead of pinning a configured one.
+	var rsaPublicKey []byte
+	if auth == nil {
+		rsaPublicKey = c.RsaPublicKey
+	}
+
+	cc, err := newClientConn(conn, profiles, c.Password, rsaPublicKey, c.Hostname, paddingSchedule, auth)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -44,7 +73,19 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
-	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, paddingSchedule)
+
+	var verifier *yggdrasilVerifier
+	if c.Yggdrasil != nil {
+		verifier, err = yggdrasilVerifierFor(c.Yggdrasil.Api)
+		if err != nil {
+			return nil, fmt.Errorf("minecraft finalmask: %w", err)
+		}
+	}
+	if verifier == nil && len(profiles) == 0 {
+		return nil, fmt.Errorf("minecraft finalmask: empty profiles")
+	}
+
+	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, paddingSchedule, verifier)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}

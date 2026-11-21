@@ -3,16 +3,30 @@ package xmc
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/subtle"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"sync"
 	"time"
 )
+
+const (
+	yggdrasilVerifyTimeout = 10 * time.Second
+	// The client sends its join request right after the encryption response,
+	// so the session is usually registered within a few milliseconds. Poll
+	// quickly at first and back off to yggdrasilVerifyMaxPoll while it is
+	// still missing, instead of making every login wait a fixed interval.
+	yggdrasilVerifyFirstPoll = 10 * time.Millisecond
+	yggdrasilVerifyMaxPoll   = 200 * time.Millisecond
+)
+
+var errYggdrasilNotJoined = errors.New("player did not join the minecraft session")
 
 // Response by vanilla 26.1.2 server.
 var statusResponse = `{"description":"A Minecraft Server","players":{"max":20,"online":0},"version":{"name":"26.1.2","protocol":775},"enforcesSecureChat":true}`
@@ -38,6 +52,7 @@ type serverConn struct {
 	password        string
 	rsaPrivateKey   *rsa.PrivateKey
 	rsaPublicKey    []byte
+	yggdrasil       *yggdrasilVerifier
 	paddingSchedule []paddingTurn
 	packet          *packetStream
 	deadlines       *connectionDeadlines
@@ -216,27 +231,42 @@ func (c *serverConn) handshake() error {
 			return fmt.Errorf("new crypto writer: %w", err)
 		}
 
-		// verify password
-		receivedPassword := decryptedVerifyToken[4:]
-
-		if subtle.ConstantTimeCompare(receivedPassword, []byte(c.password)) != 1 {
-			writeDisconnectPacket(c.writer, `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`)
-			return fmt.Errorf("bad password")
-		}
-		if !found {
-			if err = writeDisconnectPacket(c.writer, `{"text":"You are not white-listed on this server!"}`); err != nil {
-				return fmt.Errorf("write unknown login profile disconnect: %w", err)
+		if c.yggdrasil != nil {
+			// Online-mode login: verify the player through the session server
+			// instead of the pre-shared password and the static profile list.
+			if !bytes.Equal(decryptedVerifyToken, verifyToken) {
+				return fmt.Errorf("verify token mismatch")
 			}
-			return fmt.Errorf("unknown login profile")
+
+			serverID := minecraftServerID(string(serverId), sharedSecret, c.rsaPublicKey)
+			profile, err = c.verifyYggdrasilLogin(string(username), uuid, serverID)
+			if err != nil {
+				reason := `{"type":"translatable","translate":"multiplayer.disconnect.unverified_username"}`
+				if !errors.Is(err, errYggdrasilNotJoined) {
+					reason = `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`
+				}
+				if writeErr := writeDisconnectPacket(c.writer, reason); writeErr != nil {
+					return fmt.Errorf("write yggdrasil disconnect: %w", writeErr)
+				}
+				return fmt.Errorf("verify yggdrasil login: %w", err)
+			}
+		} else {
+			// verify password
+			receivedPassword := decryptedVerifyToken[4:]
+
+			if subtle.ConstantTimeCompare(receivedPassword, []byte(c.password)) != 1 {
+				_ = writeDisconnectPacket(c.writer, `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`)
+				return fmt.Errorf("bad password")
+			}
+			if !found {
+				if err = writeDisconnectPacket(c.writer, `{"text":"You are not white-listed on this server!"}`); err != nil {
+					return fmt.Errorf("write unknown login profile disconnect: %w", err)
+				}
+				return fmt.Errorf("unknown login profile")
+			}
 		}
 
-		loginName := String(profile.Username)
-		propertyCount := Varint(1)
-		propertyName := String("textures")
-		texturesValue := String(profile.TexturesValue)
-		signed := Boolean(true)
-		texturesSignature := String(profile.TexturesSignature)
-		if err = writePacket(c.writer, 0x02, &profile.UUID, &loginName, &propertyCount, &propertyName, &texturesValue, &signed, &texturesSignature); err != nil {
+		if err = writeLoginSuccess(c.writer, profile); err != nil {
 			return fmt.Errorf("write login finished: %w", err)
 		}
 
@@ -271,6 +301,50 @@ func (c *serverConn) handshake() error {
 
 	default:
 		return fmt.Errorf("bad handshake packet: bad next state: %d", nextState)
+	}
+}
+
+func (c *serverConn) verifyYggdrasilLogin(username string, uuid UUID, serverID string) (loginProfile, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), yggdrasilVerifyTimeout)
+	defer cancel()
+
+	poll := yggdrasilVerifyFirstPoll
+	for {
+		account, err := c.yggdrasil.hasJoined(ctx, username, serverID)
+		if err != nil {
+			return loginProfile{}, err
+		}
+		if account != nil {
+			profileUUID, err := normalizeMinecraftUUID(account.ID)
+			if err != nil {
+				return loginProfile{}, err
+			}
+			if profileUUID != uuid {
+				return loginProfile{}, fmt.Errorf("yggdrasil profile UUID mismatch")
+			}
+			if account.Name != username {
+				return loginProfile{}, fmt.Errorf("yggdrasil profile name mismatch")
+			}
+			return loginProfile{
+				Username:   account.Name,
+				UUID:       profileUUID,
+				Properties: propertyListFromYggdrasil(account.Properties),
+			}, nil
+		}
+
+		timer := time.NewTimer(poll)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return loginProfile{}, fmt.Errorf("%w: %q", errYggdrasilNotJoined, username)
+		case <-timer.C:
+		}
+		if poll < yggdrasilVerifyMaxPoll {
+			poll *= 2
+			if poll > yggdrasilVerifyMaxPoll {
+				poll = yggdrasilVerifyMaxPoll
+			}
+		}
 	}
 }
 
@@ -339,8 +413,8 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.deadlines.setWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, paddingSchedule []paddingTurn) (*serverConn, error) {
-	if len(profiles) == 0 {
+func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, paddingSchedule []paddingTurn, yggdrasil *yggdrasilVerifier) (*serverConn, error) {
+	if len(profiles) == 0 && yggdrasil == nil {
 		return nil, fmt.Errorf("empty profiles")
 	}
 	if len(rsaPrivateKeyDER) == 0 {
@@ -363,6 +437,7 @@ func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPri
 		password:        password,
 		rsaPrivateKey:   rsaPrivateKey,
 		rsaPublicKey:    rsaPublicKey,
+		yggdrasil:       yggdrasil,
 		paddingSchedule: paddingSchedule,
 		deadlines:       newConnectionDeadlines(c),
 		done:            make(chan struct{}),

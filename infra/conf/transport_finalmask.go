@@ -2,6 +2,8 @@ package conf
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -961,10 +963,11 @@ func (c *XDNS) Build() (proto.Message, error) {
 }
 
 type XMC struct {
-	Hostname string           `json:"hostname"`
-	Profiles []XMCProfile     `json:"profiles"`
-	Password string           `json:"password"`
-	Paddings []XMCPaddingTurn `json:"paddings,omitempty"`
+	Hostname  string           `json:"hostname"`
+	Profiles  []XMCProfile     `json:"profiles"`
+	Password  string           `json:"password"`
+	Paddings  []XMCPaddingTurn `json:"paddings,omitempty"`
+	Yggdrasil *XMCYggdrasil    `json:"yggdrasil,omitempty"`
 	// A configured list is the complete padding schedule and replaces the
 	// built-in preset entirely, including the preset's Play-state join tail.
 	// NoPadding disables padding. An explicit empty "paddings" array means the
@@ -980,6 +983,19 @@ type XMCPaddingTurn struct {
 	// it reproduces. The sending side samples the range, the peer spends its
 	// minimum, and nothing pauses after the last turn.
 	Delay string `json:"delay,omitempty"`
+}
+
+// XMCYggdrasil enables third-party login through a Yggdrasil API server such
+// as Blessing Skin. The client authenticates with the API and the server
+// verifies players through its hasJoined endpoint.
+type XMCYggdrasil struct {
+	// API root of the Yggdrasil API, for example
+	// https://skin.example.com/api/yggdrasil
+	API      string `json:"api"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	// Optional player name, required when the account owns several players.
+	Player string `json:"player"`
 }
 
 type XMCProfile struct {
@@ -1015,16 +1031,6 @@ func (c *XMCProfile) Build() (*xmc.Profile, error) {
 }
 
 func (c *XMC) Build() (proto.Message, error) {
-	if len(c.Profiles) == 0 {
-		return nil, fmt.Errorf("minecraft profiles are required")
-	}
-
-	if c.Password == "" {
-		return nil, fmt.Errorf("empty password")
-	}
-	if len(c.Password) > xmc.MaxLegacyPasswordLength {
-		return nil, fmt.Errorf("minecraft password is longer than %d bytes", xmc.MaxLegacyPasswordLength)
-	}
 	// An explicit empty array is different from an absent field: json leaves
 	// Paddings nil when it is absent, so the user can turn padding off without
 	// a second switch.
@@ -1032,7 +1038,7 @@ func (c *XMC) Build() (proto.Message, error) {
 	if noPadding && len(c.Paddings) > 0 {
 		return nil, fmt.Errorf("minecraft padding: noPadding and paddings are exclusive")
 	}
-	config := &xmc.Config{Password: c.Password, Hostname: c.Hostname, NoPadding: noPadding}
+	config := &xmc.Config{Hostname: c.Hostname, NoPadding: noPadding}
 	for i, turn := range c.Paddings {
 		minimum, maximum, err := ParseRangeString(turn.Length)
 		if err != nil {
@@ -1065,9 +1071,75 @@ func (c *XMC) Build() (proto.Message, error) {
 		return nil, fmt.Errorf("minecraft padding: %w", err)
 	}
 
-	rsaPrivateKey, err := xmc.DeriveRSAKey(c.Password)
-	if err != nil {
-		return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
+	var yggdrasil *xmc.Yggdrasil
+	if c.Yggdrasil != nil {
+		if c.Yggdrasil.API == "" {
+			return nil, fmt.Errorf("empty minecraft yggdrasil api")
+		}
+
+		apiURL, err := url.Parse(c.Yggdrasil.API)
+		if err != nil {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api: %w", err)
+		}
+		if apiURL.Scheme != "http" && apiURL.Scheme != "https" {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api scheme: %q", apiURL.Scheme)
+		}
+		if apiURL.Host == "" {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api: missing host")
+		}
+		if apiURL.RawQuery != "" || apiURL.Fragment != "" {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil api: query and fragment are not allowed")
+		}
+		if (c.Yggdrasil.Username == "") != (c.Yggdrasil.Password == "") {
+			return nil, fmt.Errorf("minecraft yggdrasil username and password must be set together")
+		}
+		if c.Yggdrasil.Player != "" && !xmcUsernamePattern.MatchString(c.Yggdrasil.Player) {
+			return nil, fmt.Errorf("invalid minecraft yggdrasil player: %q", c.Yggdrasil.Player)
+		}
+
+		yggdrasil = &xmc.Yggdrasil{
+			Api:      strings.TrimSuffix(c.Yggdrasil.API, "/"),
+			Username: c.Yggdrasil.Username,
+			Password: c.Yggdrasil.Password,
+			Player:   c.Yggdrasil.Player,
+		}
+	} else if len(c.Profiles) == 0 {
+		return nil, fmt.Errorf("minecraft profiles are required")
+	}
+
+	var (
+		rsaPrivateKey *rsa.PrivateKey
+		password      string
+	)
+	if yggdrasil != nil {
+		// Yggdrasil mode binds the transport through the session hash: the
+		// client joins with the server's actual public key and the server
+		// checks hasJoined. The key pair is therefore generated per process
+		// instead of being derived from the password.
+		generated, err := rsa.GenerateKey(rand.Reader, 1024)
+		if err != nil {
+			return nil, fmt.Errorf("generate minecraft rsa key: %w", err)
+		}
+		rsaPrivateKey = generated
+
+		warning := `XMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and "password" is no longer used to derive it or to authenticate the transport; players are verified through ` + yggdrasil.Api + ` (client /join, server /hasJoined). Both ends must be able to reach the Yggdrasil API.`
+		if c.Password != "" {
+			warning += ` The configured "password" is ignored.`
+		}
+		errors.LogWarning(context.Background(), warning)
+	} else {
+		if c.Password == "" {
+			return nil, fmt.Errorf("empty password")
+		}
+		if len(c.Password) > xmc.MaxLegacyPasswordLength {
+			return nil, fmt.Errorf("minecraft password is longer than %d bytes", xmc.MaxLegacyPasswordLength)
+		}
+		derived, err := xmc.DeriveRSAKey(c.Password)
+		if err != nil {
+			return nil, fmt.Errorf("derive minecraft rsa key: %w", err)
+		}
+		rsaPrivateKey = derived
+		password = c.Password
 	}
 
 	rsaPublicKey, err := x509.MarshalPKIXPublicKey(&rsaPrivateKey.PublicKey)
@@ -1084,9 +1156,11 @@ func (c *XMC) Build() (proto.Message, error) {
 		profiles = append(profiles, profile)
 	}
 
+	config.Password = password
 	config.RsaPrivateKey = x509.MarshalPKCS1PrivateKey(rsaPrivateKey)
 	config.RsaPublicKey = rsaPublicKey
 	config.Profiles = profiles
+	config.Yggdrasil = yggdrasil
 	return config, nil
 }
 

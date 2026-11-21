@@ -16,7 +16,27 @@ message Profile {
     string textures_signature = 4;
 }
 
+message Yggdrasil {
+    // API root of a third-party Yggdrasil API server, for example
+    // https://skin.example.com/api/yggdrasil. The client logs in to this API
+    // and joins the session with the server's actual public key, while the
+    // server verifies players through
+    // sessionserver/session/minecraft/hasJoined. The API's
+    // signaturePublickey is used to verify the signed textures property.
+    string api = 1;
+    // Account used by the client to authenticate with the API. Usually an
+    // email address, depending on the API implementation.
+    string username = 2;
+    string password = 3;
+    // Optional player name. Required when the account owns several players.
+    string player = 4;
+}
+
 message Config {
+    // Legacy mode only: seeds the derived RSA key pair and is the pre-shared
+    // password checked during login. Ignored in Yggdrasil mode, where the RSA
+    // key pair is generated randomly and players are authenticated through the
+    // Yggdrasil API.
     string password = 1;
     reserved 2;
     bytes rsa_private_key = 8;
@@ -27,6 +47,9 @@ message Config {
     // A configured list is the complete schedule and replaces the preset
     // entirely: the preset's Play-state join tail runs only with the preset.
     repeated Padding paddings = 12;
+    // Optional third-party Yggdrasil login. Field 13 keeps configurations
+    // that already set 12 for paddings working unchanged.
+    Yggdrasil yggdrasil = 13;
     // Disables startup padding. The configuration sets this for an explicit
     // empty "paddings" array, which an unset repeated field cannot express.
     bool no_padding = 14;
