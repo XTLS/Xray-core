@@ -76,6 +76,7 @@ func NewUDPHopConn(c *Config, dest *net.Destination, dialer *finalmask.Dialer) (
 	}
 	cur := conn.(*net.PacketConnWrapper).PacketConn
 	addr := conn.RemoteAddr().(*net.UDPAddr)
+	dialer.UDPPath = &finalmask.UDPPath{Destination: addr}
 	client := &udpHopConn{
 		dialer: dialer,
 		local:  c.Local,
@@ -121,6 +122,9 @@ func (c *udpHopConn) run() {
 }
 
 func (c *udpHopConn) hop() {
+	// Keep every noise packet, its delays, and the payload on one path.
+	c.dialer.UDPPath.Lock()
+	defer c.dialer.UDPPath.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed() {
@@ -128,6 +132,7 @@ func (c *udpHopConn) hop() {
 	}
 	oldIP := c.addr.IP
 	oldPort := c.addr.Port
+	oldLocal := c.cur.LocalAddr().String()
 	if c.remote {
 		if len(c.remoteIPs) > 0 {
 			c.addr.IP = randPrefix(c.remoteIPs[mrand.Intn(len(c.remoteIPs))])
@@ -154,6 +159,9 @@ func (c *udpHopConn) hop() {
 		c.cur = conn.(*net.PacketConnWrapper).PacketConn
 		c.wg.Add(1)
 		go c.recv(c.cur)
+	}
+	if !oldIP.Equal(c.addr.IP) || oldPort != c.addr.Port || oldLocal != c.cur.LocalAddr().String() {
+		c.dialer.UDPPath.Generation++
 	}
 }
 
