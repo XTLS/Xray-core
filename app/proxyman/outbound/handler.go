@@ -181,26 +181,29 @@ func (h *Handler) Tag() string {
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
-	content := session.ContentFromContext(ctx)
-	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain() && (content == nil || !content.SkipDNSResolve) {
-		strategy := h.senderSettings.TargetStrategy
-		if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil {
-			strategy = strategy.GetDynamicStrategy(ob.OriginalTarget.Address.Family())
-		}
-		ips, err := internet.LookupForIP(ob.Target.Address.Domain(), strategy, nil)
-		if err != nil {
-			errors.LogInfoInner(ctx, err, "failed to resolve ip for target ", ob.Target.Address.Domain())
-			if h.senderSettings.TargetStrategy.ForceIP() {
-				err := errors.New("failed to resolve ip for target ", ob.Target.Address.Domain()).Base(err)
-				session.SubmitOutboundErrorToOriginator(ctx, err)
-				common.Interrupt(link.Writer)
-				common.Interrupt(link.Reader)
-				return
-			}
+	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain() {
+		if session.SkipDNSResolveFromContext(ctx) {
+			errors.LogInfo(ctx, "bypassing targetStrategy ", h.senderSettings.TargetStrategy, " for ", ob.Target, "; preserving target domain")
 		} else {
-			unchangedDomain := ob.Target.Address.Domain()
-			ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
-			errors.LogInfo(ctx, "target: ", unchangedDomain, " resolved to: ", ob.Target.Address.String())
+			strategy := h.senderSettings.TargetStrategy
+			if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil {
+				strategy = strategy.GetDynamicStrategy(ob.OriginalTarget.Address.Family())
+			}
+			ips, err := internet.LookupForIP(ob.Target.Address.Domain(), strategy, nil)
+			if err != nil {
+				errors.LogInfoInner(ctx, err, "failed to resolve ip for target ", ob.Target.Address.Domain())
+				if h.senderSettings.TargetStrategy.ForceIP() {
+					err := errors.New("failed to resolve ip for target ", ob.Target.Address.Domain()).Base(err)
+					session.SubmitOutboundErrorToOriginator(ctx, err)
+					common.Interrupt(link.Writer)
+					common.Interrupt(link.Reader)
+					return
+				}
+			} else {
+				unchangedDomain := ob.Target.Address.Domain()
+				ob.Target.Address = net.IPAddress(ips[dice.Roll(len(ips))])
+				errors.LogInfo(ctx, "target: ", unchangedDomain, " resolved to: ", ob.Target.Address.String())
+			}
 		}
 	}
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {

@@ -318,6 +318,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	ob.Name = "freedom"
 	ob.CanSpliceCopy = 1
+
 	if !h.usesDialerProxy && len(h.firewall) > 0 {
 		rule := h.firewall[0]
 		if rule.action == RuleAction_Block && rule.network == allNetworks && len(rule.port) == 0 && rule.ip == nil {
@@ -348,6 +349,10 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			destination.Port = net.Port(server.Port)
 			UDPOverride.Port = destination.Port
 		}
+	}
+
+	if h.resolveStrategy.HasStrategy() && session.SkipDNSResolveFromContext(ctx) {
+		errors.LogInfo(ctx, "DNS-origin connection to ", destination, " may recursively resolve with sockopt.domainStrategy ", h.resolveStrategy)
 	}
 
 	input := link.Reader
