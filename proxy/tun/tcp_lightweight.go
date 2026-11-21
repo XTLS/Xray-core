@@ -1128,7 +1128,7 @@ func (c *tcpConn) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		size += uint32(b.Len())
 	}
 	mb = mb[:n]
-	if c.err != nil || c.closed {
+	if c.err != nil || c.closed || c.sndFin {
 		buf.ReleaseMulti(mb)
 		return io.ErrClosedPipe
 	}
@@ -1233,6 +1233,23 @@ func (c *tcpConn) Close() error {
 		return nil
 	}
 	c.readable.Broadcast()
+	if !c.sndFin {
+		c.send(c.sndNxt, tcpFin|tcpAck, nil, nil)
+		c.sndFin = true
+		c.sndNxt++
+	}
+	c.arm(tcpTick)
+	return nil
+}
+
+// CloseWrite sends FIN after what was written and keeps reading until Close
+func (c *tcpConn) CloseWrite() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.sndFin || c.err != nil || c.writing != 0 {
+		// FIN cannot go before a write that is still going on, and Close resets the connection then
+		return nil
+	}
 	c.send(c.sndNxt, tcpFin|tcpAck, nil, nil)
 	c.sndFin = true
 	c.sndNxt++
