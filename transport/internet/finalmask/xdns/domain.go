@@ -17,14 +17,6 @@ func Lower(c byte) byte {
 	return c
 }
 
-func ToUpper(b []byte) {
-	for i, c := range b {
-		if c >= 'a' && c <= 'z' {
-			b[i] = c - 'a' + 'A'
-		}
-	}
-}
-
 func ToLower(b []byte) {
 	for i, c := range b {
 		if c >= 'A' && c <= 'Z' {
@@ -52,7 +44,7 @@ const (
 )
 
 var (
-	base32Encoding = base32.StdEncoding.WithPadding(base32.NoPadding)
+	base32Encoding = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadding(base32.NoPadding)
 	table, table_  = NewTable()
 	TypeMap        = map[uint16]byte{
 		TypeA:     0,
@@ -74,12 +66,13 @@ type Domain struct {
 	labelLimit int
 	types      []uint16
 	edns0      uint16
+	encoding   *base32.Encoding
 
 	cap    int
 	lenMax int
 }
 
-func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns0 uint16) (*Domain, error) {
+func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns0 uint16, alphabet string) (*Domain, error) {
 	if strings.Contains(domain, "..") {
 		return nil, errors.New("invalid domain")
 	}
@@ -101,6 +94,20 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 	}
 	if edns0 != 0 && (edns0 < 512 || edns0 > 4096) {
 		return nil, errors.New("edns0 != 0 && (edns0 < 512 || edns0 > 4096)")
+	}
+	encoding := base32Encoding
+	if alphabet != "" {
+		alphabet = strings.ToLower(alphabet)
+		if len(alphabet) != 32 {
+			return nil, errors.New("len(alphabet) != 32")
+		}
+		for i := range len(alphabet) {
+			c := alphabet[i]
+			if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9') || strings.IndexByte(alphabet[:i], c) >= 0 {
+				return nil, errors.New("invalid alphabet")
+			}
+		}
+		encoding = base32.NewEncoding(alphabet).WithPadding(base32.NoPadding)
 	}
 
 	ascii, err := idna.ToASCII(domain)
@@ -145,6 +152,7 @@ func NewDomain(domain string, lenLimit int, labelLimit int, types []uint16, edns
 		labelLimit: labelLimit,
 		types:      types,
 		edns0:      edns0,
+		encoding:   encoding,
 
 		cap:    cap,
 		lenMax: lenMax,
@@ -183,8 +191,7 @@ func (d *Domain) HasType(qtype uint16) bool {
 func (d *Domain) Encode(data []byte) dnsmessage.Name {
 	var name dnsmessage.Name
 	var encoded [255]byte
-	base32Encoding.Encode(encoded[:], data)
-	ToLower(encoded[:table_[len(data)]])
+	d.encoding.Encode(encoded[:], data)
 	b1 := name.Data[:0]
 	b2 := encoded[:table_[len(data)]]
 	for len(b2) > 0 {
@@ -213,8 +220,8 @@ func (d *Domain) Decode(decoded *[255]byte, name dnsmessage.Name) int {
 			b1 = append(b1, b2[i])
 		}
 	}
-	ToUpper(b1)
-	n, err := base32Encoding.Decode(decoded[:], b1)
+	ToLower(b1)
+	n, err := d.encoding.Decode(decoded[:], b1)
 	if err != nil {
 		return 0
 	}
