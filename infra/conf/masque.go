@@ -49,6 +49,7 @@ type MasqueServerConfig struct {
 	Clients []*MasqueUserConfig `json:"clients"`
 	Address []string            `json:"address"`
 	MTU     uint32              `json:"mtu"`
+	ICMP    string              `json:"icmp"`
 }
 
 func (c *MasqueServerConfig) Build() (proto.Message, error) {
@@ -58,6 +59,10 @@ func (c *MasqueServerConfig) Build() (proto.Message, error) {
 	config := &masque.ServerConfig{
 		Address: c.Address,
 		Mtu:     c.MTU,
+	}
+	var err error
+	if config.Icmp, err = buildICMP(c.ICMP); err != nil {
+		return nil, err
 	}
 	emails := make(map[string]bool)
 	for _, user := range c.Users {

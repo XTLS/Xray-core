@@ -115,7 +115,7 @@ func NewClient(ctx context.Context, conf *DeviceConfig) (*Handler, error) {
 		tun, tnet, err = createKernelTun(localAddresses, dnses, int(conf.Mtu))
 	} else {
 		errors.LogWarning(context.Background(), "Using built-in TCP/IP stack")
-		tun, tnet, err = CreateNetTUN(localAddresses, dnses, int(conf.Mtu), nil)
+		tun, tnet, err = CreateNetTUN(NetTUNOptions{Addresses: localAddresses, DNS: dnses, MTU: int(conf.Mtu)})
 	}
 	if err != nil {
 		return nil, err
