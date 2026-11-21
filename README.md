@@ -112,6 +112,7 @@
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [XrayUI-dev](https://github.com/PhoenixNil/XrayUI-dev)
+  - [FCAE VPN](https://github.com/FCFlenkchy/FCAE_VPN)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
   - [X-flutter](https://github.com/XTLS/X-flutter)
@@ -121,6 +122,7 @@
   - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [AsteriskNG](https://github.com/Asterisk4Magisk/AsteriskNG)
+  - [FCAE VPN](https://github.com/FCFlenkchy/FCAE_VPN)
 - iOS & macOS arm64 & tvOS
   - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
@@ -137,6 +139,7 @@
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [INCY](https://apps.apple.com/en/app/incy/id6756943388)
+  - [FCAE VPN](https://github.com/FCFlenkchy/FCAE_VPN)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
   - [Furious](https://github.com/LorenEteval/Furious)
@@ -146,6 +149,7 @@
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
+  - [FCAE VPN](https://github.com/FCFlenkchy/FCAE_VPN)
 - HarmonyOS
   - [Hey](https://github.com/popsiclelmlm/Hey)
 
