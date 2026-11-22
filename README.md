@@ -151,9 +151,10 @@
 
 To submit a project to the [README](https://github.com/XTLS/Xray-core#readme), open a [pull request](https://github.com/XTLS/Xray-core/pulls). Projects are listed under these rules:
 
-- Projects must be based on Xray-core, have been maintained for at least one month, and have at least 30 stars.
+- Only submit projects that build their core experience on Xray-core and follow Xray's protocol choices and security requirements; merely offering it as an interchangeable core does not qualify.
+- Projects must have been maintained for at least one month and have at least 30 stars.
 - Projects with no activity for three months will be removed.
-- **Closed-source iOS clients must be submitted by their developers.**
+- Closed-source iOS clients must be submitted by their developers.
 
 </details>
 
