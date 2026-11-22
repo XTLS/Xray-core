@@ -191,6 +191,13 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	rec := h.server
 	var conn stat.Connection
 
+	account := rec.User.Account.(*vless.MemoryAccount)
+
+	if !native && ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 && account.Flow == vless.XRV {
+		proxy.DropUDP(ctx, link.Reader)
+		return nil, nil, errors.New("XTLS rejected UDP/443 traffic")
+	}
+
 	if h.testpre > 0 {
 		h.initpre.Do(func() {
 			h.preConns = make(chan *ConnExpire)
@@ -272,28 +279,20 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		request.Address, request.Port = target.Address, target.Port
 	}
 
-	account := request.User.Account.(*vless.MemoryAccount)
-
 	requestAddons := &encoding.Addons{
 		Flow: account.Flow,
 	}
 
 	var input *bytes.Reader
 	var rawInput **bytes.Buffer
-	allowUDP443 := false
 	switch requestAddons.Flow {
 	case vless.XRV + "-udp443":
-		allowUDP443 = true
 		requestAddons.Flow = requestAddons.Flow[:16]
 		fallthrough
 	case vless.XRV:
 		ob.CanSpliceCopy = 2
 		switch request.Command {
 		case protocol.RequestCommandUDP:
-			if !allowUDP443 && request.Port == 443 {
-				proxy.DropUDP(ctx, link.Reader)
-				return nil, nil, errors.New("XTLS rejected UDP/443 traffic")
-			}
 		case protocol.RequestCommandTCP, protocol.RequestCommandMux, protocol.RequestCommandRvs:
 			var target net.Conn
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
