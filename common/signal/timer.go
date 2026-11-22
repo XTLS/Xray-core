@@ -71,7 +71,6 @@ func (t *ActivityTimer) SetTimeout(timeout time.Duration) {
 	}
 	common.CloseIfExists(t.checkTask)
 	t.checkTask = newCheckTask
-	t.Update()
 	common.Must(newCheckTask.Start())
 }
 

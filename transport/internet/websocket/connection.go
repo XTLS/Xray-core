@@ -3,7 +3,6 @@ package websocket
 import (
 	"io"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -33,14 +32,8 @@ func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Rea
 		reader:     extraReader,
 	}
 	if heartbeatPeriod != 0 {
-		var checked atomic.Bool
 		keepalive := task.Periodic{
 			Execute: func() error {
-				// task.Periodic will try to execute this function immediately, drop it
-				if !checked.Load() {
-					checked.Store(true)
-					return nil
-				}
 				return conn.WriteControl(websocket.PingMessage, []byte{}, time.Time{})
 			},
 			Interval: time.Duration(heartbeatPeriod) * time.Second,
