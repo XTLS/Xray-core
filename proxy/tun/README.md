@@ -223,6 +223,8 @@ To make it start, wintun.dll specific for your Windows/arch must be present next
 
 After the start network adapter with the name you chose in the config will be created in the system, and exist while Xray is running. A Wintun adapter that already has that name is reused.
 
+`guid` sets the GUID of the adapter created, as in `"guid": "6ba7b810-9dad-11d1-80b4-00c04fd430c8"`, for applications that identify the adapter by something other than its name, e.g. to keep the same identity across renames or when several engines share a TUN. Without it the GUID is derived from the name with MD5, which keeps it the same for as long as the name does. It is only given to an adapter Xray creates: one that already has the name is reused as it is, whatever its GUID, and the GUID must not be one that another adapter uses. The config is rejected, on Windows and elsewhere, if the value is not a canonical GUID; other systems ignore it.
+
 With IPv6 turned off by the `DisabledComponents` registry value (0x10 set, as in 0xFF), errors setting up IPv6 for `gateway`, `dns` and `autoSystemRoutingTable`, clearing the IPv6 DNS servers when `dns` has none included, are only logged. Otherwise, they keep the TUN from starting.
 
 When `dns` is set, those servers are applied to the adapter. Windows is kept from registering the TUN's addresses in DNS, and its DNS cache is flushed when the TUN starts and stops. Xray's own lookups through the system's DNS servers, like those of the `localhost` DNS server with `autoOutboundsInterface`, skip them, unless another interface uses them as well, as they would lead back into the TUN.

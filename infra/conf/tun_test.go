@@ -124,3 +124,48 @@ func TestTunConfigAutoSystemWfpBlockLeakUnknown(t *testing.T) {
 		}
 	}
 }
+
+// TestTunConfigGUID checks that a guid is read, written back in the canonical
+// form, and rejected unless it is one, on every system, even though only
+// Windows gives the TUN a GUID.
+func TestTunConfigGUID(t *testing.T) {
+	build := func(guid string) (*tun.Config, error) {
+		config := new(TunConfig)
+		if err := json.Unmarshal([]byte(`{"name": "xray0", "guid": "`+guid+`"}`), config); err != nil {
+			t.Fatal(err)
+		}
+		message, err := config.Build()
+		if err != nil {
+			return nil, err
+		}
+		return message.(*tun.Config), nil
+	}
+
+	if config, err := build("6ba7b810-9dad-11d1-80b4-00c04fd430c8"); err != nil {
+		t.Fatal(err)
+	} else if config.GUID != "6ba7b810-9dad-11d1-80b4-00c04fd430c8" {
+		t.Errorf("guid = %q, want it kept", config.GUID)
+	}
+	if config, err := build("6BA7B810-9DAD-11D1-80B4-00C04FD430C8"); err != nil {
+		t.Fatal(err)
+	} else if config.GUID != "6ba7b810-9dad-11d1-80b4-00c04fd430c8" {
+		t.Errorf("guid = %q, want it lowercased", config.GUID)
+	}
+	if config, err := build(""); err != nil {
+		t.Fatal(err)
+	} else if config.GUID != "" {
+		t.Errorf("guid = %q, want it empty, as the adapter GUID is derived from the name then", config.GUID)
+	}
+	for _, guid := range []string{
+		"xray0",
+		"6ba7b810-9dad-11d1-80b4-00c04fd430c",
+		"6ba7b8109dad11d180b400c04fd430c8",
+		"{6ba7b810-9dad-11d1-80b4-00c04fd430c8}",
+		"urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+		"6ba7b810-9dad-11d1-80b4-00c04fd430cg",
+	} {
+		if _, err := build(guid); err == nil {
+			t.Errorf("guid %q was accepted", guid)
+		}
+	}
+}
