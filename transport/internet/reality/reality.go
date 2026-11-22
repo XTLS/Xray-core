@@ -140,6 +140,12 @@ func (c *UConn) VerifyPeerCertificate(rawCerts [][]byte, verifiedChains [][]*x50
 }
 
 func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destination) (net.Conn, error) {
+	setupComplete := false
+	defer func() {
+		if !setupComplete {
+			c.Close()
+		}
+	}()
 	localAddr := c.LocalAddr().String()
 	uConn := &UConn{
 		Config: config,
@@ -198,9 +204,14 @@ func UClient(c net.Conn, config *Config, ctx context.Context, dest net.Destinati
 		aead.Seal(hello.SessionId[:0], hello.Random[20:], hello.SessionId[:16], hello.Raw)
 		copy(hello.Raw[39:], hello.SessionId)
 	}
-	if err := uConn.HandshakeContext(ctx); err != nil {
+	handshakeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+	defer cancel()
+	if err := uConn.HandshakeContext(handshakeCtx); err != nil {
 		return nil, err
 	}
+	// A verified connection is returned to the caller. An unverified one is
+	// owned by the camouflage request below.
+	setupComplete = true
 	if config.Show {
 		fmt.Printf("REALITY localAddr: %v\tuConn.Verified: %v\n", localAddr, uConn.Verified)
 	}

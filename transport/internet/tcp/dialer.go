@@ -5,6 +5,7 @@ import (
 	gotls "crypto/tls"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/errors"
@@ -70,18 +71,22 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 				tlsConfig.NextProtos = []string{"h2", "http/1.1"}
 			}
 		}
+		// Bound negotiation even when the dispatch context is long-lived.
+		handshakeCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		defer cancel()
 		if fingerprint := tls.GetFingerprint(config.Fingerprint); fingerprint != nil {
 			conn = tls.UClient(conn, tlsConfig, fingerprint)
 			if len(tlsConfig.NextProtos) == 1 && tlsConfig.NextProtos[0] == "http/1.1" { // allow manually specify
-				err = conn.(*tls.UConn).WebsocketHandshakeContext(ctx)
+				err = conn.(*tls.UConn).WebsocketHandshakeContext(handshakeCtx)
 			} else {
-				err = conn.(*tls.UConn).HandshakeContext(ctx)
+				err = conn.(*tls.UConn).HandshakeContext(handshakeCtx)
 			}
 		} else {
 			conn = tls.Client(conn, tlsConfig)
-			err = conn.(*tls.Conn).HandshakeContext(ctx)
+			err = conn.(*tls.Conn).HandshakeContext(handshakeCtx)
 		}
 		if err != nil {
+			conn.Close()
 			if isFromMitmVerify {
 				return nil, errors.New("MITM freedom RAW TLS: failed to verify Domain Fronting certificate from " + mitmServerName).Base(err)
 			}
