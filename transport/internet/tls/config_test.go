@@ -3,6 +3,8 @@ package tls_test
 import (
 	gotls "crypto/tls"
 	"crypto/x509"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -96,4 +98,40 @@ func BenchmarkCertificateIssuing(b *testing.B) {
 		delete(tlsConfig.NameToCertificate, "www.example.com")
 		tlsConfig.Certificates = tlsConfig.Certificates[:lenCerts]
 	}
+}
+
+// https://github.com/XTLS/Xray-core/issues/7398
+func TestCertificateReloadDuringHandshakes(t *testing.T) {
+	dir := t.TempDir()
+	certPath, keyPath := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
+	writeCert := func(domain string) {
+		ct, _ := cert.MustGenerate(nil, cert.DNSNames(domain))
+		certPEM, keyPEM := ct.ToPEM()
+		common.Must(os.WriteFile(certPath, certPEM, 0o600))
+		common.Must(os.WriteFile(keyPath, keyPEM, 0o600))
+	}
+	writeCert("a.example.com")
+	certPEM, _ := os.ReadFile(certPath)
+	keyPEM, _ := os.ReadFile(keyPath)
+
+	c := &Config{Certificate: []*Certificate{{
+		Certificate:     certPEM,
+		Key:             keyPEM,
+		CertificatePath: certPath,
+		KeyPath:         keyPath,
+		OcspStapling:    1, // reload every second
+	}}}
+	getCertificate := c.GetTLSConfig().GetCertificate
+	writeCert("b.example.com")
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		keyPair, err := getCertificate(&gotls.ClientHelloInfo{ServerName: "b.example.com"})
+		common.Must(err)
+		if keyPair.Leaf.DNSNames[0] == "b.example.com" {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("the reloaded certificate was never served")
 }
