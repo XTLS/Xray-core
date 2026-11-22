@@ -12,10 +12,18 @@ import (
 	"github.com/xtls/xray-core/transport/internet/tagged"
 )
 
+type cancelOnClose context.CancelFunc
+
+func (cancel cancelOnClose) Close() error {
+	cancel()
+	return nil
+}
+
 func DialTaggedOutbound(ctx context.Context, dispatcher routing.Dispatcher, dest net.Destination, tag string) (net.Conn, error) {
 	if core.FromContext(ctx) == nil {
 		return nil, errors.New("Instance context variable is not in context, dial denied. ")
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	content := new(session.Content)
 	content.SkipDNSResolve = tag != ""
 
@@ -24,6 +32,7 @@ func DialTaggedOutbound(ctx context.Context, dispatcher routing.Dispatcher, dest
 
 	r, err := dispatcher.Dispatch(ctx, dest)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	var readerOpt cnc.ConnectionOption
@@ -32,7 +41,7 @@ func DialTaggedOutbound(ctx context.Context, dispatcher routing.Dispatcher, dest
 	} else {
 		readerOpt = cnc.ConnectionOutputMultiUDP(r.Reader)
 	}
-	return cnc.NewConnection(cnc.ConnectionInputMulti(r.Writer), readerOpt), nil
+	return cnc.NewConnection(cnc.ConnectionInputMulti(r.Writer), readerOpt, cnc.ConnectionOnClose(cancelOnClose(cancel))), nil
 }
 
 func init() {

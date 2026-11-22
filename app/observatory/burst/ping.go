@@ -33,7 +33,8 @@ func newDirectPingClient(destination string, timeout time.Duration) *pingClient 
 
 func newHTTPClient(ctxv context.Context, dispatcher routing.Dispatcher, handler string, timeout time.Duration) *http.Client {
 	tr := &http.Transport{
-		DisableKeepAlives: true,
+		DisableKeepAlives:   true,
+		TLSHandshakeTimeout: timeout,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dest, err := net.ParseDestination(network + ":" + addr)
 			if err != nil {
