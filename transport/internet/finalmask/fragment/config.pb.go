@@ -21,10 +21,60 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Config_Mode int32
+
+const (
+	Config_NORMAL   Config_Mode = 0
+	Config_DISORDER Config_Mode = 1
+	Config_DISOOB   Config_Mode = 2
+)
+
+// Enum value maps for Config_Mode.
+var (
+	Config_Mode_name = map[int32]string{
+		0: "NORMAL",
+		1: "DISORDER",
+		2: "DISOOB",
+	}
+	Config_Mode_value = map[string]int32{
+		"NORMAL":   0,
+		"DISORDER": 1,
+		"DISOOB":   2,
+	}
+)
+
+func (x Config_Mode) Enum() *Config_Mode {
+	p := new(Config_Mode)
+	*p = x
+	return p
+}
+
+func (x Config_Mode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Config_Mode) Descriptor() protoreflect.EnumDescriptor {
+	return file_transport_internet_finalmask_fragment_config_proto_enumTypes[0].Descriptor()
+}
+
+func (Config_Mode) Type() protoreflect.EnumType {
+	return &file_transport_internet_finalmask_fragment_config_proto_enumTypes[0]
+}
+
+func (x Config_Mode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Config_Mode.Descriptor instead.
+func (Config_Mode) EnumDescriptor() ([]byte, []int) {
+	return file_transport_internet_finalmask_fragment_config_proto_rawDescGZIP(), []int{0, 0}
+}
+
 type Config struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PacketsFrom   int64                  `protobuf:"varint,1,opt,name=packets_from,json=packetsFrom,proto3" json:"packets_from,omitempty"`
 	PacketsTo     int64                  `protobuf:"varint,2,opt,name=packets_to,json=packetsTo,proto3" json:"packets_to,omitempty"`
+	Mode          Config_Mode            `protobuf:"varint,13,opt,name=mode,proto3,enum=xray.transport.internet.finalmask.fragment.Config_Mode" json:"mode,omitempty"`
 	MaxSplitMin   int64                  `protobuf:"varint,7,opt,name=max_split_min,json=maxSplitMin,proto3" json:"max_split_min,omitempty"`
 	MaxSplitMax   int64                  `protobuf:"varint,8,opt,name=max_split_max,json=maxSplitMax,proto3" json:"max_split_max,omitempty"`
 	LengthsMin    []int64                `protobuf:"varint,9,rep,packed,name=lengths_min,json=lengthsMin,proto3" json:"lengths_min,omitempty"`
@@ -79,6 +129,13 @@ func (x *Config) GetPacketsTo() int64 {
 	return 0
 }
 
+func (x *Config) GetMode() Config_Mode {
+	if x != nil {
+		return x.Mode
+	}
+	return Config_NORMAL
+}
+
 func (x *Config) GetMaxSplitMin() int64 {
 	if x != nil {
 		return x.MaxSplitMin
@@ -125,11 +182,12 @@ var File_transport_internet_finalmask_fragment_config_proto protoreflect.FileDes
 
 const file_transport_internet_finalmask_fragment_config_proto_rawDesc = "" +
 	"\n" +
-	"2transport/internet/finalmask/fragment/config.proto\x12*xray.transport.internet.finalmask.fragment\"\x92\x02\n" +
+	"2transport/internet/finalmask/fragment/config.proto\x12*xray.transport.internet.finalmask.fragment\"\x8d\x03\n" +
 	"\x06Config\x12!\n" +
 	"\fpackets_from\x18\x01 \x01(\x03R\vpacketsFrom\x12\x1d\n" +
 	"\n" +
-	"packets_to\x18\x02 \x01(\x03R\tpacketsTo\x12\"\n" +
+	"packets_to\x18\x02 \x01(\x03R\tpacketsTo\x12K\n" +
+	"\x04mode\x18\r \x01(\x0e27.xray.transport.internet.finalmask.fragment.Config.ModeR\x04mode\x12\"\n" +
 	"\rmax_split_min\x18\a \x01(\x03R\vmaxSplitMin\x12\"\n" +
 	"\rmax_split_max\x18\b \x01(\x03R\vmaxSplitMax\x12\x1f\n" +
 	"\vlengths_min\x18\t \x03(\x03R\n" +
@@ -140,7 +198,13 @@ const file_transport_internet_finalmask_fragment_config_proto_rawDesc = "" +
 	"\n" +
 	"delays_min\x18\v \x03(\x03R\tdelaysMin\x12\x1d\n" +
 	"\n" +
-	"delays_max\x18\f \x03(\x03R\tdelaysMaxB\xa0\x01\n" +
+	"delays_max\x18\f \x03(\x03R\tdelaysMax\",\n" +
+	"\x04Mode\x12\n" +
+	"\n" +
+	"\x06NORMAL\x10\x00\x12\f\n" +
+	"\bDISORDER\x10\x01\x12\n" +
+	"\n" +
+	"\x06DISOOB\x10\x02B\xa0\x01\n" +
 	".com.xray.transport.internet.finalmask.fragmentP\x01Z?github.com/xtls/xray-core/transport/internet/finalmask/fragment\xaa\x02*Xray.Transport.Internet.Finalmask.Fragmentb\x06proto3"
 
 var (
@@ -155,16 +219,19 @@ func file_transport_internet_finalmask_fragment_config_proto_rawDescGZIP() []byt
 	return file_transport_internet_finalmask_fragment_config_proto_rawDescData
 }
 
+var file_transport_internet_finalmask_fragment_config_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_transport_internet_finalmask_fragment_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_transport_internet_finalmask_fragment_config_proto_goTypes = []any{
-	(*Config)(nil), // 0: xray.transport.internet.finalmask.fragment.Config
+	(Config_Mode)(0), // 0: xray.transport.internet.finalmask.fragment.Config.Mode
+	(*Config)(nil),   // 1: xray.transport.internet.finalmask.fragment.Config
 }
 var file_transport_internet_finalmask_fragment_config_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: xray.transport.internet.finalmask.fragment.Config.mode:type_name -> xray.transport.internet.finalmask.fragment.Config.Mode
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_transport_internet_finalmask_fragment_config_proto_init() }
@@ -177,13 +244,14 @@ func file_transport_internet_finalmask_fragment_config_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_transport_internet_finalmask_fragment_config_proto_rawDesc), len(file_transport_internet_finalmask_fragment_config_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_transport_internet_finalmask_fragment_config_proto_goTypes,
 		DependencyIndexes: file_transport_internet_finalmask_fragment_config_proto_depIdxs,
+		EnumInfos:         file_transport_internet_finalmask_fragment_config_proto_enumTypes,
 		MessageInfos:      file_transport_internet_finalmask_fragment_config_proto_msgTypes,
 	}.Build()
 	File_transport_internet_finalmask_fragment_config_proto = out.File

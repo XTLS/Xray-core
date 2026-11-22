@@ -297,6 +297,7 @@ type FragmentMask struct {
 	Lengths  []Int32Range `json:"lengths"`
 	Delays   []Int32Range `json:"delays"`
 	MaxSplit Int32Range   `json:"maxSplit"`
+	Mode     string       `json:"mode"`
 }
 
 func (c *FragmentMask) Build() (proto.Message, error) {
@@ -319,6 +320,17 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 		if config.PacketsFrom == 0 {
 			return nil, errors.New("PacketsFrom can't be 0")
 		}
+	}
+
+	switch strings.ToLower(c.Mode) {
+	case "", "normal":
+		config.Mode = fragment.Config_NORMAL
+	case "disorder":
+		config.Mode = fragment.Config_DISORDER
+	case "disoob":
+		config.Mode = fragment.Config_DISOOB
+	default:
+		return nil, errors.New(`unknown mode "`, c.Mode, `", valid values: normal, disorder, disoob`)
 	}
 
 	if len(c.Lengths) > 0 {
@@ -344,6 +356,18 @@ func (c *FragmentMask) Build() (proto.Message, error) {
 		config.DelaysMin = append(config.DelaysMin, int64(c.Delay.From))
 		config.DelaysMax = append(config.DelaysMax, int64(c.Delay.To))
 	}
+
+	if config.Mode != fragment.Config_NORMAL {
+		allZero := true
+		for i := range config.DelaysMax {
+			if config.DelaysMax[i] > 0 {
+				allZero = false
+				break
+			}
+		}
+		if allZero {
+			errors.LogWarning(context.Background(), `FRAGMENT: "mode" disorder/disoob with all-zero "delay" falls back to a `, fragment.GraceDelayMs, `ms hold per dying segment; set "delay" explicitly to control it`)
+		}	}
 
 	config.MaxSplitMin = int64(c.MaxSplit.From)
 	config.MaxSplitMax = int64(c.MaxSplit.To)
