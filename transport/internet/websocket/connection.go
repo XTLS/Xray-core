@@ -9,6 +9,7 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/signal/done"
 )
 
 var _ buf.Writer = (*connection)(nil)
@@ -20,24 +21,35 @@ type connection struct {
 	conn       *websocket.Conn
 	reader     io.Reader
 	remoteAddr net.Addr
+	done       *done.Instance
 }
 
 func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader, heartbeatPeriod uint32) *connection {
-	if heartbeatPeriod != 0 {
-		go func() {
-			for {
-				time.Sleep(time.Duration(heartbeatPeriod) * time.Second)
-				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Time{}); err != nil {
-					break
-				}
-			}
-		}()
-	}
-
-	return &connection{
+	c := &connection{
 		conn:       conn,
 		remoteAddr: remoteAddr,
 		reader:     extraReader,
+		done:       done.New(),
+	}
+	if heartbeatPeriod != 0 {
+		go c.heartbeat(time.Duration(heartbeatPeriod) * time.Second)
+	}
+	return c
+}
+
+// heartbeat stops on Close, so a closed connection is not kept until the next ping
+func (c *connection) heartbeat(period time.Duration) {
+	ticker := time.NewTicker(period)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.done.Wait():
+			return
+		case <-ticker.C:
+			if err := c.conn.WriteControl(websocket.PingMessage, []byte{}, time.Time{}); err != nil {
+				return
+			}
+		}
 	}
 }
 
@@ -93,6 +105,7 @@ func (c *connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 func (c *connection) Close() error {
+	c.done.Close()
 	var errs []interface{}
 	if err := c.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second*5)); err != nil {
 		errs = append(errs, err)
