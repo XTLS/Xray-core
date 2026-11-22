@@ -13,19 +13,40 @@ import (
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
 
+func TestHeaderFromTCPSourceToUDPDestination(t *testing.T) {
+	source := &net.TCPAddr{IP: net.ParseIP("198.51.100.7"), Port: 12345}
+	destination := &net.UDPAddr{IP: net.ParseIP("192.0.2.10"), Port: 443}
+	header := headerFromAddrs(2, source, destination)
+	from, to, ok := header.UDPAddrs()
+	if header.Command != proxyproto.PROXY || header.TransportProtocol != proxyproto.UDPv4 || !ok {
+		t.Fatalf("expected a UDP PROXY header, got %v", header)
+	}
+	if from.String() != source.String() || to.String() != destination.String() {
+		t.Fatalf("addresses = %v -> %v, want %v -> %v", from, to, source, destination)
+	}
+}
+
 func TestClientHeader(t *testing.T) {
+	const sourcePort = 12345
+	sources := []net.Destination{
+		{},
+		net.TCPDestination(net.ParseAddress("198.51.100.7"), sourcePort),
+		net.TCPDestination(net.ParseAddress("2001:db8::7"), sourcePort),
+		net.UDPDestination(net.ParseAddress("198.51.100.7"), sourcePort),
+		net.UDPDestination(net.ParseAddress("2001:db8::7"), sourcePort),
+	}
 	for _, version := range []uint32{0, 1, 2} {
-		for _, sourceIP := range []string{"", "198.51.100.7", "2001:db8::7"} {
-			t.Run(fmt.Sprintf("version=%d/source=%s", version, sourceIP), func(t *testing.T) {
+		for _, source := range sources {
+			t.Run(fmt.Sprintf("version=%d/source=%s", version, source), func(t *testing.T) {
 				listener, err := net.Listen("tcp", "127.0.0.1:0")
 				if err != nil {
 					t.Fatal(err)
 				}
 				defer listener.Close()
 				ctx := context.Background()
-				if sourceIP != "" {
+				if source.IsValid() {
 					ctx = session.ContextWithInbound(ctx, &session.Inbound{
-						Source: net.TCPDestination(net.ParseAddress(sourceIP), 12345),
+						Source: source,
 					})
 				}
 				fm := finalmask.NewFinalMask([]finalmask.TCPMask{&Config{Version: version}}, nil,
@@ -68,8 +89,8 @@ func TestClientHeader(t *testing.T) {
 					t.Fatalf("unexpected PROXY header: %v", header)
 				}
 				wantSource := client.LocalAddr()
-				if sourceIP != "" {
-					wantSource = &net.TCPAddr{IP: net.ParseIP(sourceIP), Port: 12345}
+				if source.IsValid() {
+					wantSource = &net.TCPAddr{IP: source.Address.IP(), Port: sourcePort}
 				}
 				if server.RemoteAddr().String() != wantSource.String() || server.LocalAddr().String() != listener.Addr().String() {
 					t.Fatalf("addresses = %v -> %v, want %v -> %v", server.RemoteAddr(), server.LocalAddr(), wantSource, listener.Addr())
