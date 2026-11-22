@@ -111,11 +111,11 @@ func Dial(ctx context.Context, dest net.Destination, streamSettings *internet.Me
 	}
 	qconn, err := tr.Dial(ctx, udpAddr, gotlsConfig, quicConfig)
 	if err != nil {
-		tr.Close()
 		pktConn.Close()
+		tr.Close()
 		return nil, err
 	}
-	context.AfterFunc(qconn.Context(), func() { tr.Close(); pktConn.Close() })
+	context.AfterFunc(qconn.Context(), func() { pktConn.Close(); tr.Close() })
 
 	switch quicParams.Congestion {
 	case "reno":
