@@ -112,11 +112,12 @@ func adapterGUID(name, id string) (*windows.GUID, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Windows keeps the first three groups of a GUID little-endian
+	// the groups are the field values, big-endian in the canonical bytes; Windows
+	// holds them little-endian in memory, which the fields take care of
 	return &windows.GUID{
-		Data1: binary.LittleEndian.Uint32(raw[0:4]),
-		Data2: binary.LittleEndian.Uint16(raw[4:6]),
-		Data3: binary.LittleEndian.Uint16(raw[6:8]),
+		Data1: binary.BigEndian.Uint32(raw[0:4]),
+		Data2: binary.BigEndian.Uint16(raw[4:6]),
+		Data3: binary.BigEndian.Uint16(raw[6:8]),
 		Data4: [8]byte(raw[8:16]),
 	}, nil
 }
