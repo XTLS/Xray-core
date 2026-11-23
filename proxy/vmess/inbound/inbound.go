@@ -133,7 +133,10 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 
 // Close implements common.Closable.
 func (h *Handler) Close() error {
-	return h.sessionHistory.Close()
+	return errors.Combine(
+		h.sessionHistory.Close(),
+		common.Close(h.usersByEmail),
+	)
 }
 
 // Network implements proxy.Inbound.Network().
