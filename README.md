@@ -2,8 +2,6 @@
 
 [Project X](https://github.com/XTLS) originates from XTLS protocol, providing a set of network tools such as [Xray-core](https://github.com/XTLS/Xray-core) and [REALITY](https://github.com/XTLS/REALITY).
 
-[README](https://github.com/XTLS/Xray-core#readme) is open, so feel free to submit your project [here](https://github.com/XTLS/Xray-core/pulls).
-
 ## Sponsors
 
 [![Remnawave](https://github.com/user-attachments/assets/a22d34ae-01ee-441c-843a-85356748ed1e)](https://docs.rw)
@@ -41,9 +39,9 @@
 
 ## Telegram
 
-[Project X](https://t.me/projectXray)
-
 [Project X Channel](https://t.me/projectXtls)
+
+[Project X](https://t.me/projectXray) (中文 / English)
 
 [Project VLESS](https://t.me/projectVless) (Русский)
 
@@ -53,7 +51,6 @@
 
 - Linux Script
   - [XTLS/Xray-install](https://github.com/XTLS/Xray-install) (**Official**)
-  - [tempest](https://github.com/team-cloudchaser/tempest) (supports [`systemd`](https://systemd.io) and [OpenRC](https://github.com/OpenRC/openrc); Linux-only)
 - Docker
   - [ghcr.io/xtls/xray-core](https://ghcr.io/xtls/xray-core) (**Official**)
   - [teddysun/xray](https://hub.docker.com/r/teddysun/xray)
@@ -69,12 +66,10 @@
   - [TX-UI](https://github.com/AghayeCoder/tx-ui)
   - [CELERITY](https://github.com/ClickDevTech/CELERITY-panel)
 - One Click
-  - [Xray-REALITY](https://github.com/zxcvos/Xray-script), [xray-reality](https://github.com/sajjaddg/xray-reality), [reality-ezpz](https://github.com/aleskxyz/reality-ezpz)
-  - [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey), [XTool](https://github.com/LordPenguin666/XTool), [VPainLess](https://github.com/vpainless/vpainless)
-  - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey), [ProxySU](https://github.com/proxysu/ProxySU)
+  - [xray-reality](https://github.com/sajjaddg/xray-reality), [Xray_bash_onekey](https://github.com/hello-yunshu/Xray_bash_onekey)
+  - [v2ray-agent](https://github.com/mack-a/v2ray-agent), [Xray_onekey](https://github.com/wulabing/Xray_onekey)
 - Magisk
   - [Magic_V2Ray](https://github.com/vincentng295/Magic_V2Ray)
-  - [Xray_For_Magisk](https://github.com/E7KMbb/Xray_For_Magisk)
 - Homebrew
   - `brew install xray`
 
@@ -86,14 +81,7 @@
   - [All-in-One-fallbacks-Nginx](https://github.com/XTLS/Xray-examples/tree/main/All-in-One-fallbacks-Nginx)
 - Xray-examples
   - [XTLS/Xray-examples](https://github.com/XTLS/Xray-examples)
-  - [chika0801/Xray-examples](https://github.com/chika0801/Xray-examples)
   - [lxhao61/integrated-examples](https://github.com/lxhao61/integrated-examples)
-- Tutorial
-  - [XTLS Vision](https://github.com/chika0801/Xray-install)
-  - [REALITY (English)](https://cscot.pages.dev/2023/03/02/Xray-REALITY-tutorial/)
-  - [XTLS-Iran-Reality (English)](https://github.com/SasukeFreestyle/XTLS-Iran-Reality)
-  - [Xray REALITY with 'steal oneself' (English)](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)
-  - [Xray with WireGuard inbound (English)](https://g800.pages.dev/wireguard)
 
 ## GUI Clients
 
@@ -106,51 +94,51 @@
   - [fancyss](https://github.com/hq450/fancyss)
 - Windows
   - [v2rayN](https://github.com/2dust/v2rayN)
-  - [Furious](https://github.com/LorenEteval/Furious)
-  - [Invisible Man - Xray](https://github.com/InvisibleManVPN/InvisibleMan-XRayClient)
-  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [XrayUI-dev](https://github.com/PhoenixNil/XrayUI-dev)
   - [keqdroid](https://github.com/Lemonochka/keqdroid)
 - Android
   - [v2rayNG](https://github.com/2dust/v2rayNG)
-  - [X-flutter](https://github.com/XTLS/X-flutter)
   - [SaeedDev94/Xray](https://github.com/SaeedDev94/Xray)
   - [SimpleXray](https://github.com/lhear/SimpleXray)
   - [XrayFA](https://github.com/Q7DF1/XrayFA)
-  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [AsteriskNG](https://github.com/Asterisk4Magisk/AsteriskNG)
   - [keqdroid](https://github.com/Lemonochka/keqdroid)
 - iOS & macOS arm64 & tvOS
-  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
+  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ tvOS](https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274)
   - [Streisand](https://apps.apple.com/app/streisand/id6450534064)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [INCY](https://apps.apple.com/en/app/incy/id6756943388)
 - macOS arm64 & x64
-  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215) | [Happ RU](https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973)
+  - [Happ](https://apps.apple.com/app/happ-proxy-utility/id6504287215)
   - [V2rayU](https://github.com/yanue/V2rayU)
   - [V2RayXS](https://github.com/tzmax/V2RayXS)
-  - [Furious](https://github.com/LorenEteval/Furious)
   - [OneXray](https://github.com/OneXray/OneXray)
-  - [GoXRay](https://github.com/goxray/desktop)
-  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [INCY](https://apps.apple.com/en/app/incy/id6756943388)
 - Linux
   - [v2rayA](https://github.com/v2rayA/v2rayA)
-  - [Furious](https://github.com/LorenEteval/Furious)
-  - [GorzRay](https://github.com/ketetefid/GorzRay)
-  - [GoXRay](https://github.com/goxray/desktop)
-  - [AnyPortal](https://github.com/AnyPortal/AnyPortal)
   - [v2rayN](https://github.com/2dust/v2rayN)
   - [GenyConnect](https://github.com/genyleap/GenyConnect)
   - [OneXray](https://github.com/OneXray/OneXray)
   - [keqdroid](https://github.com/Lemonochka/keqdroid)
 - HarmonyOS
   - [Hey](https://github.com/popsiclelmlm/Hey)
+
+<details>
+<summary>Project listing criteria</summary>
+
+To submit a project to the [README](https://github.com/XTLS/Xray-core#readme), open a [pull request](https://github.com/XTLS/Xray-core/pulls). Projects are listed under these rules:
+
+- Only submit projects that build their core experience on Xray-core and follow Xray's protocol choices and security requirements; merely offering it as an interchangeable core does not qualify.
+- Projects must have been maintained for at least one month and have at least 30 stars.
+- Projects with no activity for three months will be removed.
+- Closed-source iOS clients must be submitted by their developers.
+
+</details>
 
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
@@ -166,14 +154,8 @@
 - Xray Wrapper
   - [XTLS/libXray](https://github.com/XTLS/libXray)
   - [xtls-sdk](https://github.com/remnawave/xtls-sdk)
-  - [xtlsapi](https://github.com/hiddify/xtlsapi)
   - [AndroidLibXrayLite](https://github.com/2dust/AndroidLibXrayLite)
   - [flutter_vless](https://github.com/XIIIFOX/flutter_vless)
-  - [Xray-core-python](https://github.com/LorenEteval/Xray-core-python)
-  - [xray-api](https://github.com/XVGuardian/xray-api)
-- [XrayR](https://github.com/XrayR-project/XrayR)
-  - [XrayR-release](https://github.com/XrayR-project/XrayR-release)
-  - [XrayR-V2Board](https://github.com/missuo/XrayR-V2Board)
 - Cores
   - [Amnezia VPN](https://github.com/amnezia-vpn)
   - [mihomo](https://github.com/MetaCubeX/mihomo)
@@ -181,9 +163,9 @@
 
 ## Contributing
 
-[Code of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md)
+For code contributions, please read [CONTRIBUTING.md](CONTRIBUTING.md) and [Code of Conduct](https://github.com/XTLS/Xray-core/blob/main/CODE_OF_CONDUCT.md) before opening a pull request.
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/XTLS/Xray-core)
+[Ask DeepWiki](https://deepwiki.com/XTLS/Xray-core) might be helpful.
 
 ## Credits
 
@@ -266,4 +248,8 @@ GOOS=linux GOARCH=mipsle GOMIPS=softfloat CGO_ENABLED=0 go build -o xray -trimpa
 
 ## Stargazers over time
 
-[![Stargazers over time](https://starchart.cc/XTLS/Xray-core.svg)](https://starchart.cc/XTLS/Xray-core)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=xtls/xray-core&type=date&theme=dark&legend=top-left" />
+  <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=xtls/xray-core&type=date&legend=top-left" />
+  <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=xtls/xray-core&type=date&legend=top-left" />
+</picture>
