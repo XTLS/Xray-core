@@ -4,7 +4,7 @@ We review pull requests that address a concrete problem or an agreed proposal. P
 
 ## Bug fixes
 
-A bug-fix pull request must link an existing issue filed using the issue template. Summarize the code change and verification in the pull request, and add a regression test when practical. A speculative fix without a demonstrated problem is not ready for a pull request. Report security vulnerabilities through [the security policy](SECURITY.md) rather than a public issue.
+A bug-fix pull request must link an existing issue filed using the issue template. Summarize the code change and verification in the pull request, and add a regression test when practical. A speculative fix without a demonstrated problem is not ready for a pull request.
 
 ## Features
 
