@@ -229,8 +229,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	inbound.CanSpliceCopy = 3
 	inbound.User = request.User
 
-	ctx = policy.ContextWithBufferPolicy(ctx, h.policyManager.ForLevel(request.User.Level).Buffer)
-
 	bodyReader, err := svrSession.DecodeRequestBody(request, reader)
 	if err != nil {
 		return errors.New("failed to start decoding").Base(err)
