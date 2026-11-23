@@ -36,7 +36,7 @@ require (
 	google.golang.org/protobuf v1.36.12
 	h12.io/socks v1.0.3
 	layeh.com/gopher-luar v1.0.11
-	lukechampine.com/blake3 v1.4.1
+	lukechampine.com/blake3 v1.5.0
 	mvdan.cc/gofumpt v0.12.0
 )
 
