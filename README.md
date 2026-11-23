@@ -125,6 +125,18 @@
 - HarmonyOS
   - [Hey](https://github.com/popsiclelmlm/Hey)
 
+<details>
+<summary>Project listing criteria</summary>
+
+To submit a project to the [README](https://github.com/XTLS/Xray-core#readme), open a [pull request](https://github.com/XTLS/Xray-core/pulls). Projects are listed under these rules:
+
+- Only submit projects that build their core experience on Xray-core and follow Xray's protocol choices and security requirements; merely offering it as an interchangeable core does not qualify.
+- Projects must have been maintained for at least one month and have at least 30 stars.
+- Projects with no activity for three months will be removed.
+- Closed-source iOS clients must be submitted by their developers.
+
+</details>
+
 ## Others that support VLESS, XTLS, REALITY, XUDP, PLUX...
 
 - iOS & macOS arm64 & tvOS
@@ -145,18 +157,6 @@
   - [Amnezia VPN](https://github.com/amnezia-vpn)
   - [mihomo](https://github.com/MetaCubeX/mihomo)
   - [sing-box](https://github.com/SagerNet/sing-box)
-
-<details>
-<summary>Project listing criteria</summary>
-
-To submit a project to the [README](https://github.com/XTLS/Xray-core#readme), open a [pull request](https://github.com/XTLS/Xray-core/pulls). Projects are listed under these rules:
-
-- Only submit projects that build their core experience on Xray-core and follow Xray's protocol choices and security requirements; merely offering it as an interchangeable core does not qualify.
-- Projects must have been maintained for at least one month and have at least 30 stars.
-- Projects with no activity for three months will be removed.
-- Closed-source iOS clients must be submitted by their developers.
-
-</details>
 
 ## Contributing
 
