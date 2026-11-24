@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
@@ -144,7 +143,7 @@ func TestClientWorkerUDPSource(t *testing.T) {
 		net.UDPDestination(net.DomainAddress("example.com"), 2222),
 		net.UDPDestination(net.ParseAddress("3.3.3.3"), 3333),
 	}
-	response := &Session{ID: 1, transferType: protocol.TransferTypePacket}
+	response := &Session{ID: 1, target: net.Destination{Network: net.Network_UDP}}
 	var got buf.MultiBuffer
 	defer func() { buf.ReleaseMulti(got) }()
 	for i := range srcs {

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -27,7 +26,7 @@ func TestCarrierAdmission(t *testing.T) {
 	}
 	// Preserve the original explicit-ID publication assertion, with a fully
 	// initialized real physical owner instead of a standalone manager facade.
-	s := &Session{ID: 4, parent: worker.carrier, output: buf.Discard, done: make(chan struct{}), phase: outputOpen, transferType: protocol.TransferTypeStream}
+	s := &Session{ID: 4, parent: worker.carrier, output: buf.Discard, done: make(chan struct{}), phase: outputOpen}
 	worker.Lock()
 	admitted := worker.admitLocked(s)
 	indexed := worker.sessions[4] == s
@@ -39,18 +38,18 @@ func TestCarrierAdmission(t *testing.T) {
 
 func TestCarrierIdleRetirement(t *testing.T) {
 	reader, writer := pipe.New(pipe.WithoutSizeLimit())
-	worker := NewClientWorker(context.Background(), transport.Link{Reader: reader, Writer: buf.Discard}, ClientStrategy{})
+	worker := &ClientWorker{carrier: newCarrier(context.Background(), transport.Link{Reader: reader, Writer: buf.Discard}, 20*time.Millisecond, true)}
+	go worker.run(context.Background(), nil)
 	t.Cleanup(func() { worker.Close(); writer.Close() })
 	ctx := testOutboundContext()
 	s := NewSession(ctx, &transport.Link{Writer: buf.Discard})
 	if !worker.TryAdmit(ctx, s) {
 		t.Fatal("session not admitted")
 	}
-	worker.timer.Reset(5 * time.Millisecond)
 	select {
 	case <-worker.WaitClosed():
 		t.Fatal("active carrier retired")
-	case <-time.After(25 * time.Millisecond):
+	case <-time.After(65 * time.Millisecond):
 	}
 	s.Close()
 	select {

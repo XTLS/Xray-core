@@ -8,7 +8,6 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport"
 )
@@ -34,11 +33,9 @@ func (w *ServerWorker) dispatchFlow(ctx context.Context, dest net.Destination, f
 			}
 			XUDPManager.Unlock()
 		}
-		w.Lock()
 		w.cancel(err)
-		w.Unlock()
 		flow.Interrupt()
-		flow.expire()
+		flow.finish(true)
 		errors.LogInfoInner(ctx, err, "failed to dispatch request to ", dest)
 	}
 }
@@ -60,23 +57,18 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		}
 	}
 	errors.LogInfo(ctx, "received request for ", meta.Target)
-	{
-		msg := &log.AccessMessage{
-			To:     meta.Target,
-			Status: log.AccessAccepted,
-			Reason: "",
-		}
-		if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
-			msg.From = inbound.Source
-			msg.Email = inbound.User.Email
-		}
-		ctx = log.ContextWithAccessMessage(ctx, msg)
+	msg := &log.AccessMessage{
+		To:     meta.Target,
+		Status: log.AccessAccepted,
 	}
+	if inbound := session.InboundFromContext(ctx); inbound != nil && inbound.Source.IsValid() {
+		msg.From = inbound.Source
+		msg.Email = inbound.User.Email
+	}
+	ctx = log.ContextWithAccessMessage(ctx, msg)
 
-	if network := session.AllowedNetworkFromContext(ctx); network != net.Network_Unknown {
-		if meta.Target.Network != network {
-			return errors.New("unexpected network ", meta.Target.Network) // it will break the whole multiplex connection
-		}
+	if network := session.AllowedNetworkFromContext(ctx); network != net.Network_Unknown && meta.Target.Network != network {
+		return errors.New("unexpected network ", meta.Target.Network)
 	}
 
 	if meta.GlobalID != [8]byte{} {
@@ -85,10 +77,7 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 
 	s := &Session{
 		parent: w.carrier, phase: outputOpen,
-		ID: meta.SessionID, transferType: protocol.TransferTypeStream,
-	}
-	if meta.Target.Network == net.Network_UDP {
-		s.transferType = protocol.TransferTypePacket
+		ID: meta.SessionID, target: net.Destination{Network: meta.Target.Network},
 	}
 	s.flow = newInboundFlow(ctx, [8]byte{})
 	s.flow.binding = s
@@ -99,12 +88,11 @@ func (w *ServerWorker) handleStatusNew(ctx context.Context, meta *FrameMetadata,
 		s.flow.Interrupt()
 		return errors.New("failed to add new session")
 	}
-	dest := meta.Target
 	var output buf.Writer = s
-	if s.transferType == protocol.TransferTypePacket {
+	if meta.Target.Network == net.Network_UDP {
 		output = &flowOutput{s.flow}
 	}
-	go w.dispatchFlow(ctx, dest, s.flow, output)
+	go w.dispatchFlow(ctx, meta.Target, s.flow, output)
 	if !meta.Option.Has(OptionData) {
 		return nil
 	}

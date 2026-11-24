@@ -16,31 +16,48 @@ import (
 // Control intents carry no encoded DATA or caller payload.
 type carrier struct {
 	sync.RWMutex
-	sessions             map[uint16]*Session
-	readyHead, readyTail *Session
-	count                uint16
-	active               int
-	client               bool
-	link                 transport.Link
-	writeMutex           sync.Mutex
-	control              *sync.Cond
-	pendingUnknown       map[uint16]struct{}
-	ctx                  context.Context
-	cancel               context.CancelCauseFunc
-	timer                *time.Ticker
+	sessions map[uint16]*Session
+
+	ready      map[uint16]*Session // nil is a bounded END for an unknown wire ID
+	unknown    int
+	count      uint16
+	active     int
+	client     bool
+	link       transport.Link
+	writeMutex sync.Mutex
+	control    *sync.Cond
+	ctx        context.Context
+	cancel     context.CancelCauseFunc
+	timer      *time.Timer
 }
 
 func newCarrier(parent context.Context, link transport.Link, idle time.Duration, client bool) *carrier {
 	ctx, cancel := context.WithCancelCause(parent)
 	c := &carrier{
 		sessions: make(map[uint16]*Session, 16), link: link, ctx: ctx, cancel: cancel,
-		timer: time.NewTicker(idle), client: client,
+		client: client,
 	}
 	c.control = sync.NewCond(&c.RWMutex)
-	c.pendingUnknown = make(map[uint16]struct{})
+	c.ready = make(map[uint16]*Session)
 	context.AfterFunc(c.ctx, func() { common.Interrupt(c.link.Reader) })
+	c.Lock()
+	checkSize, checkCount := c.active, c.count
+	c.timer = time.AfterFunc(idle, func() {
+		c.Lock()
+		defer c.Unlock()
+		if c.Closed() {
+			return
+		}
+		if c.active == 0 && checkSize == 0 && c.count == checkCount {
+			c.cancel(nil)
+			return
+		}
+		checkSize, checkCount = c.active, c.count
+		c.timer.Reset(idle)
+	})
+	c.Unlock()
+	context.AfterFunc(c.ctx, c.shutdown)
 	go c.controlLoop()
-	go c.monitor()
 	return c
 }
 
@@ -55,66 +72,39 @@ func (c *carrier) admitLocked(s *Session) bool {
 	return true
 }
 
-// These are only cold control/retained-route notifications, never DATA staging.
 func (c *carrier) queueReadyLocked(s *Session) {
-	if s.listed {
-		return
-	}
-	s.prev, s.next, s.listed = c.readyTail, nil, true
-	if c.readyTail != nil {
-		c.readyTail.next = s
-	} else {
-		c.readyHead = s
-	}
-	c.readyTail = s
-	c.control.Broadcast()
-}
-
-func (c *carrier) unlinkReadyLocked(s *Session) {
-	if !s.listed {
-		return
-	}
-	if s.prev != nil {
-		s.prev.next = s.next
-	} else {
-		c.readyHead = s.next
-	}
-	if s.next != nil {
-		s.next.prev = s.prev
-	} else {
-		c.readyTail = s.prev
-	}
-	s.prev, s.next, s.listed = nil, nil, false
-}
-
-func (c *carrier) scheduleLocked(s *Session) {
-	x := s.flow
-	if !c.Closed() && c.sessions[s.ID] == s &&
-		(s.phase == outputClosing || x.binding == s &&
-			(s.phase == outputOpen && (len(x.response) != 0 || x.responseErr != nil) ||
-				s.phase == outputStarting && x.requestErr == nil && len(x.response) != 0)) {
-		c.queueReadyLocked(s)
-	}
-}
-
-func (c *carrier) invalidateUnknownLocked(id uint16) {
-	if _, ok := c.pendingUnknown[id]; ok {
-		delete(c.pendingUnknown, id)
+	if c.ready[s.ID] != s {
+		c.ready[s.ID] = s
 		c.control.Broadcast()
 	}
 }
 
-// The parser budgets live intents. Same-ID admission releases withdrawn work;
-// there is no queue of obsolete generations that can pin control capacity.
+func (c *carrier) scheduleLocked(s *Session) {
+	if !c.Closed() && c.sessions[s.ID] == s && (s.phase == outputDone || s.packetReady()) {
+		c.queueReadyLocked(s)
+	}
+}
+
+func (c *carrier) invalidateUnknownLocked(id uint16) bool {
+	if s, ok := c.ready[id]; ok && s == nil {
+		delete(c.ready, id)
+		c.unknown--
+		c.control.Broadcast()
+		return true
+	}
+	return false
+}
+
 func (c *carrier) unknownEnd(id uint16) {
 	c.Lock()
 	defer c.Unlock()
 	for !c.Closed() {
-		if _, duplicate := c.pendingUnknown[id]; duplicate {
+		if _, queued := c.ready[id]; queued || c.sessions[id] != nil {
 			return
 		}
-		if len(c.pendingUnknown) < 16 {
-			c.pendingUnknown[id] = struct{}{}
+		if c.unknown < 16 {
+			c.ready[id] = nil
+			c.unknown++
 			c.control.Broadcast()
 			return
 		}
@@ -123,42 +113,31 @@ func (c *carrier) unknownEnd(id uint16) {
 }
 
 func (c *carrier) controlLoop() {
-	for {
-		c.Lock()
-		for !c.Closed() && c.readyHead == nil && len(c.pendingUnknown) == 0 {
+	c.Lock()
+	defer c.Unlock()
+	for !c.Closed() {
+		if len(c.ready) == 0 {
 			c.control.Wait()
+			continue
 		}
-		selected, closed := c.readyHead, c.Closed()
-		c.Unlock()
-		if closed {
-			return
-		}
-		c.writeMutex.Lock()
-		var frames buf.MultiBuffer
-		var err error
-		c.Lock()
-		if !c.Closed() {
-			for id := range c.pendingUnknown {
-				c.invalidateUnknownLocked(id)
-				frames = endFrame(id, false)
-				break
-			}
-		}
-		c.Unlock()
-		// Give both live controls and retained output one bounded service turn.
-		if selected != nil {
-			raw, terminal := c.responseTurn(selected)
+		// Advance the iterator under the lock. Physical sends never hold it.
+		for id, selected := range c.ready {
+			c.Unlock()
+			c.writeMutex.Lock()
+			var frames buf.MultiBuffer
+			var err error
+			raw, terminal := c.responseTurn(id, selected)
 			if terminal {
-				frames = append(frames, endFrame(selected.ID, selected.endFailed)...)
+				frames = endFrame(id, selected != nil && selected.endFailed)
 			} else if len(raw) != 0 {
-				var own buf.MultiBuffer
-				own, err = selected.encodeBatch(&raw)
-				frames = append(frames, own...)
+				frames, err = selected.encodeBatch(&raw)
 				buf.ReleaseMulti(raw)
 			}
-		}
-		if c.writeAndUnlock(frames, err) != nil {
-			return
+			err = c.writeAndUnlock(frames, err)
+			c.Lock()
+			if err != nil || c.Closed() {
+				return
+			}
 		}
 	}
 }
@@ -168,6 +147,9 @@ func (c *carrier) writeAndUnlock(frames buf.MultiBuffer, err error) error {
 	if err != nil || c.Closed() {
 		buf.ReleaseMulti(frames)
 	} else if len(frames) != 0 {
+		if r, ok := c.link.Reader.(*responseReader); ok {
+			r.activity.Update()
+		}
 		err = c.link.Writer.WriteMultiBuffer(frames)
 	}
 	if err != nil {
@@ -184,7 +166,6 @@ func (c *carrier) ActiveConnections() uint32 {
 }
 func (c *carrier) Closed() bool                { return c.ctx.Err() != nil }
 func (c *carrier) WaitClosed() <-chan struct{} { return c.ctx.Done() }
-func (c *carrier) Context() context.Context    { return c.ctx }
 
 // Err reports the first close cause, excluding normal cancellation.
 func (c *carrier) Err() error {
@@ -200,75 +181,56 @@ func (c *carrier) Close() error {
 	return nil
 }
 
-func (c *carrier) monitor() {
-	defer c.timer.Stop()
-	for {
-		c.RLock()
-		checkSize, checkCount := c.active, c.count
-		c.RUnlock()
-		select {
-		case <-c.ctx.Done():
-			c.Lock()
-			for c.readyHead != nil {
-				c.unlinkReadyLocked(c.readyHead)
-			}
-			c.pendingUnknown = nil
-			c.control.Broadcast()
-			sessions := c.sessions
-			c.sessions, c.active = nil, 0
-			c.Unlock()
-			for id, s := range sessions {
-				if !s.seal(false, false) {
-					delete(sessions, id)
-				}
-			}
-			for _, s := range sessions {
-				s.cleanup()
-			}
-			common.Interrupt(c.link.Writer)
-			return
-		case <-c.timer.C:
-			c.Lock()
-			idle := c.active == 0 && checkSize == 0 && c.count == checkCount
-			if idle {
-				c.cancel(nil)
-			}
-			c.Unlock()
-		}
-	}
-}
-
-func discardFrame(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	if meta.Option.Has(OptionData) {
-		return copyFramePayload(reader, nil, meta.Target)
-	}
-	return nil
-}
-
-func (c *carrier) handleStatusKeep(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	if !meta.Option.Has(OptionData) {
-		return nil
-	}
-	c.RLock()
-	s, found := c.sessions[meta.SessionID]
-	if found && s.phase != outputOpen {
-		s = nil
-	}
-	c.RUnlock()
-	if !found && !c.client {
-		c.unknownEnd(meta.SessionID)
-	}
-	return copyFramePayload(reader, s, meta.Target)
-}
-
-func (c *carrier) handleStatusEnd(meta *FrameMetadata, reader *buf.BufferedReader) error {
-	c.RLock()
-	s := c.sessions[meta.SessionID]
-	c.RUnlock()
-	if s != nil {
+func (c *carrier) shutdown() {
+	c.Lock()
+	c.timer.Stop()
+	c.ready = nil
+	c.control.Broadcast()
+	sessions := c.sessions
+	c.sessions, c.active = nil, 0
+	c.Unlock()
+	for _, s := range sessions {
 		s.abort()
 	}
-	return discardFrame(meta, reader)
+	common.Interrupt(c.link.Writer)
+}
+
+func (c *carrier) readFrame(ctx context.Context, meta *FrameMetadata, reader *buf.BufferedReader, accept func(context.Context, *FrameMetadata, *buf.BufferedReader) error) error {
+	var target *Session
+	data := meta.Option.Has(OptionData)
+	switch meta.SessionStatus {
+	case SessionStatusNew:
+		if accept != nil {
+			return accept(session.ContextWithIsReverseMux(ctx, false), meta, reader)
+		}
+	case SessionStatusKeep:
+		if !data {
+			return nil
+		}
+		c.RLock()
+		s, found := c.sessions[meta.SessionID]
+		if found && s.phase == outputOpen {
+			target = s
+		}
+		c.RUnlock()
+		if !found && !c.client {
+			c.unknownEnd(meta.SessionID)
+		}
+	case SessionStatusEnd:
+		c.RLock()
+		s := c.sessions[meta.SessionID]
+		c.RUnlock()
+		if s != nil {
+			s.abort()
+		}
+	case SessionStatusKeepAlive:
+	default:
+		return errors.New("unknown status: ", meta.SessionStatus)
+	}
+	if data {
+		return copyFramePayload(reader, target, meta.Target)
+	}
+	return nil
 }
 
 func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMetadata, *buf.BufferedReader) error) {
@@ -284,22 +246,7 @@ func (c *carrier) run(ctx context.Context, accept func(context.Context, *FrameMe
 			return
 		}
 		if err == nil {
-			switch meta.SessionStatus {
-			case SessionStatusKeepAlive:
-				err = discardFrame(&meta, reader)
-			case SessionStatusKeep:
-				err = c.handleStatusKeep(&meta, reader)
-			case SessionStatusEnd:
-				err = c.handleStatusEnd(&meta, reader)
-			case SessionStatusNew:
-				if accept == nil {
-					err = discardFrame(&meta, reader)
-				} else {
-					err = accept(session.ContextWithIsReverseMux(ctx, false), &meta, reader)
-				}
-			default:
-				err = errors.New("unknown status: ", meta.SessionStatus)
-			}
+			err = frameReadError(c.readFrame(ctx, &meta, reader, accept))
 		}
 		if err != nil {
 			errors.LogInfoInner(ctx, err, "failed to process multiplex frame")

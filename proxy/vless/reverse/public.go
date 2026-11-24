@@ -102,6 +102,7 @@ func (p *PublicEndpoint) HandleConnection(ctx context.Context, link *transport.L
 		return errors.New("outbound metadata not found")
 	}
 
+	reader, writer := link.Reader, link.Writer
 	ctx = session.ContextWithIsReverseMux(ctx, true)
 
 	if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
@@ -109,7 +110,15 @@ func (p *PublicEndpoint) HandleConnection(ctx context.Context, link *transport.L
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
 
-	return multiplex.Dispatch(ctx, link, p.Admit)
+	return multiplex.Dispatch(ctx, link, p.Admit, func(physical context.Context) {
+		stop := context.AfterFunc(physical, func() {
+			common.Interrupt(writer)
+			common.Interrupt(reader)
+		})
+		defer stop()
+		common.Close(writer)
+		common.Interrupt(reader)
+	})
 }
 
 func (p *PublicEndpoint) Admit(ctx context.Context, s *multiplex.Session) error {

@@ -354,11 +354,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 		request.Command = protocol.RequestCommandMux
 	}
 
-	requestWriter := buf.NewWriter(conn)
-	if native && requestAddons.Flow == "" {
-		requestWriter = multiplex.WrapWriter(ctx, requestWriter, timer)
-	}
-	bufferWriter := buf.NewBufferedWriter(requestWriter)
+	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
 	if err := encoding.EncodeRequestHeader(bufferWriter, request, requestAddons); err != nil {
 		return nil, nil, errors.New("failed to encode request header").Base(err)
 	}
@@ -394,6 +390,7 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	if native {
 		bufferWriter.SetFlushNext()
 		if request.Command == protocol.RequestCommandRvs {
+			timer.Update()
 			if requestAddons.Flow == vless.XRV {
 				if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{nil}); err != nil {
 					return nil, nil, err

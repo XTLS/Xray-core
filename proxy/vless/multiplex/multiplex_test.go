@@ -9,7 +9,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/transport/pipe"
 )
@@ -33,13 +32,13 @@ func TestReaderWriter(t *testing.T) {
 	pReader, pWriter := pipe.New(pipe.WithSizeLimit(1024))
 
 	dest := net.TCPDestination(net.DomainAddress("example.com"), 80)
-	s1 := &Session{ID: 1, target: dest, transferType: protocol.TransferTypeStream, inbound: &session.Inbound{}, first: true}
+	s1 := &Session{ID: 1, target: dest, inbound: &session.Inbound{}, first: true}
 
 	dest2 := net.TCPDestination(net.LocalHostIP, 443)
-	s2 := &Session{ID: 2, target: dest2, transferType: protocol.TransferTypeStream, inbound: &session.Inbound{}, first: true}
+	s2 := &Session{ID: 2, target: dest2, inbound: &session.Inbound{}, first: true}
 
 	dest3 := net.TCPDestination(net.LocalHostIPv6, 18374)
-	s3 := &Session{ID: 3, target: dest3, transferType: protocol.TransferTypeStream, inbound: &session.Inbound{}, first: true}
+	s3 := &Session{ID: 3, target: dest3, inbound: &session.Inbound{}, first: true}
 
 	writePayload := func(s *Session, payload ...byte) error {
 		b := buf.New()

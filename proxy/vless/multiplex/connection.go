@@ -8,32 +8,12 @@ import (
 	"github.com/xtls/xray-core/transport"
 )
 
-type activityWriter struct {
-	ctx      context.Context
-	writer   buf.Writer
-	activity *signal.ActivityTimer
-}
-
-func WrapWriter(ctx context.Context, writer buf.Writer, activity *signal.ActivityTimer) buf.Writer {
-	return &activityWriter{ctx: ctx, writer: writer, activity: activity}
-}
-
-func (w *activityWriter) WriteMultiBuffer(data buf.MultiBuffer) error {
-	if err := w.ctx.Err(); err != nil {
-		buf.ReleaseMulti(data)
-		return err
-	}
-	if !data.IsEmpty() {
-		w.activity.Update()
-	}
-	return w.writer.WriteMultiBuffer(data)
-}
-
 type responseReader struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	results chan buf.MultiBuffer
-	// The producer publishes terminal before closing results.
+	ctx      context.Context
+	cancel   context.CancelFunc
+	activity *signal.ActivityTimer
+	open     func() (buf.Reader, error)
+	body     buf.Reader
 	terminal error
 }
 
@@ -41,65 +21,36 @@ func (r *responseReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 	if err := r.ctx.Err(); err != nil {
 		return nil, err
 	}
-	select {
-	case data, ok := <-r.results:
+	if r.open != nil {
+		r.body, r.terminal = r.open()
+		r.open = nil
+	}
+	for r.terminal == nil {
+		data, err := r.body.ReadMultiBuffer()
+		r.terminal = err
 		if err := r.ctx.Err(); err != nil {
 			buf.ReleaseMulti(data)
 			return nil, err
 		}
-		if !ok {
-			return nil, r.terminal
+		if !data.IsEmpty() {
+			r.activity.Update()
+			return data, nil
 		}
-		return data, nil
-	case <-r.ctx.Done():
-		return nil, r.ctx.Err()
+		buf.ReleaseMulti(data)
 	}
+	return nil, r.terminal
 }
 
-func (r *responseReader) Interrupt() { r.cancel() }
+func (r *responseReader) Interrupt() {
+	r.cancel()
+	r.activity.SetTimeout(0)
+}
 
-// OpenLink retains decoded read-ahead; the carrier owns output serialization.
 func OpenLink(ctx context.Context, cancel context.CancelFunc, writer buf.Writer, activity *signal.ActivityTimer, openResponse func() (buf.Reader, error)) (*transport.Link, error) {
-	if _, buffered := writer.(*buf.BufferedWriter); !buffered {
-		writer = WrapWriter(ctx, writer, activity)
-	}
-	response := &responseReader{ctx: ctx, cancel: func() {
+	if err := ctx.Err(); err != nil {
 		cancel()
 		activity.SetTimeout(0)
-	}, results: make(chan buf.MultiBuffer)}
-	if err := ctx.Err(); err != nil {
-		response.Interrupt()
 		return nil, err
 	}
-	go func() {
-		err := ctx.Err()
-		defer func() {
-			response.terminal = err
-			close(response.results)
-		}()
-		if err != nil {
-			return
-		}
-		body, err := openResponse()
-		for err == nil {
-			if err = ctx.Err(); err != nil {
-				return
-			}
-			var data buf.MultiBuffer
-			data, err = body.ReadMultiBuffer()
-			if data.IsEmpty() {
-				buf.ReleaseMulti(data)
-				continue
-			}
-			activity.Update()
-			select {
-			case response.results <- data:
-			case <-ctx.Done():
-				buf.ReleaseMulti(data)
-				err = ctx.Err()
-				return
-			}
-		}
-	}()
-	return &transport.Link{Reader: response, Writer: writer}, nil
+	return &transport.Link{Reader: &responseReader{ctx: ctx, cancel: cancel, activity: activity, open: openResponse}, Writer: writer}, nil
 }

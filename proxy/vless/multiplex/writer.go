@@ -3,14 +3,18 @@ package multiplex
 import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
-	"github.com/xtls/xray-core/common/protocol"
+	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/serial"
 )
 
 // encodeBatch moves up to four complete wire frames from raw caller custody.
 // An offer without buffers contains metadata only.
 func (s *Session) encodeBatch(mb *buf.MultiBuffer) (frames buf.MultiBuffer, err error) {
-	for n := 0; n < 4; n++ {
+	stream := s.target.Network != net.Network_UDP
+	if stream && (*mb).IsEmpty() {
+		*mb = buf.ReleaseMulti(*mb)
+	}
+	for n := 0; n < 4 && (s.first || len(*mb) != 0); n++ {
 		frame := buf.NewWithSize(1024)
 		frames = append(frames, frame)
 		meta := FrameMetadata{
@@ -21,12 +25,11 @@ func (s *Session) encodeBatch(mb *buf.MultiBuffer) (frames buf.MultiBuffer, err 
 			s.first = false
 			meta.SessionStatus = SessionStatusNew
 		}
-		if len(*mb) == 0 || s.transferType == protocol.TransferTypeStream && (*mb).IsEmpty() {
-			*mb = buf.ReleaseMulti(*mb)
+		if len(*mb) == 0 {
 			return frames, meta.WriteTo(frame)
 		}
 		var chunk buf.MultiBuffer
-		if s.transferType == protocol.TransferTypeStream {
+		if stream {
 			*mb, chunk = buf.SplitSize(*mb, 8*1024)
 		} else {
 			mb2, b := buf.SplitFirst(*mb)
@@ -43,12 +46,6 @@ func (s *Session) encodeBatch(mb *buf.MultiBuffer) (frames buf.MultiBuffer, err 
 		}
 		if _, err := serial.WriteUint16(frame, uint16(chunk.Len())); err != nil {
 			return frames, err
-		}
-		if s.transferType == protocol.TransferTypeStream && (*mb).IsEmpty() {
-			*mb = buf.ReleaseMulti(*mb)
-		}
-		if len(*mb) == 0 {
-			break
 		}
 	}
 	return frames, nil

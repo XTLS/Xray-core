@@ -100,8 +100,8 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 	return true, Dispatch(ctx, link, pool.Admit)
 }
 
-// Dispatch starts the reserved child after pool or Reverse admission releases its lock.
-func Dispatch(ctx context.Context, link *transport.Link, admit func(context.Context, *Session) error) error {
+// Dispatch runs a logical child. The caller owns the application endpoints.
+func Dispatch(ctx context.Context, link *transport.Link, admit func(context.Context, *Session) error, finish ...func(context.Context)) error {
 	s := NewSession(ctx, link)
 	if err := admit(ctx, s); err != nil {
 		return err
@@ -115,6 +115,9 @@ func Dispatch(ctx context.Context, link *transport.Link, admit func(context.Cont
 	case <-callerDone:
 		s.Close()
 	case <-s.WaitClosed():
+	}
+	if len(finish) != 0 {
+		finish[0](s.parent.ctx)
 	}
 	return nil
 }
@@ -131,71 +134,60 @@ type Pool struct {
 
 // NewPool borrows ctx; open must return a context derived from its input context.
 func NewPool(ctx context.Context, strategy ClientStrategy, open func(context.Context) (context.Context, *transport.Link, error)) *Pool {
-	p := &Pool{ctx: ctx, opening: make(chan struct{}, 1), strategy: strategy, open: open}
-	p.opening <- struct{}{}
-	return p
-}
-
-func (p *Pool) tryAdmit(ctx context.Context, s *Session) (bool, error) {
-	p.access.Lock()
-	defer p.access.Unlock()
-	if err := ctx.Err(); err != nil {
-		return false, err
-	}
-	if p.ctx.Err() != nil {
-		return false, io.ErrClosedPipe
-	}
-	for _, worker := range p.workers {
-		if worker.TryAdmit(ctx, s) {
-			return true, nil
-		}
-	}
-	return false, nil
+	return &Pool{ctx: ctx, strategy: strategy, open: open}
 }
 
 func (p *Pool) Admit(ctx context.Context, s *Session) error {
-	if ok, err := p.tryAdmit(ctx, s); ok || err != nil {
-		return err
+	p.access.Lock()
+	for {
+		if err := ctx.Err(); err != nil {
+			p.access.Unlock()
+			return err
+		}
+		if p.ctx.Err() != nil {
+			p.access.Unlock()
+			return io.ErrClosedPipe
+		}
+		for _, worker := range p.workers {
+			if worker.TryAdmit(ctx, s) {
+				p.access.Unlock()
+				return nil
+			}
+		}
+		if p.opening == nil {
+			p.opening = make(chan struct{})
+			break
+		}
+		wait := p.opening
+		p.access.Unlock()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.ctx.Done():
+			return io.ErrClosedPipe
+		case <-wait:
+		}
+		p.access.Lock()
 	}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-p.ctx.Done():
-		return io.ErrClosedPipe
-	case <-p.opening:
-	}
-	defer func() { p.opening <- struct{}{} }()
-	if ok, err := p.tryAdmit(ctx, s); ok || err != nil {
-		return err
-	}
+	p.access.Unlock()
 	opening, cancel := context.WithCancel(p.ctx)
 	stopCaller := context.AfterFunc(ctx, cancel)
 	physicalCtx, physicalLink, err := p.open(opening)
+	if !stopCaller() && err == nil {
+		err = context.Canceled
+	}
 	if ctx.Err() != nil {
 		err = ctx.Err()
 	}
 	if p.ctx.Err() != nil {
 		err = io.ErrClosedPipe
 	}
-	if err != nil {
-		stopCaller()
-		cancel()
-		if physicalLink != nil {
-			common.Interrupt(physicalLink.Reader)
-			common.Interrupt(physicalLink.Writer)
-		}
-		return err
-	}
-	worker := NewClientWorker(physicalCtx, *physicalLink, p.strategy)
 	p.access.Lock()
-	err = ctx.Err()
-	if !stopCaller() && err == nil {
-		err = context.Canceled
-	}
-	if p.ctx.Err() != nil {
-		err = io.ErrClosedPipe
-	}
+	close(p.opening)
+	p.opening = nil
+	var worker *ClientWorker
 	if err == nil {
+		worker = NewClientWorker(physicalCtx, *physicalLink, p.strategy)
 		if !worker.TryAdmit(ctx, s) {
 			err = ctx.Err()
 			if err == nil {
@@ -208,6 +200,10 @@ func (p *Pool) Admit(ctx context.Context, s *Session) error {
 	p.access.Unlock()
 	if err != nil {
 		cancel()
+		if physicalLink != nil {
+			common.Interrupt(physicalLink.Reader)
+			common.Interrupt(physicalLink.Writer)
+		}
 		return err
 	}
 	context.AfterFunc(worker.ctx, func() {

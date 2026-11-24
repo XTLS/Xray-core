@@ -9,9 +9,8 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/common/xudp"
 )
 
 type SessionStatus byte
@@ -35,12 +34,7 @@ const (
 	TargetNetworkUDP TargetNetwork = 0x02
 )
 
-var addrParser = protocol.NewAddressParser(
-	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv4), net.AddressFamilyIPv4),
-	protocol.AddressFamilyByte(byte(protocol.AddressTypeDomain), net.AddressFamilyDomain),
-	protocol.AddressFamilyByte(byte(protocol.AddressTypeIPv6), net.AddressFamilyIPv6),
-	protocol.PortThenAddress(),
-)
+var addrParser = xudp.AddrParser
 
 /*
 Frame format
@@ -109,20 +103,11 @@ func (f FrameMetadata) WriteTo(b *buf.Buffer) error {
 
 // Unmarshal reads FrameMetadata from the given reader.
 func (f *FrameMetadata) Unmarshal(reader io.Reader, readSourceAndLocal bool) error {
-	metaLen, err := serial.ReadUint16(reader)
+	b, err := readBlock(reader, 512, "invalid metalen ")
 	if err != nil {
 		return err
 	}
-	if metaLen > 512 {
-		return errors.New("invalid metalen ", metaLen)
-	}
-
-	b := buf.New()
 	defer b.Release()
-
-	if _, err := b.ReadFullFrom(reader, int32(metaLen)); err != nil {
-		return frameReadError(err)
-	}
 	return frameReadError(f.UnmarshalFromBuffer(b, readSourceAndLocal))
 }
 
