@@ -54,7 +54,7 @@ type serverConn struct {
 	rsaPublicKey    []byte
 	yggdrasil       *yggdrasilVerifier
 	paddingSchedule []paddingTurn
-	packet          *packetStream
+	packet          *tickStream
 	deadlines       *connectionDeadlines
 
 	done      chan struct{}
@@ -284,7 +284,7 @@ func (c *serverConn) handshake() error {
 			return fmt.Errorf("run startup padding: %w", err)
 		}
 
-		packet := newPacketStream(c.reader, c.writer, false)
+		packet := newTickStream(c.reader, c.writer, false)
 		c.lifecycleMu.Lock()
 		if c.closed {
 			c.lifecycleMu.Unlock()
@@ -383,6 +383,10 @@ func (c *serverConn) Close() error {
 	c.lifecycleMu.Unlock()
 	c.closeOnce.Do(func() { close(c.done) })
 	if packet != nil {
+		// Write returns once data is queued for the next tick, so a graceful
+		// close has to flush the last tick instead of dropping it.
+		_ = c.c.SetWriteDeadline(time.Now().Add(time.Second))
+		_ = packet.Flush()
 		packet.Stop()
 	}
 	return c.c.Close()

@@ -363,6 +363,9 @@ func TestHandshakeWithYggdrasil(t *testing.T) {
 			t.Errorf("wrap server: %v", err)
 			return
 		}
+		// Write queues the payload for the next tick, so Close has to flush it
+		// before the raw connection is torn down.
+		defer server.Close()
 
 		buf := make([]byte, 1024)
 		n, err := server.Read(buf)
