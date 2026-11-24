@@ -3,8 +3,10 @@ package xdns
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base32"
 	"fmt"
 	mrand "math/rand"
+	"strings"
 	"testing"
 
 	"github.com/xtls/xray-core/common"
@@ -67,7 +69,7 @@ func TestXxx(t *testing.T) {
 		t.Fatal("!bytes.Equal")
 	}
 
-	domain, _ := NewDomain("a.example.com", 200, 1, []uint16{1}, 0)
+	domain, _ := NewDomain("a.example.com", 200, 1, []uint16{1}, 0, "")
 	fmt.Println(domain.cap, domain.lenMax)
 	lenMax := domain.lenMax
 	data := make([]byte, domain.cap)
@@ -203,6 +205,43 @@ func TestTXT(t *testing.T) {
 	for i := range txt {
 		if !bytes.Equal(txt[i], []byte(m2.Answers[0].Body.(*dnsmessage.TXTResource).TXT[i])) {
 			t.Fatal("fatal txt")
+		}
+	}
+}
+
+func TestAlphabet(t *testing.T) {
+	data := make([]byte, 17)
+	common.Must2(rand.Read(data))
+
+	domain := common.Must2(NewDomain("example.com", 255, 63, []uint16{16}, 0, ""))
+	if domain.Encode(data).String() != strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(data))+".example.com." {
+		t.Fatal("default")
+	}
+
+	for _, alphabet := range []string{"", "0123456789ABCDEFGHIJKLMNOPQRSTUV", "v9u8t0s1rqponmlkjihgfedcba765432"} {
+		domain := common.Must2(NewDomain("example.com", 255, 63, []uint16{16}, 0, alphabet))
+		name := domain.Encode(data)
+		for i := 0; i < int(name.Length); i += 2 {
+			if c := name.Data[i]; c >= 'a' && c <= 'z' {
+				name.Data[i] = c - 'a' + 'A'
+			}
+		}
+		var decoded [255]byte
+		n := domain.Decode(&decoded, name)
+		if n != len(data) || !bytes.Equal(decoded[:n], data) {
+			t.Fatal(alphabet)
+		}
+	}
+
+	for _, alphabet := range []string{
+		"abcdefghijklmnopqrstuvwxyz23456",
+		"abcdefghijklmnopqrstuvwxyz2345678",
+		"abcdefghijklmnopqrstuvwxyz23456A",
+		"abcdefghijklmnopqrstuvwxyz23456-",
+		"abcdefghijklmnopqrstuvwxyz23456=",
+	} {
+		if _, err := NewDomain("example.com", 255, 63, []uint16{16}, 0, alphabet); err == nil {
+			t.Fatal(alphabet)
 		}
 	}
 }

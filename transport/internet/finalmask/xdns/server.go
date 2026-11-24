@@ -55,7 +55,7 @@ func NewServer(c *Config, raw net.PacketConn) (net.PacketConn, error) {
 		if len(types) == 0 {
 			types = []uint16{1, 5, 16, 28}
 		}
-		domain, err := NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
+		domain, err := NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0), c.Domains[i].Alphabet)
 		if err != nil {
 			return nil, err
 		}

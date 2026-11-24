@@ -31,6 +31,7 @@ type DomainProto struct {
 	LabelLimit    int32                  `protobuf:"varint,3,opt,name=label_limit,json=labelLimit,proto3" json:"label_limit,omitempty"`
 	Types         []int32                `protobuf:"varint,4,rep,packed,name=types,proto3" json:"types,omitempty"`
 	Edns0         int32                  `protobuf:"varint,5,opt,name=edns0,proto3" json:"edns0,omitempty"`
+	Alphabet      string                 `protobuf:"bytes,6,opt,name=alphabet,proto3" json:"alphabet,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -98,6 +99,13 @@ func (x *DomainProto) GetEdns0() int32 {
 		return x.Edns0
 	}
 	return 0
+}
+
+func (x *DomainProto) GetAlphabet() string {
+	if x != nil {
+		return x.Alphabet
+	}
+	return ""
 }
 
 type ResolverProto struct {
@@ -240,14 +248,15 @@ var File_transport_internet_finalmask_xdns_config_proto protoreflect.FileDescrip
 
 const file_transport_internet_finalmask_xdns_config_proto_rawDesc = "" +
 	"\n" +
-	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\x1a!common/serial/typed_message.proto\x1a#transport/internet/tls/config.proto\x1a\x1ftransport/internet/config.proto\"\x8b\x01\n" +
+	".transport/internet/finalmask/xdns/config.proto\x12&xray.transport.internet.finalmask.xdns\x1a!common/serial/typed_message.proto\x1a#transport/internet/tls/config.proto\x1a\x1ftransport/internet/config.proto\"\xa7\x01\n" +
 	"\vDomainProto\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tlen_limit\x18\x02 \x01(\x05R\blenLimit\x12\x1f\n" +
 	"\vlabel_limit\x18\x03 \x01(\x05R\n" +
 	"labelLimit\x12\x14\n" +
 	"\x05types\x18\x04 \x03(\x05R\x05types\x12\x14\n" +
-	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\"\xd9\x01\n" +
+	"\x05edns0\x18\x05 \x01(\x05R\x05edns0\x12\x1a\n" +
+	"\balphabet\x18\x06 \x01(\tR\balphabet\"\xd9\x01\n" +
 	"\rResolverProto\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04addr\x18\x02 \x01(\tR\x04addr\x12\x16\n" +
