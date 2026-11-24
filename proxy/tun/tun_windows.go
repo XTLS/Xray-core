@@ -59,7 +59,7 @@ var _ Tun = (*WindowsTun)(nil)
 // interface with the same name exist, it tried to be reused.
 func NewTun(options *Config) (Tun, error) {
 	// instantiate wintun adapter
-	adapter, err := open(options.Name, options.Desc)
+	adapter, err := open(options.Name, options.Desc, options.GUID)
 	if err != nil {
 		return nil, err
 	}
@@ -82,10 +82,11 @@ func NewTun(options *Config) (Tun, error) {
 	return tun, nil
 }
 
-func open(name, desc string) (*wintun.Adapter, error) {
-	// generate a deterministic GUID from the adapter name
-	id := md5.Sum([]byte(name))
-	guid := (*windows.GUID)(unsafe.Pointer(&id[0]))
+func open(name, desc, id string) (*wintun.Adapter, error) {
+	guid, err := adapterGUID(name, id)
+	if err != nil {
+		return nil, err
+	}
 	// try to open existing adapter by name
 	adapter, err := wintun.OpenAdapter(name)
 	if err == nil {
@@ -97,6 +98,28 @@ func open(name, desc string) (*wintun.Adapter, error) {
 		return adapter, nil
 	}
 	return nil, err
+}
+
+// adapterGUID returns the GUID that an adapter created with the given name is
+// to have: the configured one, if there is one, or else one derived from the name.
+func adapterGUID(name, id string) (*windows.GUID, error) {
+	if id == "" {
+		// generate a deterministic GUID from the adapter name
+		sum := md5.Sum([]byte(name))
+		return (*windows.GUID)(unsafe.Pointer(&sum[0])), nil
+	}
+	raw, err := ParseGUID(id)
+	if err != nil {
+		return nil, err
+	}
+	// the groups are the field values, big-endian in the canonical bytes; Windows
+	// holds them little-endian in memory, which the fields take care of
+	return &windows.GUID{
+		Data1: binary.BigEndian.Uint32(raw[0:4]),
+		Data2: binary.BigEndian.Uint16(raw[4:6]),
+		Data3: binary.BigEndian.Uint16(raw[6:8]),
+		Data4: [8]byte(raw[8:16]),
+	}, nil
 }
 
 // ipv6Off tells whether DisabledComponents turns IPv6 off on the non-tunnel
