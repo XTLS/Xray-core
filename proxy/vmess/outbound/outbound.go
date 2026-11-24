@@ -184,11 +184,9 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	openResponse := func() (buf.Reader, error) {
 		reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
-		header, err := clientSession.DecodeResponseHeader(reader)
-		if err != nil {
+		if _, err := clientSession.DecodeResponseHeader(reader); err != nil {
 			return nil, errors.New("failed to read header").Base(err)
 		}
-		h.handleCommand(rec.Destination, header.Command)
 		return clientSession.DecodeResponseBody(request, reader)
 	}
 
