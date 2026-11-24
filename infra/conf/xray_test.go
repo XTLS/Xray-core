@@ -1,6 +1,7 @@
 package conf_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/geodata"
 	clog "github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/common/serial"
 	core "github.com/xtls/xray-core/core"
 	. "github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/transport/internet"
@@ -225,49 +226,112 @@ func TestSniffingConfig_Build(t *testing.T) {
 	}
 }
 
-func TestMuxConfig_Build(t *testing.T) {
-	tests := []struct {
+func TestMultiplexConfig_Build(t *testing.T) {
+	for _, tc := range []struct {
 		name   string
 		fields string
-		want   *proxyman.MultiplexingConfig
+		want   *vless.Multiplex
+		bad    bool
 	}{
-		{"default", `{"enabled": true, "concurrency": 16}`, &proxyman.MultiplexingConfig{
-			Enabled:         true,
-			Concurrency:     16,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-		{"empty def", `{}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
-			Concurrency:     0,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-		{"not enable", `{"enabled": false, "concurrency": 4}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
-			Concurrency:     4,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-		{"forbidden", `{"enabled": false, "concurrency": -1}`, &proxyman.MultiplexingConfig{
-			Enabled:         false,
-			Concurrency:     -1,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := &MuxConfig{}
-			common.Must(json.Unmarshal([]byte(tt.fields), m))
-			if got, _ := m.Build(); !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MuxConfig.Build() = %v, want %v", got, tt.want)
+		{name: "empty", fields: `{}`},
+		{name: "both zero", fields: `{"concurrency":0,"xudpConcurrency":0}`},
+		{name: "regular pool", fields: `{"concurrency":4}`, want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
+		{name: "XUDP only", fields: `{"xudpConcurrency":8}`, want: &vless.Multiplex{XudpConcurrency: 8, XudpProxyUDP443: "reject"}},
+		{name: "negative concurrency", fields: `{"concurrency":-1,"xudpConcurrency":8}`, bad: true},
+		{name: "negative XUDP concurrency", fields: `{"concurrency":4,"xudpConcurrency":-1}`, bad: true},
+		{name: "invalid UDP policy", fields: `{"concurrency":4,"xudpProxyUDP443":"invalid"}`, bad: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var config MultiplexConfig
+			if err := json.Unmarshal([]byte(tc.fields), &config); err != nil {
+				t.Fatal(err)
+			}
+			got, err := config.Build()
+			if (err != nil) != tc.bad || !proto.Equal(got, tc.want) {
+				t.Fatalf("Build() = %v, %v, want config %v, error %t", got, err, tc.want, tc.bad)
 			}
 		})
 	}
 }
 
+func TestOutboundMultiplexConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		legacy string
+		native string
+		want   *vless.Multiplex
+	}{
+		{name: "absent"},
+		{name: "legacy enabled", legacy: `{"enabled":true,"concurrency":16}`},
+		{name: "legacy disabled", legacy: `{"enabled":false}`},
+		{name: "legacy null", legacy: `null`},
+		{name: "legacy empty", legacy: `{}`},
+		{name: "legacy values are not decoded", legacy: `{"enabled":"ignored","concurrency":"ignored"}`},
+		{name: "empty native object", native: `{}`},
+		{name: "enabled flag alone does not create a pool", native: `{"enabled":true}`},
+		{
+			name: "positive concurrency with old enabled flag", native: `{"concurrency":4,"enabled":false}`,
+			want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"},
+		},
+		{
+			name: "native XUDP only", native: `{"xudpConcurrency":8}`,
+			want: &vless.Multiplex{XudpConcurrency: 8, XudpProxyUDP443: "reject"},
+		},
+		{
+			name: "native options override legacy", legacy: `{"enabled":true,"concurrency":16}`,
+			native: `{"concurrency":4,"xudpConcurrency":8,"xudpProxyUDP443":"allow"}`,
+			want:   &vless.Multiplex{Concurrency: 4, XudpConcurrency: 8, XudpProxyUDP443: "allow"},
+		},
+		{name: "empty native with legacy enabled", legacy: `{"enabled":true}`, native: `{}`},
+	}
+	for _, protoName := range []string{"vless", "vmess"} {
+		for _, tc := range tests {
+			t.Run(protoName+"/"+tc.name, func(t *testing.T) {
+				settings := `"address":"127.0.0.1","port":443,"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d"`
+				if protoName == "vless" {
+					settings += `,"encryption":"none"`
+				}
+				if tc.native != "" {
+					settings += `,"multiplex":` + tc.native
+				}
+				input := `{"protocol":"` + protoName + `","settings":{` + settings + `}`
+				if tc.legacy != "" {
+					input += `,"mux":` + tc.legacy
+				}
+
+				var config OutboundDetourConfig
+				if err := json.Unmarshal([]byte(input+"}"), &config); err != nil {
+					t.Fatal(err)
+				}
+				if got := string(config.LegacyMux); got != tc.legacy {
+					t.Errorf("legacy mux marker = %q, want %q", got, tc.legacy)
+				}
+				serialized, err := json.Marshal(config)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if hasMux := bytes.Contains(serialized, []byte(`"mux":`)); hasMux != (tc.legacy != "") {
+					t.Errorf("serialized config changed legacy mux presence: %s", serialized)
+				}
+				built, err := config.Build()
+				if err != nil {
+					t.Fatal(err)
+				}
+				proxyConfig, err := built.ProxySettings.GetInstance()
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := proxyConfig.(interface{ GetMultiplex() *vless.Multiplex }).GetMultiplex()
+				if !proto.Equal(got, tc.want) {
+					t.Errorf("multiplex = %v, want %v", got, tc.want)
+				}
+			})
+		}
+	}
+}
+
 func TestConfig_Override(t *testing.T) {
+	legacyReverse := json.RawMessage(`{}`)
 	tests := []struct {
 		name string
 		orig *Config
@@ -285,7 +349,7 @@ func TestConfig_Override(t *testing.T) {
 				Policy:       &PolicyConfig{},
 				API:          &APIConfig{},
 				Stats:        &StatsConfig{},
-				Reverse:      &ReverseConfig{},
+				Reverse:      &legacyReverse,
 			},
 			"",
 			&Config{
@@ -295,7 +359,7 @@ func TestConfig_Override(t *testing.T) {
 				Policy:       &PolicyConfig{},
 				API:          &APIConfig{},
 				Stats:        &StatsConfig{},
-				Reverse:      &ReverseConfig{},
+				Reverse:      &legacyReverse,
 			},
 		},
 		{

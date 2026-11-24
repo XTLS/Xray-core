@@ -11,16 +11,13 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/app/dispatcher"
-	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
@@ -28,7 +25,6 @@ import (
 	"github.com/xtls/xray-core/features"
 	"github.com/xtls/xray-core/features/dns"
 	"github.com/xtls/xray-core/features/extension"
-	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/outbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
@@ -37,6 +33,8 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/reverse"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
@@ -72,14 +70,12 @@ func init() {
 
 // Handler is an inbound connection handler that handles messages in VLess protocol.
 type Handler struct {
-	inboundHandlerManager  feature_inbound.Manager
 	policyManager          policy.Manager
 	stats                  stats.Manager
 	validator              vless.Validator
 	decryption             *encryption.ServerInstance
 	outboundHandlerManager outbound.Manager
 	observer               features.Feature
-	defaultDispatcher      routing.Dispatcher
 	ctx                    context.Context
 	fallbacks              map[string]map[string]map[string]*Fallback // or nil
 	// regexps               map[string]*regexp.Regexp       // or nil
@@ -89,13 +85,11 @@ type Handler struct {
 func New(ctx context.Context, config *Config, dc dns.Client, validator vless.Validator) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		inboundHandlerManager:  v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
 		policyManager:          v.GetFeature(policy.ManagerType()).(policy.Manager),
 		stats:                  v.GetFeature(stats.ManagerType()).(stats.Manager),
 		validator:              validator,
 		outboundHandlerManager: v.GetFeature(outbound.ManagerType()).(outbound.Manager),
 		observer:               v.GetFeature(extension.ObservatoryType()),
-		defaultDispatcher:      v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
 		ctx:                    ctx,
 	}
 
@@ -188,7 +182,7 @@ func isMuxAndNotXUDP(request *protocol.RequestHeader, first *buf.Buffer) bool {
 		firstBytes[6] == 2) // Network type: UDP
 }
 
-func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
+func (h *Handler) GetReverse(a *vless.MemoryAccount) (*reverse.PublicEndpoint, error) {
 	u := h.validator.Get(a.ID.UUID())
 	if u == nil {
 		return nil, errors.New("reverse: user " + a.ID.String() + " doesn't exist anymore")
@@ -199,25 +193,28 @@ func (h *Handler) GetReverse(a *vless.MemoryAccount) (*Reverse, error) {
 	}
 	r := h.outboundHandlerManager.GetHandler(a.Reverse.Tag)
 	if r == nil {
-		picker, _ := reverse.NewStaticMuxPicker()
-		r = &Reverse{tag: a.Reverse.Tag, picker: picker, client: &mux.ClientManager{Picker: picker}}
+		r = reverse.NewPublicEndpoint(a.Reverse.Tag, h.observer)
 		for len(h.outboundHandlerManager.ListHandlers(h.ctx)) == 0 {
 			time.Sleep(time.Second) // prevents this outbound from becoming the default outbound
 		}
 		if err := h.outboundHandlerManager.AddHandler(h.ctx, r); err != nil {
+			r.Close()
 			return nil, err
 		}
 	}
-	if r, ok := r.(*Reverse); ok {
+	if r, ok := r.(*reverse.PublicEndpoint); ok {
 		return r, nil
 	}
-	return nil, errors.New("reverse: outbound " + a.Reverse.Tag + " is not type Reverse")
+	return nil, errors.New("reverse: outbound " + a.Reverse.Tag + " is not type PublicEndpoint")
 }
 
 func (h *Handler) RemoveReverse(u *protocol.MemoryUser) {
 	if u != nil {
 		a := u.Account.(*vless.MemoryAccount)
 		if a.Reverse != nil && a.Reverse.Tag != "" {
+			if publicEndpoint, ok := h.outboundHandlerManager.GetHandler(a.Reverse.Tag).(*reverse.PublicEndpoint); ok {
+				publicEndpoint.Close()
+			}
 			h.outboundHandlerManager.RemoveHandler(h.ctx, a.Reverse.Tag)
 		}
 	}
@@ -541,10 +538,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("for safety reasons, user " + account.ID.String() + " is not allowed to use forward proxy")
 	}
 
-	responseAddons := &encoding.Addons{
-		// Flow: requestAddons.Flow,
-	}
-
 	var input *bytes.Reader
 	var rawInput **bytes.Buffer
 	switch requestAddons.Flow {
@@ -607,85 +600,29 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	}
 
 	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(connection))
-	if err := encoding.EncodeResponseHeader(bufferWriter, request, responseAddons); err != nil {
+	if err := encoding.EncodeResponseHeader(bufferWriter, request, &encoding.Addons{}); err != nil {
 		return errors.New("failed to encode response header").Base(err)
 	}
 	clientWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, false, ctx, connection, nil)
 	bufferWriter.SetFlushNext()
+	link := &transport.Link{Reader: clientReader, Writer: clientWriter}
 
 	if request.Command == protocol.RequestCommandRvs {
 		r, err := h.GetReverse(account)
 		if err != nil {
 			return err
 		}
-		return r.NewMux(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, &transport.Link{Reader: clientReader, Writer: clientWriter}), h.observer)
+		return r.Accept(ctx, dispatcher.WrapLink(ctx, h.policyManager, h.stats, link))
 	}
 
-	if err := dispatch.DispatchLink(
-		ctx, request.Destination(), &transport.Link{
-			Reader: clientReader,
-			Writer: clientWriter,
-		},
-	); err != nil {
+	if request.Command == protocol.RequestCommandMux {
+		worker := multiplex.NewServerWorker(ctx, dispatch.DispatchLink, link)
+		<-worker.WaitClosed()
+		return nil
+	}
+
+	if err := dispatch.DispatchLink(ctx, request.Destination(), link); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
-	return nil
-}
-
-type Reverse struct {
-	tag    string
-	picker *reverse.StaticMuxPicker
-	client *mux.ClientManager
-}
-
-func (r *Reverse) Tag() string {
-	return r.tag
-}
-
-func (r *Reverse) NewMux(ctx context.Context, link *transport.Link, observer features.Feature) error {
-	muxClient, err := mux.NewClientWorker(*link, mux.ClientStrategy{})
-	if err != nil {
-		return errors.New("failed to create mux client worker").Base(err)
-	}
-	worker, err := reverse.NewPortalWorker(muxClient)
-	if err != nil {
-		return errors.New("failed to create portal worker").Base(err)
-	}
-	r.picker.AddWorker(worker)
-	if burstObs, ok := observer.(extension.BurstObservatory); ok {
-		go burstObs.Check([]string{r.Tag()})
-	}
-	select {
-	case <-ctx.Done():
-	case <-muxClient.WaitClosed():
-	}
-	return nil
-}
-
-func (r *Reverse) Dispatch(ctx context.Context, link *transport.Link) {
-	outbounds := session.OutboundsFromContext(ctx)
-	ob := outbounds[len(outbounds)-1]
-	if ob != nil {
-		if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil && ob.OriginalTarget.Address != ob.Target.Address {
-			link.Reader = &buf.EndpointOverrideReader{Reader: link.Reader, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
-			link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
-		}
-		r.client.Dispatch(session.ContextWithIsReverseMux(ctx, true), link)
-	}
-}
-
-func (r *Reverse) Start() error {
-	return nil
-}
-
-func (r *Reverse) Close() error {
-	return nil
-}
-
-func (r *Reverse) SenderSettings() *serial.TypedMessage {
-	return nil
-}
-
-func (r *Reverse) ProxySettings() *serial.TypedMessage {
 	return nil
 }

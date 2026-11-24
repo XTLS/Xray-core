@@ -26,9 +26,16 @@ import (
 
 var errSniffingTimeout = errors.New("timeout on sniffing")
 
+// Native readers own attempted-input accounting, timeout and interruption.
+type nativeReader interface {
+	buf.TimeoutReader
+	common.Interruptible
+	SetUplinkCounter(stats.Counter)
+}
+
 type cachedReader struct {
 	sync.Mutex
-	reader buf.TimeoutReader // *pipe.Reader or *buf.TimeoutWrapperReader
+	reader buf.TimeoutReader
 	cache  buf.MultiBuffer
 }
 
@@ -86,9 +93,7 @@ func (r *cachedReader) Interrupt() {
 		r.cache = buf.ReleaseMulti(r.cache)
 	}
 	r.Unlock()
-	if p, ok := r.reader.(*pipe.Reader); ok {
-		p.Interrupt()
-	}
+	common.Interrupt(r.reader)
 }
 
 // DefaultDispatcher is a default implementation of Dispatcher.
@@ -194,15 +199,13 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		user = sessionInbound.User
 	}
 
-	link.Reader = &buf.TimeoutWrapperReader{Reader: link.Reader}
+	var uplinkCounter stats.Counter
 
 	if user != nil && len(user.Email) > 0 {
 		p := policyManager.ForLevel(user.Level)
 		if p.Stats.UserUplink {
 			name := "user>>>" + user.Email + ">>>traffic>>>uplink"
-			if c, _ := statsManager.GetOrRegisterCounter(name); c != nil {
-				link.Reader.(*buf.TimeoutWrapperReader).Counter = c
-			}
+			uplinkCounter, _ = statsManager.GetOrRegisterCounter(name)
 		}
 		if p.Stats.UserDownlink {
 			name := "user>>>" + user.Email + ">>>traffic>>>downlink"
@@ -218,6 +221,11 @@ func WrapLink(ctx context.Context, policyManager policy.Manager, statsManager st
 		}
 	}
 
+	if reader, ok := link.Reader.(nativeReader); ok {
+		reader.SetUplinkCounter(uplinkCounter)
+	} else {
+		link.Reader = &buf.TimeoutWrapperReader{Reader: link.Reader, Counter: uplinkCounter}
+	}
 	return link
 }
 

@@ -19,6 +19,7 @@ import (
 	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport"
@@ -238,7 +239,6 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err != nil {
 		return errors.New("failed to start decoding").Base(err)
 	}
-
 	writer := buf.NewBufferedWriter(buf.NewWriter(connection))
 	response := &protocol.ResponseHeader{
 		Command: h.generateCommand(ctx, request),
@@ -249,12 +249,14 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("failed to start decoding response").Base(err)
 	}
 	writer.SetFlushNext()
+	link := &transport.Link{Reader: bodyReader, Writer: bodyWriter}
 
-	if err := dispatcher.DispatchLink(ctx, request.Destination(), &transport.Link{
-		Reader: bodyReader,
-		Writer: bodyWriter,
-	},
-	); err != nil {
+	if request.Command == protocol.RequestCommandMux {
+		worker := multiplex.NewServerWorker(ctx, dispatcher.DispatchLink, link)
+		<-worker.WaitClosed()
+		return worker.Err()
+	}
+	if err := dispatcher.DispatchLink(ctx, request.Destination(), link); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
 	return nil

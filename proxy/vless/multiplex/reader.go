@@ -1,0 +1,87 @@
+package multiplex
+
+import (
+	"io"
+
+	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/serial"
+)
+
+// frameReadError distinguishes truncation inside a frame from EOF between frames.
+func frameReadError(err error) error {
+	if errors.Cause(err) == io.EOF {
+		return io.ErrUnexpectedEOF
+	}
+	return err
+}
+
+// readBlock reads one length-prefixed frame component without retaining a partial buffer.
+func readBlock(reader io.Reader, limit uint16, oversized string) (*buf.Buffer, error) {
+	size, err := serial.ReadUint16(reader)
+	if err != nil {
+		return nil, err
+	}
+	if size > limit {
+		return nil, errors.New(oversized, size)
+	}
+	b := buf.New()
+	if _, err := b.ReadFullFrom(reader, int32(size)); err != nil {
+		b.Release()
+		return nil, frameReadError(err)
+	}
+	return b, nil
+}
+
+// readPacket reads one complete packet; its destination belongs to the buffer.
+func readPacket(reader io.Reader, dest net.Destination) (buf.MultiBuffer, error) {
+	b, err := readBlock(reader, buf.Size, "packet size too large: ")
+	if err != nil {
+		return nil, err
+	}
+	if dest.Network == net.Network_UDP {
+		b.UDP = &dest
+	}
+	return buf.MultiBuffer{b}, nil
+}
+
+// copyFramePayload publishes stream data as it arrives and keeps packets whole.
+// A closed child discards the remainder without crossing the frame boundary.
+func copyFramePayload(reader *buf.BufferedReader, s *Session, dest net.Destination) (err error) {
+	packet := s != nil && s.target.Network == net.Network_UDP
+	var left int32
+	if !packet {
+		size, sizeErr := serial.ReadUint16(reader)
+		if sizeErr != nil {
+			return sizeErr
+		}
+		left = int32(size)
+	}
+	for packet || left > 0 {
+		var mb buf.MultiBuffer
+		if packet {
+			mb, err = readPacket(reader, dest)
+		} else {
+			mb, err = reader.ReadAtMost(left)
+			left -= mb.Len()
+			// Coalesce cached pieces without reading more from the transport.
+			for s != nil && left > 0 && reader.BufferedBytes() > 0 {
+				var part buf.MultiBuffer
+				part, err = reader.ReadAtMost(left)
+				left -= part.Len()
+				mb = append(mb, part...)
+			}
+		}
+		if s == nil || mb.IsEmpty() {
+			buf.ReleaseMulti(mb)
+		} else if werr := s.writePayload(mb); werr != nil {
+			s.Interrupt()
+			s = nil
+		}
+		if packet || err != nil {
+			return err
+		}
+	}
+	return nil
+}

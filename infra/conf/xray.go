@@ -107,30 +107,6 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 	}, nil
 }
 
-type MuxConfig struct {
-	Enabled         bool   `json:"enabled"`
-	Concurrency     int16  `json:"concurrency"`
-	XudpConcurrency int16  `json:"xudpConcurrency"`
-	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
-}
-
-// Build creates MultiplexingConfig, Concurrency < 0 completely disables mux.
-func (m *MuxConfig) Build() (*proxyman.MultiplexingConfig, error) {
-	switch m.XudpProxyUDP443 {
-	case "":
-		m.XudpProxyUDP443 = "reject"
-	case "reject", "allow", "skip":
-	default:
-		return nil, errors.New(`unknown "xudpProxyUDP443": `, m.XudpProxyUDP443)
-	}
-	return &proxyman.MultiplexingConfig{
-		Enabled:         m.Enabled,
-		Concurrency:     int32(m.Concurrency),
-		XudpConcurrency: int32(m.XudpConcurrency),
-		XudpProxyUDP443: m.XudpProxyUDP443,
-	}, nil
-}
-
 type InboundDetourConfig struct {
 	Protocol       string           `json:"protocol"`
 	PortList       *PortList        `json:"port"`
@@ -213,7 +189,7 @@ func (c *InboundDetourConfig) Build() (*core.InboundHandlerConfig, error) {
 	if _, ok := ts.(*masque.ServerConfig); !ok && receiverSettings.StreamSettings != nil && receiverSettings.StreamSettings.ProtocolName == "masque" {
 		return nil, errors.New("the masque transport can only be used by the masque inbound")
 	}
-	if err := validateXDrive(ts, receiverSettings.StreamSettings, nil, receiverSettings.PortList); err != nil {
+	if err := validateXDrive(ts, receiverSettings.StreamSettings, receiverSettings.PortList); err != nil {
 		return nil, err
 	}
 
@@ -231,7 +207,7 @@ type OutboundDetourConfig struct {
 	Settings       *json.RawMessage `json:"settings"`
 	StreamSetting  *StreamConfig    `json:"streamSettings"`
 	ProxySettings  *json.RawMessage `json:"proxySettings"`
-	MuxSettings    *MuxConfig       `json:"mux"`
+	LegacyMux      json.RawMessage  `json:"mux,omitempty"`
 	TargetStrategy string           `json:"targetStrategy"`
 }
 
@@ -270,8 +246,8 @@ func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *pr
 	return nil
 }
 
-// validateXDrive allows only VLESS with encryption on xdrive, and on the client Mux.Cool for every connection
-func validateXDrive(ts proto.Message, ss *internet.StreamConfig, ms *proxyman.MultiplexingConfig, pl *net.PortList) error {
+// validateXDrive allows only encrypted VLESS on xdrive, with native multiplex on every client connection.
+func validateXDrive(ts proto.Message, ss *internet.StreamConfig, pl *net.PortList) error {
 	if ss == nil || ss.ProtocolName != "xdrive" {
 		return nil
 	}
@@ -288,9 +264,9 @@ func validateXDrive(ts proto.Message, ss *internet.StreamConfig, ms *proxyman.Mu
 		if account.Encryption == "none" {
 			return errors.New(`the xdrive transport needs VLESS "encryption", run "xray vlessenc" to get one`)
 		}
-		// reverse opens its own mux
-		if account.Reverse == nil && (ms == nil || !ms.Enabled || ms.Concurrency < 0 || ms.XudpConcurrency < 0 || ms.XudpProxyUDP443 == "skip") {
-			return errors.New(`the xdrive transport needs "mux" enabled, with no negative "concurrency" or "xudpConcurrency" and no "xudpProxyUDP443":"skip"`)
+		// Reverse opens its own multiplexed connection.
+		if account.Reverse == nil && (c.Multiplex.GetConcurrency() == 0 || c.Multiplex.GetXudpProxyUDP443() == "skip") {
+			return errors.New(`the xdrive transport needs positive "settings.multiplex.concurrency" and does not support "xudpProxyUDP443":"skip"`)
 		}
 		if account.Testpre != 0 {
 			return errors.New(`the xdrive transport doesn't support VLESS "testpre"`)
@@ -376,14 +352,6 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 		senderSettings.StreamSettings = ss
 	}
 
-	if c.MuxSettings != nil {
-		ms, err := c.MuxSettings.Build()
-		if err != nil {
-			return nil, errors.New("failed to build Mux config").Base(err)
-		}
-		senderSettings.MultiplexSettings = ms
-	}
-
 	settings := []byte("{}")
 	if c.Settings != nil {
 		settings = ([]byte)(*c.Settings)
@@ -392,13 +360,17 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
+	if c.LegacyMux != nil {
+		errors.LogWarning(context.Background(), `The legacy "mux" setting is ignored. To enable Multiplex for VLESS or VMess outbounds, use "settings.multiplex". If Multiplex is disabled, Xray will use ordinary outbound connections.`)
+	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
-	if err := validateXDrive(ts, senderSettings.StreamSettings, senderSettings.MultiplexSettings, nil); err != nil {
+	if err := validateXDrive(ts, senderSettings.StreamSettings, nil); err != nil {
 		return nil, err
 	}
+
 	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
 		return nil, err
 	}
@@ -478,7 +450,7 @@ type Config struct {
 	API              *APIConfig              `json:"api"`
 	Metrics          *MetricsConfig          `json:"metrics"`
 	Stats            *StatsConfig            `json:"stats"`
-	Reverse          *ReverseConfig          `json:"reverse"`
+	Reverse          *json.RawMessage        `json:"reverse"`
 	FakeDNS          *FakeDNSConfig          `json:"fakeDns"`
 	Observatory      *ObservatoryConfig      `json:"observatory"`
 	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
@@ -680,11 +652,6 @@ func (c *Config) Build() (*core.Config, error) {
 
 	if c.Reverse != nil {
 		return nil, errors.PrintRemovedFeatureError(`"legacy reverse"`, `"VLESS Reverse Proxy"`)
-		r, err := c.Reverse.Build()
-		if err != nil {
-			return nil, errors.New("failed to build reverse configuration").Base(err)
-		}
-		config.App = append(config.App, serial.ToTypedMessage(r))
 	}
 
 	if c.FakeDNS != nil {

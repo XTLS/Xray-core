@@ -117,13 +117,18 @@ type VMessOutboundConfig struct {
 	Security    string                 `json:"security"`
 	Experiments string                 `json:"experiments"`
 	Receivers   []*VMessOutboundTarget `json:"vnext"`
+	Multiplex   *MultiplexConfig       `json:"multiplex"`
 }
 
 // Build implements Buildable
 func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("VMess (with no Forward Secrecy, etc.)", "VLESS Encryption")
 
-	config := new(outbound.Config)
+	multiplex, err := c.Multiplex.Build()
+	if err != nil {
+		return nil, err
+	}
+	config := &outbound.Config{Multiplex: multiplex}
 	if c.Address != nil {
 		c.Receivers = []*VMessOutboundTarget{
 			{

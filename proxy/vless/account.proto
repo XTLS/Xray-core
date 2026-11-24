@@ -29,3 +29,9 @@ message Account {
   uint32 testpre = 8;
   repeated uint32 testseed = 9;
 }
+
+message Multiplex {
+  int32 concurrency = 1;
+  int32 xudpConcurrency = 2;
+  string xudpProxyUDP443 = 3;
+}
