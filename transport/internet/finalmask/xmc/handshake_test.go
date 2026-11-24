@@ -72,12 +72,12 @@ func testHandshakeWithPadding(t *testing.T, clientRaw, serverRaw net.Conn, lengt
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := newClientConn(clientRaw, profiles, "password", publicKey, "localhost", paddingSchedule, nil)
+	client, err := newClientConn(clientRaw, profiles, "password", publicKey, "localhost", paddingSchedule, nil, DefaultDataChannel, DefaultPaddingChannel)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	server, err := wrapConnServer(serverRaw, profiles, "password", x509.MarshalPKCS1PrivateKey(key), publicKey, paddingSchedule, nil)
+	server, err := wrapConnServer(serverRaw, profiles, "password", x509.MarshalPKCS1PrivateKey(key), publicKey, paddingSchedule, nil, DefaultDataChannel, DefaultPaddingChannel)
 	if err != nil {
 		t.Fatal(err)
 	}

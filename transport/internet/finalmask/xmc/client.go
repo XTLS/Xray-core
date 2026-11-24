@@ -30,6 +30,8 @@ type clientConn struct {
 	password        string
 	rsaPublicKey    []byte
 	hostname        string
+	dataChannel     string
+	paddingChannel  string
 	yggdrasil       *yggdrasilAuth
 	paddingSchedule []paddingTurn
 	packet          *tickStream
@@ -46,7 +48,7 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, paddingSchedule []paddingTurn, yggdrasil *yggdrasilAuth) (*clientConn, error) {
+func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, paddingSchedule []paddingTurn, yggdrasil *yggdrasilAuth, dataChannel, paddingChannel string) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 && yggdrasil == nil {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
@@ -66,6 +68,8 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 		password:        password,
 		rsaPublicKey:    rsaPublicKey,
 		hostname:        hostname,
+		dataChannel:     dataChannel,
+		paddingChannel:  paddingChannel,
 		yggdrasil:       yggdrasil,
 		paddingSchedule: paddingSchedule,
 		deadlines:       newConnectionDeadlines(c),
@@ -292,13 +296,13 @@ func (c *clientConn) handshake() error {
 	if err != nil {
 		return fmt.Errorf("write login acknowledged: %w", err)
 	}
-	c.reader = newPaddingReader(c.reader, true)
-	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause); err != nil {
+	c.reader = newPaddingReader(c.reader, true, c.paddingChannel)
+	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause, c.paddingChannel); err != nil {
 		_ = c.Close() // Unblock the startup reader if writing failed.
 		return fmt.Errorf("run startup padding: %w", err)
 	}
 
-	packet := newTickStream(c.reader, c.writer, true)
+	packet := newTickStream(c.reader, c.writer, true, c.dataChannel, c.paddingChannel)
 	c.lifecycleMu.Lock()
 	if c.closed {
 		c.lifecycleMu.Unlock()

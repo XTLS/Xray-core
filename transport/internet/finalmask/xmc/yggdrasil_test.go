@@ -358,7 +358,7 @@ func TestHandshakeWithYggdrasil(t *testing.T) {
 			t.Errorf("new verifier: %v", err)
 			return
 		}
-		server, err := wrapConnServer(rawConn, nil, password, privateKey, publicKey, nil, verifier)
+		server, err := wrapConnServer(rawConn, nil, password, privateKey, publicKey, nil, verifier, DefaultDataChannel, DefaultPaddingChannel)
 		if err != nil {
 			t.Errorf("wrap server: %v", err)
 			return
@@ -390,7 +390,7 @@ func TestHandshakeWithYggdrasil(t *testing.T) {
 
 	// The client intentionally has no pinned server key: Yggdrasil mode accepts
 	// the key sent by the server and binds it through the session hash.
-	client, err := newClientConn(rawClient, nil, password, nil, "localhost", nil, newTestYggdrasilAuth(t, api, "SkinUser"))
+	client, err := newClientConn(rawClient, nil, password, nil, "localhost", nil, newTestYggdrasilAuth(t, api, "SkinUser"), DefaultDataChannel, DefaultPaddingChannel)
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -557,7 +557,7 @@ func TestYggdrasilLoginFailure(t *testing.T) {
 		if err != nil {
 			return
 		}
-		server, err := wrapConnServer(rawConn, nil, password, privateKey, publicKey, nil, verifier)
+		server, err := wrapConnServer(rawConn, nil, password, privateKey, publicKey, nil, verifier, DefaultDataChannel, DefaultPaddingChannel)
 		if err != nil {
 			return
 		}
@@ -571,7 +571,7 @@ func TestYggdrasilLoginFailure(t *testing.T) {
 	}
 	defer rawClient.Close()
 
-	client, err := newClientConn(rawClient, nil, password, publicKey, "localhost", nil, newTestYggdrasilAuth(t, api, ""))
+	client, err := newClientConn(rawClient, nil, password, publicKey, "localhost", nil, newTestYggdrasilAuth(t, api, ""), DefaultDataChannel, DefaultPaddingChannel)
 	if err != nil {
 		t.Fatal(err)
 	}

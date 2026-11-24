@@ -63,10 +63,10 @@ func collectTickData(t *testing.T, batches [][]byte) (data []byte, dataPackets, 
 		for _, packet := range readTickBatch(t, batch) {
 			channel, payload := tickPacketChannelAndPayload(t, packet)
 			switch channel {
-			case packetChannel:
+			case DefaultDataChannel:
 				data = append(data, payload...)
 				dataPackets++
-			case paddingFrameChannel:
+			case DefaultPaddingChannel:
 				padding++
 			}
 		}
@@ -78,7 +78,7 @@ func collectTickData(t *testing.T, batches [][]byte) (data []byte, dataPackets, 
 // emits one small padding frame per tick in both directions.
 func TestTickStreamIdleCadence(t *testing.T) {
 	writer := &tickTestWriter{}
-	stream := newTickStream(nil, writer, true)
+	stream := newTickStream(nil, writer, true, DefaultDataChannel, DefaultPaddingChannel)
 	defer stream.Stop()
 
 	time.Sleep(180 * time.Millisecond)
@@ -99,7 +99,7 @@ func TestTickStreamIdleCadence(t *testing.T) {
 			t.Fatalf("idle tick %d packet id = %d", i, packets[0].packetID)
 		}
 		channel, _ := tickPacketChannelAndPayload(t, packets[0])
-		if channel != paddingFrameChannel {
+		if channel != DefaultPaddingChannel {
 			t.Fatalf("idle tick %d channel = %q", i, channel)
 		}
 	}
@@ -109,7 +109,7 @@ func TestTickStreamIdleCadence(t *testing.T) {
 // then emitted as one per-tick batch, split at maxPacketData boundaries.
 func TestTickStreamSendsQueuedDataInOneTick(t *testing.T) {
 	writer := &tickTestWriter{}
-	stream := newTickStream(nil, writer, true)
+	stream := newTickStream(nil, writer, true, DefaultDataChannel, DefaultPaddingChannel)
 	defer stream.Stop()
 
 	payload := bytes.Repeat([]byte("0123456789abcdef"), 4096)
@@ -150,7 +150,7 @@ func TestTickStreamSendsQueuedDataInOneTick(t *testing.T) {
 // already accepted by Write must not wait for the next tick.
 func TestTickStreamFlushWritesQueuedDataImmediately(t *testing.T) {
 	writer := &tickTestWriter{}
-	stream := newTickStream(nil, writer, true)
+	stream := newTickStream(nil, writer, true, DefaultDataChannel, DefaultPaddingChannel)
 	defer stream.Stop()
 
 	payload := []byte("flush me")

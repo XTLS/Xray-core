@@ -53,6 +53,13 @@ message Config {
     // Disables startup padding. The configuration sets this for an explicit
     // empty "paddings" array, which an unset repeated field cannot express.
     bool no_padding = 14;
+    // Custom payload channel that carries the tunnel byte stream, and the one
+    // that carries startup padding. Both ends must use the same pair; empty
+    // keeps the built-in default. Both are namespace:path resource locations,
+    // so vanilla's "minecraft" namespace is rejected: those ids belong to the
+    // game, and reusing one would collide with a vanilla payload.
+    string data_channel = 15;
+    string padding_channel = 16;
 }
 
 message Padding {

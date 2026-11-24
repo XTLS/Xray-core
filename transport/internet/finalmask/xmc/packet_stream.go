@@ -15,7 +15,6 @@ const (
 	configurationServerboundCustomPayload = 0x02
 	configurationKeepAlive                = 0x04
 
-	packetChannel   = "xmc:data"
 	maxPacketData   = 24 * 1024
 	keepAlivePeriod = 15 * time.Second
 
@@ -46,6 +45,11 @@ type tickStream struct {
 	writer   io.Writer
 	isClient bool
 
+	// Configured custom payload channels: the data one carries proxy bytes, the
+	// padding one keeps an idle tick non-empty. Both ends must use the same pair.
+	dataChannel    string
+	paddingChannel string
+
 	readMu  sync.Mutex
 	pending []byte
 
@@ -61,12 +65,14 @@ type tickStream struct {
 	stopOnce    sync.Once
 }
 
-func newTickStream(reader io.Reader, writer io.Writer, isClient bool) *tickStream {
+func newTickStream(reader io.Reader, writer io.Writer, isClient bool, dataChannel, paddingChannel string) *tickStream {
 	s := &tickStream{
-		reader:   reader,
-		writer:   writer,
-		isClient: isClient,
-		done:     make(chan struct{}),
+		reader:         reader,
+		writer:         writer,
+		isClient:       isClient,
+		dataChannel:    dataChannel,
+		paddingChannel: paddingChannel,
+		done:           make(chan struct{}),
 	}
 	s.queueCond = sync.NewCond(&s.queueMu)
 	go s.tickLoop()
@@ -107,7 +113,7 @@ func (s *tickStream) flushTick() error {
 	if err := s.writeDataPackets(&batch, data); err != nil {
 		return err
 	}
-	if err := writeCustomPayload(&batch, s.localCustomPayloadID(), paddingFrameChannel, make([]byte, tickPaddingSize)); err != nil {
+	if err := writeCustomPayload(&batch, s.localCustomPayloadID(), s.paddingChannel, make([]byte, tickPaddingSize)); err != nil {
 		return err
 	}
 
@@ -148,7 +154,7 @@ func (s *tickStream) takeQueue() []byte {
 func (s *tickStream) writeDataPackets(batch *bytes.Buffer, data []byte) error {
 	for len(data) > 0 {
 		n := min(len(data), maxPacketData)
-		if err := writeCustomPayload(batch, s.localCustomPayloadID(), packetChannel, data[:n]); err != nil {
+		if err := writeCustomPayload(batch, s.localCustomPayloadID(), s.dataChannel, data[:n]); err != nil {
 			return err
 		}
 		data = data[n:]
@@ -183,7 +189,7 @@ func (s *tickStream) Read(p []byte) (int, error) {
 		}
 
 		if packet.packetID == s.remoteCustomPayloadID() {
-			payload, ok, err := parseCustomPayload(packet)
+			payload, ok, err := parseCustomPayload(packet, s.dataChannel)
 			if err != nil {
 				return 0, err
 			}
@@ -256,13 +262,13 @@ func (s *tickStream) remoteCustomPayloadID() int {
 	return configurationServerboundCustomPayload
 }
 
-func parseCustomPayload(packet *mcPacket) ([]byte, bool, error) {
+func parseCustomPayload(packet *mcPacket, dataChannel string) ([]byte, bool, error) {
 	r := bytes.NewReader(packet.data)
 	var channel String
 	if err := channel.readFrom(r); err != nil {
 		return nil, false, fmt.Errorf("read minecraft custom payload channel: %w", err)
 	}
-	if string(channel) != packetChannel {
+	if string(channel) != dataChannel {
 		return nil, false, nil
 	}
 	payload := make([]byte, r.Len())

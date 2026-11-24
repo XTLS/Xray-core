@@ -39,6 +39,10 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
+	dataChannel, paddingChannel, err := c.ChannelIDs()
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
 
 	auth, err := c.wrapClientAuth()
 	if err != nil {
@@ -56,7 +60,7 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 		rsaPublicKey = c.RsaPublicKey
 	}
 
-	cc, err := newClientConn(conn, profiles, c.Password, rsaPublicKey, c.Hostname, paddingSchedule, auth)
+	cc, err := newClientConn(conn, profiles, c.Password, rsaPublicKey, c.Hostname, paddingSchedule, auth, dataChannel, paddingChannel)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -73,6 +77,10 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
+	dataChannel, paddingChannel, err := c.ChannelIDs()
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
 
 	var verifier *yggdrasilVerifier
 	if c.Yggdrasil != nil {
@@ -85,7 +93,7 @@ func (c *Config) WrapConnServer(conn net.Conn) (net.Conn, error) {
 		return nil, fmt.Errorf("minecraft finalmask: empty profiles")
 	}
 
-	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, paddingSchedule, verifier)
+	cc, err := wrapConnServer(conn, profiles, c.Password, c.RsaPrivateKey, c.RsaPublicKey, paddingSchedule, verifier, dataChannel, paddingChannel)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}

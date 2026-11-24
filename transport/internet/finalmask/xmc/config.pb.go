@@ -189,9 +189,16 @@ type Config struct {
 	Yggdrasil *Yggdrasil `protobuf:"bytes,13,opt,name=yggdrasil,proto3" json:"yggdrasil,omitempty"`
 	// Disables startup padding. The configuration sets this for an explicit
 	// empty "paddings" array, which an unset repeated field cannot express.
-	NoPadding     bool `protobuf:"varint,14,opt,name=no_padding,json=noPadding,proto3" json:"no_padding,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NoPadding bool `protobuf:"varint,14,opt,name=no_padding,json=noPadding,proto3" json:"no_padding,omitempty"`
+	// Custom payload channel that carries the tunnel byte stream, and the one
+	// that carries startup padding. Both ends must use the same pair; empty
+	// keeps the built-in default. Both are namespace:path resource locations,
+	// so vanilla's "minecraft" namespace is rejected: those ids belong to the
+	// game, and reusing one would collide with a vanilla payload.
+	DataChannel    string `protobuf:"bytes,15,opt,name=data_channel,json=dataChannel,proto3" json:"data_channel,omitempty"`
+	PaddingChannel string `protobuf:"bytes,16,opt,name=padding_channel,json=paddingChannel,proto3" json:"padding_channel,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -278,6 +285,20 @@ func (x *Config) GetNoPadding() bool {
 		return x.NoPadding
 	}
 	return false
+}
+
+func (x *Config) GetDataChannel() string {
+	if x != nil {
+		return x.DataChannel
+	}
+	return ""
+}
+
+func (x *Config) GetPaddingChannel() string {
+	if x != nil {
+		return x.PaddingChannel
+	}
+	return ""
 }
 
 type Padding struct {
@@ -379,7 +400,7 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\x03api\x18\x01 \x01(\tR\x03api\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x03 \x01(\tR\bpassword\x12\x16\n" +
-	"\x06player\x18\x04 \x01(\tR\x06player\"\x9b\x03\n" +
+	"\x06player\x18\x04 \x01(\tR\x06player\"\xe7\x03\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12&\n" +
 	"\x0frsa_private_key\x18\b \x01(\fR\rrsaPrivateKey\x12$\n" +
@@ -390,7 +411,9 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\bpaddings\x18\f \x03(\v2..xray.transport.internet.finalmask.xmc.PaddingR\bpaddings\x12N\n" +
 	"\tyggdrasil\x18\r \x01(\v20.xray.transport.internet.finalmask.xmc.YggdrasilR\tyggdrasil\x12\x1d\n" +
 	"\n" +
-	"no_padding\x18\x0e \x01(\bR\tnoPaddingJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
+	"no_padding\x18\x0e \x01(\bR\tnoPadding\x12!\n" +
+	"\fdata_channel\x18\x0f \x01(\tR\vdataChannel\x12'\n" +
+	"\x0fpadding_channel\x18\x10 \x01(\tR\x0epaddingChannelJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
 	"\aPadding\x12\x1d\n" +
 	"\n" +
 	"length_min\x18\x01 \x01(\x03R\tlengthMin\x12\x1d\n" +

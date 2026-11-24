@@ -52,6 +52,8 @@ type serverConn struct {
 	password        string
 	rsaPrivateKey   *rsa.PrivateKey
 	rsaPublicKey    []byte
+	dataChannel     string
+	paddingChannel  string
 	yggdrasil       *yggdrasilVerifier
 	paddingSchedule []paddingTurn
 	packet          *tickStream
@@ -278,13 +280,13 @@ func (c *serverConn) handshake() error {
 		if err = validateLoginAcknowledgedPacket(pkt); err != nil {
 			return err
 		}
-		c.reader = newPaddingReader(c.reader, false)
-		if err = runPaddingSchedule(c.writer, false, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause); err != nil {
+		c.reader = newPaddingReader(c.reader, false, c.paddingChannel)
+		if err = runPaddingSchedule(c.writer, false, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause, c.paddingChannel); err != nil {
 			_ = c.Close() // Unblock the startup reader if writing failed.
 			return fmt.Errorf("run startup padding: %w", err)
 		}
 
-		packet := newTickStream(c.reader, c.writer, false)
+		packet := newTickStream(c.reader, c.writer, false, c.dataChannel, c.paddingChannel)
 		c.lifecycleMu.Lock()
 		if c.closed {
 			c.lifecycleMu.Unlock()
@@ -417,7 +419,7 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.deadlines.setWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, paddingSchedule []paddingTurn, yggdrasil *yggdrasilVerifier) (*serverConn, error) {
+func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, paddingSchedule []paddingTurn, yggdrasil *yggdrasilVerifier, dataChannel, paddingChannel string) (*serverConn, error) {
 	if len(profiles) == 0 && yggdrasil == nil {
 		return nil, fmt.Errorf("empty profiles")
 	}
@@ -441,6 +443,8 @@ func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPri
 		password:        password,
 		rsaPrivateKey:   rsaPrivateKey,
 		rsaPublicKey:    rsaPublicKey,
+		dataChannel:     dataChannel,
+		paddingChannel:  paddingChannel,
 		yggdrasil:       yggdrasil,
 		paddingSchedule: paddingSchedule,
 		deadlines:       newConnectionDeadlines(c),

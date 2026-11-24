@@ -973,6 +973,11 @@ type XMC struct {
 	// NoPadding disables padding. An explicit empty "paddings" array means the
 	// same; an absent one keeps the built-in preset.
 	NoPadding bool `json:"noPadding,omitempty"`
+	// Custom payload channels that carry the tunnel byte stream and the startup
+	// padding. Both ends must use the same pair; empty keeps the defaults
+	// (xmc:data / xmc:pad). Vanilla's "minecraft" namespace is rejected.
+	DataChannel    string `json:"dataChannel,omitempty"`
+	PaddingChannel string `json:"paddingChannel,omitempty"`
 }
 
 type XMCPaddingTurn struct {
@@ -1038,7 +1043,17 @@ func (c *XMC) Build() (proto.Message, error) {
 	if noPadding && len(c.Paddings) > 0 {
 		return nil, fmt.Errorf("minecraft padding: noPadding and paddings are exclusive")
 	}
-	config := &xmc.Config{Hostname: c.Hostname, NoPadding: noPadding}
+	config := &xmc.Config{
+		Hostname:       c.Hostname,
+		NoPadding:      noPadding,
+		DataChannel:    c.DataChannel,
+		PaddingChannel: c.PaddingChannel,
+	}
+	dataChannel, paddingChannel, channelErr := config.ChannelIDs()
+	if channelErr != nil {
+		return nil, fmt.Errorf("minecraft channels: %w", channelErr)
+	}
+	config.DataChannel, config.PaddingChannel = dataChannel, paddingChannel
 	for i, turn := range c.Paddings {
 		minimum, maximum, err := ParseRangeString(turn.Length)
 		if err != nil {
