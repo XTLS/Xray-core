@@ -26,7 +26,9 @@ func TestClientUDP443Policy(t *testing.T) {
 				opened = true
 				return nil, nil, context.Canceled
 			})
-			handled, err := client.Dispatch(ctx, &transport.Link{})
+			r, w := pipe.New()
+			common.Close(w)
+			handled, err := client.Dispatch(ctx, &transport.Link{Reader: r})
 			wantRejected := policy == "reject"
 			if opened || handled != wantRejected || (err != nil) != wantRejected {
 				t.Fatalf("Dispatch() = (%t, %v), opened carrier = %t, want rejected = %t without opening a carrier", handled, err, opened, wantRejected)

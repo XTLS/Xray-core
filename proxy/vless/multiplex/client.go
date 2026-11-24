@@ -12,6 +12,7 @@ import (
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/session"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
 )
@@ -72,6 +73,7 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 	if target.Network == net.Network_UDP && target.Port == 443 {
 		switch c.config.GetXudpProxyUDP443() {
 		case "reject", "":
+			proxy.DropUDP(ctx, link.Reader)
 			return true, errors.New("XUDP rejected UDP/443 traffic")
 		case "skip":
 			return false, nil
