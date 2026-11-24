@@ -7,7 +7,10 @@ import (
 	"testing"
 
 	. "github.com/xtls/xray-core/infra/conf"
+	"github.com/xtls/xray-core/proxy/masque"
 	"github.com/xtls/xray-core/proxy/tun"
+	"github.com/xtls/xray-core/proxy/wireguard"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestTunConfigAutoSystem(t *testing.T) {
@@ -121,6 +124,33 @@ func TestTunConfigAutoSystemWfpBlockLeakUnknown(t *testing.T) {
 	for _, value := range []string{"ip", "tcp/0", "tcp/0-10", "icmp/1", "udp/20-10", "0", "20-10", "53/tcp", "tcpv4", "ipv4:udp", "1.1.1.1:53", "2001:db8::/32:53", "[1.1.1.0/24]:53", "[::ffff:1.1.1.0/120]:53", "1.1.1.0/24"} {
 		if build(value) == nil {
 			t.Errorf("autoSystemWfpBlockLeak value %q was accepted", value)
+		}
+	}
+}
+
+// TestICMP checks the icmp setting of the inbounds that answer ICMP echo requests themselves.
+func TestICMP(t *testing.T) {
+	const secretKey = "GJ8m0Q0V8mQzqk2h8P1nWgq4Cj4Yf0m0bqz1h3uX8U8="
+	for _, c := range []struct {
+		name   string
+		config func(icmp string) Buildable
+		icmp   func(proto.Message) string
+	}{
+		{"tun", func(icmp string) Buildable { return &TunConfig{Name: "xray0", ICMP: icmp} }, func(m proto.Message) string { return m.(*tun.Config).Icmp }},
+		{"wireguard", func(icmp string) Buildable { return &WireGuardConfig{SecretKey: secretKey, ICMP: icmp} }, func(m proto.Message) string { return m.(*wireguard.DeviceConfig).Icmp }},
+		{"masque", func(icmp string) Buildable { return &MasqueServerConfig{Address: []string{"10.0.0.1/24"}, ICMP: icmp} }, func(m proto.Message) string { return m.(*masque.ServerConfig).Icmp }},
+	} {
+		for icmp, expected := range map[string]string{"": "", "fake": "", "FAKE": "", "drop": "drop", "Drop": "drop"} {
+			message, err := c.config(icmp).Build()
+			if err != nil {
+				t.Fatalf("%s %q: %v", c.name, icmp, err)
+			}
+			if got := c.icmp(message); got != expected {
+				t.Errorf("%s %q: icmp = %q, expected %q", c.name, icmp, got, expected)
+			}
+		}
+		if _, err := c.config("proxy").Build(); err == nil {
+			t.Errorf("%s: unknown icmp value accepted", c.name)
 		}
 	}
 }

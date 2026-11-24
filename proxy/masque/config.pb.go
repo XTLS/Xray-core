@@ -123,6 +123,7 @@ type ServerConfig struct {
 	Users         []*protocol.User       `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
 	Address       []string               `protobuf:"bytes,2,rep,name=address,proto3" json:"address,omitempty"`
 	Mtu           uint32                 `protobuf:"varint,3,opt,name=mtu,proto3" json:"mtu,omitempty"`
+	Icmp          string                 `protobuf:"bytes,4,opt,name=icmp,proto3" json:"icmp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -178,6 +179,13 @@ func (x *ServerConfig) GetMtu() uint32 {
 	return 0
 }
 
+func (x *ServerConfig) GetIcmp() string {
+	if x != nil {
+		return x.Icmp
+	}
+	return ""
+}
+
 var File_proxy_masque_config_proto protoreflect.FileDescriptor
 
 const file_proxy_masque_config_proto_rawDesc = "" +
@@ -188,11 +196,12 @@ const file_proxy_masque_config_proto_rawDesc = "" +
 	"\n" +
 	"remote_dns\x18\x02 \x03(\tR\tremoteDns\"%\n" +
 	"\aAccount\x12\x1a\n" +
-	"\bpassword\x18\x01 \x01(\tR\bpassword\"l\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\"\x80\x01\n" +
 	"\fServerConfig\x120\n" +
 	"\x05users\x18\x01 \x03(\v2\x1a.xray.common.protocol.UserR\x05users\x12\x18\n" +
 	"\aaddress\x18\x02 \x03(\tR\aaddress\x12\x10\n" +
-	"\x03mtu\x18\x03 \x01(\rR\x03mtuBU\n" +
+	"\x03mtu\x18\x03 \x01(\rR\x03mtu\x12\x12\n" +
+	"\x04icmp\x18\x04 \x01(\tR\x04icmpBU\n" +
 	"\x15com.xray.proxy.masqueP\x01Z&github.com/xtls/xray-core/proxy/masque\xaa\x02\x11Xray.Proxy.Masqueb\x06proto3"
 
 var (

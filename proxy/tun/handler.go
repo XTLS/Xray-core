@@ -172,6 +172,7 @@ func (t *Handler) Start() error {
 		Tun:         tunInterface,
 		MTU:         t.config.MTU,
 		IdleTimeout: t.policyManager.ForLevel(t.config.UserLevel).Timeouts.ConnectionIdle,
+		IP:          ICMPHandler(t.config.Icmp),
 	}
 	tunStack, err := NewStack(t.ctx, tunStackOptions, t)
 	if err != nil {

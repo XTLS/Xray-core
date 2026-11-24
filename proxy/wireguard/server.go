@@ -124,7 +124,7 @@ func NewServer(ctx context.Context, conf *DeviceConfig) (*Server, error) {
 		users: users,
 	}
 	// The stack hands its connections to s from the first packet on, which the device delivers after Start -> dev.Up.
-	tun, _, err := CreateNetTUN(localAddresses, nil, int(conf.Mtu), s)
+	tun, _, err := CreateNetTUN(NetTUNOptions{Addresses: localAddresses, MTU: int(conf.Mtu), Handler: s, IP: xtun.ICMPHandler(conf.Icmp)})
 	if err != nil {
 		return nil, err
 	}
