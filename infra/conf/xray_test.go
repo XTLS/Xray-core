@@ -269,13 +269,19 @@ func TestOutboundMultiplexConfig(t *testing.T) {
 		{name: "legacy values are not decoded", legacy: `{"enabled":"ignored","concurrency":"ignored"}`},
 		{name: "empty native object", native: `{}`},
 		{name: "enabled flag alone does not create a pool", native: `{"enabled":true}`},
-		{name: "positive concurrency with old enabled flag", native: `{"concurrency":4,"enabled":false}`,
-			want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
-		{name: "native XUDP only", native: `{"xudpConcurrency":8}`,
-			want: &vless.Multiplex{XudpConcurrency: 8, XudpProxyUDP443: "reject"}},
-		{name: "native options override legacy", legacy: `{"enabled":true,"concurrency":16}`,
+		{
+			name: "positive concurrency with old enabled flag", native: `{"concurrency":4,"enabled":false}`,
+			want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"},
+		},
+		{
+			name: "native XUDP only", native: `{"xudpConcurrency":8}`,
+			want: &vless.Multiplex{XudpConcurrency: 8, XudpProxyUDP443: "reject"},
+		},
+		{
+			name: "native options override legacy", legacy: `{"enabled":true,"concurrency":16}`,
 			native: `{"concurrency":4,"xudpConcurrency":8,"xudpProxyUDP443":"allow"}`,
-			want:   &vless.Multiplex{Concurrency: 4, XudpConcurrency: 8, XudpProxyUDP443: "allow"}},
+			want:   &vless.Multiplex{Concurrency: 4, XudpConcurrency: 8, XudpProxyUDP443: "allow"},
+		},
 		{name: "empty native with legacy enabled", legacy: `{"enabled":true}`, native: `{}`},
 	}
 	for _, protoName := range []string{"vless", "vmess"} {
