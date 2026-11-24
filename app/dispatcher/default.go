@@ -35,7 +35,7 @@ type nativeReader interface {
 
 type cachedReader struct {
 	sync.Mutex
-	reader buf.TimeoutReader // *pipe.Reader or *buf.TimeoutWrapperReader
+	reader buf.TimeoutReader
 	cache  buf.MultiBuffer
 }
 

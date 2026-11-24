@@ -7,40 +7,29 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/transport"
 )
 
-// LegacyConfig reads the old outbound mux setting used by VLESS and VMess.
-func LegacyConfig(ctx context.Context) (*vless.Multiplex, error) {
-	full := session.FullHandlerFromContext(ctx)
-	if full == nil {
+// NormalizeConfig validates the pool settings and returns nil when both pools are off.
+func NormalizeConfig(config *vless.Multiplex) (*vless.Multiplex, error) {
+	if config.GetConcurrency() < 0 || config.GetXudpConcurrency() < 0 {
+		return nil, errors.New(`multiplex "concurrency" and "xudpConcurrency" must be non-negative`)
+	}
+	switch config.GetXudpProxyUDP443() {
+	case "", "reject", "allow", "skip":
+	default:
+		return nil, errors.New(`unknown "xudpProxyUDP443": `, config.GetXudpProxyUDP443())
+	}
+	if config.GetConcurrency() == 0 && config.GetXudpConcurrency() == 0 {
 		return nil, nil
 	}
-	settings := full.SenderSettings()
-	if settings == nil || settings.Type != serial.GetMessageType(&proxyman.SenderConfig{}) {
-		return nil, nil
-	}
-	sender, err := settings.GetInstance()
-	if err != nil {
-		return nil, errors.New("failed to read outbound mux settings").Base(err)
-	}
-	legacy := sender.(*proxyman.SenderConfig).GetMultiplexSettings()
-	if !legacy.GetEnabled() {
-		return nil, nil
-	}
-	udp443 := legacy.XudpProxyUDP443
-	if udp443 == "" {
-		udp443 = "allow"
-	}
-	return &vless.Multiplex{Concurrency: legacy.Concurrency, XudpConcurrency: legacy.XudpConcurrency, XudpProxyUDP443: udp443}, nil
+	return config, nil
 }
 
 // Client owns the logical stream pools.
@@ -55,18 +44,14 @@ func NewClient(ctx context.Context, config *vless.Multiplex, network string, ope
 	pool := func(concurrency int32) *Pool {
 		return NewPool(ctx, ClientStrategy{MaxConcurrency: uint32(concurrency), MaxConnection: 1024}, open)
 	}
-	concurrency := config.Concurrency
-	if concurrency == 0 {
-		concurrency = 8
-	}
-	if concurrency > 0 {
+	if concurrency := config.GetConcurrency(); concurrency > 0 {
 		if network == "xdrive" {
 			concurrency = max(concurrency, 128)
 		}
 		c.tcp = pool(concurrency)
 	}
-	if config.XudpConcurrency > 0 {
-		c.udp = pool(config.XudpConcurrency)
+	if concurrency := config.GetXudpConcurrency(); concurrency > 0 {
+		c.udp = pool(concurrency)
 	}
 	return c
 }
@@ -78,24 +63,19 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 	pool := c.tcp
 	outbounds := session.OutboundsFromContext(ctx)
 	target := outbounds[len(outbounds)-1].Target
-	if target.Network == net.Network_UDP {
-		if target.Port == 443 {
-			switch c.config.XudpProxyUDP443 {
-			case "reject", "":
-				return true, errors.New("XUDP rejected UDP/443 traffic")
-			case "skip":
-				return false, nil
-			}
-		}
-		if c.config.XudpConcurrency < 0 {
-			return false, nil
-		}
-		if c.udp != nil {
-			pool = c.udp
-		}
+	if target.Network == net.Network_UDP && c.udp != nil {
+		pool = c.udp
 	}
 	if pool == nil {
 		return false, nil
+	}
+	if target.Network == net.Network_UDP && target.Port == 443 {
+		switch c.config.GetXudpProxyUDP443() {
+		case "reject", "":
+			return true, errors.New("XUDP rejected UDP/443 traffic")
+		case "skip":
+			return false, nil
+		}
 	}
 	return true, Dispatch(ctx, link, pool.Admit)
 }

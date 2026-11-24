@@ -45,23 +45,23 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
+	muxConfig, err := multiplex.NormalizeConfig(config.Multiplex)
+	if err != nil {
+		return nil, err
+	}
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
 		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
-	legacy, err := multiplex.LegacyConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if legacy != nil {
+	if muxConfig != nil {
 		dialer, ok := session.FullHandlerFromContext(ctx).(internet.Dialer)
 		if !ok {
 			return nil, errors.New("VMess multiplex requires an outbound dialer")
 		}
 		poolCtx, stop := context.WithCancel(context.Background())
 		handler.stopMultiplex = stop
-		handler.multiplex = multiplex.NewClient(poolCtx, legacy, "", func(ctx context.Context) (context.Context, *transport.Link, error) {
+		handler.multiplex = multiplex.NewClient(poolCtx, muxConfig, "", func(ctx context.Context) (context.Context, *transport.Link, error) {
 			return handler.process(ctx, nil, dialer, protocol.RequestCommandMux)
 		})
 	}

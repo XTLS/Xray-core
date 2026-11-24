@@ -107,13 +107,6 @@ func (c *SniffingConfig) Build() (*proxyman.SniffingConfig, error) {
 	}, nil
 }
 
-type MuxConfig struct {
-	Enabled         bool   `json:"enabled"`
-	Concurrency     int16  `json:"concurrency"`
-	XudpConcurrency int16  `json:"xudpConcurrency"`
-	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
-}
-
 type InboundDetourConfig struct {
 	Protocol       string           `json:"protocol"`
 	PortList       *PortList        `json:"port"`
@@ -214,7 +207,7 @@ type OutboundDetourConfig struct {
 	Settings       *json.RawMessage `json:"settings"`
 	StreamSetting  *StreamConfig    `json:"streamSettings"`
 	ProxySettings  *json.RawMessage `json:"proxySettings"`
-	MuxSettings    *MuxConfig       `json:"mux"`
+	LegacyMux      json.RawMessage  `json:"mux,omitempty"`
 	TargetStrategy string           `json:"targetStrategy"`
 }
 
@@ -272,9 +265,8 @@ func validateXDrive(ts proto.Message, ss *internet.StreamConfig, pl *net.PortLis
 			return errors.New(`the xdrive transport needs VLESS "encryption", run "xray vlessenc" to get one`)
 		}
 		// Reverse opens its own multiplexed connection.
-		ms := c.Multiplex
-		if account.Reverse == nil && (ms == nil || ms.Concurrency < 0 || ms.XudpConcurrency < 0 || ms.XudpProxyUDP443 == "skip") {
-			return errors.New(`the xdrive transport needs "multiplex" (legacy "mux") enabled, with no negative "concurrency" or "xudpConcurrency" and no "xudpProxyUDP443":"skip"`)
+		if account.Reverse == nil && (c.Multiplex.GetConcurrency() == 0 || c.Multiplex.GetXudpProxyUDP443() == "skip") {
+			return errors.New(`the xdrive transport needs positive "settings.multiplex.concurrency" and does not support "xudpProxyUDP443":"skip"`)
 		}
 		if account.Testpre != 0 {
 			return errors.New(`the xdrive transport doesn't support VLESS "testpre"`)
@@ -368,28 +360,8 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to load outbound detour config for protocol ", c.Protocol).Base(err)
 	}
-	if c.MuxSettings != nil && c.MuxSettings.Enabled {
-		legacy := MultiplexConfig{
-			Concurrency: c.MuxSettings.Concurrency, XudpConcurrency: c.MuxSettings.XudpConcurrency,
-			XudpProxyUDP443: c.MuxSettings.XudpProxyUDP443,
-		}
-		switch config := rawConfig.(type) {
-		case *VLessOutboundConfig:
-			if config.Multiplex == nil {
-				config.Multiplex = &legacy
-			}
-		case *VMessOutboundConfig:
-			mux, err := legacy.Build()
-			if err != nil {
-				return nil, err
-			}
-			senderSettings.MultiplexSettings = &proxyman.MultiplexingConfig{
-				Enabled: true, Concurrency: mux.Concurrency,
-				XudpConcurrency: mux.XudpConcurrency, XudpProxyUDP443: mux.XudpProxyUDP443,
-			}
-		default:
-			errors.LogWarning(context.Background(), "Mux is no longer supported by this outbound protocol; ordinary outbound connections will be used.")
-		}
+	if c.LegacyMux != nil {
+		errors.LogWarning(context.Background(), `The legacy "mux" setting is ignored. To enable Multiplex for VLESS or VMess outbounds, use "settings.multiplex". If Multiplex is disabled, Xray will use ordinary outbound connections.`)
 	}
 	ts, err := rawConfig.(Buildable).Build()
 	if err != nil {

@@ -1,6 +1,7 @@
 package conf_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/xtls/xray-core/app/log"
 	"github.com/xtls/xray-core/app/proxyman"
 	"github.com/xtls/xray-core/app/router"
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/geodata"
 	clog "github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
@@ -19,7 +19,6 @@ import (
 	core "github.com/xtls/xray-core/core"
 	. "github.com/xtls/xray-core/infra/conf"
 	"github.com/xtls/xray-core/proxy/vless"
-	vlessoutbound "github.com/xtls/xray-core/proxy/vless/outbound"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/transport/internet"
@@ -228,76 +227,100 @@ func TestSniffingConfig_Build(t *testing.T) {
 }
 
 func TestMultiplexConfig_Build(t *testing.T) {
-	tests := []struct {
+	for _, tc := range []struct {
 		name   string
 		fields string
 		want   *vless.Multiplex
+		bad    bool
 	}{
-		{"default", `{"concurrency": 16}`, &vless.Multiplex{
-			Concurrency:     16,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-		{"empty def", `{}`, &vless.Multiplex{
-			Concurrency:     0,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-		{"explicit small concurrency", `{"concurrency": 4}`, &vless.Multiplex{
-			Concurrency:     4,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-		{"disabled native pool", `{"concurrency": -1}`, &vless.Multiplex{
-			Concurrency:     -1,
-			XudpConcurrency: 0,
-			XudpProxyUDP443: "reject",
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := &MultiplexConfig{}
-			common.Must(json.Unmarshal([]byte(tt.fields), m))
-			got, err := m.Build()
-			if err != nil {
+		{name: "empty", fields: `{}`},
+		{name: "both zero", fields: `{"concurrency":0,"xudpConcurrency":0}`},
+		{name: "regular pool", fields: `{"concurrency":4}`, want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
+		{name: "XUDP only", fields: `{"xudpConcurrency":8}`, want: &vless.Multiplex{XudpConcurrency: 8, XudpProxyUDP443: "reject"}},
+		{name: "negative concurrency", fields: `{"concurrency":-1,"xudpConcurrency":8}`, bad: true},
+		{name: "negative XUDP concurrency", fields: `{"concurrency":4,"xudpConcurrency":-1}`, bad: true},
+		{name: "invalid UDP policy", fields: `{"concurrency":4,"xudpProxyUDP443":"invalid"}`, bad: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var config MultiplexConfig
+			if err := json.Unmarshal([]byte(tc.fields), &config); err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("MultiplexConfig.Build() = %v, want %v", got, tt.want)
+			got, err := config.Build()
+			if (err != nil) != tc.bad || !proto.Equal(got, tc.want) {
+				t.Fatalf("Build() = %v, %v, want config %v, error %t", got, err, tc.want, tc.bad)
 			}
 		})
 	}
+}
 
-	for _, tc := range []struct {
+func TestOutboundMultiplexConfig(t *testing.T) {
+	tests := []struct {
+		name   string
 		legacy string
 		native string
 		want   *vless.Multiplex
 	}{
-		{`{"enabled": true, "concurrency": 16}`, "", &vless.Multiplex{Concurrency: 16, XudpProxyUDP443: "reject"}},
-		{`{"enabled": false, "concurrency": 4}`, "", nil},
-		{`{"enabled": false, "concurrency": -1}`, "", nil},
-		{`{}`, "", nil},
-		{`{"enabled": true, "concurrency": 16}`, `, "multiplex": {"concurrency": 4}`, &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
-		{`{"enabled": true, "concurrency": 16}`, `, "multiplex": {"enabled": false}`, nil},
-	} {
-		t.Run("legacy top-level mux "+tc.legacy+tc.native, func(t *testing.T) {
-			var config OutboundDetourConfig
-			common.Must(json.Unmarshal([]byte(`{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":443,"users":[{"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d","encryption":"none"}]}]`+tc.native+`},"mux":`+tc.legacy+`}`), &config))
-			if config.MuxSettings == nil {
-				t.Fatal("legacy mux input was not recognized")
-			}
-			built, err := config.Build()
-			if err != nil {
-				t.Fatal(err)
-			}
-			proxyConfig, err := built.ProxySettings.GetInstance()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got := proxyConfig.(*vlessoutbound.Config).Multiplex; !proto.Equal(got, tc.want) {
-				t.Errorf("legacy mux Build() multiplex = %v, want %v", got, tc.want)
-			}
-		})
+		{name: "absent"},
+		{name: "legacy enabled", legacy: `{"enabled":true,"concurrency":16}`},
+		{name: "legacy disabled", legacy: `{"enabled":false}`},
+		{name: "legacy null", legacy: `null`},
+		{name: "legacy empty", legacy: `{}`},
+		{name: "legacy values are not decoded", legacy: `{"enabled":"ignored","concurrency":"ignored"}`},
+		{name: "empty native object", native: `{}`},
+		{name: "enabled flag alone does not create a pool", native: `{"enabled":true}`},
+		{name: "positive concurrency with old enabled flag", native: `{"concurrency":4,"enabled":false}`,
+			want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
+		{name: "native XUDP only", native: `{"xudpConcurrency":8}`,
+			want: &vless.Multiplex{XudpConcurrency: 8, XudpProxyUDP443: "reject"}},
+		{name: "native options override legacy", legacy: `{"enabled":true,"concurrency":16}`,
+			native: `{"concurrency":4,"xudpConcurrency":8,"xudpProxyUDP443":"allow"}`,
+			want:   &vless.Multiplex{Concurrency: 4, XudpConcurrency: 8, XudpProxyUDP443: "allow"}},
+		{name: "empty native with legacy enabled", legacy: `{"enabled":true}`, native: `{}`},
+	}
+	for _, protoName := range []string{"vless", "vmess"} {
+		for _, tc := range tests {
+			t.Run(protoName+"/"+tc.name, func(t *testing.T) {
+				settings := `"address":"127.0.0.1","port":443,"id":"d19768cb-2891-4c3c-b45d-863f8fd64b6d"`
+				if protoName == "vless" {
+					settings += `,"encryption":"none"`
+				}
+				if tc.native != "" {
+					settings += `,"multiplex":` + tc.native
+				}
+				input := `{"protocol":"` + protoName + `","settings":{` + settings + `}`
+				if tc.legacy != "" {
+					input += `,"mux":` + tc.legacy
+				}
+
+				var config OutboundDetourConfig
+				if err := json.Unmarshal([]byte(input+"}"), &config); err != nil {
+					t.Fatal(err)
+				}
+				if got := string(config.LegacyMux); got != tc.legacy {
+					t.Errorf("legacy mux marker = %q, want %q", got, tc.legacy)
+				}
+				serialized, err := json.Marshal(config)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if hasMux := bytes.Contains(serialized, []byte(`"mux":`)); hasMux != (tc.legacy != "") {
+					t.Errorf("serialized config changed legacy mux presence: %s", serialized)
+				}
+				built, err := config.Build()
+				if err != nil {
+					t.Fatal(err)
+				}
+				proxyConfig, err := built.ProxySettings.GetInstance()
+				if err != nil {
+					t.Fatal(err)
+				}
+				got := proxyConfig.(interface{ GetMultiplex() *vless.Multiplex }).GetMultiplex()
+				if !proto.Equal(got, tc.want) {
+					t.Errorf("multiplex = %v, want %v", got, tc.want)
+				}
+			})
+		}
 	}
 }
 

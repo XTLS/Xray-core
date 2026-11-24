@@ -151,7 +151,6 @@ func (f *FrameMetadata) UnmarshalFromBuffer(b *buf.Buffer, readSourceAndLocal bo
 		return nil
 	}
 
-	// Application data is essential, to test whether the pipe is closed.
 	if f.SessionStatus == SessionStatusNew && f.Option.Has(OptionData) &&
 		f.Target.Network == net.Network_UDP && b.Len() >= 8 {
 		copy(f.GlobalID[:], b.Bytes())

@@ -35,6 +35,16 @@ func TestClientUDP443Policy(t *testing.T) {
 	}
 }
 
+func TestClientWithoutPoolLeavesUDP443ToOutbound(t *testing.T) {
+	ctx := session.ContextWithOutbounds(t.Context(), []*session.Outbound{{
+		Target: net.UDPDestination(net.LocalHostIP, 443),
+	}})
+	client := NewClient(ctx, &vless.Multiplex{XudpProxyUDP443: "reject"}, "", nil)
+	if handled, err := client.Dispatch(ctx, &transport.Link{}); handled || err != nil {
+		t.Fatalf("Dispatch without a pool = (%t, %v), want fallback", handled, err)
+	}
+}
+
 func TestPoolFailure(t *testing.T) {
 	calls := 0
 	owner, stop := context.WithCancel(context.Background())

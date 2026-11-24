@@ -73,12 +73,9 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
-	muxConfig := config.Multiplex
-	if muxConfig == nil {
-		muxConfig, err = multiplex.LegacyConfig(ctx)
-		if err != nil {
-			return nil, err
-		}
+	muxConfig, err := multiplex.NormalizeConfig(config.Multiplex)
+	if err != nil {
+		return nil, err
 	}
 	a := server.User.Account.(*vless.MemoryAccount)
 	dialer, _ := session.FullHandlerFromContext(ctx).(internet.Dialer)
