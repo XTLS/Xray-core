@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common/buf"
@@ -30,6 +31,8 @@ type Session struct {
 	done      chan struct{}
 	flow      *inboundFlow
 	producer  sync.Mutex
+
+	writingResponse atomic.Bool
 }
 
 const (
@@ -96,11 +99,15 @@ func (s *Session) writePayload(data buf.MultiBuffer) error {
 	if x == nil {
 		s.parent.RLock()
 		live := s.phase == outputOpen || s.phase == outputStarting
+		if live {
+			s.writingResponse.Store(true)
+		}
 		s.parent.RUnlock()
 		if !live {
 			buf.ReleaseMulti(data)
 			return io.ErrClosedPipe
 		}
+		defer s.writingResponse.Store(false)
 		return s.output.WriteMultiBuffer(data)
 	}
 	err := x.accept(data, s)

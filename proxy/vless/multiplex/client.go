@@ -80,6 +80,11 @@ func (c *Client) Dispatch(ctx context.Context, link *transport.Link) (bool, erro
 	return true, Dispatch(ctx, link, pool.Admit)
 }
 
+type deferredWriterClose struct{}
+
+func (deferredWriterClose) Error() string          { return "defer link writer close" }
+func (deferredWriterClose) DeferWriterClose() bool { return true }
+
 // Dispatch runs a logical child. The caller owns the application endpoints.
 func Dispatch(ctx context.Context, link *transport.Link, admit func(context.Context, *Session) error, finish ...func(context.Context)) error {
 	s := NewSession(ctx, link)
@@ -96,8 +101,17 @@ func Dispatch(ctx context.Context, link *transport.Link, admit func(context.Cont
 		s.Close()
 	case <-s.WaitClosed():
 	}
+	// The session is sealed. Only a response write already in progress can
+	// still hold the application writer.
+	writingResponse := s.writingResponse.Load()
 	if len(finish) != 0 {
-		finish[0](s.parent.ctx)
+		if writingResponse {
+			go finish[0](s.parent.ctx)
+		} else {
+			finish[0](s.parent.ctx)
+		}
+	} else if writingResponse {
+		return deferredWriterClose{}
 	}
 	return nil
 }

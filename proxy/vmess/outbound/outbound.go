@@ -5,12 +5,14 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"hash/crc64"
+	"sync/atomic"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
 	"github.com/xtls/xray-core/common/session"
@@ -140,7 +142,10 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	request.Security = account.Security
 
 	if request.Security == protocol.SecurityType_AES128_GCM || request.Security == protocol.SecurityType_CHACHA20_POLY1305 {
-		request.Option.Set(protocol.RequestOptionChunkMasking | protocol.RequestOptionGlobalPadding)
+		request.Option.Set(protocol.RequestOptionChunkMasking)
+	}
+	if shouldEnablePadding(request.Security) && request.Option.Has(protocol.RequestOptionChunkMasking) {
+		request.Option.Set(protocol.RequestOptionGlobalPadding)
 	}
 
 	if account.AuthenticatedLengthExperiment {
@@ -179,9 +184,11 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	}
 	openResponse := func() (buf.Reader, error) {
 		reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
-		if _, err := clientSession.DecodeResponseHeader(reader); err != nil {
+		header, err := clientSession.DecodeResponseHeader(reader)
+		if err != nil {
 			return nil, errors.New("failed to read header").Base(err)
 		}
+		h.handleCommand(rec.Destination, header.Command)
 		return clientSession.DecodeResponseBody(request, reader)
 	}
 
@@ -237,8 +244,23 @@ func (h *Handler) process(ctx context.Context, link *transport.Link, dialer inte
 	return nil, nil, nil
 }
 
+var enablePadding atomic.Bool
+
+func shouldEnablePadding(s protocol.SecurityType) bool {
+	return enablePadding.Load() || s == protocol.SecurityType_AES128_GCM || s == protocol.SecurityType_CHACHA20_POLY1305 || s == protocol.SecurityType_AUTO
+}
+
+func reloadEnvSettings() error {
+	const defaultFlagValue = "NOT_DEFINED_AT_ALL"
+	paddingValue := platform.NewEnvFlag(platform.UseVmessPadding).GetValue(func() string { return defaultFlagValue })
+	enablePadding.Store(paddingValue != defaultFlagValue)
+	return nil
+}
+
 func init() {
 	common.Must(common.RegisterConfig((*Config)(nil), func(ctx context.Context, config interface{}) (interface{}, error) {
 		return New(ctx, config.(*Config))
 	}))
+
+	platform.RegisterEnvReload(reloadEnvSettings)
 }

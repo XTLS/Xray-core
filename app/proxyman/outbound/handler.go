@@ -155,6 +155,12 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	}
 
 	err := h.proxy.Process(ctx, link, h)
+	var completion interface{ DeferWriterClose() bool }
+	if goerrors.As(err, &completion) && completion.DeferWriterClose() {
+		go common.Close(writer)
+		common.Interrupt(reader)
+		return
+	}
 	var errC error
 	if err != nil {
 		errC = errors.Cause(err)

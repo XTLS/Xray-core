@@ -16,6 +16,7 @@ import (
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/uuid"
 	"github.com/xtls/xray-core/core"
+	feature_inbound "github.com/xtls/xray-core/features/inbound"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
@@ -101,20 +102,22 @@ func (v *userByEmail) Remove(email string) bool {
 
 // Handler is an inbound connection handler that handles messages in VMess protocol.
 type Handler struct {
-	policyManager  policy.Manager
-	clients        *vmess.TimedUserValidator
-	usersByEmail   *userByEmail
-	sessionHistory *encoding.SessionHistory
+	policyManager         policy.Manager
+	inboundHandlerManager feature_inbound.Manager
+	clients               *vmess.TimedUserValidator
+	usersByEmail          *userByEmail
+	sessionHistory        *encoding.SessionHistory
 }
 
 // New creates a new VMess inbound handler.
 func New(ctx context.Context, config *Config) (*Handler, error) {
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
-		policyManager:  v.GetFeature(policy.ManagerType()).(policy.Manager),
-		clients:        vmess.NewTimedUserValidator(),
-		usersByEmail:   newUserByEmail(config.GetDefaultValue()),
-		sessionHistory: encoding.NewSessionHistory(),
+		policyManager:         v.GetFeature(policy.ManagerType()).(policy.Manager),
+		inboundHandlerManager: v.GetFeature(feature_inbound.ManagerType()).(feature_inbound.Manager),
+		clients:               vmess.NewTimedUserValidator(),
+		usersByEmail:          newUserByEmail(config.GetDefaultValue()),
+		sessionHistory:        encoding.NewSessionHistory(),
 	}
 
 	for _, user := range config.User {
@@ -237,7 +240,10 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		return errors.New("failed to start decoding").Base(err)
 	}
 	writer := buf.NewBufferedWriter(buf.NewWriter(connection))
-	svrSession.EncodeResponseHeader(&protocol.ResponseHeader{}, writer)
+	response := &protocol.ResponseHeader{
+		Command: h.generateCommand(ctx, request),
+	}
+	svrSession.EncodeResponseHeader(response, writer)
 	bodyWriter, err := svrSession.EncodeResponseBody(request, writer)
 	if err != nil {
 		return errors.New("failed to start decoding response").Base(err)
@@ -253,6 +259,11 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 	if err := dispatcher.DispatchLink(ctx, request.Destination(), link); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
+	return nil
+}
+
+// Stub command generator
+func (h *Handler) generateCommand(ctx context.Context, request *protocol.RequestHeader) protocol.ResponseCommand {
 	return nil
 }
 
