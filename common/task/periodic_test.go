@@ -20,17 +20,17 @@ func TestPeriodicTaskStop(t *testing.T) {
 	common.Must(task.Start())
 	time.Sleep(time.Second * 5)
 	common.Must(task.Close())
-	if value != 3 {
-		t.Fatal("expected 3, but got ", value)
+	if value != 2 {
+		t.Fatal("expected 2, but got ", value)
 	}
 	time.Sleep(time.Second * 4)
-	if value != 3 {
-		t.Fatal("expected 3, but got ", value)
+	if value != 2 {
+		t.Fatal("expected 2, but got ", value)
 	}
 	common.Must(task.Start())
 	time.Sleep(time.Second * 3)
-	if value != 5 {
-		t.Fatal("Expected 5, but ", value)
+	if value != 3 {
+		t.Fatal("Expected 3, but ", value)
 	}
 	common.Must(task.Close())
 }

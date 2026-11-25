@@ -26,6 +26,7 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	http_proto "github.com/xtls/xray-core/common/protocol/http"
 	"github.com/xtls/xray-core/common/signal/done"
+	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion"
 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
@@ -78,10 +79,9 @@ func (h *requestHandler) upsertSession(sessionId string) *httpSession {
 	h.sessions.Store(sessionId, s)
 
 	shouldReap := done.New()
-	go func() {
-		time.Sleep(30 * time.Second)
+	time.AfterFunc(30*time.Second, func() {
 		shouldReap.Close()
-	}()
+	})
 	go func() {
 		select {
 		case <-shouldReap.Wait():
@@ -222,15 +222,15 @@ func (h *requestHandler) ServeHTTP(writer http.ResponseWriter, request *http.Req
 				scStreamUpServerSecs := h.config.GetNormalizedScStreamUpServerSecs()
 				hasLegacyRefererCompatMarker := request.Header.Get("Referer") != ""
 				if (hasLegacyRefererCompatMarker || obfsPaddingAccepted) && scStreamUpServerSecs.To > 0 {
-					go func() {
-						for {
+					writePadding := &task.Periodic{
+						Execute: func() error {
 							_, err := httpSC.Write(bytes.Repeat([]byte{'X'}, int(h.config.GetNormalizedXPaddingBytes().rand())))
-							if err != nil {
-								break
-							}
-							time.Sleep(time.Duration(scStreamUpServerSecs.rand()) * time.Second)
-						}
-					}()
+							return err
+						},
+						Interval: time.Duration(scStreamUpServerSecs.rand()) * time.Second,
+					}
+					defer writePadding.Close()
+					writePadding.Start()
 				}
 				select {
 				case <-request.Context().Done():
