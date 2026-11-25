@@ -85,6 +85,9 @@ func (w *TCPWriter) Close() error {
 	return nil
 }
 
+// Interrupt does nothing, HandleConnection closes the connection right after and that resets it if something is left unread
+func (w *TCPWriter) Interrupt() {}
+
 // ConnectionHandler interface with the only method that stack is going to push new connections to
 type ConnectionHandler interface {
 	HandleConnection(conn net.Conn, destination net.Destination)

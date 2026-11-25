@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
 )
@@ -2380,5 +2381,27 @@ func TestTCPCloseWrite(t *testing.T) {
 	}
 	a.conn.Close()
 	p.silent(100 * time.Millisecond)
+	forgotten(t, s)
+}
+
+// An interrupted writer does not send FIN, and what is left unread resets the connection.
+func TestTCPWriterInterrupt(t *testing.T) {
+	conns := make(chan accepted, 1)
+	p, l := newPeer(t, "10.0.0.1:1234", "10.0.0.2:80")
+	s := newTestStack(t, l, accept(conns))
+	p.connect(nil)
+	a := take(t, conns)
+
+	p.send(p.seq, tcpAck|tcpPsh, nil, []byte("abc"))
+	p.seq += 3
+	if s := p.receive(); s.flags != tcpAck || s.ack != p.seq {
+		t.Fatal("not acknowledged: flags ", s.flags, ", ack ", s.ack)
+	}
+	common.Interrupt(&TCPWriter{Writer: buf.NewWriter(a.conn)})
+	p.silent(100 * time.Millisecond)
+	a.conn.Close()
+	if s := p.receive(); s.flags != tcpRst|tcpAck || s.seq != p.ack {
+		t.Fatal("not a reset: flags ", s.flags, ", seq ", s.seq)
+	}
 	forgotten(t, s)
 }
