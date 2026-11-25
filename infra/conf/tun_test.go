@@ -159,6 +159,7 @@ func TestTunConfigGUID(t *testing.T) {
 	for _, guid := range []string{
 		"xray0",
 		"6ba7b810-9dad-11d1-80b4-00c04fd430c",
+		"6ba7b8109-dad-11d1-80b4-00c04fd430c8", // the right length, a hyphen out of place
 		"6ba7b8109dad11d180b400c04fd430c8",
 		"{6ba7b810-9dad-11d1-80b4-00c04fd430c8}",
 		"urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8",
