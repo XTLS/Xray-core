@@ -42,17 +42,19 @@ type Client struct {
 
 func NewClient(ctx context.Context, config *vless.Multiplex, network string, open func(context.Context) (context.Context, *transport.Link, error)) *Client {
 	c := &Client{config: config}
-	pool := func(concurrency int32) *Pool {
-		return NewPool(ctx, ClientStrategy{MaxConcurrency: uint32(concurrency), MaxConnection: 1024}, open)
-	}
-	if concurrency := config.GetConcurrency(); concurrency > 0 {
-		if network == "xdrive" {
-			concurrency = max(concurrency, 128)
+	maxReuseTimes := uint32(1024)
+	if network == "xdrive" {
+		maxReuseTimes = 0 // unlimited
+		config.Concurrency = max(config.Concurrency, 128)
+		if config.XudpConcurrency > 0 {
+			config.XudpConcurrency = max(config.XudpConcurrency, 128)
 		}
-		c.tcp = pool(concurrency)
 	}
-	if concurrency := config.GetXudpConcurrency(); concurrency > 0 {
-		c.udp = pool(concurrency)
+	if config.Concurrency > 0 {
+		c.tcp = NewPool(ctx, ClientStrategy{MaxConcurrency: uint32(config.Concurrency), MaxConnection: maxReuseTimes}, open)
+	}
+	if config.XudpConcurrency > 0 {
+		c.udp = NewPool(ctx, ClientStrategy{MaxConcurrency: uint32(config.XudpConcurrency), MaxConnection: maxReuseTimes}, open)
 	}
 	return c
 }
