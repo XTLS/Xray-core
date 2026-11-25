@@ -541,10 +541,7 @@ func TestXDriveOutboundConfig(t *testing.T) {
 	for _, c := range []struct{ input, err string }{
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, "encryption": "none", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"encryption"`},
 		{`{"protocol": "vless", "settings": {"address": "example.com", "port": 443, ` + xdriveID + `, "encryption": "none", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"encryption"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `}`, `"settings.multiplex.concurrency"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"settings.multiplex.concurrency"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"xudpConcurrency": 8}}, ` + xdriveStream + `}`, `"settings.multiplex.concurrency"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8, "xudpProxyUDP443": "skip"}}, ` + xdriveStream + `}`, `"settings.multiplex.concurrency"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8, "xudpProxyUDP443": "skip"}}, ` + xdriveStream + `}`, `"xudpProxyUDP443":"skip"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"flow"`},
 		{`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}]}], "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"flow"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "testpre": 1, "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"testpre"`},

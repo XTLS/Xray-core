@@ -36,6 +36,7 @@ import (
 	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vless/reverse"
 	"github.com/xtls/xray-core/transport"
+	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
@@ -523,6 +524,12 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
 		errors.LogWarningInner(ctx, err, "unable to set back read deadline")
 	}
 	errors.LogInfo(ctx, "received request for ", request.Destination())
+
+	if stream, ok := session.StreamSettingsFromContext(h.ctx).(*internet.MemoryStreamConfig); ok && stream.ProtocolName == "xdrive" {
+		if request.Command != protocol.RequestCommandMux && request.Command != protocol.RequestCommandRvs {
+			return errors.New("VLESS over XDRIVE: inbound received a non-Mux/Rvs request")
+		}
+	}
 
 	inbound := session.InboundFromContext(ctx)
 	if inbound == nil {

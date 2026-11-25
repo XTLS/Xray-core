@@ -265,8 +265,13 @@ func validateXDrive(ts proto.Message, ss *internet.StreamConfig, pl *net.PortLis
 			return errors.New(`the xdrive transport needs VLESS "encryption", run "xray vlessenc" to get one`)
 		}
 		// Reverse opens its own multiplexed connection.
-		if account.Reverse == nil && (c.Multiplex.GetConcurrency() == 0 || c.Multiplex.GetXudpProxyUDP443() == "skip") {
-			return errors.New(`the xdrive transport needs positive "settings.multiplex.concurrency" and does not support "xudpProxyUDP443":"skip"`)
+		if account.Reverse == nil {
+			if c.Multiplex == nil {
+				c.Multiplex = &vless.Multiplex{Concurrency: 128}
+			}
+			if c.Multiplex.XudpProxyUDP443 == "skip" {
+				return errors.New(`the xdrive transport does not support "xudpProxyUDP443":"skip"`)
+			}
 		}
 		if account.Testpre != 0 {
 			return errors.New(`the xdrive transport doesn't support VLESS "testpre"`)
