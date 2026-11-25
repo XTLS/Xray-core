@@ -367,10 +367,15 @@ func (c *OutboundDetourConfig) Build() (*core.OutboundHandlerConfig, error) {
 	if err != nil {
 		return nil, errors.New("failed to build outbound handler for protocol ", c.Protocol).Base(err)
 	}
+
+	if senderSettings.StreamSettings != nil && senderSettings.StreamSettings.ProtocolName == "splithttp" {
+		if v, ok := ts.(*outbound.Config); ok && v.Multiplex != nil && v.Multiplex.Concurrency != 0 {
+			errors.LogWarning(context.Background(), `ATTENTION: Using VLESS Multiplex over XHTTP XMUX`)
+		}
+	}
 	if err := validateXDrive(ts, senderSettings.StreamSettings, nil); err != nil {
 		return nil, err
 	}
-
 	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
 		return nil, err
 	}
