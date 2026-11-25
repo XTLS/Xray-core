@@ -3,14 +3,17 @@
 package net
 
 import (
-	"bufio"
 	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
-	"slices"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
+
+	"github.com/vishvananda/netlink/nl"
+	"golang.org/x/sys/unix"
 
 	"github.com/xtls/xray-core/common/errors"
 )
@@ -27,50 +30,20 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 		panic("Unsupported network type for process lookup.")
 	}
 
-	var procFiles []string
-
-	switch network {
-	case "tcp":
-		if net.ParseIP(srcIP).To4() != nil {
-			procFiles = []string{"/proc/net/tcp", "/proc/net/tcp6"}
-		} else {
-			procFiles = []string{"/proc/net/tcp6"}
-		}
-	case "udp":
-		if net.ParseIP(srcIP).To4() != nil {
-			procFiles = []string{"/proc/net/udp", "/proc/net/udp6"}
-		} else {
-			procFiles = []string{"/proc/net/udp6", "/proc/net/udp"}
-		}
-	default:
-		panic("Unsupported network type for process lookup.")
-	}
-
-	targetHexAddrs := []string{formatProcNetAddress(net.ParseIP(srcIP).To16(), Port(srcPort))}
-	if ipv4 := net.ParseIP(srcIP).To4(); ipv4 != nil {
-		// the one above is then the IPv4-mapped IPv6 address that an IPv6 socket has it as, in the IPv6 file
-		targetHexAddrs = append(targetHexAddrs, formatProcNetAddress(ipv4, Port(srcPort)))
-	}
-
-	portFallback := ""
-	if network == "udp" {
-		portFallback = fmt.Sprintf(":%04X", srcPort)
-	}
-
-	inode, err := findInodeInFiles(procFiles, targetHexAddrs, portFallback)
+	socket, err := findSocketInode(network, net.ParseIP(srcIP), srcPort)
 	if err != nil {
-		return 0, "", "", errors.New("could not search in ", strings.Join(procFiles, " and ")).Base(err)
+		return 0, "", "", errors.New("could not query sockets using netlink").Base(err)
 	}
-	if inode == "" {
-		return 0, "", "", errors.New("connection for ", srcIP, ":", srcPort, " not found in ", strings.Join(procFiles, " or "))
+	if socket == nil {
+		return 0, "", "", errors.New("connection for ", srcIP, ":", srcPort, " not found")
 	}
 
-	pidStr, err := findPidByInode(inode)
+	pidStr, err := findPidByInode(socket.inode, socket.uid)
 	if err != nil {
-		return 0, "", "", errors.New("could not find PID for inode ", inode, ": ", err)
+		return 0, "", "", errors.New("could not find PID for inode ", socket.inode, ": ", err)
 	}
 	if pidStr == "" {
-		return 0, "", "", errors.New("no process found for inode ", inode)
+		return 0, "", "", errors.New("no process found for inode ", socket.inode)
 	}
 
 	absPath, err := getAbsPath(pidStr)
@@ -89,59 +62,93 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 	return pid, procName, absPath, nil
 }
 
-// formatProcNetAddress formats the 4 or 16 bytes of addr as they are: an IPv4-mapped IPv6 address stays one
-func formatProcNetAddress(addr net.IP, port Port) string {
-	ipBytes := []byte(addr)
-
-	var formatted strings.Builder
-	formatted.Grow(len(ipBytes)*2 + 5)
-	for i := 0; i < len(ipBytes); i += 4 {
-		fmt.Fprintf(&formatted, "%08X", binary.NativeEndian.Uint32(ipBytes[i:i+4]))
-	}
-	fmt.Fprintf(&formatted, ":%04X", uint16(port))
-	return formatted.String()
+type processSocket struct {
+	inode string
+	uid   uint32
 }
 
-func findInodeInFiles(filePaths []string, targetHexAddrs []string, portFallback string) (string, error) {
-	onlyMatchedPort := ""
+// Layouts are defined by Linux's inet_diag_req_v2 and inet_diag_msg.
+const (
+	inetDiagRequestSize  = 56
+	inetDiagResponseSize = 72
+	tcpBoundInactive     = 13
+)
 
-	for i, filePath := range filePaths {
-		file, err := os.Open(filePath)
+func findSocketInode(network string, ip net.IP, port uint16) (*processSocket, error) {
+	families := []uint8{unix.AF_INET6}
+	if ip.To4() != nil {
+		families = []uint8{unix.AF_INET, unix.AF_INET6}
+	} else if network == "udp" {
+		families = append(families, unix.AF_INET)
+	}
+
+	protocol := byte(unix.IPPROTO_UDP)
+	if network == "tcp" {
+		protocol = unix.IPPROTO_TCP
+	}
+
+	var wildcard *processSocket
+	for _, family := range families {
+		request := make([]byte, inetDiagRequestSize)
+		request[0], request[1] = family, protocol
+		states := ^uint32(0)
+		if network == "tcp" {
+			states &^= 1 << tcpBoundInactive
+		}
+		binary.NativeEndian.PutUint32(request[4:8], states)
+		binary.BigEndian.PutUint16(request[8:10], port)
+		if family == unix.AF_INET {
+			copy(request[12:28], ip.To4())
+		} else {
+			copy(request[12:28], ip.To16())
+		}
+		binary.NativeEndian.PutUint32(request[48:52], ^uint32(0))
+		binary.NativeEndian.PutUint32(request[52:56], ^uint32(0))
+
+		req := nl.NewNetlinkRequest(nl.SOCK_DIAG_BY_FAMILY, unix.NLM_F_DUMP)
+		req.AddRawData(request)
+		var exact *processSocket
+		var parseErr error
+		err := req.ExecuteIter(unix.NETLINK_INET_DIAG, nl.SOCK_DIAG_BY_FAMILY, func(msg []byte) bool {
+			if len(msg) < inetDiagResponseSize {
+				parseErr = fmt.Errorf("short inet_diag response: %d bytes", len(msg))
+				return false
+			}
+			if msg[0] != family || binary.BigEndian.Uint16(msg[4:6]) != port {
+				return true
+			}
+			source := net.IP(msg[8:24])
+			if family == unix.AF_INET {
+				source = source[:4]
+			}
+			if !source.Equal(ip) && !(network == "udp" && source.IsUnspecified()) {
+				return true
+			}
+			socket := &processSocket{
+				uid:   binary.NativeEndian.Uint32(msg[64:68]),
+				inode: strconv.FormatUint(uint64(binary.NativeEndian.Uint32(msg[68:72])), 10),
+			}
+			if source.Equal(ip) {
+				exact = socket
+				return false
+			}
+			wildcard = socket
+			return true
+		})
 		if err != nil {
-			if i > 0 && os.IsNotExist(err) {
-				continue
-			}
-			return "", err
+			return nil, err
 		}
-		defer file.Close()
-
-		scanner := bufio.NewScanner(file)
-		for scanner.Scan() {
-			fields := strings.Fields(scanner.Text())
-			if len(fields) < 10 {
-				continue
-			}
-
-			localAddress := fields[1]
-			if slices.Contains(targetHexAddrs, localAddress) {
-				return fields[9], nil
-			}
-			if portFallback != "" && strings.HasSuffix(localAddress, portFallback) {
-				wildcardIP := strings.TrimSuffix(localAddress, portFallback)
-				if (len(wildcardIP) == 8 || len(wildcardIP) == 32) && strings.Trim(wildcardIP, "0") == "" {
-					onlyMatchedPort = fields[9]
-				}
-			}
+		if parseErr != nil {
+			return nil, parseErr
 		}
-		if err := scanner.Err(); err != nil {
-			return "", err
+		if exact != nil {
+			return exact, nil
 		}
 	}
-
-	return onlyMatchedPort, nil
+	return wildcard, nil
 }
 
-func findPidByInode(inode string) (string, error) {
+func findPidByInode(inode string, uid uint32) (string, error) {
 	procDir, err := os.ReadDir("/proc")
 	if err != nil {
 		return "", err
@@ -158,24 +165,42 @@ func findPidByInode(inode string) (string, error) {
 			continue
 		}
 
-		fdPath := fmt.Sprintf("/proc/%s/fd", pid)
-		fdDir, err := os.ReadDir(fdPath)
+		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
-
-		for _, fdEntry := range fdDir {
-			linkPath := fmt.Sprintf("%s/%s", fdPath, fdEntry.Name())
-			linkTarget, err := os.Readlink(linkPath)
-			if err != nil {
-				continue
-			}
-			if linkTarget == targetLink {
-				return pid, nil
-			}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return "", fmt.Errorf("unexpected stat data for process %s", pid)
+		}
+		if stat.Uid != uid {
+			continue
+		}
+		if processHasSocket(pid, targetLink) {
+			return pid, nil
 		}
 	}
 	return "", nil
+}
+
+func processHasSocket(pid, targetLink string) bool {
+	fdPath := filepath.Join("/proc", pid, "fd")
+	fdDir, err := os.ReadDir(fdPath)
+	if err != nil {
+		return false
+	}
+
+	buffer := make([]byte, unix.PathMax)
+	for _, fdEntry := range fdDir {
+		n, err := unix.Readlink(filepath.Join(fdPath, fdEntry.Name()), buffer)
+		if err != nil {
+			continue
+		}
+		if string(buffer[:n]) == targetLink {
+			return true
+		}
+	}
+	return false
 }
 
 func getAbsPath(pid string) (string, error) {
