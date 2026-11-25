@@ -55,6 +55,9 @@ func ValidateS3Config(c *Config) error {
 		u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
 		return errors.New("S3 endpoint must be an http(s) URL without credentials, query or fragment")
 	}
+	if host, err := httpguts.PunycodeHostPort(u.Host); err != nil || !httpguts.ValidHostHeader(host) {
+		return errors.New("invalid S3 endpoint authority")
+	}
 	if !httpguts.ValidHeaderFieldValue(c.S3.Region) || strings.ContainsAny(c.S3.Region, "/, \t") {
 		return errors.New("invalid S3 signing region")
 	}
@@ -108,6 +111,8 @@ func newS3Storage(streamSettings *internet.MemoryStreamConfig, c *Config) (*s3St
 		return nil, err
 	}
 	base, _ := url.Parse(c.S3.Endpoint)
+	// Match the ASCII authority net/http transmits before using it in SigV4.
+	base.Host, _ = httpguts.PunycodeHostPort(base.Host)
 	// Encode the endpoint prefix for SigV4 without turning escaped slashes into separators.
 	segments := strings.Split(base.EscapedPath(), "/")
 	for i, segment := range segments {
@@ -142,7 +147,7 @@ func newS3Storage(streamSettings *internet.MemoryStreamConfig, c *Config) (*s3St
 	}
 	s := &s3Storage{
 		s3Shared: &s3Shared{
-			conns:     newConnPool(c.Xmux, newClient),
+			conns:     newConnPool(c.Xmux, 0, newClient),
 			base:      *base,
 			prefix:    strings.TrimSuffix(c.RemoteFolder, "/") + "/",
 			region:    s3Region(c.S3.Region),
@@ -278,6 +283,10 @@ func (s *s3Storage) do(ctx context.Context, method, key string, query url.Values
 		case <-ctx.Done():
 			return 0, nil, ctx.Err()
 		}
+		if err := ctx.Err(); err != nil {
+			<-s.inflight
+			return 0, nil, err
+		}
 		status, payload, after, err := s.attempt(ctx, method, key, query, body, payloadHash)
 		<-s.inflight
 		if ctx.Err() != nil {
@@ -319,22 +328,28 @@ func (s *s3Storage) attempt(ctx context.Context, method, key string, query url.V
 	s.sign(req, hash, time.Now())
 	resp, err := s.client.Do(req)
 	if err != nil {
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
 		if urlErr, ok := err.(*url.Error); ok {
 			err = urlErr.Err
 		}
 		return 0, nil, 0, errors.New("S3 request failed").Base(err)
 	}
 	defer resp.Body.Close()
-	limit := int64(maxSegmentBytes)
+	limit := int64(adapterMaxMetadataBody)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		limit = 64 << 10
+		limit = adapterMaxErrorBody
+	} else if method == http.MethodGet {
+		if query.Get("list-type") != "" {
+			limit = adapterMaxListResponse
+		} else {
+			limit = adapterObjectLimit(ctx)
+		}
 	}
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	payload, err := readAdapterBody(resp.Body, limit)
 	if err != nil {
 		return resp.StatusCode, nil, 0, errors.New("failed to read S3 response (HTTP ", resp.StatusCode, ")").Base(err)
-	}
-	if int64(len(payload)) > limit {
-		return 0, nil, 0, errors.New("S3 response exceeds size limit")
 	}
 	var after time.Duration
 	if raw := resp.Header.Get("Retry-After"); raw != "" {

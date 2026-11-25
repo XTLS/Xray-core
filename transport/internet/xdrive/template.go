@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	stderrors "errors"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -34,13 +36,17 @@ type opTemplate struct {
 	Body       string            `json:"body"`
 	NamesRegex string            `json:"namesRegex"`
 
+	// NextPagePath extracts a JSON token for the next list URL's query-escaped {pageToken}.
+	NextPagePath string `json:"nextPagePath"`
+
 	// HrefPath makes the operation two-step, as in the Yandex Disk REST API: the first request
 	// answers with a JSON body, the URL found at HrefPath is then called with HrefMethod (GET by
 	// default), carrying the payload. The URL is used as given, with neither auth nor headers.
 	HrefPath   string `json:"hrefPath"`
 	HrefMethod string `json:"hrefMethod"`
 
-	presigned bool
+	presigned     bool
+	responseLimit int64
 }
 
 type retryTemplate struct {
@@ -78,8 +84,30 @@ type templateShared struct {
 	secrets     []string
 
 	tokenMu     sync.Mutex
+	tokenWG     sync.WaitGroup
+	tokenClosed bool
 	token       string
 	tokenExpiry time.Time
+	tokenFlight *templateTokenFlight
+}
+
+type templateTokenFlight struct {
+	done    chan struct{}
+	cancel  context.CancelFunc
+	waiters int
+	token   string
+	err     error
+}
+
+type adapterPermanentError struct{ error }
+
+func (e *adapterPermanentError) Unwrap() error { return e.error }
+
+func permanentAdapterError(err error) error { return &adapterPermanentError{err} }
+
+func isPermanentAdapterError(err error) bool {
+	var permanent *adapterPermanentError
+	return stderrors.As(err, &permanent)
 }
 
 func newTemplateStorage(streamSettings *internet.MemoryStreamConfig, config *Config) (*templateStorage, error) {
@@ -92,6 +120,9 @@ func newTemplateStorage(streamSettings *internet.MemoryStreamConfig, config *Con
 	}
 	if tmpl.List.NamesRegex == "" {
 		return nil, errors.New("template list needs a namesRegex")
+	}
+	if tmpl.List.NextPagePath != "" && !strings.Contains(tmpl.List.URL, "{pageToken}") {
+		return nil, errors.New("paginated template list URL needs {pageToken}")
 	}
 	re, err := regexp.Compile(tmpl.List.NamesRegex)
 	if err != nil {
@@ -114,7 +145,7 @@ func newTemplateStorage(streamSettings *internet.MemoryStreamConfig, config *Con
 	client := newServiceClient(context.Background(), h1Hosts, streamSettings, driveTimeout, conc)
 	return &templateStorage{
 		templateShared: &templateShared{
-			conns: newConnPool(config.Xmux, func(connCtx context.Context) *http.Client {
+			conns: newConnPool(config.Xmux, 0, func(connCtx context.Context) *http.Client {
 				return newServiceClient(connCtx, h1Hosts, streamSettings, driveTimeout, conc)
 			}),
 			tmpl:        tmpl,
@@ -139,7 +170,28 @@ func (s *templateStorage) session() Storage {
 	}
 }
 
-const maxTemplateConcurrency = 256
+const (
+	maxTemplateConcurrency = 256
+	adapterMaxListResponse = 32 << 20
+	adapterMaxMetadataBody = 1 << 20
+	adapterMaxErrorBody    = 64 << 10
+)
+
+func adapterObjectLimit(ctx context.Context) int64 {
+	limit := int64(maxSegmentBytes)
+	if v, ok := ctx.Value(maxBodyKey{}).(int64); ok && v > 0 {
+		limit = min(limit, v)
+	}
+	return limit
+}
+
+func readAdapterBody(body io.Reader, limit int64) ([]byte, error) {
+	payload, err := io.ReadAll(io.LimitReader(body, limit+1))
+	if int64(len(payload)) > limit {
+		return nil, permanentAdapterError(errors.New("adapter response exceeds the ", limit, " byte cap"))
+	}
+	return payload, err
+}
 
 func (s *templateStorage) baseVars() map[string]string {
 	vars := map[string]string{"folder": s.folder}
@@ -218,51 +270,123 @@ func (s *templateStorage) authHeaders(ctx context.Context, vars map[string]strin
 		enc := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
 		return map[string]string{"Authorization": "Basic " + enc}, nil
 	default:
-		return nil, errors.New("unsupported auth type: ", s.tmpl.Auth.Type)
+		return nil, permanentAdapterError(errors.New("unsupported auth type: ", s.tmpl.Auth.Type))
 	}
 }
 
 func (s *templateStorage) accessToken(ctx context.Context) (string, error) {
-	s.tokenMu.Lock()
-	defer s.tokenMu.Unlock()
-
-	if s.token != "" && time.Now().Before(s.tokenExpiry) {
-		return s.token, nil
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
-
-	form := make(map[string]string, len(s.tmpl.Auth.Form))
-	vars := s.baseVars()
-	values := strings.Builder{}
-	first := true
-	for k, v := range s.tmpl.Auth.Form {
-		form[k] = subst(v, vars)
-		if !first {
-			values.WriteByte('&')
+	s.tokenMu.Lock()
+	if s.tokenClosed {
+		s.tokenMu.Unlock()
+		return "", context.Canceled
+	}
+	if s.token != "" && time.Now().Before(s.tokenExpiry) {
+		token := s.token
+		s.tokenMu.Unlock()
+		return token, nil
+	}
+	f := s.tokenFlight
+	if f == nil {
+		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), driveTimeout)
+		f = &templateTokenFlight{done: make(chan struct{}), cancel: cancel}
+		s.tokenFlight = f
+		s.tokenWG.Add(1)
+		go func() {
+			defer s.tokenWG.Done()
+			token, lifetime, err := s.fetchTemplateToken(fetchCtx)
+			cancel()
+			s.tokenMu.Lock()
+			f.token, f.err = token, err
+			if s.tokenFlight == f {
+				s.tokenFlight = nil
+				if err == nil {
+					s.token = token
+					s.tokenExpiry = time.Now().Add(lifetime)
+				}
+			}
+			close(f.done)
+			s.tokenMu.Unlock()
+		}()
+	}
+	f.waiters++
+	s.tokenMu.Unlock()
+	defer func() {
+		s.tokenMu.Lock()
+		f.waiters--
+		if f.waiters == 0 && s.tokenFlight == f {
+			s.tokenFlight = nil
+			f.cancel()
 		}
-		first = false
-		values.WriteString(k)
-		values.WriteByte('=')
-		values.WriteString(form[k])
+		s.tokenMu.Unlock()
+	}()
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-f.done:
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		return f.token, f.err
+	}
+}
+
+func (s *templateStorage) closeTokenWorkers() {
+	s.tokenMu.Lock()
+	s.tokenClosed = true
+	if f := s.tokenFlight; f != nil {
+		s.tokenFlight = nil
+		f.cancel()
+	}
+	s.tokenMu.Unlock()
+	s.tokenWG.Wait()
+}
+
+func (s *templateStorage) fetchTemplateToken(ctx context.Context) (string, time.Duration, error) {
+	form := make(url.Values, len(s.tmpl.Auth.Form))
+	vars := s.baseVars()
+	for k, v := range s.tmpl.Auth.Form {
+		form.Add(k, subst(v, vars))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tmpl.Auth.TokenURL,
-		strings.NewReader(values.String()))
+		strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", errors.New("failed to build the token request").Base(err)
+		return "", 0, permanentAdapterError(errors.New("failed to build the token request").Base(err))
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
+	if req.URL.Scheme != "http" && req.URL.Scheme != "https" || req.URL.Host == "" {
+		return "", 0, permanentAdapterError(errors.New("token URL must be an http(s) URL with an authority"))
+	}
 	resp, err := s.tokenClient.Do(req)
 	if err != nil {
-		return "", errors.New("failed to fetch the token").Base(err)
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+		return "", 0, errors.New("failed to fetch the token").Base(err)
 	}
 	defer resp.Body.Close()
-	payload, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	limit := int64(adapterMaxMetadataBody)
+	if resp.StatusCode != http.StatusOK {
+		limit = adapterMaxErrorBody
+	}
+	payload, err := readAdapterBody(resp.Body, limit)
 	if err != nil {
-		return "", errors.New("failed to read the token response").Base(err)
+		readErr := errors.New("failed to read the token response").Base(err)
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests {
+			return "", 0, permanentAdapterError(readErr)
+		}
+		return "", 0, readErr
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", errors.New("the token endpoint answered ", resp.StatusCode, ": ", string(payload))
+		err := errors.New("the token endpoint answered ", resp.StatusCode)
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests {
+			return "", 0, permanentAdapterError(err)
+		}
+		return "", 0, err
 	}
 
 	path := s.tmpl.Auth.TokenPath
@@ -271,7 +395,7 @@ func (s *templateStorage) accessToken(ctx context.Context) (string, error) {
 	}
 	token := jsonString(payload, path)
 	if token == "" {
-		return "", errors.New("the token response has no token at ", path)
+		return "", 0, permanentAdapterError(errors.New("the token response has no token at ", path))
 	}
 
 	lifetime := int64(3600)
@@ -280,12 +404,11 @@ func (s *templateStorage) accessToken(ctx context.Context) (string, error) {
 			lifetime = n
 		}
 	}
+	lifetime = min(lifetime, int64(365*24*60*60))
 	if lifetime > 60 {
 		lifetime -= 60
 	}
-	s.token = token
-	s.tokenExpiry = time.Now().Add(time.Duration(lifetime) * time.Second)
-	return s.token, nil
+	return token, time.Duration(lifetime) * time.Second, nil
 }
 
 func (s *templateStorage) invalidateToken() {
@@ -304,6 +427,9 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 	}
 
 	for attempt := 0; attempt < driveMaxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return 0, nil, err
+		}
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
@@ -320,6 +446,12 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 		if !op.presigned {
 			headers, err := s.authHeaders(ctx, vars)
 			if err != nil {
+				if ctx.Err() != nil {
+					return 0, nil, ctx.Err()
+				}
+				if isPermanentAdapterError(err) {
+					return 0, nil, err
+				}
 				lastErr = err
 				continue
 			}
@@ -351,20 +483,50 @@ func (s *templateStorage) do(ctx context.Context, op *opTemplate, vars map[strin
 		case <-ctx.Done():
 			return 0, nil, ctx.Err()
 		}
+		if err := ctx.Err(); err != nil {
+			<-s.inflight
+			return 0, nil, err
+		}
 		resp, err := s.client.Do(req)
-		<-s.inflight
 		if err != nil {
+			if resp != nil && resp.Body != nil {
+				resp.Body.Close()
+			}
+			<-s.inflight
 			if ctx.Err() != nil {
 				return 0, nil, ctx.Err()
 			}
 			lastErr = errors.New("request failed").Base(err)
+			if errors.Cause(err) == errSessionClosed {
+				return 0, nil, lastErr
+			}
 			continue
 		}
-		payload, err := io.ReadAll(resp.Body)
+		limit := op.responseLimit
+		if limit <= 0 {
+			switch op {
+			case &s.tmpl.Get:
+				limit = adapterObjectLimit(ctx)
+			case &s.tmpl.List:
+				limit = adapterMaxListResponse
+			default:
+				limit = adapterMaxMetadataBody
+			}
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			limit = adapterMaxErrorBody
+		} else if op.HrefPath != "" {
+			limit = adapterMaxMetadataBody
+		}
+		payload, err := readAdapterBody(resp.Body, limit)
 		resp.Body.Close()
+		<-s.inflight
+		if ctx.Err() != nil {
+			return 0, nil, ctx.Err()
+		}
 		if err != nil {
-			if ctx.Err() != nil {
-				return 0, nil, ctx.Err()
+			if isPermanentAdapterError(err) {
+				return 0, nil, err
 			}
 			lastErr = errors.New("failed to read response").Base(err)
 			continue
@@ -397,7 +559,14 @@ func (s *templateStorage) run(ctx context.Context, op *opTemplate, vars map[stri
 	if href == "" {
 		return 0, nil, errors.New("the response has no href at ", op.HrefPath)
 	}
-	return s.do(ctx, &opTemplate{Method: op.HrefMethod, URL: href, presigned: true}, vars, body)
+	limit := int64(adapterMaxMetadataBody)
+	switch op {
+	case &s.tmpl.Get:
+		limit = adapterObjectLimit(ctx)
+	case &s.tmpl.List:
+		limit = adapterMaxListResponse
+	}
+	return s.do(ctx, &opTemplate{Method: op.HrefMethod, URL: href, presigned: true, responseLimit: limit}, vars, body)
 }
 
 func (s *templateStorage) Put(ctx context.Context, name string, data []byte) error {
@@ -438,10 +607,9 @@ func (s *templateStorage) Get(ctx context.Context, name string) ([]byte, error) 
 	}
 }
 
-func (s *templateStorage) Delete(ctx context.Context, name string) error {
+func (s *templateStorage) deleteStoredObject(ctx context.Context, name string) error {
 	vars := s.baseVars()
-	vars["name"] = s.storedName(name)
-
+	vars["name"] = name
 	status, payload, err := s.run(ctx, &s.tmpl.Delete, vars, nil)
 	if err != nil {
 		return err
@@ -452,53 +620,100 @@ func (s *templateStorage) Delete(ctx context.Context, name string) error {
 	return errors.New("delete of ", name, " answered ", status, ": ", string(payload))
 }
 
-func (s *templateStorage) List(ctx context.Context, prefix string) ([]Entry, error) {
-	vars := s.baseVars()
-	flat := s.storedName(prefix)
-	vars["prefix"] = flat
-
-	status, payload, err := s.run(ctx, &s.tmpl.List, vars, nil)
-	if err != nil {
-		return nil, err
-	}
-	if status == http.StatusNotFound {
-		return nil, nil
-	}
-	if status < 200 || status >= 300 {
-		return nil, errors.New("list of ", prefix, " answered ", status, ": ", string(payload))
-	}
-
-	matches := s.tmpl.names.FindAllStringSubmatch(string(payload), -1)
+func (s *templateStorage) Delete(ctx context.Context, name string) error {
+	flat := s.storedName(name)
 	if !s.tmpl.Flatten {
-		entries := make([]Entry, 0, len(matches))
-		for _, m := range matches {
-			entries = append(entries, Entry{Name: m[1]})
-		}
-		return entries, nil
+		return s.deleteStoredObject(ctx, flat)
 	}
-
 	want := flat + flatSeparator
-	seen := make(map[string]bool, len(matches))
-	entries := make([]Entry, 0, len(matches))
-	for _, m := range matches {
-		name := m[1]
-		if !strings.HasPrefix(name, want) {
-			continue
+	seen := make(map[string]bool)
+	var descendants []string
+	// Finish pagination before deleting so offset-based listings cannot skip shifted entries.
+	if err := s.listStoredNames(ctx, want, func(name string) {
+		if strings.HasPrefix(name, want) && len(name) > len(want) && !seen[name] {
+			seen[name] = true
+			descendants = append(descendants, name)
 		}
-		rest := strings.TrimPrefix(name, want)
-		if rest == "" {
-			continue
-		}
-		if cut := strings.Index(rest, flatSeparator); cut >= 0 {
-			rest = rest[:cut]
-		}
-		if seen[rest] {
-			continue
-		}
-		seen[rest] = true
-		entries = append(entries, Entry{Name: rest})
+	}); err != nil {
+		return err
 	}
-	return entries, nil
+	for _, name := range descendants {
+		if err := s.deleteStoredObject(ctx, name); err != nil {
+			return err
+		}
+	}
+	return s.deleteStoredObject(ctx, flat)
+}
+
+func (s *templateStorage) listStoredNames(ctx context.Context, prefix string, visit func(string)) error {
+	vars := s.baseVars()
+	vars["prefix"] = prefix
+	vars["pageToken"] = ""
+	seen := make(map[string]bool)
+	for {
+		status, payload, err := s.run(ctx, &s.tmpl.List, vars, nil)
+		if err != nil {
+			return err
+		}
+		if status == http.StatusNotFound && vars["pageToken"] == "" {
+			return nil
+		}
+		if status < 200 || status >= 300 {
+			return errors.New("list of ", prefix, " answered ", status, ": ", string(payload))
+		}
+		var token string
+		if s.tmpl.List.NextPagePath != "" {
+			if !json.Valid(payload) {
+				return permanentAdapterError(errors.New("invalid JSON in paginated template list response"))
+			}
+			if node := jsonWalk(payload, s.tmpl.List.NextPagePath); node != nil {
+				var ok bool
+				token, ok = node.(string)
+				if !ok {
+					return permanentAdapterError(errors.New("template list continuation token must be a string"))
+				}
+			}
+			if token != "" && seen[token] {
+				return permanentAdapterError(errors.New("template list pagination did not advance"))
+			}
+		}
+		for _, match := range s.tmpl.names.FindAllStringSubmatch(string(payload), -1) {
+			visit(match[1])
+		}
+		if token == "" {
+			return nil
+		}
+		seen[token] = true
+		vars["pageToken"] = url.QueryEscape(token)
+	}
+}
+
+func (s *templateStorage) List(ctx context.Context, prefix string) ([]Entry, error) {
+	flat := s.storedName(prefix)
+	want := flat + flatSeparator
+	seen := make(map[string]bool)
+	var entries []Entry
+	err := s.listStoredNames(ctx, flat, func(name string) {
+		if !s.tmpl.Flatten {
+			entries = append(entries, Entry{Name: name})
+			return
+		}
+		if !strings.HasPrefix(name, want) {
+			return
+		}
+		name = strings.TrimPrefix(name, want)
+		if name == "" {
+			return
+		}
+		if cut := strings.Index(name, flatSeparator); cut >= 0 {
+			name = name[:cut]
+		}
+		if !seen[name] {
+			seen[name] = true
+			entries = append(entries, Entry{Name: name})
+		}
+	})
+	return entries, err
 }
 
 func (s *templateStorage) Close() error {

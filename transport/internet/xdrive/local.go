@@ -31,10 +31,14 @@ func (s *localStorage) resolve(name string) (string, error) {
 	if clean == "/" {
 		return "", errors.New("invalid object name: ", name)
 	}
-	if strings.HasPrefix(path.Base(clean), tempPrefix) {
+	local, err := filepath.Localize(clean[1:])
+	if err != nil {
+		return "", errors.New("invalid object name: ", name).Base(err)
+	}
+	if strings.HasPrefix(filepath.Base(local), tempPrefix) {
 		return "", errors.New("reserved object name: ", name)
 	}
-	return filepath.Join(s.root, filepath.FromSlash(clean[1:])), nil
+	return filepath.Join(s.root, local), nil
 }
 
 func (s *localStorage) Put(ctx context.Context, name string, data []byte) error {

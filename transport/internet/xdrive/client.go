@@ -32,10 +32,7 @@ type serviceTransport struct {
 	stall  time.Duration
 }
 
-// RoundTrip ends a request that stands still for t.stall, with no answer that
-// long after its body went out or no byte of either body, but not one that just
-// runs long: a large object on a slow link takes minutes and is fine as long as
-// its bytes move
+// Cancel stalled requests, not long transfers that continue to make progress.
 func (t *serviceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	next := t.plain
 	if r.URL.Scheme == "https" {
@@ -43,29 +40,46 @@ func (t *serviceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	}
 
 	ctx, cancel := context.WithCancelCause(r.Context())
-	timer := time.AfterFunc(t.stall, func() { cancel(errStalled) })
-	alive := func() { timer.Reset(t.stall) }
+	var timerMu sync.Mutex
+	ended := false
+	deadline := time.Now().Add(t.stall)
+	timer := time.AfterFunc(t.stall, func() {
+		timerMu.Lock()
+		defer timerMu.Unlock()
+		if !ended && !time.Now().Before(deadline) {
+			cancel(errStalled)
+		}
+	})
+	alive := func() {
+		timerMu.Lock()
+		defer timerMu.Unlock()
+		if !ended {
+			deadline = time.Now().Add(t.stall)
+			timer.Reset(t.stall)
+		}
+	}
 	end := func() {
+		timerMu.Lock()
+		ended = true
 		timer.Stop()
+		timerMu.Unlock()
 		cancel(nil)
 	}
 	r = r.WithContext(ctx)
-	// the headers of chrome as with XHTTP and DoH, net/http and http3 would send
-	// their own user agent after a hello of chrome
+	// Clone before setting defaults: the caller owns the original headers.
 	r.Header = r.Header.Clone()
 	utils.TryDefaultHeadersWith(r.Header, "fetch")
 	if r.Body != nil && r.Body != http.NoBody {
-		r.Body = &progressBody{ReadCloser: r.Body, alive: alive}
+		r.Body = &progressBody{ReadCloser: r.Body, alive: alive, upload: true}
 	}
-	// a body sent again by the transport itself, after a GOAWAY or on a reused
-	// connection that failed, moves just the same
+	// Rewinds performed by the transport must also reset the stall timer.
 	if getBody := r.GetBody; getBody != nil {
 		r.GetBody = func() (io.ReadCloser, error) {
 			body, err := getBody()
 			if err != nil || body == http.NoBody {
 				return body, err
 			}
-			return &progressBody{ReadCloser: body, alive: alive}, nil
+			return &progressBody{ReadCloser: body, alive: alive, upload: true}, nil
 		}
 	}
 
@@ -80,8 +94,18 @@ func (t *serviceTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// stalled returns errStalled for an error that the stall gave, which http2 reports
-// as a plain cancel
+func (t *serviceTransport) CloseIdleConnections() {
+	closeIdleTransport(t.plain)
+	closeIdleTransport(t.secure)
+}
+
+func closeIdleTransport(t http.RoundTripper) {
+	if closer, ok := t.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+// HTTP/2 can report the stall timeout as an ordinary cancellation.
 func stalled(ctx context.Context, err error) error {
 	if context.Cause(ctx) == errStalled {
 		return errStalled
@@ -91,16 +115,19 @@ func stalled(ctx context.Context, err error) error {
 
 type progressBody struct {
 	io.ReadCloser
-	alive func()
-	end   func()
+	alive  func()
+	end    func()
+	upload bool
 	// ctx is that of the request, for the body of its response
 	ctx context.Context
 }
 
 func (b *progressBody) Read(p []byte) (int, error) {
-	// http2 reads a request body up to 512 KiB at a time and sends it all before
-	// the next read, which on a slow link could look like no progress
-	n, err := b.ReadCloser.Read(p[:min(len(p), 16<<10)])
+	// Short upload reads keep the stall timer meaningful on slow connections.
+	if b.upload {
+		p = p[:min(len(p), 16<<10)]
+	}
+	n, err := b.ReadCloser.Read(p)
 	if n > 0 {
 		b.alive()
 	}
@@ -118,29 +145,27 @@ func (b *progressBody) Close() error {
 	return err
 }
 
-// newServiceClient returns a client whose requests end after stall without
-// progress, see serviceTransport.RoundTrip, and whose connections close when
-// connCtx is done. Clients that share h1Hosts share which hosts answer over h1
+// connCtx owns sockets; h1Hosts shares ALPN observations between clients.
 func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings *internet.MemoryStreamConfig, stall time.Duration, maxConns int) *http.Client {
 	var (
 		tlsConfig *tls.Config
 		sockopt   *internet.SocketConfig
 		fronting  *net.Destination
-		keepAlive = net.ChromeH2KeepAlivePeriod
-		// h3 keeps alive only when asked to, see below
-		h3KeepAlive time.Duration
+		// Detect silent h2 loss unless XMUX supplies an explicit keepalive.
+		h2Idle, h2PingWait = 1500 * time.Millisecond, 2500 * time.Millisecond
+		h3KeepAlive        time.Duration
 	)
 	if streamSettings != nil {
 		tlsConfig = tls.ConfigFromStreamSettings(streamSettings)
 		sockopt = streamSettings.SocketSettings
 		fronting = streamSettings.Destination
-		if config, ok := streamSettings.ProtocolSettings.(*Config); ok && config.Xmux != nil {
+		if config, ok := streamSettings.ProtocolSettings.(*Config); ok && config != nil && config.Xmux != nil {
 			switch period := config.Xmux.HKeepAlivePeriod; {
 			case period > 0:
-				keepAlive = time.Duration(period) * time.Second
-				h3KeepAlive = keepAlive
+				h3KeepAlive = time.Duration(period) * time.Second
+				h2Idle, h2PingWait = h3KeepAlive, 0
 			case period < 0:
-				keepAlive = 0
+				h2Idle, h2PingWait = 0, 0
 			}
 		}
 	}
@@ -149,9 +174,15 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 	}
 	fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint)
 
-	// fronting takes only the address and port, the network stays that of the
-	// dial, which is UDP for h3 though the destination is built as TCP
+	// A configured front replaces the address, not the transport network.
 	dial := func(ctx context.Context, network, addr string) (net.Conn, net.Destination, error) {
+		ctx, cancel := context.WithCancel(ctx)
+		stop := context.AfterFunc(connCtx, cancel)
+		defer stop()
+		defer cancel()
+		if err := connCtx.Err(); err != nil {
+			return nil, net.Destination{}, err
+		}
 		host, err := net.ParseDestination(network + ":" + addr)
 		if err != nil {
 			return nil, host, errors.New("bad address: ", addr).Base(err)
@@ -167,7 +198,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 
 		var conn net.Conn
 		switch {
-		case streamSettings.FinalMask == nil:
+		case streamSettings == nil || streamSettings.FinalMask == nil:
 			conn, err = internet.DialSystem(ctx, target, sockopt)
 		case target.Network == net.Network_UDP:
 			conn, err = streamSettings.FinalMask.DialUDP(ctx, target)
@@ -177,15 +208,13 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 		if err != nil {
 			return nil, host, errors.New("failed to dial to dest").Base(err)
 		}
-		// h3 closes its QUIC connection instead, as the server never hears of a UDP
-		// socket that closes
+		// HTTP/3 must close QUIC itself as well as its UDP socket.
 		if network == "udp" {
 			return conn, host, nil
 		}
-		// CloseIdleConnections leaves an h2 connection open while a stream just
-		// canceled has not left it yet
-		stop := context.AfterFunc(connCtx, func() { conn.Close() })
-		return &ctxConn{Conn: conn, stop: stop}, host, nil
+		// A recently canceled h2 stream may still own the socket.
+		stopConn := context.AfterFunc(connCtx, func() { conn.Close() })
+		return &ctxConn{Conn: conn, stop: stopConn}, host, nil
 	}
 
 	dialPlain := func(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -207,8 +236,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 		} else {
 			tlsConn = tls.UClient(conn, gotlsConfig, fingerprint)
 		}
-		// the dial outlives the request that started it, and a handshake that hangs
-		// would keep the one connection of the host to itself
+		// Bound the handshake independently of connection reuse.
 		ctx, cancel := context.WithTimeout(ctx, stall)
 		defer cancel()
 		if err := tlsConn.(tls.Interface).HandshakeContext(ctx); err != nil {
@@ -226,7 +254,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 			MaxIdleConns:        maxConns,
 			MaxIdleConnsPerHost: maxConns,
 			MaxConnsPerHost:     connsPerHost,
-			HTTP2:               &http.HTTP2Config{SendPingTimeout: keepAlive},
+			HTTP2:               &http.HTTP2Config{SendPingTimeout: h2Idle, PingTimeout: h2PingWait},
 		}
 	}
 
@@ -237,9 +265,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 		if quicParams == nil {
 			quicParams = &internet.QuicParams{BbrProfile: string(bbr.ProfileStandard)}
 		}
-		// the defaults are those of quic-go, with no keepalive unless asked for, as
-		// in DoH: http3 never closes a connection that is idle or that it dropped
-		// after an error, so only the idle timeout or the end of connCtx ends it
+		// QUIC idle timeout and connCtx bound unused connections.
 		quicConfig := &quic.Config{
 			InitialStreamReceiveWindow:     quicParams.InitStreamReceiveWindow,
 			MaxStreamReceiveWindow:         quicParams.MaxStreamReceiveWindow,
@@ -258,11 +284,16 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 		https = &http3.Transport{
 			QUICConfig: quicConfig,
 			Dial: func(ctx context.Context, addr string, _ *gotls.Config, cfg *quic.Config) (*quic.Conn, error) {
+				ctx, cancel := context.WithCancel(ctx)
+				stop := context.AfterFunc(connCtx, cancel)
+				defer stop()
+				defer cancel()
+				if connCtx.Err() != nil {
+					cancel()
+				}
 				switch quicParams.Congestion {
 				case "", "bbr", "reno":
 				default:
-					// brutal is for Hysteria servers, not services, and a panic here, in
-					// a goroutine of http3, would end the process
 					return nil, errors.New("unsupported congestion control over h3: ", quicParams.Congestion)
 				}
 
@@ -284,8 +315,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 					return nil, errors.New("failed to dial to dest: unexpected ", reflect.TypeOf(c))
 				}
 
-				// built for each dial with the host as SNI, as for h2: http3 sets the
-				// SNI on a copy, which a pinned CA and the ECH lookup do not see
+				// Set SNI before certificate pinning and ECH lookup.
 				gotlsConfig := tlsConfig.GetTLSConfig(tls.WithDestination(host))
 				// it is for servers, and ChromeParrot refuses a config that has it
 				gotlsConfig.GetCertificate = nil
@@ -299,8 +329,8 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 					pktConn.Close()
 					return nil, err
 				}
-				stop := context.AfterFunc(connCtx, func() { qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "") })
-				context.AfterFunc(qconn.Context(), func() { stop(); tr.Close(); pktConn.Close() })
+				stopConn := context.AfterFunc(connCtx, func() { qconn.CloseWithError(quic.ApplicationErrorCode(http3.ErrCodeNoError), "") })
+				context.AfterFunc(qconn.Context(), func() { stopConn(); tr.Close(); pktConn.Close() })
 				if quicParams.Congestion != "reno" {
 					congestion.UseBBR(qconn, bbr.Profile(quicParams.BbrProfile))
 				}
@@ -324,8 +354,7 @@ func newServiceClient(connCtx context.Context, h1Hosts *sync.Map, streamSettings
 	}
 }
 
-// ctxConn is a connection that connCtx no longer closes once it is closed,
-// so that one that ends on its own leaves nothing behind in connCtx
+// Closing the socket unregisters the owner-context callback.
 type ctxConn struct {
 	net.Conn
 	stop func() bool
@@ -336,9 +365,7 @@ func (c *ctxConn) Close() error {
 	return c.Conn.Close()
 }
 
-// secureTransport keeps a host to one connection, all that h2 needs, as without
-// a limit parallel requests would each dial their own. A host that answers over
-// h1 moves to a transport with more, since h1 carries one request at a time
+// Use one h2 connection per host, but allow parallel h1 connections.
 type secureTransport struct {
 	h2, h1  http.RoundTripper
 	h1Hosts *sync.Map
@@ -355,162 +382,153 @@ func (t *secureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
+func (t *secureTransport) CloseIdleConnections() {
+	closeIdleTransport(t.h2)
+	closeIdleTransport(t.h1)
+}
+
 var errSessionClosed = errors.New("the session is closed")
 
-// connPool hands the sessions of a storage the connections of XMUX, each a
-// client of its own made by newClient
+// XMUX selects a lease once, not repeatedly while looking for a connection.
+// Running references cover both the session and any response bodies still open.
 type connPool struct {
-	mu   sync.Mutex
-	xmux *splithttp.XmuxManager
-}
-
-func newConnPool(config *splithttp.XmuxConfig, newClient func(connCtx context.Context) *http.Client) *connPool {
-	var xmuxConfig splithttp.XmuxConfig
-	if config != nil {
-		xmuxConfig = *config
-	}
-	return &connPool{xmux: splithttp.NewXmuxManager(xmuxConfig, func() splithttp.XmuxConn {
-		ctx, cancel := context.WithCancel(context.Background())
-		return &poolConn{next: newClient(ctx).Transport, cancel: cancel}
-	})}
-}
-
-// poolConn is a connection of XMUX, which closes once XMUX drops it and the
-// requests on it end
-type poolConn struct {
-	next   http.RoundTripper
+	mu     sync.Mutex
+	mux    *splithttp.XmuxManager
+	media  []*splithttp.XmuxManager // Drive-only, one connection per round-robin lane
+	next   int
+	ctx    context.Context
 	cancel context.CancelFunc
-
-	mu       sync.Mutex
-	inflight int
-	closing  bool
 }
 
-func (c *poolConn) IsClosed() bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.closing
+type poolConn struct {
+	transport http.RoundTripper
+	ctx       context.Context
+	cancel    context.CancelFunc
+	stop      func() bool
 }
+
+func (c *poolConn) IsClosed() bool { return c.ctx.Err() != nil }
 
 func (c *poolConn) Close() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.closing = true
-	if c.inflight == 0 {
-		c.cancel()
-	}
+	c.cancel()
+	c.stop()
+	closeIdleTransport(c.transport)
 	return nil
 }
 
-func (c *poolConn) done() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.inflight--
-	if c.closing && c.inflight == 0 {
-		c.cancel()
+// driveMediaConns is the number of Drive media connections: XMUX
+// maxConnections when set, else 4. One Google connection carries only a
+// fraction of a link, so media requests are spread over these.
+func driveMediaConns(x *splithttp.XmuxConfig) int32 {
+	if x != nil && x.MaxConnections != nil && x.MaxConnections.To > 0 {
+		return x.MaxConnections.To
+	}
+	return 4
+}
+
+// Positive conns gives Drive round-robin lanes; other backends keep one manager.
+func newConnPool(config *splithttp.XmuxConfig, conns int32, newClient func(context.Context) *http.Client) *connPool {
+	if config == nil {
+		config = &splithttp.XmuxConfig{}
+	}
+	maxConns := config.MaxConnections
+	if conns > 0 {
+		maxConns = &splithttp.RangeConfig{From: 1, To: 1}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &connPool{ctx: ctx, cancel: cancel}
+	newConn := func() splithttp.XmuxConn {
+		ctx, cancel := context.WithCancel(p.ctx)
+		c := &poolConn{ctx: ctx, cancel: cancel, transport: newClient(ctx).Transport}
+		c.stop = context.AfterFunc(ctx, func() { closeIdleTransport(c.transport) })
+		return c
+	}
+	newMux := func() *splithttp.XmuxManager {
+		return splithttp.NewXmuxManager(splithttp.XmuxConfig{
+			MaxConnections: maxConns, MaxConcurrency: config.MaxConcurrency,
+			CMaxReuseTimes: config.CMaxReuseTimes, HMaxRequestTimes: config.HMaxRequestTimes,
+			HMaxReusableSecs: config.HMaxReusableSecs, HKeepAlivePeriod: config.HKeepAlivePeriod,
+		}, newConn)
+	}
+	p.mux = newMux()
+	for i := int32(0); i < conns; i++ {
+		mux := p.mux
+		if i > 0 {
+			mux = newMux()
+		}
+		p.media = append(p.media, mux)
+	}
+	return p
+}
+
+func (p *connPool) Close() {
+	if p != nil {
+		p.cancel()
 	}
 }
 
-// roundTrip sends a request counted in inflight by the caller
-func (c *poolConn) roundTrip(r *http.Request) (*http.Response, error) {
-	resp, err := c.next.RoundTrip(r)
-	if err != nil {
-		c.done()
-		return nil, err
-	}
-	resp.Body = &doneBody{ReadCloser: resp.Body, done: sync.OnceFunc(c.done)}
-	return resp, nil
-}
-
-type doneBody struct {
-	io.ReadCloser
-	done func()
-}
-
-func (b *doneBody) Close() error {
-	err := b.ReadCloser.Close()
-	b.done()
-	return err
-}
-
-// a connection that has not answered yet is given this long before its
-// timeouts retire it, so that a dial or handshake is not cut short again
-var stalledGrace = 12 * time.Second
-
-// sessionTransport sends the requests of one session over a connection of
-// XMUX, and over another once that one has no requests or time left
 type sessionTransport struct {
-	pool *connPool
-
-	mu                sync.Mutex
-	client            *splithttp.XmuxClient
-	closed            bool
-	slowAt, retiredAt time.Time
-	movedAt           time.Time
-	takenAt           time.Time
-	served            bool
+	pool   *connPool
+	client *splithttp.XmuxClient // guarded by pool.mu
+	closed bool
+	// spread selects a pool connection per request instead of pinning one.
+	spread bool
 }
 
 func (t *sessionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	t.mu.Lock()
-	if t.closed {
-		t.mu.Unlock()
+	p := t.pool
+	p.mu.Lock()
+	if t.closed || p.ctx.Err() != nil || r.Context().Err() != nil {
+		p.mu.Unlock()
+		if r.Body != nil {
+			r.Body.Close()
+		}
+		if err := r.Context().Err(); err != nil {
+			return nil, err
+		}
 		return nil, errSessionClosed
 	}
-	client := t.client
-	if client == nil || client.XmuxConn.IsClosed() || client.LeftRequests.Add(-1) < 0 || !client.UnreusableAt.IsZero() && time.Now().After(client.UnreusableAt) {
-		t.pool.mu.Lock()
-		t.client = t.pool.xmux.GetXmuxClient(r.Context())
-		t.pool.mu.Unlock()
-		t.client.AddRunning()
-		t.client.LeftRequests.Add(-1)
-		if client != nil {
-			client.DoneRunning()
-			t.movedAt = time.Now()
+	c := t.client
+	if t.spread {
+		mux := p.mux
+		if len(p.media) != 0 {
+			mux = p.media[p.next]
+			p.next = (p.next + 1) % len(p.media)
 		}
-		client = t.client
-		t.takenAt, t.served = time.Now(), false
-	}
-	// counted under mu, or another request of the session that moves on could
-	// close the connection before this one is sent
-	conn := client.XmuxConn.(*poolConn)
-	conn.mu.Lock()
-	conn.inflight++
-	conn.mu.Unlock()
-	t.mu.Unlock()
-	resp, err := conn.roundTrip(r)
-	if err == nil {
-		t.mu.Lock()
-		if t.client == client {
-			t.served = true
+		c = mux.GetXmuxClient(r.Context())
+	} else if c == nil || c.XmuxConn.IsClosed() || c.LeftRequests.Load() <= 0 || (!c.UnreusableAt.IsZero() && time.Now().After(c.UnreusableAt)) {
+		if c != nil {
+			c.DoneRunning()
 		}
-		t.mu.Unlock()
+		c = p.mux.GetXmuxClient(r.Context())
+		c.AddRunning()
+		t.client = c
 	}
-	return resp, err
+	c.LeftRequests.Add(-1)
+	c.AddRunning()
+	p.mu.Unlock()
+	resp, err := c.XmuxConn.(*poolConn).transport.RoundTrip(r)
+	if err != nil {
+		c.DoneRunning()
+		return nil, err
+	}
+	resp.Body = &leasedBody{ReadCloser: resp.Body, release: sync.OnceFunc(c.DoneRunning)}
+	return resp, nil
 }
 
-func (t *sessionTransport) stalled(began time.Time) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if began.Before(t.movedAt) {
-		return
-	}
-	now := time.Now()
-	if !t.served && now.Sub(t.takenAt) < stalledGrace {
-		return
-	}
-	slow := now.Sub(t.slowAt) < 3*time.Second
-	t.slowAt = now
-	if !slow || t.client == nil || now.Sub(t.retiredAt) < 2*time.Second {
-		return
-	}
-	t.retiredAt = now
-	t.client.XmuxConn.(*poolConn).Close()
+type leasedBody struct {
+	io.ReadCloser
+	release func()
+}
+
+func (b *leasedBody) Close() error {
+	defer b.release()
+	return b.ReadCloser.Close()
 }
 
 func (t *sessionTransport) Close() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.pool.mu.Lock()
+	defer t.pool.mu.Unlock()
 	t.closed = true
 	if t.client != nil {
 		t.client.DoneRunning()
