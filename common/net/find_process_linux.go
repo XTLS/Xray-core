@@ -15,6 +15,7 @@ import (
 	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 )
 
@@ -88,8 +89,9 @@ func findSocketInode(network string, ip net.IP, port uint16) (*processSocket, er
 	}
 
 	var wildcard *processSocket
+	request := make([]byte, inetDiagRequestSize)
 	for _, family := range families {
-		request := make([]byte, inetDiagRequestSize)
+		clear(request)
 		request[0], request[1] = family, protocol
 		states := ^uint32(0)
 		if network == "tcp" {
@@ -190,7 +192,8 @@ func processHasSocket(pid, targetLink string) bool {
 		return false
 	}
 
-	buffer := make([]byte, unix.PathMax)
+	buffer := bytespool.Alloc(unix.PathMax)
+	defer bytespool.Free(buffer)
 	for _, fdEntry := range fdDir {
 		n, err := unix.Readlink(filepath.Join(fdPath, fdEntry.Name()), buffer)
 		if err != nil {
