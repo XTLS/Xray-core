@@ -255,10 +255,11 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		}
 		ips, err := LookupForIP(dest.Address.Domain(), finalStrategy, src)
 		if err != nil {
-			errors.LogErrorInner(ctx, err, "failed to resolve ip")
 			if sockopt.DomainStrategy.ForceIP() {
+				errors.LogErrorInner(ctx, err, "failed to resolve ip for: ", dest.Address.Domain())
 				return nil, err
 			}
+			errors.LogInfoInner(ctx, err, "failed to resolve ip for: ", dest.Address.Domain(), ", but continue due to USEIP* strategy")
 		} else if sockopt.HappyEyeballs == nil || sockopt.HappyEyeballs.TryDelayMs == 0 || sockopt.HappyEyeballs.MaxConcurrentTry == 0 || len(ips) < 2 || len(sockopt.DialerProxy) > 0 || dest.Network != net.Network_TCP {
 			dest.Address = net.IPAddress(ips[dice.Roll(len(ips))])
 			errors.LogInfo(ctx, "replace destination with "+dest.String())
