@@ -142,6 +142,32 @@ func TestAddressProperty(t *testing.T) {
 	}
 }
 
+func TestAppendIP(t *testing.T) {
+	for _, tc := range []struct {
+		address Address
+		want    []byte
+	}{
+		{ParseAddress("1.2.3.4"), []byte{0xff, 1, 2, 3, 4}},
+		{ParseAddress("::ffff:1.2.3.4"), []byte{0xff, 1, 2, 3, 4}},
+		{ParseAddress("2001:db8::1"), []byte{0xff, 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}},
+		{DomainAddress("example.com"), []byte{0xff}},
+	} {
+		if r := cmp.Diff(AppendIP([]byte{0xff}, tc.address), tc.want); r != "" {
+			t.Errorf("AppendIP(%v): %s", tc.address, r)
+		}
+		appendIP := func() { AppendIP(make([]byte, 0, IPv6len), tc.address) }
+		if n := testing.AllocsPerRun(100, appendIP); n != 0 {
+			t.Errorf("AppendIP(%v): %v allocs", tc.address, n)
+		}
+	}
+
+	// An Address implemented outside this package falls back to its IP().
+	foreign := struct{ Address }{ParseAddress("5.6.7.8")}
+	if r := cmp.Diff(AppendIP(nil, foreign), []byte{5, 6, 7, 8}); r != "" {
+		t.Errorf("AppendIP(foreign address): %s", r)
+	}
+}
+
 func TestInvalidAddressConvertion(t *testing.T) {
 	panics := func(f func()) (ret bool) {
 		defer func() {

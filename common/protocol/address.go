@@ -3,11 +3,9 @@ package protocol
 import (
 	"io"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
 )
 
 type AddressOption func(*option)
@@ -39,7 +37,7 @@ func WithAddressTypeParser(atp AddressTypeParser) AddressOption {
 type AddressSerializer interface {
 	ReadAddressPort(buffer *buf.Buffer, input io.Reader) (net.Address, net.Port, error)
 
-	WriteAddressPort(writer io.Writer, addr net.Address, port net.Port) error
+	WriteAddressPort(buffer *buf.Buffer, addr net.Address, port net.Port) error
 }
 
 const afInvalid = 255
@@ -102,12 +100,12 @@ func (p portFirstAddressParser) ReadAddressPort(buffer *buf.Buffer, input io.Rea
 	return addr, port, nil
 }
 
-func (p portFirstAddressParser) WriteAddressPort(writer io.Writer, addr net.Address, port net.Port) error {
-	if err := writePort(writer, port); err != nil {
+func (p portFirstAddressParser) WriteAddressPort(buffer *buf.Buffer, addr net.Address, port net.Port) error {
+	if err := writePort(buffer, port); err != nil {
 		return err
 	}
 
-	return p.ap.writeAddress(writer, addr)
+	return p.ap.writeAddress(buffer, addr)
 }
 
 type portLastAddressParser struct {
@@ -133,12 +131,12 @@ func (p portLastAddressParser) ReadAddressPort(buffer *buf.Buffer, input io.Read
 	return addr, port, nil
 }
 
-func (p portLastAddressParser) WriteAddressPort(writer io.Writer, addr net.Address, port net.Port) error {
-	if err := p.ap.writeAddress(writer, addr); err != nil {
+func (p portLastAddressParser) WriteAddressPort(buffer *buf.Buffer, addr net.Address, port net.Port) error {
+	if err := p.ap.writeAddress(buffer, addr); err != nil {
 		return err
 	}
 
-	return writePort(writer, port)
+	return writePort(buffer, port)
 }
 
 func readPort(b *buf.Buffer, reader io.Reader) (net.Port, error) {
@@ -148,8 +146,11 @@ func readPort(b *buf.Buffer, reader io.Reader) (net.Port, error) {
 	return net.PortFromBytes(b.BytesFrom(-2)), nil
 }
 
-func writePort(writer io.Writer, port net.Port) error {
-	return common.Error2(serial.WriteUint16(writer, port.Value()))
+func writePort(b *buf.Buffer, port net.Port) error {
+	if err := b.WriteByte(byte(port >> 8)); err != nil {
+		return err
+	}
+	return b.WriteByte(byte(port))
 }
 
 func maybeIPPrefix(b byte) bool {
@@ -225,7 +226,7 @@ func (p *addressParser) readAddress(b *buf.Buffer, reader io.Reader) (net.Addres
 	}
 }
 
-func (p *addressParser) writeAddress(writer io.Writer, address net.Address) error {
+func (p *addressParser) writeAddress(b *buf.Buffer, address net.Address) error {
 	tb := p.addrByteMap[address.Family()]
 	if tb == afInvalid {
 		return errors.New("unknown address family", address.Family())
@@ -233,10 +234,10 @@ func (p *addressParser) writeAddress(writer io.Writer, address net.Address) erro
 
 	switch address.Family() {
 	case net.AddressFamilyIPv4, net.AddressFamilyIPv6:
-		if _, err := writer.Write([]byte{tb}); err != nil {
+		if err := b.WriteByte(tb); err != nil {
 			return err
 		}
-		if _, err := writer.Write(address.IP()); err != nil {
+		if _, err := b.Write(net.AppendIP(make([]byte, 0, net.IPv6len), address)); err != nil {
 			return err
 		}
 	case net.AddressFamilyDomain:
@@ -245,10 +246,13 @@ func (p *addressParser) writeAddress(writer io.Writer, address net.Address) erro
 			return errors.New("Super long domain is not supported: ", domain)
 		}
 
-		if _, err := writer.Write([]byte{tb, byte(len(domain))}); err != nil {
+		if err := b.WriteByte(tb); err != nil {
 			return err
 		}
-		if _, err := writer.Write([]byte(domain)); err != nil {
+		if err := b.WriteByte(byte(len(domain))); err != nil {
+			return err
+		}
+		if _, err := b.WriteString(domain); err != nil {
 			return err
 		}
 	default:

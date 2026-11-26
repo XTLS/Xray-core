@@ -42,8 +42,8 @@ func IncreaseNonce(nonce []byte) {
 }
 
 // WriteAddressPort writes a destination address and port in SOCKS5 format
-func WriteAddressPort(w io.Writer, dest net.Destination) error {
-	return addrParser.WriteAddressPort(w, dest.Address, dest.Port)
+func WriteAddressPort(b *buf.Buffer, dest net.Destination) error {
+	return addrParser.WriteAddressPort(b, dest.Address, dest.Port)
 }
 
 // AddrPortLength returns the serialized length of a destination in SOCKS5 format

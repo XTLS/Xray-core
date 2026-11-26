@@ -122,6 +122,24 @@ func TestAddressWriting(t *testing.T) {
 			Port:    net.Port(80),
 			Bytes:   []byte{1, 127, 0, 0, 1, 0, 80},
 		},
+		{
+			Options: []AddressOption{AddressFamilyByte(0x04, net.AddressFamilyIPv6)},
+			Address: net.ParseAddress("2001:db8::1"),
+			Port:    net.Port(443),
+			Bytes:   []byte{4, 0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 187},
+		},
+		{
+			Options: []AddressOption{AddressFamilyByte(0x03, net.AddressFamilyDomain), PortThenAddress()},
+			Address: net.DomainAddress("example.com"),
+			Port:    net.Port(80),
+			Bytes:   []byte{0, 80, 3, 11, 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm'},
+		},
+		{
+			Options: []AddressOption{AddressFamilyByte(0x01, net.AddressFamilyIPv4)},
+			Address: net.DomainAddress("example.com"),
+			Port:    net.Port(80),
+			Error:   true,
+		},
 	}
 
 	for _, tc := range data {
@@ -137,6 +155,10 @@ func TestAddressWriting(t *testing.T) {
 			common.Must(err)
 			if diff := cmp.Diff(tc.Bytes, b.Bytes()); diff != "" {
 				t.Error(err)
+			}
+			write := func() { b.Clear(); parser.WriteAddressPort(b, tc.Address, tc.Port) }
+			if n := testing.AllocsPerRun(100, write); n != 0 {
+				t.Errorf("WriteAddressPort(%v): %v allocs", tc.Address, n)
 			}
 		}
 	}

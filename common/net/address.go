@@ -120,6 +120,20 @@ func IPAddress(ip []byte) Address {
 	}
 }
 
+// AppendIP appends the IP of address to b. Unlike address.IP(), it does not allocate
+// for addresses of this package. For a domain address, b is returned unchanged.
+func AppendIP(b []byte, address Address) []byte {
+	switch a := address.(type) {
+	case ipv4Address:
+		return append(b, a[:]...)
+	case ipv6Address:
+		return append(b, a[:]...)
+	case domainAddress:
+		return b
+	}
+	return append(b, address.IP()...)
+}
+
 // DomainAddress creates an Address with given domain.
 // This is an internal function that forcibly converts a string to domain.
 // It's mainly used in test files and mux.
