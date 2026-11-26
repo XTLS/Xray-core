@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"net/netip"
 	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
@@ -115,9 +116,23 @@ func IPAddress(ip []byte) Address {
 		}
 		return addr
 	default:
-		errors.LogError(context.Background(), "invalid IP format: ", ip)
+		// A clone, so that ip does not escape to the heap on every call.
+		errors.LogError(context.Background(), "invalid IP format: ", bytes.Clone(ip))
 		return nil
 	}
+}
+
+// AsNetipAddr returns the IP of address as a netip.Addr. Unlike address.IP(), it does not
+// allocate for IP addresses of this package. Like address.IP(), it panics for a domain.
+func AsNetipAddr(address Address) netip.Addr {
+	switch a := address.(type) {
+	case ipv4Address:
+		return netip.AddrFrom4(a)
+	case ipv6Address:
+		return netip.AddrFrom16(a)
+	}
+	addr, _ := netip.AddrFromSlice(address.IP())
+	return addr
 }
 
 // DomainAddress creates an Address with given domain.

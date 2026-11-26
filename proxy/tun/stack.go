@@ -417,15 +417,15 @@ func (s *stack) handleUDP(p packet) {
 	src := net.UDPDestination(net.IPAddress(p.src.AsSlice()), net.Port(binary.BigEndian.Uint16(u)))
 	if socket == nil {
 		s.udp.HandlePacket(src, net.UDPDestination(net.IPAddress(p.dst.AsSlice()), net.Port(binary.BigEndian.Uint16(u[2:]))), b)
-	} else if b.UDP = &src; !socket.queue.push(b) {
+	} else if b.UDP = new(src); !socket.queue.push(b) {
 		b.Release()
 	}
 }
 
 // writeUDP writes a packet with the payload from src to dst to the tun
 func (s *stack) writeUDP(payload []byte, src net.Destination, dst net.Destination) error {
-	srcIP, _ := netip.AddrFromSlice(src.Address.IP())
-	dstIP, _ := netip.AddrFromSlice(dst.Address.IP())
+	srcIP := net.AsNetipAddr(src.Address)
+	dstIP := net.AsNetipAddr(dst.Address)
 	return s.sendUDP(payload, netip.AddrPortFrom(srcIP, uint16(src.Port)), netip.AddrPortFrom(dstIP, uint16(dst.Port)))
 }
 

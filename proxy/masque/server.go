@@ -503,7 +503,7 @@ func packetDestination(packet []byte) (netip.Addr, bool) {
 func (s *Server) HandleConnection(conn net.Conn, dest net.Destination) {
 	defer conn.Close()
 	source := net.DestinationFromAddr(conn.RemoteAddr())
-	addr, _ := netip.AddrFromSlice(source.Address.IP())
+	addr := net.AsNetipAddr(source.Address)
 	t := s.lookup(addr.Unmap())
 	if t == nil || !t.track(conn) {
 		errors.LogInfo(s.ctx, "MASQUE: no tunnel for ", source, " to ", dest)
