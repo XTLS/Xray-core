@@ -21,6 +21,9 @@ const ChromeH2KeepAlivePeriod = 45 * time.Second
 
 var ErrNotLocal = errors.New("the source address is not from local machine.")
 
+// ErrProcessNotMatched means that FindProcessMatching found no process that the caller accepts and that owns the socket.
+var ErrProcessNotMatched = errors.New("no accepted process owns the socket")
+
 type localIPCacheEntry struct {
 	addrs      []net.Addr
 	lastUpdate time.Time

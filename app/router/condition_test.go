@@ -1,6 +1,7 @@
 package router_test
 
 import (
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -366,6 +367,47 @@ func TestLocalOSRule(t *testing.T) {
 		common.Must(err)
 		if got := cond.Apply(withBackground()); got != test.output {
 			t.Errorf("for localOS %v on %s: expected %v, got %v", test.localOS, runtime.GOOS, test.output, got)
+		}
+	}
+}
+
+func TestProcessRule(t *testing.T) {
+	switch runtime.GOOS {
+	case "linux", "windows", "darwin":
+	default:
+		t.Skip("no process lookup on ", runtime.GOOS)
+	}
+
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.LocalHostIP.IP()})
+	common.Must(err)
+	defer conn.Close()
+	port := net.Port(conn.LocalAddr().(*net.UDPAddr).Port)
+	_, name, absPath, err := net.FindProcess("udp", "127.0.0.1", uint16(port), "", 0)
+	common.Must(err)
+	ctx := &routing_session.Context{
+		Inbound:  &session.Inbound{Source: net.UDPDestination(net.LocalHostIP, port)},
+		Outbound: &session.Outbound{Target: net.UDPDestination(net.LocalHostIP, 53)},
+	}
+
+	cases := []struct {
+		process []string
+		output  bool
+	}{
+		{process: []string{"self/"}, output: true},
+		{process: []string{name}, output: true},
+		{process: []string{absPath}, output: true},
+		{process: []string{path.Dir(absPath) + "/"}, output: true},
+		{process: []string{"xray-test-no-such-process", name}, output: true},
+		{process: []string{"xray-test-no-such-process"}, output: false},
+		{process: []string{"/xray-test-no-such-dir/" + name}, output: false},
+		{process: []string{"/xray-test-no-such-dir/"}, output: false},
+	}
+
+	for _, test := range cases {
+		cond, err := (&RoutingRule{Process: test.process}).BuildCondition()
+		common.Must(err)
+		if got := cond.Apply(ctx); got != test.output {
+			t.Errorf("for process %v: expected %v, got %v", test.process, test.output, got)
 		}
 	}
 }

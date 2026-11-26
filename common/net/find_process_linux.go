@@ -16,6 +16,17 @@ import (
 )
 
 func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort uint16) (PID int, Name string, AbsolutePath string, err error) {
+	return FindProcessMatching(network, srcIP, srcPort, destIP, destPort, nil)
+}
+
+// FindProcessMatching is FindProcess for a caller that needs only the processes that accept returns true for.
+//
+// Linux has no table from a socket to its process. The owner of the socket is found by a readlink of
+// /proc/<pid>/fd/* of each process, so a lookup costs about one readlink for each fd open on the system.
+// With accept, it is called for each process in /proc, not only for the owner, and the fds of a process
+// are read only if accept returns true for its PID, name and executable path. That costs one readlink of
+// /proc/<pid>/exe for each process. If no accepted process owns the socket, the error is ErrProcessNotMatched.
+func FindProcessMatching(network, srcIP string, srcPort uint16, destIP string, destPort uint16, accept func(pid int, name, absPath string) bool) (PID int, Name string, AbsolutePath string, err error) {
 	isLocal, err := IsLocal(net.ParseIP(srcIP))
 	if err != nil {
 		return 0, "", "", errors.New("failed to determine if address is local: ", err)
@@ -65,28 +76,34 @@ func FindProcess(network, srcIP string, srcPort uint16, destIP string, destPort 
 		return 0, "", "", errors.New("connection for ", srcIP, ":", srcPort, " not found in ", strings.Join(procFiles, " or "))
 	}
 
-	pidStr, err := findPidByInode(inode)
+	pidStr, absPath, err := findPidByInode(inode, accept)
 	if err != nil {
 		return 0, "", "", errors.New("could not find PID for inode ", inode, ": ", err)
 	}
 	if pidStr == "" {
+		if accept != nil {
+			return 0, "", "", ErrProcessNotMatched
+		}
 		return 0, "", "", errors.New("no process found for inode ", inode)
 	}
 
-	absPath, err := getAbsPath(pidStr)
-	if err != nil {
-		return 0, "", "", errors.New("could not get process name for PID ", pidStr, ":", err)
+	if absPath == "" {
+		absPath, err = getAbsPath(pidStr)
+		if err != nil {
+			return 0, "", "", errors.New("could not get process name for PID ", pidStr, ":", err)
+		}
 	}
-
-	nameSplit := strings.Split(absPath, "/")
-	procName := nameSplit[len(nameSplit)-1]
 
 	pid, err := strconv.Atoi(pidStr)
 	if err != nil {
 		return 0, "", "", errors.New("failed to parse PID: ", err)
 	}
 
-	return pid, procName, absPath, nil
+	return pid, procNameOf(absPath), absPath, nil
+}
+
+func procNameOf(absPath string) string {
+	return absPath[strings.LastIndexByte(absPath, '/')+1:]
 }
 
 // formatProcNetAddress formats the 4 or 16 bytes of addr as they are: an IPv4-mapped IPv6 address stays one
@@ -141,10 +158,13 @@ func findInodeInFiles(filePaths []string, targetHexAddrs []string, portFallback 
 	return onlyMatchedPort, nil
 }
 
-func findPidByInode(inode string) (string, error) {
+// findPidByInode returns the PID of the process that owns the socket, or "" if there is none.
+// With accept, it searches only the processes that accept returns true for, and returns the
+// executable path too.
+func findPidByInode(inode string, accept func(pid int, name, absPath string) bool) (string, string, error) {
 	procDir, err := os.ReadDir("/proc")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	targetLink := "socket:[" + inode + "]"
@@ -154,8 +174,19 @@ func findPidByInode(inode string) (string, error) {
 			continue
 		}
 		pid := entry.Name()
-		if _, err := strconv.Atoi(pid); err != nil {
+		pidNum, err := strconv.Atoi(pid)
+		if err != nil {
 			continue
+		}
+
+		absPath := ""
+		if accept != nil {
+			// the exe link can't be read for kernel threads, and for the processes of other users
+			// without root, but then their fds can't be read either
+			absPath, err = getAbsPath(pid)
+			if err != nil || !accept(pidNum, procNameOf(absPath), absPath) {
+				continue
+			}
 		}
 
 		fdPath := fmt.Sprintf("/proc/%s/fd", pid)
@@ -171,11 +202,11 @@ func findPidByInode(inode string) (string, error) {
 				continue
 			}
 			if linkTarget == targetLink {
-				return pid, nil
+				return pid, absPath, nil
 			}
 		}
 	}
-	return "", nil
+	return "", "", nil
 }
 
 func getAbsPath(pid string) (string, error) {
