@@ -529,26 +529,25 @@ func TestXDriveOutboundConfig(t *testing.T) {
 	}
 
 	for _, input := range []string{
-		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`,
-		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": 0, "xudpConcurrency": 8, "xudpProxyUDP443": "allow"}}`,
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`,
+		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8, "xudpConcurrency": 8, "xudpProxyUDP443": "allow"}}, ` + xdriveStream + `}`,
 		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "reverse": {"tag": "r"}}, ` + xdriveStream + `}`,
-		`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `}]}]}, ` + xdriveStream + `, "mux": {"enabled": true}}`,
+		`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `}]}], "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`,
 	} {
 		if err := build(input); err != nil {
 			t.Errorf("%s: %v", input, err)
 		}
 	}
 	for _, c := range []struct{ input, err string }{
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, "encryption": "none"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"encryption"`},
-		{`{"protocol": "vless", "settings": {"address": "example.com", "port": 443, ` + xdriveID + `, "encryption": "none"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"encryption"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `}`, `"mux"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": false}}`, `"mux"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"mux"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "xudpConcurrency": -1}}`, `"mux"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true, "xudpProxyUDP443": "skip"}}`, `"mux"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"flow"`},
-		{`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}]}]}, ` + xdriveStream + `, "mux": {"enabled": true, "concurrency": -1}}`, `"flow"`},
-		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "testpre": 1}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"testpre"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, "encryption": "none", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"encryption"`},
+		{`{"protocol": "vless", "settings": {"address": "example.com", "port": 443, ` + xdriveID + `, "encryption": "none", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"encryption"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `}`, `"settings.multiplex.concurrency"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`, `"settings.multiplex.concurrency"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"xudpConcurrency": 8}}, ` + xdriveStream + `}`, `"settings.multiplex.concurrency"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8, "xudpProxyUDP443": "skip"}}, ` + xdriveStream + `}`, `"settings.multiplex.concurrency"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"flow"`},
+		{`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}]}], "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"flow"`},
+		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "testpre": 1, "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"testpre"`},
 		{`{"protocol": "vmess", "settings": {` + xdriveServer + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
 		{`{"protocol": "trojan", "settings": {"address": "example.com", "port": 443, "password": "p"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
 		{`{"protocol": "freedom", ` + xdriveStream + `}`, "VLESS"},

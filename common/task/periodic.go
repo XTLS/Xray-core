@@ -58,14 +58,10 @@ func (t *Periodic) Start() error {
 		return nil
 	}
 	t.running = true
+	t.timer = time.AfterFunc(t.Interval, func() {
+		t.checkedExecute()
+	})
 	t.access.Unlock()
-
-	if err := t.checkedExecute(); err != nil {
-		t.access.Lock()
-		t.running = false
-		t.access.Unlock()
-		return err
-	}
 
 	return nil
 }

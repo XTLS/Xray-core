@@ -16,6 +16,7 @@ import (
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/proxy/dokodemo"
 	"github.com/xtls/xray-core/proxy/freedom"
+	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/inbound"
 	"github.com/xtls/xray-core/proxy/vmess/outbound"
@@ -680,6 +681,7 @@ func TestVMessGCMMux(t *testing.T) {
 		},
 	}
 
+	carrierPort, carriers := countTCPCarriers(t, serverPort)
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
 		App: []*serial.TypedMessage{
@@ -703,16 +705,11 @@ func TestVMessGCMMux(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-					MultiplexSettings: &proxyman.MultiplexingConfig{
-						Enabled:     true,
-						Concurrency: 4,
-					},
-				}),
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
+					Multiplex: &vless.Multiplex{Concurrency: 4},
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
-						Port:    uint32(serverPort),
+						Port:    uint32(carrierPort),
 						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
@@ -731,7 +728,10 @@ func TestVMessGCMMux(t *testing.T) {
 	common.Must(err)
 	defer CloseAllServers(servers)
 
-	for range "abcd" {
+	if err := testTCPConn(clientPort, 10240, 10*time.Second)(); err != nil {
+		t.Fatal(err)
+	}
+	for range 4 {
 		var errg errgroup.Group
 		for range 3 {
 			errg.Go(testTCPConn(clientPort, 10240, time.Second*20))
@@ -739,7 +739,9 @@ func TestVMessGCMMux(t *testing.T) {
 		if err := errg.Wait(); err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(time.Second)
+	}
+	if got := carriers.Load(); got != 1 {
+		t.Errorf("connections used %d physical carriers, want 1", got)
 	}
 }
 
@@ -793,6 +795,7 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 		},
 	}
 
+	carrierPort, carriers := countTCPCarriers(t, serverPort)
 	clientPort := tcp.PickPort()
 	clientUDPPort := udp.PickPort()
 	clientConfig := &core.Config{
@@ -828,16 +831,11 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 		},
 		Outbound: []*core.OutboundHandlerConfig{
 			{
-				SenderSettings: serial.ToTypedMessage(&proxyman.SenderConfig{
-					MultiplexSettings: &proxyman.MultiplexingConfig{
-						Enabled:     true,
-						Concurrency: 4,
-					},
-				}),
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
+					Multiplex: &vless.Multiplex{Concurrency: 16},
 					Receiver: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
-						Port:    uint32(serverPort),
+						Port:    uint32(carrierPort),
 						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vmess.Account{
 								Id: userID.String(),
@@ -865,6 +863,10 @@ func TestVMessGCMMuxUDP(t *testing.T) {
 			t.Error(err)
 		}
 		time.Sleep(time.Second)
+	}
+
+	if got := carriers.Load(); got != 1 {
+		t.Errorf("TCP and UDP used %d physical carriers, want 1", got)
 	}
 
 	defer func() {

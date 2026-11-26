@@ -9,15 +9,11 @@ import (
 	"sync"
 	"time"
 
-	utls "github.com/refraction-networking/utls"
 	proxymanConfig "github.com/xtls/xray-core/app/proxyman"
-	proxyman "github.com/xtls/xray-core/app/proxyman/outbound"
-	"github.com/xtls/xray-core/app/reverse"
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	xctx "github.com/xtls/xray-core/common/ctx"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/mux"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/retry"
@@ -32,12 +28,13 @@ import (
 	"github.com/xtls/xray-core/proxy/vless"
 	"github.com/xtls/xray-core/proxy/vless/encoding"
 	"github.com/xtls/xray-core/proxy/vless/encryption"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
+	"github.com/xtls/xray-core/proxy/vless/reverse"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
 	"github.com/xtls/xray-core/transport/internet/reality"
 	"github.com/xtls/xray-core/transport/internet/stat"
 	"github.com/xtls/xray-core/transport/internet/tls"
-	"github.com/xtls/xray-core/transport/pipe"
 )
 
 func init() {
@@ -51,7 +48,10 @@ type Handler struct {
 	server        *protocol.ServerSpec
 	policyManager policy.Manager
 	encryption    *encryption.ClientInstance
-	reverse       *Reverse
+	closeReverse  func()
+	ctx           context.Context
+	stop          context.CancelFunc
+	multiplex     *multiplex.Client
 
 	testpre  uint32
 	initpre  sync.Once
@@ -73,13 +73,24 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
+	muxConfig, err := multiplex.NormalizeConfig(config.Multiplex)
+	if err != nil {
+		return nil, err
+	}
+	a := server.User.Account.(*vless.MemoryAccount)
+	dialer, _ := session.FullHandlerFromContext(ctx).(internet.Dialer)
+	if dialer == nil && (a.Reverse != nil || muxConfig != nil) {
+		return nil, errors.New("VLESS Reverse or multiplex requires an outbound dialer")
+	}
+
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
 		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
 
-	a := handler.server.User.Account.(*vless.MemoryAccount)
+	handler.ctx, handler.stop = context.WithCancel(context.Background())
+
 	if a.Encryption != "" && a.Encryption != "none" {
 		s := strings.Split(a.Encryption, ".")
 		var nfsPKeysBytes [][]byte
@@ -93,11 +104,14 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		}
 	}
 
-	if a.Reverse != nil {
+	if a.Reverse == nil {
+		handler.testpre = a.Testpre
+	} else {
 		rvsCtx := session.ContextWithInbound(ctx, &session.Inbound{
-			Tag:  a.Reverse.Tag,
-			Name: "vless-reverse",
-			User: handler.server.User, // TODO: email
+			Tag:           a.Reverse.Tag,
+			Name:          "vless-reverse",
+			User:          handler.server.User, // TODO: email
+			CanSpliceCopy: 3,
 		})
 		if sc := a.Reverse.Sniffing; sc != nil && sc.Enabled {
 			request, err := proxymanConfig.BuildSniffingRequest(sc)
@@ -108,73 +122,113 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 				SniffingRequest: request,
 			})
 		}
-		handler.reverse = &Reverse{
-			tag:        a.Reverse.Tag,
-			dispatcher: v.GetFeature(routing.DispatcherType()).(routing.Dispatcher),
-			ctx:        rvsCtx,
-			handler:    handler,
-		}
-		handler.reverse.monitorTask = &task.Periodic{
-			Execute:  handler.reverse.monitor,
-			Interval: time.Second * 2,
-		}
-		go func() {
-			time.Sleep(2 * time.Second)
-			handler.reverse.Start()
-		}()
+		handler.closeReverse = reverse.StartIntranet(rvsCtx,
+			v.GetFeature(routing.DispatcherType()).(routing.Dispatcher).DispatchLink,
+			func(ctx context.Context) (context.Context, *transport.Link, error) {
+				return handler.process(ctx, nil, dialer, protocol.RequestCommandRvs)
+			})
 	}
 
-	handler.testpre = a.Testpre
+	if muxConfig != nil {
+		network := ""
+		if settings, ok := session.StreamSettingsFromContext(ctx).(*internet.MemoryStreamConfig); ok {
+			network = settings.ProtocolName
+		}
+		handler.multiplex = multiplex.NewClient(handler.ctx, muxConfig, network,
+			func(ctx context.Context) (context.Context, *transport.Link, error) {
+				return handler.process(ctx, nil, dialer, protocol.RequestCommandMux)
+			})
+	}
 
 	return handler, nil
 }
 
 // Close implements common.Closable.Close().
 func (h *Handler) Close() error {
-	if h.preConns != nil {
-		close(h.preConns)
-	}
-	if h.reverse != nil {
-		return h.reverse.Close()
+	h.stop()
+	if h.closeReverse != nil {
+		h.closeReverse()
 	}
 	return nil
 }
 
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
+	if handled, err := h.multiplex.Dispatch(ctx, link); handled {
+		return err
+	}
+	_, _, err := h.process(ctx, link, dialer, 0)
+	return err
+}
+
+func (h *Handler) process(ctx context.Context, link *transport.Link, dialer internet.Dialer, command protocol.RequestCommand) (nativeCtx context.Context, nativeLink *transport.Link, err error) {
+	native := command != 0
+	if native {
+		ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{Target: h.server.Destination}})
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	var rawConn stat.Connection
+	var timer *signal.ActivityTimer
+	defer func() {
+		if !native || err != nil {
+			if timer != nil {
+				timer.SetTimeout(0)
+			}
+			cancel()
+			if rawConn != nil {
+				rawConn.Close()
+			}
+		}
+	}()
+
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
-	if !ob.Target.IsValid() && ob.Target.Address.String() != "v1.rvs.cool" {
-		return errors.New("target not specified")
+	if !ob.Target.IsValid() {
+		return nil, nil, errors.New("target not specified")
 	}
 	ob.Name = "vless"
 
 	rec := h.server
 	var conn stat.Connection
 
-	if h.testpre > 0 && h.reverse == nil {
+	account := rec.User.Account.(*vless.MemoryAccount)
+
+	if !native && ob.Target.Network == net.Network_UDP && ob.Target.Port == 443 && account.Flow == vless.XRV {
+		proxy.DropUDP(ctx, link.Reader)
+		return nil, nil, errors.New("XTLS rejected UDP/443 traffic")
+	}
+
+	if h.testpre > 0 {
 		h.initpre.Do(func() {
 			h.preConns = make(chan *ConnExpire)
 			for range h.testpre { // TODO: randomize
 				go func() {
-					defer func() { recover() }()
-					ctx := xctx.ContextWithID(context.Background(), session.NewID())
-					for {
+					ctx := xctx.ContextWithID(h.ctx, session.NewID())
+					for ctx.Err() == nil {
 						conn, err := dialer.Dial(ctx, rec.Destination)
 						if err != nil {
 							errors.LogWarningInner(ctx, err, "pre-connect failed")
 							continue
 						}
-						h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)} // TODO: customize & randomize
-						time.Sleep(time.Millisecond * 200)                                             // TODO: customize & randomize
+						select {
+						case <-ctx.Done():
+							conn.Close()
+							return
+						case h.preConns <- &ConnExpire{Conn: conn, Expire: time.Now().Add(time.Minute * 2)}:
+						}
+						time.Sleep(time.Millisecond * 200) // TODO: customize & randomize
 					}
 				}()
 			}
 		})
 		for {
-			connTime := <-h.preConns
-			if connTime == nil {
-				return errors.New("closed handler")
+			var connTime *ConnExpire
+			select {
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			case <-h.ctx.Done():
+				return nil, nil, h.ctx.Err()
+			case connTime = <-h.preConns:
 			}
 			if time.Now().Before(connTime.Expire) {
 				conn = connTime.Conn
@@ -193,10 +247,13 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 			return nil
 		}); err != nil {
-			return errors.New("failed to find an available destination").Base(err)
+			return nil, nil, errors.New("failed to find an available destination").Base(err)
 		}
 	}
-	defer conn.Close()
+	rawConn = conn
+	if native {
+		context.AfterFunc(ctx, func() { common.Interrupt(stat.TryUnwrapStatsConn(rawConn)) })
+	}
 
 	iConn := stat.TryUnwrapStatsConn(conn)
 	target := ob.Target
@@ -205,23 +262,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if h.encryption != nil {
 		var err error
 		if conn, err = h.encryption.Handshake(conn); err != nil {
-			return errors.New("ML-KEM-768 handshake failed").Base(err)
-		}
-	}
-
-	command := protocol.RequestCommandTCP
-	if target.Network == net.Network_UDP {
-		command = protocol.RequestCommandUDP
-	}
-	if target.Address.Family().IsDomain() {
-		switch target.Address.Domain() {
-		case "v1.mux.cool":
-			command = protocol.RequestCommandMux
-		case "v1.rvs.cool":
-			if target.Network != net.Network_Unknown {
-				return errors.New("nice try baby")
-			}
-			command = protocol.RequestCommandRvs
+			return nil, nil, errors.New("ML-KEM-768 handshake failed").Base(err)
 		}
 	}
 
@@ -229,11 +270,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		Version: encoding.Version,
 		User:    rec.User,
 		Command: command,
-		Address: target.Address,
-		Port:    target.Port,
 	}
-
-	account := request.User.Account.(*vless.MemoryAccount)
+	if !native {
+		request.Command = protocol.RequestCommandTCP
+		if target.Network == net.Network_UDP {
+			request.Command = protocol.RequestCommandUDP
+		}
+		request.Address, request.Port = target.Address, target.Port
+	}
 
 	requestAddons := &encoding.Addons{
 		Flow: account.Flow,
@@ -241,22 +285,15 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	var input *bytes.Reader
 	var rawInput **bytes.Buffer
-	allowUDP443 := false
 	switch requestAddons.Flow {
 	case vless.XRV + "-udp443":
-		allowUDP443 = true
 		requestAddons.Flow = requestAddons.Flow[:16]
 		fallthrough
 	case vless.XRV:
 		ob.CanSpliceCopy = 2
 		switch request.Command {
 		case protocol.RequestCommandUDP:
-			if !allowUDP443 && request.Port == 443 {
-				return errors.New("XTLS rejected UDP/443 traffic")
-			}
-		case protocol.RequestCommandMux:
-			fallthrough // let server break Mux connections that contain TCP requests
-		case protocol.RequestCommandTCP, protocol.RequestCommandRvs:
+		case protocol.RequestCommandTCP, protocol.RequestCommandMux, protocol.RequestCommandRvs:
 			var target net.Conn
 			if commonConn, ok := conn.(*encryption.CommonConn); ok {
 				if _, ok := commonConn.Conn.(*encryption.XorConn); ok || !proxy.IsRAWTransportWithoutSecurity(iConn) {
@@ -270,7 +307,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			} else if realityConn, ok := iConn.(*reality.UConn); ok {
 				target = realityConn.Conn
 			} else {
-				return errors.New("XTLS only supports TLS and REALITY directly for now.")
+				return nil, nil, errors.New("XTLS only supports TLS and REALITY directly for now.")
 			}
 			input, rawInput = vless.AccessTLSBuffers(target)
 		default:
@@ -282,41 +319,95 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 
 	var newCtx context.Context
 	var newCancel context.CancelFunc
-	if session.TimeoutOnlyFromContext(ctx) {
+	if !native && session.TimeoutOnlyFromContext(ctx) {
 		newCtx, newCancel = context.WithCancel(context.Background())
 	}
 
 	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, func() {
+	timer = signal.CancelAfterInactivity(ctx, func() {
 		cancel()
 		if newCancel != nil {
 			newCancel()
 		}
 	}, sessionPolicy.Timeouts.ConnectionIdle)
 
-	clientReader := link.Reader // .(*pipe.Reader)
-	clientWriter := link.Writer // .(*pipe.Writer)
+	if requestAddons.Flow == vless.XRV {
+		if outerTLS, ok := iConn.(interface {
+			tls.Interface
+			ConnectionState() gotls.ConnectionState
+		}); ok {
+			if err := outerTLS.HandshakeContext(ctx); err != nil {
+				return nil, nil, errors.New("failed outer TLS handshake for Vision").Base(err)
+			}
+			if version := outerTLS.ConnectionState().Version; version != gotls.VersionTLS13 {
+				return nil, nil, errors.New("failed to use "+requestAddons.Flow+", found outer tls version ", version)
+			}
+		}
+	}
+
 	trafficState := proxy.NewTrafficState(account.ID.Bytes())
-	if request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || (request.Port != 53 && request.Port != 443)) {
+	singleXUDP := request.Command == protocol.RequestCommandUDP && (requestAddons.Flow == vless.XRV || request.Port != 53 && request.Port != 443)
+	if singleXUDP {
 		request.Command = protocol.RequestCommandMux
-		request.Address = net.DomainAddress("v1.mux.cool")
-		request.Port = net.Port(666)
+	}
+
+	bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+	if err := encoding.EncodeRequestHeader(bufferWriter, request, requestAddons); err != nil {
+		return nil, nil, errors.New("failed to encode request header").Base(err)
+	}
+
+	// default: serverWriter := bufferWriter
+	serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
+	if singleXUDP {
+		serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
+	}
+
+	openResponse := func() (buf.Reader, error) {
+		responseAddons, err := encoding.DecodeResponseHeader(conn, request)
+		if err != nil {
+			return nil, errors.New("failed to decode response header").Base(err)
+		}
+
+		// default: serverReader := buf.NewReader(conn)
+		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
+		if requestAddons.Flow == vless.XRV {
+			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx, conn, input, rawInput, ob)
+		}
+		if singleXUDP {
+			if requestAddons.Flow == vless.XRV {
+				serverReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: serverReader})
+			} else {
+				serverReader = xudp.NewPacketReader(conn)
+			}
+		}
+
+		return serverReader, nil
+	}
+
+	if native {
+		bufferWriter.SetFlushNext()
+		if request.Command == protocol.RequestCommandRvs {
+			timer.Update()
+			if requestAddons.Flow == vless.XRV {
+				if err := serverWriter.WriteMultiBuffer(buf.MultiBuffer{nil}); err != nil {
+					return nil, nil, err
+				}
+			}
+			if err := bufferWriter.SetBuffered(false); err != nil {
+				return nil, nil, err
+			}
+		}
+		directLink, openErr := multiplex.OpenLink(ctx, cancel, serverWriter, timer, openResponse)
+		if openErr != nil {
+			return nil, nil, openErr
+		}
+		return ctx, directLink, nil
 	}
 
 	postRequest := func() error {
+		clientReader := link.Reader
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
-		bufferWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
-		if err := encoding.EncodeRequestHeader(bufferWriter, request, requestAddons); err != nil {
-			return errors.New("failed to encode request header").Base(err)
-		}
-
-		// default: serverWriter := bufferWriter
-		serverWriter := encoding.EncodeBodyAddons(bufferWriter, request, requestAddons, trafficState, true, ctx, conn, ob)
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			serverWriter = xudp.NewPacketWriter(serverWriter, target, xudp.GetGlobalID(ctx))
-		}
 		timeoutReader, ok := clientReader.(buf.TimeoutReader)
 		if ok {
 			multiBuffer, err1 := timeoutReader.ReadMultiBufferTimeout(time.Millisecond * 500)
@@ -341,48 +432,20 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return errors.New("failed to write A request payload").Base(err)
 		}
 
-		if requestAddons.Flow == vless.XRV {
-			if tlsConn, ok := iConn.(*tls.Conn); ok {
-				if tlsConn.ConnectionState().Version != gotls.VersionTLS13 {
-					return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, tlsConn.ConnectionState().Version)
-				}
-			} else if utlsConn, ok := iConn.(*tls.UConn); ok {
-				if utlsConn.ConnectionState().Version != utls.VersionTLS13 {
-					return errors.New(`failed to use `+requestAddons.Flow+`, found outer tls version `, utlsConn.ConnectionState().Version)
-				}
-			}
-		}
 		err := buf.Copy(clientReader, serverWriter, buf.UpdateActivity(timer))
 		if err != nil {
 			return errors.New("failed to transfer request payload").Base(err)
 		}
 
-		// Indicates the end of request payload.
-		switch requestAddons.Flow {
-		default:
-		}
 		return nil
 	}
 
+	clientWriter := link.Writer
 	getResponse := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-
-		responseAddons, err := encoding.DecodeResponseHeader(conn, request)
+		serverReader, err := openResponse()
 		if err != nil {
-			return errors.New("failed to decode response header").Base(err)
-		}
-
-		// default: serverReader := buf.NewReader(conn)
-		serverReader := encoding.DecodeBodyAddons(conn, request, responseAddons)
-		if requestAddons.Flow == vless.XRV {
-			serverReader = proxy.NewVisionReader(serverReader, trafficState, false, ctx, conn, input, rawInput, ob)
-		}
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			if requestAddons.Flow == vless.XRV {
-				serverReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: serverReader})
-			} else {
-				serverReader = xudp.NewPacketReader(conn)
-			}
+			return err
 		}
 
 		if requestAddons.Flow == vless.XRV {
@@ -404,72 +467,8 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	}
 
 	if err := task.Run(ctx, postRequest, task.OnSuccess(getResponse, task.Close(clientWriter))); err != nil {
-		return errors.New("connection ends").Base(err)
+		return nil, nil, errors.New("connection ends").Base(err)
 	}
 
-	return nil
-}
-
-type Reverse struct {
-	tag         string
-	dispatcher  routing.Dispatcher
-	ctx         context.Context
-	handler     *Handler
-	workers     []*reverse.BridgeWorker
-	monitorTask *task.Periodic
-}
-
-func (r *Reverse) monitor() error {
-	var activeWorkers []*reverse.BridgeWorker
-	for _, w := range r.workers {
-		if w.IsActive() {
-			activeWorkers = append(activeWorkers, w)
-		}
-	}
-	if len(activeWorkers) != len(r.workers) {
-		r.workers = activeWorkers
-	}
-
-	var numConnections uint32
-	var numWorker uint32
-	for _, w := range r.workers {
-		if w.IsActive() {
-			numConnections += w.Connections()
-			numWorker++
-		}
-	}
-	if numWorker == 0 || numConnections/numWorker > 16 {
-		reader1, writer1 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
-		reader2, writer2 := pipe.New(pipe.WithSizeLimit(2 * buf.Size))
-		link1 := &transport.Link{Reader: reader1, Writer: writer2}
-		link2 := &transport.Link{Reader: reader2, Writer: writer1}
-		w := &reverse.BridgeWorker{
-			Tag:        r.tag,
-			Dispatcher: r.dispatcher,
-		}
-		worker, err := mux.NewServerWorker(session.ContextWithIsReverseMux(r.ctx, true), w, link1)
-		if err != nil {
-			errors.LogWarningInner(r.ctx, err, "failed to create mux server worker")
-			return nil
-		}
-		w.Worker = worker
-		r.workers = append(r.workers, w)
-		go func() {
-			ctx := session.ContextWithOutbounds(r.ctx, []*session.Outbound{{
-				Target: net.Destination{Address: net.DomainAddress("v1.rvs.cool")},
-			}})
-			r.handler.Process(ctx, link2, session.FullHandlerFromContext(ctx).(*proxyman.Handler))
-			common.Interrupt(reader1)
-			common.Interrupt(reader2)
-		}()
-	}
-	return nil
-}
-
-func (r *Reverse) Start() error {
-	return r.monitorTask.Start()
-}
-
-func (r *Reverse) Close() error {
-	return r.monitorTask.Close()
+	return nil, nil, nil
 }

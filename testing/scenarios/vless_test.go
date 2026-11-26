@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,7 +34,47 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+func countTCPCarriers(t *testing.T, target net.Port) (net.Port, *atomic.Int32) {
+	t.Helper()
+	addr := &net.TCPAddr{IP: net.LocalHostIP.IP()}
+	listener, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listener.Close() })
+	count := new(atomic.Int32)
+	go func() {
+		for {
+			conn, err := listener.AcceptTCP()
+			if err != nil {
+				return
+			}
+			count.Add(1)
+			go func() {
+				defer conn.Close()
+				server, err := net.DialTCP("tcp", nil, &net.TCPAddr{IP: addr.IP, Port: int(target)})
+				if err != nil {
+					return
+				}
+				defer server.Close()
+				go func() {
+					io.Copy(server, conn)
+					server.CloseWrite()
+				}()
+				io.Copy(conn, server)
+			}()
+		}
+	}()
+	return net.Port(listener.Addr().(*net.TCPAddr).Port), count
+}
+
 func TestVless(t *testing.T) {
+	t.Run("direct", func(t *testing.T) { testVlessTCP(t, false) })
+	t.Run("native-multiplex", func(t *testing.T) { testVlessTCP(t, true) })
+}
+
+func testVlessTCP(t *testing.T, nativeMux bool) {
+	t.Helper()
 	tcpServer := tcp.Server{
 		MsgProcessor: xor,
 	}
@@ -76,6 +117,14 @@ func TestVless(t *testing.T) {
 		},
 	}
 
+	outboundPort := serverPort
+	var carrierCount func() int32
+	var multiplex *vless.Multiplex
+	if nativeMux {
+		port, count := countTCPCarriers(t, serverPort)
+		outboundPort, carrierCount = port, count.Load
+		multiplex = &vless.Multiplex{Concurrency: 4}
+	}
 	clientPort := tcp.PickPort()
 	clientConfig := &core.Config{
 		App: []*serial.TypedMessage{
@@ -100,9 +149,10 @@ func TestVless(t *testing.T) {
 		Outbound: []*core.OutboundHandlerConfig{
 			{
 				ProxySettings: serial.ToTypedMessage(&outbound.Config{
+					Multiplex: multiplex,
 					Vnext: &protocol.ServerEndpoint{
 						Address: net.NewIPOrDomain(net.LocalHostIP),
-						Port:    uint32(serverPort),
+						Port:    uint32(outboundPort),
 						User: &protocol.User{
 							Account: serial.ToTypedMessage(&vless.Account{
 								Id: userID.String(),
@@ -118,12 +168,22 @@ func TestVless(t *testing.T) {
 	common.Must(err)
 	defer CloseAllServers(servers)
 
+	if nativeMux {
+		if err := testTCPConn(clientPort, 64*1024, time.Second*10)(); err != nil {
+			t.Fatal(err)
+		}
+	}
 	var errg errgroup.Group
 	for range 3 {
 		errg.Go(testTCPConn(clientPort, 1024*1024, time.Second*30))
 	}
 	if err := errg.Wait(); err != nil {
 		t.Error(err)
+	}
+	if nativeMux {
+		if got := carrierCount(); got != 1 {
+			t.Errorf("connections used %d physical carriers, want 1", got)
+		}
 	}
 }
 

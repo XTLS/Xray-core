@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/serial"
+	"github.com/xtls/xray-core/common/task"
 )
 
 var _ buf.Writer = (*connection)(nil)
@@ -20,25 +22,27 @@ type connection struct {
 	conn       *websocket.Conn
 	reader     io.Reader
 	remoteAddr net.Addr
+	keepalive  *task.Periodic
 }
 
 func NewConnection(conn *websocket.Conn, remoteAddr net.Addr, extraReader io.Reader, heartbeatPeriod uint32) *connection {
-	if heartbeatPeriod != 0 {
-		go func() {
-			for {
-				time.Sleep(time.Duration(heartbeatPeriod) * time.Second)
-				if err := conn.WriteControl(websocket.PingMessage, []byte{}, time.Time{}); err != nil {
-					break
-				}
-			}
-		}()
-	}
-
-	return &connection{
+	wrappedConn := &connection{
 		conn:       conn,
 		remoteAddr: remoteAddr,
 		reader:     extraReader,
 	}
+	if heartbeatPeriod != 0 {
+		keepalive := task.Periodic{
+			Execute: func() error {
+				return conn.WriteControl(websocket.PingMessage, []byte{}, time.Time{})
+			},
+			Interval: time.Duration(heartbeatPeriod) * time.Second,
+		}
+		keepalive.Start()
+		wrappedConn.keepalive = &keepalive
+	}
+
+	return wrappedConn
 }
 
 // Read implements net.Conn.Read()
@@ -93,6 +97,7 @@ func (c *connection) WriteMultiBuffer(mb buf.MultiBuffer) error {
 }
 
 func (c *connection) Close() error {
+	common.CloseIfExists(c.keepalive)
 	var errs []interface{}
 	if err := c.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second*5)); err != nil {
 		errs = append(errs, err)

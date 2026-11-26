@@ -72,7 +72,7 @@ func NewClient(c *Config, dialer *finalmask.Dialer) (net.PacketConn, error) {
 		if len(types) == 0 {
 			types = []uint16{16}
 		}
-		domain, err := NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0))
+		domain, err := NewDomain(c.Domains[i].Name, int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), types, uint16(c.Domains[i].Edns0), c.Domains[i].Alphabet)
 		if err != nil {
 			return nil, err
 		}

@@ -867,6 +867,7 @@ type XDNSDomain struct {
 	LabelLimit int32    `json:"labelLimit"`
 	Types      []int32  `json:"types"`
 	Edns0      int32    `json:"edns0"`
+	Alphabet   string   `json:"alphabet"`
 }
 
 type XDNSResolver struct {
@@ -893,7 +894,7 @@ func (c *XDNS) Build() (proto.Message, error) {
 			c.Domains[i].LabelLimit = 63
 		}
 		for j := range c.Domains[i].Names {
-			domain, err := xdns.NewDomain(c.Domains[i].Names[j], int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), []uint16{1, 5, 16, 28}, uint16(c.Domains[i].Edns0))
+			domain, err := xdns.NewDomain(c.Domains[i].Names[j], int(c.Domains[i].LenLimit), int(c.Domains[i].LabelLimit), []uint16{1, 5, 16, 28}, uint16(c.Domains[i].Edns0), c.Domains[i].Alphabet)
 			if err != nil {
 				return nil, err
 			}
@@ -904,6 +905,7 @@ func (c *XDNS) Build() (proto.Message, error) {
 				LabelLimit: c.Domains[i].LabelLimit,
 				Types:      c.Domains[i].Types,
 				Edns0:      c.Domains[i].Edns0,
+				Alphabet:   c.Domains[i].Alphabet,
 			})
 		}
 	}

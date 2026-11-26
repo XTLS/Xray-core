@@ -7,6 +7,7 @@ import (
 	"net"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/proxy/tun"
@@ -16,6 +17,7 @@ import (
 type TunConfig struct {
 	Name                   string   `json:"name"`
 	Desc                   string   `json:"desc"`
+	GUID                   string   `json:"guid"`
 	MTU                    uint32   `json:"mtu"`
 	Gateway                []string `json:"gateway"`
 	DNS                    []string `json:"dns"`
@@ -36,6 +38,13 @@ func (v *TunConfig) Build() (proto.Message, error) {
 		UserLevel:              v.UserLevel,
 		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
 		AutoSystemDnsToGateway: v.AutoSystemDnsToGateway,
+	}
+	if v.GUID != "" {
+		// only Windows gives the TUN a GUID, but a config is checked wherever it is loaded
+		if _, err := tun.ParseGUID(v.GUID); err != nil {
+			return nil, err
+		}
+		config.GUID = strings.ToLower(v.GUID)
 	}
 	leaks, err := tun.ExpandWfpBlockLeak(v.AutoSystemWfpBlockLeak)
 	if err != nil {

@@ -8,20 +8,6 @@ import (
 	"github.com/xtls/xray-core/common/net"
 )
 
-// BenchmarkUDPNewSession measures what one new UDP flow costs the
-// inbound while it stays open: QUIC and DNS open many short flows, and each
-// one lives until the connection idle timeout.
-func BenchmarkUDPNewSession(b *testing.B) {
-	u := newUdpConnectionHandler(func(conn net.Conn, dest net.Destination) {}, nil)
-	dst := net.UDPDestination(net.ParseAddress("1.1.1.1"), 443)
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		src := net.UDPDestination(net.IPAddress([]byte{10, byte(i >> 16), byte(i >> 8), byte(i)}), net.Port(1024+i%60000))
-		u.HandlePacket(src, dst, &buf.Buffer{})
-	}
-}
-
 func TestPacketQueueOrderAndClose(t *testing.T) {
 	q := newPacketQueue(udpQueueLimit)
 	for i := 0; i < 3; i++ {

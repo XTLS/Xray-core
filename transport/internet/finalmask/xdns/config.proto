@@ -16,6 +16,7 @@ message DomainProto {
   int32 label_limit = 3;
   repeated int32 types = 4;
   int32 edns0 = 5;
+  string alphabet = 6;
 }
 
 message ResolverProto {

@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/common/xudp"
 	core "github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
+	"github.com/xtls/xray-core/proxy/vless/multiplex"
 	"github.com/xtls/xray-core/proxy/vmess"
 	"github.com/xtls/xray-core/proxy/vmess/encoding"
 	"github.com/xtls/xray-core/transport"
@@ -32,6 +33,8 @@ import (
 type Handler struct {
 	server        *protocol.ServerSpec
 	policyManager policy.Manager
+	multiplex     *multiplex.Client
+	stopMultiplex context.CancelFunc
 }
 
 // New creates a new VMess outbound handler.
@@ -44,21 +47,55 @@ func New(ctx context.Context, config *Config) (*Handler, error) {
 		return nil, errors.New("failed to get server spec").Base(err)
 	}
 
+	muxConfig, err := multiplex.NormalizeConfig(config.Multiplex)
+	if err != nil {
+		return nil, err
+	}
 	v := core.MustFromContext(ctx)
 	handler := &Handler{
 		server:        server,
 		policyManager: v.GetFeature(policy.ManagerType()).(policy.Manager),
 	}
+	if muxConfig != nil {
+		dialer, ok := session.FullHandlerFromContext(ctx).(internet.Dialer)
+		if !ok {
+			return nil, errors.New("VMess multiplex requires an outbound dialer")
+		}
+		poolCtx, stop := context.WithCancel(context.Background())
+		handler.stopMultiplex = stop
+		handler.multiplex = multiplex.NewClient(poolCtx, muxConfig, "", func(ctx context.Context) (context.Context, *transport.Link, error) {
+			return handler.process(ctx, nil, dialer, protocol.RequestCommandMux)
+		})
+	}
 
 	return handler, nil
 }
 
+func (h *Handler) Close() error {
+	if h.stopMultiplex != nil {
+		h.stopMultiplex()
+	}
+	return nil
+}
+
 // Process implements proxy.Outbound.Process().
 func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer internet.Dialer) error {
+	if handled, err := h.multiplex.Dispatch(ctx, link); handled {
+		return err
+	}
+	_, _, err := h.process(ctx, link, dialer, 0)
+	return err
+}
+
+func (h *Handler) process(ctx context.Context, link *transport.Link, dialer internet.Dialer, command protocol.RequestCommand) (_ context.Context, _ *transport.Link, err error) {
+	native := command == protocol.RequestCommandMux
+	if native {
+		ctx = session.ContextWithOutbounds(ctx, []*session.Outbound{{Target: h.server.Destination}})
+	}
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
 	if !ob.Target.IsValid() {
-		return errors.New("target not specified")
+		return nil, nil, errors.New("target not specified")
 	}
 	ob.Name = "vmess"
 	ob.CanSpliceCopy = 3
@@ -66,7 +103,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	rec := h.server
 	var conn stat.Connection
 
-	err := retry.ExponentialBackoff(5, 200).On(func() error {
+	err = retry.ExponentialBackoff(5, 200).On(func() error {
 		rawConn, err := dialer.Dial(ctx, rec.Destination)
 		if err != nil {
 			return err
@@ -76,29 +113,29 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		return nil
 	})
 	if err != nil {
-		return errors.New("failed to find an available destination").Base(err)
+		return nil, nil, errors.New("failed to find an available destination").Base(err)
 	}
-	defer conn.Close()
+	if !native {
+		defer conn.Close()
+	}
 
 	target := ob.Target
 	errors.LogInfo(ctx, "tunneling request to ", target, " via ", rec.Destination.NetAddr())
 
-	command := protocol.RequestCommandTCP
-	if target.Network == net.Network_UDP {
-		command = protocol.RequestCommandUDP
-	}
-	if target.Address.Family().IsDomain() && target.Address.Domain() == "v1.mux.cool" {
-		command = protocol.RequestCommandMux
-	}
-
-	user := rec.User
+	singleXUDP := target.Network == net.Network_UDP && target.Port != 53 && target.Port != 443
 	request := &protocol.RequestHeader{
 		Version: encoding.Version,
-		User:    user,
-		Command: command,
+		User:    rec.User,
+		Command: protocol.RequestCommandTCP,
 		Address: target.Address,
 		Port:    target.Port,
 		Option:  protocol.RequestOptionChunkStream,
+	}
+	switch {
+	case native || singleXUDP:
+		request.Command = protocol.RequestCommandMux
+	case target.Network == net.Network_UDP:
+		request.Command = protocol.RequestCommandUDP
 	}
 
 	account := request.User.Account.(*vmess.MemoryAccount)
@@ -107,7 +144,6 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	if request.Security == protocol.SecurityType_AES128_GCM || request.Security == protocol.SecurityType_CHACHA20_POLY1305 {
 		request.Option.Set(protocol.RequestOptionChunkMasking)
 	}
-
 	if shouldEnablePadding(request.Security) && request.Option.Has(protocol.RequestOptionChunkMasking) {
 		request.Option.Set(protocol.RequestOptionGlobalPadding)
 	}
@@ -116,54 +152,60 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 		request.Option.Set(protocol.RequestOptionAuthenticatedLength)
 	}
 
-	input := link.Reader
-	output := link.Writer
-
 	hashkdf := hmac.New(sha256.New, []byte("VMessBF"))
 	hashkdf.Write(account.ID.Bytes())
 
 	behaviorSeed := crc64.Checksum(hashkdf.Sum(nil), crc64.MakeTable(crc64.ISO))
 
-	var newCtx context.Context
-	var newCancel context.CancelFunc
+	clientSession := encoding.NewClientSession(ctx, int64(behaviorSeed))
+	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
 	if session.TimeoutOnlyFromContext(ctx) {
-		newCtx, newCancel = context.WithCancel(context.Background())
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
+	if native {
+		context.AfterFunc(ctx, func() { common.Interrupt(stat.TryUnwrapStatsConn(conn)) })
+	}
+	defer func() {
+		if err != nil {
+			timer.SetTimeout(0)
+		}
+	}()
+
+	writer := buf.NewBufferedWriter(buf.NewWriter(conn))
+	if err := clientSession.EncodeRequestHeader(request, writer); err != nil {
+		return nil, nil, errors.New("failed to encode request").Base(err)
 	}
 
-	session := encoding.NewClientSession(ctx, int64(behaviorSeed))
-	sessionPolicy := h.policyManager.ForLevel(request.User.Level)
-
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, func() {
-		cancel()
-		if newCancel != nil {
-			newCancel()
+	bodyWriter, err := clientSession.EncodeRequestBody(request, writer)
+	if err != nil {
+		return nil, nil, errors.New("failed to start encoding").Base(err)
+	}
+	openResponse := func() (buf.Reader, error) {
+		reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
+		if _, err := clientSession.DecodeResponseHeader(reader); err != nil {
+			return nil, errors.New("failed to read header").Base(err)
 		}
-	}, sessionPolicy.Timeouts.ConnectionIdle)
+		return clientSession.DecodeResponseBody(request, reader)
+	}
 
-	if request.Command == protocol.RequestCommandUDP && request.Port != 53 && request.Port != 443 {
-		request.Command = protocol.RequestCommandMux
-		request.Address = net.DomainAddress("v1.mux.cool")
-		request.Port = net.Port(666)
+	if native {
+		if err := writer.SetBuffered(false); err != nil {
+			return nil, nil, err
+		}
+		physical, err := multiplex.OpenLink(ctx, cancel, bodyWriter, timer, openResponse)
+		return ctx, physical, err
 	}
 
 	requestDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
 
-		writer := buf.NewBufferedWriter(buf.NewWriter(conn))
-		if err := session.EncodeRequestHeader(request, writer); err != nil {
-			return errors.New("failed to encode request").Base(err)
+		stream := bodyWriter
+		if singleXUDP {
+			stream = xudp.NewPacketWriter(bodyWriter, target, xudp.GetGlobalID(ctx))
 		}
-
-		bodyWriter, err := session.EncodeRequestBody(request, writer)
-		if err != nil {
-			return errors.New("failed to start encoding").Base(err)
-		}
-		bodyWriter2 := bodyWriter
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
-			bodyWriter = xudp.NewPacketWriter(bodyWriter, target, xudp.GetGlobalID(ctx))
-		}
-		if err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
+		if err := buf.CopyOnceTimeout(link.Reader, stream, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {
 			return errors.New("failed to write first payload").Base(err)
 		}
 
@@ -171,50 +213,33 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			return err
 		}
 
-		if err := buf.Copy(input, bodyWriter, buf.UpdateActivity(timer)); err != nil {
+		err := buf.Copy(link.Reader, stream, buf.UpdateActivity(timer))
+		if err != nil || account.NoTerminationSignal {
 			return err
 		}
-
-		if request.Option.Has(protocol.RequestOptionChunkStream) && !account.NoTerminationSignal {
-			if err := bodyWriter2.WriteMultiBuffer(buf.MultiBuffer{}); err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return bodyWriter.WriteMultiBuffer(buf.MultiBuffer{})
 	}
 
 	responseDone := func() error {
 		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
 
-		reader := &buf.BufferedReader{Reader: buf.NewReader(conn)}
-		header, err := session.DecodeResponseHeader(reader)
+		bodyReader, err := openResponse()
 		if err != nil {
-			return errors.New("failed to read header").Base(err)
+			return err
 		}
-		h.handleCommand(rec.Destination, header.Command)
-
-		bodyReader, err := session.DecodeResponseBody(request, reader)
-		if err != nil {
-			return errors.New("failed to start encoding response").Base(err)
-		}
-		if request.Command == protocol.RequestCommandMux && request.Port == 666 {
+		if singleXUDP {
 			bodyReader = xudp.NewPacketReader(&buf.BufferedReader{Reader: bodyReader})
 		}
 
-		return buf.Copy(bodyReader, output, buf.UpdateActivity(timer))
+		return buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer))
 	}
 
-	if newCtx != nil {
-		ctx = newCtx
-	}
-
-	responseDonePost := task.OnSuccess(responseDone, task.Close(output))
+	responseDonePost := task.OnSuccess(responseDone, task.Close(link.Writer))
 	if err := task.Run(ctx, requestDone, responseDonePost); err != nil {
-		return errors.New("connection ends").Base(err)
+		return nil, nil, errors.New("connection ends").Base(err)
 	}
 
-	return nil
+	return nil, nil, nil
 }
 
 var enablePadding atomic.Bool
