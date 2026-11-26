@@ -58,6 +58,15 @@ type fakeYggdrasil struct {
 
 	boundProfile string
 	joined       map[string]string // serverId -> profile name
+
+	// latestServerID is the server id of the most recent join. A real session
+	// server keeps one id per profile, so with singleSession set only that id
+	// answers hasJoined.
+	latestServerID string
+	singleSession  bool
+	// hasJoinedDelay widens the window in which a concurrent join can replace
+	// the session under test.
+	hasJoinedDelay time.Duration
 }
 
 func writeFakeYggdrasilJSON(w http.ResponseWriter, status int, body string) {
@@ -124,15 +133,30 @@ func newFakeYggdrasilHandler(state *fakeYggdrasil) http.Handler {
 		state.joinCalls++
 		state.boundProfile = request.SelectedProfile
 		state.joined[request.ServerID] = state.profile.Name
+		state.latestServerID = request.ServerID
 		w.WriteHeader(http.StatusNoContent)
 	})
 
 	mux.HandleFunc(prefix+"/sessionserver/session/minecraft/hasJoined", func(w http.ResponseWriter, r *http.Request) {
+		serverID := r.URL.Query().Get("serverId")
+		username := r.URL.Query().Get("username")
+
+		state.mu.Lock()
+		delay := state.hasJoinedDelay
+		state.mu.Unlock()
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+
 		state.mu.Lock()
 		defer state.mu.Unlock()
 
-		name, found := state.joined[r.URL.Query().Get("serverId")]
-		if !found || name != r.URL.Query().Get("username") {
+		if state.singleSession && state.latestServerID != serverID {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		name, found := state.joined[serverID]
+		if !found || name != username {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
@@ -421,6 +445,128 @@ func TestHandshakeWithYggdrasil(t *testing.T) {
 	}
 	if state.boundProfile != state.profile.ID {
 		t.Errorf("joined profile = %q", state.boundProfile)
+	}
+}
+
+// TestYggdrasilConcurrentLoginsSerialized checks that one account never runs two
+// logins at once. The session server keeps a single server id per profile, so a
+// concurrent login would overwrite the session of a server that is still polling
+// hasJoined, and that server would answer unverified_username. The fake API here
+// behaves like the real one (only the most recent /join answers hasJoined) and
+// adds latency to make the overwrite window wide.
+func TestYggdrasilConcurrentLoginsSerialized(t *testing.T) {
+	state, api := newFakeYggdrasilServer(t)
+	state.singleSession = true
+	state.hasJoinedDelay = 25 * time.Millisecond
+
+	const logins = 4
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	password := "yggdrasil-rsa-seed"
+	privateKey, publicKey := deriveTestRSAKey(t, password)
+
+	var servers sync.WaitGroup
+	servers.Add(logins)
+	go func() {
+		for i := 0; i < logins; i++ {
+			rawConn, err := ln.Accept()
+			if err != nil {
+				t.Errorf("accept: %v", err)
+				servers.Done()
+				continue
+			}
+			go func(conn net.Conn) {
+				defer servers.Done()
+				defer conn.Close()
+
+				verifier, err := newYggdrasilVerifier(api)
+				if err != nil {
+					t.Errorf("new verifier: %v", err)
+					return
+				}
+				server, err := wrapConnServer(conn, nil, password, privateKey, publicKey, nil, verifier, DefaultDataChannel, DefaultPaddingChannel)
+				if err != nil {
+					t.Errorf("wrap server: %v", err)
+					return
+				}
+				defer server.Close()
+
+				buf := make([]byte, 64)
+				n, err := server.Read(buf)
+				if err != nil {
+					t.Errorf("server read: %v", err)
+					return
+				}
+				if !bytes.Equal(buf[:n], []byte("ping")) {
+					t.Errorf("unexpected payload: %q", buf[:n])
+					return
+				}
+				if _, err := server.Write([]byte("ok")); err != nil {
+					t.Errorf("server write: %v", err)
+				}
+			}(rawConn)
+		}
+	}()
+
+	// One auth value for all connections, like one Xray process and one account.
+	auth := newTestYggdrasilAuth(t, api, "SkinUser")
+
+	var clients sync.WaitGroup
+	errs := make(chan error, logins)
+	for i := 0; i < logins; i++ {
+		clients.Add(1)
+		go func() {
+			defer clients.Done()
+
+			rawConn, err := net.Dial("tcp", ln.Addr().String())
+			if err != nil {
+				errs <- fmt.Errorf("dial: %w", err)
+				return
+			}
+			defer rawConn.Close()
+
+			client, err := newClientConn(rawConn, latestProtocolVersion, nil, "", nil, "localhost", nil, auth, DefaultDataChannel, DefaultPaddingChannel)
+			if err != nil {
+				errs <- fmt.Errorf("new client: %w", err)
+				return
+			}
+			defer client.Close()
+
+			if _, err := client.Write([]byte("ping")); err != nil {
+				errs <- fmt.Errorf("client write: %w", err)
+				return
+			}
+			reply := make([]byte, 2)
+			if err := client.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
+				errs <- err
+				return
+			}
+			if _, err := io.ReadFull(client, reply); err != nil {
+				errs <- fmt.Errorf("client read: %w", err)
+				return
+			}
+			if string(reply) != "ok" {
+				errs <- fmt.Errorf("unexpected reply: %q", reply)
+			}
+		}()
+	}
+
+	clients.Wait()
+	servers.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.joinCalls != logins {
+		t.Errorf("join calls = %d, want %d", state.joinCalls, logins)
 	}
 }
 

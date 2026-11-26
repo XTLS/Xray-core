@@ -125,6 +125,32 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("write handshake packet: %w", err)
 	}
 
+	// The session server keeps a single server id per profile: only the last
+	// /join answers hasJoined. One account is therefore one login at a time, so
+	// the whole exchange is serialized per account until the server has verified
+	// the player and answered with Login Finished. Releasing the lock after
+	// /join alone is not enough: a second login would overwrite the session
+	// while the first server is still polling hasJoined, and that server would
+	// disconnect with unverified_username.
+	//
+	// The lock is released as soon as the login is verified, before the startup
+	// padding (which takes time on purpose) so a queue of connections still
+	// logs in at the API's pace rather than at the peer's padding pace. A peer
+	// that never answers holds this account's logins until the handshake
+	// deadline, which is the same wait its own connection would have.
+	releaseLogin := func() {}
+	if c.yggdrasil != nil {
+		c.yggdrasil.loginMu.Lock()
+		released := false
+		releaseLogin = func() {
+			if !released {
+				released = true
+				c.yggdrasil.loginMu.Unlock()
+			}
+		}
+		defer releaseLogin()
+	}
+
 	// Login Start
 	var selectedProfile loginProfile
 	if c.yggdrasil != nil {
@@ -230,6 +256,10 @@ func (c *clientConn) handshake() error {
 			if finishErr != nil {
 				return fmt.Errorf("read login finished fields: %w", finishErr)
 			}
+			// Login Finished is written only after the server's hasJoined
+			// succeeded, so the session is verified and the next login for this
+			// account may join.
+			releaseLogin()
 			if verifyErr := c.verifyLoginProfile(receivedProfile, selectedProfile, joinedSession); verifyErr != nil {
 				return verifyErr
 			}
