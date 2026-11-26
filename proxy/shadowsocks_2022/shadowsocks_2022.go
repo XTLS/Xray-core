@@ -63,10 +63,16 @@ func (s *ServerUDPSession) EnsureLink(
 
 	s.currentConn.Store(conn)
 
-	sessCtx, cancel := context.WithCancel(ctx)
+	// UDP Session might travel across multiple connections
+	// don't bind its lifetime to a parent context
+	sessCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	inbound := session.InboundFromContext(sessCtx)
-	if inbound != nil && s.User != nil {
-		inbound.User = s.User
+	if inbound != nil {
+		newInbound := *inbound
+		if s.User != nil {
+			newInbound.User = s.User
+		}
+		sessCtx = session.ContextWithInbound(sessCtx, &newInbound)
 	}
 	var email string
 	var level uint32

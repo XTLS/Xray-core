@@ -337,7 +337,7 @@ func WriteTCPRequest(w io.Writer, method *CipherMethod, pskList [][]byte, dest n
 	addrPortLen := AddrPortLength(dest)
 	varHeaderLen := addrPortLen + 2 + paddingLen + payloadLen
 
-	totalHandshakeLen := int32(method.KeySaltLength + len(pskList)*AESBlockSize + RequestHeaderFixedChunkLength + AEADTagSize + varHeaderLen + AEADTagSize)
+	totalHandshakeLen := int32(method.KeySaltLength + (len(pskList)-1)*AESBlockSize + RequestHeaderFixedChunkLength + AEADTagSize + varHeaderLen + AEADTagSize)
 	handshakeBuf := buf.NewWithSize(totalHandshakeLen)
 	defer handshakeBuf.Release()
 

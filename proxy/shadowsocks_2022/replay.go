@@ -100,19 +100,27 @@ type ServerUDPSession struct {
 func (s *ServerUDPSession) CheckPacketID(packetID uint64) bool {
 	s.Lock()
 	defer s.Unlock()
-	if s.Window == nil {
-		s.Window = new(SlidingWindow)
-	}
 	return s.Window.Check(packetID)
 }
 
-func (s *ServerUDPSession) AddPacketID(packetID uint64) {
+func (s *ServerUDPSession) Commit(packetID uint64, bodyAead cipher.AEAD, user *protocol.MemoryUser, userPSK []byte) bool {
 	s.Lock()
 	defer s.Unlock()
-	if s.Window == nil {
-		s.Window = new(SlidingWindow)
+	if s.User != nil && user != nil && s.User != user {
+		return false
 	}
-	s.Window.Add(packetID)
+	if !s.Window.CheckAndAdd(packetID) {
+		return false
+	}
+	if s.clientBodyCipher == nil && bodyAead != nil {
+		s.clientBodyCipher = bodyAead
+	}
+	if s.User == nil && user != nil {
+		s.User = user
+		s.UserPSK = userPSK
+	}
+	s.LastActive.Store(time.Now().Unix())
+	return true
 }
 
 type UDPSessionManager struct {
@@ -128,6 +136,13 @@ func NewUDPSessionManager(timeout time.Duration) *UDPSessionManager {
 	}
 }
 
+func (m *UDPSessionManager) Get(sessionID uint64) *ServerUDPSession {
+	if s, ok := m.sessions.Load(sessionID); ok {
+		return s
+	}
+	return nil
+}
+
 func (m *UDPSessionManager) GetOrCreate(sessionID uint64) *ServerUDPSession {
 	now := time.Now().Unix()
 	if s, ok := m.sessions.Load(sessionID); ok {
@@ -137,6 +152,7 @@ func (m *UDPSessionManager) GetOrCreate(sessionID uint64) *ServerUDPSession {
 
 	s := &ServerUDPSession{
 		SessionID: sessionID,
+		Window:    new(SlidingWindow),
 		manager:   m,
 	}
 	s.LastActive.Store(now)
