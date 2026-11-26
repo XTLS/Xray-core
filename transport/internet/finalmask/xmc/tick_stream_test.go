@@ -166,3 +166,44 @@ func TestTickStreamFlushWritesQueuedDataImmediately(t *testing.T) {
 		t.Fatalf("flush delivered %q, want %q", data, payload)
 	}
 }
+
+// TestPingPongEncoding pins the configuration ping/pong form: the id is a plain
+// 32-bit integer, not a varint. Vanilla rejected a varint pong with "Failed to
+// decode packet 'serverbound/minecraft:pong'", which is why this is tested
+// separately from the rest of the stream.
+func TestPingPongEncoding(t *testing.T) {
+	packetIDs := configurationPacketIDs121
+
+	var wire bytes.Buffer
+	pingID := Int(0x01020304)
+	if err := writePacket(&wire, packetIDs.clientboundPing, &pingID); err != nil {
+		t.Fatal(err)
+	}
+	packet, err := readPacket(&wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var received Int
+	if err := packet.readFields(&received); err != nil {
+		t.Fatalf("read ping id as int: %v", err)
+	}
+	if received != pingID {
+		t.Fatalf("ping id = %#x, want %#x", received, pingID)
+	}
+
+	var out bytes.Buffer
+	stream := &tickStream{writer: &out, isClient: true, packetIDs: packetIDs}
+	if err := stream.writePong(received); err != nil {
+		t.Fatal(err)
+	}
+	answer, err := readPacket(&out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer.packetID != packetIDs.serverboundPong {
+		t.Fatalf("pong packet id = 0x%02x", answer.packetID)
+	}
+	if !bytes.Equal(answer.data, []byte{1, 2, 3, 4}) {
+		t.Fatalf("pong body = %x, want 01020304", answer.data)
+	}
+}

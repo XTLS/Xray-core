@@ -238,6 +238,29 @@ func (v *UnsignedShort) writeTo(w io.Writer) error {
 	return nil
 }
 
+// Int is a big-endian 32-bit integer, which is how vanilla encodes packet ids
+// that are not counting up from zero (Ping, Pong). It is not a Varint: using the
+// wrong one decodes as a valid-looking packet and fails later with a decoder
+// exception on the peer.
+type Int int32
+
+func (v *Int) readFrom(r io.Reader) error {
+	var buf [4]byte
+	if _, err := io.ReadFull(r, buf[:]); err != nil {
+		return fmt.Errorf("read int: %w", err)
+	}
+	*v = Int(int32(buf[0])<<24 | int32(buf[1])<<16 | int32(buf[2])<<8 | int32(buf[3]))
+	return nil
+}
+
+func (v *Int) writeTo(w io.Writer) error {
+	buf := []byte{byte(*v >> 24), byte(*v >> 16), byte(*v >> 8), byte(*v)}
+	if _, err := w.Write(buf); err != nil {
+		return fmt.Errorf("write int: %w", err)
+	}
+	return nil
+}
+
 type Long int64
 
 func (v *Long) readFrom(r io.Reader) error {

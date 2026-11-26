@@ -318,10 +318,11 @@ func (c *serverConn) login() error {
 		}
 	}
 
-	// No Set Compression: the startup padding preset reproduces a login that ran
-	// without it, and the tunnel payloads are already compressed or encrypted by
-	// whoever produced them, so a threshold would only wrap the padding frames
-	// in another layer. Vanilla accepts a login without the packet.
+	// No Set Compression, which is the same wire as a vanilla server with
+	// network-compression-threshold=-1: the startup padding preset reproduces a
+	// login that ran without it, and the tunnel payloads are already compressed
+	// or encrypted by whoever produced them. The client still negotiates the
+	// compressed framing when the peer is a real server that enables it.
 	if err = writeLoginFinished(c.writer, c.protocol, profile); err != nil {
 		return fmt.Errorf("write login finished: %w", err)
 	}

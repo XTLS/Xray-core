@@ -225,8 +225,9 @@ func (s *tickStream) Read(p []byte) (int, error) {
 			}
 
 		case s.packetIDs.clientboundPing:
-			// Configuration Ping is answered with Pong, like a real client.
-			var id Varint
+			// Configuration Ping is answered with Pong, like a real client. The
+			// id is a plain 32-bit integer here, not a varint.
+			var id Int
 			if err := packet.readFields(&id); err != nil {
 				return 0, fmt.Errorf("read minecraft ping: %w", err)
 			}
@@ -317,7 +318,7 @@ func (s *tickStream) writeKeepAlive(packetID int, id Long) error {
 }
 
 // writePong answers a configuration Ping, which a vanilla client always does.
-func (s *tickStream) writePong(id Varint) error {
+func (s *tickStream) writePong(id Int) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
 	if err := writePacket(s.writer, s.packetIDs.serverboundPong, &id); err != nil {
