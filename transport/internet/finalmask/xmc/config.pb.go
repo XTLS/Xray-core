@@ -197,8 +197,14 @@ type Config struct {
 	// game, and reusing one would collide with a vanilla payload.
 	DataChannel    string `protobuf:"bytes,15,opt,name=data_channel,json=dataChannel,proto3" json:"data_channel,omitempty"`
 	PaddingChannel string `protobuf:"bytes,16,opt,name=padding_channel,json=paddingChannel,proto3" json:"padding_channel,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Minecraft release the client advertises in its handshake, as a network
+	// protocol number (for example 777 for 26.3). Zero uses the newest version
+	// the mask knows; the server always follows the version the client names.
+	// Set it when the peer is a real Minecraft server of an older release: a
+	// vanilla server rejects a client that names another version.
+	ProtocolVersion uint32 `protobuf:"varint,17,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Config) Reset() {
@@ -301,6 +307,13 @@ func (x *Config) GetPaddingChannel() string {
 	return ""
 }
 
+func (x *Config) GetProtocolVersion() uint32 {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return 0
+}
+
 type Padding struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	LengthMin int64                  `protobuf:"varint,1,opt,name=length_min,json=lengthMin,proto3" json:"length_min,omitempty"`
@@ -400,7 +413,7 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\x03api\x18\x01 \x01(\tR\x03api\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x03 \x01(\tR\bpassword\x12\x16\n" +
-	"\x06player\x18\x04 \x01(\tR\x06player\"\xe7\x03\n" +
+	"\x06player\x18\x04 \x01(\tR\x06player\"\x92\x04\n" +
 	"\x06Config\x12\x1a\n" +
 	"\bpassword\x18\x01 \x01(\tR\bpassword\x12&\n" +
 	"\x0frsa_private_key\x18\b \x01(\fR\rrsaPrivateKey\x12$\n" +
@@ -413,7 +426,8 @@ const file_transport_internet_finalmask_xmc_config_proto_rawDesc = "" +
 	"\n" +
 	"no_padding\x18\x0e \x01(\bR\tnoPadding\x12!\n" +
 	"\fdata_channel\x18\x0f \x01(\tR\vdataChannel\x12'\n" +
-	"\x0fpadding_channel\x18\x10 \x01(\tR\x0epaddingChannelJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
+	"\x0fpadding_channel\x18\x10 \x01(\tR\x0epaddingChannel\x12)\n" +
+	"\x10protocol_version\x18\x11 \x01(\rR\x0fprotocolVersionJ\x04\b\x02\x10\x03\"\x9f\x01\n" +
 	"\aPadding\x12\x1d\n" +
 	"\n" +
 	"length_min\x18\x01 \x01(\x03R\tlengthMin\x12\x1d\n" +

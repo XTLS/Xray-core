@@ -11,10 +11,6 @@ import (
 )
 
 const (
-	configurationClientboundCustomPayload = 0x01
-	configurationServerboundCustomPayload = 0x02
-	configurationKeepAlive                = 0x04
-
 	maxPacketData   = 24 * 1024
 	keepAlivePeriod = 15 * time.Second
 
@@ -45,6 +41,11 @@ type tickStream struct {
 	writer   io.Writer
 	isClient bool
 
+	// packetIDs are the configuration-state ids of the negotiated version: the
+	// custom payload pair that carries the tunnel plus the keep-alives, pings,
+	// cookies and disconnects a peer may send before the tunnel starts.
+	packetIDs configurationPacketIDs
+
 	// Configured custom payload channels: the data one carries proxy bytes, the
 	// padding one keeps an idle tick non-empty. Both ends must use the same pair.
 	dataChannel    string
@@ -65,11 +66,12 @@ type tickStream struct {
 	stopOnce    sync.Once
 }
 
-func newTickStream(reader io.Reader, writer io.Writer, isClient bool, dataChannel, paddingChannel string) *tickStream {
+func newTickStream(reader io.Reader, writer io.Writer, isClient bool, packetIDs configurationPacketIDs, dataChannel, paddingChannel string) *tickStream {
 	s := &tickStream{
 		reader:         reader,
 		writer:         writer,
 		isClient:       isClient,
+		packetIDs:      packetIDs,
 		dataChannel:    dataChannel,
 		paddingChannel: paddingChannel,
 		done:           make(chan struct{}),
@@ -204,16 +206,43 @@ func (s *tickStream) Read(p []byte) (int, error) {
 			return n, nil
 		}
 
-		if packet.packetID == configurationKeepAlive {
+		// Everything else in this state is server chatter: the client answers
+		// what a vanilla client answers and skips the rest (registry data, tags,
+		// dialogs...), which is what keeps it working across releases. The server
+		// side only reads tunnel data, so it skips all of it.
+		if !s.isClient {
+			continue
+		}
+
+		switch packet.packetID {
+		case s.packetIDs.clientboundKeepAlive:
 			var id Long
 			if err := packet.readFields(&id); err != nil {
 				return 0, fmt.Errorf("read minecraft keep-alive: %w", err)
 			}
-			if s.isClient {
-				if err := s.writeKeepAlive(id); err != nil {
-					return 0, err
-				}
+			if err := s.writeKeepAlive(s.packetIDs.serverboundKeepAlive, id); err != nil {
+				return 0, err
 			}
+
+		case s.packetIDs.clientboundPing:
+			// Configuration Ping is answered with Pong, like a real client.
+			var id Varint
+			if err := packet.readFields(&id); err != nil {
+				return 0, fmt.Errorf("read minecraft ping: %w", err)
+			}
+			if err := s.writePong(id); err != nil {
+				return 0, err
+			}
+
+		case s.packetIDs.clientboundCookieRequest:
+			if err := s.writeCookieResponse(packet); err != nil {
+				return 0, err
+			}
+
+		case s.packetIDs.clientboundDisconnect:
+			var reason String
+			_ = packet.readFields(&reason)
+			return 0, fmt.Errorf("minecraft disconnected: %s", string(reason))
 		}
 	}
 }
@@ -250,16 +279,16 @@ func (s *tickStream) Stop() {
 
 func (s *tickStream) localCustomPayloadID() int {
 	if s.isClient {
-		return configurationServerboundCustomPayload
+		return s.packetIDs.serverboundCustomPayload
 	}
-	return configurationClientboundCustomPayload
+	return s.packetIDs.clientboundCustomPayload
 }
 
 func (s *tickStream) remoteCustomPayloadID() int {
 	if s.isClient {
-		return configurationClientboundCustomPayload
+		return s.packetIDs.clientboundCustomPayload
 	}
-	return configurationServerboundCustomPayload
+	return s.packetIDs.serverboundCustomPayload
 }
 
 func parseCustomPayload(packet *mcPacket, dataChannel string) ([]byte, bool, error) {
@@ -278,11 +307,37 @@ func parseCustomPayload(packet *mcPacket, dataChannel string) ([]byte, bool, err
 	return payload, true, nil
 }
 
-func (s *tickStream) writeKeepAlive(id Long) error {
+func (s *tickStream) writeKeepAlive(packetID int, id Long) error {
 	s.writeMu.Lock()
 	defer s.writeMu.Unlock()
-	if err := writePacket(s.writer, configurationKeepAlive, &id); err != nil {
+	if err := writePacket(s.writer, packetID, &id); err != nil {
 		return fmt.Errorf("write minecraft keep-alive: %w", err)
+	}
+	return nil
+}
+
+// writePong answers a configuration Ping, which a vanilla client always does.
+func (s *tickStream) writePong(id Varint) error {
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if err := writePacket(s.writer, s.packetIDs.serverboundPong, &id); err != nil {
+		return fmt.Errorf("write minecraft pong: %w", err)
+	}
+	return nil
+}
+
+// writeCookieResponse answers a cookie request with an absent cookie, which is
+// what a client that never received one sends.
+func (s *tickStream) writeCookieResponse(request *mcPacket) error {
+	var key String
+	if err := request.readFields(&key); err != nil {
+		return fmt.Errorf("read minecraft cookie request: %w", err)
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	answered := Boolean(false)
+	if err := writePacket(s.writer, s.packetIDs.serverboundCookieResponse, &key, &answered); err != nil {
+		return fmt.Errorf("write minecraft cookie response: %w", err)
 	}
 	return nil
 }
@@ -294,7 +349,7 @@ func (s *tickStream) keepAliveLoop() {
 		select {
 		case <-ticker.C:
 			id := Long(s.keepAliveID.Add(1))
-			if err := s.writeKeepAlive(id); err != nil {
+			if err := s.writeKeepAlive(s.packetIDs.clientboundKeepAlive, id); err != nil {
 				return
 			}
 		case <-s.done:

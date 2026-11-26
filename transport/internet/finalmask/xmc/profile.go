@@ -184,19 +184,18 @@ func propertyListFromYggdrasil(properties []yggdrasilProperty) loginProperties {
 	return result
 }
 
-func readLoginSuccess(packet *mcPacket) (loginProfile, error) {
-	var (
-		profile  loginProfile
-		username String
-	)
-	if err := packet.readFields(&profile.UUID, &username, &profile.Properties); err != nil {
-		return loginProfile{}, err
-	}
-	profile.Username = string(username)
-	return profile, nil
-}
-
-func writeLoginSuccess(w io.Writer, profile loginProfile) error {
+// writeLoginFinished writes the Login Finished packet. From 26.2 on the packet
+// also carries the connection session id, which the client only uses for its
+// own telemetry, so one value per process is enough.
+func writeLoginFinished(w io.Writer, version protocolVersion, profile loginProfile) error {
 	username := String(profile.Username)
-	return writePacket(w, 0x02, &profile.UUID, &username, &profile.Properties)
+	fields := []field{&profile.UUID, &username, &profile.Properties}
+	if version.loginFinishedSessionID {
+		sessionID, err := serverSessionID()
+		if err != nil {
+			return err
+		}
+		fields = append(fields, &sessionID)
+	}
+	return writePacket(w, version.login.clientboundLoginFinished, fields...)
 }

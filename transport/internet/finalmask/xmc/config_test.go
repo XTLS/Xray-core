@@ -16,10 +16,10 @@ func TestClientRejectsLongLegacyPassword(t *testing.T) {
 	profiles := []loginProfile{{Username: "TestUser"}}
 	publicKey := []byte{0x01}
 
-	if _, err := newClientConn(client, profiles, strings.Repeat("p", MaxLegacyPasswordLength), publicKey, "localhost", nil, nil, DefaultDataChannel, DefaultPaddingChannel); err != nil {
+	if _, err := newClientConn(client, latestProtocolVersion, profiles, strings.Repeat("p", MaxLegacyPasswordLength), publicKey, "localhost", nil, nil, DefaultDataChannel, DefaultPaddingChannel); err != nil {
 		t.Fatalf("password of %d bytes was rejected: %v", MaxLegacyPasswordLength, err)
 	}
-	if _, err := newClientConn(client, profiles, strings.Repeat("p", MaxLegacyPasswordLength+1), publicKey, "localhost", nil, nil, DefaultDataChannel, DefaultPaddingChannel); err == nil {
+	if _, err := newClientConn(client, latestProtocolVersion, profiles, strings.Repeat("p", MaxLegacyPasswordLength+1), publicKey, "localhost", nil, nil, DefaultDataChannel, DefaultPaddingChannel); err == nil {
 		t.Fatal("expected the long password to be rejected")
 	}
 }
@@ -130,7 +130,7 @@ func TestCloseCancelsPaddingPause(t *testing.T) {
 	client, server := net.Pipe()
 	defer server.Close()
 
-	conn, err := newClientConn(client, []loginProfile{{Username: "TestUser"}}, "password", []byte{0x01}, "localhost", nil, nil, DefaultDataChannel, DefaultPaddingChannel)
+	conn, err := newClientConn(client, latestProtocolVersion, []loginProfile{{Username: "TestUser"}}, "password", []byte{0x01}, "localhost", nil, nil, DefaultDataChannel, DefaultPaddingChannel)
 	if err != nil {
 		t.Fatal(err)
 	}

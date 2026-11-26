@@ -99,7 +99,7 @@ func TestPaddingFramingDependsOnChannelLength(t *testing.T) {
 // exactly the configured channel and leaves every other payload alone.
 func TestPaddingChannelIsConfigurable(t *testing.T) {
 	const paddingChannel = "myxmc:noise"
-	packetID := paddingFramePacketID(false)
+	packetID := paddingFramePacketID(configurationPacketIDs121, false)
 
 	build := func() []byte {
 		var wire bytes.Buffer
@@ -155,7 +155,7 @@ func TestTickStreamUsesConfiguredChannels(t *testing.T) {
 		paddingChannel = "myxmc:noise"
 	)
 	writer := &tickTestWriter{}
-	stream := newTickStream(nil, writer, true, dataChannel, paddingChannel)
+	stream := newTickStream(nil, writer, true, configurationPacketIDs121, dataChannel, paddingChannel)
 	defer stream.Stop()
 
 	if _, err := stream.Write([]byte("hello")); err != nil {

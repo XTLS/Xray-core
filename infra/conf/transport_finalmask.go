@@ -980,6 +980,11 @@ type XMC struct {
 	// (xmc:data / xmc:pad). Vanilla's "minecraft" namespace is rejected.
 	DataChannel    string `json:"dataChannel,omitempty"`
 	PaddingChannel string `json:"paddingChannel,omitempty"`
+	// Minecraft network protocol number the client advertises, for example 777
+	// for 26.3. Zero uses the newest version the mask knows; the server follows
+	// whatever the client names. Set it when the peer is a real Minecraft server
+	// of an older release.
+	ProtocolVersion uint32 `json:"protocolVersion,omitempty"`
 }
 
 type XMCPaddingTurn struct {
@@ -1045,11 +1050,15 @@ func (c *XMC) Build() (proto.Message, error) {
 	if noPadding && len(c.Paddings) > 0 {
 		return nil, fmt.Errorf("minecraft padding: noPadding and paddings are exclusive")
 	}
+	if err := xmc.ValidateProtocolVersion(c.ProtocolVersion); err != nil {
+		return nil, fmt.Errorf("minecraft protocolVersion: %w", err)
+	}
 	config := &xmc.Config{
-		Hostname:       c.Hostname,
-		NoPadding:      noPadding,
-		DataChannel:    c.DataChannel,
-		PaddingChannel: c.PaddingChannel,
+		Hostname:        c.Hostname,
+		NoPadding:       noPadding,
+		DataChannel:     c.DataChannel,
+		PaddingChannel:  c.PaddingChannel,
+		ProtocolVersion: c.ProtocolVersion,
 	}
 	dataChannel, paddingChannel, channelErr := config.ChannelIDs()
 	if channelErr != nil {

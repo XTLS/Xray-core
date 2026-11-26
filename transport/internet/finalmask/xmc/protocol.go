@@ -443,6 +443,6 @@ func writeFull(w io.Writer, p []byte) error {
 	return nil
 }
 
-func writeDisconnectPacket(w io.Writer, reason string) error {
-	return writePacket(w, 0x00, new(String(reason)))
+func writeDisconnectPacket(w io.Writer, packetID int, reason string) error {
+	return writePacket(w, packetID, new(String(reason)))
 }

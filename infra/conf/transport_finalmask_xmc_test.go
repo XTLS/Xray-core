@@ -303,3 +303,32 @@ func TestXMCBuildRejectsChannels(t *testing.T) {
 		}
 	}
 }
+
+func TestXMCBuildProtocolVersion(t *testing.T) {
+	profile := XMCProfile{
+		Username:          "TestUser",
+		UUID:              "00112233-4455-6677-8899-aabbccddeeff",
+		TexturesValue:     "textures-value",
+		TexturesSignature: "textures-signature",
+	}
+
+	built, err := (&XMC{Password: "test-password", Profiles: []XMCProfile{profile}}).Build()
+	if err != nil {
+		t.Fatalf("build default XMC config: %v", err)
+	}
+	if got := built.(*xmc.Config).ProtocolVersion; got != 0 {
+		t.Fatalf("default protocol version = %d, want 0 (newest)", got)
+	}
+
+	built, err = (&XMC{Password: "test-password", Profiles: []XMCProfile{profile}, ProtocolVersion: 775}).Build()
+	if err != nil {
+		t.Fatalf("build XMC config with a protocol version: %v", err)
+	}
+	if got := built.(*xmc.Config).ProtocolVersion; got != 775 {
+		t.Fatalf("protocol version = %d, want 775", got)
+	}
+
+	if _, err = (&XMC{Password: "test-password", Profiles: []XMCProfile{profile}, ProtocolVersion: 778}).Build(); err == nil || !strings.Contains(err.Error(), "unsupported protocol version 778") {
+		t.Fatalf("expected an unknown protocol version to be rejected, got %v", err)
+	}
+}

@@ -30,6 +30,21 @@ func (c *Config) wrapClientAuth() (*yggdrasilAuth, error) {
 	)
 }
 
+// gameVersion resolves the protocol row the client advertises in its handshake.
+// Zero keeps the newest row, which is the version a fresh configuration gets;
+// a configured value has to be a known row, because a guessed packet id breaks
+// the login in a way that looks like a network failure.
+func (c *Config) gameVersion() (protocolVersion, error) {
+	if err := ValidateProtocolVersion(c.ProtocolVersion); err != nil {
+		return protocolVersion{}, err
+	}
+	if c.ProtocolVersion == 0 {
+		return latestProtocolVersion, nil
+	}
+	version, _ := protocolVersionByNumber(Varint(c.ProtocolVersion))
+	return version, nil
+}
+
 func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *finalmask.Dialer) (net.Conn, error) {
 	profiles, err := profilesFromConfig(c.Profiles)
 	if err != nil {
@@ -40,6 +55,10 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
 	dataChannel, paddingChannel, err := c.ChannelIDs()
+	if err != nil {
+		return nil, fmt.Errorf("minecraft finalmask: %w", err)
+	}
+	protocol, err := c.gameVersion()
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
@@ -60,7 +79,7 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 		rsaPublicKey = c.RsaPublicKey
 	}
 
-	cc, err := newClientConn(conn, profiles, c.Password, rsaPublicKey, c.Hostname, paddingSchedule, auth, dataChannel, paddingChannel)
+	cc, err := newClientConn(conn, protocol, profiles, c.Password, rsaPublicKey, c.Hostname, paddingSchedule, auth, dataChannel, paddingChannel)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}

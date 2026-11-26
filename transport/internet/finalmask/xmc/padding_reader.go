@@ -19,10 +19,10 @@ type paddingReader struct {
 // writing. Buffer only the first non-padding packet, then let the caller resume
 // reading the underlying stream. This keeps memory bounded without requiring
 // matching padding lengths or an extra end-of-padding packet on the wire.
-func newPaddingReader(reader io.Reader, isClient bool, paddingChannel string) io.Reader {
+func newPaddingReader(reader io.Reader, isClient bool, paddingChannel string, packetIDs configurationPacketIDs) io.Reader {
 	first := make(chan paddingReadResult, 1)
 	go func() {
-		frame, err := readPastPadding(reader, paddingFramePacketID(!isClient), paddingChannel)
+		frame, err := readPastPadding(reader, paddingFramePacketID(packetIDs, !isClient), paddingChannel)
 		first <- paddingReadResult{frame: frame, err: err}
 	}()
 	return &paddingReader{reader: reader, first: first}

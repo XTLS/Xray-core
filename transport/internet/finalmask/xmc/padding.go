@@ -175,7 +175,7 @@ func pausePadding(done <-chan struct{}, d time.Duration) error {
 // Minecraft packets that carry nothing to compare an early arrival against, and
 // the startup reader drains them on its own while this schedule writes. A peer
 // that stalls is bounded by maxPaddingScheduleDelay instead.
-func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration) error, paddingChannel string) error {
+func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration) error, paddingChannel string, packetIDs configurationPacketIDs) error {
 	if len(schedule) == 0 {
 		return nil
 	}
@@ -207,7 +207,7 @@ func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength i
 		if err := sleep(delay); err != nil {
 			return err
 		}
-		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(isClient), framing); err != nil {
+		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(packetIDs, isClient), framing); err != nil {
 			return fmt.Errorf("write padding turn %d: %w", i, err)
 		}
 	}
@@ -274,12 +274,13 @@ func validatePaddingSchedule(schedule []paddingTurn, firstTurnPrefixLength int) 
 
 // paddingFramePacketID returns the configuration-state custom payload packet id
 // used by the side that sends the padding bytes; both values come from the
-// vanilla configuration protocol, so no proxy-specific id ever reaches the wire.
-func paddingFramePacketID(isClient bool) int {
+// negotiated version's configuration protocol, so no proxy-specific id ever
+// reaches the wire.
+func paddingFramePacketID(packetIDs configurationPacketIDs, isClient bool) int {
 	if isClient {
-		return configurationServerboundCustomPayload
+		return packetIDs.serverboundCustomPayload
 	}
-	return configurationClientboundCustomPayload
+	return packetIDs.clientboundCustomPayload
 }
 
 // writePaddingTurnFrames writes one padding turn as a sequence of valid

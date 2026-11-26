@@ -78,7 +78,7 @@ func collectTickData(t *testing.T, batches [][]byte) (data []byte, dataPackets, 
 // emits one small padding frame per tick in both directions.
 func TestTickStreamIdleCadence(t *testing.T) {
 	writer := &tickTestWriter{}
-	stream := newTickStream(nil, writer, true, DefaultDataChannel, DefaultPaddingChannel)
+	stream := newTickStream(nil, writer, true, configurationPacketIDs121, DefaultDataChannel, DefaultPaddingChannel)
 	defer stream.Stop()
 
 	time.Sleep(180 * time.Millisecond)
@@ -95,7 +95,7 @@ func TestTickStreamIdleCadence(t *testing.T) {
 		if len(packets) != 1 {
 			t.Fatalf("idle tick %d wrote %d packets, want 1", i, len(packets))
 		}
-		if packets[0].packetID != configurationServerboundCustomPayload {
+		if packets[0].packetID != configurationPacketIDs121.serverboundCustomPayload {
 			t.Fatalf("idle tick %d packet id = %d", i, packets[0].packetID)
 		}
 		channel, _ := tickPacketChannelAndPayload(t, packets[0])
@@ -109,7 +109,7 @@ func TestTickStreamIdleCadence(t *testing.T) {
 // then emitted as one per-tick batch, split at maxPacketData boundaries.
 func TestTickStreamSendsQueuedDataInOneTick(t *testing.T) {
 	writer := &tickTestWriter{}
-	stream := newTickStream(nil, writer, true, DefaultDataChannel, DefaultPaddingChannel)
+	stream := newTickStream(nil, writer, true, configurationPacketIDs121, DefaultDataChannel, DefaultPaddingChannel)
 	defer stream.Stop()
 
 	payload := bytes.Repeat([]byte("0123456789abcdef"), 4096)
@@ -150,7 +150,7 @@ func TestTickStreamSendsQueuedDataInOneTick(t *testing.T) {
 // already accepted by Write must not wait for the next tick.
 func TestTickStreamFlushWritesQueuedDataImmediately(t *testing.T) {
 	writer := &tickTestWriter{}
-	stream := newTickStream(nil, writer, true, DefaultDataChannel, DefaultPaddingChannel)
+	stream := newTickStream(nil, writer, true, configurationPacketIDs121, DefaultDataChannel, DefaultPaddingChannel)
 	defer stream.Stop()
 
 	payload := []byte("flush me")

@@ -60,6 +60,12 @@ message Config {
     // game, and reusing one would collide with a vanilla payload.
     string data_channel = 15;
     string padding_channel = 16;
+    // Minecraft release the client advertises in its handshake, as a network
+    // protocol number (for example 777 for 26.3). Zero uses the newest version
+    // the mask knows; the server always follows the version the client names.
+    // Set it when the peer is a real Minecraft server of an older release: a
+    // vanilla server rejects a client that names another version.
+    uint32 protocol_version = 17;
 }
 
 message Padding {

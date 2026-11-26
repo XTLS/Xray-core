@@ -10,7 +10,7 @@ import (
 
 func TestPaddingReaderPreservesFollowingPackets(t *testing.T) {
 	for _, isClient := range []bool{true, false} {
-		packetID := paddingFramePacketID(!isClient)
+		packetID := paddingFramePacketID(configurationPacketIDs121, !isClient)
 		var wire bytes.Buffer
 		paddingChannel := String(DefaultPaddingChannel)
 		padding := RestBytes(make([]byte, 1024))
@@ -24,7 +24,7 @@ func TestPaddingReaderPreservesFollowingPackets(t *testing.T) {
 			t.Fatal(err)
 		}
 		id := Long(42)
-		if err := writePacket(&want, configurationKeepAlive, &id); err != nil {
+		if err := writePacket(&want, configurationPacketIDs121.clientboundKeepAlive, &id); err != nil {
 			t.Fatal(err)
 		}
 		channel := String(DefaultDataChannel)
@@ -32,7 +32,7 @@ func TestPaddingReaderPreservesFollowingPackets(t *testing.T) {
 			t.Fatal(err)
 		}
 		wire.Write(want.Bytes())
-		got, err := io.ReadAll(newPaddingReader(&wire, isClient, DefaultPaddingChannel))
+		got, err := io.ReadAll(newPaddingReader(&wire, isClient, DefaultPaddingChannel, configurationPacketIDs121))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -52,7 +52,7 @@ func TestPaddingReaderReadErrors(t *testing.T) {
 		{name: "truncated", wire: []byte{2, 1}, err: io.ErrUnexpectedEOF},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			reader := newPaddingReader(bytes.NewReader(test.wire), true, DefaultPaddingChannel)
+			reader := newPaddingReader(bytes.NewReader(test.wire), true, DefaultPaddingChannel, configurationPacketIDs121)
 			if _, err := reader.Read(make([]byte, 1)); !errors.Is(err, test.err) {
 				t.Fatalf("got %v, want %v", err, test.err)
 			}
@@ -63,7 +63,7 @@ func TestPaddingReaderReadErrors(t *testing.T) {
 func TestPaddingReaderUnblocksOnClose(t *testing.T) {
 	client, server := net.Pipe()
 	defer server.Close()
-	reader := newPaddingReader(client, true, DefaultPaddingChannel)
+	reader := newPaddingReader(client, true, DefaultPaddingChannel, configurationPacketIDs121)
 	if n, err := reader.Read(nil); n != 0 || err != nil {
 		t.Fatalf("empty read = %d, %v", n, err)
 	}

@@ -23,6 +23,11 @@ type clientConn struct {
 
 	state clientState
 
+	// protocol selects the packet ids and field shapes of the login the client
+	// performs. The server picks its own row from the handshake, so both ends
+	// agree without a negotiation round trip.
+	protocol protocolVersion
+
 	handshakeLock   sync.Mutex
 	lifecycleMu     sync.Mutex
 	closed          bool
@@ -48,7 +53,7 @@ var (
 	clientStateProxy     clientState = 2
 )
 
-func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, paddingSchedule []paddingTurn, yggdrasil *yggdrasilAuth, dataChannel, paddingChannel string) (*clientConn, error) {
+func newClientConn(c net.Conn, protocol protocolVersion, profiles []loginProfile, password string, rsaPublicKey []byte, hostname string, paddingSchedule []paddingTurn, yggdrasil *yggdrasilAuth, dataChannel, paddingChannel string) (*clientConn, error) {
 	if len(rsaPublicKey) == 0 && yggdrasil == nil {
 		return nil, fmt.Errorf("empty rsa public key")
 	}
@@ -63,6 +68,7 @@ func newClientConn(c net.Conn, profiles []loginProfile, password string, rsaPubl
 		writer:          c,
 		c:               c,
 		state:           clientStateHandshake,
+		protocol:        protocol,
 		handshakeLock:   sync.Mutex{},
 		profiles:        profiles,
 		password:        password,
@@ -96,10 +102,10 @@ func (c *clientConn) handshake() error {
 	defer func() { _ = c.deadlines.endHandshake() }()
 
 	var (
-		protocolVersion Varint        = Varint(775)
-		serverAddress   String        = String(c.hostname)
-		serverPort      UnsignedShort = UnsignedShort(25565)
-		nextState       Varint        = Varint(2)
+		protocolNumber Varint        = c.protocol.number
+		serverAddress  String        = String(c.hostname)
+		serverPort     UnsignedShort = UnsignedShort(25565)
+		nextState      Varint        = Varint(2)
 	)
 
 	host, portString, err := net.SplitHostPort(c.c.RemoteAddr().String())
@@ -114,7 +120,7 @@ func (c *clientConn) handshake() error {
 		}
 	}
 
-	err = writePacket(c.writer, 0x00, &protocolVersion, &serverAddress, &serverPort, &nextState)
+	err = writePacket(c.writer, handshakeServerboundIntention, &protocolNumber, &serverAddress, &serverPort, &nextState)
 	if err != nil {
 		return fmt.Errorf("write handshake packet: %w", err)
 	}
@@ -143,57 +149,136 @@ func (c *clientConn) handshake() error {
 	}
 	username := String(selectedProfile.Username)
 
-	err = writePacket(c.writer, 0x00, &username, &selectedProfile.UUID)
+	err = writePacket(c.writer, c.protocol.login.serverboundLoginStart, &username, &selectedProfile.UUID)
 	if err != nil {
 		return fmt.Errorf("write login start: %w", err)
 	}
 
-	// Encryption Request
-	pkt, err := readPacket(c.reader)
-	if err != nil {
-		return fmt.Errorf("read encryption request: %w", err)
-	}
+	// From here the server drives the login: an online-mode server answers with
+	// Encryption Request, then optionally Set Compression, and finally Login
+	// Finished; an offline-mode server skips straight to Login Finished. Queries
+	// and cookie requests can appear at any point between them, so the client
+	// loops over the login packets like a vanilla one instead of expecting a
+	// fixed sequence.
+	handledEncryption := false
+	joinedSession := false
+	for {
+		pkt, readErr := readPacket(c.reader)
+		if readErr != nil {
+			return fmt.Errorf("read login packet: %w", readErr)
+		}
 
-	if pkt.packetID != 0x01 {
-		return fmt.Errorf("bad encrypt request packet id")
-	}
+		switch pkt.packetID {
+		case c.protocol.login.clientboundHello:
+			if handledEncryption {
+				return fmt.Errorf("duplicate encryption request")
+			}
+			handledEncryption = true
+			updatedProfile, joined, helloErr := c.handleEncryptionRequest(pkt, selectedProfile)
+			if helloErr != nil {
+				return helloErr
+			}
+			selectedProfile = updatedProfile
+			joinedSession = joined
 
+		case c.protocol.login.clientboundLoginCompression:
+			// Set Compression is not compressed itself and must be handled before
+			// the packet that follows it, which already uses the compressed
+			// framing. The threshold only decides whether the framing applies:
+			// this writer never compresses, so a server-side threshold does not
+			// shrink padding turns.
+			var threshold Varint
+			if thresholdErr := pkt.readFields(&threshold); thresholdErr != nil {
+				return fmt.Errorf("read login compression threshold: %w", thresholdErr)
+			}
+			if threshold >= 0 {
+				c.reader = newCompressionReader(c.reader)
+				c.writer = newCompressionWriter(c.writer)
+			}
+
+		case c.protocol.login.clientboundCustomQuery:
+			// A vanilla 26.x client answers a login query with a null payload: the
+			// server-driven login extensions of older versions are gone, and a
+			// server that still asks gets an explicit "no answer".
+			if answerErr := c.answerCustomQuery(pkt); answerErr != nil {
+				return answerErr
+			}
+
+		case c.protocol.login.clientboundCookieRequest:
+			if answerErr := c.answerCookieRequest(pkt); answerErr != nil {
+				return answerErr
+			}
+
+		case c.protocol.login.clientboundLoginDisconnect:
+			var reason String
+			if readErr := pkt.readFields(&reason); readErr != nil {
+				return fmt.Errorf("authentication rejected")
+			}
+			return fmt.Errorf("authentication rejected: %s", reason)
+
+		case c.protocol.login.clientboundLoginFinished:
+			receivedProfile, finishErr := c.readLoginFinished(pkt)
+			if finishErr != nil {
+				return fmt.Errorf("read login finished fields: %w", finishErr)
+			}
+			if verifyErr := c.verifyLoginProfile(receivedProfile, selectedProfile, joinedSession); verifyErr != nil {
+				return verifyErr
+			}
+			selectedProfile = receivedProfile
+
+			loginAcknowledgedLength, writeErr := writePacketWithLength(c.writer, c.protocol.login.serverboundLoginAcknowledged)
+			if writeErr != nil {
+				return fmt.Errorf("write login acknowledged: %w", writeErr)
+			}
+			return c.startProxy(loginAcknowledgedLength)
+
+		default:
+			return fmt.Errorf("unexpected login packet: 0x%02x", pkt.packetID)
+		}
+	}
+}
+
+// handleEncryptionRequest performs the shared-secret exchange and reports the
+// session profile plus whether the session server was joined, which decides how
+// strictly the returned game profile can be checked.
+func (c *clientConn) handleEncryptionRequest(pkt *mcPacket, profile loginProfile) (loginProfile, bool, error) {
 	var (
-		serverId    String
-		publicKey   Bytes
-		verifyToken Bytes
+		serverId           String
+		publicKey          Bytes
+		verifyToken        Bytes
+		shouldAuthenticate Boolean
 	)
 
-	err = pkt.readFields(&serverId, &publicKey, &verifyToken)
+	err := pkt.readFields(&serverId, &publicKey, &verifyToken, &shouldAuthenticate)
 	if err != nil {
-		return fmt.Errorf("read encryption request fields: %w", err)
+		return profile, false, fmt.Errorf("read encryption request fields: %w", err)
 	}
 
 	if c.yggdrasil == nil && !bytes.Equal(publicKey, c.rsaPublicKey) {
-		return fmt.Errorf("server public key mismatch")
+		return profile, false, fmt.Errorf("server public key mismatch")
 	}
 
 	k, err := x509.ParsePKIXPublicKey(publicKey)
 	if err != nil {
-		return fmt.Errorf("parse server public key: %w", err)
+		return profile, false, fmt.Errorf("parse server public key: %w", err)
 	}
 
 	rsaPublicKey, ok := k.(*rsa.PublicKey)
 	if !ok {
-		return fmt.Errorf("parse server public key: not rsa")
+		return profile, false, fmt.Errorf("parse server public key: not rsa")
 	}
 	if rsaPublicKey.N.BitLen() < 1024 {
-		return fmt.Errorf("server public key is too short: %d bits", rsaPublicKey.N.BitLen())
+		return profile, false, fmt.Errorf("server public key is too short: %d bits", rsaPublicKey.N.BitLen())
 	}
 
 	sharedSecret := make([]byte, 16)
 	if _, err = rand.Read(sharedSecret); err != nil {
-		return fmt.Errorf("generate shared secret: %w", err)
+		return profile, false, fmt.Errorf("generate shared secret: %w", err)
 	}
 
 	encryptedSharedSecret, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPublicKey, sharedSecret)
 	if err != nil {
-		return fmt.Errorf("encrypt shared secret: %w", err)
+		return profile, false, fmt.Errorf("encrypt shared secret: %w", err)
 	}
 
 	if c.yggdrasil == nil {
@@ -202,107 +287,133 @@ func (c *clientConn) handshake() error {
 
 	encryptedVerifyToken, err := rsa.EncryptPKCS1v15(rand.Reader, rsaPublicKey, verifyToken)
 	if err != nil {
-		return fmt.Errorf("encrypt verify token: %w", err)
+		return profile, false, fmt.Errorf("encrypt verify token: %w", err)
 	}
 
-	// Send Encryption Response
+	// Send Encryption Response, then switch the ciphers on: vanilla starts
+	// encrypting only after the response itself has been written.
 	err = writePacket(
 		c.writer,
-		0x01,
+		c.protocol.login.serverboundKey,
 		(*Bytes)(&encryptedSharedSecret),
 		(*Bytes)(&encryptedVerifyToken),
 	)
 	if err != nil {
-		return fmt.Errorf("write encryption response: %w", err)
+		return profile, false, fmt.Errorf("write encryption response: %w", err)
 	}
 
-	// Enable encryption
 	c.reader, err = newCryptoReader(c.reader, sharedSecret)
 	if err != nil {
-		return fmt.Errorf("new crypto reader: %w", err)
+		return profile, false, fmt.Errorf("new crypto reader: %w", err)
 	}
 
 	c.writer, err = newCryptoWriter(c.writer, sharedSecret)
 	if err != nil {
-		return fmt.Errorf("new crypto writer: %w", err)
+		return profile, false, fmt.Errorf("new crypto writer: %w", err)
 	}
 
-	if c.yggdrasil != nil {
-		// Standard online-mode login: join the session with the hash of the
-		// handshake data, the server verifies it through hasJoined.
-		serverID := minecraftServerID(string(serverId), sharedSecret, publicKey)
-		token, joinErr := c.yggdrasil.join(context.Background(), serverID)
-		if joinErr != nil {
-			return fmt.Errorf("yggdrasil session join: %w", joinErr)
-		}
-		profileUUID, uuidErr := normalizeMinecraftUUID(token.profile.ID)
-		if uuidErr != nil {
-			return fmt.Errorf("yggdrasil session join: %w", uuidErr)
-		}
-		selectedProfile = loginProfile{
-			Username: token.profile.Name,
-			UUID:     profileUUID,
-		}
+	// Online mode: join the session with the digest of the handshake data so the
+	// server can verify it through hasJoined. A server that explicitly asks not
+	// to authenticate (offline mode behind an encryption request) is left alone,
+	// like a vanilla client does.
+	if c.yggdrasil == nil || !shouldAuthenticate {
+		return profile, false, nil
 	}
 
-	pkt, err = readPacket(c.reader)
-	if err != nil {
-		return fmt.Errorf("read login finished: %w", err)
+	serverID := minecraftServerID(string(serverId), sharedSecret, publicKey)
+	token, joinErr := c.yggdrasil.join(context.Background(), serverID)
+	if joinErr != nil {
+		return profile, false, fmt.Errorf("yggdrasil session join: %w", joinErr)
 	}
-	// Set Compression is not compressed itself and must be handled before the
-	// packet that follows it, which already uses the compressed framing. The
-	// threshold only decides whether the framing applies: this writer never
-	// compresses, so a server-side threshold does not shrink padding turns.
-	if pkt.packetID == 0x03 {
-		var threshold Varint
-		if thresholdErr := pkt.readFields(&threshold); thresholdErr != nil {
-			return fmt.Errorf("read login compression threshold: %w", thresholdErr)
-		}
-		if threshold >= 0 {
-			c.reader = newCompressionReader(c.reader)
-			c.writer = newCompressionWriter(c.writer)
-		}
-		pkt, err = readPacket(c.reader)
-		if err != nil {
-			return fmt.Errorf("read login finished: %w", err)
-		}
+	profileUUID, uuidErr := normalizeMinecraftUUID(token.profile.ID)
+	if uuidErr != nil {
+		return profile, false, fmt.Errorf("yggdrasil session join: %w", uuidErr)
 	}
-	if pkt.packetID == 0x00 {
-		var reason String
-		if readErr := pkt.readFields(&reason); readErr != nil {
-			return fmt.Errorf("authentication rejected")
-		}
-		return fmt.Errorf("authentication rejected: %s", reason)
-	}
-	if pkt.packetID != 0x02 {
-		return fmt.Errorf("bad login finished packet id: %d", pkt.packetID)
-	}
+	return loginProfile{Username: token.profile.Name, UUID: profileUUID}, true, nil
+}
 
-	receivedProfile, err := readLoginSuccess(pkt)
-	if err != nil {
-		return fmt.Errorf("read login finished fields: %w", err)
+// answerCustomQuery replies to a login query with a null payload, which is what
+// a vanilla 26.x client sends.
+func (c *clientConn) answerCustomQuery(pkt *mcPacket) error {
+	var transactionID Varint
+	if err := pkt.readFields(&transactionID); err != nil {
+		return fmt.Errorf("read login query: %w", err)
 	}
-	if c.yggdrasil != nil {
-		if !sameProfileIdentity(receivedProfile, selectedProfile) {
+	// The answer payload is nullable; a vanilla 26.x client leaves it absent.
+	answered := Boolean(false)
+	if err := writePacket(c.writer, c.protocol.login.serverboundCustomQueryAnswer, &transactionID, &answered); err != nil {
+		return fmt.Errorf("write login query answer: %w", err)
+	}
+	return nil
+}
+
+// answerCookieRequest replies with an absent cookie, like a client that has
+// never received a cookie for the key.
+func (c *clientConn) answerCookieRequest(pkt *mcPacket) error {
+	var key String
+	if err := pkt.readFields(&key); err != nil {
+		return fmt.Errorf("read login cookie request: %w", err)
+	}
+	// The cookie is nullable; an absent value means "no cookie for this key".
+	answered := Boolean(false)
+	if err := writePacket(c.writer, c.protocol.login.serverboundCookieResponse, &key, &answered); err != nil {
+		return fmt.Errorf("write login cookie response: %w", err)
+	}
+	return nil
+}
+
+// readLoginFinished reads the game profile and, from 26.2 on, the connection
+// session id that follows it. Trailing bytes are ignored on purpose: Mojang has
+// appended a field to this packet before, and a client that needs an exact
+// length would stop pairing on the next release.
+func (c *clientConn) readLoginFinished(pkt *mcPacket) (loginProfile, error) {
+	var (
+		profile  loginProfile
+		username String
+	)
+	fields := []field{&profile.UUID, &username, &profile.Properties}
+	if c.protocol.loginFinishedSessionID {
+		var sessionID UUID
+		fields = append(fields, &sessionID)
+	}
+	if err := pkt.readFields(fields...); err != nil {
+		return loginProfile{}, err
+	}
+	profile.Username = string(username)
+	return profile, nil
+}
+
+// verifyLoginProfile checks the profile the server returned. A session join
+// pins the identity to the Yggdrasil account and its signed textures; the
+// pre-shared password mode compares the configured profile; an offline-mode
+// server derives the profile from the name, so it is accepted as it is.
+func (c *clientConn) verifyLoginProfile(received, selected loginProfile, joinedSession bool) error {
+	switch {
+	case joinedSession:
+		if !sameProfileIdentity(received, selected) {
 			return fmt.Errorf("login profile mismatch")
 		}
-		if verifyErr := c.yggdrasil.verifyLoginProfile(receivedProfile); verifyErr != nil {
-			return fmt.Errorf("verify login profile: %w", verifyErr)
+		if err := c.yggdrasil.verifyLoginProfile(received); err != nil {
+			return fmt.Errorf("verify login profile: %w", err)
 		}
-	} else if !sameLoginProfile(receivedProfile, selectedProfile) {
-		return fmt.Errorf("login profile mismatch")
+	case c.yggdrasil == nil:
+		if !sameLoginProfile(received, selected) {
+			return fmt.Errorf("login profile mismatch")
+		}
 	}
-	loginAcknowledgedLength, err := writePacketWithLength(c.writer, 0x03)
-	if err != nil {
-		return fmt.Errorf("write login acknowledged: %w", err)
-	}
-	c.reader = newPaddingReader(c.reader, true, c.paddingChannel)
-	if err = runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause, c.paddingChannel); err != nil {
+	return nil
+}
+
+// startProxy runs the startup padding and hands the connection to the tick
+// stream. It is called once the login reached the configuration state.
+func (c *clientConn) startProxy(loginAcknowledgedLength int) error {
+	c.reader = newPaddingReader(c.reader, true, c.paddingChannel, c.protocol.configuration)
+	if err := runPaddingSchedule(c.writer, true, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause, c.paddingChannel, c.protocol.configuration); err != nil {
 		_ = c.Close() // Unblock the startup reader if writing failed.
 		return fmt.Errorf("run startup padding: %w", err)
 	}
 
-	packet := newTickStream(c.reader, c.writer, true, c.dataChannel, c.paddingChannel)
+	packet := newTickStream(c.reader, c.writer, true, c.protocol.configuration, c.dataChannel, c.paddingChannel)
 	c.lifecycleMu.Lock()
 	if c.closed {
 		c.lifecycleMu.Unlock()
