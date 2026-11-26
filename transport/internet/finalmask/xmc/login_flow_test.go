@@ -3,6 +3,7 @@ package xmc
 import (
 	"bytes"
 	"crypto/x509"
+	"io"
 	"net"
 	"strings"
 	"testing"
@@ -237,5 +238,71 @@ func TestServerRejectsUnknownProtocolVersion(t *testing.T) {
 
 	if err := <-handshakeResult; err == nil || !strings.Contains(err.Error(), "unsupported protocol version") {
 		t.Fatalf("handshake error = %v", err)
+	}
+}
+
+// TestClientRejectsOfflineLogin checks the client refuses a login that never
+// asks for encryption: XMC reproduces the online-mode login, and an offline
+// server has none of it.
+func TestClientRejectsOfflineLogin(t *testing.T) {
+	version := latestProtocolVersion
+	clientRaw, serverRaw := net.Pipe()
+	defer clientRaw.Close()
+	defer serverRaw.Close()
+
+	client := newLoginTestClient(t, clientRaw, version)
+	handshakeResult := make(chan error, 1)
+	go func() { handshakeResult <- client.handshake() }()
+
+	if err := serverRaw.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readPacket(serverRaw); err != nil {
+		t.Fatalf("read handshake: %v", err)
+	}
+	if _, err := readPacket(serverRaw); err != nil {
+		t.Fatalf("read login start: %v", err)
+	}
+
+	// An offline-mode server answers Login Start with Login Finished directly.
+	var (
+		profile  = loginProfile{Username: "TestUser", UUID: UUID{1}}
+		username = String("TestUser")
+		session  = UUID{9}
+	)
+	if err := writePacket(serverRaw, version.login.clientboundLoginFinished, &profile.UUID, &username, &profile.Properties, &session); err != nil {
+		t.Fatal(err)
+	}
+
+	err := <-handshakeResult
+	if err == nil || !strings.Contains(err.Error(), "offline-mode servers are not supported") {
+		t.Fatalf("handshake error = %v", err)
+	}
+}
+
+// TestClientRejectsUnauthenticatedServer checks that a server which still
+// encrypts but tells the client not to authenticate is refused in Yggdrasil
+// mode: that flag is an offline-mode server.
+func TestClientRejectsUnauthenticatedServer(t *testing.T) {
+	version := latestProtocolVersion
+
+	var wire bytes.Buffer
+	var (
+		serverID           String
+		publicKey          Bytes = Bytes{1, 2, 3}
+		challenge          Bytes = Bytes{4, 5, 6, 7}
+		shouldAuthenticate Boolean
+	)
+	if err := writePacket(&wire, version.login.clientboundHello, &serverID, &publicKey, &challenge, &shouldAuthenticate); err != nil {
+		t.Fatal(err)
+	}
+	request, err := readPacket(&wire)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client := &clientConn{protocol: version, writer: io.Discard, yggdrasil: &yggdrasilAuth{}}
+	if _, _, err := client.handleEncryptionRequest(request, loginProfile{}); err == nil || !strings.Contains(err.Error(), "offline-mode servers are not supported") {
+		t.Fatalf("handle encryption request error = %v", err)
 	}
 }

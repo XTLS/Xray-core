@@ -981,9 +981,10 @@ type XMC struct {
 	DataChannel    string `json:"dataChannel,omitempty"`
 	PaddingChannel string `json:"paddingChannel,omitempty"`
 	// Minecraft network protocol number the client advertises, for example 777
-	// for 26.3. Zero uses the newest version the mask knows; the server follows
-	// whatever the client names. Set it when the peer is a real Minecraft server
-	// of an older release.
+	// for 26.3. Zero detects it from the peer's status response (cached per
+	// destination) and falls back to the newest version the mask knows. Set it to
+	// skip detection or to pin a version; the server follows whatever the client
+	// names.
 	ProtocolVersion uint32 `json:"protocolVersion,omitempty"`
 }
 

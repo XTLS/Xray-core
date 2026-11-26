@@ -1,10 +1,12 @@
 package xmc
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"time"
 
+	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
@@ -30,10 +32,9 @@ func (c *Config) wrapClientAuth() (*yggdrasilAuth, error) {
 	)
 }
 
-// gameVersion resolves the protocol row the client advertises in its handshake.
-// Zero keeps the newest row, which is the version a fresh configuration gets;
-// a configured value has to be a known row, because a guessed packet id breaks
-// the login in a way that looks like a network failure.
+// gameVersion resolves an explicitly configured protocol row. A configured
+// value has to be a known row, because a guessed packet id breaks the login in a
+// way that looks like a network failure.
 func (c *Config) gameVersion() (protocolVersion, error) {
 	if err := ValidateProtocolVersion(c.ProtocolVersion); err != nil {
 		return protocolVersion{}, err
@@ -42,6 +43,35 @@ func (c *Config) gameVersion() (protocolVersion, error) {
 		return latestProtocolVersion, nil
 	}
 	version, _ := protocolVersionByNumber(Varint(c.ProtocolVersion))
+	return version, nil
+}
+
+// clientProtocol resolves the row the client advertises in its handshake. A
+// configured protocol_version is used as-is; zero asks the peer for its status,
+// because a vanilla server rejects a client that names another version, and the
+// status response carries the version its login expects.
+//
+// The probe is cached per destination, so a normal connection pays it once in a
+// while rather than on every dial. A peer that does not answer status (or is
+// behind another transport) falls back to the newest row, which is what a
+// client of the newest release sends.
+func (c *Config) clientProtocol(dest *net.Destination, dialer *finalmask.Dialer) (protocolVersion, error) {
+	if err := ValidateProtocolVersion(c.ProtocolVersion); err != nil {
+		return protocolVersion{}, err
+	}
+	if c.ProtocolVersion != 0 {
+		return c.gameVersion()
+	}
+
+	number, name, err := detectProtocolVersion(dest, c.Hostname, dialer)
+	if err != nil {
+		errors.LogWarning(context.Background(), "XMC: cannot detect the peer's protocol version (", err, "), advertising ", latestProtocolVersion.name, " (", latestProtocolVersion.number, "); set protocolVersion to pin it")
+		return latestProtocolVersion, nil
+	}
+	version, ok := protocolVersionByNumber(number)
+	if !ok {
+		return protocolVersion{}, fmt.Errorf("the peer reports Minecraft %q (protocol %d), which is not in the supported table (%s); set protocolVersion to override the detection", name, number, protocolVersionRange())
+	}
 	return version, nil
 }
 
@@ -58,7 +88,7 @@ func (c *Config) WrapConnClient(conn net.Conn, dest *net.Destination, dialer *fi
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}
-	protocol, err := c.gameVersion()
+	protocol, err := c.clientProtocol(dest, dialer)
 	if err != nil {
 		return nil, fmt.Errorf("minecraft finalmask: %w", err)
 	}

@@ -198,10 +198,12 @@ type Config struct {
 	DataChannel    string `protobuf:"bytes,15,opt,name=data_channel,json=dataChannel,proto3" json:"data_channel,omitempty"`
 	PaddingChannel string `protobuf:"bytes,16,opt,name=padding_channel,json=paddingChannel,proto3" json:"padding_channel,omitempty"`
 	// Minecraft release the client advertises in its handshake, as a network
-	// protocol number (for example 777 for 26.3). Zero uses the newest version
-	// the mask knows; the server always follows the version the client names.
-	// Set it when the peer is a real Minecraft server of an older release: a
-	// vanilla server rejects a client that names another version.
+	// protocol number (for example 777 for 26.3). Zero probes the peer: the
+	// client asks for its status and advertises the protocol the peer reports,
+	// falling back to the newest version the mask knows when the peer does not
+	// answer (the probe result is cached per destination). Set it to skip the
+	// probe or to pin a version; the server always follows the version the
+	// client names.
 	ProtocolVersion uint32 `protobuf:"varint,17,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache

@@ -154,12 +154,15 @@ func (c *clientConn) handshake() error {
 		return fmt.Errorf("write login start: %w", err)
 	}
 
-	// From here the server drives the login: an online-mode server answers with
-	// Encryption Request, then optionally Set Compression, and finally Login
-	// Finished; an offline-mode server skips straight to Login Finished. Queries
-	// and cookie requests can appear at any point between them, so the client
-	// loops over the login packets like a vanilla one instead of expecting a
-	// fixed sequence.
+	// From here the server drives the login: Encryption Request, then optionally
+	// Set Compression, then Login Finished; queries and cookie requests can
+	// appear at any point between them, so the client loops over the login
+	// packets like a vanilla one instead of expecting a fixed sequence.
+	//
+	// The encryption exchange is mandatory. XMC exists to look like a licensed
+	// player joining an online-mode server (with a third-party API in Yggdrasil
+	// mode), and an offline-mode login skips the encryption request entirely, so
+	// there is nothing to reproduce and nothing to authenticate.
 	handledEncryption := false
 	joinedSession := false
 	for {
@@ -217,6 +220,9 @@ func (c *clientConn) handshake() error {
 			return fmt.Errorf("authentication rejected: %s", reason)
 
 		case c.protocol.login.clientboundLoginFinished:
+			if !handledEncryption {
+				return fmt.Errorf("server finished the login without an encryption request: offline-mode servers are not supported")
+			}
 			receivedProfile, finishErr := c.readLoginFinished(pkt)
 			if finishErr != nil {
 				return fmt.Errorf("read login finished fields: %w", finishErr)
@@ -252,6 +258,13 @@ func (c *clientConn) handleEncryptionRequest(pkt *mcPacket, profile loginProfile
 	err := pkt.readFields(&serverId, &publicKey, &verifyToken, &shouldAuthenticate)
 	if err != nil {
 		return profile, false, fmt.Errorf("read encryption request fields: %w", err)
+	}
+
+	// shouldAuthenticate is false for an offline-mode server that still encrypts.
+	// XMC only reproduces the online-mode login, so the client does not pretend
+	// to authenticate against it.
+	if c.yggdrasil != nil && !shouldAuthenticate {
+		return profile, false, fmt.Errorf("server asked the client not to authenticate: offline-mode servers are not supported")
 	}
 
 	if c.yggdrasil == nil && !bytes.Equal(publicKey, c.rsaPublicKey) {
@@ -313,10 +326,9 @@ func (c *clientConn) handleEncryptionRequest(pkt *mcPacket, profile loginProfile
 	}
 
 	// Online mode: join the session with the digest of the handshake data so the
-	// server can verify it through hasJoined. A server that explicitly asks not
-	// to authenticate (offline mode behind an encryption request) is left alone,
-	// like a vanilla client does.
-	if c.yggdrasil == nil || !shouldAuthenticate {
+	// server can verify it through hasJoined. The password mode has no session
+	// server; its login is authenticated by the pre-shared password instead.
+	if c.yggdrasil == nil {
 		return profile, false, nil
 	}
 
