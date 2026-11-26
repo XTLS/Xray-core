@@ -231,7 +231,11 @@ func TestDialWarpHTTP3(t *testing.T) {
 				}
 				w.WriteHeader(http.StatusOK)
 				w.(http.Flusher).Flush()
-				str := w.(http3.HTTPStreamer).HTTPStream()
+				str, err := w.(http3.HTTPStreamer).HTTPStream()
+				if err != nil {
+					t.Error(err)
+					return
+				}
 				go func() { capsules <- readCapsuleTypes(str, nil) }()
 				b, err := str.ReceiveDatagram(r.Context())
 				if err != nil {

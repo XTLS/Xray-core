@@ -5,6 +5,7 @@ import (
 	go_errors "errors"
 	"io"
 	"math/rand"
+	"slices"
 
 	"github.com/apernet/quic-go"
 	"github.com/xtls/xray-core/common"
@@ -174,10 +175,15 @@ func init() {
 	}))
 }
 
+// UDPWriter is not safe for concurrent writes.
 type UDPWriter struct {
 	writer io.Writer
 	addr   string
 	buf    [buf.Size]byte
+
+	// Last b.UDP and its NetAddr, which allocates on every call.
+	lastUDP     net.Destination
+	lastUDPAddr string
 }
 
 func (w *UDPWriter) SendMessage(msg *UDPMessage) error {
@@ -193,21 +199,21 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	for i, b := range mb {
 		addr := w.addr
 		if b.UDP != nil {
-			addr = b.UDP.NetAddr()
+			if *b.UDP != w.lastUDP {
+				w.lastUDP = *b.UDP
+				w.lastUDPAddr = b.UDP.NetAddr()
+			}
+			addr = w.lastUDPAddr
 		}
 
 		msg := &UDPMessage{
-			SessionID: 0,
-			PacketID:  0,
-			FragID:    0,
 			FragCount: 1,
 			Addr:      addr,
 			Data:      b.Bytes(),
 		}
 
 		err := w.SendMessage(msg)
-		var errTooLarge *quic.DatagramTooLargeError
-		if go_errors.As(err, &errTooLarge) {
+		if errTooLarge, ok := go_errors.AsType[*quic.DatagramTooLargeError](err); ok {
 			msg.PacketID = uint16(rand.Intn(0xFFFF)) + 1
 			fMsgs := FragUDPMessage(msg, int(errTooLarge.MaxDatagramPayloadSize))
 			for _, fMsg := range fMsgs {
@@ -228,24 +234,37 @@ func (w *UDPWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return nil
 }
 
+// UDPReader is not safe for concurrent reads.
 type UDPReader struct {
 	reader   io.Reader
 	df       *Defragger
 	firstBuf *buf.Buffer
+
+	// Last message address and its parsed destination.
+	lastAddr string
+	lastDest net.Destination
+
+	packet [1500]byte
+	msg    UDPMessage
 }
 
 func (r *UDPReader) ReadFrom(p []byte) (n int, addr *net.Destination, err error) {
 	for {
-		var packet [1500]byte
-
-		n, err := r.reader.Read(packet[:])
+		n, err := r.reader.Read(r.packet[:])
 		if err != nil {
 			return 0, nil, err
 		}
 
-		msg, err := ParseUDPMessage(packet[:n])
-		if err != nil {
+		if err := parseUDPMessage(r.packet[:n], r.lastAddr, &r.msg); err != nil {
 			continue
+		}
+
+		msg := &r.msg
+		if msg.FragCount > 1 {
+			// The defragger keeps fragments between calls, so they must not alias packet.
+			frag := *msg
+			frag.Data = slices.Clone(msg.Data)
+			msg = &frag
 		}
 
 		dfMsg := r.df.Feed(msg)
@@ -253,15 +272,21 @@ func (r *UDPReader) ReadFrom(p []byte) (n int, addr *net.Destination, err error)
 			continue
 		}
 
-		dest, err := net.ParseDestination("udp:" + dfMsg.Addr)
-		if err != nil {
-			continue
+		if dfMsg.Addr != r.lastAddr {
+			dest, err := net.ParseDestination("udp:" + dfMsg.Addr)
+			if err != nil {
+				continue
+			}
+			r.lastAddr = dfMsg.Addr
+			r.lastDest = dest
 		}
 
 		if len(p) < len(dfMsg.Data) {
 			continue
 		}
 
+		// Callers can rewrite the packet destination in place.
+		dest := r.lastDest
 		return copy(p, dfMsg.Data), &dest, nil
 	}
 }
