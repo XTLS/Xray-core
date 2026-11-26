@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"golang.org/x/net/dns/dnsmessage"
@@ -204,24 +205,20 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 	if decoded[8]&0x3F == 8 {
 		return
 	}
-	p := pool4K.Get().([]byte)
-	p = p[:0]
+	p := bytespool.Alloc(4096)
 	if decoded[8]&0xC0 == 0xC0 {
-		out := pool4K.Get().([]byte)
-		n := c.fragManager.Feed(out, FragKey{clientID: clientID, fragID: decoded[12]}, decoded[13], decoded[14], decoded[15:n])
-		pool4K.Put(p[:cap(p)])
-		if n > 0 {
-			p = out[:n]
-		} else {
-			pool4K.Put(out[:cap(out)])
+		n := c.fragManager.Feed(p, FragKey{clientID: clientID, fragID: decoded[12]}, decoded[13], decoded[14], decoded[15:n])
+		if n <= 0 {
+			bytespool.Free(p)
 			return
 		}
+		p = p[:n]
 	} else {
-		p = append(p, decoded[12:n]...)
+		p = append(p[:0], decoded[12:n]...)
 	}
 	select {
 	case <-c.closeCh:
-		pool4K.Put(p[:cap(p)])
+		bytespool.Free(p)
 		return
 	case c.readCh <- packet{p: p, addr: clientID.Addr()}:
 		return
@@ -352,7 +349,7 @@ func (c *xdnsServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	packet, ok := <-c.readCh
 	if ok {
 		n = copy(p, packet.p)
-		pool4K.Put(packet.p[:cap(packet.p)])
+		bytespool.Free(packet.p)
 		return n, packet.addr, nil
 	}
 	return 0, nil, io.ErrClosedPipe

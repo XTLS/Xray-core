@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
@@ -76,11 +77,11 @@ func (r *UDPResolver) recv(conn net.PacketConn) {
 		if err != nil {
 			break
 		}
-		p := pool4K.Get().([]byte)
+		p := bytespool.Alloc(4096)
 		copy(p, buf[:n])
 		select {
 		case <-r.closeCh:
-			pool4K.Put(p[:cap(p)])
+			bytespool.Free(p)
 		case r.readCh <- p[:n]:
 		}
 	}
@@ -100,7 +101,7 @@ func (r *UDPResolver) Read(p []byte) (n int, err error) {
 	packet, ok := <-r.readCh
 	if ok {
 		n = copy(p, packet)
-		pool4K.Put(packet[:cap(packet)])
+		bytespool.Free(packet)
 		return n, nil
 	}
 	return 0, io.ErrClosedPipe

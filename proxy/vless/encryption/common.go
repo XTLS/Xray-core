@@ -18,9 +18,13 @@ import (
 	"lukechampine.com/blake3"
 )
 
-var OutBytesPool = sync.Pool{
+// outBytes is a record: a 5-byte header, up to 8192 bytes of data and a 16-byte tag.
+type outBytes = [5 + 8192 + 16]byte
+
+// outBytesPool holds *outBytes: unlike a slice, a pointer is put without an allocation.
+var outBytesPool = sync.Pool{
 	New: func() any {
-		return make([]byte, 5+8192+16)
+		return new(outBytes)
 	},
 }
 
@@ -48,15 +52,15 @@ func (c *CommonConn) Write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
 	}
-	outBytes := OutBytesPool.Get().([]byte)
-	defer OutBytesPool.Put(outBytes)
+	out := outBytesPool.Get().(*outBytes)
+	defer outBytesPool.Put(out)
 	for n := 0; n < len(b); {
 		b := b[n:]
 		if len(b) > 8192 {
 			b = b[:8192] // for avoiding another copy() in peer's Read()
 		}
 		n += len(b)
-		headerAndData := outBytes[:5+len(b)+16]
+		headerAndData := out[:5+len(b)+16]
 		EncodeHeader(headerAndData, len(b)+16)
 		max := false
 		if bytes.Equal(c.AEAD.Nonce[:], MaxNonce) {

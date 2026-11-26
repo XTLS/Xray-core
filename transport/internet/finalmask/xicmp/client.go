@@ -15,6 +15,7 @@ import (
 	_ "unsafe"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
@@ -22,12 +23,6 @@ import (
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/ipv6"
 )
-
-var pool = sync.Pool{
-	New: func() any {
-		return make([]byte, finalmask.UDPSize)
-	},
-}
 
 type packet struct {
 	p    []byte
@@ -157,7 +152,7 @@ func (c *xicmpConnClient) recv4() {
 			continue
 		}
 
-		p := pool.Get().([]byte)[:len(echo.Data)]
+		p := bytespool.Alloc(finalmask.UDPSize)[:len(echo.Data)]
 		copy(p, echo.Data)
 
 		if !c.udp {
@@ -170,7 +165,7 @@ func (c *xicmpConnClient) recv4() {
 			addr: addr,
 		}:
 		case <-c.closeCh:
-			pool.Put(p)
+			bytespool.Free(p)
 			return
 		}
 	}
@@ -225,7 +220,7 @@ func (c *xicmpConnClient) recv6() {
 			continue
 		}
 
-		p := pool.Get().([]byte)[:len(echo.Data)]
+		p := bytespool.Alloc(finalmask.UDPSize)[:len(echo.Data)]
 		copy(p, echo.Data)
 
 		if !c.udp {
@@ -238,7 +233,7 @@ func (c *xicmpConnClient) recv6() {
 			addr: addr,
 		}:
 		case <-c.closeCh:
-			pool.Put(p)
+			bytespool.Free(p)
 			return
 		}
 	}
@@ -249,7 +244,7 @@ func (c *xicmpConnClient) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if ok {
 		if packet.p != nil {
 			n = copy(p, packet.p)
-			pool.Put(packet.p)
+			bytespool.Free(packet.p)
 		}
 		return n, packet.addr, packet.err
 	}
@@ -279,8 +274,8 @@ func (c *xicmpConnClient) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 		addr = &net.IPAddr{IP: ip}
 	}
 
-	b := pool.Get().([]byte)[:finalmask.UDPSize]
-	defer pool.Put(b)
+	b := bytespool.Alloc(finalmask.UDPSize)
+	defer bytespool.Free(b)
 
 	copy(b[8:], c.clientID[:])
 	copy(b[16:], p)

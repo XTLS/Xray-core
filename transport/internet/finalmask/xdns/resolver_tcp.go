@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
@@ -97,17 +98,17 @@ func (r *TCPResolver) do(conn *net.Conn, buf *[4096 + 2]byte, p []byte) error {
 		return err
 	}
 
-	b := pool4K.Get().([]byte)
+	b := bytespool.Alloc(4096)
 	l, err = r.read(c, b)
 	if err != nil {
 		c.Close()
 		*conn = nil
-		pool4K.Put(b[:cap(b)])
+		bytespool.Free(b)
 		return err
 	}
 	select {
 	case <-r.closeCh:
-		pool4K.Put(b[:cap(b)])
+		bytespool.Free(b)
 	case r.readCh <- b[:l]:
 	}
 	return nil
@@ -161,7 +162,7 @@ func (r *TCPResolver) Read(p []byte) (n int, err error) {
 	packet, ok := <-r.readCh
 	if ok {
 		n = copy(p, packet)
-		pool4K.Put(packet[:cap(packet)])
+		bytespool.Free(packet)
 		return n, nil
 	}
 	return 0, io.ErrClosedPipe

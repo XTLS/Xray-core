@@ -14,6 +14,7 @@ import (
 	"github.com/apernet/quic-go"
 	"github.com/apernet/quic-go/http3"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet"
@@ -197,7 +198,7 @@ func (r *DOHResolver) do(p []byte) error {
 	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
-		p := pool4K.Get().([]byte)
+		p := bytespool.Alloc(4096)
 		off := 0
 		for {
 			n, err := resp.Body.Read(p[off:])
@@ -206,7 +207,7 @@ func (r *DOHResolver) do(p []byte) error {
 			}
 			if off == len(p) || err != nil {
 				if err != io.EOF {
-					pool4K.Put(p[:cap(p)])
+					bytespool.Free(p)
 					return err
 				}
 				break
@@ -214,7 +215,7 @@ func (r *DOHResolver) do(p []byte) error {
 		}
 		select {
 		case <-r.closeCh:
-			pool4K.Put(p[:cap(p)])
+			bytespool.Free(p)
 		case r.readCh <- p[:off]:
 		}
 		return nil
@@ -264,7 +265,7 @@ func (r *DOHResolver) Read(p []byte) (n int, err error) {
 	packet, ok := <-r.readCh
 	if ok {
 		n = copy(p, packet)
-		pool4K.Put(packet[:cap(packet)])
+		bytespool.Free(packet)
 		return n, nil
 	}
 	return 0, io.ErrClosedPipe

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 	"golang.org/x/net/icmp"
@@ -173,7 +174,7 @@ func (c *xicmpConnServer) recv4() {
 		}
 		c.mu.Unlock()
 
-		p := pool.Get().([]byte)[:len(echo.Data[8:])]
+		p := bytespool.Alloc(finalmask.UDPSize)[:len(echo.Data[8:])]
 		copy(p, echo.Data[8:])
 
 		select {
@@ -182,7 +183,7 @@ func (c *xicmpConnServer) recv4() {
 			addr: cAddr,
 		}:
 		case <-c.closeCh:
-			pool.Put(p)
+			bytespool.Free(p)
 			return
 		}
 	}
@@ -253,7 +254,7 @@ func (c *xicmpConnServer) recv6() {
 		}
 		c.mu.Unlock()
 
-		p := pool.Get().([]byte)[:len(echo.Data[8:])]
+		p := bytespool.Alloc(finalmask.UDPSize)[:len(echo.Data[8:])]
 		copy(p, echo.Data[8:])
 
 		select {
@@ -262,7 +263,7 @@ func (c *xicmpConnServer) recv6() {
 			addr: cAddr,
 		}:
 		case <-c.closeCh:
-			pool.Put(p)
+			bytespool.Free(p)
 			return
 		}
 	}
@@ -273,7 +274,7 @@ func (c *xicmpConnServer) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if ok {
 		if packet.p != nil {
 			n = copy(p, packet.p)
-			pool.Put(packet.p)
+			bytespool.Free(packet.p)
 		}
 		return n, packet.addr, packet.err
 	}
@@ -299,8 +300,8 @@ func (c *xicmpConnServer) WriteTo(p []byte, addr net.Addr) (n int, err error) {
 
 	// errors.LogDebug(context.Background(), "id ", r.id, " seq ", r.seq, " addr ", r.addr)
 
-	b := pool.Get().([]byte)[:finalmask.UDPSize]
-	defer pool.Put(b)
+	b := bytespool.Alloc(finalmask.UDPSize)
+	defer bytespool.Free(b)
 
 	copy(b[8:], p)
 

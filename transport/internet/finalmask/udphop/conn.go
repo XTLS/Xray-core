@@ -12,17 +12,12 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
 )
-
-var pool = sync.Pool{
-	New: func() any {
-		return make([]byte, finalmask.UDPSize)
-	},
-}
 
 type packet struct {
 	p    []byte
@@ -161,10 +156,10 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 	defer c.wg.Done()
 
 	for {
-		p := pool.Get().([]byte)
+		p := bytespool.Alloc(finalmask.UDPSize)
 		n, addr, err := conn.ReadFrom(p)
 		if err != nil {
-			pool.Put(p[:cap(p)])
+			bytespool.Free(p)
 			if c.closed() || goerrors.Is(err, stdnet.ErrClosed) {
 				return
 			}
@@ -183,7 +178,7 @@ func (c *udpHopConn) recv(conn net.PacketConn) {
 		select {
 		case c.readCh <- packet{p: p[:n], addr: addr}:
 		case <-c.closeCh:
-			pool.Put(p[:cap(p)])
+			bytespool.Free(p)
 			return
 		}
 	}
@@ -194,7 +189,7 @@ func (c *udpHopConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	if ok {
 		if packet.p != nil {
 			n = copy(p, packet.p)
-			pool.Put(packet.p[:cap(packet.p)])
+			bytespool.Free(packet.p)
 		}
 		return n, packet.addr, packet.err
 	}

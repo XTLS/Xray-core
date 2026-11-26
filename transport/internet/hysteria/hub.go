@@ -17,6 +17,7 @@ import (
 	"github.com/apernet/quic-go/http3"
 	"github.com/apernet/quic-go/quicvarint"
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
@@ -260,7 +261,7 @@ func Listen(ctx context.Context, address net.Address, port net.Port, streamSetti
 				}
 			},
 			Transport:  transport,
-			BufferPool: newMasqueradeProxyBufferPool(),
+			BufferPool: masqueradeProxyBufferPool{},
 			ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 				errors.LogErrorInner(context.Background(), err, "HTTP reverse proxy error")
 				w.WriteHeader(http.StatusBadGateway)
@@ -374,27 +375,13 @@ const (
 	masqueradeProxyMaxIdleConnsPerHost = 32
 )
 
-type masqueradeProxyBufferPool struct {
-	pool sync.Pool
+// masqueradeProxyBufferPool lends httputil.ReverseProxy its buffers from bytespool.
+type masqueradeProxyBufferPool struct{}
+
+func (masqueradeProxyBufferPool) Get() []byte {
+	return bytespool.Alloc(masqueradeProxyBufferSize)
 }
 
-func newMasqueradeProxyBufferPool() *masqueradeProxyBufferPool {
-	return &masqueradeProxyBufferPool{
-		pool: sync.Pool{
-			New: func() any {
-				return make([]byte, masqueradeProxyBufferSize)
-			},
-		},
-	}
-}
-
-func (p *masqueradeProxyBufferPool) Get() []byte {
-	return p.pool.Get().([]byte)
-}
-
-func (p *masqueradeProxyBufferPool) Put(buf []byte) {
-	if cap(buf) < masqueradeProxyBufferSize {
-		return
-	}
-	p.pool.Put(buf[:masqueradeProxyBufferSize])
+func (masqueradeProxyBufferPool) Put(buf []byte) {
+	bytespool.Free(buf)
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xtls/xray-core/common"
+	"github.com/xtls/xray-core/common/bytespool"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/transport/internet/finalmask"
@@ -22,12 +23,6 @@ const (
 	pollDelayMultiplier = 2.0
 	pollLimit           = 16
 )
-
-var pool4K = sync.Pool{
-	New: func() any {
-		return make([]byte, 4096)
-	},
-}
 
 type packet struct {
 	p    []byte
@@ -248,7 +243,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 
 	resp := NewResp(msg, domain, 0)
 
-	p := pool4K.Get().([]byte)
+	p := bytespool.Alloc(4096)
 	n := resp.Decode(p)
 	p = p[:n]
 
@@ -273,7 +268,7 @@ func (c *xdnsClient) read(buf []byte, addr net.Addr) bool {
 			bs = nil
 		}
 	}
-	pool4K.Put(p[:cap(p)])
+	bytespool.Free(p)
 
 	for i := range bs {
 		select {
