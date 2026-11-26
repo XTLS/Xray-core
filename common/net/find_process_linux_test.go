@@ -10,7 +10,9 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -50,6 +52,26 @@ func TestFindProcessIPv4Mapped(t *testing.T) {
 		} else if pid != os.Getpid() {
 			t.Errorf("%s: found PID %d, want %d", network, pid, os.Getpid())
 		}
+	}
+}
+
+func TestFindInodeInFilesSkipsSocketsWithoutProcess(t *testing.T) {
+	// a socket in TIME_WAIT has no process and has inode 0, and a new socket can have the same local address
+	file := filepath.Join(t.TempDir(), "tcp")
+	err := os.WriteFile(file, []byte(strings.Join([]string{
+		"  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode",
+		"   0: 0100007F:A1B2 0100007F:0050 06 00000000:00000000 03:00000F3C 00000000     0        0 0 3 0000000000000000",
+		"   1: 0100007F:A1B2 0100007F:01BB 01 00000000:00000000 00:00000000 00000000  1000        0 123456 1 0000000000000000 20 4 30 10 -1",
+	}, "\n")), 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inode, err := findInodeInFiles([]string{file}, []string{"0100007F:A1B2"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inode != "123456" {
+		t.Errorf("found inode %q, want 123456", inode)
 	}
 }
 

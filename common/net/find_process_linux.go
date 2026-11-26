@@ -139,6 +139,11 @@ func findInodeInFiles(filePaths []string, targetHexAddrs []string, portFallback 
 				continue
 			}
 
+			// a socket without a process, as in TIME_WAIT, has inode 0, and can have the same local address as a new socket
+			if fields[9] == "0" {
+				continue
+			}
+
 			localAddress := fields[1]
 			if slices.Contains(targetHexAddrs, localAddress) {
 				return fields[9], nil
