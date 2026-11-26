@@ -28,7 +28,11 @@ func (s *Proxy) Proxy(w http.ResponseWriter, r *ProxyRequest) (*Conn, error) {
 	w.WriteHeader(http.StatusOK)
 
 	if ok {
-		return newProxiedConn(streamer.HTTPStream()), nil
+		str, err := streamer.HTTPStream()
+		if err != nil {
+			return nil, err
+		}
+		return newProxiedConn(str), nil
 	}
 	controller := http.NewResponseController(w)
 	if err := controller.Flush(); err != nil {
