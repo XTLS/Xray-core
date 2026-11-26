@@ -236,9 +236,11 @@ func TestMultiplexConfig_Build(t *testing.T) {
 		{name: "empty", fields: `{}`},
 		{name: "both zero", fields: `{"concurrency":0,"xudpConcurrency":0}`},
 		{name: "regular pool", fields: `{"concurrency":4}`, want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject"}},
+		{name: "regular pool with maxReuseTimes", fields: `{"concurrency":4,"maxReuseTimes":128}`, want: &vless.Multiplex{Concurrency: 4, XudpProxyUDP443: "reject", MaxReuseTimes: 128}},
 		{name: "XUDP only", fields: `{"xudpConcurrency":8}`, want: &vless.Multiplex{XudpConcurrency: 8, XudpProxyUDP443: "reject"}},
 		{name: "negative concurrency", fields: `{"concurrency":-1,"xudpConcurrency":8}`, bad: true},
 		{name: "negative XUDP concurrency", fields: `{"concurrency":4,"xudpConcurrency":-1}`, bad: true},
+		{name: "negative maxReuseTimes", fields: `{"concurrency":4,"maxReuseTimes":-1}`, bad: true},
 		{name: "invalid UDP policy", fields: `{"concurrency":4,"xudpProxyUDP443":"invalid"}`, bad: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

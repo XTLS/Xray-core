@@ -189,6 +189,7 @@ type Multiplex struct {
 	Concurrency     int32                  `protobuf:"varint,1,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
 	XudpConcurrency int32                  `protobuf:"varint,2,opt,name=xudpConcurrency,proto3" json:"xudpConcurrency,omitempty"`
 	XudpProxyUDP443 string                 `protobuf:"bytes,3,opt,name=xudpProxyUDP443,proto3" json:"xudpProxyUDP443,omitempty"`
+	MaxReuseTimes   int32                  `protobuf:"varint,4,opt,name=maxReuseTimes,proto3" json:"maxReuseTimes,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -244,6 +245,13 @@ func (x *Multiplex) GetXudpProxyUDP443() string {
 	return ""
 }
 
+func (x *Multiplex) GetMaxReuseTimes() int32 {
+	if x != nil {
+		return x.MaxReuseTimes
+	}
+	return 0
+}
+
 var File_proxy_vless_account_proto protoreflect.FileDescriptor
 
 const file_proxy_vless_account_proto_rawDesc = "" +
@@ -263,11 +271,12 @@ const file_proxy_vless_account_proto_rawDesc = "" +
 	"\apadding\x18\x06 \x01(\tR\apadding\x123\n" +
 	"\areverse\x18\a \x01(\v2\x19.xray.proxy.vless.ReverseR\areverse\x12\x18\n" +
 	"\atestpre\x18\b \x01(\rR\atestpre\x12\x1a\n" +
-	"\btestseed\x18\t \x03(\rR\btestseed\"\x81\x01\n" +
+	"\btestseed\x18\t \x03(\rR\btestseed\"\xa7\x01\n" +
 	"\tMultiplex\x12 \n" +
 	"\vconcurrency\x18\x01 \x01(\x05R\vconcurrency\x12(\n" +
 	"\x0fxudpConcurrency\x18\x02 \x01(\x05R\x0fxudpConcurrency\x12(\n" +
-	"\x0fxudpProxyUDP443\x18\x03 \x01(\tR\x0fxudpProxyUDP443BR\n" +
+	"\x0fxudpProxyUDP443\x18\x03 \x01(\tR\x0fxudpProxyUDP443\x12$\n" +
+	"\rmaxReuseTimes\x18\x04 \x01(\x05R\rmaxReuseTimesBR\n" +
 	"\x14com.xray.proxy.vlessP\x01Z%github.com/xtls/xray-core/proxy/vless\xaa\x02\x10Xray.Proxy.Vlessb\x06proto3"
 
 var (

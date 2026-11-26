@@ -85,7 +85,7 @@ func TestClientWorkerClose(t *testing.T) {
 	links := []*transport.Link{{Reader: r1, Writer: w1}, {Reader: r2, Writer: w2}}
 	owner, stop := context.WithCancel(context.Background())
 	defer stop()
-	pool := NewPool(owner, ClientStrategy{MaxConcurrency: 4, MaxConnection: 4}, func(ctx context.Context) (context.Context, *transport.Link, error) {
+	pool := NewPool(owner, ClientStrategy{MaxConcurrency: 4, MaxReuseTimes: 4}, func(ctx context.Context) (context.Context, *transport.Link, error) {
 		if len(links) == 0 {
 			return nil, nil, errors.New("unexpected opening")
 		}

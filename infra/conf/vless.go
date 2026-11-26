@@ -241,6 +241,7 @@ type MultiplexConfig struct {
 	Concurrency     int16  `json:"concurrency"`
 	XudpConcurrency int16  `json:"xudpConcurrency"`
 	XudpProxyUDP443 string `json:"xudpProxyUDP443"`
+	MaxReuseTimes   int32  `json:"maxReuseTimes"`
 }
 
 func (c *MultiplexConfig) Build() (*vless.Multiplex, error) {
@@ -252,7 +253,10 @@ func (c *MultiplexConfig) Build() (*vless.Multiplex, error) {
 		udp443 = "reject"
 	}
 	return multiplex.NormalizeConfig(&vless.Multiplex{
-		Concurrency: int32(c.Concurrency), XudpConcurrency: int32(c.XudpConcurrency), XudpProxyUDP443: udp443,
+		Concurrency:     int32(c.Concurrency),
+		XudpConcurrency: int32(c.XudpConcurrency),
+		XudpProxyUDP443: udp443,
+		MaxReuseTimes:   c.MaxReuseTimes,
 	})
 }
 

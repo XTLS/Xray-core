@@ -18,8 +18,8 @@ import (
 
 // NormalizeConfig validates the pool settings and returns nil when both pools are off.
 func NormalizeConfig(config *vless.Multiplex) (*vless.Multiplex, error) {
-	if config.GetConcurrency() < 0 || config.GetXudpConcurrency() < 0 {
-		return nil, errors.New(`multiplex "concurrency" and "xudpConcurrency" must be non-negative`)
+	if config.GetConcurrency() < 0 || config.GetXudpConcurrency() < 0 || config.GetMaxReuseTimes() < 0 {
+		return nil, errors.New(`multiplex "concurrency", "xudpConcurrency" and "maxReuseTimes" must be non-negative`)
 	}
 	switch config.GetXudpProxyUDP443() {
 	case "", "reject", "allow", "skip":
@@ -41,17 +41,17 @@ type Client struct {
 
 func NewClient(ctx context.Context, config *vless.Multiplex, network string, open func(context.Context) (context.Context, *transport.Link, error)) *Client {
 	c := &Client{config: config}
-	pool := func(concurrency int32) *Pool {
-		return NewPool(ctx, ClientStrategy{MaxConcurrency: uint32(concurrency), MaxConnection: 1024}, open)
+	pool := func(concurrency int32, maxReuseTimes uint32) *Pool {
+		return NewPool(ctx, ClientStrategy{MaxConcurrency: uint32(concurrency), MaxReuseTimes: maxReuseTimes}, open)
 	}
 	if concurrency := config.GetConcurrency(); concurrency > 0 {
 		if network == "xdrive" {
 			concurrency = max(concurrency, 128)
 		}
-		c.tcp = pool(concurrency)
+		c.tcp = pool(concurrency, uint32(config.GetMaxReuseTimes()))
 	}
 	if concurrency := config.GetXudpConcurrency(); concurrency > 0 {
-		c.udp = pool(concurrency)
+		c.udp = pool(concurrency, 1024)
 	}
 	return c
 }
@@ -211,7 +211,7 @@ func (p *Pool) Admit(ctx context.Context, s *Session) error {
 
 type ClientStrategy struct {
 	MaxConcurrency uint32
-	MaxConnection  uint32
+	MaxReuseTimes  uint32
 }
 
 type ClientWorker struct {
@@ -258,7 +258,7 @@ func (m *ClientWorker) TryAdmit(ctx context.Context, s *Session) bool {
 	defer m.Unlock()
 	if ctx.Err() != nil || m.Closed() || m.count == 65535 ||
 		(m.strategy.MaxConcurrency > 0 && m.active >= int(m.strategy.MaxConcurrency)) ||
-		(m.strategy.MaxConnection > 0 && uint32(m.count) >= m.strategy.MaxConnection) {
+		(m.strategy.MaxReuseTimes > 0 && uint32(m.count) >= m.strategy.MaxReuseTimes) {
 		return false
 	}
 	s.parent, s.ID, s.phase, s.done = m.carrier, m.count+1, outputOpen, make(chan struct{})
