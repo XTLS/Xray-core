@@ -1,72 +1,84 @@
 package bytespool
 
-import "sync"
+import (
+	"math/bits"
+	"sync"
+)
 
-func createAllocFunc(size int32) func() interface{} {
-	return func() interface{} {
-		return make([]byte, size)
-	}
-}
-
-// The following parameters controls the size of buffer pools.
-// There are numPools pools. Starting from 2k size, the size of each pool is sizeMulti of the previous one.
-// Package buf is guaranteed to not use buffers larger than the largest pool.
-// Other packets may use larger buffers.
 const (
-	numPools  = 4
-	sizeMulti = 4
+	minShift = 10 // 1KB
+	maxShift = 16 // 64KB
+	numPools = maxShift - minShift + 1
+	minSize  = 1 << minShift
+	maxSize  = 1 << maxShift
 )
 
-var (
-	pool     [numPools]sync.Pool
-	poolSize [numPools]int32
-)
-
-func init() {
-	size := int32(2048)
-	for i := 0; i < numPools; i++ {
-		pool[i] = sync.Pool{
-			New: createAllocFunc(size),
-		}
-		poolSize[i] = size
-		size *= sizeMulti
-	}
+// pools hold array pointers (*[N]byte) to avoid interface boxing allocations on Put.
+var pools = [numPools]sync.Pool{
+	{New: func() any { return new([1 << 10]byte) }},
+	{New: func() any { return new([1 << 11]byte) }},
+	{New: func() any { return new([1 << 12]byte) }},
+	{New: func() any { return new([1 << 13]byte) }},
+	{New: func() any { return new([1 << 14]byte) }},
+	{New: func() any { return new([1 << 15]byte) }},
+	{New: func() any { return new([1 << 16]byte) }},
 }
 
-// GetPool returns a sync.Pool that generates bytes array with at least the given size.
-// It may return nil if no such pool exists.
-//
-// xray:api:stable
-func GetPool(size int32) *sync.Pool {
-	for idx, ps := range poolSize {
-		if size <= ps {
-			return &pool[idx]
-		}
-	}
-	return nil
-}
-
-// Alloc returns a byte slice with at least the given size. Minimum size of returned slice is 2048.
+// Alloc returns a byte slice with at least the given size. Minimum size of returned slice is 1024.
 //
 // xray:api:stable
 func Alloc(size int32) []byte {
-	pool := GetPool(size)
-	if pool != nil {
-		return pool.Get().([]byte)
+	if size > maxSize {
+		return make([]byte, size)
 	}
-	return make([]byte, size)
+	index := 0
+	if size > minSize {
+		index = bits.Len32(uint32(size-1)) - minShift
+	}
+	p := pools[index].Get()
+	switch index {
+	case 0:
+		return p.(*[1 << 10]byte)[:]
+	case 1:
+		return p.(*[1 << 11]byte)[:]
+	case 2:
+		return p.(*[1 << 12]byte)[:]
+	case 3:
+		return p.(*[1 << 13]byte)[:]
+	case 4:
+		return p.(*[1 << 14]byte)[:]
+	case 5:
+		return p.(*[1 << 15]byte)[:]
+	case 6:
+		return p.(*[1 << 16]byte)[:]
+	default:
+		panic("invalid pool index")
+	}
 }
 
 // Free puts a byte slice into the internal pool.
 //
 // xray:api:stable
 func Free(b []byte) {
-	size := int32(cap(b))
-	b = b[0:cap(b)]
-	for i := numPools - 1; i >= 0; i-- {
-		if size >= poolSize[i] {
-			pool[i].Put(b)
-			return
-		}
+	c := cap(b)
+	if c < minSize || c > maxSize {
+		return
+	}
+	index := bits.Len(uint(c)) - 1 - minShift
+	switch index {
+	case 0:
+		pools[0].Put((*[1 << 10]byte)(b[:1<<10]))
+	case 1:
+		pools[1].Put((*[1 << 11]byte)(b[:1<<11]))
+	case 2:
+		pools[2].Put((*[1 << 12]byte)(b[:1<<12]))
+	case 3:
+		pools[3].Put((*[1 << 13]byte)(b[:1<<13]))
+	case 4:
+		pools[4].Put((*[1 << 14]byte)(b[:1<<14]))
+	case 5:
+		pools[5].Put((*[1 << 15]byte)(b[:1<<15]))
+	case 6:
+		pools[6].Put((*[1 << 16]byte)(b[:1<<16]))
 	}
 }
