@@ -2,7 +2,6 @@ package multiplex
 
 import (
 	"encoding/binary"
-	"io"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/bitmask"
@@ -102,7 +101,7 @@ func (f FrameMetadata) WriteTo(b *buf.Buffer) error {
 }
 
 // Unmarshal reads FrameMetadata from the given reader.
-func (f *FrameMetadata) Unmarshal(reader io.Reader, readSourceAndLocal bool) error {
+func (f *FrameMetadata) Unmarshal(reader *buf.BufferedReader, readSourceAndLocal bool) error {
 	b, err := readBlock(reader, 512, "invalid metalen ")
 	if err != nil {
 		return err

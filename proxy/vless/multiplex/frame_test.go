@@ -41,7 +41,8 @@ func TestFrameEndpoints(t *testing.T) {
 			if got := hex.EncodeToString(wire.Bytes()); got != tc.wire {
 				t.Fatalf("metadata = %s, want %s", got, tc.wire)
 			}
-			reader := io.MultiReader(bytes.NewReader(wire.Bytes()), bytes.NewReader([]byte("payload")))
+			source := io.MultiReader(bytes.NewReader(wire.Bytes()), bytes.NewReader([]byte("payload")))
+			reader := &buf.BufferedReader{Reader: buf.NewReader(source)}
 			var decoded multiplex.FrameMetadata
 			if err := decoded.Unmarshal(reader, true); err != nil {
 				t.Fatal(err)

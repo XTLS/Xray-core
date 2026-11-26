@@ -43,6 +43,9 @@ type BufferedReader struct {
 	Buffer MultiBuffer
 	// Splitter is a function to read bytes from MultiBuffer
 	Splitter func(MultiBuffer, []byte) (MultiBuffer, int)
+
+	// oneByte is read into by ReadByte: a local array passed to Splitter escapes to the heap.
+	oneByte [1]byte
 }
 
 // BufferedBytes returns the number of bytes that is cached in this reader.
@@ -50,11 +53,16 @@ func (r *BufferedReader) BufferedBytes() int32 {
 	return r.Buffer.Len()
 }
 
-// ReadByte implements io.ByteReader.
+// ReadByte implements io.ByteReader. Like io.ReadFull, it reads until it gets a byte or an error.
 func (r *BufferedReader) ReadByte() (byte, error) {
-	var b [1]byte
-	_, err := r.Read(b[:])
-	return b[0], err
+	// The last byte goes through Read, which releases the emptied buffer.
+	if r.Splitter == nil && len(r.Buffer) > 0 && r.Buffer[0].Len() > 1 {
+		return r.Buffer[0].ReadByte()
+	}
+	if _, err := io.ReadFull(r, r.oneByte[:]); err != nil {
+		return 0, err
+	}
+	return r.oneByte[0], nil
 }
 
 // Read implements io.Reader. It reads from internal buffer first (if available) and then reads from the underlying reader.

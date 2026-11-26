@@ -77,6 +77,59 @@ func TestReadByte(t *testing.T) {
 	}
 }
 
+// multiBufferReader returns its MultiBuffers in order, then io.EOF.
+type multiBufferReader []MultiBuffer
+
+func (r *multiBufferReader) ReadMultiBuffer() (MultiBuffer, error) {
+	if len(*r) == 0 {
+		return nil, io.EOF
+	}
+	mb := (*r)[0]
+	*r = (*r)[1:]
+	return mb, nil
+}
+
+func TestReadByteAcrossBuffers(t *testing.T) {
+	cached, next := New(), New()
+	cached.WriteString("ab")
+	next.WriteString("c")
+	// After the cached buffer, an empty read comes before the next buffer.
+	reader := &BufferedReader{Buffer: MultiBuffer{cached}, Reader: &multiBufferReader{nil, MultiBuffer{next}}}
+	readByte := func(want byte) {
+		t.Helper()
+		if c, err := reader.ReadByte(); c != want || err != nil {
+			t.Fatalf("ReadByte() = %q, %v, want %q, nil", c, err, want)
+		}
+	}
+	readByte('a')
+	readByte('b')
+	if reader.Buffer != nil {
+		t.Fatal("ReadByte kept the emptied buffer: ", reader.Buffer)
+	}
+	readByte('c')
+	if _, err := reader.ReadByte(); err != io.EOF {
+		t.Fatalf("ReadByte() error = %v, want EOF", err)
+	}
+}
+
+func TestReadByteAllocs(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		splitter func(MultiBuffer, []byte) (MultiBuffer, int)
+	}{
+		{"cached buffer", nil},
+		// An explicit Splitter takes the path through Read.
+		{"Read", SplitBytes},
+	} {
+		b := New()
+		b.Extend(Size)
+		reader := &BufferedReader{Buffer: MultiBuffer{b}, Splitter: tc.splitter}
+		if n := testing.AllocsPerRun(100, func() { reader.ReadByte() }); n != 0 {
+			t.Errorf("ReadByte through %s: %v allocs", tc.name, n)
+		}
+	}
+}
+
 func TestReadBuffer(t *testing.T) {
 	{
 		sr := strings.NewReader("abcd")

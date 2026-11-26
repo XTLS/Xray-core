@@ -18,7 +18,7 @@ func frameReadError(err error) error {
 }
 
 // readBlock reads one length-prefixed frame component without retaining a partial buffer.
-func readBlock(reader io.Reader, limit uint16, oversized string) (*buf.Buffer, error) {
+func readBlock(reader *buf.BufferedReader, limit uint16, oversized string) (*buf.Buffer, error) {
 	size, err := serial.ReadUint16(reader)
 	if err != nil {
 		return nil, err
@@ -35,7 +35,7 @@ func readBlock(reader io.Reader, limit uint16, oversized string) (*buf.Buffer, e
 }
 
 // readPacket reads one complete packet; its destination belongs to the buffer.
-func readPacket(reader io.Reader, dest net.Destination) (buf.MultiBuffer, error) {
+func readPacket(reader *buf.BufferedReader, dest net.Destination) (buf.MultiBuffer, error) {
 	b, err := readBlock(reader, buf.Size, "packet size too large: ")
 	if err != nil {
 		return nil, err

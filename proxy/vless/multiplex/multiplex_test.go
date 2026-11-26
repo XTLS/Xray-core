@@ -200,3 +200,18 @@ func TestReaderWriter(t *testing.T) {
 		}
 	}
 }
+
+func TestEncodeBatchLength(t *testing.T) {
+	s := &Session{ID: 1, target: net.TCPDestination(net.DomainAddress("example.com"), 80), inbound: &session.Inbound{}}
+	b := buf.New()
+	b.Extend(300)
+	data := buf.MultiBuffer{b}
+	frames, err := s.encodeBatch(&data)
+	common.Must(err)
+	defer buf.ReleaseMulti(frames)
+
+	// The frame header ends with the big-endian length of the payload that follows it.
+	if diff := cmp.Diff(frames[0].BytesFrom(-2), []byte{0x01, 0x2c}); diff != "" {
+		t.Error(diff)
+	}
+}

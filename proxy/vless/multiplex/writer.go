@@ -1,10 +1,11 @@
 package multiplex
 
 import (
+	"encoding/binary"
+
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
 )
 
 // encodeBatch moves up to four complete wire frames from raw caller custody.
@@ -44,9 +45,7 @@ func (s *Session) encodeBatch(mb *buf.MultiBuffer) (frames buf.MultiBuffer, err 
 		if err := meta.WriteTo(frame); err != nil {
 			return frames, err
 		}
-		if _, err := serial.WriteUint16(frame, uint16(chunk.Len())); err != nil {
-			return frames, err
-		}
+		binary.BigEndian.PutUint16(frame.Extend(2), uint16(chunk.Len()))
 	}
 	return frames, nil
 }

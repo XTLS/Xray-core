@@ -5,13 +5,20 @@ import (
 	"io"
 )
 
-// ReadUint16 reads first two bytes from the reader, and then converts them to an uint16 value.
-func ReadUint16(reader io.Reader) (uint16, error) {
-	var b [2]byte
-	if _, err := io.ReadFull(reader, b[:]); err != nil {
+// ReadUint16 reads a big-endian uint16. EOF after the first byte is io.ErrUnexpectedEOF.
+func ReadUint16(reader io.ByteReader) (uint16, error) {
+	hi, err := reader.ReadByte()
+	if err != nil {
 		return 0, err
 	}
-	return binary.BigEndian.Uint16(b[:]), nil
+	lo, err := reader.ReadByte()
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	if err != nil {
+		return 0, err
+	}
+	return uint16(hi)<<8 | uint16(lo), nil
 }
 
 // WriteUint16 writes an uint16 value into writer.
