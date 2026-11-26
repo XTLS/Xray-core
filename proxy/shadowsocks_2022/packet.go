@@ -629,7 +629,7 @@ func (s *ClientUDPSession) EncodePacket(dest net.Destination, payload []byte) (*
 
 	var paddingLen int
 	if dest.Port == 53 && len(payload) < MaxPaddingLength {
-		paddingLen = mrand.IntN(MaxPaddingLength) + 1
+		paddingLen = mrand.IntN(MaxPaddingLength-len(payload)) + 1
 	}
 
 	addrPortLen := AddrPortLength(dest)
