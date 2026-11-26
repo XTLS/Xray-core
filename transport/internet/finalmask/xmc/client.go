@@ -217,6 +217,9 @@ func (c *clientConn) handshake() error {
 			if readErr := pkt.readFields(&reason); readErr != nil {
 				return fmt.Errorf("authentication rejected")
 			}
+			if isProtocolVersionReject(string(reason)) {
+				forgetProbedVersions()
+			}
 			return fmt.Errorf("authentication rejected: %s", reason)
 
 		case c.protocol.login.clientboundLoginFinished:

@@ -139,6 +139,16 @@ func detectProtocolVersion(dest *xnet.Destination, hostname string, dialer *fina
 	return number, name, nil
 }
 
+// forgetProbedVersions drops every cached detection. A login rejected with a
+// version mismatch means the cached row is stale (the peer was upgraded, or the
+// detection was wrong), so the next attempt has to ask again instead of waiting
+// for the TTL.
+func forgetProbedVersions() {
+	protocolProbeCache.mu.Lock()
+	clear(protocolProbeCache.entries)
+	protocolProbeCache.mu.Unlock()
+}
+
 func protocolProbeKey(dest *xnet.Destination) string {
 	return dest.Network.String() + "|" + dest.Address.String() + "|" + strconv.Itoa(int(dest.Port.Value()))
 }

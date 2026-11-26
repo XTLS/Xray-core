@@ -25,7 +25,10 @@
 // protocol_table_test.go, after diffing the two registration lists.
 package xmc
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // handshaking and status packet ids. These have not moved since 1.7 and are
 // fixed for every version the table covers.
@@ -185,6 +188,14 @@ func ValidateProtocolVersion(number uint32) error {
 func protocolVersionRange() string {
 	first, last := protocolVersions[0], protocolVersions[len(protocolVersions)-1]
 	return fmt.Sprintf("%d (%s) to %d (%s)", first.number, first.name, last.number, last.name)
+}
+
+// isProtocolVersionReject recognises the Login Disconnect reasons vanilla sends
+// when the client named another protocol version, so the cached detection can be
+// dropped.
+func isProtocolVersionReject(reason string) bool {
+	return strings.Contains(reason, "multiplayer.disconnect.incompatible") ||
+		strings.Contains(reason, "multiplayer.disconnect.outdated_client")
 }
 
 // loginRejectReason is the Login Disconnect reason a vanilla server sends for a

@@ -197,3 +197,55 @@ func TestClientProtocol(t *testing.T) {
 		}
 	})
 }
+
+// TestForgetProbedVersions covers a stale detection: after a version mismatch
+// the cache is dropped, so the next connection probes again instead of reusing
+// the row the peer no longer speaks.
+func TestForgetProbedVersions(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	statusTestServer(t, listener, 767, "1.21.1")
+	dest := statusTestDestination(t, listener)
+
+	if number, _, err := detectProtocolVersion(&dest, "localhost", statusTestDialer(nil)); err != nil || number != 767 {
+		t.Fatalf("detect = %v, %v", number, err)
+	}
+	forgetProbedVersions()
+
+	// The peer now reports another version; a cached answer would hide it.
+	listener2, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener2.Close()
+	statusTestServer(t, listener2, 775, "26.1")
+	dest2 := statusTestDestination(t, listener2)
+
+	// A dialer that fails proves the cache was consulted; after forgetting, the
+	// same destination must probe again.
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if number, _, err := detectProtocolVersion(&dest, "localhost", statusTestDialer(fmt.Errorf("must probe again"))); err == nil {
+		t.Fatalf("stale cache was reused: %v", number)
+	}
+	if number, _, err := detectProtocolVersion(&dest2, "localhost", statusTestDialer(nil)); err != nil || number != 775 {
+		t.Fatalf("fresh detect = %v, %v", number, err)
+	}
+}
+
+func TestIsProtocolVersionReject(t *testing.T) {
+	for _, reason := range []string{
+		`{"translate":"multiplayer.disconnect.incompatible","with":["26.3"]}`,
+		`{"translate":"multiplayer.disconnect.outdated_client","with":["26.3"]}`,
+	} {
+		if !isProtocolVersionReject(reason) {
+			t.Fatalf("%s should be a version reject", reason)
+		}
+	}
+	if isProtocolVersionReject(`{"translate":"multiplayer.disconnect.not_whitelisted"}`) {
+		t.Fatal("a whitelist reject is not a version reject")
+	}
+}
