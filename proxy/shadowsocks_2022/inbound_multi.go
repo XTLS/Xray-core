@@ -32,15 +32,15 @@ func init() {
 
 type MultiUserInbound struct {
 	sync.Mutex
-	networks        []net.Network
-	method          *CipherMethod
-	masterPSK       []byte
-	usersByHash     *utils.TypedSyncMap[[AESBlockSize]byte, *protocol.MemoryUser]
-	usersByEmail    *utils.TypedSyncMap[string, *protocol.MemoryUser]
-	userCount       atomic.Int64
-	saltFilter      *antireplay.ReplayFilter[[32]byte]
-	udpCodec        *UDPMultiServerCodec
-	policyManager   policy.Manager
+	networks      []net.Network
+	method        *CipherMethod
+	masterPSK     []byte
+	usersByHash   *utils.TypedSyncMap[[AESBlockSize]byte, *protocol.MemoryUser]
+	usersByEmail  *utils.TypedSyncMap[string, *protocol.MemoryUser]
+	userCount     atomic.Int64
+	saltFilter    *antireplay.ReplayFilter[[32]byte]
+	udpCodec      *UDPMultiServerCodec
+	policyManager policy.Manager
 }
 
 func NewMultiServer(ctx context.Context, config *MultiUserServerConfig) (*MultiUserInbound, error) {
