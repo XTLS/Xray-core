@@ -15,8 +15,6 @@ const (
 
 var ErrBufferFull = errors.New("buffer is full")
 
-var pool = bytespool.GetPool(Size)
-
 // ownership represents the data owner of the buffer.
 type ownership uint8
 
@@ -39,16 +37,7 @@ type Buffer struct {
 
 // New creates a Buffer with 0 length and 8K capacity, managed.
 func New() *Buffer {
-	buf := pool.Get().([]byte)
-	if cap(buf) >= Size {
-		buf = buf[:Size]
-	} else {
-		buf = make([]byte, Size)
-	}
-
-	return &Buffer{
-		v: buf,
-	}
+	return &Buffer{v: bytespool.Alloc(Size)}
 }
 
 // NewExisted creates a standard size Buffer with an existed bytearray, managed.
@@ -80,16 +69,7 @@ func FromBytes(b []byte) *Buffer {
 // StackNew creates a new Buffer object on stack, managed.
 // This method is for buffers that is released in the same function.
 func StackNew() Buffer {
-	buf := pool.Get().([]byte)
-	if cap(buf) >= Size {
-		buf = buf[:Size]
-	} else {
-		buf = make([]byte, Size)
-	}
-
-	return Buffer{
-		v: buf,
-	}
+	return Buffer{v: bytespool.Alloc(Size)}
 }
 
 // NewWithSize creates a Buffer with 0 length and capacity with at least the given size, bytespool's.
@@ -113,7 +93,7 @@ func (b *Buffer) Release() {
 	switch b.ownership {
 	case managed:
 		if cap(p) == Size {
-			pool.Put(p)
+			bytespool.Free(p)
 		}
 	case bytespools:
 		bytespool.Free(p)

@@ -2,34 +2,25 @@ package bytespool
 
 import "sync"
 
-func createAllocFunc(size int32) func() interface{} {
-	return func() interface{} {
-		return make([]byte, size)
-	}
-}
-
-// The following parameters controls the size of buffer pools.
-// There are numPools pools. Starting from 2k size, the size of each pool is sizeMulti of the previous one.
+// Sizes of the buffer pools.
 // Package buf is guaranteed to not use buffers larger than the largest pool.
 // Other packets may use larger buffers.
 const (
-	numPools  = 4
-	sizeMulti = 4
+	size2k   = 2048
+	size8k   = 8192
+	size32k  = 32768
+	size128k = 131072
 )
 
+// GetPool pools hold []byte, as its callers expect.
 var (
-	pool     [numPools]sync.Pool
-	poolSize [numPools]int32
+	poolSize = [...]int32{size2k, size8k, size32k, size128k}
+	pool     [len(poolSize)]sync.Pool
 )
 
 func init() {
-	size := int32(2048)
-	for i := 0; i < numPools; i++ {
-		pool[i] = sync.Pool{
-			New: createAllocFunc(size),
-		}
-		poolSize[i] = size
-		size *= sizeMulti
+	for i, size := range poolSize {
+		pool[i].New = func() any { return make([]byte, size) }
 	}
 }
 
@@ -46,13 +37,28 @@ func GetPool(size int32) *sync.Pool {
 	return nil
 }
 
+// Alloc and Free pools hold array pointers: unlike a slice, a pointer goes into
+// a sync.Pool without an allocation.
+var (
+	arrays2k   = sync.Pool{New: func() any { return new([size2k]byte) }}
+	arrays8k   = sync.Pool{New: func() any { return new([size8k]byte) }}
+	arrays32k  = sync.Pool{New: func() any { return new([size32k]byte) }}
+	arrays128k = sync.Pool{New: func() any { return new([size128k]byte) }}
+)
+
 // Alloc returns a byte slice with at least the given size. Minimum size of returned slice is 2048.
 //
 // xray:api:stable
 func Alloc(size int32) []byte {
-	pool := GetPool(size)
-	if pool != nil {
-		return pool.Get().([]byte)
+	switch {
+	case size <= size2k:
+		return arrays2k.Get().(*[size2k]byte)[:]
+	case size <= size8k:
+		return arrays8k.Get().(*[size8k]byte)[:]
+	case size <= size32k:
+		return arrays32k.Get().(*[size32k]byte)[:]
+	case size <= size128k:
+		return arrays128k.Get().(*[size128k]byte)[:]
 	}
 	return make([]byte, size)
 }
@@ -61,12 +67,14 @@ func Alloc(size int32) []byte {
 //
 // xray:api:stable
 func Free(b []byte) {
-	size := int32(cap(b))
-	b = b[0:cap(b)]
-	for i := numPools - 1; i >= 0; i-- {
-		if size >= poolSize[i] {
-			pool[i].Put(b)
-			return
-		}
+	switch c := cap(b); {
+	case c >= size128k:
+		arrays128k.Put((*[size128k]byte)(b[:size128k]))
+	case c >= size32k:
+		arrays32k.Put((*[size32k]byte)(b[:size32k]))
+	case c >= size8k:
+		arrays8k.Put((*[size8k]byte)(b[:size8k]))
+	case c >= size2k:
+		arrays2k.Put((*[size2k]byte)(b[:size2k]))
 	}
 }
