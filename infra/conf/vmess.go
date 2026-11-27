@@ -124,7 +124,7 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 	config := &outbound.Config{Multiplex: multiplex}
 
 	if c.Address == nil {
-		return nil, errors.New(`VMess vnext: "address" is not set`)
+		return nil, errors.New(`VMess: "address" is not set`)
 	}
 	uid, err := uuid.ParseString(c.ID)
 	if err != nil {

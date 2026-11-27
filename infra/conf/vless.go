@@ -280,7 +280,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 	config := &outbound.Config{Multiplex: multiplex}
 
 	if c.Address == nil {
-		return nil, errors.New(`VLESS vnext: "address" is not set`)
+		return nil, errors.New(`VLESS: "address" is not set`)
 	}
 	uid, err := uuid.ParseString(c.Id)
 	if err != nil {

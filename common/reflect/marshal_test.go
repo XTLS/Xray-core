@@ -191,18 +191,10 @@ func getConfig() string {
     {
       "protocol": "vless",
       "settings": {
-        "vnext": [
-          {
-            "address": "1.2.3.4",
-            "port": 1234,
-            "users": [
-              {
-                "id": "4784f9b8-a879-4fec-9718-ebddefa47750",
-                "encryption": "none"
-              }
-            ]
-          }
-        ]
+        "address": "1.2.3.4",
+        "port": 1234,
+        "id": "4784f9b8-a879-4fec-9718-ebddefa47750",
+        "encryption": "none"
       },
       "tag": "XHTTP_IN",
       "streamSettings": {
