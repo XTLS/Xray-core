@@ -256,26 +256,19 @@ func (c *MultiplexConfig) Build() (*vless.Multiplex, error) {
 	})
 }
 
-type VLessOutboundVnext struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
-}
-
 type VLessOutboundConfig struct {
-	Address    *Address              `json:"address"`
-	Port       uint16                `json:"port"`
-	Level      uint32                `json:"level"`
-	Email      string                `json:"email"`
-	Id         string                `json:"id"`
-	Flow       string                `json:"flow"`
-	Seed       string                `json:"seed"`
-	Encryption string                `json:"encryption"`
-	Multiplex  *MultiplexConfig      `json:"multiplex"`
-	Reverse    *VLessReverseConfig   `json:"reverse"`
-	Testpre    uint32                `json:"testpre"`
-	Testseed   []uint32              `json:"testseed"`
-	Vnext      []*VLessOutboundVnext `json:"vnext"`
+	Address    *Address            `json:"address"`
+	Port       uint16              `json:"port"`
+	Level      uint32              `json:"level"`
+	Email      string              `json:"email"`
+	Id         string              `json:"id"`
+	Flow       string              `json:"flow"`
+	Seed       string              `json:"seed"`
+	Encryption string              `json:"encryption"`
+	Multiplex  *MultiplexConfig    `json:"multiplex"`
+	Reverse    *VLessReverseConfig `json:"reverse"`
+	Testpre    uint32              `json:"testpre"`
+	Testseed   []uint32            `json:"testseed"`
 }
 
 // Build implements Buildable
@@ -286,130 +279,92 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 	}
 	config := &outbound.Config{Multiplex: multiplex}
 
-	if c.Address != nil {
-		c.Vnext = []*VLessOutboundVnext{
-			{
-				Address: c.Address,
-				Port:    c.Port,
-				Users:   []json.RawMessage{{}},
-			},
-		}
+	if c.Address == nil {
+		return nil, errors.New(`VLESS: "address" is not set`)
 	}
-	if len(c.Vnext) != 1 {
-		return nil, errors.New(`VLESS settings: "vnext" should have one and only one member. Multiple endpoints in "vnext" should use multiple VLESS outbounds and routing balancer instead`)
-	}
-	for _, rec := range c.Vnext {
-		if rec.Address == nil {
-			return nil, errors.New(`VLESS vnext: "address" is not set`)
-		}
-		if len(rec.Users) != 1 {
-			return nil, errors.New(`VLESS vnext: "users" should have one and only one member. Multiple members in "users" should use multiple VLESS outbounds and routing balancer instead`)
-		}
-		spec := &protocol.ServerEndpoint{
-			Address: rec.Address.Build(),
-			Port:    uint32(rec.Port),
-		}
-		for _, rawUser := range rec.Users {
-			user := new(protocol.User)
-			if c.Address != nil {
-				user.Level = c.Level
-				user.Email = c.Email
-			} else {
-				if err := json.Unmarshal(rawUser, user); err != nil {
-					return nil, errors.New(`VLESS users: invalid user`).Base(err)
-				}
-			}
-			account := new(vless.Account)
-			if c.Address != nil {
-				account.Id = c.Id
-				account.Flow = c.Flow
-				//account.Seed = c.Seed
-				account.Encryption = c.Encryption
-				if c.Reverse != nil {
-					rvs, err := c.Reverse.Build()
-					if err != nil {
-						return nil, err
-					}
-					account.Reverse = rvs
-				}
-				account.Testpre = c.Testpre
-				account.Testseed = c.Testseed
-			} else {
-				if err := json.Unmarshal(rawUser, account); err != nil {
-					return nil, errors.New(`VLESS users: invalid user`).Base(err)
-				}
-				// validateOutboundTransportSecurity needs to see these
-				c.Encryption = account.Encryption
-				c.Address = rec.Address
-				if account.Reverse != nil { // may not be reached: error json unmarshal
-					return nil, errors.New(`VLESS users: please use simplified outbound's config style to use "reverse"`)
-				}
-			}
-
-			u, err := uuid.ParseString(account.Id)
-			if err != nil {
-				return nil, err
-			}
-			account.Id = u.String()
-
-			switch account.Flow {
-			case "":
-			case vless.XRV, vless.XRV + "-udp443":
-			default:
-				return nil, errors.New(`VLESS users: "flow" doesn't support "` + account.Flow + `" in this version`)
-			}
-
-			if !func() bool {
-				s := strings.Split(account.Encryption, ".")
-				if len(s) < 4 || s[0] != "mlkem768x25519plus" {
-					return false
-				}
-				switch s[1] {
-				case "native":
-				case "xorpub":
-					account.XorMode = 1
-				case "random":
-					account.XorMode = 2
-				default:
-					return false
-				}
-				switch s[2] {
-				case "1rtt":
-				case "0rtt":
-					account.Seconds = 1
-				default:
-					return false
-				}
-				padding := 0
-				for _, r := range s[3:] {
-					if len(r) < 20 {
-						padding += len(r) + 1
-						continue
-					}
-					if b, _ := base64.RawURLEncoding.DecodeString(r); len(b) != 32 && len(b) != 1184 {
-						return false
-					}
-				}
-				account.Encryption = account.Encryption[27+len(s[2]):]
-				if padding > 0 {
-					account.Padding = account.Encryption[:padding-1]
-					account.Encryption = account.Encryption[padding:]
-				}
-				return true
-			}() && account.Encryption != "none" {
-				if account.Encryption == "" {
-					return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
-				}
-				return nil, errors.New(`VLESS users: unsupported "encryption": ` + account.Encryption)
-			}
-
-			user.Account = serial.ToTypedMessage(account)
-			spec.User = user
-			break
-		}
-		config.Vnext = spec
-		break
+	uid, err := uuid.ParseString(c.Id)
+	if err != nil {
+		return nil, err
 	}
 
+	switch c.Flow {
+	case "":
+	case vless.XRV, vless.XRV + "-udp443":
+	default:
+		return nil, errors.New(`VLESS users: "flow" doesn't support "` + c.Flow + `" in this version`)
+	}
+
+	spec := &protocol.ServerEndpoint{
+		Address: c.Address.Build(),
+		Port:    uint32(c.Port),
+	}
+	user := &protocol.User{
+		Level: c.Level,
+		Email: c.Email,
+	}
+	account := &vless.Account{
+		Id:   uid.String(),
+		Flow: c.Flow,
+		// Seed: c.Seed,
+		Encryption: c.Encryption,
+		Testpre:    c.Testpre,
+		Testseed:   c.Testseed,
+	}
+	if c.Reverse != nil {
+		rvs, err := c.Reverse.Build()
+		if err != nil {
+			return nil, err
+		}
+		account.Reverse = rvs
+	}
+
+	if !func() bool {
+		s := strings.Split(account.Encryption, ".")
+		if len(s) < 4 || s[0] != "mlkem768x25519plus" {
+			return false
+		}
+		switch s[1] {
+		case "native":
+		case "xorpub":
+			account.XorMode = 1
+		case "random":
+			account.XorMode = 2
+		default:
+			return false
+		}
+		switch s[2] {
+		case "1rtt":
+		case "0rtt":
+			account.Seconds = 1
+		default:
+			return false
+		}
+		padding := 0
+		for _, r := range s[3:] {
+			if len(r) < 20 {
+				padding += len(r) + 1
+				continue
+			}
+			if b, _ := base64.RawURLEncoding.DecodeString(r); len(b) != 32 && len(b) != 1184 {
+				return false
+			}
+		}
+		account.Encryption = account.Encryption[27+len(s[2]):]
+		if padding > 0 {
+			account.Padding = account.Encryption[:padding-1]
+			account.Encryption = account.Encryption[padding:]
+		}
+		return true
+	}() && account.Encryption != "none" {
+		if account.Encryption == "" {
+			return nil, errors.New(`VLESS users: please add/set "encryption":"none" for every user`)
+		}
+		return nil, errors.New(`VLESS users: unsupported "encryption": ` + account.Encryption)
+	}
+
+	user.Account = serial.ToTypedMessage(account)
+	spec.User = user
+
+	config.Vnext = spec
 	return config, nil
 }

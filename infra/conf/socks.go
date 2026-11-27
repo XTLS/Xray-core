@@ -1,9 +1,6 @@
 package conf
 
 import (
-	"encoding/json"
-
-	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/protocol"
 	"github.com/xtls/xray-core/common/serial"
 	"github.com/xtls/xray-core/proxy/socks"
@@ -67,71 +64,35 @@ func (v *SocksServerConfig) Build() (proto.Message, error) {
 	return config, nil
 }
 
-type SocksRemoteConfig struct {
-	Address *Address          `json:"address"`
-	Port    uint16            `json:"port"`
-	Users   []json.RawMessage `json:"users"`
-}
-
 type SocksClientConfig struct {
-	Address  *Address             `json:"address"`
-	Port     uint16               `json:"port"`
-	Level    uint32               `json:"level"`
-	Email    string               `json:"email"`
-	Username string               `json:"user"`
-	Password string               `json:"pass"`
-	Servers  []*SocksRemoteConfig `json:"servers"`
+	Address  *Address `json:"address"`
+	Port     uint16   `json:"port"`
+	Level    uint32   `json:"level"`
+	Email    string   `json:"email"`
+	Username string   `json:"user"`
+	Password string   `json:"pass"`
 }
 
 func (v *SocksClientConfig) Build() (proto.Message, error) {
 	config := new(socks.ClientConfig)
-	if v.Address != nil {
-		v.Servers = []*SocksRemoteConfig{
-			{
-				Address: v.Address,
-				Port:    v.Port,
-			},
-		}
-		if len(v.Username) > 0 {
-			v.Servers[0].Users = []json.RawMessage{{}}
-		}
+
+	server := &protocol.ServerEndpoint{
+		Address: v.Address.Build(),
+		Port:    uint32(v.Port),
 	}
-	if len(v.Servers) != 1 {
-		return nil, errors.New(`SOCKS settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple SOCKS outbounds and routing balancer instead`)
+	if len(v.Username) > 0 {
+		account := &SocksAccount{
+			Username: v.Username,
+			Password: v.Password,
+		}
+		user := &protocol.User{
+			Level:   v.Level,
+			Email:   v.Email,
+			Account: serial.ToTypedMessage(account.Build()),
+		}
+		server.User = user
 	}
-	for _, serverConfig := range v.Servers {
-		if len(serverConfig.Users) > 1 {
-			return nil, errors.New(`SOCKS servers: "users" should have one member at most. Multiple members in "users" should use multiple SOCKS outbounds and routing balancer instead`)
-		}
-		server := &protocol.ServerEndpoint{
-			Address: serverConfig.Address.Build(),
-			Port:    uint32(serverConfig.Port),
-		}
-		for _, rawUser := range serverConfig.Users {
-			user := new(protocol.User)
-			if v.Address != nil {
-				user.Level = v.Level
-				user.Email = v.Email
-			} else {
-				if err := json.Unmarshal(rawUser, user); err != nil {
-					return nil, errors.New("failed to parse Socks user").Base(err)
-				}
-			}
-			account := new(SocksAccount)
-			if v.Address != nil {
-				account.Username = v.Username
-				account.Password = v.Password
-			} else {
-				if err := json.Unmarshal(rawUser, account); err != nil {
-					return nil, errors.New("failed to parse socks account").Base(err)
-				}
-			}
-			user.Account = serial.ToTypedMessage(account.Build())
-			server.User = user
-			break
-		}
-		config.Server = server
-		break
-	}
+
+	config.Server = server
 	return config, nil
 }

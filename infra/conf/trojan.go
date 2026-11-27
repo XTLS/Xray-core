@@ -17,76 +17,41 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// TrojanServerTarget is configuration of a single trojan server
-type TrojanServerTarget struct {
+// TrojanClientConfig is configuration of trojan servers
+type TrojanClientConfig struct {
 	Address  *Address `json:"address"`
 	Port     uint16   `json:"port"`
 	Level    byte     `json:"level"`
 	Email    string   `json:"email"`
 	Password string   `json:"password"`
-	Flow     string   `json:"flow"`
-}
-
-// TrojanClientConfig is configuration of trojan servers
-type TrojanClientConfig struct {
-	Address  *Address              `json:"address"`
-	Port     uint16                `json:"port"`
-	Level    byte                  `json:"level"`
-	Email    string                `json:"email"`
-	Password string                `json:"password"`
-	Flow     string                `json:"flow"`
-	Servers  []*TrojanServerTarget `json:"servers"`
 }
 
 // Build implements Buildable
 func (c *TrojanClientConfig) Build() (proto.Message, error) {
 	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
 
-	if c.Address != nil {
-		c.Servers = []*TrojanServerTarget{
-			{
-				Address:  c.Address,
-				Port:     c.Port,
-				Level:    c.Level,
-				Email:    c.Email,
-				Password: c.Password,
-				Flow:     c.Flow,
-			},
-		}
-	}
-	if len(c.Servers) != 1 {
-		return nil, errors.New(`Trojan settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple Trojan outbounds and routing balancer instead`)
-	}
-
 	config := &trojan.ClientConfig{}
 
-	for _, rec := range c.Servers {
-		if rec.Address == nil {
-			return nil, errors.New("Trojan server address is not set.")
-		}
-		if rec.Port == 0 {
-			return nil, errors.New("Invalid Trojan port.")
-		}
-		if rec.Password == "" {
-			return nil, errors.New("Trojan password is not specified.")
-		}
-		if rec.Flow != "" {
-			return nil, errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
-		}
+	if c.Address == nil {
+		return nil, errors.New("Trojan server address is not set.")
+	}
+	if c.Port == 0 {
+		return nil, errors.New("Invalid Trojan port.")
+	}
+	if c.Password == "" {
+		return nil, errors.New("Trojan password is not specified.")
+	}
 
-		config.Server = &protocol.ServerEndpoint{
-			Address: rec.Address.Build(),
-			Port:    uint32(rec.Port),
-			User: &protocol.User{
-				Level: uint32(rec.Level),
-				Email: rec.Email,
-				Account: serial.ToTypedMessage(&trojan.Account{
-					Password: rec.Password,
-				}),
-			},
-		}
-
-		break
+	config.Server = &protocol.ServerEndpoint{
+		Address: c.Address.Build(),
+		Port:    uint32(c.Port),
+		User: &protocol.User{
+			Level: uint32(c.Level),
+			Email: c.Email,
+			Account: serial.ToTypedMessage(&trojan.Account{
+				Password: c.Password,
+			}),
+		},
 	}
 
 	return config, nil
@@ -107,7 +72,6 @@ type TrojanUserConfig struct {
 	Password string `json:"password"`
 	Level    byte   `json:"level"`
 	Email    string `json:"email"`
-	Flow     string `json:"flow"`
 }
 
 // TrojanServerConfig is Inbound configuration
@@ -131,9 +95,6 @@ func (c *TrojanServerConfig) Build() (proto.Message, error) {
 
 	processClient := func(idx int) error {
 		rawUser := c.Users[idx]
-		if rawUser.Flow != "" {
-			return errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
-		}
 
 		config.Users[idx] = &protocol.User{
 			Level: uint32(rawUser.Level),

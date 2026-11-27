@@ -238,7 +238,7 @@ func validateOutboundTransportSecurity(rawConfig interface{}, senderSettings *pr
 	}
 
 	if tjCfg, ok := rawConfig.(*TrojanClientConfig); ok {
-		if requiresTransportSecurity(tjCfg.Servers[0].Address) {
+		if requiresTransportSecurity(tjCfg.Address) {
 			return errors.New("trojan without TLS is prohibited unless the server address is a private IP or domain")
 		}
 	}

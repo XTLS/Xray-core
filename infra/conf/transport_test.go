@@ -532,7 +532,7 @@ func TestXDriveOutboundConfig(t *testing.T) {
 		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`,
 		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8, "xudpConcurrency": 8, "xudpProxyUDP443": "allow"}}, ` + xdriveStream + `}`,
 		`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "reverse": {"tag": "r"}}, ` + xdriveStream + `}`,
-		`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `}]}], "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`,
+		`{"protocol": "vless", "settings": {"address": "127.0.0.1", "port": 443, ` + xdriveID + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`,
 	} {
 		if err := build(input); err != nil {
 			t.Errorf("%s: %v", input, err)
@@ -543,7 +543,7 @@ func TestXDriveOutboundConfig(t *testing.T) {
 		{`{"protocol": "vless", "settings": {"address": "example.com", "port": 443, ` + xdriveID + `, "encryption": "none", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"encryption"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "multiplex": {"concurrency": 8, "xudpProxyUDP443": "skip"}}, ` + xdriveStream + `}`, `"xudpProxyUDP443":"skip"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"flow"`},
-		{`{"protocol": "vless", "settings": {"vnext": [{"address": "127.0.0.1", "port": 443, "users": [{` + xdriveID + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision"}]}], "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"flow"`},
+		{`{"protocol": "vless", "settings": {"address": "127.0.0.1", "port": 443, ` + xdriveID + `, ` + xdriveEnc + `, "flow": "xtls-rprx-vision", "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"flow"`},
 		{`{"protocol": "vless", "settings": {` + xdriveServer + `, ` + xdriveEnc + `, "testpre": 1, "multiplex": {"concurrency": 8}}, ` + xdriveStream + `}`, `"testpre"`},
 		{`{"protocol": "vmess", "settings": {` + xdriveServer + `}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
 		{`{"protocol": "trojan", "settings": {"address": "example.com", "port": 443, "password": "p"}, ` + xdriveStream + `, "mux": {"enabled": true}}`, "VLESS"},
