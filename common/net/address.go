@@ -122,19 +122,6 @@ func IPAddress(ip []byte) Address {
 	}
 }
 
-// AsNetipAddr returns the IP of address as a netip.Addr. Unlike address.IP(), it does not
-// allocate for IP addresses of this package. Like address.IP(), it panics for a domain.
-func AsNetipAddr(address Address) netip.Addr {
-	switch a := address.(type) {
-	case ipv4Address:
-		return netip.AddrFrom4(a)
-	case ipv6Address:
-		return netip.AddrFrom16(a)
-	}
-	addr, _ := netip.AddrFromSlice(address.IP())
-	return addr
-}
-
 // DomainAddress creates an Address with given domain.
 // This is an internal function that forcibly converts a string to domain.
 // It's mainly used in test files and mux.
@@ -179,6 +166,19 @@ func (ipv6Address) Family() AddressFamily {
 
 func (a ipv6Address) String() string {
 	return "[" + a.IP().String() + "]"
+}
+
+// AsNetipAddr returns the IP of address as a netip.Addr. Unlike address.IP(), it does not
+// allocate for IP addresses of this package. Like address.IP(), it panics for a domain.
+func AsNetipAddr(address Address) netip.Addr {
+	switch a := address.(type) {
+	case ipv4Address:
+		return netip.AddrFrom4(a)
+	case ipv6Address:
+		return netip.AddrFrom16(a)
+	}
+	addr, _ := netip.AddrFromSlice(address.IP())
+	return addr
 }
 
 type domainAddress string
