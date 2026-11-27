@@ -301,6 +301,9 @@ type VisionWriter struct {
 	// internal
 	writeOnceUserUUID  []byte
 	directWriteCounter stats.Counter
+	// bytes of the current inner TLS record that earlier writes have not covered, -1 if unknown
+	recordRemaining int32
+	recordType      byte
 
 	testseed []uint32
 }
@@ -327,6 +330,7 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	var isPadding *bool
 	var switchToDirectCopy *bool
 	var spliceReadyInbound *session.Inbound
+	var rest buf.MultiBuffer
 	if w.isUplink {
 		isPadding = &w.trafficState.Outbound.IsPadding
 		switchToDirectCopy = &w.trafficState.Outbound.UplinkWriterDirectCopy
@@ -362,11 +366,25 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		if len(mb) == 1 && mb[0] == nil {
 			mb[0] = XtlsPadding(nil, CommandPaddingContinue, &w.writeOnceUserUUID, true, w.ctx, w.testseed) // we do a long padding to hide vless header
 		} else {
-			isComplete := IsCompleteRecord(mb)
+			// Records can span writes, so end the padding on the last record boundary
+			// in this write and send the rest after the switch (rest)
+			var end int32
+			end, w.recordRemaining, w.recordType = tlsRecordEnd(mb, max(w.recordRemaining, 0), w.recordType)
+			isComplete := w.trafficState.IsTLS && end > 0
+			if isComplete && end < mb.Len() {
+				var head buf.MultiBuffer
+				rest, head = buf.SplitSize(mb, end)
+				if n := head.Len(); n < end {
+					var tail buf.MultiBuffer
+					rest, tail = buf.SplitSize(rest, end-n)
+					head = append(head, tail...)
+				}
+				mb = head
+			}
 			mb = ReshapeMultiBuffer(w.ctx, mb)
 			longPadding := w.trafficState.IsTLS
 			for i, b := range mb {
-				if w.trafficState.IsTLS && b.Len() >= 6 && bytes.Equal(TlsApplicationDataStart, b.BytesTo(3)) && isComplete {
+				if isComplete {
 					if w.trafficState.EnableXtls {
 						*switchToDirectCopy = true
 					}
@@ -398,7 +416,11 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 		}
 	}
 	if err := w.Writer.WriteMultiBuffer(mb); err != nil {
+		buf.ReleaseMulti(rest)
 		return err
+	}
+	if !rest.IsEmpty() {
+		return w.WriteMultiBuffer(rest) // after the switch, unpadded
 	}
 	if spliceReadyInbound != nil && spliceReadyInbound.CanSpliceCopy == 2 {
 		// Enable splice only after this write has completed to avoid racing
@@ -408,58 +430,38 @@ func (w *VisionWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 	return nil
 }
 
-// IsCompleteRecord Is complete tls data record
-func IsCompleteRecord(buffer buf.MultiBuffer) bool {
-	b := make([]byte, buffer.Len())
-	if buffer.Copy(b) != int(buffer.Len()) {
-		panic("impossible bytes allocation")
+// tlsRecordEnd walks mb as TLS records. The first skip bytes finish a record of
+// type typ from an earlier write. It returns the end of the last complete
+// application data record (0 if there is none, or if mb holds a handshake
+// record), how many bytes of the last record are still to come (-1 if mb is not
+// TLS records or ends inside a record header) and the type of that record.
+func tlsRecordEnd(mb buf.MultiBuffer, skip int32, typ byte) (end int32, remaining int32, lastType byte) {
+	b := make([]byte, mb.Len())
+	mb.Copy(b)
+	i := int(skip)
+	handshake := skip > 0 && typ == 0x16
+	if skip > 0 && typ == 0x17 && i <= len(b) {
+		end = skip
 	}
-	var headerLen int = 5
-	var recordLen int
-
-	totalLen := len(b)
-	i := 0
-	for i < totalLen {
-		// record header: 0x17 0x3 0x3 + 2 bytes length
-		if headerLen > 0 {
-			data := b[i]
-			i++
-			switch headerLen {
-			case 5:
-				if data != 0x17 {
-					return false
-				}
-			case 4:
-				if data != 0x03 {
-					return false
-				}
-			case 3:
-				if data != 0x03 {
-					return false
-				}
-			case 2:
-				recordLen = int(data) << 8
-			case 1:
-				recordLen = recordLen | int(data)
-			}
-			headerLen--
-		} else if recordLen > 0 {
-			remaining := totalLen - i
-			if remaining < recordLen {
-				return false
-			} else {
-				i += recordLen
-				recordLen = 0
-				headerLen = 5
-			}
-		} else {
-			return false
+	for i+5 <= len(b) {
+		typ = b[i]
+		if typ < 0x14 || typ > 0x17 || b[i+1] != 0x03 {
+			return 0, -1, 0
 		}
+		handshake = handshake || typ == 0x16
+		next := i + 5 + (int(b[i+3])<<8 | int(b[i+4]))
+		if typ == 0x17 && next <= len(b) {
+			end = int32(next)
+		}
+		i = next
 	}
-	if headerLen == 5 && recordLen == 0 {
-		return true
+	if handshake {
+		end = 0
 	}
-	return false
+	if i < len(b) {
+		return end, -1, 0
+	}
+	return end, int32(i - len(b)), typ
 }
 
 // ReshapeMultiBuffer prepare multi buffer for padding structure (max 21 bytes)
