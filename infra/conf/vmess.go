@@ -145,7 +145,7 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 			Account: serial.ToTypedMessage(account.Build()),
 		},
 	}
-	
+
 	config.Receiver = spec
 	return config, nil
 }

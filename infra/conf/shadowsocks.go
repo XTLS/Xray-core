@@ -217,8 +217,8 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 		Address: v.Address.Build(),
 		Port:    uint32(v.Port),
 		User: &protocol.User{
-			Level:   uint32(v.Level),
-			Email:   v.Email,
+			Level: uint32(v.Level),
+			Email: v.Email,
 			Account: serial.ToTypedMessage(&shadowsocks.Account{
 				Password:   v.Password,
 				CipherType: cipherFromString(v.Cipher),

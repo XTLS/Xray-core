@@ -46,8 +46,8 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 		Address: c.Address.Build(),
 		Port:    uint32(c.Port),
 		User: &protocol.User{
-			Level:   uint32(c.Level),
-			Email:   c.Email,
+			Level: uint32(c.Level),
+			Email: c.Email,
 			Account: serial.ToTypedMessage(&trojan.Account{
 				Password: c.Password,
 			}),

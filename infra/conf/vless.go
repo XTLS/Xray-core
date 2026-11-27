@@ -305,7 +305,7 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 	account := &vless.Account{
 		Id:   uid.String(),
 		Flow: c.Flow,
-		//Seed: c.Seed,
+		// Seed: c.Seed,
 		Encryption: c.Encryption,
 		Testpre:    c.Testpre,
 		Testseed:   c.Testseed,
