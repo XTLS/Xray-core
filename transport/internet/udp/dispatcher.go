@@ -42,13 +42,17 @@ func (c *connEntry) terminate() {
 	common.Interrupt(c.link.Writer)
 }
 
+// defaultIdleTimeout is how long a flow lives without a response unless SetIdleTimeout says otherwise.
+const defaultIdleTimeout = time.Minute
+
 type Dispatcher struct {
 	sync.RWMutex
-	conn       *connEntry
-	dispatcher routing.Dispatcher
-	callback   ResponseCallback
-	callClose  func() error
-	closed     bool
+	conn        *connEntry
+	dispatcher  routing.Dispatcher
+	callback    ResponseCallback
+	callClose   func() error
+	closed      bool
+	idleTimeout time.Duration
 }
 
 func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Dispatcher {
@@ -56,6 +60,15 @@ func NewDispatcher(dispatcher routing.Dispatcher, callback ResponseCallback) *Di
 		dispatcher: dispatcher,
 		callback:   callback,
 	}
+}
+
+// SetIdleTimeout sets how long a flow lives without a response, usually the
+// policy's UDPIdle. It applies to flows dispatched afterwards; zero or
+// negative restores the default of one minute.
+func (v *Dispatcher) SetIdleTimeout(timeout time.Duration) {
+	v.Lock()
+	defer v.Unlock()
+	v.idleTimeout = timeout
 }
 
 func (v *Dispatcher) RemoveRay() {
@@ -99,7 +112,11 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 		cancel: cancel,
 	}
 
-	entry.timer = signal.CancelAfterInactivity(ctx, entry.terminate, time.Minute)
+	idleTimeout := v.idleTimeout
+	if idleTimeout <= 0 {
+		idleTimeout = defaultIdleTimeout
+	}
+	entry.timer = signal.CancelAfterInactivity(ctx, entry.terminate, idleTimeout)
 	v.conn = entry
 	go handleInput(ctx, entry, dest, v.callback, v.callClose)
 	return entry, nil

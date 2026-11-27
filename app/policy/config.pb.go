@@ -228,6 +228,7 @@ type Policy_Timeout struct {
 	ConnectionIdle *Second                `protobuf:"bytes,2,opt,name=connection_idle,json=connectionIdle,proto3" json:"connection_idle,omitempty"`
 	UplinkOnly     *Second                `protobuf:"bytes,3,opt,name=uplink_only,json=uplinkOnly,proto3" json:"uplink_only,omitempty"`
 	DownlinkOnly   *Second                `protobuf:"bytes,4,opt,name=downlink_only,json=downlinkOnly,proto3" json:"downlink_only,omitempty"`
+	UdpIdle        *Second                `protobuf:"bytes,5,opt,name=udp_idle,json=udpIdle,proto3" json:"udp_idle,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -286,6 +287,13 @@ func (x *Policy_Timeout) GetUplinkOnly() *Second {
 func (x *Policy_Timeout) GetDownlinkOnly() *Second {
 	if x != nil {
 		return x.DownlinkOnly
+	}
+	return nil
+}
+
+func (x *Policy_Timeout) GetUdpIdle() *Second {
+	if x != nil {
+		return x.UdpIdle
 	}
 	return nil
 }
@@ -469,17 +477,18 @@ const file_app_policy_config_proto_rawDesc = "" +
 	"\n" +
 	"\x17app/policy/config.proto\x12\x0fxray.app.policy\"\x1e\n" +
 	"\x06Second\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\rR\x05value\"\xc7\x04\n" +
+	"\x05value\x18\x01 \x01(\rR\x05value\"\xfb\x04\n" +
 	"\x06Policy\x129\n" +
 	"\atimeout\x18\x01 \x01(\v2\x1f.xray.app.policy.Policy.TimeoutR\atimeout\x123\n" +
 	"\x05stats\x18\x02 \x01(\v2\x1d.xray.app.policy.Policy.StatsR\x05stats\x126\n" +
-	"\x06buffer\x18\x03 \x01(\v2\x1e.xray.app.policy.Policy.BufferR\x06buffer\x1a\xfa\x01\n" +
+	"\x06buffer\x18\x03 \x01(\v2\x1e.xray.app.policy.Policy.BufferR\x06buffer\x1a\xae\x02\n" +
 	"\aTimeout\x125\n" +
 	"\thandshake\x18\x01 \x01(\v2\x17.xray.app.policy.SecondR\thandshake\x12@\n" +
 	"\x0fconnection_idle\x18\x02 \x01(\v2\x17.xray.app.policy.SecondR\x0econnectionIdle\x128\n" +
 	"\vuplink_only\x18\x03 \x01(\v2\x17.xray.app.policy.SecondR\n" +
 	"uplinkOnly\x12<\n" +
-	"\rdownlink_only\x18\x04 \x01(\v2\x17.xray.app.policy.SecondR\fdownlinkOnly\x1an\n" +
+	"\rdownlink_only\x18\x04 \x01(\v2\x17.xray.app.policy.SecondR\fdownlinkOnly\x122\n" +
+	"\budp_idle\x18\x05 \x01(\v2\x17.xray.app.policy.SecondR\audpIdle\x1an\n" +
 	"\x05Stats\x12\x1f\n" +
 	"\vuser_uplink\x18\x01 \x01(\bR\n" +
 	"userUplink\x12#\n" +
@@ -541,12 +550,13 @@ var file_app_policy_config_proto_depIdxs = []int32{
 	0,  // 7: xray.app.policy.Policy.Timeout.connection_idle:type_name -> xray.app.policy.Second
 	0,  // 8: xray.app.policy.Policy.Timeout.uplink_only:type_name -> xray.app.policy.Second
 	0,  // 9: xray.app.policy.Policy.Timeout.downlink_only:type_name -> xray.app.policy.Second
-	1,  // 10: xray.app.policy.Config.LevelEntry.value:type_name -> xray.app.policy.Policy
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 10: xray.app.policy.Policy.Timeout.udp_idle:type_name -> xray.app.policy.Second
+	1,  // 11: xray.app.policy.Config.LevelEntry.value:type_name -> xray.app.policy.Policy
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_app_policy_config_proto_init() }

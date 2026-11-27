@@ -20,6 +20,9 @@ type Timeout struct {
 	UplinkOnly time.Duration
 	// Timeout for an downlink only connection, i.e., the uplink of the connection has been closed.
 	DownlinkOnly time.Duration
+	// Timeout for a UDP flow relayed by the UDP dispatcher (Shadowsocks, SOCKS and Trojan inbounds)
+	// that receives no response. The inbound UDP listener keeps an idle client session for twice as long.
+	UDPIdle time.Duration
 }
 
 // Stats contains settings for stats counters.
@@ -131,6 +134,7 @@ func SessionDefault() Session {
 			ConnectionIdle: time.Second * 300,
 			UplinkOnly:     time.Second * 1,
 			DownlinkOnly:   time.Second * 1,
+			UDPIdle:        time.Second * 60,
 		},
 		Stats: Stats{
 			UserUplink:   false,

@@ -20,6 +20,13 @@ func TestPolicy(t *testing.T) {
 					},
 				},
 			},
+			2: {
+				Timeout: &Policy_Timeout{
+					UdpIdle: &Second{
+						Value: 300,
+					},
+				},
+			},
 		},
 	})
 	common.Must(err)
@@ -34,12 +41,28 @@ func TestPolicy(t *testing.T) {
 		if p.Timeouts.ConnectionIdle != pDefault.Timeouts.ConnectionIdle {
 			t.Error("expect ", pDefault.Timeouts.ConnectionIdle, " sec timeout, but got ", p.Timeouts.ConnectionIdle)
 		}
+		if p.Timeouts.UDPIdle != time.Minute {
+			t.Error("expect 60 sec UDP idle timeout, but got ", p.Timeouts.UDPIdle)
+		}
+	}
+
+	{
+		p := manager.ForLevel(2)
+		if p.Timeouts.UDPIdle != 300*time.Second {
+			t.Error("expect 300 sec UDP idle timeout, but got ", p.Timeouts.UDPIdle)
+		}
+		if p.Timeouts.ConnectionIdle != pDefault.Timeouts.ConnectionIdle {
+			t.Error("expect ", pDefault.Timeouts.ConnectionIdle, " sec timeout, but got ", p.Timeouts.ConnectionIdle)
+		}
 	}
 
 	{
 		p := manager.ForLevel(1)
 		if p.Timeouts.Handshake != pDefault.Timeouts.Handshake {
 			t.Error("expect ", pDefault.Timeouts.Handshake, " sec timeout, but got ", p.Timeouts.Handshake)
+		}
+		if p.Timeouts.UDPIdle != pDefault.Timeouts.UDPIdle {
+			t.Error("expect ", pDefault.Timeouts.UDPIdle, " sec UDP idle timeout, but got ", p.Timeouts.UDPIdle)
 		}
 	}
 }

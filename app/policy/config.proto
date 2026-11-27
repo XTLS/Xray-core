@@ -17,6 +17,7 @@ message Policy {
     Second connection_idle = 2;
     Second uplink_only = 3;
     Second downlink_only = 4;
+    Second udp_idle = 5;
   }
 
   message Stats {

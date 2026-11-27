@@ -88,3 +88,78 @@ func TestSameDestinationDispatching(t *testing.T) {
 		t.Error("msgCount: ", v)
 	}
 }
+
+func TestIdleTimeout(t *testing.T) {
+	var count uint32
+	var uplinkReaders []*pipe.Reader
+	td := &TestDispatcher{
+		OnDispatch: func(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+			atomic.AddUint32(&count, 1)
+			uplinkReader, uplinkWriter := pipe.New(pipe.WithSizeLimit(1024))
+			downlinkReader, _ := pipe.New(pipe.WithSizeLimit(1024)) // the remote never answers
+			uplinkReaders = append(uplinkReaders, uplinkReader)
+			return &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}, nil
+		},
+	}
+	dest := net.UDPDestination(net.LocalHostIP, 53)
+	newPayload := func() *buf.Buffer {
+		b := buf.New()
+		b.WriteString("abcd")
+		return b
+	}
+
+	dispatcher := NewDispatcher(td, func(ctx context.Context, packet *udp.Packet) {})
+	dispatcher.SetIdleTimeout(200 * time.Millisecond)
+	dispatcher.Dispatch(context.Background(), dest, newPayload())
+
+	// The flow ends once it has waited the idle timeout for a response,
+	// which interrupts its link.
+	done := make(chan struct{})
+	go func() {
+		for {
+			if _, err := uplinkReaders[0].ReadMultiBuffer(); err != nil {
+				close(done)
+				return
+			}
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("flow still alive 5 s after its 200 ms idle timeout")
+	}
+
+	// The next datagram starts a new flow.
+	time.Sleep(100 * time.Millisecond)
+	dispatcher.Dispatch(context.Background(), dest, newPayload())
+	if v := atomic.LoadUint32(&count); v != 2 {
+		t.Error("count: ", v)
+	}
+	dispatcher.RemoveRay()
+}
+
+func TestDefaultIdleTimeout(t *testing.T) {
+	var count uint32
+	td := &TestDispatcher{
+		OnDispatch: func(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+			atomic.AddUint32(&count, 1)
+			_, uplinkWriter := pipe.New(pipe.WithSizeLimit(1024), pipe.DiscardOverflow())
+			downlinkReader, _ := pipe.New(pipe.WithSizeLimit(1024))
+			return &transport.Link{Reader: downlinkReader, Writer: uplinkWriter}, nil
+		},
+	}
+	dest := net.UDPDestination(net.LocalHostIP, 53)
+
+	dispatcher := NewDispatcher(td, func(ctx context.Context, packet *udp.Packet) {})
+	dispatcher.SetIdleTimeout(0) // keeps the default of one minute
+	for i := 0; i < 2; i++ {
+		b := buf.New()
+		b.WriteString("abcd")
+		dispatcher.Dispatch(context.Background(), dest, b)
+		time.Sleep(500 * time.Millisecond)
+	}
+	if v := atomic.LoadUint32(&count); v != 1 {
+		t.Error("count: ", v)
+	}
+	dispatcher.RemoveRay()
+}

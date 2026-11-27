@@ -23,6 +23,7 @@ func defaultPolicy() *Policy {
 			ConnectionIdle: &Second{Value: uint32(p.Timeouts.ConnectionIdle / time.Second)},
 			UplinkOnly:     &Second{Value: uint32(p.Timeouts.UplinkOnly / time.Second)},
 			DownlinkOnly:   &Second{Value: uint32(p.Timeouts.DownlinkOnly / time.Second)},
+			UdpIdle:        &Second{Value: uint32(p.Timeouts.UDPIdle / time.Second)},
 		},
 		Buffer: &Policy_Buffer{
 			Connection: p.Buffer.PerConnection,
@@ -42,6 +43,9 @@ func (p *Policy_Timeout) overrideWith(another *Policy_Timeout) {
 	}
 	if another.DownlinkOnly != nil {
 		p.DownlinkOnly = &Second{Value: another.DownlinkOnly.Value}
+	}
+	if another.UdpIdle != nil {
+		p.UdpIdle = &Second{Value: another.UdpIdle.Value}
 	}
 }
 
@@ -69,6 +73,9 @@ func (p *Policy) ToCorePolicy() policy.Session {
 		cp.Timeouts.Handshake = p.Timeout.Handshake.Duration()
 		cp.Timeouts.DownlinkOnly = p.Timeout.DownlinkOnly.Duration()
 		cp.Timeouts.UplinkOnly = p.Timeout.UplinkOnly.Duration()
+		if p.Timeout.UdpIdle != nil {
+			cp.Timeouts.UDPIdle = p.Timeout.UdpIdle.Duration()
+		}
 	}
 	if p.Stats != nil {
 		cp.Stats.UserUplink = p.Stats.UserUplink

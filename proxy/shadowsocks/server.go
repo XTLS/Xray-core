@@ -185,6 +185,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 
 			if dest == nil {
 				dest = &destination
+				udpServer.SetIdleTimeout(s.policyManager.ForLevel(request.User.Level).Timeouts.UDPIdle)
 			}
 
 			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)

@@ -221,6 +221,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 		conn.Write(udpMessage.Bytes())
 		udpMessage.Release()
 	})
+	udpServer.SetIdleTimeout(s.policy().Timeouts.UDPIdle)
 	defer udpServer.RemoveRay()
 
 	inbound := session.InboundFromContext(ctx)

@@ -260,6 +260,7 @@ func (s *Server) handleUDPPayload(ctx context.Context, sessionPolicy policy.Sess
 			timer.Update()
 		}
 	})
+	udpServer.SetIdleTimeout(sessionPolicy.Timeouts.UDPIdle)
 	defer udpServer.RemoveRay()
 
 	inbound := session.InboundFromContext(ctx)

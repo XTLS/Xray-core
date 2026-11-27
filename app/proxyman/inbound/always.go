@@ -92,7 +92,10 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 		tag:            tag,
 	}
 
-	uplinkCounter, downlinkCounter := getStatCounter(core.MustFromContext(ctx), tag)
+	v := core.MustFromContext(ctx)
+	uplinkCounter, downlinkCounter := getStatCounter(v, tag)
+	// UDP sessions are created before the user (and so its level) is known.
+	udpIdle := v.GetFeature(policy.ManagerType()).(policy.Manager).ForLevel(0).Timeouts.UDPIdle
 
 	nl := p.Network()
 	pl := receiverConfig.PortList
@@ -161,6 +164,7 @@ func NewAlwaysOnInboundHandler(ctx context.Context, tag string, receiverConfig *
 						uplinkCounter:   uplinkCounter,
 						downlinkCounter: downlinkCounter,
 						stream:          mss,
+						idleTimeout:     2 * udpIdle,
 						ctx:             ctx,
 					}
 					h.workers = append(h.workers, worker)

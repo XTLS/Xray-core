@@ -9,6 +9,7 @@ type Policy struct {
 	ConnectionIdle    *uint32 `json:"connIdle"`
 	UplinkOnly        *uint32 `json:"uplinkOnly"`
 	DownlinkOnly      *uint32 `json:"downlinkOnly"`
+	UDPIdle           *uint32 `json:"udpIdle"`
 	StatsUserUplink   bool    `json:"statsUserUplink"`
 	StatsUserDownlink bool    `json:"statsUserDownlink"`
 	StatsUserOnline   bool    `json:"statsUserOnline"`
@@ -28,6 +29,9 @@ func (t *Policy) Build() (*policy.Policy, error) {
 	}
 	if t.DownlinkOnly != nil {
 		config.DownlinkOnly = &policy.Second{Value: *t.DownlinkOnly}
+	}
+	if t.UDPIdle != nil {
+		config.UdpIdle = &policy.Second{Value: *t.UDPIdle}
 	}
 
 	p := &policy.Policy{

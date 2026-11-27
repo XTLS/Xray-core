@@ -270,8 +270,9 @@ type udpWorker struct {
 	uplinkCounter   stats.Counter
 	downlinkCounter stats.Counter
 
-	checker    *task.Periodic
-	activeConn map[connID]*udpConn
+	checker     *task.Periodic
+	activeConn  map[connID]*udpConn
+	idleTimeout time.Duration // a session silent both ways for longer is closed; 2 minutes if zero
 
 	ctx context.Context
 }
@@ -382,6 +383,10 @@ func (w *udpWorker) handlePackets() {
 
 func (w *udpWorker) clean() error {
 	nowSec := time.Now().Unix()
+	idleSec := int64(w.idleTimeout / time.Second)
+	if idleSec <= 0 {
+		idleSec = 2 * 60
+	}
 	w.Lock()
 	defer w.Unlock()
 
@@ -390,7 +395,7 @@ func (w *udpWorker) clean() error {
 	}
 
 	for addr, conn := range w.activeConn {
-		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > 2*60 {
+		if nowSec-atomic.LoadInt64(&conn.lastActivityTime) > idleSec {
 			if !conn.inactive {
 				conn.setInactive()
 				delete(w.activeConn, addr)
