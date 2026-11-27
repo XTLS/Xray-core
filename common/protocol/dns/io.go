@@ -7,7 +7,6 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
-	"github.com/xtls/xray-core/common/serial"
 	"golang.org/x/net/dns/dnsmessage"
 )
 
@@ -92,7 +91,7 @@ func NewTCPReader(reader buf.Reader) *TCPReader {
 }
 
 func (r *TCPReader) ReadMessage() (*buf.Buffer, error) {
-	size, err := serial.ReadUint16(r.reader)
+	size, err := r.reader.ReadUint16()
 	if err != nil {
 		return nil, err
 	}

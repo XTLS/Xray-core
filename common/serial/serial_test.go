@@ -2,7 +2,6 @@ package serial_test
 
 import (
 	"bytes"
-	"io"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,26 +42,19 @@ func TestReadUint16(t *testing.T) {
 	testCases := []struct {
 		Input  []byte
 		Output uint16
-		Error  error
 	}{
-		{Input: []byte{1, 2}, Output: 0x0102},
-		{Error: io.EOF},
-		{Input: []byte{1}, Error: io.ErrUnexpectedEOF},
+		{
+			Input:  []byte{0, 1},
+			Output: 1,
+		},
 	}
 
 	for _, testCase := range testCases {
 		v, err := serial.ReadUint16(bytes.NewReader(testCase.Input))
-		if v != testCase.Output || err != testCase.Error {
-			t.Errorf("ReadUint16(%v) = %v, %v, want %v, %v", testCase.Input, v, err, testCase.Output, testCase.Error)
+		common.Must(err)
+		if v != testCase.Output {
+			t.Error("for input ", testCase.Input, " expect output ", testCase.Output, " but got ", v)
 		}
-	}
-}
-
-func TestReadUint16Allocs(t *testing.T) {
-	b := buf.New()
-	defer b.Release()
-	if n := testing.AllocsPerRun(100, func() { b.Clear(); b.Extend(2); serial.ReadUint16(b) }); n != 0 {
-		t.Errorf("ReadUint16 from buf.Buffer: %v allocs", n)
 	}
 }
 

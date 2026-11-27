@@ -6,7 +6,6 @@ import (
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/serial"
 )
 
 // frameReadError distinguishes truncation inside a frame from EOF between frames.
@@ -19,7 +18,7 @@ func frameReadError(err error) error {
 
 // readBlock reads one length-prefixed frame component without retaining a partial buffer.
 func readBlock(reader *buf.BufferedReader, limit uint16, oversized string) (*buf.Buffer, error) {
-	size, err := serial.ReadUint16(reader)
+	size, err := reader.ReadUint16()
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +51,7 @@ func copyFramePayload(reader *buf.BufferedReader, s *Session, dest net.Destinati
 	packet := s != nil && s.target.Network == net.Network_UDP
 	var left int32
 	if !packet {
-		size, sizeErr := serial.ReadUint16(reader)
+		size, sizeErr := reader.ReadUint16()
 		if sizeErr != nil {
 			return sizeErr
 		}

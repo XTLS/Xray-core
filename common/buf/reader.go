@@ -1,6 +1,7 @@
 package buf
 
 import (
+	"encoding/binary"
 	"io"
 
 	"github.com/xtls/xray-core/common"
@@ -44,8 +45,8 @@ type BufferedReader struct {
 	// Splitter is a function to read bytes from MultiBuffer
 	Splitter func(MultiBuffer, []byte) (MultiBuffer, int)
 
-	// oneByte is read into by ReadByte: a local array passed to Splitter escapes to the heap.
-	oneByte [1]byte
+	// twoBytes is read into by ReadUint16: a local array passed to Read escapes to the heap.
+	twoBytes [2]byte
 }
 
 // BufferedBytes returns the number of bytes that is cached in this reader.
@@ -53,16 +54,25 @@ func (r *BufferedReader) BufferedBytes() int32 {
 	return r.Buffer.Len()
 }
 
-// ReadByte implements io.ByteReader. Like io.ReadFull, it reads until it gets a byte or an error.
+// ReadByte implements io.ByteReader.
 func (r *BufferedReader) ReadByte() (byte, error) {
-	// The last byte goes through Read, which releases the emptied buffer.
-	if r.Splitter == nil && len(r.Buffer) > 0 && r.Buffer[0].Len() > 1 {
-		return r.Buffer[0].ReadByte()
+	var b [1]byte
+	_, err := r.Read(b[:])
+	return b[0], err
+}
+
+// ReadUint16 reads two bytes at once, like io.ReadFull, as a big-endian uint16.
+func (r *BufferedReader) ReadUint16() (uint16, error) {
+	// The last bytes of a buffer go through Read, which releases the emptied buffer.
+	if r.Splitter == nil && len(r.Buffer) > 0 && r.Buffer[0].Len() > 2 {
+		v := binary.BigEndian.Uint16(r.Buffer[0].Bytes())
+		r.Buffer[0].Advance(2)
+		return v, nil
 	}
-	if _, err := io.ReadFull(r, r.oneByte[:]); err != nil {
+	if _, err := io.ReadFull(r, r.twoBytes[:]); err != nil {
 		return 0, err
 	}
-	return r.oneByte[0], nil
+	return binary.BigEndian.Uint16(r.twoBytes[:]), nil
 }
 
 // Read implements io.Reader. It reads from internal buffer first (if available) and then reads from the underlying reader.

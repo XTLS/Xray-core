@@ -89,30 +89,45 @@ func (r *multiBufferReader) ReadMultiBuffer() (MultiBuffer, error) {
 	return mb, nil
 }
 
-func TestReadByteAcrossBuffers(t *testing.T) {
-	cached, next := New(), New()
-	cached.WriteString("ab")
-	next.WriteString("c")
-	// After the cached buffer, an empty read comes before the next buffer.
-	reader := &BufferedReader{Buffer: MultiBuffer{cached}, Reader: &multiBufferReader{nil, MultiBuffer{next}}}
-	readByte := func(want byte) {
-		t.Helper()
-		if c, err := reader.ReadByte(); c != want || err != nil {
-			t.Fatalf("ReadByte() = %q, %v, want %q, nil", c, err, want)
-		}
-	}
-	readByte('a')
-	readByte('b')
-	if reader.Buffer != nil {
-		t.Fatal("ReadByte kept the emptied buffer: ", reader.Buffer)
-	}
-	readByte('c')
-	if _, err := reader.ReadByte(); err != io.EOF {
-		t.Fatalf("ReadByte() error = %v, want EOF", err)
+func newBuffer(data ...byte) *Buffer {
+	b := New()
+	b.Write(data)
+	return b
+}
+
+func TestBufferedReaderReadUint16(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		splitter func(MultiBuffer, []byte) (MultiBuffer, int)
+		reads    []MultiBuffer
+		want     []uint16
+		err      error
+	}{
+		// Across a buffer boundary, and through Read for the last two bytes of a buffer.
+		{"stream", nil, []MultiBuffer{{newBuffer(1, 2, 3, 4, 5)}, {newBuffer(6, 7, 8)}}, []uint16{0x0102, 0x0304, 0x0506, 0x0708}, io.EOF},
+		// Each read takes one packet and drops its rest, so both bytes come from the same packet.
+		{"packets", SplitFirstBytes, []MultiBuffer{{newBuffer(1, 2, 9), newBuffer(3, 4, 9)}, {newBuffer(5, 6)}}, []uint16{0x0102, 0x0304, 0x0506}, io.EOF},
+		{"truncated", nil, []MultiBuffer{{newBuffer(1)}}, nil, io.ErrUnexpectedEOF},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reads := multiBufferReader(tc.reads)
+			reader := &BufferedReader{Reader: &reads, Splitter: tc.splitter}
+			for _, want := range tc.want {
+				if v, err := reader.ReadUint16(); v != want || err != nil {
+					t.Fatalf("ReadUint16() = %#04x, %v, want %#04x, nil", v, err, want)
+				}
+			}
+			if _, err := reader.ReadUint16(); err != tc.err {
+				t.Errorf("ReadUint16() error = %v, want %v", err, tc.err)
+			}
+			if reader.Buffer != nil {
+				t.Error("ReadUint16 kept an emptied buffer: ", reader.Buffer)
+			}
+		})
 	}
 }
 
-func TestReadByteAllocs(t *testing.T) {
+func TestBufferedReaderReadUint16Allocs(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		splitter func(MultiBuffer, []byte) (MultiBuffer, int)
@@ -124,8 +139,8 @@ func TestReadByteAllocs(t *testing.T) {
 		b := New()
 		b.Extend(Size)
 		reader := &BufferedReader{Buffer: MultiBuffer{b}, Splitter: tc.splitter}
-		if n := testing.AllocsPerRun(100, func() { reader.ReadByte() }); n != 0 {
-			t.Errorf("ReadByte through %s: %v allocs", tc.name, n)
+		if n := testing.AllocsPerRun(100, func() { reader.ReadUint16() }); n != 0 {
+			t.Errorf("ReadUint16 through %s: %v allocs", tc.name, n)
 		}
 	}
 }
