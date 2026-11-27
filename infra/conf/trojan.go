@@ -43,13 +43,13 @@ func (c *TrojanClientConfig) Build() (proto.Message, error) {
 	}
 
 	config.Server = &protocol.ServerEndpoint{
-		Address: u.Address.Build(),
-		Port:    uint32(u.Port),
+		Address: c.Address.Build(),
+		Port:    uint32(c.Port),
 		User: &protocol.User{
-			Level:   uint32(u.Level),
-			Email:   u.Email,
+			Level:   uint32(c.Level),
+			Email:   c.Email,
 			Account: serial.ToTypedMessage(&trojan.Account{
-				Password: u.Password,
+				Password: c.Password,
 			}),
 		},
 	}
