@@ -64,6 +64,85 @@ func TestMultiBufferSliceBySizeLarge(t *testing.T) {
 	}
 }
 
+// newMultiBuffer returns a MultiBuffer with one Buffer per string.
+func newMultiBuffer(contents ...string) MultiBuffer {
+	mb := make(MultiBuffer, 0, len(contents))
+	for _, s := range contents {
+		b := New()
+		common.Must2(b.WriteString(s))
+		mb = append(mb, b)
+	}
+	return mb
+}
+
+func bufferStrings(mb MultiBuffer) []string {
+	contents := []string(nil)
+	for _, b := range mb {
+		contents = append(contents, b.String())
+	}
+	return contents
+}
+
+func TestSplitSize(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		in          []string
+		size        int32
+		rest, chunk []string
+	}{
+		{"empty", nil, 4, nil, nil},
+		{"whole buffers", []string{"ab", "cd", "ef"}, 5, []string{"ef"}, []string{"ab", "cd"}},
+		{"exact size", []string{"ab", "cd"}, 2, []string{"cd"}, []string{"ab"}},
+		{"all", []string{"ab", "cd"}, 8, nil, []string{"ab", "cd"}},
+		{"first larger", []string{"abcde", "fg"}, 3, []string{"de", "fg"}, []string{"abc"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rest, chunk := SplitSize(newMultiBuffer(tc.in...), tc.size)
+			if r := cmp.Diff(bufferStrings(rest), tc.rest); r != "" {
+				t.Error("rest: ", r)
+			}
+			if r := cmp.Diff(bufferStrings(chunk), tc.chunk); r != "" {
+				t.Error("chunk: ", r)
+			}
+		})
+	}
+}
+
+// Appending to one result of SplitSize must not overwrite the other.
+func TestSplitSizeAppend(t *testing.T) {
+	for _, size := range []int32{4, 8} {
+		// Spare capacity, so that appending to rest stays in the array of in.
+		in := append(make(MultiBuffer, 0, 4), newMultiBuffer("ab", "cd", "ef")...)
+		rest, chunk := SplitSize(in, size)
+		restWant := append(bufferStrings(rest), "gh")
+		chunkWant := append(bufferStrings(chunk), "ij")
+		rest = append(rest, newMultiBuffer("gh")...)
+		chunk = append(chunk, newMultiBuffer("ij")...)
+		if r := cmp.Diff(bufferStrings(rest), restWant); r != "" {
+			t.Error("rest: ", r)
+		}
+		if r := cmp.Diff(bufferStrings(chunk), chunkWant); r != "" {
+			t.Error("chunk: ", r)
+		}
+		// XHTTP releases a chunk in its own goroutine while rest is still in use.
+		ReleaseMulti(chunk)
+		if r := cmp.Diff(bufferStrings(rest), restWant); r != "" {
+			t.Error("rest after ReleaseMulti(chunk): ", r)
+		}
+	}
+}
+
+func TestSplitSizeAllocs(t *testing.T) {
+	mb := newMultiBuffer("ab", "cd", "ef")
+	in := make(MultiBuffer, len(mb))
+	if n := testing.AllocsPerRun(100, func() {
+		copy(in, mb)
+		SplitSize(in, 4)
+	}); n != 0 {
+		t.Error("SplitSize of whole buffers: ", n, " allocs")
+	}
+}
+
 func TestMultiBufferSplitFirst(t *testing.T) {
 	b1 := New()
 	b1.WriteString("b1")

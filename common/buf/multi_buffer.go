@@ -170,6 +170,7 @@ func SplitFirst(mb MultiBuffer) (MultiBuffer, *Buffer) {
 }
 
 // SplitSize splits the beginning of the MultiBuffer into another one, for at most size bytes.
+// Both results may share the array of mb, so mb must not be used afterwards.
 func SplitSize(mb MultiBuffer, size int32) (MultiBuffer, MultiBuffer) {
 	if len(mb) == 0 {
 		return mb, nil
@@ -182,25 +183,13 @@ func SplitSize(mb MultiBuffer, size int32) (MultiBuffer, MultiBuffer) {
 		return mb, MultiBuffer{b}
 	}
 
-	totalBytes := int32(0)
-	var r MultiBuffer
-	endIndex := -1
-	for i := range mb {
-		if totalBytes+mb[i].Len() > size {
-			endIndex = i
-			break
-		}
-		totalBytes += mb[i].Len()
-		r = append(r, mb[i])
-		mb[i] = nil
+	n, totalBytes := 0, int32(0)
+	for n < len(mb) && totalBytes+mb[n].Len() <= size {
+		totalBytes += mb[n].Len()
+		n++
 	}
-	if endIndex == -1 {
-		// To reuse mb array
-		mb = mb[:0]
-	} else {
-		mb = mb[endIndex:]
-	}
-	return mb, r
+	// The result is capped at n and rest starts at n, not 0: appending to one keeps the other intact.
+	return mb[n:], mb[:n:n]
 }
 
 // SplitMulti splits the beginning of the MultiBuffer into first one, the index i and after into second one
