@@ -20,42 +20,6 @@ func TestVMessOutbound(t *testing.T) {
 	runMultiTestCase(t, []TestCase{
 		{
 			Input: `{
-				"vnext": [{
-					"address": "127.0.0.1",
-					"port": 80,
-					"users": [
-						{
-							"id": "e641f5ad-9397-41e3-bf1a-e8740dfed019",
-							"email": "love@example.com",
-							"level": 255
-						}
-					]
-				}]
-			}`,
-			Parser: loadJSON(creator),
-			Output: &outbound.Config{
-				Receiver: &protocol.ServerEndpoint{
-					Address: &net.IPOrDomain{
-						Address: &net.IPOrDomain_Ip{
-							Ip: []byte{127, 0, 0, 1},
-						},
-					},
-					Port: 80,
-					User: &protocol.User{
-						Email: "love@example.com",
-						Level: 255,
-						Account: serial.ToTypedMessage(&vmess.Account{
-							Id: "e641f5ad-9397-41e3-bf1a-e8740dfed019",
-							SecuritySettings: &protocol.SecurityConfig{
-								Type: protocol.SecurityType_AUTO,
-							},
-						}),
-					},
-				},
-			},
-		},
-		{
-			Input: `{
 				"address": "127.0.0.1",
 				"port": 80,
 				"id": "e641f5ad-9397-41e3-bf1a-e8740dfed019",
