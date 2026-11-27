@@ -8,14 +8,18 @@ import (
 	"github.com/xtls/xray-core/common/net"
 )
 
-// encodeBatch moves up to four complete wire frames from raw caller custody.
+const batchFrames = 4
+
+// encodeBatch moves up to batchFrames complete wire frames from raw caller custody.
 // An offer without buffers contains metadata only.
 func (s *Session) encodeBatch(mb *buf.MultiBuffer) (frames buf.MultiBuffer, err error) {
 	stream := s.target.Network != net.Network_UDP
 	if stream && (*mb).IsEmpty() {
 		*mb = buf.ReleaseMulti(*mb)
 	}
-	for n := 0; n < 4 && (s.first || len(*mb) != 0); n++ {
+	// A header and one payload buffer per frame.
+	frames = make(buf.MultiBuffer, 0, 2*min(len(*mb), batchFrames))
+	for n := 0; n < batchFrames && (s.first || len(*mb) != 0); n++ {
 		frame := buf.NewWithSize(1024)
 		frames = append(frames, frame)
 		meta := FrameMetadata{
