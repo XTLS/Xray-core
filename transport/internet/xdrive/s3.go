@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -504,15 +505,21 @@ func (s *s3Storage) Delete(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.deleteObject(ctx, key); err != nil {
-		return err
-	}
-	return s.list(ctx, key+"/", "", func(page *s3ListPage) error {
+	keys := []string{key}
+	if err := s.list(ctx, key+"/", "", func(page *s3ListPage) error {
 		for _, item := range page.Contents {
-			if err := s.deleteObject(ctx, item.Key); err != nil {
-				return err
-			}
+			keys = append(keys, item.Key)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	// A directory key is a prefix of its children, even across list pages.
+	slices.Sort(keys)
+	for _, key := range slices.Backward(keys) {
+		if err := s.deleteObject(ctx, key); err != nil {
+			return err
+		}
+	}
+	return nil
 }
