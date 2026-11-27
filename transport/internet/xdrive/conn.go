@@ -119,6 +119,12 @@ func (c *Conn) Close() error {
 	return c.closeErr
 }
 
+// Interrupt cancels pending storage I/O before joining the close path.
+func (c *Conn) Interrupt() {
+	c.cancel()
+	c.Close()
+}
+
 func (c *Conn) LocalAddr() net.Addr {
 	return placeholderAddr
 }
