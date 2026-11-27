@@ -123,26 +123,22 @@ func getGrpcClient(ctx context.Context, dest net.Destination, streamSettings *in
 			gctx = session.ContextWithOutbounds(gctx, session.OutboundsFromContext(ctx))
 			gctx = session.ContextWithTimeoutOnly(gctx, true)
 
-			var c net.Conn
-			if streamSettings.FinalMask != nil {
-				c, err = streamSettings.FinalMask.DialTCP(gctx, net.TCPDestination(address, port))
-			} else {
-				c, err = internet.DialSystem(gctx, net.TCPDestination(address, port), streamSettings.SocketSettings)
-			}
-			if err == nil {
-				if tlsConfig != nil {
+			var handshake func(context.Context, net.Conn) (net.Conn, error)
+			if tlsConfig != nil {
+				handshake = func(ctx context.Context, conn net.Conn) (net.Conn, error) {
 					config := tlsConfig.GetTLSConfig(tls.WithDestination(dest))
 					if fingerprint := tls.GetFingerprint(tlsConfig.Fingerprint); fingerprint != nil {
-						return tls.UClient(c, config, fingerprint), nil
+						return tls.UClient(conn, config, fingerprint), nil
 					} else { // Fallback to normal gRPC TLS
-						return tls.Client(c, config), nil
+						return tls.Client(conn, config), nil
 					}
 				}
-				if realityConfig != nil {
-					return reality.UClient(c, realityConfig, gctx, dest)
+			} else if realityConfig != nil {
+				handshake = func(ctx context.Context, conn net.Conn) (net.Conn, error) {
+					return reality.UClient(conn, realityConfig, ctx, dest)
 				}
 			}
-			return c, err
+			return internet.DialTCPWithHandshake(gctx, net.TCPDestination(address, port), streamSettings, handshake)
 		}),
 	}
 
