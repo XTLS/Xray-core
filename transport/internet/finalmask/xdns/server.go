@@ -175,7 +175,14 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		c.decref(msg, addr)
 		return
 	}
-	if TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) || (decoded[8]&0x3F != 3 && decoded[8]&0x3F != 8) || (decoded[8]&0x3F == 3 && n < 9+3+1) || (decoded[8]&0x3F == 8 && n != 9+8) {
+	kind := decoded[8] & 0x3F
+	fragmented := decoded[8]&0xC0 == 0xC0
+	dataOffset := 9 + 3
+	if fragmented {
+		dataOffset += 3
+	}
+	if TypeMap_[decoded[0]&3] != uint16(msg.Questions[0].Type) ||
+		(kind != 3 && kind != 8) || (kind == 3 && n <= dataOffset) || (kind == 8 && n != 9+8) {
 		msg.Header.Response = true
 		msg.Header.Authoritative = true
 		msg.Header.RCode = dnsmessage.RCodeSuccess
@@ -201,14 +208,14 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 		c.decref(msg, addr)
 	}
 
-	if decoded[8]&0x3F == 8 {
+	if kind == 8 {
 		return
 	}
 	p := pool4K.Get().([]byte)
 	p = p[:0]
-	if decoded[8]&0xC0 == 0xC0 {
+	if fragmented {
 		out := pool4K.Get().([]byte)
-		n := c.fragManager.Feed(out, FragKey{clientID: clientID, fragID: decoded[12]}, decoded[13], decoded[14], decoded[15:n])
+		n := c.fragManager.Feed(out, FragKey{clientID: clientID, fragID: decoded[12]}, decoded[13], decoded[14], decoded[dataOffset:n])
 		pool4K.Put(p[:cap(p)])
 		if n > 0 {
 			p = out[:n]
@@ -217,7 +224,7 @@ func (c *xdnsServer) read(buf []byte, addr net.Addr) {
 			return
 		}
 	} else {
-		p = append(p, decoded[12:n]...)
+		p = append(p, decoded[dataOffset:n]...)
 	}
 	select {
 	case <-c.closeCh:
