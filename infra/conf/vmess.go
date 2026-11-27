@@ -126,7 +126,8 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 	if c.Address == nil {
 		return nil, errors.New(`VMess vnext: "address" is not set`)
 	}
-	if uid, err := uuid.ParseString(c.ID); err != nil {
+	uid, err := uuid.ParseString(c.ID)
+	if err != nil {
 		return nil, err
 	}
 

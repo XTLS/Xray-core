@@ -282,7 +282,8 @@ func (c *VLessOutboundConfig) Build() (proto.Message, error) {
 	if c.Address == nil {
 		return nil, errors.New(`VLESS vnext: "address" is not set`)
 	}
-	if uid, err := uuid.ParseString(c.Id); err != nil {
+	uid, err := uuid.ParseString(c.Id)
+	if err != nil {
 		return nil, err
 	}
 

@@ -71,11 +71,12 @@ func (v *HTTPClientConfig) Build() (proto.Message, error) {
 			Username: v.Username,
 			Password: v.Password,
 		}
-		server.User := &protocol.User{
+		user := &protocol.User{
 			Level:   v.Level,
 			Email:   v.Email,
 			Account: serial.ToTypedMessage(account.Build()),
 		}
+		server.User = user
 	}
 
 	config.Server = server
