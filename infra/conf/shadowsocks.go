@@ -203,7 +203,7 @@ func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
 		config := &shadowsocks_2022.ClientConfig{
 			Address: v.Address.Build(),
 			Port:    uint32(v.Port),
-			Method   v.Cipher,
+			Method:  v.Cipher,
 			Key:     v.Password,
 		}
 		return config, nil

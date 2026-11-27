@@ -141,7 +141,7 @@ func (c *VMessOutboundConfig) Build() (proto.Message, error) {
 		User: &protocol.User{
 			Level:   c.Level,
 			Email:   c.Email,
-			Account: serial.ToTypedMessage(account.Build())
+			Account: serial.ToTypedMessage(account.Build()),
 		},
 	}
 	
