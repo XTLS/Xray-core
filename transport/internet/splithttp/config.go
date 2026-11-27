@@ -427,6 +427,40 @@ func (c *Config) ExtractMetaFromRequest(req *http.Request, path string) (session
 	return sessionId, seqStr
 }
 
+func (c *PacketDownConfig) GetNormalizedKeepAlivePeriod() *RangeConfig {
+	if c.KeepAlivePeriod == nil || c.KeepAlivePeriod.To == 0 {
+		return &RangeConfig{
+			From: 10,
+			To:   30,
+		}
+	}
+
+	return c.KeepAlivePeriod
+}
+
+func (c *PacketDownConfig) GetNormalizedKeepAliveLength() *RangeConfig {
+	if c.KeepAliveLength == nil || c.KeepAliveLength.To == 0 {
+		return &RangeConfig{
+			From: 24,
+			To:   64,
+		}
+	}
+
+	if c.KeepAliveLength.From > pdMaxFramePayload {
+		return &RangeConfig{
+			From: pdMaxFramePayload,
+			To:   pdMaxFramePayload,
+		}
+	} else if c.KeepAliveLength.To > pdMaxFramePayload {
+		return &RangeConfig{
+			From: c.KeepAliveLength.From,
+			To:   pdMaxFramePayload,
+		}
+	}
+
+	return c.KeepAliveLength
+}
+
 func (m *XmuxConfig) GetNormalizedMaxConcurrency() *RangeConfig {
 	if m.MaxConcurrency == nil {
 		return &RangeConfig{
