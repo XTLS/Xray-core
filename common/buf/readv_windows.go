@@ -26,22 +26,23 @@ func (r *windowsReader) Clear() {
 	r.bufs = r.bufs[:0]
 }
 
-func (r *windowsReader) Read(fd uintptr) int32 {
-	// On the first invocation, we return -1 to indicate "not ready"
+func (r *windowsReader) Read(fd uintptr) (int32, error) {
+	// On the first invocation, we return syscall.EAGAIN to indicate "not ready"
 	// to make rawConn.Read wait for readability using the runtime's own mechanism
 	// because syscall.WSARecv() is a blocking call when used with nil OVERLAPPED
 	if !r.ready {
 		r.ready = true
-		return -1
+		return 0, syscall.EAGAIN
 	}
 
 	var nBytes uint32
 	var flags uint32
 	err := syscall.WSARecv(syscall.Handle(fd), &r.bufs[0], uint32(len(r.bufs)), &nBytes, &flags, nil, nil)
 	if err != nil {
-		return -1
+		// Wait as well: the zero-byte read of rawConn.Read then returns the error.
+		return 0, syscall.EAGAIN
 	}
-	return int32(nBytes)
+	return int32(nBytes), nil
 }
 
 func newMultiReader() multiReader {

@@ -3,7 +3,9 @@
 package buf
 
 import (
+	"errors"
 	"io"
+	"os"
 	"sync/atomic"
 	"syscall"
 
@@ -45,7 +47,8 @@ func (s *allocStrategy) Alloc() []*Buffer {
 
 type multiReader interface {
 	Init([]*Buffer)
-	Read(fd uintptr) int32
+	// Read returns syscall.EAGAIN when fd has no data yet.
+	Read(fd uintptr) (int32, error)
 	Clear()
 }
 
@@ -59,8 +62,9 @@ type ReadVReader struct {
 	counter stats.Counter
 
 	// read is r.readFD, bound once: a method value passed to rawConn.Read allocates per call.
-	read   func(fd uintptr) bool
-	nBytes int32
+	read    func(fd uintptr) bool
+	nBytes  int32
+	readErr error
 }
 
 // NewReadVReader creates a new ReadVReader.
@@ -78,20 +82,23 @@ func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Cou
 	return r
 }
 
-// readFD reads into the buffers of r.mr; a negative count makes rawConn.Read wait and retry.
+// readFD reads into the buffers of r.mr; syscall.EAGAIN makes rawConn.Read wait and retry.
 func (r *ReadVReader) readFD(fd uintptr) bool {
-	r.nBytes = r.mr.Read(fd)
-	return r.nBytes >= 0
+	r.nBytes, r.readErr = r.mr.Read(fd)
+	return !errors.Is(r.readErr, syscall.EAGAIN)
 }
 
 func (r *ReadVReader) readMulti() (MultiBuffer, error) {
 	bs := r.alloc.Alloc()
 
 	r.mr.Init(bs)
-	r.nBytes = 0
+	r.nBytes, r.readErr = 0, nil
 	err := r.rawConn.Read(r.read)
 	r.mr.Clear()
 	nBytes := r.nBytes
+	if err == nil {
+		err = os.NewSyscallError("readv", r.readErr)
+	}
 
 	if err != nil {
 		ReleaseMulti(MultiBuffer(bs))

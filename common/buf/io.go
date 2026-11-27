@@ -115,26 +115,27 @@ func NewReader(reader io.Reader) Reader {
 		return mr
 	}
 
-	if isPacketReader(reader) {
+	// The stats wrapper hides PacketConn and syscall.Conn of the connection inside it.
+	// Only ReadVReader reads that connection directly, since it counts the bytes itself.
+	conn, counter := reader, stats.Counter(nil)
+	if statConn, ok := reader.(*stat.CounterConnection); ok {
+		conn, counter = statConn.Connection, statConn.ReadCounter
+	}
+
+	if isPacketReader(conn) {
 		return &PacketReader{
 			Reader: reader,
 		}
 	}
 
-	_, isFile := reader.(*os.File)
+	_, isFile := conn.(*os.File)
 	if !isFile && useReadV() {
-		if sc, ok := reader.(syscall.Conn); ok {
+		if sc, ok := conn.(syscall.Conn); ok {
 			rawConn, err := sc.SyscallConn()
 			if err != nil {
 				errors.LogInfoInner(context.Background(), err, "failed to get sysconn")
 			} else {
-				var counter stats.Counter
-
-				if statConn, ok := reader.(*stat.CounterConnection); ok {
-					reader = statConn.Connection
-					counter = statConn.ReadCounter
-				}
-				return NewReadVReader(reader, rawConn, counter)
+				return NewReadVReader(conn, rawConn, counter)
 			}
 		}
 	}
