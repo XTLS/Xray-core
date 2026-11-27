@@ -39,14 +39,16 @@ type SeverityLogger interface {
 	Severity() Severity
 }
 
-func GetSeverity() Severity {
+// Enabled reports whether messages of the severity are logged. Hot paths check it before a log
+// call: its arguments are boxed even when the message is dropped.
+func Enabled(severity Severity) bool {
 	if h := logHandler.Load(); h != nil {
 		if sh, ok := (*h).(SeverityLogger); ok {
-			return sh.Severity()
+			return sh.Severity() >= severity
 		}
 	}
 	// log everything by default
-	return Severity_Debug
+	return true
 }
 
 var logHandler atomic.Pointer[Handler]

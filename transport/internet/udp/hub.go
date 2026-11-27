@@ -5,6 +5,7 @@ import (
 
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/transport/internet"
@@ -130,10 +131,10 @@ func (h *Hub) start() {
 		}
 		if h.recvOrigDest && noob > 0 {
 			payload.Target = RetrieveOriginalDest(oobBytes[:noob])
-			if payload.Target.IsValid() {
-				errors.LogDebug(context.Background(), "UDP original destination: ", payload.Target)
-			} else {
+			if !payload.Target.IsValid() {
 				errors.LogInfo(context.Background(), "failed to read UDP original destination")
+			} else if log.Enabled(log.Severity_Debug) {
+				errors.LogDebug(context.Background(), "UDP original destination: ", payload.Target)
 			}
 		}
 

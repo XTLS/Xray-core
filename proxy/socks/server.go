@@ -194,7 +194,9 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
 		payload := packet.Payload
-		errors.LogDebug(ctx, "writing back UDP response with ", payload.Len(), " bytes")
+		if log.Enabled(log.Severity_Debug) {
+			errors.LogDebug(ctx, "writing back UDP response with ", payload.Len(), " bytes")
+		}
 
 		request := protocol.RequestHeaderFromContext(ctx)
 		if request == nil {
@@ -262,7 +264,9 @@ func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dis
 			destination := request.Destination()
 
 			currentPacketCtx := ctx
-			errors.LogDebug(ctx, "send packet to ", destination, " with ", payload.Len(), " bytes")
+			if log.Enabled(log.Severity_Debug) {
+				errors.LogDebug(ctx, "send packet to ", destination, " with ", payload.Len(), " bytes")
+			}
 			if inbound != nil && inbound.Source.IsValid() {
 				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
 					From:   inbound.Source,

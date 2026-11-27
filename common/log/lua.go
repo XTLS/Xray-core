@@ -19,7 +19,7 @@ func RegisterLua(L *lua.LState) {
 			"Error":   Severity_Error,
 		} {
 			module.RawSetString(name, L.NewFunction(func(L *lua.LState) int {
-				if GetSeverity() < severity {
+				if !Enabled(severity) {
 					return 0
 				}
 				var content strings.Builder

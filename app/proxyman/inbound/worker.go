@@ -315,7 +315,8 @@ func (w *udpWorker) callback(b *buf.Buffer, source net.Destination, originalDest
 		src: source,
 	}
 	if originalDest.IsValid() {
-		b.UDP = &originalDest
+		// Not &originalDest: it would move the parameter to the heap on every packet.
+		b.UDP = new(originalDest)
 	}
 	conn, existing := w.getConnection(id)
 

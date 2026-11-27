@@ -11,6 +11,7 @@ import (
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/common/signal"
@@ -107,7 +108,9 @@ func (v *Dispatcher) getInboundRay(ctx context.Context, dest net.Destination) (*
 
 func (v *Dispatcher) Dispatch(ctx context.Context, destination net.Destination, payload *buf.Buffer) {
 	// TODO: Add user to destString
-	errors.LogDebug(ctx, "dispatch request to: ", destination)
+	if log.Enabled(log.Severity_Debug) {
+		errors.LogDebug(ctx, "dispatch request to: ", destination)
+	}
 
 	conn, err := v.getInboundRay(ctx, destination)
 	if err != nil {

@@ -125,7 +125,7 @@ func LogErrorInner(ctx context.Context, inner error, msg ...interface{}) {
 }
 
 func doLog(ctx context.Context, inner error, severity log.Severity, msg ...interface{}) {
-	if log.GetSeverity() < severity {
+	if !log.Enabled(severity) {
 		return
 	}
 	pc, _, _, _ := runtime.Caller(2)

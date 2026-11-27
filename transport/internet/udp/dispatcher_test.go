@@ -2,12 +2,16 @@ package udp_test
 
 import (
 	"context"
+	"slices"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
+	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/features/routing"
@@ -86,5 +90,60 @@ func TestSameDestinationDispatching(t *testing.T) {
 	}
 	if v := atomic.LoadUint32(&msgCount); v != 6 {
 		t.Error("msgCount: ", v)
+	}
+}
+
+// severityLogHandler reports its severity to log.Enabled and keeps every message it gets.
+type severityLogHandler struct {
+	severity log.Severity
+	sync.Mutex
+	messages []string
+}
+
+func (h *severityLogHandler) Handle(msg log.Message) {
+	h.Lock()
+	defer h.Unlock()
+	h.messages = append(h.messages, msg.String())
+}
+
+func (h *severityLogHandler) Severity() log.Severity { return h.severity }
+
+// newDiscardDispatcher logs to handler until the test ends and returns a Dispatcher whose links
+// discard what is written to them.
+func newDiscardDispatcher(t *testing.T, handler log.Handler) *Dispatcher {
+	log.RegisterHandler(handler)
+	t.Cleanup(func() { log.RegisterHandler(log.NewLogger(log.CreateStdoutLogWriter())) })
+	reader, writer := pipe.New()
+	t.Cleanup(func() { writer.Close() })
+	return NewDispatcher(&TestDispatcher{
+		OnDispatch: func(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+			return &transport.Link{Reader: reader, Writer: buf.Discard}, nil
+		},
+	}, nil)
+}
+
+func TestDispatchAllocs(t *testing.T) {
+	dispatcher := newDiscardDispatcher(t, &severityLogHandler{severity: log.Severity_Warning})
+	ctx := t.Context()
+	dest := net.UDPDestination(net.LocalHostIP, 53)
+	payload := buf.FromBytes([]byte("abcd"))
+	dispatcher.Dispatch(ctx, dest, payload)
+
+	if n := testing.AllocsPerRun(100, func() { dispatcher.Dispatch(ctx, dest, payload) }); n != 1 {
+		t.Error("Dispatch on an established link: ", n, " allocs, want 1 (buf.MultiBuffer{payload})")
+	}
+}
+
+func TestDispatchDebugLog(t *testing.T) {
+	handler := &severityLogHandler{severity: log.Severity_Debug}
+	dispatcher := newDiscardDispatcher(t, handler)
+	dispatcher.Dispatch(t.Context(), net.UDPDestination(net.LocalHostIP, 53), buf.FromBytes([]byte("abcd")))
+
+	handler.Lock()
+	defer handler.Unlock()
+	if !slices.ContainsFunc(handler.messages, func(m string) bool {
+		return strings.Contains(m, "dispatch request to: udp:127.0.0.1:53")
+	}) {
+		t.Error("debug log: ", handler.messages)
 	}
 }
