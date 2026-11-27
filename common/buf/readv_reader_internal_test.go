@@ -5,6 +5,7 @@ package buf
 import (
 	"io"
 	"os"
+	"runtime"
 	"syscall"
 	"testing"
 
@@ -12,6 +13,10 @@ import (
 )
 
 func TestReadVReaderReadMultiAllocs(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		// Elsewhere a pipe may return less than two buffers at once, which changes the count.
+		t.Skip("the count is measured on Linux")
+	}
 	pr, pw, err := os.Pipe()
 	common.Must(err)
 	defer pr.Close()
