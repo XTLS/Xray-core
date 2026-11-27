@@ -3,6 +3,12 @@ package tls_test
 import (
 	gotls "crypto/tls"
 	"crypto/x509"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,6 +77,69 @@ func TestInsecureCertificates(t *testing.T) {
 	if len(tlsConfig.CipherSuites) > 0 {
 		t.Fatal("Unexpected tls cipher suites list: ", tlsConfig.CipherSuites)
 	}
+}
+
+// Handshakes read the certificate while it is reloaded from disk; run with -race.
+func TestCertificateHotReload(t *testing.T) {
+	old, _ := cert.MustGenerate(nil, cert.CommonName("old.example.com"))
+	certificate := ParseCertificate(old)
+	dir := t.TempDir()
+	certificate.CertificatePath = filepath.Join(dir, "cert.pem")
+	certificate.KeyPath = filepath.Join(dir, "key.pem")
+	// The reload goroutine reads the files at once, before its first tick.
+	ct, _ := cert.MustGenerate(nil, cert.CommonName("new.example.com"))
+	certPEM, keyPEM := ct.ToPEM()
+	common.Must(os.WriteFile(certificate.CertificatePath, certPEM, 0o600))
+	common.Must(os.WriteFile(certificate.KeyPath, keyPEM, 0o600))
+	getCertificate := (&Config{Certificate: []*Certificate{certificate}}).GetTLSConfig().GetCertificate
+
+	waitCertificate(t, getCertificate, func(keyPair *gotls.Certificate) bool {
+		return keyPair.Leaf.Subject.CommonName == "new.example.com"
+	})
+}
+
+// An OCSP update must not change the certificate that a handshake may still hold; run with -race.
+func TestCertificateOCSPUpdate(t *testing.T) {
+	responses := new(atomic.Int32)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, responses.Add(1))
+	}))
+	defer server.Close()
+	ca, _ := cert.MustGenerate(nil, cert.Authority(true), cert.KeyUsage(x509.KeyUsageCertSign))
+	leaf, _ := cert.MustGenerate(ca, cert.CommonName("example.com"), func(c *x509.Certificate) {
+		c.OCSPServer = []string{server.URL}
+	})
+	certificate := ParseCertificate(leaf)
+	caPEM, _ := ca.ToPEM()
+	certificate.Certificate = append(certificate.Certificate, caPEM...)
+	certificate.OcspStapling = 1 // The OCSP update interval, in seconds.
+	getCertificate := (&Config{Certificate: []*Certificate{certificate}}).GetTLSConfig().GetCertificate
+
+	stapled := func(previous string) func(*gotls.Certificate) bool {
+		return func(keyPair *gotls.Certificate) bool {
+			return len(keyPair.OCSPStaple) > 0 && string(keyPair.OCSPStaple) != previous
+		}
+	}
+	first := waitCertificate(t, getCertificate, stapled(""))
+	staple := string(first.OCSPStaple)
+	waitCertificate(t, getCertificate, stapled(staple))
+	if string(first.OCSPStaple) != staple {
+		t.Fatal("OCSP update changed the certificate in use: ", staple, " -> ", string(first.OCSPStaple))
+	}
+}
+
+// waitCertificate polls getCertificate for up to 5 seconds until it returns a matching certificate.
+func waitCertificate(t *testing.T, getCertificate func(*gotls.ClientHelloInfo) (*gotls.Certificate, error), match func(*gotls.Certificate) bool) *gotls.Certificate {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		keyPair, err := getCertificate(&gotls.ClientHelloInfo{})
+		common.Must(err)
+		if match(keyPair) {
+			return keyPair
+		}
+	}
+	t.Fatal("certificate is not updated")
+	return nil
 }
 
 func BenchmarkCertificateIssuing(b *testing.B) {
