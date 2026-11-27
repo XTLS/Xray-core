@@ -50,17 +50,22 @@ type multiReader interface {
 }
 
 // ReadVReader is a Reader that uses readv(2) syscall to read data.
+// Use it by pointer from NewReadVReader: a copy reads into the original.
 type ReadVReader struct {
 	io.Reader
 	rawConn syscall.RawConn
 	mr      multiReader
 	alloc   allocStrategy
 	counter stats.Counter
+
+	// read is r.readFD, bound once: a method value passed to rawConn.Read allocates per call.
+	read   func(fd uintptr) bool
+	nBytes int32
 }
 
 // NewReadVReader creates a new ReadVReader.
 func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Counter) *ReadVReader {
-	return &ReadVReader{
+	r := &ReadVReader{
 		Reader:  reader,
 		rawConn: rawConn,
 		alloc: allocStrategy{
@@ -69,23 +74,24 @@ func NewReadVReader(reader io.Reader, rawConn syscall.RawConn, counter stats.Cou
 		mr:      newMultiReader(),
 		counter: counter,
 	}
+	r.read = r.readFD
+	return r
+}
+
+// readFD reads into the buffers of r.mr; a negative count makes rawConn.Read wait and retry.
+func (r *ReadVReader) readFD(fd uintptr) bool {
+	r.nBytes = r.mr.Read(fd)
+	return r.nBytes >= 0
 }
 
 func (r *ReadVReader) readMulti() (MultiBuffer, error) {
 	bs := r.alloc.Alloc()
 
 	r.mr.Init(bs)
-	var nBytes int32
-	err := r.rawConn.Read(func(fd uintptr) bool {
-		n := r.mr.Read(fd)
-		if n < 0 {
-			return false
-		}
-
-		nBytes = n
-		return true
-	})
+	r.nBytes = 0
+	err := r.rawConn.Read(r.read)
 	r.mr.Clear()
+	nBytes := r.nBytes
 
 	if err != nil {
 		ReleaseMulti(MultiBuffer(bs))

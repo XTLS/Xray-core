@@ -16,6 +16,8 @@ type BufferToBytesWriter struct {
 
 	counter stats.Counter
 	cache   [][]byte
+	// buffers is written by net.Buffers.WriteTo: a local one escapes to the heap.
+	buffers net.Buffers
 }
 
 // WriteMultiBuffer implements Writer. This method takes ownership of the given buffer.
@@ -40,13 +42,13 @@ func (w *BufferToBytesWriter) WriteMultiBuffer(mb MultiBuffer) error {
 		bs = append(bs, b.Bytes())
 	}
 
+	w.buffers = bs
 	defer func() {
 		for idx := range bs {
 			bs[idx] = nil
 		}
 	}()
 
-	nb := net.Buffers(bs)
 	wc := int64(0)
 	defer func() {
 		if w.counter != nil {
@@ -54,7 +56,7 @@ func (w *BufferToBytesWriter) WriteMultiBuffer(mb MultiBuffer) error {
 		}
 	}()
 	for size > 0 {
-		n, err := nb.WriteTo(w.Writer)
+		n, err := w.buffers.WriteTo(w.Writer)
 		wc += n
 		if err != nil {
 			return err

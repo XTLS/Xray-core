@@ -31,6 +31,18 @@ func TestWriter(t *testing.T) {
 	}
 }
 
+func TestBufferToBytesWriterAllocs(t *testing.T) {
+	a, b := FromBytes([]byte("ab")), FromBytes([]byte("cd"))
+	mb := make(MultiBuffer, 2)
+	writer := &BufferToBytesWriter{Writer: io.Discard}
+	if n := testing.AllocsPerRun(100, func() {
+		mb[0], mb[1] = a, b
+		common.Must(writer.WriteMultiBuffer(mb))
+	}); n != 0 {
+		t.Error("WriteMultiBuffer of two buffers: ", n, " allocs")
+	}
+}
+
 func TestBytesWriterReadFrom(t *testing.T) {
 	const size = 50000
 	pReader, pWriter := pipe.New(pipe.WithSizeLimit(size))
