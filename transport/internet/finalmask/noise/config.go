@@ -6,7 +6,11 @@ import (
 )
 
 func (c *Config) WrapPacketConnClient(conn net.PacketConn, dest *net.Destination, dialer *finalmask.Dialer) (net.PacketConn, error) {
-	return NewConnClient(c, conn)
+	wrapped, err := NewConnClient(c, conn)
+	if err == nil && dialer != nil {
+		wrapped.(*noiseConn).path = dialer.UDPPath
+	}
+	return wrapped, err
 }
 
 func (c *Config) WrapPacketConnServer(conn net.PacketConn, addr net.Addr, lc *finalmask.ListenConfig) (net.PacketConn, error) {
