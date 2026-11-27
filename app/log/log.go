@@ -16,6 +16,7 @@ import (
 // Instance is a log.Handler that handles logs.
 type Instance struct {
 	sync.RWMutex
+	lifecycle    sync.Mutex
 	config       *Config
 	accessLogger log.Handler
 	errorLogger  log.Handler
@@ -79,6 +80,9 @@ func (*Instance) Type() interface{} {
 }
 
 func (g *Instance) startInternal() error {
+	g.lifecycle.Lock()
+	defer g.lifecycle.Unlock()
+
 	g.Lock()
 	defer g.Unlock()
 
@@ -149,20 +153,24 @@ func (g *Instance) Severity() log.Severity {
 func (g *Instance) Close() error {
 	errors.LogDebug(context.Background(), "Logger closing")
 
-	g.Lock()
-	defer g.Unlock()
+	g.lifecycle.Lock()
+	defer g.lifecycle.Unlock()
 
+	g.Lock()
 	if !g.active {
+		g.Unlock()
 		return nil
 	}
 
 	g.active = false
-
-	common.Close(g.accessLogger)
+	accessLogger, errorLogger := g.accessLogger, g.errorLogger
 	g.accessLogger = nil
-
-	common.Close(g.errorLogger)
 	g.errorLogger = nil
+	g.Unlock()
+
+	// A worker can call Handle while it finishes writing.
+	common.Close(accessLogger)
+	common.Close(errorLogger)
 
 	return nil
 }
