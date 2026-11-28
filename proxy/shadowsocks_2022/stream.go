@@ -1,7 +1,6 @@
 package shadowsocks_2022
 
 import (
-	"context"
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/binary"
@@ -11,16 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/antireplay"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
-	"github.com/xtls/xray-core/features/policy"
-	"github.com/xtls/xray-core/transport"
 )
 
 var addrParser = protocol.NewAddressParser(
@@ -625,33 +619,4 @@ func InitServerStream(conn net.Conn, method *CipherMethod, psk, saltSlice []byte
 		return nil, nil, ErrSaltNotUnique
 	}
 	return reader, reqHeader, nil
-}
-
-func TransportTCP(ctx context.Context, sessionPolicy policy.Session, reader buf.Reader, writer buf.Writer, link *transport.Link) error {
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-	defer timer.SetTimeout(0)
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-
-	requestDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-		return buf.Copy(reader, link.Writer, buf.UpdateActivity(timer))
-	}
-
-	responseDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-		if c, ok := writer.(io.Closer); ok {
-			defer c.Close()
-		}
-		return buf.Copy(link.Reader, writer, buf.UpdateActivity(timer))
-	}
-
-	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
-		common.Interrupt(link.Reader)
-		common.Interrupt(link.Writer)
-		return errors.New("connection ends").Base(err)
-	}
-
-	return nil
 }

@@ -5,7 +5,6 @@ import (
 
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/routing"
@@ -22,17 +21,7 @@ func DialTaggedOutbound(ctx context.Context, dispatcher routing.Dispatcher, dest
 	ctx = session.ContextWithContent(ctx, content)
 	ctx = session.SetForcedOutboundTagToContext(ctx, tag)
 
-	r, err := dispatcher.Dispatch(ctx, dest)
-	if err != nil {
-		return nil, err
-	}
-	var readerOpt cnc.ConnectionOption
-	if dest.Network == net.Network_TCP {
-		readerOpt = cnc.ConnectionOutputMulti(r.Reader)
-	} else {
-		readerOpt = cnc.ConnectionOutputMultiUDP(r.Reader)
-	}
-	return cnc.NewConnection(cnc.ConnectionInputMulti(r.Writer), readerOpt), nil
+	return routing.DialApplication(ctx, dispatcher, dest)
 }
 
 func init() {

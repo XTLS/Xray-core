@@ -15,6 +15,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -132,19 +133,11 @@ func (i *Inbound) processTCP(ctx context.Context, conn net.Conn, dispatcher rout
 
 	errors.LogInfo(ctx, "tunneling request to ", dest)
 
-	link, err := dispatcher.Dispatch(ctx, dest)
-	if err != nil {
-		return err
-	}
-
+	var early buf.MultiBuffer
 	if len(reqHeader.EarlyData) > 0 {
-		mb := buf.MergeBytes(nil, reqHeader.EarlyData)
-		if err := link.Writer.WriteMultiBuffer(mb); err != nil {
-			return err
-		}
+		early = buf.MergeBytes(nil, reqHeader.EarlyData)
 	}
-
-	return TransportTCP(ctx, i.policyManager.ForLevel(uint32(i.user.Level)), reader, writer, link)
+	return proxy.DispatchInboundStream(ctx, conn, i.policyManager.ForLevel(uint32(i.user.Level)), dispatcher, dest, reader, writer, early)
 }
 
 func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
@@ -163,23 +156,15 @@ func (i *Inbound) processUDP(ctx context.Context, conn stat.Connection, dispatch
 				continue
 			}
 
-			link := sessionItem.link.Load()
-			if link != nil {
-				sessionItem.UpdateConn(conn)
-			} else {
-				var err error
-				link, err = sessionItem.EnsureLink(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(dest net.Destination, payload []byte) ([]byte, error) {
-					return i.udpCodec.EncodeServerPacket(decoded.SessionID, dest, payload)
-				})
-				if err != nil {
-					continue
-				}
-			}
-
 			payloadBuf := buf.New()
 			payloadBuf.Write(decoded.Payload)
 			payloadBuf.UDP = &decoded.Destination
-			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{payloadBuf})
+			sessionItem.dispatchPacket(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(dest net.Destination, payload []byte) ([]byte, error) {
+				if err := sessionItem.EnsureServerState(i.method, i.psk); err != nil {
+					return nil, err
+				}
+				return sessionItem.EncodeServerPacket(i.method, sessionItem.SessionID, dest, payload)
+			}, payloadBuf)
 		}
 	}
 }

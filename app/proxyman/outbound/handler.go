@@ -126,7 +126,8 @@ func (h *Handler) Tag() string {
 func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 	outbounds := session.OutboundsFromContext(ctx)
 	ob := outbounds[len(outbounds)-1]
-	if h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain() {
+	resolveTarget := h.senderSettings != nil && h.senderSettings.TargetStrategy.HasStrategy() && ob.Target.Address.Family().IsDomain()
+	if resolveTarget {
 		if session.SkipDNSResolveFromContext(ctx) {
 			errors.LogInfo(ctx, "bypassing targetStrategy ", h.senderSettings.TargetStrategy, " for ", ob.Target, "; preserving target domain")
 		} else {
@@ -134,7 +135,12 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 			if ob.Target.Network == net.Network_UDP && ob.OriginalTarget.Address != nil {
 				strategy = strategy.GetDynamicStrategy(ob.OriginalTarget.Address.Family())
 			}
-			ips, err := internet.LookupForIP(ob.Target.Address.Domain(), strategy, nil)
+			ips, err := internet.LookupForIPContext(ctx, ob.Target.Address.Domain(), strategy, nil)
+			if ctx.Err() != nil {
+				common.Interrupt(link.Writer)
+				common.Interrupt(link.Reader)
+				return
+			}
 			if err != nil {
 				errors.LogInfoInner(ctx, err, "failed to resolve ip for target ", ob.Target.Address.Domain())
 				if h.senderSettings.TargetStrategy.ForceIP() {
@@ -157,6 +163,11 @@ func (h *Handler) Dispatch(ctx context.Context, link *transport.Link) {
 		link.Writer = &buf.EndpointOverrideWriter{Writer: link.Writer, Dest: ob.Target.Address, OriginalDest: ob.OriginalTarget.Address}
 	}
 
+	if resolveTarget && ctx.Err() != nil {
+		common.Interrupt(writer)
+		common.Interrupt(reader)
+		return
+	}
 	err := h.proxy.Process(ctx, link, h)
 	var completion interface{ DeferWriterClose() bool }
 	if goerrors.As(err, &completion) && completion.DeferWriterClose() {

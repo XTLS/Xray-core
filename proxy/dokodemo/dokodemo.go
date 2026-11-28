@@ -198,7 +198,7 @@ func (d *DokodemoDoor) Process(ctx context.Context, network net.Network, conn st
 	); err != nil {
 		return errors.New("failed to dispatch request").Base(err)
 	}
-	return nil // Unlike Dispatch(), DispatchLink() will not return until the outbound finishes Process()
+	return nil
 }
 
 func NewPacketWriter(conn net.PacketConn, d *net.Destination, mark int, back *net.UDPAddr) buf.Writer {

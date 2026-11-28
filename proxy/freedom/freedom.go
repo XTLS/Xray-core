@@ -361,11 +361,14 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	var conn stat.Connection
 	var blockedDest *net.Destination
 	var blockedRule *Firewall
-	err := retry.ExponentialBackoff(5, 100).On(func() error {
+	err := retry.ExponentialBackoffContext(ctx, 5, 100).On(func() error {
 		if destination.Address.Family().IsDomain() {
 			if defaultRule != nil || len(h.firewall) > 0 {
 				if strategy := h.resolveStrategy; strategy.HasStrategy() {
-					ips, err := internet.LookupForIP(destination.Address.Domain(), strategy, outGateway)
+					ips, err := internet.LookupForIPContext(ctx, destination.Address.Domain(), strategy, outGateway)
+					if cancelErr := ctx.Err(); cancelErr != nil {
+						return cancelErr
+					}
 					if err != nil { // non-force may still dial with system DNS
 						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
 						if strategy.ForceIP() {
@@ -384,6 +387,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 					}
 				} else {
 					addrs, err := net.DefaultResolver.LookupIPAddr(ctx, destination.Address.Domain())
+					if cancelErr := ctx.Err(); cancelErr != nil {
+						return cancelErr
+					}
 					if err != nil { // dialer may retry DNS
 						errors.LogInfoInner(ctx, err, "failed to get IP address for domain ", destination.Address.Domain())
 					}
@@ -407,6 +413,9 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 			}
 		}
 
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		rawConn, err := dialer.Dial(ctx, destination)
 		if err != nil {
 			return err
@@ -417,6 +426,12 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 	})
 	if err != nil {
 		return errors.New("failed to open connection to ", destination).Base(err)
+	}
+	if err := ctx.Err(); err != nil {
+		if conn != nil {
+			conn.Close()
+		}
+		return err
 	}
 	if blockedDest != nil {
 		return h.blackhole(ctx, input, output, blockedRule, blockedDest)
@@ -464,7 +479,7 @@ func (h *Handler) Process(ctx context.Context, link *transport.Link, dialer inte
 				writer = buf.NewWriter(conn)
 			}
 		} else {
-			writer = NewPacketWriter(conn, h, defaultRule, UDPOverride, destination, outGateway)
+			writer = newPacketWriter(ctx, conn, h, defaultRule, UDPOverride, destination, outGateway)
 			if h.config.Noises != nil {
 				errors.LogDebug(ctx, "NOISE", h.config.Noises)
 				writer = &NoisePacketWriter{
@@ -594,6 +609,10 @@ func (r *PacketReader) ReadMultiBuffer() (buf.MultiBuffer, error) {
 
 // DialDest means the dial target used in the dialer when creating conn
 func NewPacketWriter(conn net.Conn, h *Handler, defaultRule *Firewall, UDPOverride net.Destination, DialDest net.Destination, outGateway net.Address) buf.Writer {
+	return newPacketWriter(context.Background(), conn, h, defaultRule, UDPOverride, DialDest, outGateway)
+}
+
+func newPacketWriter(ctx context.Context, conn net.Conn, h *Handler, defaultRule *Firewall, UDPOverride net.Destination, DialDest net.Destination, outGateway net.Address) buf.Writer {
 	iConn := conn
 	statConn, ok := iConn.(*stat.CounterConnection)
 	if ok {
@@ -618,6 +637,7 @@ func NewPacketWriter(conn net.Conn, h *Handler, defaultRule *Firewall, UDPOverri
 			UDPOverride:       UDPOverride,
 			ResolvedUDPAddr:   resolvedUDPAddr,
 			OutGateway:        outGateway,
+			ctx:               ctx,
 		}
 	}
 	return &buf.SequentialWriter{Writer: conn}
@@ -636,14 +656,24 @@ type PacketWriter struct {
 	// So, cache and keep the resolve result
 	ResolvedUDPAddr *utils.TypedSyncMap[string, net.Address]
 	OutGateway      net.Address
+	ctx             context.Context
 }
 
 func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	ctx := w.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	defer func() { buf.ReleaseMulti(mb) }()
 	for {
 		mb2, b := buf.SplitFirst(mb)
 		mb = mb2
 		if b == nil {
 			break
+		}
+		if err := ctx.Err(); err != nil {
+			b.Release()
+			return err
 		}
 		var n int
 		var err error
@@ -660,7 +690,11 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				} else {
 					shouldUseSystemResolver := true
 					if strategy := w.Handler.resolveStrategy; strategy.HasStrategy() {
-						ips, err := internet.LookupForIP(b.UDP.Address.Domain(), strategy, w.OutGateway)
+						ips, err := internet.LookupForIPContext(ctx, b.UDP.Address.Domain(), strategy, w.OutGateway)
+						if cancelErr := ctx.Err(); cancelErr != nil {
+							b.Release()
+							return cancelErr
+						}
 						if err != nil {
 							// drop packet if resolve failed when forceIP
 							if strategy.ForceIP() {
@@ -673,7 +707,15 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 						}
 					}
 					if shouldUseSystemResolver {
+						if err := ctx.Err(); err != nil {
+							b.Release()
+							return err
+						}
 						udpAddr, err := net.ResolveUDPAddr("udp", b.UDP.NetAddr())
+						if cancelErr := ctx.Err(); cancelErr != nil {
+							b.Release()
+							return cancelErr
+						}
 						if err != nil {
 							b.Release()
 							continue
@@ -695,13 +737,16 @@ func (w *PacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				b.Release()
 				continue
 			}
+			if err := ctx.Err(); err != nil {
+				b.Release()
+				return err
+			}
 			n, err = w.PacketConnWrapper.WriteTo(b.Bytes(), destAddr)
 		} else {
 			n, err = w.PacketConnWrapper.Write(b.Bytes())
 		}
 		b.Release()
 		if err != nil {
-			buf.ReleaseMulti(mb)
 			return err
 		}
 		if w.Counter != nil {
@@ -754,11 +799,11 @@ func (w *NoisePacketWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
 				noise, err = GenerateRandomBytes(crypto.RandBetween(int64(n.LengthMin),
 					int64(n.LengthMax)))
 			}
-			if err != nil {
-				return err
+			if err == nil {
+				err = w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
 			}
-			err = w.Writer.WriteMultiBuffer(buf.MultiBuffer{buf.FromBytes(noise)})
 			if err != nil {
+				buf.ReleaseMulti(mb)
 				return err
 			}
 

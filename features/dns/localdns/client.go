@@ -31,12 +31,16 @@ func (*Client) Close() error { return nil }
 
 // LookupIP implements Client.
 func (c *Client) LookupIP(host string, option dns.IPOption) ([]net.IP, uint32, error) {
+	return c.LookupIPContext(context.Background(), host, option)
+}
+
+func (c *Client) LookupIPContext(ctx context.Context, host string, option dns.IPOption) ([]net.IP, uint32, error) {
 	var ips []net.IP
 	var err error
 	if len(internet.Controllers) > 0 {
-		ips, err = c.r.LookupIP(context.Background(), "ip", host)
+		ips, err = c.r.LookupIP(ctx, "ip", host)
 	} else {
-		ips, err = net.LookupIP(host)
+		ips, err = net.DefaultResolver.LookupIP(ctx, "ip", host)
 	}
 	if err != nil {
 		return nil, 0, err

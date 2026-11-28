@@ -21,6 +21,7 @@ type CachedNameserver interface {
 // queryIP is called from dns.Server->queryIPTimeout
 func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
 	fqdn := Fqdn(domain)
+	owner, _ := ctx.Value(queryOwnerKey{}).(queryOwner)
 
 	cache := s.getCacheController()
 	if !cache.disableCache {
@@ -35,7 +36,11 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 				if cache.serveStale && (cache.serveExpiredTTL == 0 || cache.serveExpiredTTL < ttl) {
 					errors.LogDebugInner(ctx, err, cache.name, " cache OPTIMISTE ", fqdn, " -> ", ips)
 					log.Record(&log.DNSLog{Server: cache.name, Domain: fqdn, Result: ips, Status: log.DNSCacheOptimiste, Elapsed: 0, Error: err})
-					go pull(ctx, s, fqdn, option)
+					refresh := ctx
+					if owner.ctx != nil {
+						refresh = owner.ctx
+					}
+					go pull(refresh, s, fqdn, option)
 					return ips, 1, err
 				}
 			}
@@ -44,17 +49,17 @@ func queryIP(ctx context.Context, s CachedNameserver, domain string, option dns.
 		errors.LogDebug(ctx, "DNS cache is disabled. Querying IP for ", fqdn, " at ", cache.name)
 	}
 
-	return fetch(ctx, s, fqdn, option)
+	return fetch(ctx, s, fqdn, option, owner)
 }
 
 func pull(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) {
 	nctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
 	defer cancel()
 
-	fetch(nctx, s, fqdn, option)
+	fetch(nctx, s, fqdn, option, queryOwner{})
 }
 
-func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption) ([]net.IP, uint32, error) {
+func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOption, owner queryOwner) ([]net.IP, uint32, error) {
 	key := fqdn
 	switch {
 	case option.IPv4Enable && option.IPv6Enable:
@@ -65,7 +70,32 @@ func fetch(ctx context.Context, s CachedNameserver, fqdn string, option dns.IPOp
 		key = key + "6"
 	}
 
-	v, _, _ := s.getCacheController().requestGroup.Do(key, func() (any, error) {
+	group := &s.getCacheController().requestGroup
+	if !owner.deadline.IsZero() {
+		if err := ctx.Err(); err != nil {
+			return nil, 0, err
+		}
+
+		// The first waiter can leave without canceling the shared request.
+		parent, deadline := owner.ctx, owner.deadline
+		response := group.DoChan(key, func() (any, error) {
+			work, cancel := context.WithDeadline(parent, deadline)
+			defer cancel()
+			if err := work.Err(); err != nil {
+				return result{error: err}, nil
+			}
+			return doFetch(work, s, fqdn, option), nil
+		})
+		select {
+		case <-ctx.Done():
+			return nil, 0, ctx.Err()
+		case value := <-response:
+			ret := value.Val.(result)
+			return ret.ips, ret.ttl, ret.error
+		}
+	}
+
+	v, _, _ := group.Do(key, func() (any, error) {
 		return doFetch(ctx, s, fqdn, option), nil
 	})
 	ret := v.(result)

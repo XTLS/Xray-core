@@ -15,8 +15,10 @@ import (
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
+	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/task"
 	dns_feature "github.com/xtls/xray-core/features/dns"
+	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet"
@@ -30,15 +32,30 @@ type ClassicNameServer struct {
 	cacheController *CacheController
 	address         *net.Destination
 	requests        map[uint16]*udpDnsRequest
-	udpServer       *udp.Dispatcher
 	requestsCleanup *task.Periodic
 	reqID           uint32
 	clientIP        net.IP
+
+	dispatcher routing.Dispatcher
+	local      bool
+	exchangeMu sync.Mutex
+	exchange   *dnsUDPExchange
 }
 
 type udpDnsRequest struct {
 	dnsRequest
 	ctx context.Context
+}
+
+// dnsUDPExchange carries queries for one nameserver while its transport lives.
+// Local mode sends straight to its socket. Routed mode supplies pending queries
+// and the response parser as the endpoints of the selected outbound.
+type dnsUDPExchange struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	timer  *signal.ActivityTimer
+	conn   net.Conn
+	inbox  *udp.PacketInbox
 }
 
 // NewClassicNameServer creates udp server object for remote resolving.
@@ -53,13 +70,12 @@ func NewClassicNameServer(address net.Destination, dispatcher routing.Dispatcher
 		address:         &address,
 		requests:        make(map[uint16]*udpDnsRequest),
 		clientIP:        clientIP,
+		dispatcher:      dispatcher,
 	}
 	s.requestsCleanup = &task.Periodic{
 		Interval: time.Minute,
 		Execute:  s.RequestsCleanup,
 	}
-	s.udpServer = udp.NewDispatcher(dispatcher, s.HandleResponse)
-
 	errors.LogInfo(context.Background(), "DNS: created UDP client initialized for ", address.NetAddr())
 	return s
 }
@@ -76,32 +92,150 @@ func NewUDPNameServer(url *url.URL, dispatcher routing.Dispatcher, local bool, d
 			return nil, err
 		}
 	}
-	if local {
-		dispatcher = &localUDPDispatcher{dispatcher}
-	}
 	s := NewClassicNameServer(net.UDPDestination(net.ParseAddress(url.Hostname()), port), dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
 	if local {
+		s.local = true
 		s.cacheController.name = "UDPL//" + s.address.NetAddr()
 	}
 	return s, nil
 }
 
-type localUDPDispatcher struct {
-	routing.Dispatcher
+func (s *ClassicNameServer) getExchange(ctx context.Context) (*dnsUDPExchange, error) {
+	s.exchangeMu.Lock()
+	defer s.exchangeMu.Unlock()
+	if s.exchange != nil && s.exchange.ctx.Err() == nil {
+		return s.exchange, nil
+	}
+
+	ctx, cancel := context.WithCancel(udp.WithPacketRouteState(toDnsContext(ctx, s.address.String())))
+	exchange := &dnsUDPExchange{ctx: ctx, cancel: cancel}
+	if s.local {
+		conn, err := internet.DialSystem(ctx, *s.address, nil)
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		exchange.conn = conn
+	} else {
+		if s.dispatcher == nil {
+			cancel()
+			return nil, errors.New("routing dispatcher is required for UDP DNS")
+		}
+		exchange.inbox = udp.NewPacketInbox(policy.BufferPolicyFromContext(ctx).PerConnection)
+		exchange.inbox.AttachRoute(ctx)
+	}
+	exchange.timer = signal.CancelAfterInactivity(ctx, cancel, time.Minute)
+	s.exchange = exchange
+	context.AfterFunc(ctx, func() {
+		exchange.timer.SetTimeout(0)
+		if exchange.conn != nil {
+			exchange.conn.Close()
+		} else {
+			exchange.inbox.Close()
+		}
+		s.exchangeMu.Lock()
+		if s.exchange == exchange {
+			s.exchange = nil
+		}
+		s.exchangeMu.Unlock()
+	})
+
+	response := &dnsUDPResponseWriter{server: s, exchange: exchange}
+	if exchange.conn != nil {
+		go func() {
+			defer cancel()
+			reader := buf.NewPacketReader(exchange.conn)
+			for {
+				packets, err := reader.ReadMultiBuffer()
+				if err != nil {
+					buf.ReleaseMulti(packets)
+					if ctx.Err() == nil {
+						errors.LogInfoInner(ctx, err, "failed to read local UDP DNS response")
+					}
+					return
+				}
+				if err := response.WriteMultiBuffer(packets); err != nil {
+					return
+				}
+			}
+		}()
+	} else {
+		go func() {
+			defer cancel()
+			reader := udp.NewDispatchPacketReader(ctx, cancel, exchange.inbox, nil)
+			link := &transport.Link{Reader: reader, Writer: response}
+			if err := s.dispatcher.DispatchLink(ctx, *s.address, link); err != nil && ctx.Err() == nil {
+				errors.LogInfoInner(ctx, err, "failed to dispatch UDP DNS")
+			}
+		}()
+	}
+	return exchange, nil
 }
 
-func (*localUDPDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
-	conn, err := internet.DialSystem(ctx, dest, nil)
-	if err != nil {
-		return nil, err
+func (s *ClassicNameServer) sendPacket(req *udpDnsRequest, packet *buf.Buffer) {
+	ctx := req.ctx
+	if ctx.Err() != nil {
+		packet.Release()
+		return
 	}
-	return &transport.Link{
-		Reader: &struct {
-			buf.Reader
-			io.Closer
-		}{buf.NewPacketReader(conn), conn},
-		Writer: buf.NewWriter(conn),
-	}, nil
+	exchange, err := s.getExchange(ctx)
+	if err != nil {
+		packet.Release()
+		errors.LogInfoInner(ctx, err, "failed to open UDP DNS exchange")
+		return
+	}
+	s.addPendingRequest(req)
+	if exchange.conn != nil {
+		if err = ctx.Err(); err == nil {
+			if _, err = exchange.conn.Write(packet.Bytes()); err != nil {
+				exchange.cancel()
+			}
+		}
+		packet.Release()
+	} else {
+		// Admission belongs to this query's work deadline. The nameserver's
+		// exchange and its already-admitted queries can outlive it.
+		err = exchange.inbox.Put(ctx, buf.MultiBuffer{packet})
+	}
+	if err != nil {
+		s.Lock()
+		if id := req.msg.ID; s.requests[id] == req {
+			delete(s.requests, id)
+		}
+		s.Unlock()
+		if ctx.Err() == nil {
+			errors.LogInfoInner(ctx, err, "failed to send UDP DNS query")
+		}
+	}
+}
+
+type dnsUDPResponseWriter struct {
+	server   *ClassicNameServer
+	exchange *dnsUDPExchange
+}
+
+func (w *dnsUDPResponseWriter) WriteMultiBuffer(packets buf.MultiBuffer) error {
+	ctx := w.exchange.ctx
+	if ctx.Err() != nil {
+		buf.ReleaseMulti(packets)
+		return io.ErrClosedPipe
+	}
+	w.exchange.timer.Update()
+	for _, packet := range packets {
+		source := *w.server.address
+		if packet.UDP != nil {
+			source = *packet.UDP
+		}
+		w.server.HandleResponse(ctx, &udp_proto.Packet{Payload: packet, Source: source})
+	}
+	return nil
+}
+
+func (w *dnsUDPResponseWriter) Interrupt() { w.exchange.cancel() }
+
+func (w *dnsUDPResponseWriter) Close() error {
+	w.Interrupt()
+	return nil
 }
 
 // Name implements Server.
@@ -174,9 +308,14 @@ func (s *ClassicNameServer) HandleResponse(ctx context.Context, packet *udp_prot
 			newMsg.Additionals = append(newMsg.Additionals, *opt)
 			newMsg.ID = s.newReqID()
 			newReq.msg = &newMsg
-			s.addPendingRequest(&newReq)
-			b, _ := dns.PackMessage(newReq.msg)
-			s.udpServer.Dispatch(toDnsContext(newReq.ctx, s.address.String()), *s.address, b)
+			b, err := dns.PackMessage(newReq.msg)
+			if err != nil {
+				errors.LogErrorInner(ctx, err, "failed to pack DNS UDP retry")
+				return
+			}
+			// A retry can wait for outbound admission. Do not make the
+			// response writer (including a shared Mux reader) wait for it.
+			go s.sendPacket(&newReq, b)
 			return
 		}
 	}
@@ -225,7 +364,6 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<
 			dnsRequest: *req,
 			ctx:        ctx,
 		}
-		s.addPendingRequest(udpReq)
 		b, err := dns.PackMessage(req.msg)
 		if err != nil {
 			errors.LogErrorInner(ctx, err, "failed to pack dns query")
@@ -234,7 +372,7 @@ func (s *ClassicNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<
 			}
 			return
 		}
-		s.udpServer.Dispatch(toDnsContext(ctx, s.address.String()), *s.address, b)
+		s.sendPacket(udpReq, b)
 	}
 }
 
