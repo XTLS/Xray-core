@@ -1,6 +1,7 @@
 package xmc
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"crypto/sha256"
 	"fmt"
@@ -13,9 +14,16 @@ type sha256Stream struct {
 	buf     []byte
 }
 
+// newSHA256Stream returns a stream seeded with a private copy of seed. The
+// seed is hashed lazily on every refill, so retaining the caller's slice lets a
+// later append on the same base array rewrite an already-created stream.
+// DeriveRSAKey builds "<password>-p-prime" and "<password>-q-prime" from one
+// password buffer: with a shared array the second append overwrote the first
+// stream's seed, both primes then came from the "-q-prime" stream, and the
+// resulting N factored at the first step of Fermat's method.
 func newSHA256Stream(seed []byte) *sha256Stream {
 	return &sha256Stream{
-		seed: seed,
+		seed: bytes.Clone(seed),
 	}
 }
 
@@ -56,6 +64,8 @@ func derivePrime(stream *sha256Stream) *big.Int {
 func DeriveRSAKey(password string) (*rsa.PrivateKey, error) {
 	seed := []byte(password)
 
+	// Both appends may write into seed's spare capacity; that is harmless
+	// because each stream keeps its own copy of the bytes it was given.
 	pStream := newSHA256Stream(append(seed, []byte("-p-prime")...))
 	qStream := newSHA256Stream(append(seed, []byte("-q-prime")...))
 
