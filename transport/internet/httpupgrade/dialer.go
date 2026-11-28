@@ -20,16 +20,16 @@ import (
 
 type ConnRF struct {
 	net.Conn
-	Req   *http.Request
-	First bool
+	Req     *http.Request
+	First   bool
+	reader  *bufio.Reader
+	readErr error
 }
 
 func (c *ConnRF) Read(b []byte) (int, error) {
 	if c.First {
 		c.First = false
-		// create reader capped to size of `b`, so it can be fully drained into
-		// `b` later with a single Read call
-		reader := bufio.NewReaderSize(c.Conn, len(b))
+		reader := bufio.NewReader(c.Conn)
 		resp, err := http.ReadResponse(reader, c.Req) // nolint:bodyclose
 		if err != nil {
 			return 0, err
@@ -39,8 +39,30 @@ func (c *ConnRF) Read(b []byte) (int, error) {
 			strings.ToLower(resp.Header.Get("Connection")) != "upgrade" {
 			return 0, errors.New("unrecognized reply")
 		}
-		// drain remaining bufreader
-		return reader.Read(b[:reader.Buffered()])
+		// Keep reader only while buffered response payload remains.
+		if reader.Buffered() > 0 {
+			c.reader = reader
+		} else if _, err := reader.Read(nil); err != nil {
+			return 0, err
+		}
+		if len(b) == 0 {
+			return 0, nil
+		}
+	}
+	if c.reader != nil {
+		n, err := c.reader.Read(b)
+		if c.reader.Buffered() == 0 {
+			if err == nil {
+				_, c.readErr = c.reader.Read(nil)
+			}
+			c.reader = nil
+		}
+		return n, err
+	}
+	if c.readErr != nil {
+		err := c.readErr
+		c.readErr = nil
+		return 0, err
 	}
 	return c.Conn.Read(b)
 }
