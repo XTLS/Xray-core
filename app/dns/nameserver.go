@@ -169,8 +169,23 @@ func (c *Client) Name() string {
 	return c.server.Name()
 }
 
+// queryOwner keeps the DNS service lifetime separate from a route's wait.
+type queryOwner struct {
+	ctx      context.Context
+	waiter   context.Context
+	deadline time.Time
+}
+
+type queryOwnerKey struct{}
+
 // QueryIP sends DNS query to the name server with the client's IP.
 func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+	owner, cancelable := ctx.Value(queryOwnerKey{}).(queryOwner)
+	if cancelable {
+		if err := owner.waiter.Err(); err != nil {
+			return nil, 0, err
+		}
+	}
 	if c.checkSystem {
 		supportIPv4, supportIPv6 := utils.CheckRoutes()
 		option.IPv4Enable = option.IPv4Enable && supportIPv4
@@ -184,10 +199,22 @@ func (c *Client) QueryIP(ctx context.Context, domain string, option dns.IPOption
 		return nil, 0, dns.ErrEmptyResponse
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, c.timeoutMs)
+	_, local := c.server.(*LocalNameServer)
+	// The system resolver previously ignored the configured server timeout.
+	if !cancelable || !local {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.timeoutMs)
+		defer cancel()
+	}
 	ctx = session.ContextWithInbound(ctx, &session.Inbound{Tag: c.tag})
+	if cancelable {
+		owner.ctx = session.ContextWithInbound(owner.ctx, &session.Inbound{Tag: c.tag})
+		// Keep the tighter service or script deadline. The route is linked
+		// through cancellation only, so its own deadline is absent here.
+		owner.deadline, _ = ctx.Deadline()
+		ctx = context.WithValue(ctx, queryOwnerKey{}, owner)
+	}
 	ips, ttl, err := c.server.QueryIP(ctx, domain, option)
-	cancel()
 
 	if err != nil {
 		return nil, 0, err

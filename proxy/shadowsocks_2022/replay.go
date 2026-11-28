@@ -8,9 +8,7 @@ import (
 
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	"github.com/xtls/xray-core/common/signal"
 	"github.com/xtls/xray-core/common/utils"
-	"github.com/xtls/xray-core/transport"
 )
 
 const (
@@ -92,21 +90,21 @@ type ServerUDPSession struct {
 	serverChaCha      cipher.AEAD
 
 	manager     *UDPSessionManager
-	link        atomic.Pointer[transport.Link]
-	timer       *signal.ActivityTimer
-	currentConn atomic.Value // stores stat.Connection
+	route       *udpSessionRoute
+	closed      bool
+	currentConn *udpSessionPeer
 }
 
 func (s *ServerUDPSession) CheckPacketID(packetID uint64) bool {
 	s.Lock()
 	defer s.Unlock()
-	return s.Window.Check(packetID)
+	return !s.closed && s.Window.Check(packetID)
 }
 
 func (s *ServerUDPSession) Commit(packetID uint64, bodyAead cipher.AEAD, user *protocol.MemoryUser, userPSK []byte) bool {
 	s.Lock()
 	defer s.Unlock()
-	if s.User != nil && user != nil && s.User != user {
+	if s.closed || s.User != nil && user != nil && s.User != user {
 		return false
 	}
 	if !s.Window.CheckAndAdd(packetID) {
@@ -177,11 +175,8 @@ func (m *UDPSessionManager) cleanup(now int64) {
 	if timeoutSec <= 0 {
 		timeoutSec = 60
 	}
-	m.sessions.Range(func(k uint64, v *ServerUDPSession) bool {
-		if now-v.LastActive.Load() > timeoutSec {
-			m.sessions.Delete(k)
-			v.Close()
-		}
+	m.sessions.Range(func(_ uint64, v *ServerUDPSession) bool {
+		v.expire(now - timeoutSec)
 		return true
 	})
 }

@@ -85,20 +85,46 @@ var (
 )
 
 func LookupForIP(domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
-	if dnsClient == nil {
+	return lookupForIP(nil, domain, strategy, localAddr)
+}
+
+// LookupForIPContext uses a cancelable resolver wait when the DNS client supports it.
+func LookupForIPContext(ctx context.Context, domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+	return lookupForIP(ctx, domain, strategy, localAddr)
+}
+
+func lookupForIP(ctx context.Context, domain string, strategy DomainStrategy, localAddr net.Address) ([]net.IP, error) {
+	client := dnsClient
+	if client == nil {
 		return nil, errors.New("DNS client not initialized")
 	}
 
-	ips, _, err := dnsClient.LookupIP(domain, dns.IPOption{
+	lookup := client.LookupIP
+	if ctx != nil && ctx.Done() != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if contextual, ok := client.(dns.ContextClient); ok {
+			lookup = func(domain string, option dns.IPOption) ([]net.IP, uint32, error) {
+				return contextual.LookupIPContext(ctx, domain, option)
+			}
+		}
+	}
+
+	ips, _, err := lookup(domain, dns.IPOption{
 		IPv4Enable: (localAddr == nil && strategy.PreferIP4()) || (localAddr != nil && localAddr.Family().IsIPv4() && (strategy.PreferIP4() || strategy.FallbackIP4())),
 		IPv6Enable: (localAddr == nil && strategy.PreferIP6()) || (localAddr != nil && localAddr.Family().IsIPv6() && (strategy.PreferIP6() || strategy.FallbackIP6())),
 	})
-	{ // Resolve fallback
-		if (len(ips) == 0 || err != nil) && strategy.HasFallback() && localAddr == nil {
-			ips, _, err = dnsClient.LookupIP(domain, dns.IPOption{
-				IPv4Enable: strategy.FallbackIP4(),
-				IPv6Enable: strategy.FallbackIP6(),
-			})
+	if ctx != nil && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if (len(ips) == 0 || err != nil) && strategy.HasFallback() && localAddr == nil {
+		ips, _, err = lookup(domain, dns.IPOption{
+			IPv4Enable: strategy.FallbackIP4(),
+			IPv6Enable: strategy.FallbackIP6(),
+		})
+		if ctx != nil && ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
 	}
 
@@ -248,12 +274,16 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		dest = *newDest
 	}
 
-	if sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain() {
+	resolveDomain := sockopt.DomainStrategy.HasStrategy() && dest.Address.Family().IsDomain()
+	if resolveDomain {
 		finalStrategy := sockopt.DomainStrategy
 		if outboundName == "freedom" && dest.Network == net.Network_UDP && origTargetAddr != nil && src == nil {
 			finalStrategy = finalStrategy.GetDynamicStrategy(origTargetAddr.Family())
 		}
-		ips, err := LookupForIP(dest.Address.Domain(), finalStrategy, src)
+		ips, err := LookupForIPContext(ctx, dest.Address.Domain(), finalStrategy, src)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if err != nil {
 			if sockopt.DomainStrategy.ForceIP() {
 				errors.LogErrorInner(ctx, err, "failed to resolve ip for: ", dest.Address.Domain())
@@ -268,6 +298,9 @@ func DialSystem(ctx context.Context, dest net.Destination, sockopt *SocketConfig
 		}
 	}
 
+	if resolveDomain && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if len(sockopt.DialerProxy) > 0 {
 		if obm == nil {
 			return nil, errors.New("there is no outbound manager for dialerProxy")

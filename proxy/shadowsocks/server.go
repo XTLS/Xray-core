@@ -10,15 +10,12 @@ import (
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/common/session"
-	"github.com/xtls/xray-core/common/signal"
-	"github.com/xtls/xray-core/common/task"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
 type Server struct {
@@ -99,102 +96,6 @@ func (s *Server) Process(ctx context.Context, network net.Network, conn stat.Con
 	}
 }
 
-func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
-		request := protocol.RequestHeaderFromContext(ctx)
-		payload := packet.Payload
-		if request == nil {
-			payload.Release()
-			return
-		}
-
-		if payload.UDP != nil {
-			request = &protocol.RequestHeader{
-				User:    request.User,
-				Address: payload.UDP.Address,
-				Port:    payload.UDP.Port,
-			}
-		}
-
-		data, err := EncodeUDPPacket(request, payload.Bytes())
-		payload.Release()
-		if err != nil {
-			errors.LogWarningInner(ctx, err, "failed to encode UDP packet")
-			return
-		}
-
-		conn.Write(data.Bytes())
-		data.Release()
-	})
-	defer udpServer.RemoveRay()
-
-	inbound := session.InboundFromContext(ctx)
-	var dest *net.Destination
-	reader := buf.NewPacketReader(conn)
-	for {
-		mpayload, err := reader.ReadMultiBuffer()
-		if err != nil {
-			break
-		}
-
-		for _, payload := range mpayload {
-			var request *protocol.RequestHeader
-			var data *buf.Buffer
-			var err error
-
-			if inbound.User != nil {
-				validator := new(Validator)
-				validator.Add(inbound.User)
-				request, data, err = DecodeUDPPacket(validator, payload)
-			} else {
-				request, data, err = DecodeUDPPacket(s.validator, payload)
-				if err == nil {
-					inbound.User = request.User
-				}
-			}
-
-			if err != nil {
-				if inbound.Source.IsValid() {
-					errors.LogInfoInner(ctx, err, "dropping invalid UDP packet from: ", inbound.Source)
-					log.Record(&log.AccessMessage{
-						From:   inbound.Source,
-						To:     "",
-						Status: log.AccessRejected,
-						Reason: err,
-					})
-				}
-				payload.Release()
-				continue
-			}
-
-			destination := request.Destination()
-
-			currentPacketCtx := ctx
-			if inbound.Source.IsValid() {
-				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-					From:   inbound.Source,
-					To:     destination,
-					Status: log.AccessAccepted,
-					Reason: "",
-					Email:  request.User.Email,
-				})
-			}
-			errors.LogInfo(ctx, "tunnelling request to ", destination)
-
-			data.UDP = &destination
-
-			if dest == nil {
-				dest = &destination
-			}
-
-			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
-			udpServer.Dispatch(currentPacketCtx, *dest, data)
-		}
-	}
-
-	return nil
-}
-
 func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
 	sessionPolicy := s.policyManager.ForLevel(0)
 	if err := conn.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake)); err != nil {
@@ -202,6 +103,7 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	}
 
 	bufferedReader := buf.BufferedReader{Reader: buf.NewReader(conn)}
+	defer func() { buf.ReleaseMulti(bufferedReader.Buffer) }()
 	request, bodyReader, err := ReadTCPSession(s.validator, &bufferedReader)
 	if err != nil {
 		log.Record(&log.AccessMessage{
@@ -231,63 +133,13 @@ func (s *Server) handleConnection(ctx context.Context, conn stat.Connection, dis
 	errors.LogInfo(ctx, "tunnelling request to ", dest)
 
 	sessionPolicy = s.policyManager.ForLevel(request.User.Level)
-	ctx, cancel := context.WithCancel(ctx)
-	timer := signal.CancelAfterInactivity(ctx, cancel, sessionPolicy.Timeouts.ConnectionIdle)
-
-	ctx = policy.ContextWithBufferPolicy(ctx, sessionPolicy.Buffer)
-	link, err := dispatcher.Dispatch(ctx, dest)
+	bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
+	responseWriter, err := WriteTCPResponse(request, bufferedWriter)
 	if err != nil {
-		return err
+		return errors.New("failed to write response").Base(err)
 	}
-
-	responseDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.UplinkOnly)
-
-		bufferedWriter := buf.NewBufferedWriter(buf.NewWriter(conn))
-		responseWriter, err := WriteTCPResponse(request, bufferedWriter)
-		if err != nil {
-			return errors.New("failed to write response").Base(err)
-		}
-
-		{
-			payload, err := link.Reader.ReadMultiBuffer()
-			if err != nil {
-				return err
-			}
-			if err := responseWriter.WriteMultiBuffer(payload); err != nil {
-				return err
-			}
-		}
-
-		if err := bufferedWriter.SetBuffered(false); err != nil {
-			return err
-		}
-
-		if err := buf.Copy(link.Reader, responseWriter, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to transport all TCP response").Base(err)
-		}
-
-		return nil
-	}
-
-	requestDone := func() error {
-		defer timer.SetTimeout(sessionPolicy.Timeouts.DownlinkOnly)
-
-		if err := buf.Copy(bodyReader, link.Writer, buf.UpdateActivity(timer)); err != nil {
-			return errors.New("failed to transport all TCP request").Base(err)
-		}
-
-		return nil
-	}
-
-	requestDoneAndCloseWriter := task.OnSuccess(requestDone, task.Close(link.Writer))
-	if err := task.Run(ctx, requestDoneAndCloseWriter, responseDone); err != nil {
-		common.Interrupt(link.Reader)
-		common.Interrupt(link.Writer)
-		return errors.New("connection ends").Base(err)
-	}
-
-	return nil
+	bufferedWriter.SetFlushNext()
+	return proxy.DispatchInboundStream(ctx, conn, sessionPolicy, dispatcher, dest, bodyReader, responseWriter, nil)
 }
 
 func init() {

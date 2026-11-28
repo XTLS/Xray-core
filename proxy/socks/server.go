@@ -4,7 +4,6 @@ import (
 	"context"
 	goerrors "errors"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/xtls/xray-core/common"
@@ -13,7 +12,6 @@ import (
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/protocol"
-	udp_proto "github.com/xtls/xray-core/common/protocol/udp"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
@@ -22,7 +20,6 @@ import (
 	"github.com/xtls/xray-core/proxy/http"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
-	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
 // Server is a SOCKS 5 proxy server
@@ -177,112 +174,25 @@ func (s *Server) processTCP(ctx context.Context, conn stat.Connection, dispatche
 				WriteCounter: counters.WriteCounter,
 			}
 		}
+		ctx, cancel := context.WithCancel(ctx)
+		stopClose := context.AfterFunc(ctx, func() { tempUDPConn.Close() })
+		defer stopClose()
+		defer cancel()
+
 		errCh := make(chan error, 1)
 		go func() {
+			defer cancel()
 			errCh <- s.handleUDPPayload(ctx, udpConn, dispatcher)
 		}()
 		// Associated TCP keeps the UDP alive
 		// Close UDP if TCP connection is closed
 		// Or Close TCP if UDP is idle timeout
 		io.Copy(buf.DiscardBytes, conn)
+		cancel()
 		tempUDPConn.Close()
 		return <-errCh
 	}
 	return nil
-}
-
-func (s *Server) handleUDPPayload(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
-	udpServer := udp.NewDispatcher(dispatcher, func(ctx context.Context, packet *udp_proto.Packet) {
-		payload := packet.Payload
-		errors.LogDebug(ctx, "writing back UDP response with ", payload.Len(), " bytes")
-
-		request := protocol.RequestHeaderFromContext(ctx)
-		if request == nil {
-			payload.Release()
-			return
-		}
-
-		if payload.UDP != nil {
-			request = &protocol.RequestHeader{
-				User:    request.User,
-				Address: payload.UDP.Address,
-				Port:    payload.UDP.Port,
-			}
-		}
-
-		udpMessage, err := EncodeUDPPacket(request, payload.Bytes())
-		payload.Release()
-
-		if err != nil {
-			errors.LogWarningInner(ctx, err, "failed to write UDP response")
-			return
-		}
-
-		conn.Write(udpMessage.Bytes())
-		udpMessage.Release()
-	})
-	defer udpServer.RemoveRay()
-
-	inbound := session.InboundFromContext(ctx)
-
-	var dest *net.Destination
-
-	reader := buf.NewPacketReader(conn)
-	var changeRemote sync.Once
-	for {
-		mpayload, err := reader.ReadMultiBuffer()
-		if err != nil {
-			return err
-		}
-		changeRemote.Do(func() {
-			if inbound != nil {
-				newInbound := *inbound
-				// change source to real remote UDP address
-				newInbound.Source = net.DestinationFromAddr(conn.RemoteAddr())
-				newInbound.Local = net.DestinationFromAddr(conn.LocalAddr())
-				inbound = &newInbound
-				ctx = session.ContextWithInbound(ctx, inbound)
-				errors.LogInfo(ctx, "client UDP connection from ", inbound.Source)
-			}
-		})
-
-		for _, payload := range mpayload {
-			request, err := DecodeUDPPacket(payload)
-			if err != nil {
-				errors.LogInfoInner(ctx, err, "failed to parse UDP request")
-				payload.Release()
-				continue
-			}
-
-			if payload.IsEmpty() {
-				payload.Release()
-				continue
-			}
-
-			destination := request.Destination()
-
-			currentPacketCtx := ctx
-			errors.LogDebug(ctx, "send packet to ", destination, " with ", payload.Len(), " bytes")
-			if inbound != nil && inbound.Source.IsValid() {
-				currentPacketCtx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
-					From:   inbound.Source,
-					To:     destination,
-					Status: log.AccessAccepted,
-					Reason: "",
-					Email:  inbound.User.Email,
-				})
-			}
-
-			payload.UDP = &destination
-
-			if dest == nil {
-				dest = &destination
-			}
-
-			currentPacketCtx = protocol.ContextWithRequestHeader(currentPacketCtx, request)
-			udpServer.Dispatch(currentPacketCtx, *dest, payload)
-		}
-	}
 }
 
 func init() {

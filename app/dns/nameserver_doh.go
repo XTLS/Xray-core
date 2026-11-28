@@ -11,12 +11,10 @@ import (
 	"time"
 
 	utls "github.com/refraction-networking/utls"
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/crypto"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
 	"github.com/xtls/xray-core/common/net"
-	"github.com/xtls/xray-core/common/net/cnc"
 	"github.com/xtls/xray-core/common/protocol/dns"
 	"github.com/xtls/xray-core/common/session"
 	"github.com/xtls/xray-core/common/utils"
@@ -65,27 +63,14 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, dis
 						dnsCtx = session.ContextWithMitmAlpn11(dnsCtx, false) // for insurance
 						dnsCtx = session.ContextWithMitmServerName(dnsCtx, url.Hostname())
 					}
-					link, err := dispatcher.Dispatch(dnsCtx, dest)
-					select {
-					case <-ctx.Done():
-						return nil, ctx.Err()
-					default:
-					}
+					conn, err = routing.DialApplication(dnsCtx, dispatcher, dest)
 					if err != nil {
 						return nil, err
 					}
-					cc := common.ChainedClosable{}
-					if cw, ok := link.Writer.(common.Closable); ok {
-						cc = append(cc, cw)
+					if err := ctx.Err(); err != nil {
+						conn.Close()
+						return nil, err
 					}
-					if cr, ok := link.Reader.(common.Closable); ok {
-						cc = append(cc, cr)
-					}
-					conn = cnc.NewConnection(
-						cnc.ConnectionInputMulti(link.Writer),
-						cnc.ConnectionOutputMulti(link.Reader),
-						cnc.ConnectionOnClose(cc),
-					)
 				} else {
 					log.Record(&log.AccessMessage{
 						From:   "DNS",
@@ -101,6 +86,7 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, dis
 				if !h2c {
 					conn = utls.UClient(conn, &utls.Config{ServerName: url.Hostname()}, utls.HelloChrome_Auto)
 					if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
+						conn.Close()
 						return nil, err
 					}
 				}

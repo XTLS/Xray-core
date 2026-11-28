@@ -2,8 +2,10 @@ package shadowsocks_2022
 
 import (
 	"context"
+	"reflect"
+	"sync"
+	"time"
 
-	"github.com/xtls/xray-core/common"
 	"github.com/xtls/xray-core/common/buf"
 	"github.com/xtls/xray-core/common/errors"
 	"github.com/xtls/xray-core/common/log"
@@ -15,59 +17,105 @@ import (
 	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport"
 	"github.com/xtls/xray-core/transport/internet/stat"
+	"github.com/xtls/xray-core/transport/internet/udp"
 )
 
-func (s *ServerUDPSession) UpdateConn(conn stat.Connection) {
-	s.currentConn.Store(conn)
-	s.timer.Update()
+type udpSessionPeer struct {
+	conn stat.Connection
+}
+
+func (s *ServerUDPSession) bindPeer(conn stat.Connection) {
+	if peer := s.currentConn; peer != nil && reflect.ValueOf(conn).Kind() == reflect.Pointer && peer.conn == conn {
+		return
+	}
+	s.currentConn = &udpSessionPeer{conn: conn}
 }
 
 func (s *ServerUDPSession) WriteToClient(b []byte) error {
-	connVal := s.currentConn.Load()
-	if connVal == nil {
+	s.Lock()
+	peer := s.currentConn
+	s.Unlock()
+	if peer == nil {
 		return errors.New("client connection closed")
 	}
-	conn, ok := connVal.(stat.Connection)
-	if !ok || conn == nil {
-		return errors.New("client connection closed")
+	_, err := peer.conn.Write(b)
+	if err == nil {
+		return nil
 	}
-	_, err := conn.Write(b)
+
+	// This packet was offered to the old peer before reattachment. A later
+	// failure on that socket must neither replay it nor retire the new peer.
+	s.Lock()
+	if s.currentConn != peer {
+		s.Unlock()
+		return nil
+	}
+	s.closeLocked()
 	return err
 }
 
 func (s *ServerUDPSession) Close() {
-	if s.timer != nil {
-		s.timer.SetTimeout(0)
+	s.Lock()
+	s.closeLocked()
+}
+
+func (s *ServerUDPSession) expire(before int64) {
+	s.Lock()
+	if s.LastActive.Load() >= before {
+		s.Unlock()
+		return
 	}
-	if link := s.link.Load(); link != nil {
-		common.Interrupt(link.Reader)
-		common.Interrupt(link.Writer)
+	s.closeLocked()
+}
+
+// closeLocked retires only this session and releases the lock before waking I/O.
+func (s *ServerUDPSession) closeLocked() {
+	if s.closed {
+		s.Unlock()
+		return
+	}
+	s.closed = true
+	s.currentConn = nil
+	route := s.route
+	if s.manager != nil {
+		s.manager.sessions.CompareAndDelete(s.SessionID, s)
+	}
+	s.Unlock()
+
+	if route != nil {
+		route.cancel()
+		route.input.Close()
+		route.timer.SetTimeout(0)
 	}
 }
 
-func (s *ServerUDPSession) EnsureLink(
+func (s *ServerUDPSession) dispatchPacket(
 	ctx context.Context,
 	conn stat.Connection,
 	dest net.Destination,
 	dispatcher routing.Dispatcher,
 	policyManager policy.Manager,
-	responseEncoder func(dest net.Destination, payload []byte) ([]byte, error),
-) (*transport.Link, error) {
+	encode func(net.Destination, []byte) ([]byte, error),
+	packet *buf.Buffer,
+) {
 	s.Lock()
-	defer s.Unlock()
-
-	if link := s.link.Load(); link != nil {
-		s.UpdateConn(conn)
-		return link, nil
+	if s.closed {
+		s.Unlock()
+		packet.Release()
+		return
+	}
+	s.bindPeer(conn)
+	s.LastActive.Store(time.Now().Unix())
+	if route := s.route; route != nil {
+		route.timer.Update()
+		s.Unlock()
+		_ = route.input.Put(route.ctx, buf.MultiBuffer{packet})
+		return
 	}
 
-	s.currentConn.Store(conn)
-
-	// UDP Session might travel across multiple connections
-	// don't bind its lifetime to a parent context
-	sessCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	inbound := session.InboundFromContext(sessCtx)
-	if inbound != nil {
+	// An authenticated session keeps its route across physical UDP peers.
+	sessCtx, cancel := context.WithCancel(udp.WithPacketRouteState(context.WithoutCancel(ctx)))
+	if inbound := session.InboundFromContext(sessCtx); inbound != nil {
 		newInbound := *inbound
 		if s.User != nil {
 			newInbound.User = s.User
@@ -81,30 +129,80 @@ func (s *ServerUDPSession) EnsureLink(
 		level = s.User.Level
 	}
 	sessCtx = log.ContextWithAccessMessage(sessCtx, &log.AccessMessage{
-		From:   conn.RemoteAddr(),
-		To:     dest,
-		Status: log.AccessAccepted,
-		Email:  email,
+		From: conn.RemoteAddr(), To: dest, Status: log.AccessAccepted, Email: email,
 	})
-
-	link, err := dispatcher.Dispatch(sessCtx, dest)
-	if err != nil {
-		cancel()
-		return nil, err
+	input := udp.NewPacketInbox(policy.BufferPolicyFromContext(sessCtx).PerConnection)
+	input.AttachRoute(sessCtx)
+	route := &udpSessionRoute{
+		ctx: sessCtx, cancel: cancel, input: input,
+		timer:   signal.CancelAfterInactivity(sessCtx, cancel, policyManager.ForLevel(level).Timeouts.ConnectionIdle),
+		session: s, fallback: dest, encode: encode,
 	}
+	s.route = route
+	s.Unlock()
 
-	sessionPolicy := policyManager.ForLevel(level)
-	s.timer = signal.CancelAfterInactivity(sessCtx, func() {
-		if s.manager != nil {
-			s.manager.Delete(s.SessionID)
+	context.AfterFunc(sessCtx, input.Close)
+	// Seed the association before the routed reader is started. This prevents
+	// the first packet from lagging behind packets from a concurrent reattachment.
+	reader := udp.NewDispatchPacketReader(sessCtx, cancel, input, buf.MultiBuffer{packet})
+	go func() {
+		defer s.Close()
+		defer reader.Close()
+		if sessCtx.Err() == nil {
+			if err := dispatcher.DispatchLink(sessCtx, dest, &transport.Link{Reader: reader, Writer: route}); err != nil {
+				errors.LogInfoInner(sessCtx, err, "connection ends")
+			}
 		}
-		s.Close()
-		cancel()
-	}, sessionPolicy.Timeouts.ConnectionIdle)
-	s.link.Store(link)
+	}()
+}
 
-	go handleUDPResponse(s, link, dest, responseEncoder)
-	return link, nil
+type udpSessionRoute struct {
+	ctx      context.Context
+	cancel   context.CancelFunc
+	input    *udp.PacketInbox
+	timer    *signal.ActivityTimer
+	session  *ServerUDPSession
+	fallback net.Destination
+	encode   func(net.Destination, []byte) ([]byte, error)
+	writeMu  sync.Mutex
+}
+
+func (r *udpSessionRoute) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	defer buf.ReleaseMulti(mb)
+	r.writeMu.Lock()
+	defer r.writeMu.Unlock()
+	for _, packet := range mb {
+		if err := r.ctx.Err(); err != nil {
+			return err
+		}
+		r.timer.Update()
+		data := packet.Bytes()
+		if r.encode != nil {
+			dest := r.fallback
+			if packet.UDP != nil {
+				dest = *packet.UDP
+			}
+			var err error
+			data, err = r.encode(dest, data)
+			if err != nil {
+				continue
+			}
+			r.session.LastActive.Store(time.Now().Unix())
+		}
+		if err := r.session.WriteToClient(data); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *udpSessionRoute) Close() error {
+	r.cancel()
+	return nil
+}
+
+func (r *udpSessionRoute) Interrupt() {
+	_ = r.Close()
 }
 
 // ResetTCPConn sets SO_LINGER to 0 per SIP022 §3.1.4 to consistently send RST on close
@@ -113,42 +211,6 @@ func ResetTCPConn(conn net.Conn) {
 	rawConn, _, _ := proxy.UnwrapRawConn(conn)
 	if tcpConn, ok := rawConn.(*net.TCPConn); ok {
 		_ = tcpConn.SetLinger(0)
-	}
-}
-
-func handleUDPResponse(s *ServerUDPSession, link *transport.Link, fallbackDest net.Destination, encode func(dest net.Destination, payload []byte) ([]byte, error)) {
-	defer s.timer.SetTimeout(0)
-	for {
-		resMb, err := link.Reader.ReadMultiBuffer()
-		if err != nil {
-			return
-		}
-		s.timer.Update()
-		for i, rb := range resMb {
-			b := rb.Bytes()
-			if encode != nil {
-				replyDest := fallbackDest
-				if rb.UDP != nil {
-					replyDest = *rb.UDP
-				}
-				encPacket, err := encode(replyDest, b)
-				rb.Release()
-				if err != nil {
-					continue
-				}
-				if err := s.WriteToClient(encPacket); err != nil {
-					buf.ReleaseMulti(resMb[i+1:])
-					return
-				}
-			} else {
-				err := s.WriteToClient(b)
-				rb.Release()
-				if err != nil {
-					buf.ReleaseMulti(resMb[i+1:])
-					return
-				}
-			}
-		}
 	}
 }
 

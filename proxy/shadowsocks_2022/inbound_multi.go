@@ -21,6 +21,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -252,19 +253,11 @@ func (i *MultiUserInbound) processTCP(ctx context.Context, conn net.Conn, dispat
 
 	errors.LogInfo(ctx, "tunneling request to ", dest, " for user ", user.Email)
 
-	link, err := dispatcher.Dispatch(ctx, dest)
-	if err != nil {
-		return err
-	}
-
+	var early buf.MultiBuffer
 	if len(reqHeader.EarlyData) > 0 {
-		mb := buf.MergeBytes(nil, reqHeader.EarlyData)
-		if err := link.Writer.WriteMultiBuffer(mb); err != nil {
-			return err
-		}
+		early = buf.MergeBytes(nil, reqHeader.EarlyData)
 	}
-
-	return TransportTCP(ctx, i.policyManager.ForLevel(user.Level), reader, writer, link)
+	return proxy.DispatchInboundStream(ctx, conn, i.policyManager.ForLevel(user.Level), dispatcher, dest, reader, writer, early)
 }
 
 func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
@@ -289,24 +282,15 @@ func (i *MultiUserInbound) processUDP(ctx context.Context, conn stat.Connection,
 				continue
 			}
 
-			link := sessionItem.link.Load()
-			if link != nil {
-				sessionItem.UpdateConn(conn)
-			} else {
-				userPSK := user.Account.(*MemoryAccount).Key
-				var err error
-				link, err = sessionItem.EnsureLink(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(replyDest net.Destination, payload []byte) ([]byte, error) {
-					return i.udpCodec.EncodeServerPacket(decoded.SessionID, userPSK, replyDest, payload)
-				})
-				if err != nil {
-					continue
-				}
-			}
-
 			pBuf := buf.New()
 			pBuf.Write(decoded.Payload)
 			pBuf.UDP = &decoded.Destination
-			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{pBuf})
+			sessionItem.dispatchPacket(ctx, conn, decoded.Destination, dispatcher, i.policyManager, func(dest net.Destination, payload []byte) ([]byte, error) {
+				if err := sessionItem.EnsureServerState(i.method, user.Account.(*MemoryAccount).Key); err != nil {
+					return nil, err
+				}
+				return sessionItem.EncodeServerPacket(i.method, sessionItem.SessionID, dest, payload)
+			}, pBuf)
 		}
 	}
 }

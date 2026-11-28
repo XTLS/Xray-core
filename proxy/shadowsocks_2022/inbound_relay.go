@@ -18,6 +18,7 @@ import (
 	"github.com/xtls/xray-core/core"
 	"github.com/xtls/xray-core/features/policy"
 	"github.com/xtls/xray-core/features/routing"
+	"github.com/xtls/xray-core/proxy"
 	"github.com/xtls/xray-core/transport/internet/stat"
 )
 
@@ -182,12 +183,6 @@ func (i *RelayInbound) processTCP(ctx context.Context, conn net.Conn, dispatcher
 
 	errors.LogInfo(ctx, "relaying connection to ", targetDest.destination)
 
-	link, err := dispatcher.Dispatch(ctx, targetDest.destination)
-	if err != nil {
-		requestHeader.Release()
-		return err
-	}
-
 	// Unwrap outer EIH: send client salt and remaining handshake bytes to next hop
 	// in a single write call, satisfying downstream server's single-read handshake expectation (SIP022 §3.1.3).
 	var saltCopy [32]byte
@@ -195,11 +190,7 @@ func (i *RelayInbound) processTCP(ctx context.Context, conn net.Conn, dispatcher
 	copy(requestHeader.Bytes()[AESBlockSize:AESBlockSize+i.method.KeySaltLength], saltCopy[:i.method.KeySaltLength])
 	requestHeader.Advance(AESBlockSize)
 
-	if err := link.Writer.WriteMultiBuffer(buf.MultiBuffer{requestHeader}); err != nil {
-		return err
-	}
-
-	return TransportTCP(ctx, i.policyManager.ForLevel(targetDest.level), buf.NewReader(conn), buf.NewWriter(conn), link)
+	return proxy.DispatchInboundStream(ctx, conn, i.policyManager.ForLevel(targetDest.level), dispatcher, targetDest.destination, buf.NewReader(conn), buf.NewWriter(conn), buf.MultiBuffer{requestHeader})
 }
 
 func (i *RelayInbound) processUDP(ctx context.Context, conn stat.Connection, dispatcher routing.Dispatcher) error {
@@ -251,19 +242,7 @@ func (i *RelayInbound) processUDP(ctx context.Context, conn stat.Connection, dis
 				}
 			}
 			sessionItem.Unlock()
-			link := sessionItem.link.Load()
-			if link != nil {
-				sessionItem.UpdateConn(conn)
-			} else {
-				var err error
-				link, err = sessionItem.EnsureLink(ctx, conn, dest, dispatcher, i.policyManager, nil)
-				if err != nil {
-					b.Release()
-					continue
-				}
-			}
-
-			_ = link.Writer.WriteMultiBuffer(buf.MultiBuffer{b})
+			sessionItem.dispatchPacket(ctx, conn, dest, dispatcher, i.policyManager, nil, b)
 		}
 	}
 }
