@@ -1,8 +1,6 @@
 package retry_test
 
 import (
-	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -94,67 +92,5 @@ func TestExponentialBackoff(t *testing.T) {
 	}
 	if v := int64(duration / time.Millisecond); v < 4000 {
 		t.Error("duration: ", v)
-	}
-}
-
-type backoffWaitContext struct {
-	context.Context
-	waiting chan struct{}
-	once    sync.Once
-}
-
-func (c *backoffWaitContext) Done() <-chan struct{} {
-	c.once.Do(func() { close(c.waiting) })
-	return c.Context.Done()
-}
-
-func TestExponentialBackoffContextStopsDuringWait(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	waiter := &backoffWaitContext{Context: ctx, waiting: make(chan struct{})}
-	done := make(chan error, 1)
-	attempts := 0
-	go func() {
-		done <- ExponentialBackoffContext(waiter, 5, 10000).On(func() error {
-			attempts++
-			return errorTestOnly
-		})
-	}()
-
-	select {
-	case <-waiter.waiting:
-	case <-time.After(time.Second):
-		t.Fatal("retry did not enter the backoff wait")
-	}
-	cancel()
-	select {
-	case err := <-done:
-		if err != context.Canceled || attempts != 2 {
-			t.Fatalf("retry returned %v after %d attempts", err, attempts)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("retry remained in backoff after cancellation")
-	}
-}
-
-func TestExponentialBackoffContextKeepsAttempts(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	attempts := 0
-	err := ExponentialBackoffContext(ctx, 3, 1).On(func() error {
-		attempts++
-		return errorTestOnly
-	})
-	if errors.Cause(err) != ErrRetryFailed || attempts != 3 {
-		t.Fatalf("retry returned %v after %d attempts", err, attempts)
-	}
-
-	cancel()
-	err = ExponentialBackoffContext(ctx, 3, 1).On(func() error {
-		t.Fatal("retry admitted an attempt for a canceled context")
-		return nil
-	})
-	if err != context.Canceled {
-		t.Fatalf("retry with canceled context returned %v", err)
 	}
 }

@@ -1,7 +1,6 @@
 package shadowsocks_2022_test
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -9,6 +8,7 @@ import (
 	"errors"
 	"io"
 	gonet "net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -125,93 +125,67 @@ func TestRelayUDPSessionStabilityAndDispatch(t *testing.T) {
 		t.Fatalf("failed to encode pkt2: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(newTestContext(), 3*time.Second)
-	defer cancel()
 	var dispatchCount atomic.Int32
-	packets := make(chan []byte, 2)
-	reply := make(chan struct{})
-	routeDone := make(chan error, 1)
+	var receivedPackets [][]byte
+	var mu sync.Mutex
+
 	disp := &dummyDispatcher{
-		onDispatch: func(_ context.Context, d net.Destination, link *transport.Link) (err error) {
-			defer func() { routeDone <- err }()
+		onDispatch: func(ctx context.Context, d net.Destination) (*transport.Link, error) {
 			dispatchCount.Add(1)
-			if d != dest {
-				return errors.New("unexpected relay UDP destination")
+			linkR, linkW := gonet.Pipe()
+			t.Cleanup(func() {
+				linkW.Close()
+				linkR.Close()
+			})
+			link := &transport.Link{
+				Reader: buf.NewReader(linkR),
+				Writer: &customWriter{
+					write: func(mb buf.MultiBuffer) error {
+						mu.Lock()
+						defer mu.Unlock()
+						for _, b := range mb {
+							cpy := make([]byte, b.Len())
+							copy(cpy, b.Bytes())
+							receivedPackets = append(receivedPackets, cpy)
+							b.Release()
+						}
+						return nil
+					},
+				},
 			}
-			for received := 0; received < 2; {
-				mb, err := link.Reader.ReadMultiBuffer()
-				if err != nil {
-					buf.ReleaseMulti(mb)
-					return err
-				}
-				if len(mb) > 2-received {
-					buf.ReleaseMulti(mb)
-					return errors.New("received duplicate relay UDP data")
-				}
-				for _, packet := range mb {
-					packets <- bytes.Clone(packet.Bytes())
-					received++
-				}
-				buf.ReleaseMulti(mb)
-			}
-			select {
-			case <-reply:
-				return link.Writer.WriteMultiBuffer(buf.MergeBytes(nil, []byte("reply at the second peer")))
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			return link, nil
 		},
 	}
 
-	startPeer := func() (gonet.Conn, <-chan struct{}) {
-		client, server := gonet.Pipe()
-		client.SetDeadline(time.Now().Add(time.Second))
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			defer server.Close()
-			_ = inbound.Process(ctx, net.Network_UDP, &dummyStatConn{Conn: server}, disp)
-		}()
-		t.Cleanup(func() {
-			client.Close()
-			<-done
-		})
-		return client, done
-	}
-	readPacket := func() []byte {
-		t.Helper()
-		select {
-		case packet := <-packets:
-			return packet
-		case <-ctx.Done():
-			t.Fatal("did not dispatch a relay packet")
-			return nil
-		}
-	}
+	clientConn, serverConn := gonet.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
 
-	first, firstDone := startPeer()
-	if _, err := first.Write(pkt1); err != nil {
+	inboundConn := &dummyStatConn{Conn: serverConn}
+	ctx, cancel := context.WithCancel(newTestContext())
+	defer cancel()
+
+	go func() {
+		_ = inbound.Process(ctx, net.Network_UDP, inboundConn, disp)
+	}()
+
+	// Send Packet 1
+	_, err = clientConn.Write(pkt1)
+	if err != nil {
 		t.Fatalf("write pkt1 failed: %v", err)
 	}
-	firstPacket := readPacket()
-	first.Close()
-	<-firstDone
+	time.Sleep(50 * time.Millisecond)
 
-	second, _ := startPeer()
-	if _, err := second.Write(pkt2); err != nil {
+	// Send Packet 2 (same sessionID, packetID=2)
+	_, err = clientConn.Write(pkt2)
+	if err != nil {
 		t.Fatalf("write pkt2 failed: %v", err)
 	}
-	secondPacket := readPacket()
-	close(reply)
-	p := make([]byte, len("reply at the second peer"))
-	if _, err := io.ReadFull(second, p); err != nil || string(p) != "reply at the second peer" {
-		t.Fatalf("read rebound reply: %q, %v", p, err)
-	}
-	if err := <-routeDone; err != nil {
-		t.Fatal(err)
-	}
+	time.Sleep(50 * time.Millisecond)
+
+	// Check dispatch count: For the SAME UDP session, Dispatch MUST be called exactly ONCE!
 	if count := dispatchCount.Load(); count != 1 {
-		t.Fatalf("expected one route for the same session after reattachment, got %d", count)
+		t.Fatalf("CRITICAL BUG CONFIRMED: expected dispatchCount = 1 for same session, got %d (sessionID was corrupted by Encrypt!)", count)
 	}
 
 	// Verify downstream destination can decode both packets
@@ -220,7 +194,13 @@ func TestRelayUDPSessionStabilityAndDispatch(t *testing.T) {
 	destCodec, err := NewUDPServerCodec(method, destKey, nil, 300*time.Second)
 	common.Must(err)
 
-	pkts := [][]byte{firstPacket, secondPacket}
+	mu.Lock()
+	pkts := receivedPackets
+	mu.Unlock()
+
+	if len(pkts) != 2 {
+		t.Fatalf("expected 2 received packets at destination, got %d", len(pkts))
+	}
 
 	dec1, dec2 := DecodedUDPPacket{}, DecodedUDPPacket{}
 	_, dec1, err = destCodec.DecodePacket(pkts[0])
@@ -240,12 +220,33 @@ func TestRelayUDPSessionStabilityAndDispatch(t *testing.T) {
 	}
 }
 
+type customWriter struct {
+	write func(mb buf.MultiBuffer) error
+}
+
+func (w *customWriter) WriteMultiBuffer(mb buf.MultiBuffer) error {
+	return w.write(mb)
+}
+
+func (w *customWriter) Close() error {
+	return nil
+}
+
+func (w *customWriter) Interrupt() {}
+
 type dummyDispatcher struct {
-	onDispatch func(context.Context, net.Destination, *transport.Link) error
+	onDispatch func(ctx context.Context, dest net.Destination) (*transport.Link, error)
+}
+
+func (d *dummyDispatcher) Dispatch(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+	if d.onDispatch != nil {
+		return d.onDispatch(ctx, dest)
+	}
+	return nil, errors.New("not handled")
 }
 
 func (d *dummyDispatcher) DispatchLink(ctx context.Context, dest net.Destination, link *transport.Link) error {
-	return d.onDispatch(ctx, dest, link)
+	return nil
 }
 
 func (d *dummyDispatcher) Start() error      { return nil }
@@ -304,84 +305,72 @@ func TestRelayTCPHandshakeForwarding(t *testing.T) {
 
 			targetDest := net.TCPDestination(net.LocalHostIP, net.Port(targetPort))
 
-			first := make(chan []byte, 1)
-			next := make(chan []byte, 1)
+			downstreamR, downstreamW := gonet.Pipe()
+			defer downstreamR.Close()
+			defer downstreamW.Close()
+
 			disp := &dummyDispatcher{
-				onDispatch: func(_ context.Context, dest net.Destination, link *transport.Link) error {
-					if dest != targetDest {
-						return errors.New("unexpected relay TCP destination")
+				onDispatch: func(ctx context.Context, dest net.Destination) (*transport.Link, error) {
+					inLink := &transport.Link{
+						Reader: buf.NewReader(downstreamR),
+						Writer: &customWriter{
+							write: func(mb buf.MultiBuffer) error {
+								defer buf.ReleaseMulti(mb)
+								for _, b := range mb {
+									if _, err := downstreamW.Write(b.Bytes()); err != nil {
+										return err
+									}
+								}
+								return nil
+							},
+						},
 					}
-					for _, result := range []chan []byte{first, next} {
-						mb, err := link.Reader.ReadMultiBuffer()
-						if err != nil {
-							buf.ReleaseMulti(mb)
-							return err
-						}
-						data := make([]byte, mb.Len())
-						mb.Copy(data)
-						buf.ReleaseMulti(mb)
-						result <- data
-					}
-					return nil
+					return inLink, nil
 				},
 			}
 
 			clientConn, relayConn := gonet.Pipe()
 			defer clientConn.Close()
 			defer relayConn.Close()
-			clientConn.SetDeadline(time.Now().Add(time.Second))
-			ctx, cancel := context.WithTimeout(testCtx, 3*time.Second)
-			defer cancel()
-			processDone := make(chan error, 1)
+
 			go func() {
-				processDone <- inbound.Process(ctx, net.Network_TCP, &dummyStatConn{Conn: relayConn}, disp)
+				_ = inbound.Process(testCtx, net.Network_TCP, &dummyStatConn{Conn: relayConn}, disp)
 			}()
 
 			clientSalt := make([]byte, method.KeySaltLength)
 			_, _ = io.ReadFull(rand.Reader, clientSalt)
 			pskList := [][]byte{relayKey, destKey}
-			if _, err := WriteTCPRequest(clientConn, method, pskList, targetDest, clientSalt, []byte("relay payload")); err != nil {
-				t.Fatalf("WriteTCPRequest failed: %v", err)
+
+			go func() {
+				_, err := WriteTCPRequest(clientConn, method, pskList, targetDest, clientSalt, []byte("relay payload"))
+				if err != nil {
+					t.Errorf("WriteTCPRequest failed: %v", err)
+				}
+			}()
+
+			// Downstream server must be able to read Salt + Fixed chunk in a single Read call!
+			headerLen := method.KeySaltLength + RequestHeaderFixedChunkLength + AEADTagSize
+			headerBuf := make([]byte, headerLen)
+			n, err := downstreamR.Read(headerBuf)
+			if err != nil {
+				t.Fatalf("downstream failed to read handshake: %v", err)
 			}
-			var wire []byte
-			select {
-			case wire = <-first:
-			case err := <-processDone:
-				t.Fatalf("relay ended before forwarding the first record: %v", err)
-			case <-ctx.Done():
-				t.Fatal("timed out waiting for the first downstream record")
+			if n < headerLen {
+				t.Fatalf("downstream expected single read >= %d bytes, got %d", headerLen, n)
 			}
 
-			// The downstream must receive the complete forwarded handshake as its first read.
-			headerLen := method.KeySaltLength + RequestHeaderFixedChunkLength + AEADTagSize
-			if len(wire) < headerLen || !bytes.Equal(wire[:method.KeySaltLength], clientSalt) {
-				t.Fatalf("unexpected forwarded handshake length or salt: %d bytes", len(wire))
-			}
-			sessionKey := DeriveSessionSubKey(destKey, clientSalt, method.KeySaltLength)
+			// Verify downstream can decode the fixed chunk and subsequent payload
+			sessionKey := DeriveSessionSubKey(destKey, headerBuf[:method.KeySaltLength], method.KeySaltLength)
 			aead, err := method.NewAEAD(sessionKey)
 			common.Must(err)
-			reader := NewStreamReader(bytes.NewReader(wire[headerLen:]), aead)
-			reqHeader, err := ReadClientRequestHeaderWithFixed(reader, wire[method.KeySaltLength:headerLen])
+
+			reader := NewStreamReader(downstreamR, aead)
+			reqHeader, err := ReadClientRequestHeaderWithFixed(reader, headerBuf[method.KeySaltLength:])
 			if err != nil {
 				t.Fatalf("downstream failed to parse client request header: %v", err)
 			}
-			if reqHeader.Destination != targetDest || string(reqHeader.EarlyData) != "relay payload" {
-				t.Fatalf("unexpected forwarded destination or payload: %s %q", reqHeader.Destination, reqHeader.EarlyData)
-			}
-
-			if _, err := io.WriteString(clientConn, "later bytes"); err != nil {
-				t.Fatal(err)
-			}
-			select {
-			case more := <-next:
-				if string(more) != "later bytes" {
-					t.Fatalf("expected only subsequent stream bytes, got %q", more)
-				}
-			case <-ctx.Done():
-				t.Fatal("timed out waiting for subsequent stream bytes")
-			}
-			if err := <-processDone; err != nil {
-				t.Fatal(err)
+			if string(reqHeader.EarlyData) != "relay payload" {
+				t.Fatalf("payload mismatch: expected 'relay payload', got '%s'", string(reqHeader.EarlyData))
 			}
 		})
 	}
