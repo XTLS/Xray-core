@@ -9,10 +9,22 @@ import (
 	"time"
 )
 
+// TestHandshakeWithBidirectionalPadding performs the whole login for the oldest
+// and the newest row: 1.21.1 has no Login Finished session id, 26.3 does, so the
+// test covers both packet shapes end to end.
 func TestHandshakeWithBidirectionalPadding(t *testing.T) {
+	for _, version := range []protocolVersion{protocolVersions[0], latestProtocolVersion} {
+		t.Run(version.name, func(t *testing.T) {
+			testHandshakeVersions(t, version)
+		})
+	}
+}
+
+func testHandshakeVersions(t *testing.T, version protocolVersion) {
+	t.Helper()
 	t.Run("pipe", func(t *testing.T) {
 		client, server := net.Pipe()
-		testHandshakeWithPadding(t, client, server, 64*1024)
+		testHandshakeWithPadding(t, version, client, server, 64*1024)
 	})
 	t.Run("tcp", func(t *testing.T) {
 		listener, err := net.ListenTCP("tcp", &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1)})
@@ -38,11 +50,11 @@ func TestHandshakeWithBidirectionalPadding(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		testHandshakeWithPadding(t, client, server, maxPaddingTurnLength)
+		testHandshakeWithPadding(t, version, client, server, maxPaddingTurnLength)
 	})
 }
 
-func testHandshakeWithPadding(t *testing.T, clientRaw, serverRaw net.Conn, length int64) {
+func testHandshakeWithPadding(t *testing.T, version protocolVersion, clientRaw, serverRaw net.Conn, length int64) {
 	t.Helper()
 	defer clientRaw.Close()
 	defer serverRaw.Close()
@@ -72,12 +84,12 @@ func testHandshakeWithPadding(t *testing.T, clientRaw, serverRaw net.Conn, lengt
 	if err != nil {
 		t.Fatal(err)
 	}
-	client, err := newClientConn(clientRaw, profiles, "password", publicKey, "localhost", paddingSchedule, nil)
+	client, err := newClientConn(clientRaw, version, profiles, "password", publicKey, "localhost", paddingSchedule, nil, DefaultDataChannel, DefaultPaddingChannel)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer client.Close()
-	server, err := wrapConnServer(serverRaw, profiles, "password", x509.MarshalPKCS1PrivateKey(key), publicKey, paddingSchedule, nil)
+	server, err := wrapConnServer(serverRaw, profiles, "password", x509.MarshalPKCS1PrivateKey(key), publicKey, paddingSchedule, nil, DefaultDataChannel, DefaultPaddingChannel)
 	if err != nil {
 		t.Fatal(err)
 	}

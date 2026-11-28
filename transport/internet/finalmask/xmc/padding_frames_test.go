@@ -12,8 +12,8 @@ import (
 
 func TestPaddingFrameDataLengthRoundTrip(t *testing.T) {
 	for dataLength := 0; dataLength <= maxPaddingFrameDataLength; dataLength++ {
-		frameLength := paddingFrameLength(dataLength)
-		got, ok := paddingFrameDataLength(frameLength)
+		frameLength := defaultPaddingFraming.frameLength(dataLength)
+		got, ok := defaultPaddingFraming.frameDataLength(frameLength)
 		if !ok || got != dataLength {
 			t.Fatalf("data length %d -> frame %d -> data %d (ok=%v)", dataLength, frameLength, got, ok)
 		}
@@ -21,18 +21,18 @@ func TestPaddingFrameDataLengthRoundTrip(t *testing.T) {
 }
 
 func TestPaddingFramePlanTotals(t *testing.T) {
-	lengths := []int{paddingFrameOverhead, paddingFrameOverhead + 1, 128, 129, 130, 131, 140, 1024, 48 * 1024, maxPaddingFrameLength - 1, maxPaddingFrameLength, maxPaddingFrameLength + 1, 3 * maxPaddingFrameLength, 1024 * 1024}
+	lengths := []int{defaultPaddingFraming.overhead(), defaultPaddingFraming.overhead() + 1, 128, 129, 130, 131, 140, 1024, 48 * 1024, defaultPaddingFraming.maxFrameLength() - 1, defaultPaddingFraming.maxFrameLength(), defaultPaddingFraming.maxFrameLength() + 1, 3 * defaultPaddingFraming.maxFrameLength(), 1024 * 1024}
 	for _, length := range lengths {
-		plan, err := paddingFramePlan(length)
+		plan, err := defaultPaddingFraming.plan(length)
 		if err != nil {
 			t.Fatalf("plan %d: %v", length, err)
 		}
 		total := 0
 		for _, frameLength := range plan {
-			if _, ok := paddingFrameDataLength(frameLength); !ok {
+			if _, ok := defaultPaddingFraming.frameDataLength(frameLength); !ok {
 				t.Fatalf("plan %d contains unreachable frame %d", length, frameLength)
 			}
-			if frameLength > maxPaddingFrameLength {
+			if frameLength > defaultPaddingFraming.maxFrameLength() {
 				t.Fatalf("plan %d contains oversized frame %d", length, frameLength)
 			}
 			total += frameLength
@@ -44,11 +44,11 @@ func TestPaddingFramePlanTotals(t *testing.T) {
 }
 
 func TestPaddingFramePlanRoundsUpShortTurn(t *testing.T) {
-	plan, err := paddingFramePlan(2)
+	plan, err := defaultPaddingFraming.plan(2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan) != 1 || plan[0] != paddingFrameOverhead {
+	if len(plan) != 1 || plan[0] != defaultPaddingFraming.overhead() {
 		t.Fatalf("short turn plan = %v", plan)
 	}
 }
@@ -57,12 +57,12 @@ func TestWritePaddingTurnFramesIsMinecraftTraffic(t *testing.T) {
 	turns := []paddingTurn{
 		{direction: paddingClientToServer, minLength: 44, maxLength: 44},
 		{direction: paddingClientToServer, minLength: 2, maxLength: 2},
-		{direction: paddingClientToServer, minLength: maxPaddingFrameLength, maxLength: maxPaddingFrameLength},
-		{direction: paddingClientToServer, minLength: 3*maxPaddingFrameLength + 7, maxLength: 3*maxPaddingFrameLength + 7},
+		{direction: paddingClientToServer, minLength: defaultPaddingFraming.maxFrameLength(), maxLength: defaultPaddingFraming.maxFrameLength()},
+		{direction: paddingClientToServer, minLength: 3*defaultPaddingFraming.maxFrameLength() + 7, maxLength: 3*defaultPaddingFraming.maxFrameLength() + 7},
 	}
 	for i, turn := range turns {
 		var buffer bytes.Buffer
-		written, err := writePaddingTurnFrames(&buffer, turn, 0, noPaddingPause, configurationServerboundCustomPayload)
+		written, err := writePaddingTurnFrames(&buffer, turn, 0, noPaddingPause, configurationPacketIDs121.serverboundCustomPayload, defaultPaddingFraming)
 		if err != nil {
 			t.Fatalf("turn %d: %v", i, err)
 		}
@@ -81,10 +81,10 @@ func TestWritePaddingTurnFramesIsMinecraftTraffic(t *testing.T) {
 			if err != nil {
 				t.Fatalf("turn %d frame %d is not a valid packet: %v", i, frames, err)
 			}
-			if packet.packetID != configurationServerboundCustomPayload {
+			if packet.packetID != configurationPacketIDs121.serverboundCustomPayload {
 				t.Fatalf("turn %d frame %d has packet id %d", i, frames, packet.packetID)
 			}
-			_, ok, err := parseCustomPayload(packet)
+			_, ok, err := parseCustomPayload(packet, DefaultDataChannel)
 			if err != nil {
 				t.Fatalf("turn %d frame %d: %v", i, frames, err)
 			}
@@ -107,7 +107,7 @@ func TestRunPaddingScheduleLeavesPeerTurnsAlone(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runPaddingSchedule(&out, true, 2, schedule, noPaddingPause); err != nil {
+	if err := runPaddingSchedule(&out, true, 2, schedule, noPaddingPause, DefaultPaddingChannel, configurationPacketIDs121); err != nil {
 		t.Fatal(err)
 	}
 
@@ -119,7 +119,7 @@ func TestRunPaddingScheduleLeavesPeerTurnsAlone(t *testing.T) {
 		if err != nil {
 			t.Fatalf("padding stream is not a valid packet stream: %v", err)
 		}
-		if packet.packetID != configurationServerboundCustomPayload {
+		if packet.packetID != configurationPacketIDs121.serverboundCustomPayload {
 			t.Fatalf("unexpected packet id %d in padding stream", packet.packetID)
 		}
 		total += before - reader.Len()
@@ -135,7 +135,7 @@ func TestRunPaddingScheduleRejectsInvalidSchedule(t *testing.T) {
 	schedule := []paddingTurn{
 		{direction: paddingServerToClient, minLength: 10, maxLength: 10},
 	}
-	if err := runPaddingSchedule(&bytes.Buffer{}, true, 2, schedule, noPaddingPause); err == nil {
+	if err := runPaddingSchedule(&bytes.Buffer{}, true, 2, schedule, noPaddingPause, DefaultPaddingChannel, configurationPacketIDs121); err == nil {
 		t.Fatal("expected an error for a prefixed server-to-client first turn")
 	}
 }
@@ -144,7 +144,7 @@ func noPaddingPause(time.Duration) error { return nil }
 
 func TestRunPaddingScheduleWithoutTurns(t *testing.T) {
 	var out bytes.Buffer
-	if err := runPaddingSchedule(&out, true, 2, nil, noPaddingPause); err != nil {
+	if err := runPaddingSchedule(&out, true, 2, nil, noPaddingPause, DefaultPaddingChannel, configurationPacketIDs121); err != nil {
 		t.Fatal(err)
 	}
 	if out.Len() != 0 {
@@ -167,7 +167,7 @@ func TestRunPaddingScheduleStopsWhenClosed(t *testing.T) {
 		pauses++
 		return net.ErrClosed
 	}
-	err := runPaddingSchedule(&out, true, 2, schedule, sleep)
+	err := runPaddingSchedule(&out, true, 2, schedule, sleep, DefaultPaddingChannel, configurationPacketIDs121)
 	if !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("expected net.ErrClosed, got %v", err)
 	}
@@ -208,7 +208,7 @@ func TestPaddingDelayLeadsIntoTheTurn(t *testing.T) {
 			}
 			return nil
 		}
-		if err := runPaddingSchedule(recordingWriter{events: &events}, isClient, 2, schedule, sleep); err != nil {
+		if err := runPaddingSchedule(recordingWriter{events: &events}, isClient, 2, schedule, sleep, DefaultPaddingChannel, configurationPacketIDs121); err != nil {
 			t.Fatal(err)
 		}
 		return events
@@ -246,7 +246,7 @@ func TestPaddingDelayRangeJittersOnlyTheSender(t *testing.T) {
 			}
 			return nil
 		}
-		if err := runPaddingSchedule(io.Discard, isClient, 2, schedule, sleep); err != nil {
+		if err := runPaddingSchedule(io.Discard, isClient, 2, schedule, sleep, DefaultPaddingChannel, configurationPacketIDs121); err != nil {
 			t.Fatal(err)
 		}
 		return pauses

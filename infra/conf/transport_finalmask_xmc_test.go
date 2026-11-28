@@ -242,3 +242,93 @@ func TestXMCBuildDisablesPadding(t *testing.T) {
 		t.Fatalf("expected an exclusive padding error, got %v", err)
 	}
 }
+
+func xmcTestProfiles() []XMCProfile {
+	return []XMCProfile{{
+		Username:          "TestUser",
+		UUID:              "00112233-4455-6677-8899-aabbccddeeff",
+		TexturesValue:     "textures-value",
+		TexturesSignature: "textures-signature",
+	}}
+}
+
+func TestXMCBuildChannels(t *testing.T) {
+	built, err := (&XMC{
+		Password:       "test-password",
+		Profiles:       xmcTestProfiles(),
+		DataChannel:    "myxmc:stream",
+		PaddingChannel: "myxmc:noise",
+	}).Build()
+	if err != nil {
+		t.Fatalf("build XMC config: %v", err)
+	}
+	config := built.(*xmc.Config)
+	if config.DataChannel != "myxmc:stream" || config.PaddingChannel != "myxmc:noise" {
+		t.Fatalf("channels = %q, %q", config.DataChannel, config.PaddingChannel)
+	}
+}
+
+func TestXMCBuildChannelDefaults(t *testing.T) {
+	built, err := (&XMC{Password: "test-password", Profiles: xmcTestProfiles()}).Build()
+	if err != nil {
+		t.Fatalf("build XMC config: %v", err)
+	}
+	config := built.(*xmc.Config)
+	if config.DataChannel != xmc.DefaultDataChannel || config.PaddingChannel != xmc.DefaultPaddingChannel {
+		t.Fatalf("default channels = %q, %q", config.DataChannel, config.PaddingChannel)
+	}
+}
+
+func TestXMCBuildRejectsChannels(t *testing.T) {
+	cases := map[string]struct {
+		data    string
+		padding string
+	}{
+		"vanilla_namespace": {"minecraft:data", ""},
+		"no_colon":          {"xmcdata", ""},
+		"empty_path":        {"xmc:", ""},
+		"uppercase":         {"Xmc:data", ""},
+		"same_channel":      {"xmc:same", "xmc:same"},
+		"too_long":          {strings.Repeat("a", 129) + ":b", ""},
+	}
+	for name, test := range cases {
+		_, err := (&XMC{
+			Password:       "test-password",
+			Profiles:       xmcTestProfiles(),
+			DataChannel:    test.data,
+			PaddingChannel: test.padding,
+		}).Build()
+		if err == nil || !strings.Contains(err.Error(), "channel") {
+			t.Fatalf("%s: expected a channel error, got %v", name, err)
+		}
+	}
+}
+
+func TestXMCBuildProtocolVersion(t *testing.T) {
+	profile := XMCProfile{
+		Username:          "TestUser",
+		UUID:              "00112233-4455-6677-8899-aabbccddeeff",
+		TexturesValue:     "textures-value",
+		TexturesSignature: "textures-signature",
+	}
+
+	built, err := (&XMC{Password: "test-password", Profiles: []XMCProfile{profile}}).Build()
+	if err != nil {
+		t.Fatalf("build default XMC config: %v", err)
+	}
+	if got := built.(*xmc.Config).ProtocolVersion; got != 0 {
+		t.Fatalf("default protocol version = %d, want 0 (newest)", got)
+	}
+
+	built, err = (&XMC{Password: "test-password", Profiles: []XMCProfile{profile}, ProtocolVersion: 775}).Build()
+	if err != nil {
+		t.Fatalf("build XMC config with a protocol version: %v", err)
+	}
+	if got := built.(*xmc.Config).ProtocolVersion; got != 775 {
+		t.Fatalf("protocol version = %d, want 775", got)
+	}
+
+	if _, err = (&XMC{Password: "test-password", Profiles: []XMCProfile{profile}, ProtocolVersion: 778}).Build(); err == nil || !strings.Contains(err.Error(), "unsupported protocol version 778") {
+		t.Fatalf("expected an unknown protocol version to be rejected, got %v", err)
+	}
+}

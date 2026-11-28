@@ -24,12 +24,22 @@ const (
 	// still missing, instead of making every login wait a fixed interval.
 	yggdrasilVerifyFirstPoll = 10 * time.Millisecond
 	yggdrasilVerifyMaxPoll   = 200 * time.Millisecond
+	// maxPlayerNameLength is vanilla's Login Start limit (readUtf(16)).
+	maxPlayerNameLength = 16
 )
 
 var errYggdrasilNotJoined = errors.New("player did not join the minecraft session")
 
-// Response by vanilla 26.1.2 server.
-var statusResponse = `{"description":"A Minecraft Server","players":{"max":20,"online":0},"version":{"name":"26.1.2","protocol":775},"enforcesSecureChat":true}`
+// serverSessionID is the connection session id that Login Finished carries from
+// 26.2 on. Vanilla generates it once per server rather than per connection, so
+// one value for the process has the same shape.
+var serverSessionID = sync.OnceValues(func() (UUID, error) {
+	var sessionID UUID
+	if _, err := rand.Read(sessionID[:]); err != nil {
+		return UUID{}, fmt.Errorf("generate session id: %w", err)
+	}
+	return sessionID, nil
+})
 
 type serverState int
 
@@ -45,6 +55,10 @@ type serverConn struct {
 
 	state serverState
 
+	// protocol is the row selected from the client's handshake. Both ends have
+	// to use the same ids, and the client is the side that names the version.
+	protocol protocolVersion
+
 	handshakeLock   sync.Mutex
 	lifecycleMu     sync.Mutex
 	closed          bool
@@ -52,9 +66,11 @@ type serverConn struct {
 	password        string
 	rsaPrivateKey   *rsa.PrivateKey
 	rsaPublicKey    []byte
+	dataChannel     string
+	paddingChannel  string
 	yggdrasil       *yggdrasilVerifier
 	paddingSchedule []paddingTurn
-	packet          *packetStream
+	packet          *tickStream
 	deadlines       *connectionDeadlines
 
 	done      chan struct{}
@@ -75,10 +91,10 @@ func (c *serverConn) handshake() error {
 	defer func() { _ = c.deadlines.endHandshake() }()
 
 	var (
-		protocolVersion Varint
-		serverAddress   String
-		serverPort      UnsignedShort
-		nextState       Varint
+		protocolNumber Varint
+		serverAddress  String
+		serverPort     UnsignedShort
+		nextState      Varint
 	)
 
 	// handshake packet
@@ -88,11 +104,11 @@ func (c *serverConn) handshake() error {
 		return fmt.Errorf("read handshake packet: %w", err)
 	}
 
-	if pkt.packetID != 0 {
+	if pkt.packetID != handshakeServerboundIntention {
 		return fmt.Errorf("bad handshake packet id")
 	}
 
-	err = pkt.readFields(&protocolVersion, &serverAddress, &serverPort, &nextState)
+	err = pkt.readFields(&protocolNumber, &serverAddress, &serverPort, &nextState)
 	if err != nil {
 		return fmt.Errorf("read handshake packet: %w", err)
 	}
@@ -110,14 +126,14 @@ func (c *serverConn) handshake() error {
 			}
 
 			switch pkt.packetID {
-			case 0: // Status Request
+			case statusServerboundRequest: // Status Request
 
-				err = writePacket(c.writer, 0, new(String(statusResponse)))
+				err = writePacket(c.writer, statusClientboundResponse, new(String(statusResponse(latestProtocolVersion))))
 				if err != nil {
 					return fmt.Errorf("write status response: %w", err)
 				}
 
-			case 1: // Ping
+			case statusServerboundPing: // Ping
 
 				var payload Long
 				err = pkt.readFields(&payload)
@@ -125,7 +141,7 @@ func (c *serverConn) handshake() error {
 					return fmt.Errorf("read ping packet: %w", err)
 				}
 
-				err = writePacket(c.writer, 1, &payload)
+				err = writePacket(c.writer, statusClientboundPong, &payload)
 				if err != nil {
 					return fmt.Errorf("write ping response: %w", err)
 				}
@@ -136,172 +152,243 @@ func (c *serverConn) handshake() error {
 
 		return fmt.Errorf("ping")
 
-	case 2:
+	case 2, 3:
 
-		// Login
-
-		// login start
-
-		pkt, err := readPacket(c.reader)
-		if err != nil {
-			return fmt.Errorf("read login start packet: %w", err)
+		// Login. A vanilla server starts the login protocol, checks the version
+		// against its own, and only then reads Login Start; TRANSFER shares the
+		// login but is only accepted when the server allows transfers, which the
+		// mask does not.
+		if nextState == 3 {
+			reason := `{"translate":"multiplayer.disconnect.transfers_disabled"}`
+			_ = writePacket(c.writer, latestProtocolVersion.login.clientboundLoginDisconnect, new(String(reason)))
+			return fmt.Errorf("transfers are disabled")
 		}
 
-		if pkt.packetID != 0 {
-			return fmt.Errorf("bad login start packet id")
+		// The version picks the row, not the other way around: the ids are the
+		// registration order of the peer's own protocol, so the client decides.
+		// An unknown version is rejected with the same Login Disconnect a vanilla
+		// server sends for it. The disconnect id is taken from the newest row
+		// because no row matches, and no release has ever moved it.
+		protocol, known := protocolVersionByNumber(protocolNumber)
+		if !known {
+			reason := String(loginRejectReason(protocolNumber))
+			_ = writePacket(c.writer, latestProtocolVersion.login.clientboundLoginDisconnect, &reason)
+			return fmt.Errorf("unsupported protocol version: %d", protocolNumber)
 		}
+		c.protocol = protocol
 
-		var (
-			username String
-			uuid     UUID
-		)
-
-		err = pkt.readFields(&username, &uuid)
-		if err != nil {
-			return fmt.Errorf("read login start packet: %w", err)
-		}
-		profile, found := findProfile(c.profiles, string(username), uuid)
-
-		// encrypt request
-
-		var (
-			serverId           String  = String("")
-			publicKey          Bytes   = Bytes(c.rsaPublicKey)
-			verifyToken        Bytes   = Bytes(make([]byte, 4))
-			shouldAuthenticate Boolean = true
-		)
-
-		if _, err = rand.Read(verifyToken); err != nil {
-			return fmt.Errorf("generate verify token: %w", err)
-		}
-
-		err = writePacket(c.writer, 0x01, &serverId, &publicKey, &verifyToken, &shouldAuthenticate)
-		if err != nil {
-			return fmt.Errorf("write encryption request: %w", err)
-		}
-
-		// encrypt response
-
-		var (
-			encryptedSharedSecret Bytes
-			encryptedVerifyToken  Bytes
-
-			sharedSecret         []byte
-			decryptedVerifyToken []byte
-		)
-
-		pkt, err = readPacket(c.reader)
-		if err != nil {
-			return fmt.Errorf("read encrypt response: %w", err)
-		}
-
-		if pkt.packetID != 0x01 {
-			return fmt.Errorf("bad encrypt response packet id")
-		}
-
-		err = pkt.readFields(&encryptedSharedSecret, &encryptedVerifyToken)
-		if err != nil {
-			return fmt.Errorf("read encrypt response: %w", err)
-		}
-
-		sharedSecret, err = rsa.DecryptPKCS1v15(rand.Reader, c.rsaPrivateKey, encryptedSharedSecret)
-		if err != nil {
-			return fmt.Errorf("decrypt shared secret: %w", err)
-		}
-		if len(sharedSecret) != 16 {
-			return fmt.Errorf("bad shared secret length: %d", len(sharedSecret))
-		}
-
-		decryptedVerifyToken, err = rsa.DecryptPKCS1v15(rand.Reader, c.rsaPrivateKey, encryptedVerifyToken)
-		if err != nil {
-			return fmt.Errorf("decrypt verify token: %w", err)
-		}
-
-		if len(decryptedVerifyToken) < 4 || !bytes.Equal(verifyToken, decryptedVerifyToken[:4]) {
-			return fmt.Errorf("verify token mismatch")
-		}
-
-		c.reader, err = newCryptoReader(c.reader, sharedSecret)
-		if err != nil {
-			return fmt.Errorf("new crypto reader: %w", err)
-		}
-
-		c.writer, err = newCryptoWriter(c.writer, sharedSecret)
-		if err != nil {
-			return fmt.Errorf("new crypto writer: %w", err)
-		}
-
-		if c.yggdrasil != nil {
-			// Online-mode login: verify the player through the session server
-			// instead of the pre-shared password and the static profile list.
-			if !bytes.Equal(decryptedVerifyToken, verifyToken) {
-				return fmt.Errorf("verify token mismatch")
-			}
-
-			serverID := minecraftServerID(string(serverId), sharedSecret, c.rsaPublicKey)
-			profile, err = c.verifyYggdrasilLogin(string(username), uuid, serverID)
-			if err != nil {
-				reason := `{"type":"translatable","translate":"multiplayer.disconnect.unverified_username"}`
-				if !errors.Is(err, errYggdrasilNotJoined) {
-					reason = `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`
-				}
-				if writeErr := writeDisconnectPacket(c.writer, reason); writeErr != nil {
-					return fmt.Errorf("write yggdrasil disconnect: %w", writeErr)
-				}
-				return fmt.Errorf("verify yggdrasil login: %w", err)
-			}
-		} else {
-			// verify password
-			receivedPassword := decryptedVerifyToken[4:]
-
-			if subtle.ConstantTimeCompare(receivedPassword, []byte(c.password)) != 1 {
-				_ = writeDisconnectPacket(c.writer, `{"type":"translatable","translate":"multiplayer.disconnect.authservers_down"}`)
-				return fmt.Errorf("bad password")
-			}
-			if !found {
-				if err = writeDisconnectPacket(c.writer, `{"text":"You are not white-listed on this server!"}`); err != nil {
-					return fmt.Errorf("write unknown login profile disconnect: %w", err)
-				}
-				return fmt.Errorf("unknown login profile")
-			}
-		}
-
-		if err = writeLoginSuccess(c.writer, profile); err != nil {
-			return fmt.Errorf("write login finished: %w", err)
-		}
-
-		var loginAcknowledgedLength int
-		pkt, loginAcknowledgedLength, err = readPacketWithLength(c.reader)
-		if err != nil {
-			return fmt.Errorf("read login acknowledged: %w", err)
-		}
-		if err = validateLoginAcknowledgedPacket(pkt); err != nil {
+		if err = c.login(); err != nil {
 			return err
 		}
-		c.reader = newPaddingReader(c.reader, false)
-		if err = runPaddingSchedule(c.writer, false, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause); err != nil {
-			_ = c.Close() // Unblock the startup reader if writing failed.
-			return fmt.Errorf("run startup padding: %w", err)
-		}
-
-		packet := newPacketStream(c.reader, c.writer, false)
-		c.lifecycleMu.Lock()
-		if c.closed {
-			c.lifecycleMu.Unlock()
-			packet.Stop()
-			return net.ErrClosed
-		}
-		c.packet = packet
-		c.reader = packet
-		c.writer = packet
-		c.state = serverStateProxy
-		c.lifecycleMu.Unlock()
-
 		return nil
 
 	default:
 		return fmt.Errorf("bad handshake packet: bad next state: %d", nextState)
 	}
+}
+
+// login runs the login state once the protocol version is known.
+func (c *serverConn) login() error {
+	// login start
+
+	pkt, err := readPacket(c.reader)
+	if err != nil {
+		return fmt.Errorf("read login start packet: %w", err)
+	}
+
+	if pkt.packetID != c.protocol.login.serverboundLoginStart {
+		return fmt.Errorf("bad login start packet id")
+	}
+
+	var (
+		username String
+		uuid     UUID
+	)
+
+	err = pkt.readFields(&username, &uuid)
+	if err != nil {
+		return fmt.Errorf("read login start packet: %w", err)
+	}
+	if !validPlayerName(string(username)) {
+		return fmt.Errorf("invalid player name: %q", string(username))
+	}
+	profile, found := findProfile(c.profiles, string(username), uuid)
+
+	// encrypt request
+
+	var (
+		serverId           String  = String("")
+		publicKey          Bytes   = Bytes(c.rsaPublicKey)
+		verifyToken        Bytes   = Bytes(make([]byte, 4))
+		shouldAuthenticate Boolean = true
+	)
+
+	if _, err = rand.Read(verifyToken); err != nil {
+		return fmt.Errorf("generate verify token: %w", err)
+	}
+
+	err = writePacket(c.writer, c.protocol.login.clientboundHello, &serverId, &publicKey, &verifyToken, &shouldAuthenticate)
+	if err != nil {
+		return fmt.Errorf("write encryption request: %w", err)
+	}
+
+	// encrypt response
+
+	var (
+		encryptedSharedSecret Bytes
+		encryptedVerifyToken  Bytes
+
+		sharedSecret         []byte
+		decryptedVerifyToken []byte
+	)
+
+	pkt, err = readPacket(c.reader)
+	if err != nil {
+		return fmt.Errorf("read encrypt response: %w", err)
+	}
+
+	if pkt.packetID != c.protocol.login.serverboundKey {
+		return fmt.Errorf("bad encrypt response packet id")
+	}
+
+	err = pkt.readFields(&encryptedSharedSecret, &encryptedVerifyToken)
+	if err != nil {
+		return fmt.Errorf("read encrypt response: %w", err)
+	}
+
+	sharedSecret, err = rsa.DecryptPKCS1v15(rand.Reader, c.rsaPrivateKey, encryptedSharedSecret)
+	if err != nil {
+		return fmt.Errorf("decrypt shared secret: %w", err)
+	}
+	if len(sharedSecret) != 16 {
+		return fmt.Errorf("bad shared secret length: %d", len(sharedSecret))
+	}
+
+	decryptedVerifyToken, err = rsa.DecryptPKCS1v15(rand.Reader, c.rsaPrivateKey, encryptedVerifyToken)
+	if err != nil {
+		return fmt.Errorf("decrypt verify token: %w", err)
+	}
+
+	if len(decryptedVerifyToken) < 4 || !bytes.Equal(verifyToken, decryptedVerifyToken[:4]) {
+		return fmt.Errorf("verify token mismatch")
+	}
+
+	c.reader, err = newCryptoReader(c.reader, sharedSecret)
+	if err != nil {
+		return fmt.Errorf("new crypto reader: %w", err)
+	}
+
+	c.writer, err = newCryptoWriter(c.writer, sharedSecret)
+	if err != nil {
+		return fmt.Errorf("new crypto writer: %w", err)
+	}
+
+	if c.yggdrasil != nil {
+		// Online-mode login: verify the player through the session server
+		// instead of the pre-shared password and the static profile list.
+		if !bytes.Equal(decryptedVerifyToken, verifyToken) {
+			return fmt.Errorf("verify token mismatch")
+		}
+
+		serverID := minecraftServerID(string(serverId), sharedSecret, c.rsaPublicKey)
+		profile, err = c.verifyYggdrasilLogin(string(username), uuid, serverID)
+		if err != nil {
+			reason := `{"translate":"multiplayer.disconnect.unverified_username"}`
+			if !errors.Is(err, errYggdrasilNotJoined) {
+				reason = `{"translate":"multiplayer.disconnect.authservers_down"}`
+			}
+			if writeErr := writeDisconnectPacket(c.writer, c.protocol.login.clientboundLoginDisconnect, reason); writeErr != nil {
+				return fmt.Errorf("write yggdrasil disconnect: %w", writeErr)
+			}
+			return fmt.Errorf("verify yggdrasil login: %w", err)
+		}
+	} else {
+		// verify password
+		receivedPassword := decryptedVerifyToken[4:]
+
+		if subtle.ConstantTimeCompare(receivedPassword, []byte(c.password)) != 1 {
+			_ = writeDisconnectPacket(c.writer, c.protocol.login.clientboundLoginDisconnect, `{"translate":"multiplayer.disconnect.authservers_down"}`)
+			return fmt.Errorf("bad password")
+		}
+		if !found {
+			if err = writeDisconnectPacket(c.writer, c.protocol.login.clientboundLoginDisconnect, `{"text":"You are not white-listed on this server!"}`); err != nil {
+				return fmt.Errorf("write unknown login profile disconnect: %w", err)
+			}
+			return fmt.Errorf("unknown login profile")
+		}
+	}
+
+	// No Set Compression, which is the same wire as a vanilla server with
+	// network-compression-threshold=-1: the startup padding preset reproduces a
+	// login that ran without it, and the tunnel payloads are already compressed
+	// or encrypted by whoever produced them. The client still negotiates the
+	// compressed framing when the peer is a real server that enables it.
+	if err = writeLoginFinished(c.writer, c.protocol, profile); err != nil {
+		return fmt.Errorf("write login finished: %w", err)
+	}
+
+	var loginAcknowledgedLength int
+	pkt, loginAcknowledgedLength, err = readPacketWithLength(c.reader)
+	if err != nil {
+		return fmt.Errorf("read login acknowledged: %w", err)
+	}
+	if err = validateLoginAcknowledgedPacket(pkt, c.protocol.login.serverboundLoginAcknowledged); err != nil {
+		return err
+	}
+
+	return c.startProxy(loginAcknowledgedLength)
+}
+
+// startProxy runs the startup padding and hands the connection to the tick
+// stream. It is called once the login reached the configuration state.
+func (c *serverConn) startProxy(loginAcknowledgedLength int) error {
+	c.reader = newPaddingReader(c.reader, false, c.paddingChannel, c.protocol.configuration)
+	if err := runPaddingSchedule(c.writer, false, loginAcknowledgedLength, c.paddingSchedule, c.paddingPause, c.paddingChannel, c.protocol.configuration); err != nil {
+		_ = c.Close() // Unblock the startup reader if writing failed.
+		return fmt.Errorf("run startup padding: %w", err)
+	}
+
+	packet := newTickStream(c.reader, c.writer, false, c.protocol.configuration, c.dataChannel, c.paddingChannel)
+	c.lifecycleMu.Lock()
+	if c.closed {
+		c.lifecycleMu.Unlock()
+		packet.Stop()
+		return net.ErrClosed
+	}
+	c.packet = packet
+	c.reader = packet
+	c.writer = packet
+	c.state = serverStateProxy
+	c.lifecycleMu.Unlock()
+
+	return nil
+}
+
+// validPlayerName mirrors vanilla's Login Start check in 26.x: at most sixteen
+// bytes, all printable ASCII. The older "letters, digits and underscore"
+// restriction was dropped, so filtering it here would reject players a vanilla
+// server accepts.
+func validPlayerName(name string) bool {
+	if len(name) > maxPlayerNameLength {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		if name[i] <= 32 || name[i] >= 127 {
+			return false
+		}
+	}
+	return true
+}
+
+// statusResponse is the status JSON a vanilla server of this version builds:
+// a collapsed literal description, the player counts with an empty sample, and
+// the version the server speaks.
+func statusResponse(version protocolVersion) string {
+	return fmt.Sprintf(
+		`{"description":"A Minecraft Server","players":{"max":20,"online":0,"sample":[]},"version":{"name":%q,"protocol":%d},"enforcesSecureChat":true}`,
+		version.name,
+		version.number,
+	)
 }
 
 func (c *serverConn) verifyYggdrasilLogin(username string, uuid UUID, serverID string) (loginProfile, error) {
@@ -348,8 +435,8 @@ func (c *serverConn) verifyYggdrasilLogin(username string, uuid UUID, serverID s
 	}
 }
 
-func validateLoginAcknowledgedPacket(pkt *mcPacket) error {
-	if pkt.packetID != 0x03 {
+func validateLoginAcknowledgedPacket(pkt *mcPacket, packetID int) error {
+	if pkt.packetID != packetID {
 		return fmt.Errorf("bad login acknowledged packet id: %d", pkt.packetID)
 	}
 	if len(pkt.data) != 0 {
@@ -383,6 +470,10 @@ func (c *serverConn) Close() error {
 	c.lifecycleMu.Unlock()
 	c.closeOnce.Do(func() { close(c.done) })
 	if packet != nil {
+		// Write returns once data is queued for the next tick, so a graceful
+		// close has to flush the last tick instead of dropping it.
+		_ = c.c.SetWriteDeadline(time.Now().Add(time.Second))
+		_ = packet.Flush()
 		packet.Stop()
 	}
 	return c.c.Close()
@@ -413,7 +504,7 @@ func (c *serverConn) SetWriteDeadline(t time.Time) error {
 	return c.deadlines.setWriteDeadline(t)
 }
 
-func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, paddingSchedule []paddingTurn, yggdrasil *yggdrasilVerifier) (*serverConn, error) {
+func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPrivateKeyDER []byte, rsaPublicKey []byte, paddingSchedule []paddingTurn, yggdrasil *yggdrasilVerifier, dataChannel, paddingChannel string) (*serverConn, error) {
 	if len(profiles) == 0 && yggdrasil == nil {
 		return nil, fmt.Errorf("empty profiles")
 	}
@@ -437,6 +528,8 @@ func wrapConnServer(c net.Conn, profiles []loginProfile, password string, rsaPri
 		password:        password,
 		rsaPrivateKey:   rsaPrivateKey,
 		rsaPublicKey:    rsaPublicKey,
+		dataChannel:     dataChannel,
+		paddingChannel:  paddingChannel,
 		yggdrasil:       yggdrasil,
 		paddingSchedule: paddingSchedule,
 		deadlines:       newConnectionDeadlines(c),

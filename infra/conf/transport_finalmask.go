@@ -975,6 +975,17 @@ type XMC struct {
 	// NoPadding disables padding. An explicit empty "paddings" array means the
 	// same; an absent one keeps the built-in preset.
 	NoPadding bool `json:"noPadding,omitempty"`
+	// Custom payload channels that carry the tunnel byte stream and the startup
+	// padding. Both ends must use the same pair; empty keeps the defaults
+	// (xmc:data / xmc:pad). Vanilla's "minecraft" namespace is rejected.
+	DataChannel    string `json:"dataChannel,omitempty"`
+	PaddingChannel string `json:"paddingChannel,omitempty"`
+	// Minecraft network protocol number the client advertises, for example 777
+	// for 26.3. Zero detects it from the peer's status response (cached per
+	// destination) and falls back to the newest version the mask knows. Set it to
+	// skip detection or to pin a version; the server follows whatever the client
+	// names.
+	ProtocolVersion uint32 `json:"protocolVersion,omitempty"`
 }
 
 type XMCPaddingTurn struct {
@@ -1040,7 +1051,21 @@ func (c *XMC) Build() (proto.Message, error) {
 	if noPadding && len(c.Paddings) > 0 {
 		return nil, fmt.Errorf("minecraft padding: noPadding and paddings are exclusive")
 	}
-	config := &xmc.Config{Hostname: c.Hostname, NoPadding: noPadding}
+	if err := xmc.ValidateProtocolVersion(c.ProtocolVersion); err != nil {
+		return nil, fmt.Errorf("minecraft protocolVersion: %w", err)
+	}
+	config := &xmc.Config{
+		Hostname:        c.Hostname,
+		NoPadding:       noPadding,
+		DataChannel:     c.DataChannel,
+		PaddingChannel:  c.PaddingChannel,
+		ProtocolVersion: c.ProtocolVersion,
+	}
+	dataChannel, paddingChannel, channelErr := config.ChannelIDs()
+	if channelErr != nil {
+		return nil, fmt.Errorf("minecraft channels: %w", channelErr)
+	}
+	config.DataChannel, config.PaddingChannel = dataChannel, paddingChannel
 	for i, turn := range c.Paddings {
 		minimum, maximum, err := ParseRangeString(turn.Length)
 		if err != nil {

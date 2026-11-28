@@ -29,19 +29,97 @@ const (
 	// every connection, so it is rejected when the configuration is built.
 	maxPaddingScheduleDelay = handshakeTimeout - 10*time.Second
 
-	// Frame padding carries the startup padding in ordinary Minecraft custom
-	// payload packets so that a vanilla server can parse the whole connection
-	// without taking the pipeline over. The channel is deliberately different
-	// from the packet stream channel: both ends drop unknown payloads.
-	paddingFrameChannel = "xmc:pad"
 	// Serverbound custom payload data is capped at 32767 bytes by
 	// ServerboundCustomPayloadPacket; keep the same budget in both directions.
 	maxPaddingFrameDataLength = 32767
-	// Length varint, packet id, channel length varint and the channel itself.
-	paddingFrameOverhead = 1 + 1 + 1 + len(paddingFrameChannel)
 )
 
-var maxPaddingFrameLength = paddingFrameLength(maxPaddingFrameDataLength)
+// defaultPaddingFraming is the framing of the built-in padding channel. A
+// configured channel name changes the frame overhead, so the framing travels
+// with the channel instead of being a package constant.
+var defaultPaddingFraming = newPaddingFraming(DefaultPaddingChannel)
+
+// paddingFraming is the custom payload framing of one channel. Frame padding
+// carries the startup padding in ordinary Minecraft custom payload packets so
+// that a vanilla server can parse the whole connection without taking the
+// pipeline over; the channel name decides the frame overhead, so every exact
+// frame length the captured presets ask for depends on it.
+type paddingFraming struct {
+	channel string
+}
+
+func newPaddingFraming(channel string) paddingFraming {
+	return paddingFraming{channel: channel}
+}
+
+// overhead is the length varint, the packet id, the channel length varint and
+// the channel itself, for the smallest length varint.
+func (f paddingFraming) overhead() int {
+	return 1 + 1 + 1 + len(f.channel)
+}
+
+func (f paddingFraming) maxFrameLength() int {
+	return f.frameLength(maxPaddingFrameDataLength)
+}
+
+// frameLength is the wire size of a custom payload frame whose payload body is
+// dataLength bytes long.
+func (f paddingFraming) frameLength(dataLength int) int {
+	bodyLength := 1 + 1 + len(f.channel) + dataLength
+	return varintSize(Varint(bodyLength)) + bodyLength
+}
+
+// frameDataLength is the payload body that makes a frame exactly frameLength
+// bytes long. Some lengths are unreachable because the length varint grows in
+// steps.
+func (f paddingFraming) frameDataLength(frameLength int) (int, bool) {
+	for overhead := f.overhead(); overhead <= f.overhead()+2; overhead++ {
+		dataLength := frameLength - overhead
+		if dataLength < 0 || dataLength > maxPaddingFrameDataLength {
+			continue
+		}
+		if f.frameLength(dataLength) == frameLength {
+			return dataLength, true
+		}
+	}
+	return 0, false
+}
+
+// plan splits length bytes into reachable frame sizes. The result is exact
+// whenever a partition exists; a length below the smallest frame (the captured
+// 2-byte turns) is rounded up to that frame.
+func (f paddingFraming) plan(length int) ([]int, error) {
+	if length <= 0 {
+		return nil, nil
+	}
+	overhead := f.overhead()
+	if length < overhead {
+		return []int{overhead}, nil
+	}
+	maxFrameLength := f.maxFrameLength()
+	frameLengths := make([]int, 0, length/paddingBufferLength+1)
+	for remaining := length; remaining > 0; {
+		candidate := min(remaining, maxFrameLength)
+		picked := 0
+		for ; candidate >= overhead; candidate-- {
+			if _, ok := f.frameDataLength(candidate); !ok {
+				continue
+			}
+			rest := remaining - candidate
+			if rest > 0 && rest < overhead {
+				continue
+			}
+			picked = candidate
+			break
+		}
+		if picked == 0 {
+			return nil, fmt.Errorf("cannot frame %d padding bytes", length)
+		}
+		frameLengths = append(frameLengths, picked)
+		remaining -= picked
+	}
+	return frameLengths, nil
+}
 
 type paddingVariant struct {
 	chunks []int
@@ -97,13 +175,14 @@ func pausePadding(done <-chan struct{}, d time.Duration) error {
 // Minecraft packets that carry nothing to compare an early arrival against, and
 // the startup reader drains them on its own while this schedule writes. A peer
 // that stalls is bounded by maxPaddingScheduleDelay instead.
-func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration) error) error {
+func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength int, schedule []paddingTurn, sleep func(time.Duration) error, paddingChannel string, packetIDs configurationPacketIDs) error {
 	if len(schedule) == 0 {
 		return nil
 	}
 	if err := validatePaddingSchedule(schedule, firstTurnPrefixLength); err != nil {
 		return err
 	}
+	framing := newPaddingFraming(paddingChannel)
 
 	for i, turn := range schedule {
 		prefixLength := 0
@@ -128,7 +207,7 @@ func runPaddingSchedule(writer io.Writer, isClient bool, firstTurnPrefixLength i
 		if err := sleep(delay); err != nil {
 			return err
 		}
-		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(isClient)); err != nil {
+		if _, err := writePaddingTurnFrames(writer, turn, prefixLength, sleep, paddingFramePacketID(packetIDs, isClient), framing); err != nil {
 			return fmt.Errorf("write padding turn %d: %w", i, err)
 		}
 	}
@@ -195,18 +274,19 @@ func validatePaddingSchedule(schedule []paddingTurn, firstTurnPrefixLength int) 
 
 // paddingFramePacketID returns the configuration-state custom payload packet id
 // used by the side that sends the padding bytes; both values come from the
-// vanilla configuration protocol, so no proxy-specific id ever reaches the wire.
-func paddingFramePacketID(isClient bool) int {
+// negotiated version's configuration protocol, so no proxy-specific id ever
+// reaches the wire.
+func paddingFramePacketID(packetIDs configurationPacketIDs, isClient bool) int {
 	if isClient {
-		return configurationServerboundCustomPayload
+		return packetIDs.serverboundCustomPayload
 	}
-	return configurationClientboundCustomPayload
+	return packetIDs.clientboundCustomPayload
 }
 
 // writePaddingTurnFrames writes one padding turn as a sequence of valid
 // Minecraft custom payload frames. Only the framing is native: payload bodies
 // stay zero-filled, so the captured traffic shape is kept.
-func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sleep func(time.Duration) error, packetID int) (int, error) {
+func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sleep func(time.Duration) error, packetID int, framing paddingFraming) (int, error) {
 	startDelay, err := randomPaddingDelay(turn.startDelay)
 	if err != nil {
 		return 0, fmt.Errorf("select padding start delay: %w", err)
@@ -241,7 +321,7 @@ func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sle
 	}
 
 	zeros := make([]byte, maxPaddingFrameDataLength)
-	channel := String(paddingFrameChannel)
+	channel := String(framing.channel)
 	written := 0
 	for i, chunkLength := range chunks {
 		if i < len(delays) {
@@ -253,12 +333,12 @@ func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sle
 				return written, delayErr
 			}
 		}
-		frameLengths, planErr := paddingFramePlan(chunkLength)
+		frameLengths, planErr := framing.plan(chunkLength)
 		if planErr != nil {
 			return written, planErr
 		}
 		for _, frameLength := range frameLengths {
-			dataLength, ok := paddingFrameDataLength(frameLength)
+			dataLength, ok := framing.frameDataLength(frameLength)
 			if !ok {
 				return written, fmt.Errorf("unframed padding length %d", frameLength)
 			}
@@ -270,63 +350,6 @@ func writePaddingTurnFrames(w io.Writer, turn paddingTurn, prefixLength int, sle
 		}
 	}
 	return written, nil
-}
-
-// paddingFrameLength is the wire size of a custom payload frame whose payload
-// body is dataLength bytes long.
-func paddingFrameLength(dataLength int) int {
-	bodyLength := 1 + 1 + len(paddingFrameChannel) + dataLength
-	return varintSize(Varint(bodyLength)) + bodyLength
-}
-
-// paddingFrameDataLength is the payload body that makes a frame exactly
-// frameLength bytes long. Some lengths are unreachable because the length
-// varint grows in steps.
-func paddingFrameDataLength(frameLength int) (int, bool) {
-	for overhead := paddingFrameOverhead; overhead <= paddingFrameOverhead+2; overhead++ {
-		dataLength := frameLength - overhead
-		if dataLength < 0 || dataLength > maxPaddingFrameDataLength {
-			continue
-		}
-		if paddingFrameLength(dataLength) == frameLength {
-			return dataLength, true
-		}
-	}
-	return 0, false
-}
-
-// paddingFramePlan splits length bytes into reachable frame sizes. The result is
-// exact whenever a partition exists; a length below the smallest frame (the
-// captured 2-byte turns) is rounded up to that frame.
-func paddingFramePlan(length int) ([]int, error) {
-	if length <= 0 {
-		return nil, nil
-	}
-	if length < paddingFrameOverhead {
-		return []int{paddingFrameOverhead}, nil
-	}
-	frameLengths := make([]int, 0, length/paddingBufferLength+1)
-	for remaining := length; remaining > 0; {
-		candidate := min(remaining, maxPaddingFrameLength)
-		picked := 0
-		for ; candidate >= paddingFrameOverhead; candidate-- {
-			if _, ok := paddingFrameDataLength(candidate); !ok {
-				continue
-			}
-			rest := remaining - candidate
-			if rest > 0 && rest < paddingFrameOverhead {
-				continue
-			}
-			picked = candidate
-			break
-		}
-		if picked == 0 {
-			return nil, fmt.Errorf("cannot frame %d padding bytes", length)
-		}
-		frameLengths = append(frameLengths, picked)
-		remaining -= picked
-	}
-	return frameLengths, nil
 }
 
 func selectPaddingVariant(turn paddingTurn, prefixLength int) (int, []int, []paddingDelayRange, error) {

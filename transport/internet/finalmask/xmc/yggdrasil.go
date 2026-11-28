@@ -468,6 +468,14 @@ type yggdrasilAuth struct {
 
 	keyMu        sync.Mutex
 	signatureKey *rsa.PublicKey
+
+	// loginMu serializes the login exchange of one account, from Login Start to
+	// the peer's Login Finished. The session server keeps one server id per
+	// profile, so only the most recent /join answers hasJoined; a second login
+	// that started while the first server was still polling would overwrite
+	// that session and the first server would reject it with
+	// unverified_username.
+	loginMu sync.Mutex
 }
 
 func newYggdrasilAuth(config *yggdrasilConfig) *yggdrasilAuth {
